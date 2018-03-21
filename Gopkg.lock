@@ -16,9 +16,12 @@
 
 [[projects]]
   name = "github.com/Azure/azure-sdk-for-go"
-  packages = ["storage"]
-  revision = "509eea43b93cec2f3f17acbe2578ef58703923f8"
-  version = "v11.1.1-beta"
+  packages = [
+    "storage",
+    "version"
+  ]
+  revision = "e67cd39e942c417ae5e9ae1165f778d9fe8996e0"
+  version = "v14.5.0"
 
 [[projects]]
   branch = "master"
@@ -37,8 +40,8 @@
     "autorest/azure",
     "autorest/date"
   ]
-  revision = "e90eb98af76c8cf5684aa79ecc8abce90afe484a"
-  version = "v9.2.0"
+  revision = "0ae36a9e544696de46fdadb7b0d5fb38af48c063"
+  version = "v10.2.0"
 
 [[projects]]
   branch = "parse-constraints-with-dash-in-pre"
@@ -741,6 +744,12 @@
   version = "v0.15.0"
 
 [[projects]]
+  name = "github.com/marstr/guid"
+  packages = ["."]
+  revision = "8bd9a64bf37eb297b492a4101fb28e80ac0b290f"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/mattn/go-isatty"
   packages = ["."]
   revision = "0360b2af4f38e8d38c7fce2a9f4e702702d73a39"
@@ -852,10 +861,10 @@
   version = "v0.3.2"
 
 [[projects]]
+  branch = "master"
   name = "github.com/pelletier/go-toml"
   packages = ["."]
-  revision = "acdc4509485b587f5e675510c4f2c63e90ff68a8"
-  version = "v1.1.0"
+  revision = "05bcc0fb0d3e60da4b8dd5bd7e0ea563eb4ca943"
 
 [[projects]]
   branch = "master"
@@ -947,12 +956,6 @@
   packages = ["."]
   revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
   version = "v1.2.0"
-
-[[projects]]
-  name = "github.com/satori/uuid"
-  packages = ["."]
-  revision = "879c5887cd475cd7864858769793b2ceb0d44feb"
-  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
