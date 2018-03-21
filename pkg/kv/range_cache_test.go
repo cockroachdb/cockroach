@@ -964,11 +964,11 @@ func TestRangeCacheEvictMetaDescriptors(t *testing.T) {
 	}
 	meta2RightDesc := roachpb.RangeDescriptor{
 		StartKey: meta2LeftDesc.EndKey,
-		EndKey:   keys.MustAddr(keys.Meta2KeyMax.Next()),
+		EndKey:   keys.RangeMetaKey(roachpb.RKey("zzz")).Next(),
 	}
 	restDesc := roachpb.RangeDescriptor{
 		StartKey: meta2RightDesc.EndKey,
-		EndKey:   roachpb.RKeyMax,
+		EndKey:   roachpb.RKey("zzz"),
 	}
 
 	testCases := []struct {
