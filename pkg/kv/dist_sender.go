@@ -795,7 +795,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				pErr.UpdateTxn(br.Txn)
 			}
 			// If this is a write batch with any successful responses, but
-			// we're ultimately returning an error, wrap the error with an
+			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
 			if hadSuccess && ba.IsWrite() {
 				pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
