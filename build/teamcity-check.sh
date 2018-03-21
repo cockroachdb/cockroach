@@ -12,7 +12,7 @@ run build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=checkdeps g
 tc_end_block "Ensure dependencies are up-to-date"
 
 tc_start_block "Ensure generated code is up-to-date"
-run build/builder.sh make generate
+run build/builder.sh make generate buildshort
 # The workspace is clean iff `git status --porcelain` produces no output. Any
 # output is either an error message or a listing of an untracked/dirty file.
 if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
