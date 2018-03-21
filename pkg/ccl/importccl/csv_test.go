@@ -1017,3 +1017,32 @@ func BenchmarkConvertRecord(b *testing.B) {
 	}
 	close(kvCh)
 }
+
+// TestImportMVCCChecksums verifies that MVCC checksums are correctly
+// computed by issuing a secondary index change that runs a CPut on the
+// index. See #23984.
+func TestImportMVCCChecksums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			fmt.Fprint(w, "1,1,1")
+		}
+	}))
+	defer srv.Close()
+
+	sqlDB.Exec(t, `IMPORT TABLE d.t (
+		a INT PRIMARY KEY,
+		b INT,
+		c INT,
+		INDEX (b) STORING (c)
+	) CSV DATA ($1)`, srv.URL)
+	sqlDB.Exec(t, `UPDATE d.t SET c = 2 WHERE a = 1`)
+}

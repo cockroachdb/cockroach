@@ -652,6 +652,7 @@ func convertRecord(
 			if err := ri.InsertRow(
 				ctx,
 				inserter(func(kv roachpb.KeyValue) {
+					kv.Value.InitChecksum(kv.Key)
 					kvBatch = append(kvBatch, kv)
 				}),
 				row,
