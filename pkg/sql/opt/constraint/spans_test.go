@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSpans(t *testing.T) {
@@ -49,20 +50,60 @@ func TestSpans(t *testing.T) {
 	check("[/1 - /1]")
 	s.Truncate(0)
 	check("")
+}
 
-	add(3)
-	add(1)
-	add(2)
-	add(1)
-	add(4)
-	add(3)
-	s.SortAndDedup(keyCtx)
-	check("[/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4]")
-	s.SortAndDedup(keyCtx)
-	check("[/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4]")
-	add(4)
-	add(5)
-	add(5)
-	s.SortAndDedup(keyCtx)
-	check("[/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5]")
+func TestSpansSortAndMerge(t *testing.T) {
+	keyCtx := testKeyContext(1)
+	evalCtx := keyCtx.EvalCtx
+
+	// To test SortAndMerge, we note that the result can also be obtained by
+	// creating a constraint per span and calculating the union. We generate
+	// random cases and cross-check.
+	for testIdx := 0; testIdx < 100; testIdx++ {
+		rng, _ := randutil.NewPseudoRand()
+		n := 1 + rng.Intn(10)
+		var spans Spans
+		for i := 0; i < n; i++ {
+			x, y := rng.Intn(20), rng.Intn(20)
+			if x > y {
+				x, y = y, x
+			}
+			xk, yk := EmptyKey, EmptyKey
+			if x > 0 {
+				xk = MakeKey(tree.NewDInt(tree.DInt(x)))
+			}
+			if y > 0 {
+				yk = MakeKey(tree.NewDInt(tree.DInt(y)))
+			}
+
+			xb, yb := IncludeBoundary, IncludeBoundary
+			if x != 0 && x != y && rng.Intn(2) == 0 {
+				xb = ExcludeBoundary
+			}
+			if y != 0 && x != y && rng.Intn(2) == 0 {
+				yb = ExcludeBoundary
+			}
+			var sp Span
+			if x != 0 || y != 0 {
+				sp.Set(keyCtx, xk, xb, yk, yb)
+			}
+			spans.Append(&sp)
+		}
+		origStr := spans.String()
+
+		// Calculate via constraints.
+		var c Constraint
+		c.Init(keyCtx, SingleSpan(spans.Get(0)))
+		for i := 1; i < spans.Count(); i++ {
+			var d Constraint
+			d.Init(keyCtx, SingleSpan(spans.Get(i)))
+			c.UnionWith(evalCtx, &d)
+		}
+		expected := c.Spans.String()
+
+		spans.SortAndMerge(keyCtx)
+		if actual := spans.String(); actual != expected {
+			t.Fatalf("%s : expected  %s  got  %s", origStr, expected, actual)
+		}
+	}
 }

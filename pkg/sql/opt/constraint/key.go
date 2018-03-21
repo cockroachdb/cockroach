@@ -158,6 +158,22 @@ func (k Key) Concat(l Key) Key {
 	return Key{firstVal: k.firstVal, otherVals: vals}
 }
 
+// CutFront returns the key with the first numCols values removed.
+// Example:
+//   [/1/2 - /1/3].CutFront(1) = [/2 - /3]
+func (k Key) CutFront(numCols int) Key {
+	if numCols == 0 {
+		return k
+	}
+	if len(k.otherVals) < numCols {
+		return EmptyKey
+	}
+	return Key{
+		firstVal:  k.otherVals[numCols-1],
+		otherVals: k.otherVals[numCols:],
+	}
+}
+
 // Next returns the next key; this only works for discrete types like integers.
 // It is guaranteed that there are no  possible keys in the span
 //   ( key, Next(keu) ).
