@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -268,6 +269,76 @@ func TestCutFirstColumn(t *testing.T) {
 	c.UnionWith(evalCtx, gen([]int{2, 1}, IncludeBoundary, []int{4, 2}, IncludeBoundary))
 	test(c, 1, "/2/3: unconstrained")
 	test(c, 2, "/3: unconstrained")
+}
+
+func TestConstraintCombine(t *testing.T) {
+	cols := []opt.OrderingColumn{1, 2, 3, 4}
+	keyCtx := make([]*KeyContext, len(cols))
+	for i := range keyCtx {
+		keyCtx[i] = testKeyContext(cols[i:]...)
+	}
+	evalCtx := keyCtx[0].EvalCtx
+
+	key10 := MakeKey(tree.NewDInt(10))
+	key15 := MakeKey(tree.NewDInt(15))
+	key20 := MakeKey(tree.NewDInt(20))
+	key20_10 := MakeCompositeKey(tree.NewDInt(20), tree.NewDInt(10))
+	key30 := MakeKey(tree.NewDInt(30))
+	key40 := MakeKey(tree.NewDInt(40))
+	key80 := MakeKey(tree.NewDInt(80))
+
+	c := make([]Constraint, 4)
+
+	var sp Span
+	spans := Spans{}
+	sp.Set(keyCtx[0], EmptyKey, IncludeBoundary, key10, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[0], key15, IncludeBoundary, key15, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[0], key20, IncludeBoundary, key20_10, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[0], key30, IncludeBoundary, key40, ExcludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[0], key80, IncludeBoundary, EmptyKey, IncludeBoundary)
+	spans.Append(&sp)
+	// /1/2/3/4: [ - /10] [/15 - /15] [/20 - /20/10] [/30 - /40) [/80 - ]
+	c[0].Init(keyCtx[0], spans)
+
+	spans = Spans{}
+	sp.Set(keyCtx[1], key20, IncludeBoundary, key20_10, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[1], key30, IncludeBoundary, key30, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[1], key40, IncludeBoundary, key40, IncludeBoundary)
+	spans.Append(&sp)
+	// /2/3/4: [/20 - /20/10] [/30 - /30] [/40 - /40]
+	c[1].Init(keyCtx[1], spans)
+
+	spans = Spans{}
+	spans.Append(&Span{})
+	// /3/4: unconstrained
+	c[2].Init(keyCtx[2], spans)
+
+	spans = Spans{}
+	sp.Set(keyCtx[3], key20_10, IncludeBoundary, key30, IncludeBoundary)
+	spans.Append(&sp)
+	sp.Set(keyCtx[3], key40, IncludeBoundary, key40, IncludeBoundary)
+	spans.Append(&sp)
+	// /4: [/20/10 - /30] [/40 - /40]
+	c[3].Init(keyCtx[3], spans)
+
+	c[0].Combine(evalCtx, c[1:])
+
+	exp := "/1/2/3/4: " +
+		"[ - /10/40] " +
+		"[/15/20 - /15/20/10/40] " +
+		"[/15/30 - /15/30] " +
+		"[/15/40 - /15/40] " +
+		"[/30/20 - /40) " +
+		"[/80/20 - ]"
+	if c[0].String() != exp {
+		t.Errorf("Got:\n  %s\nexpected:\n  %s", c[0], exp)
+	}
 }
 
 type constraintTestData struct {
