@@ -183,9 +183,12 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		if !matched {
+			// Since the sorted distinct columns have changed, we know that all the
+			// distinct keys in the 'seen' set will never be seen again. This allows
+			// us to forget about all the previously allocated encodings, and use
+			// UnsafeReset() to keep the arena's allocation.
 			d.lastGroupKey = row
-			d.memAcc.Clear(d.ctx)
-			d.arena = stringarena.Make(&d.memAcc)
+			d.arena.UnsafeReset()
 			d.seen = make(map[string]struct{})
 		}
 

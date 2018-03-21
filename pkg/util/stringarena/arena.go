@@ -39,6 +39,17 @@ func Make(acc *mon.BoundAccount) Arena {
 	return Arena{acc: acc}
 }
 
+// UnsafeReset "forgets" about previously allocated strings, but keeps the allocated
+// memory. This allows us to prevent unnecessary future allocations if we know
+// that *none of the strings currently on the arena will be referenced again*.
+//
+// NOTE: This point is EXTREMELY important! If we cannot guarantee that those strings
+// will never be used again, we run the risk of overwriting their contents with
+// new data, which violates assumptions about the immutability of Go's strings.
+func (a *Arena) UnsafeReset() {
+	a.alloc = a.alloc[:0]
+}
+
 // AllocBytes allocates a string in the arena with contents specified by
 // b. Returns an error on memory accounting failure. The returned string can be
 // used for as long as desired, but it will pin the entire underlying chunk of
