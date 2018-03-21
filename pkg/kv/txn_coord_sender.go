@@ -154,10 +154,11 @@ type TxnMetrics struct {
 	Restarts *metric.Histogram
 
 	// Counts of restart types.
-	RestartsWriteTooOld    *metric.Counter
-	RestartsDeleteRange    *metric.Counter
-	RestartsSerializable   *metric.Counter
-	RestartsPossibleReplay *metric.Counter
+	RestartsWriteTooOld      *metric.Counter
+	RestartsDeleteRange      *metric.Counter
+	RestartsSerializable     *metric.Counter
+	RestartsPossibleReplay   *metric.Counter
+	RestartsDeadlineExceeded *metric.Counter
 }
 
 var (
@@ -194,23 +195,27 @@ var (
 	metaRestartsPossibleReplay = metric.Metadata{
 		Name: "txn.restarts.possiblereplay",
 		Help: "Number of restarts due to possible replays of command batches at the storage layer"}
+	metaRestartsDeadlineExceeded = metric.Metadata{
+		Name: "txn.restarts.deadlineexceeded",
+		Help: "Number of restarts due to transaction deadline expiring at commit"}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                 metric.NewCounterWithRates(metaAbortsRates),
-		Commits:                metric.NewCounterWithRates(metaCommitsRates),
-		Commits1PC:             metric.NewCounterWithRates(metaCommits1PCRates),
-		AutoRetries:            metric.NewCounterWithRates(metaAutoRetriesRates),
-		Abandons:               metric.NewCounterWithRates(metaAbandonsRates),
-		Durations:              metric.NewLatency(metaDurationsHistograms, histogramWindow),
-		Restarts:               metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:    metric.NewCounter(metaRestartsWriteTooOld),
-		RestartsDeleteRange:    metric.NewCounter(metaRestartsDeleteRange),
-		RestartsSerializable:   metric.NewCounter(metaRestartsSerializable),
-		RestartsPossibleReplay: metric.NewCounter(metaRestartsPossibleReplay),
+		Aborts:                   metric.NewCounterWithRates(metaAbortsRates),
+		Commits:                  metric.NewCounterWithRates(metaCommitsRates),
+		Commits1PC:               metric.NewCounterWithRates(metaCommits1PCRates),
+		AutoRetries:              metric.NewCounterWithRates(metaAutoRetriesRates),
+		Abandons:                 metric.NewCounterWithRates(metaAbandonsRates),
+		Durations:                metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		Restarts:                 metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
+		RestartsWriteTooOld:      metric.NewCounter(metaRestartsWriteTooOld),
+		RestartsDeleteRange:      metric.NewCounter(metaRestartsDeleteRange),
+		RestartsSerializable:     metric.NewCounter(metaRestartsSerializable),
+		RestartsPossibleReplay:   metric.NewCounter(metaRestartsPossibleReplay),
+		RestartsDeadlineExceeded: metric.NewCounter(metaRestartsDeadlineExceeded),
 	}
 }
 
@@ -1208,6 +1213,8 @@ func (tc *TxnCoordSender) updateState(
 					tc.metrics.RestartsSerializable.Inc(1)
 				case roachpb.RETRY_POSSIBLE_REPLAY:
 					tc.metrics.RestartsPossibleReplay.Inc(1)
+				case roachpb.RETRY_DEADLINE_EXCEEDED:
+					tc.metrics.RestartsDeadlineExceeded.Inc(1)
 				}
 			}
 			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)

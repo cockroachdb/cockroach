@@ -359,8 +359,7 @@ func evalEndTransaction(
 			// transactions; unless the client misconfigured the txn, the deadline can
 			// only be expired if the txn has been pushed, and pushed Serializable
 			// transactions are detected above.
-			return result.Result{}, roachpb.NewTransactionStatusError(
-				"transaction deadline exceeded")
+			return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_DEADLINE_EXCEEDED)
 		}
 
 		reply.Txn.Status = roachpb.COMMITTED
