@@ -723,7 +723,25 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 // transactions and intents after the lastUpdateNanos exceeds the timeout.
 func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
+	// Add a testing request filter which pauses a get request for the
+	// key until after the signal channel is closed.
+	key := roachpb.Key("a")
+	value := []byte("value")
+	signal := make(chan struct{})
+	knobs := &storage.StoreTestingKnobs{
+		DisableScanner:    true,
+		DisableSplitQueue: true,
+		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+			for _, req := range ba.Requests {
+				if getReq, ok := req.GetInner().(*roachpb.GetRequest); ok && getReq.Key.Equal(key) {
+					<-signal
+				}
+			}
+			return nil
+		},
+	}
+
+	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), knobs)
 	defer s.Stop()
 
 	// Set heartbeat interval to 1ms for testing.
@@ -731,10 +749,17 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
 
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	key := roachpb.Key("a")
-	if err := txn.Put(context.TODO(), key, []byte("value")); err != nil {
+	if err := txn.Put(context.TODO(), key, value); err != nil {
 		t.Fatal(err)
 	}
+	errCh := make(chan error)
+	go func() {
+		if _, err := txn.Get(context.TODO(), key); err != nil {
+			errCh <- err
+		} else {
+			errCh <- errors.New("expected error")
+		}
+	}()
 
 	// Now, advance clock past the default client timeout.
 	// Locking the TxnCoordSender to prevent a data race.
@@ -753,7 +778,15 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 		return nil
 	})
 
+	// Verify all intents have been cleaned up.
 	verifyCleanup(key, s.Eng, t, tc)
+
+	// Verify that the inflight get request receives a transaction
+	// aborted error.
+	close(signal)
+	if err := <-errCh; !testutils.IsError(err, "txn aborted") {
+		t.Errorf("expected transaction aborted error; got %s", err)
+	}
 }
 
 // TestTxnCoordSenderGCWithCancel verifies that the coordinator cleans up extant

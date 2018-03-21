@@ -1017,6 +1017,10 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 					},
 					Commit:      false,
 					IntentSpans: intentSpans,
+					// Resolved intents should maintain an abort span entry to
+					// prevent concurrent requests from failing to notice the
+					// transaction was aborted.
+					Poison: true,
 				},
 			)
 			tc.mu.Lock()
