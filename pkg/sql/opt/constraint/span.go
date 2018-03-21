@@ -62,6 +62,9 @@ type Span struct {
 	immutable bool
 }
 
+// UnconstrainedSpan is the span without any boundaries.
+var UnconstrainedSpan = Span{immutable: true}
+
 // IsUnconstrained is true if the span does not constrain the key range. Both
 // the start and end boundaries are empty. This is the default state of a Span
 // before Set is called. Unconstrained spans cannot be used in constraints,
@@ -171,6 +174,13 @@ func (sp *Span) CompareEnds(keyCtx *KeyContext, other *Span) int {
 // or equal to the given span's end boundary.
 func (sp *Span) StartsAfter(keyCtx *KeyContext, other *Span) bool {
 	return sp.start.Compare(keyCtx, other.end, sp.startExt(), other.endExt()) >= 0
+}
+
+// StartsStrictlyAfter returns true if this span is greater than the given span and
+// does not overlap or touch it. In other words, this span's start boundary is
+// strictly greater than the given span's end boundary.
+func (sp *Span) StartsStrictlyAfter(keyCtx *KeyContext, other *Span) bool {
+	return sp.start.Compare(keyCtx, other.end, sp.startExt(), other.endExt()) > 0
 }
 
 // TryIntersectWith finds the overlap between this span and the given span.

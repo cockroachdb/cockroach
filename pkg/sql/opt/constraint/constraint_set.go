@@ -69,14 +69,14 @@ type Set struct {
 }
 
 // SingleConstraint creates a Set from a single Constraint.
-func SingleConstraint(c Constraint) *Set {
+func SingleConstraint(c *Constraint) *Set {
 	if c.IsContradiction() {
 		return Contradiction
 	}
 	if c.IsUnconstrained() {
 		return Unconstrained
 	}
-	return &Set{length: 1, firstConstraint: c}
+	return &Set{length: 1, firstConstraint: *c}
 }
 
 // Length returns the number of constraints in the set.
@@ -170,8 +170,12 @@ func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
 // the input sets allowed. Compatible constraints (that share same column list)
 // that exist in both sets are merged with one another. Note that the results
 // may not be "tight", meaning that the new constraint set might allow
-// additional values that neither of the input sets allowed. Union returns the
-// merged set.
+// additional combinations of values that neither of the input sets allowed. For
+// example:
+//   (x > 1 AND y > 10) OR (x < 5 AND y < 50)
+// the union is unconstrained (and thus allows combinations like x,y = 10,0).
+//
+// Union returns the merged set.
 func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
 	// Union with the contradiction set is an identity operation.
 	if s == Contradiction {
@@ -181,9 +185,7 @@ func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
 	}
 
 	// Union with the unconstrained set yields an unconstrained set.
-	if s.IsUnconstrained() {
-		return Unconstrained
-	} else if other.IsUnconstrained() {
+	if s.IsUnconstrained() || other.IsUnconstrained() {
 		return Unconstrained
 	}
 

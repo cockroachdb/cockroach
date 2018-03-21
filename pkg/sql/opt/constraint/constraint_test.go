@@ -156,6 +156,120 @@ func TestConstraintIntersect(t *testing.T) {
 	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
 }
 
+func TestConstraintSubsetOf(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	data := newConstraintTestData(&evalCtx)
+
+	test := func(left, right Constraint, expected bool) {
+		t.Helper()
+		if actual := left.SubsetOf(&evalCtx, &right); actual != expected {
+			format := "left: %s, right: %s, expected: %t, actual: %t"
+			t.Errorf(format, left.String(), right.String(), expected, actual)
+		}
+	}
+
+	var left, right Constraint
+	left = data.c1to10
+	test(left, left, true)
+
+	test(left, data.cLt10, false)
+	test(data.cLt10, left, false)
+
+	right = data.c1to10
+	right.UnionWith(&evalCtx, &data.c5to25)
+	test(left, right, true)
+	test(right, left, false)
+
+	left.UnionWith(&evalCtx, &data.c30to40)
+	test(left, right, false)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c30to40)
+	test(left, right, true)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c20to30)
+	test(left, right, true)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c40to50)
+	test(left, right, true)
+	test(right, left, false)
+
+	right = data.c1to10
+	right.UnionWith(&evalCtx, &data.c20to30)
+	right.UnionWith(&evalCtx, &data.c30to40)
+	right.UnionWith(&evalCtx, &data.c60to70)
+
+	test(data.c1to10, right, true)
+	test(data.c20to30, right, true)
+	test(data.c30to40, right, true)
+	test(data.c40to50, right, false)
+	test(data.c60to70, right, true)
+
+	// Generate a contradiction and verify it is a subset of anything else.
+	right = data.c1to10
+	right.IntersectWith(&evalCtx, &data.c20to30)
+	test(data.c1to10, right, false)
+	test(right, data.c1to10, true)
+	test(right, right, true)
+}
+
+func TestCutFirstColumn(t *testing.T) {
+	kc := testKeyContext(1, 2, 3)
+	evalCtx := kc.EvalCtx
+
+	gen := func(
+		leftVals []int, leftBoundary SpanBoundary, rightVals []int, rightBoundary SpanBoundary,
+	) *Constraint {
+		leftDatums := make([]tree.Datum, len(leftVals))
+		for i, v := range leftVals {
+			leftDatums[i] = tree.NewDInt(tree.DInt(v))
+		}
+		rightDatums := make([]tree.Datum, len(rightVals))
+		for i, v := range rightVals {
+			rightDatums[i] = tree.NewDInt(tree.DInt(v))
+		}
+		var sp Span
+		sp.Set(
+			kc,
+			MakeCompositeKey(leftDatums...), leftBoundary,
+			MakeCompositeKey(rightDatums...), rightBoundary,
+		)
+		var c Constraint
+		c.Init(kc, SingleSpan(&sp))
+		return &c
+	}
+
+	test := func(c *Constraint, level int, expected string) {
+		t.Helper()
+		cCopy := *c
+		for i := 0; i < level; i++ {
+			cCopy.CutFirstColumn(evalCtx)
+		}
+		if actual := cCopy.String(); actual != expected {
+			t.Errorf("expected: %v, actual: %v", expected, actual)
+		}
+	}
+
+	c := gen([]int{1, 2, 3}, IncludeBoundary, []int{1, 2, 4}, IncludeBoundary)
+	test(c, 1, "/2/3: [/2/3 - /2/4]")
+	test(c, 2, "/3: [/3 - /4]")
+
+	c.UnionWith(evalCtx, gen([]int{1, 1, 5}, IncludeBoundary, []int{1, 1, 6}, IncludeBoundary))
+	test(c, 1, "/2/3: [/1/5 - /1/6] [/2/3 - /2/4]")
+	test(c, 2, "/3: [/3 - /4] [/5 - /6]")
+
+	c.UnionWith(evalCtx, gen([]int{1, 2, 8}, IncludeBoundary, []int{1, 4, 9}, IncludeBoundary))
+	test(c, 1, "/2/3: [/1/5 - /1/6] [/2/3 - /2/4] [/2/8 - /4/9]")
+	test(c, 2, "/3: unconstrained")
+
+	c.UnionWith(evalCtx, gen([]int{2, 1}, IncludeBoundary, []int{4, 2}, IncludeBoundary))
+	test(c, 1, "/2/3: unconstrained")
+	test(c, 2, "/3: unconstrained")
+}
+
 type constraintTestData struct {
 	cLt10           Constraint // [ - /10)
 	cGt20           Constraint // (/20 - ]
