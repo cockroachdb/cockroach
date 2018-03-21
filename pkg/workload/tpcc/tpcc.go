@@ -43,7 +43,9 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs         []tx
+	txs []tx
+	// deck contains indexes into the txs slice.
+	deck        []int
 	totalWeight int
 
 	split   bool
@@ -103,7 +105,7 @@ var tpccMeta = workload.Meta{
 		g.nowString = `2006-01-02 15:04:05`
 
 		g.flags.StringVar(&g.mix, `mix`,
-			`newOrder=45,payment=43,orderStatus=4,delivery=4,stockLevel=4`,
+			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
 		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
@@ -295,7 +297,11 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			idx:       workerIdx,
 			db:        db,
 			warehouse: warehouse,
+			deckPerm:  make([]int, len(w.deck)),
+			permIdx:   len(w.deck),
 		}
+		copy(worker.deckPerm, w.deck)
+
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
 	if w.doWaits {
