@@ -53,7 +53,7 @@ func (s SystemConfig) Equal(other SystemConfig) bool {
 			return false
 		}
 		leftVal, rightVal := leftKV.Value, rightKV.Value
-		if !bytes.Equal(leftVal.RawBytes, rightVal.RawBytes) {
+		if !leftVal.EqualData(rightVal) {
 			return false
 		}
 		if leftVal.Timestamp != rightVal.Timestamp {
