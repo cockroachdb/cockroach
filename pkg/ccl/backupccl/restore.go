@@ -1092,6 +1092,7 @@ func restore(
 
 			// Assert that we're actually marking the correct span done. See #23977.
 			if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+				mu.Unlock()
 				return errors.Errorf(
 					"request %d for span %v (to %v) does not match import span for same idx: %v",
 					idx, importRequest.DataSpan, newSpan, importSpans[idx],
