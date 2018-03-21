@@ -90,7 +90,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
-	cfg.TimestampCachePageSize = tscache.TestSklPageSize
+	cfg.TimestampCachePageSize = tscache.TestSklPageSize()
 
 	// Enable web session authentication.
 	cfg.EnableWebSessionAuthentication = true

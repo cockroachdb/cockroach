@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,7 +39,11 @@ import (
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	func(clock *hlc.Clock) Cache { return newSklImpl(clock, TestSklPageSize, MakeMetrics()) },
+	func(clock *hlc.Clock) Cache {
+		st := cluster.MakeTestingClusterSettings()
+		SklPageSize.Override(&st.SV, int64(TestSklPageSize()))
+		return newSklImpl(st, clock, MakeMetrics())
+	},
 }
 
 func forEachCacheImpl(
@@ -463,7 +468,7 @@ func TestTimestampCacheLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
-		keyStart := roachpb.Key(make([]byte, 5*TestSklPageSize))
+		keyStart := roachpb.Key(make([]byte, 5*TestSklPageSize()))
 		keyEnd := keyStart.Next()
 		ts1 := clock.Now()
 		txn1 := uuid.MakeV4()
@@ -681,10 +686,12 @@ func identicalAndRatcheted(
 }
 
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
+	st := cluster.MakeTestingClusterSettings()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := New(clock, 0, MakeMetrics())
+	tc := New(st, clock, MakeMetrics())
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()
 		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
