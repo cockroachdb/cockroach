@@ -866,7 +866,7 @@ func (ru *RowUpdater) UpdateRow(
 				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldSecondaryIndexEntry.Key))
 			}
 			batch.Del(oldSecondaryIndexEntry.Key)
-		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, oldSecondaryIndexEntry.Value.RawBytes) {
+		} else if !newSecondaryIndexEntry.Value.EqualData(oldSecondaryIndexEntry.Value) {
 			expValue = &oldSecondaryIndexEntry.Value
 		} else {
 			continue

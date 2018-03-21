@@ -1460,7 +1460,7 @@ func mvccConditionalPutUsingIter(
 		func(existVal *roachpb.Value) ([]byte, error) {
 			if expValPresent, existValPresent := expVal != nil, existVal.IsPresent(); expValPresent && existValPresent {
 				// Every type flows through here, so we can't use the typed getters.
-				if !bytes.Equal(expVal.RawBytes, existVal.RawBytes) {
+				if !expVal.EqualData(*existVal) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
 					}
@@ -1531,7 +1531,7 @@ func mvccInitPutUsingIter(
 				return nil, &roachpb.ConditionFailedError{ActualValue: existVal.ShallowClone()}
 			}
 			if existVal.IsPresent() {
-				if !bytes.Equal(value.RawBytes, existVal.RawBytes) {
+				if !value.EqualData(*existVal) {
 					return nil, &roachpb.ConditionFailedError{
 						ActualValue: existVal.ShallowClone(),
 					}
