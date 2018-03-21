@@ -67,6 +67,19 @@ func (c *Columns) Get(nth int) opt.OrderingColumn {
 	return c.otherCols[nth-1]
 }
 
+// Equals returns true if the two lists of columns are identical.
+func (c *Columns) Equals(other *Columns) bool {
+	if c.Count() != other.Count() {
+		return false
+	}
+	for i := 0; i < c.Count(); i++ {
+		if c.Get(i) != other.Get(i) {
+			return false
+		}
+	}
+	return true
+}
+
 func (c Columns) String() string {
 	var b strings.Builder
 
