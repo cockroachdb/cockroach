@@ -84,6 +84,7 @@ func backupRestoreTestSetupWithParams(
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.UseDatabase = "data"
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 
 	for _, server := range tc.Servers {
@@ -99,9 +100,9 @@ func backupRestoreTestSetupWithParams(
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	sqlDB.Exec(t, `USE data`)
 	const insertBatchSize = 1000
-	if _, err := workload.Setup(sqlDB.DB, bankData, insertBatchSize); err != nil {
+	const concurrency = 4
+	if _, err := workload.Setup(ctx, sqlDB.DB, bankData, insertBatchSize, concurrency); err != nil {
 		t.Fatalf("%+v", err)
 	}
 	if err := bank.Split(sqlDB.DB, bankData); err != nil {
