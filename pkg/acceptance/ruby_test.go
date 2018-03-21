@@ -16,7 +16,6 @@ package acceptance
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,17 +26,6 @@ func TestDockerRuby(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", "3", 1)})
-	testDockerFail(ctx, t, "ruby", []string{"ruby", "-e", strings.Replace(ruby, "%v", `"a"`, 1)})
+	testDockerSuccess(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 3"})
+	testDockerFail(ctx, t, "ruby", []string{"sh", "-c", "cd /mnt/data/ruby && ruby test.rb 1"})
 }
-
-const ruby = `
-require 'pg'
-
-conn = PG.connect()
-res = conn.exec_params('SELECT 1, 2 > $1, $1', [%v])
-raise 'Unexpected: ' + res.values.to_s unless res.values == [["1", "f", "3"]]
-
-res = conn.exec('SELECT 1e1::decimal')
-raise 'Unexpected: ' + res.values.to_s unless res.values == [["1E+1"]]
-`
