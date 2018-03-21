@@ -141,7 +141,7 @@ type Table struct {
 type QueryLoad struct {
 	SQLDatabase string
 
-	// WorkerFns one function per worker. It is to be called once per unit of
+	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
 	WorkerFns []func(context.Context) error
 
