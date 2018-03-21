@@ -80,6 +80,21 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
+// IsSuffixOf returns true if the columns in c are a strict suffix of the
+// columns in other.
+func (c *Columns) IsSuffixOf(other *Columns) bool {
+	offset := other.Count() - c.Count()
+	if offset <= 0 {
+		return false
+	}
+	for i := 0; i < c.Count(); i++ {
+		if c.Get(i) != other.Get(i+offset) {
+			return false
+		}
+	}
+	return true
+}
+
 func (c Columns) String() string {
 	var b strings.Builder
 
