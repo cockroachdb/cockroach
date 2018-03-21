@@ -1,0 +1,3 @@
+on_conflict ::=
+	'ON' 'CONFLICT' ( '(' ( ( name ) ( ( ',' name ) )* ) ')' ( 'WHERE' a_expr |  ) |  ) 'DO' 'UPDATE' 'SET' ( ( ( ( column_name '=' a_expr ) | ( '(' ( ( ( column_name ) ) ( ( ',' ( column_name ) ) )* ) ')' '=' ( '(' select_stmt ')' | '(' ( ( a_expr ) ( ( ',' a_expr ) )* ) ')' ) ) ) ) ( ( ',' ( ( column_name '=' a_expr ) | ( '(' ( ( ( column_name ) ) ( ( ',' ( column_name ) ) )* ) ')' '=' ( '(' select_stmt ')' | '(' ( ( a_expr ) ( ( ',' a_expr ) )* ) ')' ) ) ) ) )* ) ( 'WHERE' a_expr |  )
+	| 'ON' 'CONFLICT' ( '(' ( ( name ) ( ( ',' name ) )* ) ')' ( 'WHERE' a_expr |  ) |  ) 'DO' 'NOTHING'
