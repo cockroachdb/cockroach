@@ -16,14 +16,15 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func initNone(_ *cluster.Settings) {}
+func initNone(_ *testcluster.TestCluster) {}
 
 // The tests in this file talk to remote APIs which require credentials.
 // To run these tests, you need to supply credentials via env vars (the tests
