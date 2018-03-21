@@ -184,8 +184,7 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		if !matched {
 			d.lastGroupKey = row
-			d.memAcc.Clear(d.ctx)
-			d.arena = stringarena.Make(&d.memAcc)
+			d.arena.Reset()
 			d.seen = make(map[string]struct{})
 		}
 

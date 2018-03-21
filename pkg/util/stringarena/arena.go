@@ -39,6 +39,13 @@ func Make(acc *mon.BoundAccount) Arena {
 	return Arena{acc: acc}
 }
 
+// Reset "forgets" about previously allocated strings, but keeps the allocated
+// memory. This allows us to prevent unnecessary future allocations if we know
+// that none of the strings currently on the arena will be referenced again.
+func (a *Arena) Reset() {
+	a.alloc = a.alloc[:0]
+}
+
 // AllocBytes allocates a string in the arena with contents specified by
 // b. Returns an error on memory accounting failure. The returned string can be
 // used for as long as desired, but it will pin the entire underlying chunk of
