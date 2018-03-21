@@ -750,10 +750,18 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 		if !done {
 			return errors.Errorf("expected garbage collection")
 		}
+		// We expect the intent written at the key to still be visible on
+		// an abort from the coordinator heartbeat loop.
+		meta := &enginepb.MVCCMetadata{}
+		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+		if err != nil {
+			return fmt.Errorf("error getting MVCC metadata: %s", err)
+		}
+		if !ok || meta.Txn == nil {
+			return fmt.Errorf("did not find expected key written in txn")
+		}
 		return nil
 	})
-
-	verifyCleanup(key, s.Eng, t, tc)
 }
 
 // TestTxnCoordSenderGCWithCancel verifies that the coordinator cleans up extant
@@ -813,7 +821,27 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 
 	// After the context is canceled, the heartbeat should stop.
 	cancel()
-	verifyCleanup(key, s.Eng, t, tc)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Locking the TxnCoordSender to prevent a data race.
+		tc.mu.Lock()
+		done := tc.mu.txnEnd == nil
+		tc.mu.Unlock()
+		if !done {
+			return errors.Errorf("expected garbage collection")
+		}
+		// We expect the intent written at the key to still be visible on
+		// an abort from the coordinator heartbeat loop.
+		meta := &enginepb.MVCCMetadata{}
+		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+		if err != nil {
+			return fmt.Errorf("error getting MVCC metadata: %s", err)
+		}
+		if !ok || meta.Txn == nil {
+			return fmt.Errorf("did not find expected key written in txn")
+		}
+		return nil
+	})
 }
 
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
@@ -863,10 +891,18 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 			if !done {
 				return errors.Errorf("expected garbage collection")
 			}
+			// We expect the intent written at the key to still be visible on
+			// an abort from the coordinator heartbeat loop.
+			meta := &enginepb.MVCCMetadata{}
+			ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
+			if err != nil {
+				return fmt.Errorf("error getting MVCC metadata: %s", err)
+			}
+			if !ok || meta.Txn == nil {
+				return fmt.Errorf("did not find expected key written in txn")
+			}
 			return nil
 		})
-
-		verifyCleanup(key, s.Eng, t, tc)
 	})
 }
 
@@ -974,7 +1010,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				var reply *roachpb.BatchResponse
-				pErr := test.pErrGen(ba.Txn)
+				var pErr *roachpb.Error
+				if ba.Txn != nil {
+					pErr = test.pErrGen(ba.Txn)
+				} else {
+					pErr = roachpb.NewError(errors.New("generic error"))
+				}
 				if pErr == nil {
 					reply = ba.CreateReply()
 				}
@@ -1797,6 +1838,16 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 						return nil, roachpb.NewErrorWithTxn(test.err, ba.Txn)
 					}
 					abort.Store(true)
+				case *roachpb.PushTxnRequest:
+					txn := roachpb.Transaction{
+						TxnMeta:       req.PusheeTxn,
+						OrigTimestamp: req.PusheeTxn.Timestamp,
+					}
+					if req.PushType == roachpb.PUSH_ABORT {
+						txn.Status = roachpb.ABORTED
+						abort.Store(true)
+					}
+					br.Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn = txn
 				default:
 					t.Fatalf("unexpected batch: %s", ba)
 				}
