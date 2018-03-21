@@ -76,7 +76,7 @@ func (sp *Span) IsUnconstrained() bool {
 //  2. Unconstrained span (should never be used in a constraint)
 //  3. Exclusive empty key boundary (use inclusive instead)
 func (sp *Span) Set(
-	keyCtx KeyContext, start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary,
+	keyCtx *KeyContext, start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary,
 ) {
 	if sp.immutable {
 		panic("mutation disallowed")
@@ -134,7 +134,7 @@ func (sp *Span) Set(
 //   (/1   - /2/1)  =  /1/High   - /2/1/Low
 //   (/1   - /2/1]  =  /1/High   - /2/1/High
 //   (/1   -     ]  =  /1/High   - /High
-func (sp *Span) Compare(keyCtx KeyContext, other *Span) int {
+func (sp *Span) Compare(keyCtx *KeyContext, other *Span) int {
 	// Span with lowest start boundary is less than the other.
 	if cmp := sp.CompareStarts(keyCtx, other); cmp != 0 {
 		return cmp
@@ -154,7 +154,7 @@ func (sp *Span) Compare(keyCtx KeyContext, other *Span) int {
 // boundaries of the two spans. The result will be 0 if the spans have the same
 // start boundary, -1 if this span has a smaller start boundary than the given
 // span, or 1 if this span has a bigger start boundary than the given span.
-func (sp *Span) CompareStarts(keyCtx KeyContext, other *Span) int {
+func (sp *Span) CompareStarts(keyCtx *KeyContext, other *Span) int {
 	return sp.start.Compare(keyCtx, other.start, sp.startExt(), other.startExt())
 }
 
@@ -162,14 +162,14 @@ func (sp *Span) CompareStarts(keyCtx KeyContext, other *Span) int {
 // of the two spans. The result will be 0 if the spans have the same end
 // boundary, -1 if this span has a smaller end boundary than the given span, or
 // 1 if this span has a bigger end boundary than the given span.
-func (sp *Span) CompareEnds(keyCtx KeyContext, other *Span) int {
+func (sp *Span) CompareEnds(keyCtx *KeyContext, other *Span) int {
 	return sp.end.Compare(keyCtx, other.end, sp.endExt(), other.endExt())
 }
 
 // StartsAfter returns true if this span is greater than the given span and
 // does not overlap it. In other words, this span's start boundary is greater
 // or equal to the given span's end boundary.
-func (sp *Span) StartsAfter(keyCtx KeyContext, other *Span) bool {
+func (sp *Span) StartsAfter(keyCtx *KeyContext, other *Span) bool {
 	return sp.start.Compare(keyCtx, other.end, sp.startExt(), other.endExt()) >= 0
 }
 
@@ -177,7 +177,7 @@ func (sp *Span) StartsAfter(keyCtx KeyContext, other *Span) bool {
 // This span is updated to only cover the range that is common to both spans.
 // If there is no overlap, then this span will not be updated, and
 // TryIntersectWith will return false.
-func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
+func (sp *Span) TryIntersectWith(keyCtx *KeyContext, other *Span) bool {
 	if sp.immutable {
 		panic("mutation disallowed")
 	}
@@ -221,7 +221,7 @@ func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
 // returns true. If the resulting span does not constrain the range [ - ], then
 // its IsUnconstrained method returns true, and it cannot be used as part of a
 // constraint in a constraint set.
-func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
+func (sp *Span) TryUnionWith(keyCtx *KeyContext, other *Span) bool {
 	if sp.immutable {
 		panic("mutation disallowed")
 	}
@@ -272,7 +272,7 @@ func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
 //      (/foo - /qux)  =>  [/foo\x00 - /qux).
 //  - for a decimal column, we don't have either Next or Prev so we can't
 //    change anything.
-func (sp *Span) PreferInclusive(keyCtx KeyContext) {
+func (sp *Span) PreferInclusive(keyCtx *KeyContext) {
 	if sp.immutable {
 		panic("mutation disallowed")
 	}
