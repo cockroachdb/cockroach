@@ -1,0 +1,6 @@
+status = [
+  "GitHub CI (Cockroach)"
+]
+block_labels = [
+  "do-not-merge"
+]
