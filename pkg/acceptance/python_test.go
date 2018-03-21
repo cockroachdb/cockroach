@@ -16,7 +16,6 @@ package acceptance
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,51 +26,6 @@ func TestDockerPython(t *testing.T) {
 	defer s.Close(t)
 
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", "3", 1)})
-	testDockerFail(ctx, t, "python", []string{"python", "-c", strings.Replace(python, "%v", `"a"`, 1)})
+	testDockerSuccess(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 3"})
+	testDockerFail(ctx, t, "python", []string{"sh", "-c", "cd /mnt/data/python && python test.py 2"})
 }
-
-const python = `
-import psycopg2
-import decimal
-conn = psycopg2.connect('')
-cur = conn.cursor()
-cur.execute("SELECT 1, 2+%v")
-v = cur.fetchall()
-assert v == [(1, 5)]
-
-# Verify #6597 (timestamp format) is fixed.
-cur = conn.cursor()
-cur.execute("SELECT now()")
-v = cur.fetchall()
-
-# Verify round-trip of strings containing backslashes.
-# https://github.com/cockroachdb/cockroachdb-python/issues/23
-s = ('\\\\',)
-cur.execute("SELECT %s", s)
-v = cur.fetchall()
-assert v == [s], (v, s)
-
-# Verify decimals with exponents can be parsed.
-cur = conn.cursor()
-cur.execute("SELECT 1e1::decimal")
-v = cur.fetchall()
-d = v[0][0]
-assert type(d) is decimal.Decimal
-# Use of compare_total here guarantees that we didn't just get '10' back, we got '1e1'.
-assert d.compare_total(decimal.Decimal('1e1')) == 0
-
-# Verify arrays with strings can be parsed.
-cur = conn.cursor()
-cur.execute("SELECT ARRAY['foo','bar','baz']")
-v = cur.fetchall()
-d = v[0][0]
-assert d == ["foo","bar","baz"]
-
-# Verify JSON values come through properly.
-cur = conn.cursor()
-cur.execute("SELECT '{\"a\":\"b\"}'::JSONB")
-v = cur.fetchall()
-d = v[0][0]
-assert d == {"a": "b"}
-`
