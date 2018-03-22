@@ -1,12 +1,13 @@
 import React from "react";
 
-import step1 from "assets/nodeMapSteps/1-getLicense.svg";
-import step2 from "assets/nodeMapSteps/2-setKey.svg";
-import step3 from "assets/nodeMapSteps/3-seeMap.png";
+import step1Img from "assets/nodeMapSteps/1-getLicense.svg";
+import step2Img from "assets/nodeMapSteps/2-setKey.svg";
+import step3Img from "assets/nodeMapSteps/3-seeMap.png";
 
 import {
   NodeCanvasContainerOwnProps,
 } from "src/views/clusterviz/containers/map/nodeCanvasContainer";
+import { NODE_MAP_DOCS_URL } from "src/views/clusterviz/components/instructionsBox";
 import "./needEnterpriseLicense.styl";
 
 const LICENSE_DOCS_URL = "https://www.cockroachlabs.com/docs/stable/enterprise-licensing.html";
@@ -32,22 +33,30 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
           </a>
         </div>
         <div className="need-license-steps">
-          <Step num={1} text="Get a trial license delivered straight to your inbox." img={step1} />
-          <Step num={2} text="Activate the trial license with two simple SQL commands." img={step2} />
-          <Step num={3} text="Come back to this page and check out your cluster's Node Map." img={step3} />
+          <Step num={1} img={step1Img}>
+            <a href={TRIAL_LICENSE_URL}>Get a trial license</a>{" "}
+            delivered straight to your inbox.
+          </Step>
+          <Step num={2} img={step2Img}>
+            Activate the trial license with two simple SQL commands.
+          </Step>
+          <Step num={3} img={step3Img}>
+            Add some configuration (<a href={NODE_MAP_DOCS_URL}>see our setup guide</a>)
+            and check out your cluster's Node Map.
+          </Step>
         </div>
       </section>
     );
   }
 }
 
-function Step(props: { num: number, text: string, img: string }) {
+function Step(props: { num: number, img: string, children: React.ReactNode }) {
   return (
     <div className="license-step">
       <img src={props.img} className="license-step__image" />
       <div className="license-step__text">
         <span className="license-step__stepnum">Step {props.num}:</span>{" "}
-        {props.text}
+        {props.children}
       </div>
     </div>
   );
