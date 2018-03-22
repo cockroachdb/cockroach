@@ -509,6 +509,10 @@ type importEntry struct {
 
 	// Only set if entryType is request
 	files []roachpb.ImportRequest_File
+
+	// for progress tracking we assign the spans numbers as they can be executed
+	// out-of-order based on splitAndScatter's scheduling.
+	progressIdx int
 }
 
 func errOnMissingRange(span intervalccl.Range, start, end hlc.Timestamp) error {
@@ -979,6 +983,9 @@ func restore(
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
+	for i := range importSpans {
+		importSpans[i].progressIdx = i
+	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
 	progressLogger := jobs.ProgressLogger{
@@ -1043,12 +1050,12 @@ func restore(
 	})
 
 	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-	var importIdx int
 	for readyForImportSpan := range readyForImportCh {
 		newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
 		if err != nil {
 			return mu.res, nil, nil, err
 		}
+		idx := readyForImportSpan.progressIdx
 
 		importRequest := &roachpb.ImportRequest{
 			// Import is a point request because we don't want DistSender to split
@@ -1062,8 +1069,6 @@ func restore(
 		}
 
 		importCtx, importSpan := tracing.ChildSpan(gCtx, "import")
-		idx := importIdx
-		importIdx++
 		log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
 
 		select {
@@ -1084,6 +1089,15 @@ func restore(
 
 			mu.Lock()
 			mu.res.Add(importRes.(*roachpb.ImportResponse).Imported)
+
+			// Assert that we're actually marking the correct span done. See #23977.
+			if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
+				mu.Unlock()
+				return errors.Errorf(
+					"request %d for span %v (to %v) does not match import span for same idx: %v",
+					idx, importRequest.DataSpan, newSpan, importSpans[idx],
+				)
+			}
 			mu.requestsCompleted[idx] = true
 			for j := mu.lowWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
 				mu.lowWaterMark = j
