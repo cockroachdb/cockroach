@@ -94,6 +94,10 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 
+	config.auditor.Lock()
+	config.auditor.orderLinesFreq[d.oOlCnt]++
+	config.auditor.Unlock()
+
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
 	// orderItem already tracks a quantity that can be larger than 1.
