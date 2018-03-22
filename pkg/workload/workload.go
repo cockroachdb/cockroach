@@ -97,6 +97,9 @@ type Hooks struct {
 	// loaded. It called after restoring a fixture. This, for example, is where
 	// creating foreign keys should go.
 	PostLoad func(*gosql.DB) error
+	// PostRun is called after workload run has ended. This is where any post-run
+	// special printing or validation can be done.
+	PostRun func() error
 }
 
 // Meta is used to register a Generator at init time and holds meta information
@@ -141,7 +144,7 @@ type Table struct {
 type QueryLoad struct {
 	SQLDatabase string
 
-	// WorkerFns one function per worker. It is to be called once per unit of
+	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
 	WorkerFns []func(context.Context) error
 

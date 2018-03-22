@@ -14,6 +14,15 @@
 
 package tpcc
 
+import (
+	gosql "database/sql"
+	"encoding/binary"
+	"fmt"
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
 const (
 	tpccWarehouseSchema = `(
 		w_id        integer   not null primary key,
@@ -148,3 +157,62 @@ const (
 	)`
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
+
+// NB: Since we always split at the same points (specific warehouse IDs and
+// item IDs), splitting is idempotent.
+func splitTables(db *gosql.DB, warehouses int) {
+	// Split district and warehouse tables every 10 warehouses.
+	const warehousesPerRange = 10
+	for i := warehousesPerRange; i < warehouses; i += warehousesPerRange {
+		sql := fmt.Sprintf("ALTER TABLE warehouse SPLIT AT VALUES (%d)", i)
+		if _, err := db.Exec(sql); err != nil {
+			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		}
+		sql = fmt.Sprintf("ALTER TABLE district SPLIT AT VALUES (%d, 0)", i)
+		if _, err := db.Exec(sql); err != nil {
+			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		}
+	}
+
+	// Split the item table every 100 items.
+	const itemsPerRange = 100
+	for i := itemsPerRange; i < numItems; i += itemsPerRange {
+		sql := fmt.Sprintf("ALTER TABLE item SPLIT AT VALUES (%d)", i)
+		if _, err := db.Exec(sql); err != nil {
+			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		}
+	}
+
+	// Split the history table into 1000 ranges.
+	const maxVal = math.MaxUint64
+	const valsPerRange uint64 = maxVal / 1000
+	for i := 1; i < 100; i++ {
+		var u uuid.UUID
+		binary.BigEndian.PutUint64(u.GetBytes()[:], uint64(i)*valsPerRange)
+		sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
+		if _, err := db.Exec(sql); err != nil {
+			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		}
+	}
+}
+
+func scatterRanges(db *gosql.DB) {
+	tables := []string{
+		`customer`,
+		`district`,
+		`history`,
+		`item`,
+		`new_order`,
+		`"order"`,
+		`order_line`,
+		`stock`,
+		`warehouse`,
+	}
+
+	for _, table := range tables {
+		sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
+		if _, err := db.Exec(sql); err != nil {
+			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		}
+	}
+}

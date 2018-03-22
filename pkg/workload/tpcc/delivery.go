@@ -21,8 +21,12 @@ import (
 
 	"context"
 
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // 2.7 The Delivery Transaction
@@ -42,92 +46,127 @@ import (
 
 type delivery struct{}
 
-var _ tpccTx = newOrder{}
+var _ tpccTx = delivery{}
 
-func (del delivery) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
-	oCarrierID := rand.Intn(10) + 1
+func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
+	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
 	err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		config.txOpts,
 		func(tx *gosql.Tx) error {
-			getNewOrder, err := tx.Prepare(`
-			SELECT no_o_id
-			FROM new_order
-			WHERE no_w_id = $1 AND no_d_id = $2
-			ORDER BY no_o_id ASC
-			LIMIT 1`)
-			if err != nil {
-				return err
-			}
-			delNewOrder, err := tx.Prepare(`
-			DELETE FROM new_order
-			WHERE no_w_id = $1 AND no_d_id = $2 AND no_o_id = $3`)
-			if err != nil {
-				return err
-			}
-			updateOrder, err := tx.Prepare(`
-			UPDATE "order"
-			SET o_carrier_id = $1
-			WHERE o_w_id = $2 AND o_d_id = $3 AND o_id = $4
-			RETURNING o_c_id`)
-			if err != nil {
-				return err
-			}
-			updateOrderLine, err := tx.Prepare(`
-			UPDATE order_line
-			SET ol_delivery_d = $1
-			WHERE ol_w_id = $2 AND ol_d_id = $3 AND ol_o_id = $4`)
-			if err != nil {
-				return err
-			}
-			sumOrderLine, err := tx.Prepare(`
-			SELECT SUM(ol_amount) FROM order_line
-			WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`)
-			if err != nil {
-				return err
-			}
-			updateCustomer, err := tx.Prepare(`
-			UPDATE customer
-			SET (c_balance, c_delivery_cnt) =
-				(c_Balance + $1, c_delivery_cnt + 1)
-			WHERE c_w_id = $2 AND c_d_id = $3 AND c_id = $4`)
-			if err != nil {
-				return err
-			}
-
 			// 2.7.4.2. For each district:
+			dIDoIDPairs := make(map[int]int)
+			dIDolTotalPairs := make(map[int]float64)
 			for dID := 1; dID <= 10; dID++ {
 				var oID int
-				if err := getNewOrder.QueryRow(wID, dID).Scan(&oID); err != nil {
+				if err := tx.QueryRow(fmt.Sprintf(`
+					SELECT no_o_id
+					FROM new_order
+					WHERE no_w_id = %d AND no_d_id = %d
+					ORDER BY no_o_id ASC
+					LIMIT 1`,
+					wID, dID)).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if err != gosql.ErrNoRows {
 						return err
 					}
 					continue
 				}
-				if _, err := delNewOrder.Exec(wID, dID, oID); err != nil {
-					return err
-				}
-				var oCID int
-				if err := updateOrder.QueryRow(oCarrierID, wID, dID, oID).Scan(&oCID); err != nil {
-					return err
-				}
-				if _, err := updateOrderLine.Exec(olDeliveryD, wID, dID, oID); err != nil {
-					return err
-				}
+				dIDoIDPairs[dID] = oID
+
 				var olTotal float64
-				if err := sumOrderLine.QueryRow(wID, dID, oID).Scan(&olTotal); err != nil {
+				if err := tx.QueryRow(fmt.Sprintf(`
+						SELECT SUM(ol_amount) FROM order_line
+						WHERE ol_w_id = %d AND ol_d_id = %d AND ol_o_id = %d`,
+					wID, dID, oID)).Scan(&olTotal); err != nil {
 					return err
 				}
-				if _, err := updateCustomer.Exec(olTotal, wID, dID, oID); err != nil {
-					return err
-				}
+				dIDolTotalPairs[dID] = olTotal
 			}
-			return nil
-		},
-	)
+			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
+
+			rows, err := tx.Query(fmt.Sprintf(`
+					UPDATE "order"
+					SET o_carrier_id = %d
+					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)
+					RETURNING o_d_id, o_c_id`,
+				oCarrierID, wID, dIDoIDPairsStr))
+			if err != nil {
+				return err
+			}
+			dIDcIDPairs := make(map[int]int)
+			for rows.Next() {
+				var dID, oCID int
+				if err := rows.Scan(&dID, &oCID); err != nil {
+					rows.Close()
+					return err
+				}
+				dIDcIDPairs[dID] = oCID
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			rows.Close()
+
+			if err := checkSameKeys(dIDoIDPairs, dIDcIDPairs); err != nil {
+				return err
+			}
+			dIDcIDPairsStr := makeInTuples(dIDcIDPairs)
+			dIDToOlTotalStr := makeWhereCases(dIDolTotalPairs)
+
+			if _, err := tx.Exec(fmt.Sprintf(`
+				UPDATE customer
+				SET c_delivery_cnt = c_delivery_cnt + 1,
+					c_balance = c_balance + CASE c_d_id %s END
+				WHERE c_w_id = %d AND (c_d_id, c_id) IN (%s)`,
+				dIDToOlTotalStr, wID, dIDcIDPairsStr)); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(fmt.Sprintf(`
+				DELETE FROM new_order
+				WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
+				wID, dIDoIDPairsStr)); err != nil {
+				return err
+			}
+			_, err = tx.Exec(fmt.Sprintf(`
+				UPDATE order_line
+				SET ol_delivery_d = '%s'
+				WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
+				olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr))
+			return err
+		})
 	return nil, err
+}
+
+func makeInTuples(pairs map[int]int) string {
+	tupleStrs := make([]string, 0, len(pairs))
+	for k, v := range pairs {
+		tupleStrs = append(tupleStrs, fmt.Sprintf("(%d, %d)", k, v))
+	}
+	return strings.Join(tupleStrs, ", ")
+}
+
+func makeWhereCases(cases map[int]float64) string {
+	casesStrs := make([]string, 0, len(cases))
+	for k, v := range cases {
+		casesStrs = append(casesStrs, fmt.Sprintf("WHEN %d THEN %f", k, v))
+	}
+	return strings.Join(casesStrs, " ")
+}
+
+func checkSameKeys(a, b map[int]int) error {
+	if len(a) != len(b) {
+		return errors.Errorf("different number of keys")
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return errors.Errorf("missing key %v", k)
+		}
+	}
+	return nil
 }
