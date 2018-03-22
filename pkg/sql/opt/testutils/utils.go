@@ -74,8 +74,8 @@ func ExecuteTestDDL(tb testing.TB, sql string, catalog *TestCatalog) string {
 
 	switch stmt := stmt.(type) {
 	case *tree.CreateTable:
-		tbl := catalog.CreateTable(stmt)
-		return tbl.String()
+		tab := catalog.CreateTable(stmt)
+		return tab.String()
 
 	default:
 		tb.Fatalf("expected CREATE TABLE statement but found: %v", stmt)

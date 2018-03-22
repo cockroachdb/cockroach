@@ -135,7 +135,7 @@ func (p *LogicalProps) FormatColSet(
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		colSet.ForEach(func(i int) {
-			p.FormatCol("", opt.ColumnIndex(i), md, &buf)
+			p.FormatCol("", opt.ColumnID(i), md, &buf)
 		})
 		tp.Child(buf.String())
 	}
@@ -165,19 +165,19 @@ func (p *LogicalProps) FormatColList(
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
 func (p *LogicalProps) FormatCol(
-	label string, index opt.ColumnIndex, md *opt.Metadata, buf *bytes.Buffer,
+	label string, id opt.ColumnID, md *opt.Metadata, buf *bytes.Buffer,
 ) {
 	if label == "" {
-		label = md.ColumnLabel(index)
+		label = md.ColumnLabel(id)
 	}
-	typ := md.ColumnType(index)
+	typ := md.ColumnType(id)
 	buf.WriteByte(' ')
 	buf.WriteString(label)
 	buf.WriteByte(':')
-	fmt.Fprintf(buf, "%d", index)
+	fmt.Fprintf(buf, "%d", id)
 	buf.WriteByte('(')
 	buf.WriteString(typ.String())
-	if p.Relational.NotNullCols.Contains(int(index)) {
+	if p.Relational.NotNullCols.Contains(int(id)) {
 		buf.WriteString("!null")
 	}
 	buf.WriteByte(')')

@@ -86,12 +86,12 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	return texpr
 }
 
-// hasColumn returns true if the given column index is found within this scope.
-func (s *scope) hasColumn(index opt.ColumnIndex) bool {
+// hasColumn returns true if the given column id is found within this scope.
+func (s *scope) hasColumn(id opt.ColumnID) bool {
 	for curr := s; curr != nil; curr = curr.parent {
 		for i := range curr.cols {
 			col := &curr.cols[i]
-			if col.index == index {
+			if col.id == id {
 				return true
 			}
 		}
@@ -107,7 +107,7 @@ func (s *scope) hasSameColumns(other *scope) bool {
 		return false
 	}
 	for i := range s.cols {
-		if s.cols[i].index != other.cols[i].index {
+		if s.cols[i].id != other.cols[i].id {
 			return false
 		}
 	}
@@ -276,13 +276,13 @@ func (s *scope) FindSourceProvidingColumn(
 			)
 		}
 		if candidateFromAnonSource != nil {
-			return &candidateFromAnonSource.table, candidateFromAnonSource, int(candidateFromAnonSource.index), nil
+			return &candidateFromAnonSource.table, candidateFromAnonSource, int(candidateFromAnonSource.id), nil
 		}
 
 		// Else if a single named source exists with a matching non-hidden column,
 		// use that.
 		if candidateWithPrefix != nil && !moreThanOneCandidateWithPrefix {
-			return &candidateWithPrefix.table, candidateWithPrefix, int(candidateWithPrefix.index), nil
+			return &candidateWithPrefix.table, candidateWithPrefix, int(candidateWithPrefix.id), nil
 		}
 		if moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
 			return nil, nil, -1, s.newAmbiguousColumnError(
@@ -293,7 +293,7 @@ func (s *scope) FindSourceProvidingColumn(
 		// One last option: if a single source exists with a matching hidden
 		// column, use that.
 		if hiddenCandidate != nil {
-			return &hiddenCandidate.table, hiddenCandidate, int(hiddenCandidate.index), nil
+			return &hiddenCandidate.table, hiddenCandidate, int(hiddenCandidate.id), nil
 		}
 	}
 

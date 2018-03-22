@@ -148,13 +148,12 @@ func (p Presentation) format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-
-		fmt.Fprintf(buf, "%s:%d", col.Label, col.Index)
+		fmt.Fprintf(buf, "%s:%d", col.Label, col.ID)
 	}
 }
 
 // Ordering defines the order of rows provided or required by an operator. A
-// negative value indicates descending order on the column index "-(value)".
+// negative value indicates descending order on the column id "-(value)".
 type Ordering []opt.OrderingColumn
 
 // Defined is true if a particular row ordering is required or provided.
@@ -178,7 +177,7 @@ func (o Ordering) format(buf *bytes.Buffer) {
 		} else {
 			buf.WriteByte('+')
 		}
-		fmt.Fprintf(buf, "%d", col.Index())
+		fmt.Fprintf(buf, "%d", col.ID())
 	}
 }
 

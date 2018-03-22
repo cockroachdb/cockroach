@@ -90,10 +90,10 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 	varsUsedIn := len(inScope.groupby.varsUsed)
 	switch t := scalar.(type) {
 	case *columnProps:
-		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.index) {
-			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.index)
+		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.id) {
+			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.id)
 		}
-		return b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
+		return b.factory.ConstructVariable(b.factory.InternPrivate(t.id))
 
 	case *tree.AndExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)
@@ -187,7 +187,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
 			panic(errorf("invalid column ordinal @%d", t.Idx))
 		}
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(inScope.cols[t.Idx].index))
+		out = b.factory.ConstructVariable(b.factory.InternPrivate(inScope.cols[t.Idx].id))
 		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:

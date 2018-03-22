@@ -28,9 +28,9 @@ import (
 // values on that column (in other words, inverts the result of any Datum
 // comparisons on that column).
 type Columns struct {
-	// firstCol holds the first column index and otherCols hold any indexes
-	// beyond the first. These are separated in order to optimize for the common
-	// case of a single-column constraint.
+	// firstCol holds the first column id and otherCols hold any ids beyond the
+	// first. These are separated in order to optimize for the common case of a
+	// single-column constraint.
 	firstCol  opt.OrderingColumn
 	otherCols []opt.OrderingColumn
 }

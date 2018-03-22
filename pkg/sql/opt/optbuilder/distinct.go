@@ -49,7 +49,7 @@ func (b *Builder) buildDistinct(
 	// Distinct is equivalent to group by without any aggregations.
 	var groupCols opt.ColSet
 	for i := range byCols {
-		groupCols.Add(int(byCols[i].index))
+		groupCols.Add(int(byCols[i].id))
 		outScope.cols = append(outScope.cols, byCols[i])
 	}
 

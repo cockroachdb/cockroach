@@ -52,8 +52,8 @@ func (tc *TestCatalog) Table(name string) *TestTable {
 }
 
 // AddTable adds the given test table to the catalog.
-func (tc *TestCatalog) AddTable(tbl *TestTable) {
-	tc.tables[tbl.Name] = tbl
+func (tc *TestCatalog) AddTable(tab *TestTable) {
+	tc.tables[tab.Name] = tab
 }
 
 // TestTable implements the opt.Table interface for testing purposes.
