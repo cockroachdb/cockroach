@@ -409,7 +409,7 @@ define Func {
 }
 
 define Variable {
-    Col ColumnIndex
+    Col ColumnID
 }
 
 [Concat, Normalize]

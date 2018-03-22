@@ -26,8 +26,8 @@ import (
 type buildScalarCtx struct {
 	ivh tree.IndexedVarHelper
 
-	// ivarMap is a map from opt.ColumnIndex to the index of an IndexedVar.
-	// If a ColumnIndex is not in the map, it cannot appear in the expression.
+	// ivarMap is a map from opt.ColumnID to the index of an IndexedVar.
+	// If a ColumnID is not in the map, it cannot appear in the expression.
 	ivarMap opt.ColMap
 }
 
@@ -87,12 +87,12 @@ func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExp
 }
 
 func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	colIndex := ev.Private().(opt.ColumnIndex)
-	idx, ok := ctx.ivarMap.Get(int(colIndex))
+	colID := ev.Private().(opt.ColumnID)
+	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
-		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colIndex))
+		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colID))
 	}
-	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colIndex))
+	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colID))
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {

@@ -113,12 +113,12 @@ func (b *Builder) synthesizeColumn(
 	}
 
 	name := tree.Name(label)
-	colIndex := b.factory.Metadata().AddColumn(label, typ)
+	colID := b.factory.Metadata().AddColumn(label, typ)
 	col := columnProps{
 		origName: name,
 		name:     name,
 		typ:      typ,
-		index:    colIndex,
+		id:       colID,
 		expr:     expr,
 	}
 	b.colMap = append(b.colMap, col)
@@ -133,7 +133,7 @@ func (b *Builder) constructList(
 ) memo.GroupID {
 	colList := make(opt.ColList, len(cols))
 	for i := range cols {
-		colList[i] = cols[i].index
+		colList[i] = cols[i].id
 	}
 
 	list := b.factory.InternList(items)
@@ -153,8 +153,8 @@ func (b *Builder) constructList(
 // verifies it refers to a valid target in the SELECT list, and returns the
 // corresponding column index. For example:
 //    SELECT a from T ORDER by 1
-// Here "1" refers to the first item in the SELECT list, "a". The returned index
-// is 0.
+// Here "1" refers to the first item in the SELECT list, "a". The returned
+// index is 0.
 func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 	ord := int64(-1)
 	switch i := expr.(type) {
@@ -280,15 +280,15 @@ func symbolicExprStr(expr tree.Expr) string {
 func colsToColList(cols []columnProps) opt.ColList {
 	colList := make(opt.ColList, len(cols))
 	for i := range cols {
-		colList[i] = cols[i].index
+		colList[i] = cols[i].id
 	}
 	return colList
 }
 
-func findColByIndex(cols []columnProps, colIndex opt.ColumnIndex) *columnProps {
+func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
 	for i := range cols {
 		col := &cols[i]
-		if col.index == colIndex {
+		if col.id == id {
 			return col
 		}
 	}
@@ -300,7 +300,7 @@ func makePresentation(cols []columnProps) memo.Presentation {
 	presentation := make(memo.Presentation, len(cols))
 	for i := range cols {
 		col := &cols[i]
-		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}
+		presentation[i] = opt.LabeledColumn{Label: string(col.name), ID: col.id}
 	}
 	return presentation
 }

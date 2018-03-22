@@ -440,7 +440,7 @@ func (m *Memo) formatPrivate(private interface{}, buf *bytes.Buffer) {
 		case nil:
 		case *ScanOpDef:
 			fmt.Fprintf(buf, " %s", m.metadata.Table(t.Table).TabName())
-		case opt.ColumnIndex:
+		case opt.ColumnID:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
 		case *opt.ColSet, *opt.ColMap, *opt.ColList:
 			// Don't show anything, because it's mostly redundant.

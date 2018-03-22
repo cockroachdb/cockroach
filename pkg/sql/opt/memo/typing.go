@@ -118,12 +118,12 @@ func init() {
 }
 
 // typeVariable returns the type of a variable expression, which is stored in
-// the query metadata and acessed by column index.
+// the query metadata and accessed by column id.
 func typeVariable(ev ExprView) types.T {
-	colIndex := ev.Private().(opt.ColumnIndex)
-	typ := ev.Metadata().ColumnType(colIndex)
+	colID := ev.Private().(opt.ColumnID)
+	typ := ev.Metadata().ColumnType(colID)
 	if typ == nil {
-		panic(fmt.Sprintf("column %d does not have type", colIndex))
+		panic(fmt.Sprintf("column %d does not have type", colID))
 	}
 	return typ
 }

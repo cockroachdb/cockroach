@@ -108,7 +108,7 @@ type groupby struct {
 	//                \   /                 a GROUP BY expression
 	//  5.          Build v/(k+v) [v] <- error - build is complete and varsUsed
 	//                                   is not empty
-	varsUsed []opt.ColumnIndex
+	varsUsed []opt.ColumnID
 }
 
 // aggregateInfo stores information about an aggregation function call.
@@ -215,9 +215,9 @@ func (b *Builder) buildAggregation(
 	for i, agg := range aggInfos {
 		argList := make([]memo.GroupID, len(agg.args))
 		for j := range agg.args {
-			colIndex := argCols[0].index
+			colID := argCols[0].id
 			argCols = argCols[1:]
-			argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colIndex))
+			argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colID))
 		}
 		aggExprs[i] = b.factory.ConstructFunction(
 			b.factory.InternList(argList),
@@ -228,7 +228,7 @@ func (b *Builder) buildAggregation(
 	aggList := b.constructList(opt.AggregationsOp, aggExprs, aggOutScope.getAggregateCols())
 	var groupingColSet opt.ColSet
 	for i := range groupings {
-		groupingColSet.Add(int(aggInScope.cols[i].index))
+		groupingColSet.Add(int(aggInScope.cols[i].id))
 	}
 	outGroup = b.factory.ConstructGroupBy(outGroup, aggList, b.factory.InternPrivate(&groupingColSet))
 
@@ -402,7 +402,7 @@ func (b *Builder) buildAggregateFunction(
 	}
 
 	// Replace the function call with a reference to the column.
-	return b.factory.ConstructVariable(b.factory.InternPrivate(col.index)), col
+	return b.factory.ConstructVariable(b.factory.InternPrivate(col.id)), col
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {

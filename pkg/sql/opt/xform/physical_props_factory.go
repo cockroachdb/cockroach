@@ -116,8 +116,8 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 
 		for i := 0; i < cnt; i++ {
 			primaryCol := primary.Column(i)
-			colIndex := f.mem.Metadata().TableColumn(def.Table, primaryCol.Ordinal)
-			orderingCol := opt.MakeOrderingColumn(colIndex, primaryCol.Descending)
+			colID := f.mem.Metadata().TableColumn(def.Table, primaryCol.Ordinal)
+			orderingCol := opt.MakeOrderingColumn(colID, primaryCol.Descending)
 			if orderingCol != required[i] {
 				return false
 			}

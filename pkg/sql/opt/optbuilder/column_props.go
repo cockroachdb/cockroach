@@ -37,9 +37,9 @@ type columnProps struct {
 	table tree.TableName
 	typ   types.T
 
-	// index is an identifier for this column, which is unique across all the
+	// id is an identifier for this column, which is unique across all the
 	// columns in the query.
-	index  opt.ColumnIndex
+	id     opt.ColumnID
 	hidden bool
 
 	// expr is the expression that this column refers to, if any. expr is nil if

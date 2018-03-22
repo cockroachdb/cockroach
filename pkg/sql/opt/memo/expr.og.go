@@ -1941,7 +1941,7 @@ func (e *Expr) AsSubquery() *SubqueryExpr {
 }
 
 // VariableExpr is the typed scalar value of a column in the query. The private
-// field is a Metadata.ColumnIndex that references the column by index.
+// field is a Metadata.ColumnID that references the column by index.
 type VariableExpr Expr
 
 func MakeVariableExpr(col PrivateID) VariableExpr {

@@ -463,7 +463,7 @@ func (v *indexInfo) makeIndexConstraints(
 
 		colDesc := &v.desc.Columns[idx]
 		colInfos = append(colInfos, idxconstraint.IndexColumnInfo{
-			VarIdx:    opt.ColumnIndex(idx + 1),
+			VarID:     opt.ColumnID(idx + 1),
 			Typ:       colDesc.Type.ToDatumType(),
 			Direction: dir,
 			Nullable:  colDesc.Nullable,

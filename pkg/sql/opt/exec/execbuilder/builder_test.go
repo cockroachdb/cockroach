@@ -231,13 +231,13 @@ func TestBuild(t *testing.T) {
 
 					parts := strings.Split(d.Input, ".")
 					name := tree.NewTableName(tree.Name(parts[0]), tree.Name(parts[1]))
-					tbl, err := eng.Catalog().FindTable(context.Background(), name)
+					tab, err := eng.Catalog().FindTable(context.Background(), name)
 					if err != nil {
 						d.Fatalf(t, "Catalog: %v", err)
 					}
 
 					tp := treeprinter.New()
-					opt.FormatCatalogTable(tbl, tp)
+					opt.FormatCatalogTable(tab, tp)
 					return tp.String()
 
 				default:

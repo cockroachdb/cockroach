@@ -1322,7 +1322,7 @@ func (_f *Factory) ConstructSubquery(
 
 // ConstructVariable constructs an expression for the Variable operator.
 // Variable is the typed scalar value of a column in the query. The private
-// field is a Metadata.ColumnIndex that references the column by index.
+// field is a Metadata.ColumnID that references the column by index.
 func (_f *Factory) ConstructVariable(
 	col memo.PrivateID,
 ) memo.GroupID {

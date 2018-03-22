@@ -32,8 +32,8 @@ func TestPhysicalProps(t *testing.T) {
 
 	// Presentation props.
 	presentation := memo.Presentation{
-		opt.LabeledColumn{Label: "a", Index: 1},
-		opt.LabeledColumn{Label: "b", Index: 2},
+		opt.LabeledColumn{Label: "a", ID: 1},
+		opt.LabeledColumn{Label: "b", ID: 2},
 	}
 	props = &memo.PhysicalProps{Presentation: presentation}
 	testPhysicalProps(t, props, "p:a:1,b:2")
