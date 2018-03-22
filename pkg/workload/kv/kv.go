@@ -109,15 +109,16 @@ func (w *kv) Tables() []workload.Table {
 		Name:   `kv`,
 		Schema: kvSchema,
 		// TODO(dan): Support initializing kv with data.
-		InitialRowCount: 0,
-		SplitCount:      w.splits,
-		SplitFn: func(splitIdx int) []interface{} {
-			rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
-			g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
-			return []interface{}{
-				int(g.hash(rng.Int63())),
-			}
-		},
+		Splits: workload.Tuples(
+			w.splits,
+			func(splitIdx int) []interface{} {
+				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
+				return []interface{}{
+					int(g.hash(rng.Int63())),
+				}
+			},
+		),
 	}
 	return []workload.Table{table}
 }

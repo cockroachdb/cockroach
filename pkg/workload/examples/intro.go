@@ -40,19 +40,21 @@ func (intro) Meta() workload.Meta { return introMeta }
 func (intro) Tables() []workload.Table {
 	return []workload.Table{
 		{
-			Name:            `mytable`,
-			Schema:          `(l INT PRIMARY KEY, v TEXT)`,
-			InitialRowCount: len(mytableRows),
-			InitialRowFn: func(rowIdx int) []interface{} {
-				// The second datum in mytableRows is a hex encoded string, but
-				// we want to hand it back as bytes.
-				row := mytableRows[rowIdx]
-				bytes, err := hex.DecodeString(row[1].(string))
-				if err != nil {
-					panic(err)
-				}
-				return []interface{}{row[0], bytes}
-			},
+			Name:   `mytable`,
+			Schema: `(l INT PRIMARY KEY, v TEXT)`,
+			InitialRows: workload.Tuples(
+				len(mytableRows),
+				func(rowIdx int) []interface{} {
+					// The second datum in mytableRows is a hex encoded string, but
+					// we want to hand it back as bytes.
+					row := mytableRows[rowIdx]
+					bytes, err := hex.DecodeString(row[1].(string))
+					if err != nil {
+						panic(err)
+					}
+					return []interface{}{row[0], bytes}
+				},
+			),
 		},
 	}
 }
