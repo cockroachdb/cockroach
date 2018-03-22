@@ -287,9 +287,31 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		scatterRanges(dbs[0])
 	}
 
+	// If no partitions were specified, pretend there is a single partition
+	// containing all warehouses.
+	if w.partitions == 0 {
+		w.partitions = 1
+	}
+	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
+	// a machine that holds partition "i % *partitions".
+	partitionDBs := make([][]*gosql.DB, w.partitions)
+	for i, db := range dbs {
+		p := i % w.partitions
+		partitionDBs[p] = append(partitionDBs[p], db)
+	}
+	for i := range partitionDBs {
+		if partitionDBs[i] == nil {
+			partitionDBs[i] = dbs
+		}
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx / numWorkersPerWarehouse
+		warehouse := workerIdx % w.warehouses
+		// NB: Each partition contains "warehouses / partitions" warehouses. See
+		// partitionTables().
+		p := (warehouse * w.partitions) / w.warehouses
+		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
 			config:    w,
