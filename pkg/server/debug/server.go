@@ -121,11 +121,17 @@ func NewServer(st *cluster.Settings) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	return &Server{
+	s := &Server{
 		st:  st,
 		mux: mux,
 		spy: spy,
 	}
+
+	mux.HandleFunc("/debug/pprof/ui/profile", (&pprofHandler{
+		profileHandler: pprof.Profile,
+	}).Handle)
+
+	return s
 }
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access
