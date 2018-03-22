@@ -16,7 +16,8 @@ namespace CockroachDrivers
             connStringBuilder.Username = Environment.GetEnvironmentVariable("PGUSER");
             connStringBuilder.SslMode = SslMode.Require;
             connStringBuilder.TrustServerCertificate = true;
-            connStringBuilder.Database = "";
+            // Npgsql needs to connect to a database that already exists.
+            connStringBuilder.Database = "system";
             Simple(connStringBuilder.ConnectionString);
             TxnSample(connStringBuilder.ConnectionString);
             UnitTest(connStringBuilder.ConnectionString);
@@ -284,6 +285,15 @@ namespace CockroachDrivers
                     }
                 }
 
+                using (var cmd = new NpgsqlCommand("USE test", conn))
+                {
+                    cmd.Prepare();
+                    var rows = cmd.ExecuteNonQuery();
+                    if (rows != -1)
+                    {
+                        throw new DataException(String.Format("USE reports {0} rows changed, expecting -1", rows));
+                    }
+                }
 
                 using (var cmd = new NpgsqlCommand("CREATE TABLE accounts (id INT PRIMARY KEY, balance INT, cdate DATE)", conn))
                 {
@@ -387,21 +397,6 @@ namespace CockroachDrivers
                     if (rows != 1)
                     {
                         throw new DataException(String.Format("INSERT reports {0} rows changed, expecting 1", rows));
-                    }
-                }
-
-                using (var cmd = new NpgsqlCommand("SELECT nspname FROM pg_catalog.pg_namespace WHERE oid=@oid", conn))
-                {
-                    cmd.Parameters.Add("oid", NpgsqlTypes.NpgsqlDbType.Bigint).Value = 1782195457;
-                    cmd.Prepare();
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        reader.Read();
-                        var nspName = reader.GetString(0);
-                        if (nspName != "pg_catalog")
-                        {
-                            throw new DataException(String.Format("SELECT returns {0}, expected pg_catalog", nspName));
-                        }
                     }
                 }
             }
