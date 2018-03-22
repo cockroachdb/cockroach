@@ -39,6 +39,11 @@ type scope struct {
 	groupby      groupby
 	ordering     memo.Ordering
 	presentation memo.Presentation
+
+	// Desired number of columns for subqueries found during name resolution and
+	// type checking. This only applies to the top-level subqueries that are
+	// anchored directly to a relational expression.
+	columns int
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions.
@@ -76,6 +81,12 @@ func (s *scope) appendColumns(src *scope) {
 // conversion, it performs name resolution and replaces unresolved column names
 // with columnProps.
 func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+	// TODO(peter): The caller should specify the desired number of columns. This
+	// is needed when a subquery is used by an UPDATE statement.
+	// TODO(andy): shouldn't this be part of the desired type rather than yet
+	// another parameter?
+	s.columns = 1
+
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
@@ -472,10 +483,59 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			// Similar to the work done in PR #17833.
 		}
 
-		// TODO(rytaft): Implement subquery replacement.
+	case *tree.ArrayFlatten:
+		// TODO(peter): the ARRAY flatten operator requires a single column from
+		// the subquery.
+		if sub, ok := t.Subquery.(*tree.Subquery); ok {
+			t.Subquery = s.replaceSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
+		}
+
+	case *tree.ComparisonExpr:
+		switch t.Operator {
+		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
+			if sub, ok := t.Right.(*tree.Subquery); ok {
+				t.Right = s.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
+			}
+		}
+
+	case *tree.Subquery:
+		if t.Exists {
+			expr = s.replaceSubquery(t, true /* multi-row */, -1 /* desired-columns */)
+		} else {
+			expr = s.replaceSubquery(t, false /* multi-row */, s.columns /* desired-columns */)
+		}
 	}
 
+	// Reset the desired number of columns since if the subquery is a child of
+	// any other expression, type checking will verify the number of columns.
+	s.columns = -1
 	return true, expr
+}
+
+// Replace a raw subquery node with a typed subquery. multiRow specifies
+// whether the subquery is occurring in a single-row or multi-row
+// context. desiredColumns specifies the desired number of columns for the
+// subquery. Specifying -1 for desiredColumns allows the subquery to return any
+// number of columns and is used when the normal type checking machinery will
+// verify that the correct number of columns is returned.
+func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
+	out, outScope := s.builder.buildStmt(sub.Select, s)
+	if desiredColumns > 0 && len(outScope.cols) != desiredColumns {
+		n := len(outScope.cols)
+		switch desiredColumns {
+		case 1:
+			panic(errorf("subquery must return only one column, found %d", n))
+		default:
+			panic(errorf("subquery must return %d columns, found %d", desiredColumns, n))
+		}
+	}
+
+	return &subquery{
+		cols:     outScope.cols,
+		out:      out,
+		multiRow: multiRow,
+		exists:   sub.Exists,
+	}
 }
 
 // VisitPost is part of the Visitor interface.

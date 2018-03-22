@@ -1303,6 +1303,43 @@ func (_f *Factory) ConstructOffset(
 }
 
 // ConstructSubquery constructs an expression for the Subquery operator.
+// Subquery is a subquery in a single-row context such as
+// `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
+// In a single-row context, the outer query is only valid if the subquery
+// returns at most one row.
+//
+// Subqueries in a multi-row context such as
+// `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`
+// can be transformed to a single row context using the Any operator. (Note that
+// this is different from the SQL ANY operator. See the comment above the Any
+// operator for more details.)
+//
+// We use the following transformations:
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// `<var> IN (<subquery>)`
+//    ==> `Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+//
+// `<var> NOT IN (<subquery>)`
+//    ==> `NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+//
+// `<var> <comp> {SOME|ANY}(<subquery>)`
+//    ==> `Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))`
+//
+// `<var> <comp> ALL(<subquery>)`
+//    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//
+// The Input field contains the subquery itself, and the Projection field
+// contains a single column representing the output of the subquery. For
+// example, `(SELECT 1, 'a')` would be represented by the following structure:
+//
+// (Subquery
+//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   (Variable 3)
+// )
+//
+// Here Variable 3 refers to the projection from the Input,
+// (Tuple (Const 1) (Const 'a')).
 func (_f *Factory) ConstructSubquery(
 	input memo.GroupID,
 	projection memo.GroupID,
@@ -1318,6 +1355,32 @@ func (_f *Factory) ConstructSubquery(
 	}
 
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_subqueryExpr)))
+}
+
+// ConstructAny constructs an expression for the Any operator.
+// Any is a special operator that does not exist in SQL. However, it is very
+// similar to the SQL ANY, and can be converted to the SQL ANY operator using
+// the following transformation:
+//  `Any(<subquery>)` ==> `True = ANY(<subquery>)`
+//
+// Any expects the subquery to return a single boolean column. The semantics
+// are equivalent to the SQL ANY expression above on the right: Any returns true
+// if any of the values returned by the subquery are true, else returns NULL
+// if any of the values are NULL, else returns false.
+func (_f *Factory) ConstructAny(
+	input memo.GroupID,
+) memo.GroupID {
+	_anyExpr := memo.MakeAnyExpr(input)
+	_group := _f.mem.GroupByFingerprint(_anyExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.o.allowOptimizations() {
+		return _f.mem.MemoizeNormExpr(memo.Expr(_anyExpr))
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_anyExpr)))
 }
 
 // ConstructVariable constructs an expression for the Variable operator.
@@ -4298,7 +4361,7 @@ func (_f *Factory) ConstructCast(
 //
 // The Case operator evaluates <Input> (if not provided, Input is set to True),
 // then picks the WHEN branch where <condval> is equal to
-// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// <Input>, then evaluates and returns the corresponding THEN expression. If no
 // WHEN branch matches, the ELSE expression is evaluated and returned, if any.
 // Otherwise, NULL is returned.
 //
@@ -4564,6 +4627,11 @@ func init() {
 	// SubqueryOp
 	dynConstructLookup[opt.SubqueryOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
 		return f.ConstructSubquery(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// AnyOp
+	dynConstructLookup[opt.AnyOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructAny(memo.GroupID(operands[0]))
 	}
 
 	// VariableOp
