@@ -22,10 +22,19 @@ import (
 // progressTimeThreshold since the last update, or b) the difference between the
 // last logged fractionCompleted and the current fractionCompleted is more than
 // progressFractionThreshold.
-const (
-	progressTimeThreshold     = time.Second
-	progressFractionThreshold = 0.05
+var (
+	progressTimeThreshold             = time.Second
+	progressFractionThreshold float32 = 0.05
 )
+
+// TestingSetProgressThreshold overrides the progressFractionThreshold.
+func TestingSetProgressThreshold(v float32) func() {
+	old := progressFractionThreshold
+	progressFractionThreshold = v
+	return func() {
+		progressFractionThreshold = old
+	}
+}
 
 // ProgressLogger is a helper for managing the progress state on a job.
 type ProgressLogger struct {
