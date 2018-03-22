@@ -29,9 +29,11 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	bankData := bank.FromRows(numAccounts).Tables()[0]
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
-	for rowIdx := 0; rowIdx < bankData.InitialRowCount; rowIdx++ {
-		row := workload.StringTuple(bankData.InitialRowFn(rowIdx))
-		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row, `,`))
+	for rowIdx := 0; rowIdx < bankData.InitialRows.NumBatches; rowIdx++ {
+		for _, row := range bankData.InitialRows.Batch(rowIdx) {
+			rowTuple := strings.Join(workload.StringTuple(row), `,`)
+			fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, rowTuple)
+		}
 	}
 	return &buf
 }
@@ -77,8 +79,8 @@ func TestImportOutOfOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	bankData := bank.FromRows(2).Tables()[0]
-	row1 := workload.StringTuple(bankData.InitialRowFn(0))
-	row2 := workload.StringTuple(bankData.InitialRowFn(1))
+	row1 := workload.StringTuple(bankData.InitialRows.Batch(0)[0])
+	row2 := workload.StringTuple(bankData.InitialRows.Batch(1)[0])
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)

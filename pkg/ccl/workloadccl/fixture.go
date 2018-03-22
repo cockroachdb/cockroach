@@ -203,9 +203,9 @@ func (c *groupCSVWriter) groupWriteCSVs(
 			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, w.Attrs().Size)
 			d := timeutil.Since(c.start)
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
-			log.Infof(ctx, `wrote csv %s [%d,%d] of %d rows (%.2f%% (%s) in %s: %.1f MB/s)`,
-				table.Name, rowStart, rowIdx, table.InitialRowCount,
-				float64(100*table.InitialRowCount)/float64(rowIdx),
+			log.Infof(ctx, `wrote csv %s [%d,%d] of %d row batches (%.2f%% (%s) in %s: %.1f MB/s)`,
+				table.Name, rowStart, rowIdx, table.InitialRows.NumBatches,
+				float64(100*table.InitialRows.NumBatches)/float64(rowIdx),
 				humanizeutil.IBytes(newBytesWritten), d, throughput)
 
 			return nil
@@ -254,7 +254,8 @@ func (c *groupCSVWriter) groupWriteCSVs(
 func csvServerPaths(
 	csvServerURL string, gen workload.Generator, table workload.Table, numNodes int,
 ) []string {
-	if table.InitialRowCount == 0 {
+	if table.InitialRows.Batch == nil {
+		// Some workloads don't support initial table data.
 		return nil
 	}
 
@@ -264,16 +265,16 @@ func csvServerPaths(
 	// have some integer multiple of the number of nodes in the cluster, which
 	// will guarantee that the work is balanced across the cluster.
 	numFiles := numNodes * 10
-	rowStep := table.InitialRowCount / (numFiles)
+	rowStep := table.InitialRows.NumBatches / (numFiles)
 	if rowStep == 0 {
 		rowStep = 1
 	}
 
 	var paths []string
-	for rowIdx := 0; rowIdx < table.InitialRowCount; {
+	for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; {
 		chunkRowStart, chunkRowEnd := rowIdx, rowIdx+rowStep
-		if chunkRowEnd > table.InitialRowCount {
-			chunkRowEnd = table.InitialRowCount
+		if chunkRowEnd > table.InitialRows.NumBatches {
+			chunkRowEnd = table.InitialRows.NumBatches
 		}
 
 		params := url.Values{
@@ -336,7 +337,7 @@ func MakeFixture(
 		g.Go(func() error {
 			defer close(tableCSVPathsCh)
 			if len(config.CSVServerURL) == 0 {
-				startRow, endRow := 0, table.InitialRowCount
+				startRow, endRow := 0, table.InitialRows.NumBatches
 				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
 			}
 			// Specify an explicit empty prefix for crdb_internal to avoid an error if

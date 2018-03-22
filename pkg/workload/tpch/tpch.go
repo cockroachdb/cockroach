@@ -111,44 +111,44 @@ func (w *tpch) Hooks() workload.Hooks {
 func (w *tpch) Tables() []workload.Table {
 	// TODO(dan): Implement the InitialRowFns for these.
 	nation := workload.Table{
-		Name:            `nation`,
-		Schema:          tpchNationSchema,
-		InitialRowCount: numNation,
+		Name:        `nation`,
+		Schema:      tpchNationSchema,
+		InitialRows: workload.Tuples(numNation, nil),
 	}
 	region := workload.Table{
-		Name:            `region`,
-		Schema:          tpchRegionSchema,
-		InitialRowCount: numRegion,
+		Name:        `region`,
+		Schema:      tpchRegionSchema,
+		InitialRows: workload.Tuples(numRegion, nil),
 	}
 	part := workload.Table{
-		Name:            `part`,
-		Schema:          tpchPartSchema,
-		InitialRowCount: numPartPerSF * w.scaleFactor,
+		Name:        `part`,
+		Schema:      tpchPartSchema,
+		InitialRows: workload.Tuples(numPartPerSF*w.scaleFactor, nil),
 	}
 	supplier := workload.Table{
-		Name:            `supplier`,
-		Schema:          tpchSupplierSchema,
-		InitialRowCount: numSupplierPerSF * w.scaleFactor,
+		Name:        `supplier`,
+		Schema:      tpchSupplierSchema,
+		InitialRows: workload.Tuples(numSupplierPerSF*w.scaleFactor, nil),
 	}
 	partsupp := workload.Table{
-		Name:            `partsupp`,
-		Schema:          tpchPartSuppSchema,
-		InitialRowCount: numPartSuppPerSF * w.scaleFactor,
+		Name:        `partsupp`,
+		Schema:      tpchPartSuppSchema,
+		InitialRows: workload.Tuples(numPartSuppPerSF*w.scaleFactor, nil),
 	}
 	customer := workload.Table{
-		Name:            `customer`,
-		Schema:          tpchCustomerSchema,
-		InitialRowCount: numCustomerPerSF * w.scaleFactor,
+		Name:        `customer`,
+		Schema:      tpchCustomerSchema,
+		InitialRows: workload.Tuples(numCustomerPerSF*w.scaleFactor, nil),
 	}
 	orders := workload.Table{
-		Name:            `orders`,
-		Schema:          tpchOrdersSchema,
-		InitialRowCount: numOrderPerSF * w.scaleFactor,
+		Name:        `orders`,
+		Schema:      tpchOrdersSchema,
+		InitialRows: workload.Tuples(numOrderPerSF*w.scaleFactor, nil),
 	}
 	lineitem := workload.Table{
-		Name:            `lineitem`,
-		Schema:          tpchLineItemSchema,
-		InitialRowCount: numLineItemPerSF * w.scaleFactor,
+		Name:        `lineitem`,
+		Schema:      tpchLineItemSchema,
+		InitialRows: workload.Tuples(numLineItemPerSF*w.scaleFactor, nil),
 	}
 
 	return []workload.Table{
