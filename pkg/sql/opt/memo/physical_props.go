@@ -148,8 +148,7 @@ func (p Presentation) format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-
-		fmt.Fprintf(buf, "%s:%d", col.Label, col.Index)
+		fmt.Fprintf(buf, "%s:%d", col.Label, col.ID)
 	}
 }
 
@@ -178,7 +177,7 @@ func (o Ordering) format(buf *bytes.Buffer) {
 		} else {
 			buf.WriteByte('+')
 		}
-		fmt.Fprintf(buf, "%d", col.Index())
+		fmt.Fprintf(buf, "%d", col.ID())
 	}
 }
 

@@ -131,10 +131,10 @@ func (b *Builder) buildScalarProjection(
 func (b *Builder) buildVariableProjection(
 	col *columnProps, label string, inScope, outScope *scope,
 ) memo.GroupID {
-	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.index) {
+	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.id) {
 		panic(groupingError(col.String()))
 	}
-	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
 	outScope.cols = append(outScope.cols, *col)
 
 	// Update the column name with the alias if it exists, and mark the column
@@ -186,14 +186,14 @@ func (b *Builder) buildDefaultScalarProjection(
 
 		if col := inScope.findGrouping(group); col != nil {
 			// The column already exists, so use that instead.
-			col = &b.colMap[col.index]
+			col = &b.colMap[col.id]
 			if label != "" {
 				col.name = tree.Name(label)
 			}
 			outScope.cols = append(outScope.cols, *col)
 
 			// Replace the expression with a reference to the column.
-			return b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+			return b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
 		}
 	}
 

@@ -129,20 +129,20 @@ type Catalog interface {
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
-func FormatCatalogTable(tbl Table, tp treeprinter.Node) {
-	child := tp.Childf("TABLE %s", tbl.TabName())
+func FormatCatalogTable(tab Table, tp treeprinter.Node) {
+	child := tp.Childf("TABLE %s", tab.TabName())
 
 	var buf bytes.Buffer
-	for i := 0; i < tbl.ColumnCount(); i++ {
+	for i := 0; i < tab.ColumnCount(); i++ {
 		buf.Reset()
-		formatColumn(tbl.Column(i), &buf)
+		formatColumn(tab.Column(i), &buf)
 		child.Child(buf.String())
 	}
 
-	formatCatalogIndex(tbl.Primary(), child)
+	formatCatalogIndex(tab.Primary(), child)
 
-	for i := 0; i < tbl.SecondaryCount(); i++ {
-		formatCatalogIndex(tbl.Secondary(i), child)
+	for i := 0; i < tab.SecondaryCount(); i++ {
+		formatCatalogIndex(tab.Secondary(i), child)
 	}
 }
 

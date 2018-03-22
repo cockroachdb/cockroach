@@ -142,10 +142,10 @@ func (b *Builder) buildUsingJoin(
 		// Wrap in a projection to include the merged columns.
 		projections := make([]memo.GroupID, 0, len(outScope.cols))
 		for _, col := range outScope.cols {
-			if mergedCol, ok := mergedCols[col.index]; ok {
+			if mergedCol, ok := mergedCols[col.id]; ok {
 				projections = append(projections, mergedCol)
 			} else {
-				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
 				projections = append(projections, v)
 			}
 		}
@@ -219,7 +219,7 @@ func (b *Builder) buildUsingJoin(
 //    8: right.y             @6
 //
 // If new merged columns are created (as in the FULL OUTER JOIN example above),
-// the return value mergedCols contains a mapping from the column index to the
+// the return value mergedCols contains a mapping from the column id to the
 // memo group ID of the IFNULL expression.
 //
 // See Builder.buildStmt for a description of the remaining input and
@@ -230,10 +230,10 @@ func (b *Builder) buildUsingJoinPredicate(
 	rightCols []columnProps,
 	names tree.NameList,
 	inScope *scope,
-) (mergedCols map[opt.ColumnIndex]memo.GroupID, out memo.GroupID, outScope *scope) {
+) (mergedCols map[opt.ColumnID]memo.GroupID, out memo.GroupID, outScope *scope) {
 	joined := make(map[tree.Name]*columnProps, len(names))
 	conditions := make([]memo.GroupID, 0, len(names))
-	mergedCols = make(map[opt.ColumnIndex]memo.GroupID)
+	mergedCols = make(map[opt.ColumnID]memo.GroupID)
 	outScope = inScope.push()
 
 	for _, name := range names {
@@ -256,8 +256,8 @@ func (b *Builder) buildUsingJoinPredicate(
 		}
 
 		// Construct the predicate.
-		leftVar := b.factory.ConstructVariable(b.factory.InternPrivate(leftCol.index))
-		rightVar := b.factory.ConstructVariable(b.factory.InternPrivate(rightCol.index))
+		leftVar := b.factory.ConstructVariable(b.factory.InternPrivate(leftCol.id))
+		rightVar := b.factory.ConstructVariable(b.factory.InternPrivate(rightCol.id))
 		eq := b.factory.ConstructEq(leftVar, rightVar)
 		conditions = append(conditions, eq)
 
@@ -282,7 +282,7 @@ func (b *Builder) buildUsingJoinPredicate(
 			texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
 			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr)
 			merged := b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{leftVar, rightVar}))
-			mergedCols[col.index] = merged
+			mergedCols[col.id] = merged
 		}
 
 		joined[name] = &outScope.cols[len(outScope.cols)-1]

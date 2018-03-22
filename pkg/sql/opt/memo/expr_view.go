@@ -240,8 +240,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	switch ev.Operator() {
 	case opt.ScanOp:
-		tblIndex := ev.Private().(*ScanOpDef).Table
-		fmt.Fprintf(&buf, " %s", ev.Metadata().Table(tblIndex).TabName())
+		tabID := ev.Private().(*ScanOpDef).Table
+		fmt.Fprintf(&buf, " %s", ev.Metadata().Table(tabID).TabName())
 	}
 
 	logProps := ev.Logical()
@@ -360,8 +360,8 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	switch ev.op {
 	case opt.VariableOp:
-		colIndex := private.(opt.ColumnIndex)
-		private = ev.mem.metadata.ColumnLabel(colIndex)
+		id := private.(opt.ColumnID)
+		private = ev.mem.metadata.ColumnLabel(id)
 
 	case opt.NullOp:
 		// Private is redundant with logical type property.
@@ -385,7 +385,7 @@ func (ev ExprView) formatPresentation(presentation Presentation, tp treeprinter.
 	var buf bytes.Buffer
 	buf.WriteString("columns:")
 	for _, col := range presentation {
-		logProps.FormatCol(col.Label, col.Index, ev.Metadata(), &buf)
+		logProps.FormatCol(col.Label, col.ID, ev.Metadata(), &buf)
 	}
 	tp.Child(buf.String())
 }

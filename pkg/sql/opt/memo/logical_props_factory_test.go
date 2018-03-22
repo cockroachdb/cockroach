@@ -70,10 +70,10 @@ func TestLogicalJoinProps(t *testing.T) {
 	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
 }
 
-func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *memo.ScanOpDef {
-	def := memo.ScanOpDef{Table: tblIndex}
-	for i := 0; i < md.Table(tblIndex).ColumnCount(); i++ {
-		def.Cols.Add(int(md.TableColumn(tblIndex, i)))
+func constructScanOpDef(md *opt.Metadata, tabID opt.TableID) *memo.ScanOpDef {
+	def := memo.ScanOpDef{Table: tabID}
+	for i := 0; i < md.Table(tabID).ColumnCount(); i++ {
+		def.Cols.Add(int(md.TableColumn(tabID, i)))
 	}
 	return &def
 }

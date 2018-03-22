@@ -14,10 +14,10 @@ define Subquery {
 }
 
 # Variable is the typed scalar value of a column in the query. The private
-# field is a Metadata.ColumnIndex that references the column by index.
+# field is a Metadata.ColumnID that references the column by index.
 [Scalar]
 define Variable {
-    Col ColumnIndex
+    Col ColumnID
 }
 
 # Const is a typed scalar constant value. The private field is a tree.Datum
