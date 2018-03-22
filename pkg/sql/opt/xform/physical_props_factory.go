@@ -102,7 +102,7 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 	case opt.ScanOp:
 		// Scan naturally orders according to the primary index.
 		def := mexpr.Private(f.mem).(*memo.ScanOpDef)
-		primary := f.mem.Metadata().Table(def.Table).Primary()
+		primary := f.mem.Metadata().Table(def.Table).Index(opt.PrimaryIndex)
 
 		// The scan can provide the required ordering in either of these cases:
 		// 1. The required columns are a prefix of the primary index columns.
