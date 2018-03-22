@@ -21,7 +21,7 @@ interface InstructionsBoxProps {
   collapse: () => void;
 }
 
-const DOCS_LINK = docsURL("enable-node-map.html");
+export const NODE_MAP_DOCS_URL = docsURL("enable-node-map.html");
 
 class InstructionsBox extends React.Component<InstructionsBoxProps> {
   renderExpanded() {
@@ -35,7 +35,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
               See your nodes on a map!
             </span>{" "}
             <a
-              href={DOCS_LINK}
+              href={NODE_MAP_DOCS_URL}
               className="instructions-box-top-bar__setup_link"
             >
               Follow our setup guide
