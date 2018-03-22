@@ -39,6 +39,9 @@ type worker struct {
 	idx       int
 	db        *gosql.DB
 	warehouse int
+
+	deckPerm []int
+	permIdx  int
 }
 
 type tpccTx interface {
@@ -89,6 +92,7 @@ func initializeMix(config *tpcc) error {
 	}
 
 	items := strings.Split(config.mix, `,`)
+	totalWeight := 0
 	for _, item := range items {
 		kv := strings.Split(item, `=`)
 		if len(kv) != 2 {
@@ -109,21 +113,37 @@ func initializeMix(config *tpcc) error {
 		}
 
 		config.txs[i].weight = weight
-		config.totalWeight += weight
+		totalWeight += weight
 	}
+
+	config.deck = make([]int, 0, totalWeight)
+	for i, t := range config.txs {
+		for j := 0; j < t.weight; j++ {
+			config.deck = append(config.deck, i)
+		}
+	}
+
 	return nil
 }
 
 func (w *worker) run(ctx context.Context) error {
-	transactionType := rand.Intn(w.config.totalWeight)
-	weightSum := 0
-	var t tx
-	for _, t = range w.config.txs {
-		weightSum += t.weight
-		if transactionType < weightSum {
-			break
-		}
+	// 5.2.4.2: the required mix is achieved by selecting each new transaction
+	// uniformly at random from a deck whose content guarantees the required
+	// transaction mix. Each pass through a deck must be made in a different
+	// uniformly random order.
+	if w.permIdx == len(w.deckPerm) {
+		rand.Shuffle(len(w.deckPerm), func(i, j int) {
+			w.deckPerm[i], w.deckPerm[j] = w.deckPerm[j], w.deckPerm[i]
+		})
+		w.permIdx = 0
 	}
+	// Move through our permutation slice until its exhausted, using each value to
+	// to index into our deck of transactions, which contains indexes into the
+	// txs slice.
+	opIdx := w.deckPerm[w.permIdx]
+	t := w.config.txs[opIdx]
+	w.permIdx++
+
 	warehouseID := w.warehouse
 	if !w.config.doWaits {
 		warehouseID = rand.Intn(w.config.warehouses)

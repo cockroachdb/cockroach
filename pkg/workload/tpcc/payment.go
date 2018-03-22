@@ -104,7 +104,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
-	if rand.Intn(9) < 6 {
+	if rand.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
 	} else {
 		d.cID = randCustomerID(rng)
@@ -113,27 +113,27 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		config.txOpts,
 		func(tx *gosql.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
-			if err := tx.QueryRow(`
+			if err := tx.QueryRow(fmt.Sprintf(`
 				UPDATE warehouse
-				SET w_ytd = w_ytd + $1
-				WHERE w_id = $2
+				SET w_ytd = w_ytd + %[1]f
+				WHERE w_id = %[2]d
 				RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`,
-				d.hAmount, wID,
+				d.hAmount, wID),
 			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
 				return err
 			}
 
 			// Update district with payment
-			if err := tx.QueryRow(`
+			if err := tx.QueryRow(fmt.Sprintf(`
 				UPDATE district
-				SET d_ytd = d_ytd + $1
-				WHERE d_w_id = $2 AND d_id = $3
+				SET d_ytd = d_ytd + %[1]f
+				WHERE d_w_id = %[2]d AND d_id = %[3]d
 				RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
-				d.hAmount, wID, d.dID,
+				d.hAmount, wID, d.dID),
 			).Scan(&dName, &d.dStreet1, &d.dStreet2, &d.dCity, &d.dState, &d.dZip); err != nil {
 				return err
 			}
@@ -142,12 +142,16 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			// then proceed.
 			if d.cID == 0 {
 				// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
-				rows, err := tx.Query(`
+				indexStr := "@customer_idx"
+				if config.usePostgres {
+					indexStr = ""
+				}
+				rows, err := tx.Query(fmt.Sprintf(`
 					SELECT c_id
-					FROM customer@customer_idx
-					WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
+					FROM customer%[1]s
+					WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_last = '%[4]s'
 					ORDER BY c_first ASC`,
-					wID, d.dID, d.cLast)
+					indexStr, wID, d.dID, d.cLast))
 				if err != nil {
 					return errors.Wrap(err, "select by last name fail")
 				}
@@ -161,6 +165,9 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 					}
 					customers = append(customers, cID)
 				}
+				if err := rows.Err(); err != nil {
+					return err
+				}
 				rows.Close()
 				cIdx := len(customers) / 2
 				if len(customers)%2 == 0 {
@@ -171,40 +178,41 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			}
 
 			// Update customer with payment.
-			if err := tx.QueryRow(`
+			// If the customer has bad credit, update the customer's C_DATA and return
+			// the first 200 characters of it, which is supposed to get displayed by
+			// the terminal. See 2.5.3.3 and 2.5.2.2.
+			if err := tx.QueryRow(fmt.Sprintf(`
 				UPDATE customer
-				SET (c_balance, c_ytd_payment, c_payment_cnt) =
-					(c_balance - $1, c_ytd_payment + $1, c_payment_cnt + 1)
-				WHERE c_w_id = $2 AND c_d_id = $3 AND c_id = $4
+				SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =
+					(c_balance - %[1]f, c_ytd_payment + %[1]f, c_payment_cnt + 1,
+					 case c_credit when 'BC' then
+					 left(c_id::text || c_d_id::text || c_w_id::text || %[5]d::text || %[6]d::text || %[1]f::text || c_data, 500)
+					 else c_data end)
+				WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_id = %[4]d
 				RETURNING c_first, c_middle, c_last, c_street_1, c_street_2,
 						  c_city, c_state, c_zip, c_phone, c_since, c_credit,
-						  c_credit_lim, c_discount, c_balance`,
-				d.hAmount, d.cWID, d.cDID, d.cID,
+						  c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`,
+				d.hAmount, d.cWID, d.cDID, d.cID, d.dID, wID),
 			).Scan(&d.cFirst, &d.cMiddle, &d.cLast, &d.cStreet1, &d.cStreet2,
 				&d.cCity, &d.cState, &d.cZip, &d.cPhone, &d.cSince, &d.cCredit,
-				&d.cCreditLim, &d.cDiscount, &d.cBalance,
+				&d.cCreditLim, &d.cDiscount, &d.cBalance, &d.cData,
 			); err != nil {
 				return errors.Wrap(err, "select by customer idfail")
 			}
 
-			if d.cCredit == "BC" {
-				// If the customer has bad credit, update the customer's C_DATA.
-				d.cData = fmt.Sprintf("%d %d %d %d %d %f | %s", d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount, d.cData)
-				if len(d.cData) > 500 {
-					d.cData = d.cData[0:500]
-				}
-			}
 			hData := fmt.Sprintf("%s    %s", wName, dName)
 
 			// Insert history line.
-			_, err := tx.Exec(`
+			_, err := tx.Exec(fmt.Sprintf(`
 				INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount, d.hDate, hData,
+				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, %[5]d, %[6]f, '%[7]s', '%[8]s')`,
+				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount,
+				d.hDate.Format("2006-01-02 15:04:05"), hData),
 			)
 			return err
 		}); err != nil {
 		return nil, err
 	}
 	return d, nil
+
 }
