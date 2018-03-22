@@ -65,8 +65,8 @@ type Optimizer struct {
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
 	// This state could be discarded once optimization is complete.
-	stateMap map[optStateKey]int
-	state    []optState
+	stateMap   map[optStateKey]*optState
+	stateAlloc optStateAlloc
 
 	// lastRule stores the name of the last rule that was triggered, for
 	// debugging purposes.
@@ -86,7 +86,7 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 	o := &Optimizer{
 		evalCtx:  evalCtx,
 		mem:      memo.New(),
-		stateMap: make(map[optStateKey]int),
+		stateMap: make(map[optStateKey]*optState),
 
 		// By default, search exhaustively for best plan.
 		MaxSteps: OptimizeAll,
@@ -452,14 +452,8 @@ func (o *Optimizer) reportOptimization(name RuleName) {
 
 // lookupOptState looks up the state associated with the given group and
 // properties. If no state exists yet, then lookupOptState returns nil.
-// NOTE: The returned optState reference is only valid until the next call to
-//       ensureOptState, since it may cause a resize of the optState slice.
 func (o *Optimizer) lookupOptState(group memo.GroupID, required memo.PhysicalPropsID) *optState {
-	index, ok := o.stateMap[optStateKey{group: group, required: required}]
-	if !ok {
-		return nil
-	}
-	return &o.state[index]
+	return o.stateMap[optStateKey{group: group, required: required}]
 }
 
 // ensureOptState looks up the state associated with the given group and
@@ -467,14 +461,14 @@ func (o *Optimizer) lookupOptState(group memo.GroupID, required memo.PhysicalPro
 // state and returns it.
 func (o *Optimizer) ensureOptState(group memo.GroupID, required memo.PhysicalPropsID) *optState {
 	key := optStateKey{group: group, required: required}
-	index, ok := o.stateMap[key]
+	state, ok := o.stateMap[key]
 	if !ok {
 		best := o.mem.EnsureBestExpr(group, required)
-		index = len(o.state)
-		o.state = append(o.state, optState{best: best})
-		o.stateMap[key] = index
+		state = o.stateAlloc.allocate()
+		state.best = best
+		o.stateMap[key] = state
 	}
-	return &o.state[index]
+	return state
 }
 
 // optStateKey associates optState with a group that is being optimized with
@@ -525,4 +519,37 @@ func (os *optState) markExprAsFullyOptimized(eid memo.ExprID) {
 		panic("memo expression is already fully optimized for required physical properties")
 	}
 	os.fullyOptimizedExprs.Add(int(eid.Expr))
+}
+
+// initialPageSize is the number of structs that fit into the first page to be
+// allocated. Each subsequent page doubles in size, up to maxPageSize.
+const initialPageSize = 4
+
+// maxPageSize is the number of structs that fit into the maximum page to be
+// allocated.
+const maxPageSize = 1024
+
+// optStateAlloc alloctates pages of optState structs. Each page is twice the
+// size of the previous, up to a maximum size. This is preferable to a slice
+// of optState structs because pointers are not invalidated when a resize
+// occurs, and because there's no need to retain a stable index.
+type optStateAlloc struct {
+	page []optState
+}
+
+// allocate returns a pointer to a new, empty optState struct. The pointer is
+// stable, meaning that its location won't change as other optState structs are
+// allocated.
+func (a optStateAlloc) allocate() *optState {
+	if a.page == nil {
+		a.page = make([]optState, 0, initialPageSize)
+	} else if len(a.page) == cap(a.page) {
+		newSize := len(a.page) * 2
+		if newSize > maxPageSize {
+			newSize = maxPageSize
+		}
+		a.page = make([]optState, 0, newSize)
+	}
+	a.page = a.page[:len(a.page)+1]
+	return &a.page[len(a.page)-1]
 }
