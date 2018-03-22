@@ -94,7 +94,6 @@ var tpccMeta = workload.Meta{
 			`scatter`:      {RuntimeOnly: true},
 			`serializable`: {RuntimeOnly: true},
 			`split`:        {RuntimeOnly: true},
-			`usePostgres`:  {RuntimeOnly: true},
 			`wait`:         {RuntimeOnly: true},
 			`workers`:      {RuntimeOnly: true},
 		}
