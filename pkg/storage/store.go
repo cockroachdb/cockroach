@@ -2765,9 +2765,9 @@ func (s *Store) Send(
 		// updating the top end of our uncertainty timestamp would lead to a
 		// restart (at least in the absence of a prior observed timestamp from
 		// this node, in which case the following is a no-op).
-		if now.Less(ba.Txn.MaxTimestamp) {
+		if _, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); !ok {
 			shallowTxn := *ba.Txn
-			shallowTxn.MaxTimestamp.Backward(now)
+			shallowTxn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 			ba.Txn = &shallowTxn
 		}
 	}

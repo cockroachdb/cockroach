@@ -189,28 +189,6 @@ func (ls *Stores) Send(
 		return nil, roachpb.NewError(err)
 	}
 
-	if ba.Txn != nil {
-		// For calls that read data within a txn, we keep track of timestamps
-		// observed from the various participating nodes' HLC clocks. If we have
-		// a timestamp on file for this Node which is smaller than MaxTimestamp,
-		// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
-		// OrigTimestamp, we effectively can't see uncertainty restarts any
-		// more.
-		// Note that it's not an issue if MaxTimestamp propagates back out to
-		// the client via a returned Transaction update - when updating a Txn
-		// from another, the larger MaxTimestamp wins.
-		if maxTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); ok && maxTS.Less(ba.Txn.MaxTimestamp) {
-			// Copy-on-write to protect others we might be sharing the Txn with.
-			shallowTxn := *ba.Txn
-			// The uncertainty window is [OrigTimestamp, maxTS), so if that window
-			// is empty, there won't be any uncertainty restarts.
-			if !ba.Txn.OrigTimestamp.Less(maxTS) {
-				log.Event(ctx, "read has no clock uncertainty")
-			}
-			shallowTxn.MaxTimestamp.Backward(maxTS)
-			ba.Txn = &shallowTxn
-		}
-	}
 	br, pErr := store.Send(ctx, ba)
 	if br != nil && br.Error != nil {
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
