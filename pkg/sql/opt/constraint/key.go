@@ -174,6 +174,28 @@ func (k Key) CutFront(numCols int) Key {
 	}
 }
 
+// IsNextKey returns true if:
+//  - k and other have the same length;
+//  - on all but the last column, k and other have the same values;
+//  - on the last column, k has the datum that follows other's datum (for
+//    types that support it).
+// For example: /2.IsNextKey(/1) is true.
+func (k Key) IsNextKey(keyCtx *KeyContext, other Key) bool {
+	n := k.Length()
+	if n != other.Length() {
+		return false
+	}
+	// All the datums up to the last one must be equal.
+	for i := 0; i < n-1; i++ {
+		if keyCtx.Compare(i, k.Value(i), other.Value(i)) != 0 {
+			return false
+		}
+	}
+
+	next, ok := keyCtx.Next(n-1, other.Value(n-1))
+	return ok && keyCtx.Compare(n-1, k.Value(n-1), next) == 0
+}
+
 // Next returns the next key; this only works for discrete types like integers.
 // It is guaranteed that there are no  possible keys in the span
 //   ( key, Next(keu) ).

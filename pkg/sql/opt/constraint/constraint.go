@@ -293,3 +293,68 @@ func (c *Constraint) CutFirstColumn(evalCtx *tree.EvalContext) {
 	c.Spans = result
 	c.Spans.makeImmutable()
 }
+
+// ConsolidateSpans merges spans that have consecutive boundaries. For example:
+//   [/1 - /2] [/3 - /4] becomes [/1 - /4].
+func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
+	if c.IsContradiction() {
+		return
+	}
+	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
+	var result Spans
+	for i := 1; i < c.Spans.Count(); i++ {
+		last := c.Spans.Get(i - 1)
+		sp := c.Spans.Get(i)
+		if last.endBoundary == IncludeBoundary && sp.startBoundary == IncludeBoundary &&
+			sp.start.IsNextKey(&keyCtx, last.end) {
+			// We only initialize `result` if we need to change something.
+			if result.Count() == 0 {
+				result = MakeSpans(c.Spans.Count() - 1)
+				for j := 0; j < i; j++ {
+					result.Append(c.Spans.Get(j))
+				}
+			}
+			result.Get(result.Count() - 1).end = sp.end
+		} else {
+			if result.Count() != 0 {
+				result.Append(sp)
+			}
+		}
+	}
+	if result.Count() != 0 {
+		c.Spans = result
+		c.Spans.makeImmutable()
+	}
+}
+
+// ExactPrefix returns the length of the longest column prefix which are
+// constrained to a single value. For example:
+//   /a/b/c: [/1/2/3 - /1/2/3]                    ->  ExactPrefix = 3
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]  ->  ExactPrefix = 2
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
+//   /a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
+func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
+	if c.IsContradiction() {
+		return 0
+	}
+
+	for col := 0; ; col++ {
+		// Check if all spans have the same value for this column.
+		var val tree.Datum
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			if sp.start.Length() <= col || sp.end.Length() <= col {
+				return col
+			}
+			startVal := sp.start.Value(col)
+			if startVal.Compare(evalCtx, sp.end.Value(col)) != 0 {
+				return col
+			}
+			if i == 0 {
+				val = startVal
+			} else if startVal.Compare(evalCtx, val) != 0 {
+				return col
+			}
+		}
+	}
+}
