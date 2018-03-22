@@ -74,6 +74,9 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 	`only-tables`, ``,
 	`Only load the tables with the given comma-separated names`)
 
+var fixturesLoadRunChecks = fixturesLoadCmd.PersistentFlags().Bool(
+	`checks`, false, `Run validity checks on the loaded fixture`)
+
 // gcs-bucket-override and gcs-prefix-override are exposed for testing.
 var gcsBucketOverride, gcsPrefixOverride *string
 
@@ -109,7 +112,7 @@ func init() {
 			// `./workload run` to `./workload fixtures` they don't have to
 			// remove them from the invocation.
 			for flagName, meta := range f.Flags().Meta {
-				if meta.RuntimeOnly {
+				if meta.RuntimeOnly || meta.CheckConsistencyOnly {
 					_ = genFlags.MarkHidden(flagName)
 				}
 			}
@@ -232,5 +235,21 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName); err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
+
+	if !*fixturesLoadRunChecks {
+		return nil
+	}
+	log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
+	if err := workload.ValidateInitialData(ctx, sqlDB, gen.Tables()); err != nil {
+		return err
+	}
+	if hooks, ok := gen.(workload.Hookser); ok {
+		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
+			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
