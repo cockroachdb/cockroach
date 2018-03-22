@@ -73,9 +73,6 @@ var cockroachEntry = flag.String("e", "", "the entry point for the image")
 var waitOnStop = flag.Bool("w", false, "wait for the user to interrupt before tearing down the cluster")
 var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 
-// keyLen is the length (in bits) of the generated CA and node certs.
-const keyLen = 1024
-
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", func() string {
 	rootPkg, err := build.Import("github.com/cockroachdb/cockroach", "", 0)
@@ -140,7 +137,6 @@ type DockerCluster struct {
 	events               chan Event
 	expectedEvents       chan Event
 	oneshot              *Container
-	CertsDir             string
 	stopper              *stop.Stopper
 	monitorCtx           context.Context
 	monitorCtxCancelFunc func()
@@ -327,17 +323,13 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	pwd, err := os.Getwd()
 	maybePanic(err)
 
-	// Create the temporary certs directory in the current working
-	// directory. Boot2docker's handling of binding local directories
-	// into the container is very confusing. If the directory being
-	// bound has a parent directory that exists in the boot2docker VM
-	// then that directory is bound into the container. In particular,
-	// that means that binds of /tmp and /var will be problematic.
-	l.CertsDir, err = ioutil.TempDir(pwd, ".localcluster.certs.")
-	maybePanic(err)
-
+	// Boot2docker's handling of binding local directories into the container is
+	// very confusing. If the directory being bound has a parent directory that
+	// exists in the boot2docker VM then that directory is bound into the
+	// container. In particular, that means that binds of /tmp and /var will be
+	// problematic.
 	binds := []string{
-		l.CertsDir + ":/certs",
+		filepath.Join(pwd, certsDir) + ":/certs",
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
 		filepath.Join(l.volumesDir, "logs") + ":/logs",
 	}
@@ -456,21 +448,15 @@ func (l *DockerCluster) createRoach(
 	maybePanic(err)
 }
 
-func (l *DockerCluster) createCACert() {
-	maybePanic(security.CreateCAPair(
-		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		keyLen, 96*time.Hour, false, false))
-}
-
 func (l *DockerCluster) createNodeCerts() {
 	nodes := []string{"localhost", dockerIP().String()}
 	for _, node := range l.Nodes {
 		nodes = append(nodes, node.nodeStr)
 	}
 	maybePanic(security.CreateNodePair(
-		l.CertsDir,
-		filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		keyLen, 48*time.Hour, false, nodes))
+		certsDir,
+		filepath.Join(certsDir, security.EmbeddedCAKey),
+		keyLen, 48*time.Hour, true /* overwrite */, nodes))
 }
 
 // startNode starts a Docker container to run testNode. It may be called in
@@ -526,7 +512,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 
   cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s COCKROACH_PORT=%d`,
 		node.Name(), "https://"+httpAddr.String(), localLogDir, node.Container.id[:5],
-		base.DefaultHTTPPort, cmd, l.CertsDir, httpAddr.IP, httpAddr.Port)
+		base.DefaultHTTPPort, cmd, certsDir, httpAddr.IP, httpAddr.Port)
 }
 
 // RunInitCommand runs the `cockroach init` command. Normally called
@@ -667,12 +653,8 @@ func (l *DockerCluster) Start(ctx context.Context) {
 
 	l.createNetwork(ctx)
 	l.initCluster(ctx)
-	log.Infof(ctx, "creating certs (%dbit) in: %s", keyLen, l.CertsDir)
-	l.createCACert()
+	log.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, certsDir)
 	l.createNodeCerts()
-	maybePanic(security.CreateClientPair(
-		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
-		512, 48*time.Hour, false, security.RootUser))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor(ctx)
@@ -755,10 +737,6 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		maybePanic(l.vols.Remove(ctx))
 		l.vols = nil
 	}
-	if l.CertsDir != "" {
-		_ = os.RemoveAll(l.CertsDir)
-		l.CertsDir = ""
-	}
 	for i, n := range l.Nodes {
 		if n.Container == nil {
 			continue
@@ -812,9 +790,9 @@ func (l *DockerCluster) PGUrl(ctx context.Context, i int) string {
 	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
-	options.Add("sslcert", filepath.Join(l.CertsDir, security.EmbeddedRootCert))
-	options.Add("sslkey", filepath.Join(l.CertsDir, security.EmbeddedRootKey))
-	options.Add("sslrootcert", filepath.Join(l.CertsDir, security.EmbeddedCACert))
+	options.Add("sslcert", filepath.Join(certsDir, security.EmbeddedRootCert))
+	options.Add("sslkey", filepath.Join(certsDir, security.EmbeddedRootKey))
+	options.Add("sslrootcert", filepath.Join(certsDir, security.EmbeddedCACert))
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),
