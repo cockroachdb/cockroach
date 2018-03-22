@@ -381,5 +381,9 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
+	// Preregister all of the histograms so they always print.
+	for _, tx := range allTxs {
+		reg.GetHandle().Get(tx.name)
+	}
 	return ql, nil
 }
