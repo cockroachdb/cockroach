@@ -93,11 +93,13 @@ func init() {
 		opt.ProjectionsOp:     typeAsAny,
 		opt.AggregationsOp:    typeAsAny,
 		opt.ExistsOp:          typeAsBool,
+		opt.AnyOp:             typeAsBool,
 		opt.FunctionOp:        typeFunction,
 		opt.CoalesceOp:        typeCoalesce,
 		opt.CaseOp:            typeCase,
 		opt.WhenOp:            typeWhen,
 		opt.CastOp:            typeAsPrivate,
+		opt.SubqueryOp:        typeSubquery,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -221,6 +223,12 @@ func typeWhen(ev ExprView) types.T {
 // which is an instance of types.T.
 func typeAsPrivate(ev ExprView) types.T {
 	return ev.Private().(types.T)
+}
+
+// typeSubquery returns the type of a subquery, which is equal to the type of
+// its second child, the Projection field.
+func typeSubquery(ev ExprView) types.T {
+	return ev.Child(1).Logical().Scalar.Type
 }
 
 // overload encapsulates information about a binary operator overload, to be
