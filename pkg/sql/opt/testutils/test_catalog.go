@@ -58,10 +58,9 @@ func (tc *TestCatalog) AddTable(tbl *TestTable) {
 
 // TestTable implements the opt.Table interface for testing purposes.
 type TestTable struct {
-	Name             string
-	Columns          []*TestColumn
-	PrimaryIndex     *TestIndex
-	SecondaryIndexes []*TestIndex
+	Name    string
+	Columns []*TestColumn
+	Indexes []*TestIndex
 }
 
 var _ opt.Table = &TestTable{}
@@ -87,19 +86,14 @@ func (tt *TestTable) Column(i int) opt.Column {
 	return tt.Columns[i]
 }
 
-// Primary is part of the opt.Table interface.
-func (tt *TestTable) Primary() opt.Index {
-	return tt.PrimaryIndex
+// IndexCount is part of the opt.Table interface.
+func (tt *TestTable) IndexCount() int {
+	return len(tt.Indexes)
 }
 
-// SecondaryCount is part of the opt.Table interface.
-func (tt *TestTable) SecondaryCount() int {
-	return len(tt.SecondaryIndexes)
-}
-
-// Secondary is part of the opt.Table interface.
-func (tt *TestTable) Secondary(i int) opt.Index {
-	return tt.SecondaryIndexes[i]
+// Index is part of the opt.Table interface.
+func (tt *TestTable) Index(i int) opt.Index {
+	return tt.Indexes[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -119,7 +113,10 @@ type TestIndex struct {
 
 	// Unique is the number of columns that make up the unique key for the
 	// index. The columns are always a non-empty prefix of the Columns
-	// collection, so Unique is > 0 and < len(Columns). Note that
+	// collection, so Unique is > 0 and < len(Columns). Note that this is even
+	// true for indexes that were not declared as unique, since primary key
+	// columns will be implicitly added to the index in order to ensure it is
+	// always unique.
 	Unique int
 }
 

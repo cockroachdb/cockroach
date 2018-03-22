@@ -107,19 +107,21 @@ func (ot *optTable) Column(i int) opt.Column {
 	return &ot.desc.Columns[i]
 }
 
-// Primary is part of the opt.Table interface.
-func (ot *optTable) Primary() opt.Index {
-	return &ot.primary
+// IndexCount is part of the opt.Table interface.
+func (ot *optTable) IndexCount() int {
+	// Primary index is always present, so count is always >= 1.
+	return 1 + len(ot.desc.Indexes)
 }
 
-// SecondaryCount is part of the opt.Table interface.
-func (ot *optTable) SecondaryCount() int {
-	return len(ot.desc.Indexes)
-}
+// Index is part of the opt.Table interface.
+func (ot *optTable) Index(i int) opt.Index {
+	// Primary index is always 0th index.
+	if i == opt.PrimaryIndex {
+		return &ot.primary
+	}
 
-// Secondary is part of the opt.Table interface.
-func (ot *optTable) Secondary(i int) opt.Index {
-	desc := &ot.desc.Indexes[i]
+	// Bias i to account for lack of primary index in Indexes slice.
+	desc := &ot.desc.Indexes[i-1]
 
 	// Check to see if there's already a wrapper for this index descriptor.
 	if ot.wrappers == nil {
