@@ -42,7 +42,6 @@ func TestDockerC(t *testing.T) {
 }
 
 func TestDockerCSharp(t *testing.T) {
-	t.Skip("#22769")
 	s := log.Scope(t)
 	defer s.Close(t)
 
