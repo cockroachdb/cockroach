@@ -15,10 +15,14 @@
 package constraint
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestConstraintUnion(t *testing.T) {
@@ -270,6 +274,121 @@ func TestCutFirstColumn(t *testing.T) {
 	test(c, 2, "/3: unconstrained")
 }
 
+func TestConsolidateSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		s string
+		// expected value
+		e string
+	}{
+		{
+			s: "[/1 - /2] [/3 - /5] [/7 - /9]",
+			e: "[/1 - /5] [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2] (/3 - /5] [/7 - /9]",
+			e: "[/1 - /2] (/3 - /5] [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2) [/3 - /5] [/7 - /9]",
+			e: "[/1 - /2) [/3 - /5] [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2) (/3 - /5] [/7 - /9]",
+			e: "[/1 - /2) (/3 - /5] [/7 - /9]",
+		},
+		{
+			s: "[/1/1 - /1/3] [/1/4 - /2]",
+			e: "[/1/1 - /2]",
+		},
+		{
+			s: "[/1/1/5 - /1/1/3] [/1/1/2 - /1/1/1]",
+			e: "[/1/1/5 - /1/1/1]",
+		},
+		{
+			s: "[/1/1/5 - /1/1/3] [/1/2/2 - /1/2/1]",
+			e: "[/1/1/5 - /1/1/3] [/1/2/2 - /1/2/1]",
+		},
+		{
+			s: "[/1 - /2] [/3 - /4] [/5 - /6] [/8 - /9] [/10 - /11] [/12 - /13] [/15 - /16]",
+			e: "[/1 - /6] [/8 - /13] [/15 - /16]",
+		},
+	}
+
+	kc := testKeyContext(1, 2, -3)
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			spans := parseSpans(kc, tc.s)
+			var c Constraint
+			c.Init(kc, spans)
+			c.ConsolidateSpans(kc.EvalCtx)
+			if res := c.Spans.String(); res != tc.e {
+				t.Errorf("expected  %s  got  %s", tc.e, res)
+			}
+		})
+	}
+}
+
+func TestExactPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		s string
+		// expected value
+		e int
+	}{
+		{
+			s: "",
+			e: 0,
+		},
+		{
+			s: "[/1 - /1]",
+			e: 1,
+		},
+		{
+			s: "[/1 - /2]",
+			e: 0,
+		},
+		{
+			s: "[/1 - /2]",
+			e: 0,
+		},
+		{
+			s: "[/1/2/3 - /1/2/3]",
+			e: 3,
+		},
+		{
+			s: "[/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]",
+			e: 2,
+		},
+		{
+			s: "[/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]",
+			e: 1,
+		},
+		{
+			s: "[/1/2/3 - /1/2/3] [/3 - /4]",
+			e: 0,
+		},
+		{
+			s: "[/1/2/1 - /1/2/1] [/1/3/1 - /1/4/1]",
+			e: 1,
+		},
+	}
+
+	kc := testKeyContext(1, 2, 3)
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			spans := parseSpans(kc, tc.s)
+			var c Constraint
+			c.Init(kc, spans)
+			if res := c.ExactPrefix(kc.EvalCtx); res != tc.e {
+				t.Errorf("expected  %d  got  %d", tc.e, res)
+			}
+		})
+	}
+}
+
 type constraintTestData struct {
 	cLt10           Constraint // [ - /10)
 	cGt20           Constraint // (/20 - ]
@@ -348,4 +467,86 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	data.mangoStrawberry.Init(kc12, SingleSpan(&span))
 
 	return data
+}
+
+// parseSpans parses a list of spans with integer values like:
+//   "[/1 - /2], [/5 - /6]
+func parseSpans(keyCtx *KeyContext, str string) Spans {
+	if str == "" {
+		return Spans{}
+	}
+	s := strings.Split(str, " ")
+	// Each span has three pieces.
+	if len(s)%3 != 0 {
+		panic(str)
+	}
+	var result Spans
+	for i := 0; i < len(s)/3; i++ {
+		sp := parseSpan(keyCtx, strings.Join(s[i*3:i*3+3], " "))
+		result.Append(&sp)
+	}
+	return result
+}
+
+// parses a span with integer column values in the format of Span.String,
+// e.g: [/1 - /2].
+func parseSpan(keyCtx *KeyContext, str string) Span {
+	if len(str) < len("[ - ]") {
+		panic(str)
+	}
+	var startBoundary, endBoundary SpanBoundary
+	switch str[0] {
+	case '[':
+		startBoundary = IncludeBoundary
+	case '(':
+		startBoundary = ExcludeBoundary
+	default:
+		panic(str)
+	}
+	switch str[len(str)-1] {
+	case ']':
+		endBoundary = IncludeBoundary
+	case ')':
+		endBoundary = ExcludeBoundary
+	default:
+		panic(str)
+	}
+	sepIdx := strings.Index(str, " - ")
+	if sepIdx == -1 {
+		panic(str)
+	}
+	startVal := str[1:sepIdx]
+	endVal := str[sepIdx+len(" - ") : len(str)-1]
+
+	parseVals := func(str string) tree.Datums {
+		if str == "" {
+			return nil
+		}
+		if str[0] != '/' {
+			panic(str)
+		}
+		var res tree.Datums
+		for i := 1; i < len(str); {
+			length := strings.Index(str[i:], "/")
+			if length == -1 {
+				length = len(str) - i
+			}
+			val, err := strconv.Atoi(str[i : i+length])
+			if err != nil {
+				panic(err)
+			}
+			res = append(res, tree.NewDInt(tree.DInt(val)))
+			i += length + 1
+		}
+		return res
+	}
+	var sp Span
+	startVals := parseVals(startVal)
+	endVals := parseVals(endVal)
+	sp.Set(
+		keyCtx,
+		MakeCompositeKey(startVals...), startBoundary,
+		MakeCompositeKey(endVals...), endBoundary,
+	)
+	return sp
 }

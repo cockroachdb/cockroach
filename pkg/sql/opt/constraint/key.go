@@ -301,3 +301,26 @@ func (c *KeyContext) Prev(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 	}
 	return val.Next(c.EvalCtx)
 }
+
+// AreKeysConsecutive returns true if:
+//  - a and b have the same length,
+//  - all but the last datums match between a and b,
+//  - the last datum of b is the next datum after a (for types that support it).
+func (c *KeyContext) AreKeysConsecutive(a, b Key) bool {
+	n := a.Length()
+	if n != b.Length() {
+		return false
+	}
+	// All the datums up to the last one must be equal.
+	for i := 0; i < n-1; i++ {
+		if a.Value(i).Compare(c.EvalCtx, b.Value(i)) != 0 {
+			return false
+		}
+	}
+
+	next, ok := c.Next(n-1, a.Value(n-1))
+	if !ok {
+		return false
+	}
+	return next.Compare(c.EvalCtx, b.Value(n-1)) == 0
+}
