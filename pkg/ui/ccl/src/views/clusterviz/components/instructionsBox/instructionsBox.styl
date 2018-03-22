@@ -1,19 +1,21 @@
+@require '~styl/base/palette.styl'
+
 .instructions-box
-  color #595f6c
+  right 26px
+  top 26px
+  color $body-color
   font-size 12px
   line-height 17px
   position absolute
-  right 26px
-  top 26px
   background-color white
-  border 1px solid #EDEDED
+  border 1px solid $table-border-color
   border-radius 3px
   box-shadow 0 0 4px 0 rgba(0, 0, 0, 0.2)
   letter-spacing 0.5px
 
   a
     text-decoration none
-    color #2F80ED
+    color $link-color
 
   &--collapsed
     cursor pointer
@@ -24,14 +26,14 @@
 .instructions-box-top-bar
   display flex
   justify-content space-between
-  background-color #F6F6F6
+  background-color $background-color
   padding-top 10px
   padding-bottom 10px
   padding-left 15px
   padding-right 15px
 
   &__see_nodes
-    color #333333
+    color $headings-color
     font-family Lato-Bold
 
   &__setup_link
@@ -69,7 +71,7 @@
       overflow hidden
 
   code
-    background-color #F7F7F7
-    border 1px solid #DADADA
+    background-color $background-color
+    border 1px solid $table-border-color
     border-radius 2px
     padding 1px
