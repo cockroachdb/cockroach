@@ -395,12 +395,33 @@ sort
       └── projections
            └── variable: x [type=int]
 
-# TODO(rytaft): LIMIT not yet supported.
 # Check that a limit on the JOIN's result do not cause rows from the
 # JOIN operands to become invisible to the JOIN.
-#build
-#SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
-#----
+build
+SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+----
+limit
+ ├── columns: x:1(int)
+ ├── project
+ │    ├── columns: onecolumn.x:1(int)
+ │    ├── inner-join
+ │    │    ├── columns: onecolumn.x:1(int) column1:3(int)
+ │    │    ├── project
+ │    │    │    ├── columns: onecolumn.x:1(int)
+ │    │    │    ├── scan onecolumn
+ │    │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │    │    │    └── projections
+ │    │    │         └── variable: onecolumn.x [type=int]
+ │    │    ├── values
+ │    │    │    ├── columns: column1:3(int)
+ │    │    │    └── tuple [type=tuple{int}]
+ │    │    │         └── const: 42 [type=int]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: onecolumn.x [type=int]
+ │    │         └── variable: column1 [type=int]
+ │    └── projections
+ │         └── variable: onecolumn.x [type=int]
+ └── const: 1 [type=int]
 
 exec-ddl
 CREATE TABLE empty (x INT)
@@ -1104,45 +1125,112 @@ sort
 
 # Check column orders and names.
 build
-SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1
+SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
-sort
+limit
  ├── columns: x:1(int) x:3(int) y:4(int) b:6(int) d:8(int) e:9(int)
  ├── ordering: +1
- └── project
-      ├── columns: onecolumn.x:1(int) twocolumn.x:3(int) twocolumn.y:4(int) onecolumn.x:6(int) twocolumn.x:8(int) twocolumn.y:9(int)
-      ├── inner-join
-      │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null) twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
-      │    ├── inner-join
-      │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null)
-      │    │    ├── inner-join
-      │    │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
-      │    │    │    ├── scan onecolumn
-      │    │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
-      │    │    │    ├── scan twocolumn
-      │    │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
-      │    │    │    └── true [type=bool]
-      │    │    ├── scan onecolumn
-      │    │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
-      │    │    └── eq [type=bool]
-      │    │         ├── variable: onecolumn.x [type=int]
-      │    │         └── variable: twocolumn.x [type=int]
-      │    ├── scan twocolumn
-      │    │    └── columns: twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
-      │    └── and [type=bool]
-      │         ├── eq [type=bool]
-      │         │    ├── variable: onecolumn.x [type=int]
-      │         │    └── variable: twocolumn.x [type=int]
-      │         └── eq [type=bool]
-      │              ├── variable: twocolumn.x [type=int]
-      │              └── variable: onecolumn.x [type=int]
-      └── projections
-           ├── variable: onecolumn.x [type=int]
-           ├── variable: twocolumn.x [type=int]
-           ├── variable: twocolumn.y [type=int]
-           ├── variable: onecolumn.x [type=int]
-           ├── variable: twocolumn.x [type=int]
-           └── variable: twocolumn.y [type=int]
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) twocolumn.x:3(int) twocolumn.y:4(int) onecolumn.x:6(int) twocolumn.x:8(int) twocolumn.y:9(int)
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: onecolumn.x:1(int) twocolumn.x:3(int) twocolumn.y:4(int) onecolumn.x:6(int) twocolumn.x:8(int) twocolumn.y:9(int)
+ │         ├── inner-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null) twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │         │    ├── inner-join
+ │         │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null)
+ │         │    │    ├── inner-join
+ │         │    │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │         │    │    │    ├── scan onecolumn
+ │         │    │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    │    │    ├── scan twocolumn
+ │         │    │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │         │    │    │    └── true [type=bool]
+ │         │    │    ├── scan onecolumn
+ │         │    │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
+ │         │    │    └── eq [type=bool]
+ │         │    │         ├── variable: onecolumn.x [type=int]
+ │         │    │         └── variable: twocolumn.x [type=int]
+ │         │    ├── scan twocolumn
+ │         │    │    └── columns: twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │         │    └── and [type=bool]
+ │         │         ├── eq [type=bool]
+ │         │         │    ├── variable: onecolumn.x [type=int]
+ │         │         │    └── variable: twocolumn.x [type=int]
+ │         │         └── eq [type=bool]
+ │         │              ├── variable: twocolumn.x [type=int]
+ │         │              └── variable: onecolumn.x [type=int]
+ │         └── projections
+ │              ├── variable: onecolumn.x [type=int]
+ │              ├── variable: twocolumn.x [type=int]
+ │              ├── variable: twocolumn.y [type=int]
+ │              ├── variable: onecolumn.x [type=int]
+ │              ├── variable: twocolumn.x [type=int]
+ │              └── variable: twocolumn.y [type=int]
+ └── const: 1 [type=int]
+
+# Check sub-queries in ON conditions.
+build
+SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
+----
+project
+ ├── columns: x:1(int) x:3(int) y:4(int)
+ ├── inner-join
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │    ├── scan onecolumn
+ │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │    ├── scan twocolumn
+ │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │    └── and [type=bool]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: twocolumn.x [type=int]
+ │         │    └── variable: onecolumn.x [type=int]
+ │         └── any [type=bool]
+ │              └── project
+ │                   ├── columns: column9:9(bool)
+ │                   ├── project
+ │                   │    ├── columns: twocolumn.x:6(int)
+ │                   │    ├── select
+ │                   │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │                   │    │    ├── scan twocolumn
+ │                   │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │                   │    │    └── ge [type=bool]
+ │                   │    │         ├── variable: twocolumn.y [type=int]
+ │                   │    │         └── const: 52 [type=int]
+ │                   │    └── projections
+ │                   │         └── variable: twocolumn.x [type=int]
+ │                   └── projections
+ │                        └── eq [type=bool]
+ │                             ├── variable: onecolumn.x [type=int]
+ │                             └── variable: twocolumn.x [type=int]
+ └── projections
+      ├── variable: onecolumn.x [type=int]
+      ├── variable: twocolumn.x [type=int]
+      └── variable: twocolumn.y [type=int]
+
+# Check sub-queries as data sources.
+build
+SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
+----
+project
+ ├── columns: x:1(int)
+ ├── inner-join
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) column1:3(int)
+ │    ├── scan onecolumn
+ │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │    ├── values
+ │    │    ├── columns: column1:3(int)
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 41 [type=int]
+ │    │    ├── tuple [type=tuple{int}]
+ │    │    │    └── const: 42 [type=int]
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 43 [type=int]
+ │    └── eq [type=bool]
+ │         ├── variable: onecolumn.x [type=int]
+ │         └── variable: column1 [type=int]
+ └── projections
+      └── variable: onecolumn.x [type=int]
 
 build
 SELECT * FROM onecolumn JOIN (SELECT x + 2 AS x FROM onecolumn) USING(x)
@@ -1169,34 +1257,38 @@ project
 
 # Check that a single column can have multiple table aliases.
 build
-SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x
+SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x LIMIT 1
 ----
-sort
+limit
  ├── columns: x:1(int) y:2(int) y:5(int) y:8(int)
  ├── ordering: +1
- └── project
-      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
-      ├── inner-join
-      │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
-      │    ├── inner-join
-      │    │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
-      │    │    ├── scan twocolumn
-      │    │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
-      │    │    ├── scan twocolumn
-      │    │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
-      │    │    └── eq [type=bool]
-      │    │         ├── variable: twocolumn.x [type=int]
-      │    │         └── variable: twocolumn.x [type=int]
-      │    ├── scan twocolumn
-      │    │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
-      │    └── eq [type=bool]
-      │         ├── variable: twocolumn.x [type=int]
-      │         └── variable: twocolumn.x [type=int]
-      └── projections
-           ├── variable: twocolumn.x [type=int]
-           ├── variable: twocolumn.y [type=int]
-           ├── variable: twocolumn.y [type=int]
-           └── variable: twocolumn.y [type=int]
+ ├── sort
+ │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │    ├── ordering: +1
+ │    └── project
+ │         ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+ │         ├── inner-join
+ │         │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         │    ├── inner-join
+ │         │    │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    │    ├── scan twocolumn
+ │         │    │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+ │         │    │    ├── scan twocolumn
+ │         │    │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    │    └── eq [type=bool]
+ │         │    │         ├── variable: twocolumn.x [type=int]
+ │         │    │         └── variable: twocolumn.x [type=int]
+ │         │    ├── scan twocolumn
+ │         │    │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         │    └── eq [type=bool]
+ │         │         ├── variable: twocolumn.x [type=int]
+ │         │         └── variable: twocolumn.x [type=int]
+ │         └── projections
+ │              ├── variable: twocolumn.x [type=int]
+ │              ├── variable: twocolumn.y [type=int]
+ │              ├── variable: twocolumn.y [type=int]
+ │              └── variable: twocolumn.y [type=int]
+ └── const: 1 [type=int]
 
 build
 SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
@@ -3397,3 +3489,58 @@ project
  └── projections
       ├── variable: column1 [type=int]
       └── variable: column2 [type=int]
+
+# Regression test for #23609: make sure that the type of the merged column
+# is int (not unknown).
+build
+SELECT column1, column1+1
+FROM
+  (SELECT * FROM
+    (VALUES (NULL, NULL)) AS t
+      NATURAL FULL OUTER JOIN
+    (VALUES (1, 1)) AS u)
+----
+project
+ ├── columns: column1:5(int) column7:7(int)
+ ├── project
+ │    ├── columns: column1:5(int) column2:6(int)
+ │    ├── project
+ │    │    ├── columns: column1:5(int) column2:6(int) column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+ │    │    ├── full-join
+ │    │    │    ├── columns: column1:1(unknown) column2:2(unknown) column1:3(int) column2:4(int)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:1(unknown) column2:2(unknown)
+ │    │    │    │    └── tuple [type=tuple{unknown, unknown}]
+ │    │    │    │         ├── null [type=unknown]
+ │    │    │    │         └── null [type=unknown]
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:3(int) column2:4(int)
+ │    │    │    │    └── tuple [type=tuple{int, int}]
+ │    │    │    │         ├── const: 1 [type=int]
+ │    │    │    │         └── const: 1 [type=int]
+ │    │    │    └── and [type=bool]
+ │    │    │         ├── eq [type=bool]
+ │    │    │         │    ├── variable: column1 [type=unknown]
+ │    │    │         │    └── variable: column1 [type=int]
+ │    │    │         └── eq [type=bool]
+ │    │    │              ├── variable: column2 [type=unknown]
+ │    │    │              └── variable: column2 [type=int]
+ │    │    └── projections
+ │    │         ├── coalesce [type=int]
+ │    │         │    ├── variable: column1 [type=unknown]
+ │    │         │    └── variable: column1 [type=int]
+ │    │         ├── coalesce [type=int]
+ │    │         │    ├── variable: column2 [type=unknown]
+ │    │         │    └── variable: column2 [type=int]
+ │    │         ├── variable: column1 [type=unknown]
+ │    │         ├── variable: column2 [type=unknown]
+ │    │         ├── variable: column1 [type=int]
+ │    │         └── variable: column2 [type=int]
+ │    └── projections
+ │         ├── variable: column1 [type=int]
+ │         └── variable: column2 [type=int]
+ └── projections
+      ├── variable: column1 [type=int]
+      └── plus [type=int]
+           ├── variable: column1 [type=int]
+           └── const: 1 [type=int]

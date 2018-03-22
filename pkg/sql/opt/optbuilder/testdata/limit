@@ -292,3 +292,33 @@ project
  │    └── const: 10 [type=int]
  └── projections
       └── variable: t.k [type=int]
+
+# This kind of query can be used to work around memory usage limits. We need to
+# choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
+# limit we will only store 100 rows in the sort node). See #19677.
+build
+SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
+----
+limit
+ ├── columns: w:3(int)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: t.w:3(int)
+ │    ├── ordering: +3
+ │    └── group-by
+ │         ├── columns: t.w:3(int)
+ │         ├── grouping columns: t.w:3(int)
+ │         ├── limit
+ │         │    ├── columns: t.w:3(int)
+ │         │    ├── sort
+ │         │    │    ├── columns: t.w:3(int)
+ │         │    │    ├── ordering: +3
+ │         │    │    └── project
+ │         │    │         ├── columns: t.w:3(int)
+ │         │    │         ├── scan t
+ │         │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         │    │         └── projections
+ │         │    │              └── variable: t.w [type=int]
+ │         │    └── const: 100 [type=int]
+ │         └── aggregations
+ └── const: 25 [type=int]
