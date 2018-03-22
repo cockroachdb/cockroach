@@ -1,2 +1,2 @@
 alter_onetable_stmt ::=
-	'ALTER' 'TABLE' relation_expr 'EXPERIMENTAL_AUDIT' 'SET' ( 'READ' 'WRITE' | 'OFF' )
+	'ALTER' 'TABLE' table_name 'EXPERIMENTAL_AUDIT' 'SET' ( 'READ' 'WRITE' | 'OFF' )
