@@ -17,6 +17,7 @@ package tpcc
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 
 	"context"
@@ -50,44 +51,50 @@ type stockLevel struct{}
 
 var _ tpccTx = stockLevel{}
 
-func (s stockLevel) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (s stockLevel) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
 	// within [10..20].
 	d := stockLevelData{
 		threshold: randInt(rng, 10, 20),
-		dID:       rand.Intn(9) + 1,
+		dID:       rng.Intn(10) + 1,
 	}
 
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		config.txOpts,
 		func(tx *gosql.Tx) error {
+			// This is the only join in the application, so we don't need to worry about
+			// this setting persisting incorrectly across queries.
+			if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
+				return err
+			}
+
 			var dNextOID int
-			if err := tx.QueryRow(`
+			if err := tx.QueryRow(fmt.Sprintf(`
 				SELECT d_next_o_id
 				FROM district
-				WHERE d_w_id = $1 AND d_id = $2`,
-				wID, d.dID,
+				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
+				wID, d.dID),
 			).Scan(&dNextOID); err != nil {
 				return err
 			}
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
-			return tx.QueryRow(`
+			return tx.QueryRow(fmt.Sprintf(`
 				SELECT COUNT(DISTINCT(s_i_id))
 				FROM order_line
 				JOIN stock
 				ON s_i_id=ol_i_id
-				WHERE ol_w_id = $1
-				  AND ol_d_id = $2
-				  AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
-				  AND s_w_id = $1
-				  AND s_quantity < $4`,
-				wID, d.dID, dNextOID, d.threshold,
+				  AND s_w_id=ol_w_id
+				WHERE ol_w_id = %[1]d
+				  AND ol_d_id = %[2]d
+				  AND ol_o_id BETWEEN %[3]d - 20 AND %[3]d - 1
+				  AND s_quantity < %[4]d`,
+				wID, d.dID, dNextOID, d.threshold),
 			).Scan(&d.lowStock)
 		}); err != nil {
 		return nil, err

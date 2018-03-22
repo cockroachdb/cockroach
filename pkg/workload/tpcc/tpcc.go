@@ -20,6 +20,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"net/url"
+
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -41,8 +43,20 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs         []tx
-	totalWeight int
+	txs []tx
+	// deck contains indexes into the txs slice.
+	deck []int
+
+	auditor *auditor
+
+	split   bool
+	scatter bool
+
+	partitions int
+
+	usePostgres  bool
+	serializable bool
+	txOpts       *gosql.TxOptions
 
 	randomCIDsCache struct {
 		syncutil.Mutex
@@ -72,11 +86,15 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:      {RuntimeOnly: true},
-			`fks`:     {RuntimeOnly: true},
-			`mix`:     {RuntimeOnly: true},
-			`wait`:    {RuntimeOnly: true},
-			`workers`: {RuntimeOnly: true},
+			`db`:           {RuntimeOnly: true},
+			`fks`:          {RuntimeOnly: true},
+			`mix`:          {RuntimeOnly: true},
+			`partitions`:   {RuntimeOnly: true},
+			`scatter`:      {RuntimeOnly: true},
+			`serializable`: {RuntimeOnly: true},
+			`split`:        {RuntimeOnly: true},
+			`wait`:         {RuntimeOnly: true},
+			`workers`:      {RuntimeOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -87,7 +105,7 @@ var tpccMeta = workload.Meta{
 		g.nowString = `2006-01-02 15:04:05`
 
 		g.flags.StringVar(&g.mix, `mix`,
-			`newOrder=45,payment=43,orderStatus=4,delivery=4,stockLevel=4`,
+			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
 		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
@@ -95,6 +113,12 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
+		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
+		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
+
+		g.auditor = &auditor{}
 
 		return g
 	},
@@ -118,6 +142,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 					w.warehouses, w.warehouses*numWorkersPerWarehouse)
 			}
 
+			if w.partitions != 0 && !w.split {
+				return errors.Errorf(`--partitions requires --split`)
+			}
+
+			if w.serializable {
+				w.txOpts = &gosql.TxOptions{Isolation: gosql.LevelSerializable}
+			}
+
 			return initializeMix(w)
 		},
 		PostLoad: func(sqlDB *gosql.DB) error {
@@ -137,6 +169,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 					return err
 				}
 			}
+			return nil
+		},
+		PostRun: func() error {
+			w.auditor.runChecks()
 			return nil
 		},
 	}
@@ -226,6 +262,13 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	parsedURL, err := url.Parse(urls[0])
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	w.usePostgres = parsedURL.Port() == "5432"
+
 	nConns := w.warehouses / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
@@ -238,9 +281,43 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		dbs[i].SetMaxIdleConns(nConns)
 	}
 
+	if w.split {
+		splitTables(dbs[0], w.warehouses)
+
+		if w.partitions > 0 {
+			partitionTables(dbs[0], w.warehouses, w.partitions)
+		}
+	}
+
+	if w.scatter {
+		scatterRanges(dbs[0])
+	}
+
+	// If no partitions were specified, pretend there is a single partition
+	// containing all warehouses.
+	if w.partitions == 0 {
+		w.partitions = 1
+	}
+	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
+	// a machine that holds partition "i % *partitions".
+	partitionDBs := make([][]*gosql.DB, w.partitions)
+	for i, db := range dbs {
+		p := i % w.partitions
+		partitionDBs[p] = append(partitionDBs[p], db)
+	}
+	for i := range partitionDBs {
+		if partitionDBs[i] == nil {
+			partitionDBs[i] = dbs
+		}
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx / numWorkersPerWarehouse
+		warehouse := workerIdx % w.warehouses
+		// NB: Each partition contains "warehouses / partitions" warehouses. See
+		// partitionTables().
+		p := (warehouse * w.partitions) / w.warehouses
+		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
 			config:    w,
@@ -248,7 +325,11 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			idx:       workerIdx,
 			db:        db,
 			warehouse: warehouse,
+			deckPerm:  make([]int, len(w.deck)),
+			permIdx:   len(w.deck),
 		}
+		copy(worker.deckPerm, w.deck)
+
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
 	if w.doWaits {

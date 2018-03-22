@@ -52,6 +52,7 @@ var maxRate = runFlags.Float64(
 var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
 var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init")
+var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 
 var initCmd = &cobra.Command{
 	Use:   `init`,
@@ -239,11 +240,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	start := timeutil.Now()
 	errCh := make(chan error)
 	var wg sync.WaitGroup
-	for _, workFn := range ops.WorkerFns {
-		workFn := workFn
-		wg.Add(1)
-		go workerRun(ctx, errCh, &wg, limiter, workFn)
-	}
+	sleepTime := *ramp / time.Duration(len(ops.WorkerFns))
+	wg.Add(len(ops.WorkerFns))
+	go func() {
+		for _, workFn := range ops.WorkerFns {
+			workFn := workFn
+			go workerRun(ctx, errCh, &wg, limiter, workFn)
+			time.Sleep(sleepTime)
+		}
+	}()
 
 	var numErr int
 	tick := time.Tick(time.Second)
@@ -327,6 +332,14 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			fmt.Println(totalHeader + `__result`)
 			printTotalHist(resultTick)
+
+			if h, ok := gen.(workload.Hookser); ok {
+				if h.Hooks().PostRun != nil {
+					if err := h.Hooks().PostRun(); err != nil {
+						fmt.Printf("failed post-run hook: %v\n", err)
+					}
+				}
+			}
 
 			// Output results that mimic Go's built-in benchmark format.
 			benchmarkName := strings.Join([]string{

@@ -24,6 +24,8 @@ import (
 
 	"context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -62,16 +64,16 @@ type orderStatus struct{}
 
 var _ tpccTx = orderStatus{}
 
-func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	d := orderStatusData{
-		dID: rand.Intn(9) + 1,
+		dID: rng.Intn(10) + 1,
 	}
 
 	// 2.6.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
-	if rand.Intn(9) < 6 {
+	if rng.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
 	} else {
 		d.cID = randCustomerID(rng)
@@ -80,29 +82,33 @@ func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		config.txOpts,
 		func(tx *gosql.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 
 			// Select the customer
 			if d.cID != 0 {
 				// Case 1: select by customer id
-				if err := tx.QueryRow(`
+				if err := tx.QueryRow(fmt.Sprintf(`
 					SELECT c_balance, c_first, c_middle, c_last
 					FROM customer
-					WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
-					wID, d.dID, d.cID,
+					WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
+					wID, d.dID, d.cID),
 				).Scan(&d.cBalance, &d.cFirst, &d.cMiddle, &d.cLast); err != nil {
 					return errors.Wrap(err, "select by customer idfail")
 				}
 			} else {
 				// Case 2: Pick the middle row, rounded up, from the selection by last name.
-				rows, err := tx.Query(`
+				indexStr := "@customer_idx"
+				if config.usePostgres {
+					indexStr = ""
+				}
+				rows, err := tx.Query(fmt.Sprintf(`
 					SELECT c_id, c_balance, c_first, c_middle
-					FROM customer@customer_idx
-					WHERE c_w_id = $1 AND c_d_id = $2 AND c_last = $3
-					ORDER BY c_first ASC`,
-					wID, d.dID, d.cLast)
+					FROM customer%[1]s
+					WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_last = '%[4]s'
+					ORDER BY c_first ASC`, indexStr,
+					wID, d.dID, d.cLast))
 				if err != nil {
 					return errors.Wrap(err, "select by last name fail")
 				}
@@ -115,6 +121,9 @@ func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 						return err
 					}
 					customers = append(customers, c)
+				}
+				if err := rows.Err(); err != nil {
+					return err
 				}
 				rows.Close()
 				cIdx := len(customers) / 2
@@ -130,23 +139,23 @@ func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			}
 
 			// Select the customer's order.
-			if err := tx.QueryRow(`
+			if err := tx.QueryRow(fmt.Sprintf(`
 				SELECT o_id, o_entry_d, o_carrier_id
 				FROM "order"
-				WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
+				WHERE o_w_id = %[1]d AND o_d_id = %[2]d AND o_c_id = %[3]d
 				ORDER BY o_id DESC
 				LIMIT 1`,
-				wID, d.dID, d.cID,
+				wID, d.dID, d.cID),
 			).Scan(&d.oID, &d.oEntryD, &d.oCarrierID); err != nil {
 				return errors.Wrap(err, "select order fail")
 			}
 
 			// Select the items from the customer's order.
-			rows, err := tx.Query(`
+			rows, err := tx.Query(fmt.Sprintf(`
 				SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
 				FROM order_line
-				WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
-				wID, d.dID, d.oID)
+				WHERE ol_w_id = %[1]d AND ol_d_id = %[2]d AND ol_o_id = %[3]d`,
+				wID, d.dID, d.oID))
 			if err != nil {
 				return errors.Wrap(err, "select items fail")
 			}
@@ -161,7 +170,7 @@ func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 				}
 				d.items = append(d.items, item)
 			}
-			return nil
+			return rows.Err()
 		}); err != nil {
 		return nil, err
 	}
