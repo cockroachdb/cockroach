@@ -638,6 +638,12 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
+
+	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
+		return pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: table descriptor is not valid: %s\n%v", err, tableDesc)
+	}
+
 	p.Tables().addUncommittedTable(*tableDesc)
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
