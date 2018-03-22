@@ -20,29 +20,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// TableIndex uniquely identifies the usage of a table within the scope of a
-// query. The indexes of its columns start at the table index and proceed
-// sequentially from there. See the comment for Metadata for more details.
-type TableIndex int32
+// TableID uniquely identifies the usage of a table within the scope of a
+// query. The ids of its columns start at the table id and proceed sequentially
+// from there. See the comment for Metadata for more details.
+type TableID int32
 
-// Metadata indexes the columns, tables, and other metadata used within the
-// scope of a particular query. Because it is specific to one query, the
-// indexes tend to be small integers that can be efficiently stored and
+// Metadata assigns unique ids to the columns, tables, and other metadata used
+// within the scope of a particular query. Because it is specific to one query,
+// the ids tend to be small integers that can be efficiently stored and
 // manipulated.
 //
 // Within a query, every unique column and every projection (that is more than
-// just a pass through of a column) is assigned a unique column index.
+// just a pass through of a column) is assigned a unique column id.
 // Additionally, every separate reference to a table in the query gets a new
-// set of output column indexes. Consider the query:
+// set of output column ids. Consider the query:
 //
 //   SELECT * FROM a AS l JOIN a AS r ON (l.x = r.y)
 //
 // In this query, `l.x` is not equivalent to `r.x` and `l.y` is not equivalent
 // to `r.y`. In order to achieve this, we need to give these columns different
-// indexes.
+// ids.
 //
-// In all cases, the column indexes are global to the query. For example,
-// consider the query:
+// In all cases, the column ids are global to the query. For example, consider
+// the query:
 //
 //   SELECT x FROM a WHERE y > 0
 //
@@ -53,14 +53,14 @@ type TableIndex int32
 //   -- [0] -> x
 //   -- [1] -> y
 type Metadata struct {
-	// cols stores information about each metadata column, indexed by
-	// ColumnIndex. Skip index 0 so that it is reserved for "unknown column".
+	// cols stores information about each metadata column, indexed by ColumnID.
+	// Skip id 0 so that it is reserved for "unknown column".
 	cols []mdCol
 
-	// tables maps from table index to the catalog metadata for the table. The
-	// table index is the index of the first column in the table. The remaining
-	// columns form a contiguous group following that index.
-	tables map[TableIndex]Table
+	// tables maps from table id to the catalog metadata for the table. The
+	// table id is the id of the first column in the table. The remaining
+	// columns form a contiguous group following that id.
+	tables map[TableID]Table
 }
 
 // mdCol stores information about one of the columns stored in the metadata,
@@ -78,15 +78,15 @@ type mdCol struct {
 
 // NewMetadata constructs a new instance of metadata for the optimizer.
 func NewMetadata() *Metadata {
-	// Skip label index 0 so that it is reserved for "unknown column".
+	// Skip mdCol index 0 so that it is reserved for "unknown column".
 	return &Metadata{cols: make([]mdCol, 1)}
 }
 
-// AddColumn indexes a new reference to a column within the query and records
-// its label.
-func (md *Metadata) AddColumn(label string, typ types.T) ColumnIndex {
+// AddColumn assigns a new unique id to a column within the query and records
+// its label and type.
+func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
 	md.cols = append(md.cols, mdCol{label: label, typ: typ})
-	return ColumnIndex(len(md.cols) - 1)
+	return ColumnID(len(md.cols) - 1)
 }
 
 // NumColumns returns the count of columns tracked by this Metadata instance.
@@ -97,54 +97,54 @@ func (md *Metadata) NumColumns() int {
 
 // ColumnLabel returns the label of the given column. It is used for pretty-
 // printing and debugging.
-func (md *Metadata) ColumnLabel(index ColumnIndex) string {
-	if index == 0 {
+func (md *Metadata) ColumnLabel(id ColumnID) string {
+	if id == 0 {
 		panic("uninitialized column id 0")
 	}
 
-	return md.cols[index].label
+	return md.cols[id].label
 }
 
 // ColumnType returns the SQL scalar type of the given column.
-func (md *Metadata) ColumnType(index ColumnIndex) types.T {
-	if index == 0 {
+func (md *Metadata) ColumnType(id ColumnID) types.T {
+	if id == 0 {
 		panic("uninitialized column id 0")
 	}
 
-	return md.cols[index].typ
+	return md.cols[id].typ
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
-// references to the same table are assigned different table indexes (e.g. in
-// a self-join query).
-func (md *Metadata) AddTable(tbl Table) TableIndex {
-	tblIndex := TableIndex(md.NumColumns() + 1)
+// references to the same table are assigned different table ids (e.g. in a
+// self-join query).
+func (md *Metadata) AddTable(tab Table) TableID {
+	tabID := TableID(md.NumColumns() + 1)
 
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		col := tbl.Column(i)
-		if tbl.TabName() == "" {
+	for i := 0; i < tab.ColumnCount(); i++ {
+		col := tab.Column(i)
+		if tab.TabName() == "" {
 			md.AddColumn(string(col.ColName()), col.DatumType())
 		} else {
-			md.AddColumn(fmt.Sprintf("%s.%s", tbl.TabName(), col.ColName()), col.DatumType())
+			md.AddColumn(fmt.Sprintf("%s.%s", tab.TabName(), col.ColName()), col.DatumType())
 		}
 	}
 
 	if md.tables == nil {
-		md.tables = make(map[TableIndex]Table)
+		md.tables = make(map[TableID]Table)
 	}
 
-	md.tables[tblIndex] = tbl
-	return tblIndex
+	md.tables[tabID] = tab
+	return tabID
 }
 
-// Table looks up the catalog table associated with the given metadata index.
-// The same table can be associated with multiple metadata indexes.
-func (md *Metadata) Table(index TableIndex) Table {
-	return md.tables[index]
+// Table looks up the catalog table associated with the given metadata id. The
+// same table can be associated with multiple metadata ids.
+func (md *Metadata) Table(tabID TableID) Table {
+	return md.tables[tabID]
 }
 
-// TableColumn returns the metadata index of the column at the given ordinal
+// TableColumn returns the metadata id of the column at the given ordinal
 // position in the table.
-func (md *Metadata) TableColumn(tblIndex TableIndex, ord int) ColumnIndex {
-	return ColumnIndex(int(tblIndex) + ord)
+func (md *Metadata) TableColumn(tabID TableID, ord int) ColumnID {
+	return ColumnID(int(tabID) + ord)
 }

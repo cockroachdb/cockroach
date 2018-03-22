@@ -348,7 +348,7 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
 	for _, col := range *f.mem.LookupPrivate(ordering).(*memo.Ordering) {
-		colSet.Add(int(col.Index()))
+		colSet.Add(int(col.ID()))
 	}
 	return colSet
 }
@@ -409,9 +409,9 @@ func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet
 	default:
 		// Construct new variable groups for each output column that's needed.
 		colSet.ForEach(func(i int) {
-			v := f.ConstructVariable(f.InternPrivate(opt.ColumnIndex(i)))
+			v := f.ConstructVariable(f.InternPrivate(opt.ColumnID(i)))
 			groupList = append(groupList, v)
-			colList = append(colList, opt.ColumnIndex(i))
+			colList = append(colList, opt.ColumnID(i))
 		})
 	}
 
@@ -452,11 +452,11 @@ func (f *Factory) filterUnusedValuesColumns(
 	newRows := make([]memo.GroupID, 0, len(existingRows))
 
 	// Create new list of columns that only contains needed columns.
-	for _, colIndex := range existingCols {
-		if !neededCols.Contains(int(colIndex)) {
+	for _, colID := range existingCols {
+		if !neededCols.Contains(int(colID)) {
 			continue
 		}
-		newCols = append(newCols, colIndex)
+		newCols = append(newCols, colID)
 	}
 
 	// newElems is used to store tuple values, and can be allocated once and

@@ -147,7 +147,7 @@ func (b *Builder) buildOrdering(
 	// Add the new columns to the ordering.
 	for i := start; i < len(orderByScope.cols); i++ {
 		col := opt.MakeOrderingColumn(
-			orderByScope.cols[i].index,
+			orderByScope.cols[i].id,
 			order.Direction == tree.Descending,
 		)
 		orderByScope.ordering = append(orderByScope.ordering, col)
@@ -177,7 +177,7 @@ func (b *Builder) buildOrderByProject(
 		col := &orderByScope.cols[i]
 
 		// Only append order by columns that aren't already present.
-		if findColByIndex(outScope.cols, col.index) == nil {
+		if findColByIndex(outScope.cols, col.id) == nil {
 			outScope.cols = append(outScope.cols, *col)
 			outScope.cols[len(outScope.cols)-1].hidden = true
 			combined = append(combined, orderByProjections[i])

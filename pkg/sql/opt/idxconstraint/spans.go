@@ -167,8 +167,8 @@ func ExactPrefix(spans LogicalSpans, evalCtx *tree.EvalContext) int {
 // IndexColumnInfo encompasses the information for index columns, needed for
 // index constraints.
 type IndexColumnInfo struct {
-	// VarIdx identifies the indexed var that corresponds to this column.
-	VarIdx    opt.ColumnIndex
+	// VarID identifies the indexed var that corresponds to this column.
+	VarID     opt.ColumnID
 	Typ       types.T
 	Direction encoding.Direction
 	// Nullable should be set to false if this column cannot store NULLs; used

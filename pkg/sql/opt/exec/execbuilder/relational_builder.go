@@ -31,7 +31,7 @@ import (
 type execPlan struct {
 	root exec.Node
 
-	// outputCols is a map from opt.ColumnIndex to exec.ColumnOrdinal. It maps
+	// outputCols is a map from opt.ColumnID to exec.ColumnOrdinal. It maps
 	// columns in the output set of a relational expression to indices in the
 	// result columns of the exec.Node.
 	//
@@ -72,7 +72,7 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 // getColumnOrdinal takes a column that is known to be produced by the execPlan
 // and returns the ordinal index of that column in the result columns of the
 // node.
-func (ep *execPlan) getColumnOrdinal(col opt.ColumnIndex) exec.ColumnOrdinal {
+func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	ord, ok := ep.outputCols.Get(int(col))
 	if !ok {
 		panic(fmt.Sprintf("column %d not in input", col))
@@ -180,21 +180,21 @@ func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	def := ev.Private().(*memo.ScanOpDef)
 	md := ev.Metadata()
-	tbl := md.Table(def.Table)
+	tab := md.Table(def.Table)
 
 	// Construct subset of columns needed from scan.
 	n := 0
 	needed := exec.ColumnOrdinalSet{}
 	res := execPlan{}
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		colIndex := md.TableColumn(def.Table, i)
-		if def.Cols.Contains(int(colIndex)) {
+	for i := 0; i < tab.ColumnCount(); i++ {
+		colID := md.TableColumn(def.Table, i)
+		if def.Cols.Contains(int(colID)) {
 			needed.Add(i)
-			res.outputCols.Set(int(colIndex), n)
+			res.outputCols.Set(int(colID), n)
 			n++
 		}
 	}
-	root, err := b.factory.ConstructScan(tbl, needed)
+	root, err := b.factory.ConstructScan(tab, needed)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -290,7 +290,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	var ep execPlan
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		ep.outputCols.Set(i, len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnIndex(i)))
+		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
 	}
 
 	aggColList := *aggregations.Private().(*opt.ColList)
@@ -305,7 +305,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 			if child.Operator() != opt.VariableOp {
 				return execPlan{}, errors.Errorf("only VariableOp args supported")
 			}
-			col := child.Private().(opt.ColumnIndex)
+			col := child.Private().(opt.ColumnID)
 			argIdx[j] = input.getColumnOrdinal(col)
 		}
 
@@ -431,7 +431,7 @@ func (b *Builder) buildSort(ev memo.ExprView) (execPlan, error) {
 	ordering := ev.Physical().Ordering
 	colOrd := make(sqlbase.ColumnOrdering, len(ordering))
 	for i, col := range ordering {
-		ord := input.getColumnOrdinal(col.Index())
+		ord := input.getColumnOrdinal(col.ID())
 		colOrd[i].ColIdx = int(ord)
 		if col.Descending() {
 			colOrd[i].Direction = encoding.Descending
@@ -490,7 +490,7 @@ func (b *Builder) applyPresentation(
 	colList := make(opt.ColList, len(p))
 	colNames := make([]string, len(p))
 	for i := range p {
-		colList[i] = p[i].Index
+		colList[i] = p[i].ID
 		colNames[i] = p[i].Label
 	}
 
@@ -506,7 +506,7 @@ func (b *Builder) applyPresentation(
 	}
 	ep := execPlan{root: node}
 	for i := range p {
-		ep.outputCols.Set(int(p[i].Index), i)
+		ep.outputCols.Set(int(p[i].ID), i)
 	}
 	return ep, nil
 }

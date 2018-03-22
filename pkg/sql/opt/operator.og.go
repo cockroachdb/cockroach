@@ -190,7 +190,7 @@ const (
 	SubqueryOp
 
 	// VariableOp is the typed scalar value of a column in the query. The private
-	// field is a Metadata.ColumnIndex that references the column by index.
+	// field is a Metadata.ColumnID that references the column by index.
 	VariableOp
 
 	// ConstOp is a typed scalar constant value. The private field is a tree.Datum

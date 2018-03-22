@@ -42,7 +42,7 @@ func (f FuncOpDef) String() string {
 type ScanOpDef struct {
 	// Table identifies the table to scan. It is an index that can be passed to
 	// the Metadata.Table method in order to fetch optbase.Table metadata.
-	Table opt.TableIndex
+	Table opt.TableID
 
 	// Cols specifies the set of columns that the scan operator projects. This
 	// may be a subset of the columns that the table contains.

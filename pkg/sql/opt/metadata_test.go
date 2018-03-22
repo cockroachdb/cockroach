@@ -26,17 +26,17 @@ func TestMetadataColumns(t *testing.T) {
 	md := opt.NewMetadata()
 
 	// Add standalone column.
-	colIndex := md.AddColumn("alias", types.Int)
-	if colIndex != 1 {
-		t.Fatalf("unexpected column index: %d", colIndex)
+	colID := md.AddColumn("alias", types.Int)
+	if colID != 1 {
+		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label := md.ColumnLabel(colIndex)
+	label := md.ColumnLabel(colID)
 	if label != "alias" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 
-	typ := md.ColumnType(colIndex)
+	typ := md.ColumnType(colID)
 	if typ != types.Int {
 		t.Fatalf("unexpected column type: %s", typ)
 	}
@@ -46,17 +46,17 @@ func TestMetadataColumns(t *testing.T) {
 	}
 
 	// Add another column.
-	colIndex = md.AddColumn("alias2", types.String)
-	if colIndex != 2 {
-		t.Fatalf("unexpected column index: %d", colIndex)
+	colID = md.AddColumn("alias2", types.String)
+	if colID != 2 {
+		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label = md.ColumnLabel(colIndex)
+	label = md.ColumnLabel(colID)
 	if label != "alias2" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 
-	typ = md.ColumnType(colIndex)
+	typ = md.ColumnType(colID)
 	if typ != types.String {
 		t.Fatalf("unexpected column type: %s", typ)
 	}
@@ -75,22 +75,22 @@ func TestMetadataTables(t *testing.T) {
 	y := &testutils.TestColumn{Name: "y"}
 	a.Columns = append(a.Columns, x, y)
 
-	tblIndex := md.AddTable(a)
-	if tblIndex != 1 {
-		t.Fatalf("unexpected table index: %d", tblIndex)
+	tabID := md.AddTable(a)
+	if tabID != 1 {
+		t.Fatalf("unexpected table id: %d", tabID)
 	}
 
-	tbl := md.Table(tblIndex)
-	if tbl != a {
+	tab := md.Table(tabID)
+	if tab != a {
 		t.Fatal("table didn't match table added to metadata")
 	}
 
-	colIndex := md.TableColumn(tblIndex, 0)
-	if colIndex != 1 {
-		t.Fatalf("unexpected column index: %d", colIndex)
+	colID := md.TableColumn(tabID, 0)
+	if colID != 1 {
+		t.Fatalf("unexpected column id: %d", colID)
 	}
 
-	label := md.ColumnLabel(colIndex)
+	label := md.ColumnLabel(colID)
 	if label != "a.x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
@@ -99,12 +99,12 @@ func TestMetadataTables(t *testing.T) {
 	b := &testutils.TestTable{}
 	b.Columns = append(b.Columns, &testutils.TestColumn{Name: "x"})
 
-	tblIndex = md.AddTable(b)
-	if tblIndex != 3 {
-		t.Fatalf("unexpected table index: %d", tblIndex)
+	tabID = md.AddTable(b)
+	if tabID != 3 {
+		t.Fatalf("unexpected table id: %d", tabID)
 	}
 
-	label = md.ColumnLabel(md.TableColumn(tblIndex, 0))
+	label = md.ColumnLabel(md.TableColumn(tabID, 0))
 	if label != "x" {
 		t.Fatalf("unexpected column label: %s", label)
 	}
