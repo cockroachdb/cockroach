@@ -33,15 +33,24 @@ const (
 type auditor struct {
 	syncutil.Mutex
 
+	warehouses int
+
 	newOrderTransactions uint64
 	newOrderRollbacks    uint64
 
 	// map from order-lines count to the number of orders with that count
-	orderLinesFreq map[int]uint64
+	orderLinesFreq  map[int]uint64
+	totalOrderLines uint64
+
+	remoteWarehouseFreq map[int]uint64
 }
 
-func newAuditor() *auditor {
-	return &auditor{orderLinesFreq: make(map[int]uint64)}
+func newAuditor(warehouses int) *auditor {
+	return &auditor{
+		warehouses:          warehouses,
+		orderLinesFreq:      make(map[int]uint64),
+		remoteWarehouseFreq: make(map[int]uint64),
+	}
 }
 
 // runChecks runs the audit checks and prints warnings to stdout for those that
@@ -54,6 +63,7 @@ func (a *auditor) runChecks() {
 	checks := []check{
 		{"9.2.2.5.1", check92251},
 		{"9.2.2.5.2", check92252},
+		{"9.2.2.5.3", check92253},
 	}
 	for _, check := range checks {
 		result := check.f(a)
@@ -88,17 +98,12 @@ func check92252(a *auditor) error {
 	a.Lock()
 	defer a.Unlock()
 
-	var orders, orderLines uint64
-	for i := 5; i <= 15; i++ {
-		freq := a.orderLinesFreq[i]
-		orders += freq
-		orderLines += freq * uint64(i)
-	}
-	if orders < minSignificantOrders {
+	if a.newOrderTransactions < minSignificantOrders {
+		// Not enough orders to be statistically significant.
 		return nil
 	}
 
-	avg := float64(orderLines) / float64(orders)
+	avg := float64(a.totalOrderLines) / float64(a.newOrderTransactions)
 	if avg < 9.5 || avg > 10.5 {
 		return errors.Errorf(
 			"average order-lines count %.1f is not between allowed bounds [9.5, 10.5]", avg)
@@ -108,12 +113,54 @@ func check92252(a *auditor) error {
 	tolerance := 1.0          // allow 1 percent deviation from expected
 	for i := 5; i <= 15; i++ {
 		freq := a.orderLinesFreq[i]
-		pct := 100 * float64(freq) / float64(orders)
+		pct := 100 * float64(freq) / float64(a.newOrderTransactions)
 		if math.Abs(expectedPct-pct) > tolerance {
 			return errors.Errorf(
 				"order-lines count should be uniformly distributed from 5 to 15, but it was %d for "+
 					"%.1f percent of orders", i, pct)
 		}
 	}
+	return nil
+}
+
+func check92253(a *auditor) error {
+	// The number of remote order-lines is at least 0.95% and at most 1.05% of the
+	// number of order-lines that are filled in by the New-Order transactions that
+	// are submitted to the SUT during the measurement interval, and the remote
+	// warehouse numbers are uniformly distributed within the range of active
+	// warehouses.
+	a.Lock()
+	defer a.Unlock()
+
+	if a.newOrderTransactions < minSignificantOrders {
+		// Not enough orders to be statistically significant.
+		return nil
+	}
+
+	var remoteOrderLines uint64
+	for _, freq := range a.remoteWarehouseFreq {
+		remoteOrderLines += freq
+	}
+	remotePct := 100 * float64(remoteOrderLines) / float64(a.totalOrderLines)
+	if remotePct < 0.95 || remotePct > 1.05 {
+		return errors.Errorf(
+			"remote order-line percent %.1f is not between allowed bounds [0.95, 1.05]", remotePct)
+	}
+
+	// In the absence of a more sophisticated distribution check like a
+	// chi-squared test, check each warehouse is used as a remote warehouse at
+	// least once. We need the number of remote order-lines to be at least 15
+	// times the number of warehouses (experimentally determined) to have this
+	// expectation.
+	if remoteOrderLines < 15*uint64(a.warehouses) {
+		// Not enough remote order-lines to expect all warehouses to be used.
+		return nil
+	}
+	for i := 0; i < a.warehouses; i++ {
+		if _, ok := a.remoteWarehouseFreq[i]; !ok {
+			return errors.Errorf("no remote order-lines for warehouses %d", i)
+		}
+	}
+
 	return nil
 }
