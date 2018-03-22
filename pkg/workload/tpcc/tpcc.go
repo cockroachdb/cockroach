@@ -127,8 +127,6 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 
-		g.auditor = newAuditor()
-
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		return g
 	},
@@ -159,6 +157,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.serializable {
 				w.txOpts = &gosql.TxOptions{Isolation: gosql.LevelSerializable}
 			}
+
+			w.auditor = newAuditor(w.warehouses)
 
 			return initializeMix(w)
 		},
