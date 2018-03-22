@@ -206,12 +206,12 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 type HistogramTick struct {
 	// Name is the name given to the histograms represented by this tick.
 	Name string
-	// Hist is the merged result of the represented histgrams for this tick.
+	// Hist is the merged result of the represented histograms for this tick.
 	Hist *hdrhistogram.Histogram
-	// Cumulative is the merged result of the represented histgrams for all
+	// Cumulative is the merged result of the represented histograms for all
 	// time.
 	Cumulative *hdrhistogram.Histogram
-	// Ops is the total number of `Record` calls for all represented histgrams.
+	// Ops is the total number of `Record` calls for all represented histograms.
 	Ops int64
 	// LastOps is the value of Ops for the last tick.
 	LastOps int64
