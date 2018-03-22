@@ -55,7 +55,7 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 	}
 
 	// If there is no primary index, add the hidden rowid column.
-	if tbl.PrimaryIndex == nil {
+	if len(tbl.Indexes) == 0 {
 		rowid := &TestColumn{Name: "rowid", Type: types.Int, Hidden: true}
 		tbl.Columns = append(tbl.Columns, rowid)
 		tbl.addPrimaryColumnIndex(rowid)
@@ -109,7 +109,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 
 	if typ != primaryIndex {
 		// Add implicit key columns from primary index.
-		for _, idxCol := range tt.PrimaryIndex.Columns {
+		for _, idxCol := range tt.Indexes[opt.PrimaryIndex].Columns {
 			// Only add columns that aren't already part of index.
 			found := false
 			for _, colDef := range def.Columns {
@@ -135,7 +135,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// Only add storing columns that weren't added as part of adding implicit
 		// key columns.
 		found := false
-		for _, idxCol := range tt.PrimaryIndex.Columns {
+		for _, idxCol := range tt.Indexes[opt.PrimaryIndex].Columns {
 			if opt.ColumnName(name) == idxCol.Column.ColName() {
 				found = true
 			}
@@ -147,10 +147,11 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 	}
 
 	if typ == primaryIndex {
-		tt.PrimaryIndex = idx
-	} else {
-		tt.SecondaryIndexes = append(tt.SecondaryIndexes, idx)
+		if len(tt.Indexes) != 0 {
+			panic("primary index should always be 0th index")
+		}
 	}
+	tt.Indexes = append(tt.Indexes, idx)
 }
 
 func (tt *TestTable) makeIndexName(defName tree.Name, typ indexType) string {
@@ -186,9 +187,12 @@ func (ti *TestIndex) addColumn(
 
 func (tt *TestTable) addPrimaryColumnIndex(col *TestColumn) {
 	idxCol := opt.IndexColumn{Column: col}
-	tt.PrimaryIndex = &TestIndex{
-		Name:    "primary",
-		Columns: []opt.IndexColumn{idxCol},
-		Unique:  1,
-	}
+	tt.Indexes = append(
+		tt.Indexes,
+		&TestIndex{
+			Name:    "primary",
+			Columns: []opt.IndexColumn{idxCol},
+			Unique:  1,
+		},
+	)
 }
