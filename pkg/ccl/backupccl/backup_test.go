@@ -843,6 +843,9 @@ func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// force every call to update
+	jobs.TestingSetProgressThreshold(-1.0)
+
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
 	}(jobs.DefaultAdoptInterval)
@@ -940,10 +943,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 				prevLowWaterMark := keys.MinKey
 				checkpointChanges := 0
-				for {
-					for reqs := 0; reqs < 3; reqs++ {
-						allowResponse <- struct{}{}
-					}
+				for checks := 0; checks < 1000; checks++ {
+					allowResponse <- struct{}{}
 					mark, err := getLowWaterMark(jobID, sqlDB.DB)
 					if err != nil {
 						t.Fatal(err)
@@ -951,13 +952,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 					if !mark.Equal(prevLowWaterMark) {
 						prevLowWaterMark = mark
 						checkpointChanges++
-					}
-					if checkpointChanges > 5 {
 						sqlDB.Exec(t, fmt.Sprintf(`PAUSE JOB %d`, jobID))
-						allowResponse <- struct{}{}
+						sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 						break
 					}
 				}
+				sqlDB.Exec(t, fmt.Sprintf(`PAUSE JOB %d`, jobID))
 				close(allowResponse)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
