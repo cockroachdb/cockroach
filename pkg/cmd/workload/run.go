@@ -333,6 +333,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Println(totalHeader + `__result`)
 			printTotalHist(resultTick)
 
+			if h, ok := gen.(workload.Hookser); ok {
+				if err := h.Hooks().PostRun(); err != nil {
+					fmt.Printf("failed post-run hook: %v\n", err)
+				}
+			}
+
 			// Output results that mimic Go's built-in benchmark format.
 			benchmarkName := strings.Join([]string{
 				"BenchmarkWorkload",

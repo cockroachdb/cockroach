@@ -25,6 +25,8 @@ import (
 
 	"context"
 
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
@@ -80,6 +82,8 @@ type newOrder struct{}
 var _ tpccTx = newOrder{}
 
 func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	atomic.AddUint64(&config.auditor.newOrderTransactions, 1)
+
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	d := newOrderData{
@@ -205,6 +209,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
+						atomic.AddUint64(&config.auditor.newOrderRollbacks, 1)
 						return errSimulated
 					}
 					return errors.New("missing item row")

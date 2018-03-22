@@ -48,6 +48,8 @@ type tpcc struct {
 	deck        []int
 	totalWeight int
 
+	auditor *auditor
+
 	split   bool
 	scatter bool
 
@@ -118,6 +120,8 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 
+		g.auditor = &auditor{}
+
 		return g
 	},
 }
@@ -167,6 +171,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 					return err
 				}
 			}
+			return nil
+		},
+		PostRun: func() error {
+			w.auditor.runChecks()
 			return nil
 		},
 	}
