@@ -79,17 +79,17 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 
 	md := ev.Metadata()
 	def := ev.Private().(*ScanOpDef)
-	tbl := md.Table(def.Table)
+	tab := md.Table(def.Table)
 
 	// Scan output columns are stored in the definition.
 	props.Relational.OutputCols = def.Cols
 
 	// Initialize not-NULL columns from the table schema.
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		if !tbl.Column(i).IsNullable() {
-			colIndex := md.TableColumn(def.Table, i)
-			if def.Cols.Contains(int(colIndex)) {
-				props.Relational.NotNullCols.Add(int(colIndex))
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			colID := md.TableColumn(def.Table, i)
+			if def.Cols.Contains(int(colID)) {
+				props.Relational.NotNullCols.Add(int(colID))
 			}
 		}
 	}
@@ -267,7 +267,7 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.VariableOp:
 		// Variable introduces outer column.
-		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnIndex)))
+		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return props
 	}
 

@@ -51,12 +51,12 @@ func (b *Builder) buildTable(
 		if err != nil {
 			panic(builderError{err})
 		}
-		tbl, err := b.catalog.FindTable(b.ctx, tn)
+		tab, err := b.catalog.FindTable(b.ctx, tn)
 		if err != nil {
 			panic(builderError{err})
 		}
 
-		return b.buildScan(tbl, tn, inScope)
+		return b.buildScan(tab, tn, inScope)
 
 	case *tree.ParenTableExpr:
 		return b.buildTable(source.Expr, inScope)
@@ -110,18 +110,18 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tbl opt.Table, tn *tree.TableName, inScope *scope,
+	tab opt.Table, tn *tree.TableName, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
-	tblIndex := b.factory.Metadata().AddTable(tbl)
-	scanOpDef := memo.ScanOpDef{Table: tblIndex}
+	tabID := b.factory.Metadata().AddTable(tab)
+	scanOpDef := memo.ScanOpDef{Table: tabID}
 
 	outScope = inScope.push()
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		col := tbl.Column(i)
-		colIndex := b.factory.Metadata().TableColumn(tblIndex, i)
+	for i := 0; i < tab.ColumnCount(); i++ {
+		col := tab.Column(i)
+		colID := b.factory.Metadata().TableColumn(tabID, i)
 		name := tree.Name(col.ColName())
 		colProps := columnProps{
-			index:    colIndex,
+			id:       colID,
 			origName: name,
 			name:     name,
 			table:    *tn,
@@ -129,7 +129,7 @@ func (b *Builder) buildScan(
 			hidden:   col.IsHidden(),
 		}
 
-		scanOpDef.Cols.Add(int(colIndex))
+		scanOpDef.Cols.Add(int(colID))
 		b.colMap = append(b.colMap, colProps)
 		outScope.cols = append(outScope.cols, colProps)
 	}

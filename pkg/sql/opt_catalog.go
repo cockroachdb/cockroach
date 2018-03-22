@@ -150,7 +150,7 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) int {
 // optIndex is a wrapper around sqlbase.IndexDescriptor that caches some
 // commonly accessed information and keeps a reference to the table wrapper.
 type optIndex struct {
-	tbl           *optTable
+	tab           *optTable
 	desc          *sqlbase.IndexDescriptor
 	numCols       int
 	numUniqueCols int
@@ -158,15 +158,15 @@ type optIndex struct {
 
 var _ opt.Index = &optIndex{}
 
-func newOptIndex(tbl *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
+func newOptIndex(tab *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 	oi := &optIndex{}
-	oi.init(tbl, desc)
+	oi.init(tab, desc)
 	return oi
 }
 
 // init allows the optIndex wrapper to be inlined.
-func (oi *optIndex) init(tbl *optTable, desc *sqlbase.IndexDescriptor) {
-	oi.tbl = tbl
+func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
+	oi.tab = tab
 	oi.desc = desc
 	oi.numCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs) + len(desc.StoreColumnIDs)
 
@@ -196,9 +196,9 @@ func (oi *optIndex) UniqueColumnCount() int {
 func (oi *optIndex) Column(i int) opt.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
-		ord := oi.tbl.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
+		ord := oi.tab.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
 		return opt.IndexColumn{
-			Column:     oi.tbl.Column(ord),
+			Column:     oi.tab.Column(ord),
 			Ordinal:    ord,
 			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
 		}
@@ -207,11 +207,11 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
-		ord := oi.tbl.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return opt.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
+		ord := oi.tab.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
+		return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 	}
 
 	i -= length
-	ord := oi.tbl.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
-	return opt.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
+	ord := oi.tab.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
+	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
 }
