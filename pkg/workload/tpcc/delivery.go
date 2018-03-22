@@ -54,7 +54,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	if err := crdb.ExecuteTx(
+	err := crdb.ExecuteTx(
 		context.Background(),
 		db,
 		config.txOpts,
@@ -139,10 +139,8 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 				WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
 				olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr))
 			return err
-		}); err != nil {
-		return nil, err
-	}
-	return nil, nil
+		})
+	return nil, err
 }
 
 func makeInTuples(pairs map[int]int) string {

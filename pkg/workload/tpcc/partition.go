@@ -17,15 +17,15 @@ package tpcc
 
 import (
 	"bytes"
-	"database/sql"
+	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"math"
 
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-func configureZone(db *sql.DB, table, partition string, constraint int) {
+func configureZone(db *gosql.DB, table, partition string, constraint int) {
 	sql := fmt.Sprintf(
 		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [+rack=%d]'`,
 		partition, table, constraint)
@@ -34,7 +34,7 @@ func configureZone(db *sql.DB, table, partition string, constraint int) {
 	}
 }
 
-func partitionWarehouse(db *sql.DB, wIDs []int, partitions int) {
+func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE warehouse PARTITION BY RANGE (w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -54,7 +54,7 @@ func partitionWarehouse(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionDistrict(db *sql.DB, wIDs []int, partitions int) {
+func partitionDistrict(db *gosql.DB, wIDs []int, partitions int) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE district PARTITION BY RANGE (d_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -74,7 +74,7 @@ func partitionDistrict(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionNewOrder(db *sql.DB, wIDs []int, partitions int) {
+func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE new_order PARTITION BY RANGE (no_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -94,7 +94,7 @@ func partitionNewOrder(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionOrder(db *sql.DB, wIDs []int, partitions int) {
+func partitionOrder(db *gosql.DB, wIDs []int, partitions int) {
 	targets := []string{
 		`TABLE "order"`,
 		`INDEX "order"@order_idx`,
@@ -124,7 +124,7 @@ func partitionOrder(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionOrderLine(db *sql.DB, wIDs []int, partitions int) {
+func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int) {
 	data := []struct {
 		target string
 		column string
@@ -156,7 +156,7 @@ func partitionOrderLine(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionStock(db *sql.DB, wIDs []int, partitions int) {
+func partitionStock(db *gosql.DB, wIDs []int, partitions int) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE stock PARTITION BY RANGE (s_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -199,7 +199,7 @@ func partitionStock(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionCustomer(db *sql.DB, wIDs []int, partitions int) {
+func partitionCustomer(db *gosql.DB, wIDs []int, partitions int) {
 	targets := []string{
 		`TABLE customer`,
 		`INDEX customer@customer_idx`,
@@ -228,14 +228,14 @@ func partitionCustomer(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionHistory(db *sql.DB, wIDs []int, partitions int) {
+func partitionHistory(db *gosql.DB, wIDs []int, partitions int) {
 	const maxVal = math.MaxUint64
 	rowids := make([]uuid.UUID, partitions+1)
 	for i := 0; i < partitions; i++ {
 		// We're splitting the UUID rowid column evenly into N partitions. The
 		// column is sorted lexicographically on the bytes of the UUID which means
 		// we should put the partitioning values at the front of the UUID.
-		binary.BigEndian.PutUint64(rowids[i][:], uint64(i)*(maxVal/uint64(partitions)))
+		binary.BigEndian.PutUint64(rowids[i].GetBytes()[:], uint64(i)*(maxVal/uint64(partitions)))
 	}
 	rowids[partitions], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
 
@@ -285,7 +285,7 @@ func partitionHistory(db *sql.DB, wIDs []int, partitions int) {
 	}
 }
 
-func partitionItem(db *sql.DB, partitions int) {
+func partitionItem(db *gosql.DB, partitions int) {
 	const nItems = 100000
 	iIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
@@ -312,7 +312,7 @@ func partitionItem(db *sql.DB, partitions int) {
 	}
 }
 
-func partitionTables(db *sql.DB, warehouses, partitions int) {
+func partitionTables(db *gosql.DB, warehouses, partitions int) {
 	wIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
 		wIDs[i] = i * (warehouses / partitions)

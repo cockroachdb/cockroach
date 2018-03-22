@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/satori/go.uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const (
@@ -188,7 +188,7 @@ func splitTables(db *gosql.DB, warehouses int) {
 	const valsPerRange uint64 = maxVal / 1000
 	for i := 1; i < 100; i++ {
 		var u uuid.UUID
-		binary.BigEndian.PutUint64(u[:], uint64(i)*valsPerRange)
+		binary.BigEndian.PutUint64(u.GetBytes()[:], uint64(i)*valsPerRange)
 		sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
 		if _, err := db.Exec(sql); err != nil {
 			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))

@@ -142,7 +142,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 		return d.items[i].olIID < d.items[j].olIID
 	})
 
-	d.oEntryD = time.Now()
+	d.oEntryD = timeutil.Now()
 
 	err := crdb.ExecuteTx(
 		context.Background(),

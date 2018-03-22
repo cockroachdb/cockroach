@@ -45,8 +45,7 @@ type tpcc struct {
 
 	txs []tx
 	// deck contains indexes into the txs slice.
-	deck        []int
-	totalWeight int
+	deck []int
 
 	auditor *auditor
 

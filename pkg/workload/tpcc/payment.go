@@ -85,7 +85,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 		dID: rand.Intn(10) + 1,
 		// hAmount is randomly selected within [1.00..5000.00]
 		hAmount: float64(randInt(rng, 100, 500000)) / float64(100.0),
-		hDate:   time.Now(),
+		hDate:   timeutil.Now(),
 	}
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
@@ -203,15 +203,13 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 			hData := fmt.Sprintf("%s    %s", wName, dName)
 
 			// Insert history line.
-			if _, err := tx.Exec(fmt.Sprintf(`
+			_, err := tx.Exec(fmt.Sprintf(`
 				INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
 				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, %[5]d, %[6]f, '%[7]s', '%[8]s')`,
 				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount,
 				d.hDate.Format("2006-01-02 15:04:05"), hData),
-			); err != nil {
-				return err
-			}
-			return nil
+			)
+			return err
 		}); err != nil {
 		return nil, err
 	}
