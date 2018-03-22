@@ -18,50 +18,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// ColumnIndex uniquely identifies the usage of a column within the scope of a
-// query. ColumnIndex 0 is reserved to mean "unknown column". See the comment
-// for Metadata for more details.
-type ColumnIndex int32
+// ColumnID uniquely identifies the usage of a column within the scope of a
+// query. ColumnID 0 is reserved to mean "unknown column". See the comment for
+// Metadata for more details.
+type ColumnID int32
 
-// ColSet efficiently stores an unordered set of column indexes.
+// ColSet efficiently stores an unordered set of column ids.
 type ColSet = util.FastIntSet
 
-// ColList is a list of column indexes.
+// ColList is a list of column ids.
 //
 // TODO(radu): perhaps implement a FastIntList with the same "small"
 // representation as FastIntMap but with a slice for large cases.
-type ColList = []ColumnIndex
+type ColList = []ColumnID
 
-// ColMap provides a 1:1 mapping from one column index to another. It is used
-// by operators that need to match columns from its inputs.
+// ColMap provides a 1:1 mapping from one column id to another. It is used by
+// operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap
 
-// LabeledColumn specifies the label and index of a column.
+// LabeledColumn specifies the label and id of a column.
 type LabeledColumn struct {
 	Label string
-	Index ColumnIndex
+	ID    ColumnID
 }
 
-// OrderingColumn is the ColumnIndex for a column that is part of an ordering,
+// OrderingColumn is the ColumnID for a column that is part of an ordering,
 // except that it can be negated to indicate a descending ordering on that
 // column.
 type OrderingColumn int32
 
-// MakeOrderingColumn initializes an ordering column with a ColumnIndex and a
-// flag indicating whether the direction is descending.
-func MakeOrderingColumn(index ColumnIndex, descending bool) OrderingColumn {
+// MakeOrderingColumn initializes an ordering column with a ColumnID and a flag
+// indicating whether the direction is descending.
+func MakeOrderingColumn(id ColumnID, descending bool) OrderingColumn {
 	if descending {
-		return OrderingColumn(-index)
+		return OrderingColumn(-id)
 	}
-	return OrderingColumn(index)
+	return OrderingColumn(id)
 }
 
-// Index returns the ColumnIndex for this OrderingColumn.
-func (c OrderingColumn) Index() ColumnIndex {
+// ID returns the ColumnID for this OrderingColumn.
+func (c OrderingColumn) ID() ColumnID {
 	if c < 0 {
-		return ColumnIndex(-c)
+		return ColumnID(-c)
 	}
-	return ColumnIndex(c)
+	return ColumnID(c)
 }
 
 // Ascending returns true if the ordering on this column is ascending.
@@ -74,7 +74,7 @@ func (c OrderingColumn) Descending() bool {
 	return c < 0
 }
 
-// ColListToSet converts a column index list to a column index set.
+// ColListToSet converts a column id list to a column id set.
 func ColListToSet(colList ColList) ColSet {
 	var r ColSet
 	for _, col := range colList {

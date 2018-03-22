@@ -282,15 +282,15 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 		if fields[0][0] != '@' {
 			return nil, fmt.Errorf("index column must start with @<index>")
 		}
-		idx, err := strconv.Atoi(fields[0][1:])
+		id, err := strconv.Atoi(fields[0][1:])
 		if err != nil {
 			return nil, err
 		}
-		if idx < 1 || idx > len(indexVarTypes) {
-			return nil, fmt.Errorf("invalid index var @%d", idx)
+		if id < 1 || id > len(indexVarTypes) {
+			return nil, fmt.Errorf("invalid index var @%d", id)
 		}
-		res[i].VarIdx = opt.ColumnIndex(idx)
-		res[i].Typ = indexVarTypes[res[i].VarIdx-1]
+		res[i].VarID = opt.ColumnID(id)
+		res[i].Typ = indexVarTypes[res[i].VarID-1]
 		res[i].Direction = encoding.Ascending
 		res[i].Nullable = true
 		fields = fields[1:]

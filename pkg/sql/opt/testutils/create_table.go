@@ -41,24 +41,24 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 	}
 
 	// Add the columns and primary index (if there is one defined).
-	tbl := &TestTable{Name: tn.Table()}
+	tab := &TestTable{Name: tn.Table()}
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
-			tbl.addColumn(def)
+			tab.addColumn(def)
 
 		case *tree.UniqueConstraintTableDef:
 			if def.PrimaryKey {
-				tbl.addIndex(&def.IndexTableDef, primaryIndex)
+				tab.addIndex(&def.IndexTableDef, primaryIndex)
 			}
 		}
 	}
 
 	// If there is no primary index, add the hidden rowid column.
-	if len(tbl.Indexes) == 0 {
+	if len(tab.Indexes) == 0 {
 		rowid := &TestColumn{Name: "rowid", Type: types.Int, Hidden: true}
-		tbl.Columns = append(tbl.Columns, rowid)
-		tbl.addPrimaryColumnIndex(rowid)
+		tab.Columns = append(tab.Columns, rowid)
+		tab.addPrimaryColumnIndex(rowid)
 	}
 
 	// Search for other relevant definitions.
@@ -66,11 +66,11 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 		switch def := def.(type) {
 		case *tree.UniqueConstraintTableDef:
 			if !def.PrimaryKey {
-				tbl.addIndex(&def.IndexTableDef, uniqueIndex)
+				tab.addIndex(&def.IndexTableDef, uniqueIndex)
 			}
 
 		case *tree.IndexTableDef:
-			tbl.addIndex(def, nonUniqueIndex)
+			tab.addIndex(def, nonUniqueIndex)
 		}
 		// TODO(rytaft): In the future we will likely want to check for unique
 		// constraints, indexes, and foreign key constraints to determine
@@ -78,9 +78,9 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 	}
 
 	// Add the new table to the catalog.
-	tc.AddTable(tbl)
+	tc.AddTable(tab)
 
-	return tbl
+	return tab
 }
 
 func (tt *TestTable) addColumn(def *tree.ColumnTableDef) {

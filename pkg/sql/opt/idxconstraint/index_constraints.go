@@ -1151,5 +1151,5 @@ func (ic *Instance) RemainingFilter() memo.GroupID {
 // isIndexColumn returns true if ev is an indexed var that corresponds
 // to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(ev memo.ExprView, index int) bool {
-	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnIndex) == c.colInfos[index].VarIdx
+	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnID) == c.colInfos[index].VarID
 }
