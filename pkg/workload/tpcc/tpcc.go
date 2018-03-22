@@ -16,12 +16,13 @@
 package tpcc
 
 import (
+	"context"
 	gosql "database/sql"
 	"math/rand"
+	"net/url"
 	"sync"
 
-	"net/url"
-
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -58,6 +59,8 @@ type tpcc struct {
 	serializable bool
 	txOpts       *gosql.TxOptions
 
+	expensiveChecks bool
+
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -86,15 +89,16 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:           {RuntimeOnly: true},
-			`fks`:          {RuntimeOnly: true},
-			`mix`:          {RuntimeOnly: true},
-			`partitions`:   {RuntimeOnly: true},
-			`scatter`:      {RuntimeOnly: true},
-			`serializable`: {RuntimeOnly: true},
-			`split`:        {RuntimeOnly: true},
-			`wait`:         {RuntimeOnly: true},
-			`workers`:      {RuntimeOnly: true},
+			`db`:               {RuntimeOnly: true},
+			`fks`:              {RuntimeOnly: true},
+			`mix`:              {RuntimeOnly: true},
+			`partitions`:       {RuntimeOnly: true},
+			`scatter`:          {RuntimeOnly: true},
+			`serializable`:     {RuntimeOnly: true},
+			`split`:            {RuntimeOnly: true},
+			`wait`:             {RuntimeOnly: true},
+			`workers`:          {RuntimeOnly: true},
+			`expensive-checks`: {CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -120,6 +124,7 @@ var tpccMeta = workload.Meta{
 
 		g.auditor = &auditor{}
 
+		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		return g
 	},
 }
@@ -173,6 +178,22 @@ func (w *tpcc) Hooks() workload.Hooks {
 		},
 		PostRun: func() error {
 			w.auditor.runChecks()
+			return nil
+		},
+		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
+			// TODO(arjun): We should run each test in a single transaction as
+			// currently we have to shut down load before running the checks.
+			for _, check := range allChecks() {
+				if !w.expensiveChecks && check.expensive {
+					continue
+				}
+				start := timeutil.Now()
+				err := check.f(db)
+				log.Infof(ctx, `check %s took %s`, check.name, timeutil.Since(start))
+				if err != nil {
+					return errors.Wrapf(err, `check failed: %s`, check.name)
+				}
+			}
 			return nil
 		},
 	}

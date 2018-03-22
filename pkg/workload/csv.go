@@ -154,3 +154,19 @@ func (w *bytesWrittenWriter) Write(p []byte) (int, error) {
 	w.written += int64(n)
 	return n, err
 }
+
+// CSVMux returns a mux over http handers for csv data in all tables in the
+// given generators.
+func CSVMux(metas []Meta) *http.ServeMux {
+	mux := http.NewServeMux()
+	for _, meta := range metas {
+		meta := meta
+		prefix := fmt.Sprintf(`/csv/%s/`, meta.Name)
+		mux.HandleFunc(prefix, func(w http.ResponseWriter, req *http.Request) {
+			if err := HandleCSV(w, req, prefix, meta); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+	}
+	return mux
+}

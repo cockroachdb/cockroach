@@ -146,6 +146,7 @@ func (g *ycsb) Tables() []workload.Table {
 			w := ycsbWorker{config: g, hashFunc: fnv.New64()}
 			return []interface{}{
 				w.hashKey(uint64(rowIdx)),
+				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 			}
 		},
 		SplitCount: g.splits,
