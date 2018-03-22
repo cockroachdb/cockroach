@@ -837,6 +837,82 @@ func TestRangeTransferLease(t *testing.T) {
 	})
 }
 
+// TestRangeLimitTxnMaxTimestamp verifies that on lease transfer, the
+// normal limiting of a txn's max timestamp to the first observed
+// timestamp on a node is extended to include the lease start
+// timestamp. This disallows the possibility that a write to another
+// replica of the range (on node n1) happened at a later timestamp
+// than the originally observed timestamp for the node which now owns
+// the lease (n2). This can happen if the replication of the write
+// doesn't make it from n1 to n2 before the transaction observes n2's
+// clock time.
+func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cfg := storage.TestStoreConfig(nil)
+	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
+		float64((9 * time.Second) / cfg.RaftElectionTimeout())
+	mtc := &multiTestContext{}
+	mtc.storeConfig = &cfg
+	keyA := roachpb.Key("a")
+	// Create a new clock for node2 to allow drift between the two wall clocks.
+	manual1 := hlc.NewManualClock(100) // node1 clock is @t=100
+	clock1 := hlc.NewClock(manual1.UnixNano, 250*time.Nanosecond)
+	manual2 := hlc.NewManualClock(98) // node2 clock is @t=98
+	clock2 := hlc.NewClock(manual2.UnixNano, 250*time.Nanosecond)
+	mtc.clocks = []*hlc.Clock{clock1, clock2}
+
+	// Start a transaction using node2 as a gateway.
+	txn := roachpb.MakeTransaction("test", keyA, 1, enginepb.SERIALIZABLE, clock2.Now(), 250 /* maxOffsetNs */)
+	// Simulate a read to another range on node2 by setting the observed timestamp.
+	txn.UpdateObservedTimestamp(2, clock2.Now())
+
+	defer mtc.Stop()
+	mtc.Start(t, 2)
+
+	// Do a write on node1 to establish a key with its timestamp @t=100.
+	if _, pErr := client.SendWrapped(
+		context.Background(), mtc.distSenders[0], putArgs(keyA, []byte("value")),
+	); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Up-replicate the data in the range to node2.
+	replica1 := mtc.stores[0].LookupReplica(roachpb.RKey(keyA), nil)
+	mtc.replicateRange(replica1.RangeID, 1)
+
+	// Transfer the lease from node1 to node2.
+	replica2 := mtc.stores[1].LookupReplica(roachpb.RKey(keyA), nil)
+	replica2Desc, err := replica2.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if err := replica1.AdminTransferLease(context.Background(), replica2Desc.StoreID); err != nil {
+			t.Fatal(err)
+		}
+		lease, _ := replica2.GetLease()
+		if lease.Replica.NodeID != replica2.NodeID() {
+			return errors.Errorf("expected lease transfer to node2: %s", lease)
+		}
+		return nil
+	})
+	// Verify that after the lease transfer, node2's clock has advanced to at least 100.
+	if now1, now2 := clock1.Now(), clock2.Now(); now2.WallTime < now1.WallTime {
+		t.Fatalf("expected node2's clock walltime to be >= %d; got %d", now1.WallTime, now2.WallTime)
+	}
+
+	// Send a get request for keyA to node2, which is now the
+	// leaseholder. If the max timestamp were not being properly limited,
+	// we would end up incorrectly reading nothing for keyA. Instead we
+	// expect to see an uncertainty interval error.
+	h := roachpb.Header{Txn: &txn}
+	if _, pErr := client.SendWrappedWith(
+		context.Background(), mtc.distSenders[0], h, getArgs(keyA),
+	); !testutils.IsPError(pErr, "uncertainty") {
+		t.Fatalf("expected an uncertainty interval error; got %v", pErr)
+	}
+}
+
 // TestLeaseMetricsOnSplitAndTransfer verifies that lease-related metrics
 // are updated after splitting a range and then initiating one successful
 // and one failing lease transfer.
