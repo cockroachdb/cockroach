@@ -590,11 +590,16 @@ func (r *RocksDB) open() error {
 		maxOpenFiles = r.cfg.MaxOpenFiles
 	}
 
+	// Use up to min(numCPU, 4) threads for background compactions.
+	numCPU := runtime.NumCPU()
+	if numCPU > 4 {
+		numCPU = 4
+	}
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
 			logging_enabled:   C.bool(log.V(3)),
-			num_cpu:           C.int(runtime.NumCPU()),
+			num_cpu:           C.int(numCPU),
 			max_open_files:    C.int(maxOpenFiles),
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
