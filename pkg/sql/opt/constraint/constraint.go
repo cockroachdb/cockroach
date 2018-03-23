@@ -15,6 +15,7 @@
 package constraint
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -294,12 +295,143 @@ func (c *Constraint) CutFirstColumn(evalCtx *tree.EvalContext) {
 	c.Spans.makeImmutable()
 }
 
+// Combine refines the receiver constraint using constraints on a suffix of the
+// same list of columns. For example:
+//  c:      /a/b: [/1 - /2] [/4 - /4]
+//  other:  /b: [/5 - /5]
+//  result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
+func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
+	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
+		// Note: we don't want to let the c and other pointers escape by passing
+		// them directly to Sprintf.
+		panic(fmt.Sprintf("%s not a suffix of %s", other.String(), c.String()))
+	}
+	if c.IsUnconstrained() || c.IsContradiction() || other.IsUnconstrained() {
+		return
+	}
+	if other.IsContradiction() {
+		c.Spans = Spans{}
+		c.Spans.makeImmutable()
+		return
+	}
+	offset := c.Columns.Count() - other.Columns.Count()
+
+	var result Spans
+	// We only initialize result if we determine that we need to modify the list
+	// of spans.
+	var resultInitialized bool
+	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
+
+	for i := 0; i < c.Spans.Count(); i++ {
+		sp := *c.Spans.Get(i)
+
+		startLen, endLen := sp.start.Length(), sp.end.Length()
+
+		// Try to extend the start and end keys.
+		// TODO(radu): we could look at offsets in between 0 and startLen/endLen and
+		// potentially tighten up the spans (e.g. (a, b) > (1, 2) AND b > 10).
+
+		if startLen == endLen && startLen == offset &&
+			sp.start.Compare(&keyCtx, sp.end, ExtendLow, ExtendLow) == 0 {
+			// Special case when the start and end keys are equal (i.e. an exact value
+			// on this column). This is the only case where we can break up a single
+			// span into multiple spans. Note that this implies inclusive boundaries.
+			//
+			// For example:
+			//  @1 = 1 AND @2 IN (3, 4, 5)
+			//  constraint[0]:
+			//    [/1 - /1]
+			//  constraint[1]:
+			//    [/3 - /3]
+			//    [/4 - /4]
+			//    [/5 - /5]
+			//  We break up the span to get:
+			//    [/1/3 - /1/3]
+			//    [/1/4 - /1/4]
+			//    [/1/5 - /1/5]
+
+			if !resultInitialized {
+				resultInitialized = true
+				result = MakeSpans(c.Spans.Count() + other.Spans.Count())
+				for j := 0; j < i; j++ {
+					result.Append(c.Spans.Get(j))
+				}
+			}
+			for j := 0; j < other.Spans.Count(); j++ {
+				extSp := other.Spans.Get(j)
+				var newSp Span
+				newSp.Set(
+					&keyCtx,
+					sp.start.Concat(extSp.start), extSp.startBoundary,
+					sp.end.Concat(extSp.end), extSp.endBoundary,
+				)
+				result.Append(&newSp)
+			}
+			continue
+		}
+
+		var modified bool
+		if startLen == offset && sp.startBoundary == IncludeBoundary {
+			// We can advance the starting boundary. Calculate constraints for the
+			// column that follows. If we have multiple constraints, we can only use
+			// the start of the first one to tighten the span.
+			// For example:
+			//   @1 >= 2 AND @2 IN (1, 2, 3).
+			//   constraints[0]:
+			//     [/2 - ]
+			//   constraints[1]:
+			//     [/1 - /1]
+			//     [/2 - /2]
+			//     [/3 - /3]
+			//   The best we can do is tighten the span to:
+			//     [/2/1 - ]
+			extSp := other.Spans.Get(0)
+			if extSp.start.Length() > 0 {
+				sp.start = sp.start.Concat(extSp.start)
+				sp.startBoundary = extSp.startBoundary
+				modified = true
+			}
+		}
+		// End key case is symmetric with the one above.
+		if endLen == offset && sp.endBoundary == IncludeBoundary {
+			extSp := other.Spans.Get(other.Spans.Count() - 1)
+			if extSp.end.Length() > 0 {
+				sp.end = sp.end.Concat(extSp.end)
+				sp.endBoundary = extSp.endBoundary
+				modified = true
+			}
+		}
+		if modified {
+			// We only initialize result if we need to modify the list of spans.
+			if !resultInitialized {
+				resultInitialized = true
+				result = MakeSpans(c.Spans.Count())
+				for j := 0; j < i; j++ {
+					result.Append(c.Spans.Get(j))
+				}
+			}
+			// The span can become invalid (empty). For example:
+			//   /1/2: [/1 - /1/2]
+			//   /2: [/5 - /5]
+			// This results in an invalid span [/1/5 - /1/2] which we must discard.
+			if sp.start.Compare(&keyCtx, sp.end, sp.startExt(), sp.endExt()) < 0 {
+				result.Append(&sp)
+			}
+		} else {
+			if resultInitialized {
+				result.Append(&sp)
+			}
+		}
+	}
+	if resultInitialized {
+		c.Spans = result
+		c.Spans.makeImmutable()
+	}
+}
+
 // ConsolidateSpans merges spans that have consecutive boundaries. For example:
 //   [/1 - /2] [/3 - /4] becomes [/1 - /4].
 func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
-	if c.IsContradiction() {
-		return
-	}
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 	var result Spans
 	for i := 1; i < c.Spans.Count(); i++ {

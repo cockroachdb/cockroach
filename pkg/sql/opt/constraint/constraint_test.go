@@ -16,8 +16,6 @@ package constraint
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -274,6 +272,57 @@ func TestCutFirstColumn(t *testing.T) {
 	test(c, 2, "/3: unconstrained")
 }
 
+func TestConstraintCombine(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		a, b, e string
+	}{
+		{
+			a: "/1/2: [ - /2] [/4 - /4] [/5/30 - /7] [/9 - /9/20]",
+			b: "/2: [/10 - /10] [/20 - /20] [/30 - /30] [/40 - /40]",
+			e: "/1/2: [ - /2/40] [/4/10 - /4/10] [/4/20 - /4/20] [/4/30 - /4/30] [/4/40 - /4/40] " +
+				"[/5/30 - /7/40] [/9/10 - /9/20]",
+		},
+		{
+			a: "/1/2/3: [ - /1/10] [/2 - /3/20] [/4/30 - /5] [/6/10 - /6/10]",
+			b: "/3: [/50 - /50] [/60 - /70]",
+			e: "/1/2/3: [ - /1/10/70] [/2 - /3/20/70] [/4/30/50 - /5] [/6/10/50 - /6/10/50] " +
+				"[/6/10/60 - /6/10/70]",
+		},
+		{
+			a: "/1/2/3/4: [ - /10] [/15 - /15] [/20 - /20/10] [/30 - /40) [/80 - ]",
+			b: "/2/3/4: [/20 - /20/10] [/30 - /30] [/40 - /40]",
+			e: "/1/2/3/4: [ - /10/40] [/15/20 - /15/20/10] [/15/30 - /15/30] [/15/40 - /15/40] " +
+				"[/30/20 - /40) [/80/20 - ]",
+		},
+		{
+			a: "/1/2/3/4: [ - /10/40] [/15/20 - /15/20/10] [/15/30 - /15/30] [/15/40 - /15/40] " +
+				"[/30/20 - /40) [/80/20 - ]",
+			b: "/4: [/20/10 - /30] [/40 - /40]",
+			e: "/1/2/3/4: [ - /10/40] [/15/20 - /15/20/10/40] [/15/30 - /15/30] [/15/40 - /15/40] " +
+				"[/30/20 - /40) [/80/20 - ]",
+		},
+		{
+			a: "/1/2: [/1 - /1/6]",
+			b: "/2: [/8 - /8]",
+			e: "/1/2: contradiction",
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			a := parseConstraint(&evalCtx, tc.a)
+			b := parseConstraint(&evalCtx, tc.b)
+			a.Combine(&evalCtx, &b)
+			if res := a.String(); res != tc.e {
+				t.Errorf("expected\n  %s; got\n  %s", tc.e, res)
+			}
+		})
+	}
+}
+
 func TestConsolidateSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -345,10 +394,6 @@ func TestExactPrefix(t *testing.T) {
 		{
 			s: "[/1 - /1]",
 			e: 1,
-		},
-		{
-			s: "[/1 - /2]",
-			e: 0,
 		},
 		{
 			s: "[/1 - /2]",
@@ -467,86 +512,4 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	data.mangoStrawberry.Init(kc12, SingleSpan(&span))
 
 	return data
-}
-
-// parseSpans parses a list of spans with integer values like:
-//   "[/1 - /2], [/5 - /6]
-func parseSpans(keyCtx *KeyContext, str string) Spans {
-	if str == "" {
-		return Spans{}
-	}
-	s := strings.Split(str, " ")
-	// Each span has three pieces.
-	if len(s)%3 != 0 {
-		panic(str)
-	}
-	var result Spans
-	for i := 0; i < len(s)/3; i++ {
-		sp := parseSpan(keyCtx, strings.Join(s[i*3:i*3+3], " "))
-		result.Append(&sp)
-	}
-	return result
-}
-
-// parses a span with integer column values in the format of Span.String,
-// e.g: [/1 - /2].
-func parseSpan(keyCtx *KeyContext, str string) Span {
-	if len(str) < len("[ - ]") {
-		panic(str)
-	}
-	var startBoundary, endBoundary SpanBoundary
-	switch str[0] {
-	case '[':
-		startBoundary = IncludeBoundary
-	case '(':
-		startBoundary = ExcludeBoundary
-	default:
-		panic(str)
-	}
-	switch str[len(str)-1] {
-	case ']':
-		endBoundary = IncludeBoundary
-	case ')':
-		endBoundary = ExcludeBoundary
-	default:
-		panic(str)
-	}
-	sepIdx := strings.Index(str, " - ")
-	if sepIdx == -1 {
-		panic(str)
-	}
-	startVal := str[1:sepIdx]
-	endVal := str[sepIdx+len(" - ") : len(str)-1]
-
-	parseVals := func(str string) tree.Datums {
-		if str == "" {
-			return nil
-		}
-		if str[0] != '/' {
-			panic(str)
-		}
-		var res tree.Datums
-		for i := 1; i < len(str); {
-			length := strings.Index(str[i:], "/")
-			if length == -1 {
-				length = len(str) - i
-			}
-			val, err := strconv.Atoi(str[i : i+length])
-			if err != nil {
-				panic(err)
-			}
-			res = append(res, tree.NewDInt(tree.DInt(val)))
-			i += length + 1
-		}
-		return res
-	}
-	var sp Span
-	startVals := parseVals(startVal)
-	endVals := parseVals(endVal)
-	sp.Set(
-		keyCtx,
-		MakeCompositeKey(startVals...), startBoundary,
-		MakeCompositeKey(endVals...), endBoundary,
-	)
-	return sp
 }
