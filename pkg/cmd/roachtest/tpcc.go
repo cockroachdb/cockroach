@@ -36,7 +36,7 @@ func init() {
 				"./workload run tpcc --init --warehouses=%d"+
 					extra+duration+" {pgurl:1-%d}",
 				warehouses, nodes)
-			c.Run(ctx, nodes+1, cmd)
+			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
 		m.Wait()
