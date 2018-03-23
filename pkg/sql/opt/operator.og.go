@@ -20,11 +20,10 @@ const (
 	// Relational Operators
 	// ------------------------------------------------------------
 
-	// ScanOp returns a result set containing every row in the specified table. The
-	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-	// well as the subset of columns to project from it. Rows and columns are not
-	// expected to have any particular ordering unless a physical property requires
-	// it.
+	// ScanOp returns a result set containing every row in the specified table, by
+	// scanning one of the table's indexes according to its ordering. The private
+	// Def field is an *opt.ScanOpDef that identifies the table and index to scan,
+	// as well as the subset of columns to project from it.
 	ScanOp
 
 	// ValuesOp returns a manufactured result set containing a constant number of rows.

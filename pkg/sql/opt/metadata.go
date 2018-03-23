@@ -114,6 +114,11 @@ func (md *Metadata) ColumnType(id ColumnID) types.T {
 	return md.cols[id].typ
 }
 
+// ColumnOrdinal returns the ordinal position of the column in its table.
+func (md *Metadata) ColumnOrdinal(tabID TableID, colID ColumnID) int {
+	return int(colID) - int(tabID)
+}
+
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query).
