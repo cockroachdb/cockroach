@@ -461,6 +461,13 @@ func Example_zone() {
 	c.Run("zone rm .timeseries")
 	c.Run("zone set system.jobs@primary --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system --file=./testdata/zone_attrs_advanced.yaml")
+	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int)"})
+	c.Run("zone set t --file=./testdata/zone_range_max_bytes.yaml")
+	c.Run("zone ls")
+	c.Run("zone set t.f --file=./testdata/zone_range_max_bytes.yaml")
+	c.Run("zone ls")
+	c.RunWithArgs([]string{"sql", "-e", "drop database t cascade"})
+	c.Run("zone ls")
 
 	// Output:
 	// zone ls
@@ -643,6 +650,39 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: {'+us-east-1a,+ssd': 1, +us-east-1b: 1}
 	// experimental_lease_preferences: [[+us-east1b], [+us-east-1a]]
+	// sql -e create database t; create table t.f (x int, y int)
+	// CREATE TABLE
+	// zone set t --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 90000
+	// num_replicas: 3
+	// constraints: []
+	// zone ls
+	// .default
+	// system
+	// system.jobs
+	// t
+	// zone set t.f --file=./testdata/zone_range_max_bytes.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 90000
+	// num_replicas: 3
+	// constraints: []
+	// zone ls
+	// .default
+	// system
+	// system.jobs
+	// t
+	// t.f
+	// sql -e drop database t cascade
+	// DROP DATABASE
+	// zone ls
+	// .default
+	// system
+	// system.jobs
 }
 
 func Example_sql() {
