@@ -335,7 +335,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			if h, ok := gen.(workload.Hookser); ok {
 				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(); err != nil {
+					if err := h.Hooks().PostRun(start); err != nil {
 						fmt.Printf("failed post-run hook: %v\n", err)
 					}
 				}
