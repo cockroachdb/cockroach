@@ -191,19 +191,19 @@ SHOW CREATE TABLE test.users
 ----
 test.public.users  CREATE TABLE users (
                    id INT NOT NULL,
-                   "name" STRING NOT NULL,
+                   name STRING NOT NULL,
                    title STRING NULL,
                    nickname STRING NULL,
                    username STRING(10) NULL,
                    email STRING(100) NULL,
                    CONSTRAINT "primary" PRIMARY KEY (id ASC),
-                   INDEX foo ("name" ASC),
-                   UNIQUE INDEX bar (id ASC, "name" ASC),
-                   FAMILY "primary" (id, "name"),
+                   INDEX foo (name ASC),
+                   UNIQUE INDEX bar (id ASC, name ASC),
+                   FAMILY "primary" (id, name),
                    FAMILY fam_1_title (title),
                    FAMILY fam_2_nickname (nickname),
                    FAMILY fam_3_username_email (username, email),
-                   CONSTRAINT check_nickname_name CHECK (length(nickname) < length("name")),
+                   CONSTRAINT check_nickname_name CHECK (length(nickname) < length(name)),
                    CONSTRAINT check_nickname CHECK (length(nickname) < 10)
 )
 
@@ -247,21 +247,21 @@ SHOW CREATE TABLE test.named_constraints
 ----
 test.public.named_constraints  CREATE TABLE named_constraints (
                                id INT NOT NULL,
-                               "name" STRING NOT NULL,
+                               name STRING NOT NULL,
                                title STRING NULL DEFAULT 'VP of Something':::STRING,
                                nickname STRING NULL,
                                username STRING(10) NULL,
                                email STRING(100) NULL,
                                CONSTRAINT pk PRIMARY KEY (id ASC),
                                UNIQUE INDEX uq (email ASC),
-                               INDEX foo ("name" ASC),
+                               INDEX foo (name ASC),
                                UNIQUE INDEX uq2 (username ASC),
-                               UNIQUE INDEX bar (id ASC, "name" ASC),
-                               FAMILY "primary" (id, "name"),
+                               UNIQUE INDEX bar (id ASC, name ASC),
+                               FAMILY "primary" (id, name),
                                FAMILY fam_1_title (title),
                                FAMILY fam_2_nickname (nickname),
                                FAMILY fam_3_username_email (username, email),
-                               CONSTRAINT ck2 CHECK (length(nickname) < length("name")),
+                               CONSTRAINT ck2 CHECK (length(nickname) < length(name)),
                                CONSTRAINT ck1 CHECK (length(nickname) < 10)
 )
 
@@ -271,7 +271,7 @@ SHOW CONSTRAINTS FROM test.named_constraints
 Table              Name  Type         Column(s)       Details
 named_constraints  bar   UNIQUE       id, name        NULL
 named_constraints  ck1   CHECK        nickname        length(nickname) < 10
-named_constraints  ck2   CHECK        name, nickname  length(nickname) < length("name")
+named_constraints  ck2   CHECK        name, nickname  length(nickname) < length(name)
 named_constraints  pk    PRIMARY KEY  id              NULL
 named_constraints  uq    UNIQUE       email           NULL
 named_constraints  uq2   UNIQUE       username        NULL
