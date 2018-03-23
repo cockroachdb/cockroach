@@ -5465,8 +5465,12 @@ const_typename:
     if $1 == "char" {
       $$.val = coltypes.Char
     } else {
-      sqllex.Error("syntax error")
-      return 1
+      var err error
+      $$.val, err = coltypes.TypeForNonKeywordTypeName($1)
+      if err != nil {
+        sqllex.Error(err.Error())
+        return 1
+      }
     }
   }
 
