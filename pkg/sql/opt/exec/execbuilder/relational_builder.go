@@ -194,7 +194,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 			n++
 		}
 	}
-	root, err := b.factory.ConstructScan(tab, needed)
+	root, err := b.factory.ConstructScan(tab, tab.Index(def.Index), needed)
 	if err != nil {
 		return execPlan{}, err
 	}
