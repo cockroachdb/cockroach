@@ -44,7 +44,7 @@ func MakeSpans(capacity int) Spans {
 // SingleSpan creates Spans containing a single span.
 func SingleSpan(sp *Span) Spans {
 	return Spans{
-		firstSpan: sp.Copy(),
+		firstSpan: *sp,
 		numSpans:  1,
 	}
 }
@@ -68,9 +68,9 @@ func (s *Spans) Append(sp *Span) {
 		panic("mutation disallowed")
 	}
 	if s.numSpans == 0 {
-		s.firstSpan = sp.Copy()
+		s.firstSpan = *sp
 	} else {
-		s.otherSpans = append(s.otherSpans, sp.Copy())
+		s.otherSpans = append(s.otherSpans, *sp)
 	}
 	s.numSpans++
 }
@@ -106,12 +106,6 @@ func (s Spans) String() string {
 // the Spans structure or any Span returned by Get.
 func (s *Spans) makeImmutable() {
 	s.immutable = true
-	if s.numSpans > 0 {
-		s.firstSpan.makeImmutable()
-		for i := range s.otherSpans {
-			s.otherSpans[i].makeImmutable()
-		}
-	}
 }
 
 // sortedAndMerged returns true if the collection of spans is strictly
