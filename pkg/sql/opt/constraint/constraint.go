@@ -116,7 +116,7 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 		//   merge with [/30 - /40]: [/1 - /40]
 		//   merge with [/40 - /50]: [/1 - /50]
 		//
-		mergeSpan := left.Get(leftIndex).Copy()
+		mergeSpan := *left.Get(leftIndex)
 		leftIndex++
 		for {
 			// Note that Span.TryUnionWith returns false for a different reason
@@ -185,7 +185,7 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 			continue
 		}
 
-		mergeSpan := left.Get(leftIndex).Copy()
+		mergeSpan := *left.Get(leftIndex)
 		if !mergeSpan.TryIntersectWith(&keyCtx, right.Get(rightIndex)) {
 			leftIndex++
 			continue
@@ -284,7 +284,7 @@ func (c *Constraint) CutFirstColumn(evalCtx *tree.EvalContext) {
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
 	result := MakeSpans(c.Spans.Count())
 	for i := 0; i < c.Spans.Count(); i++ {
-		sp := c.Spans.Get(i).Copy()
+		sp := *c.Spans.Get(i)
 		sp.start = sp.start.CutFront(1)
 		sp.end = sp.end.CutFront(1)
 		result.Append(&sp)
