@@ -512,3 +512,16 @@ root                 ·          ·
            └── scan  ·          ·
 ·                    table      tab4@primary
 ·                    spans      ALL
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+# Regression test for #24171.
+query I
+SELECT * FROM  a WHERE CAST(COALESCE((SELECT 'a' FROM crdb_internal.zones LIMIT 1 OFFSET 5), (SELECT 'b' FROM pg_catalog.pg_trigger)) AS BYTEA) <= 'a'
+----
+
+# Regression test for #24170.
+query I
+SELECT * FROM a WHERE CAST(COALESCE((SELECT 'a'), (SELECT 'a')) AS bytea) < 'a'
+----
