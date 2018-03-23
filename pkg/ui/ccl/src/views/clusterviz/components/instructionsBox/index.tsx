@@ -39,7 +39,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
               href={NODE_MAP_DOCS_URL}
               className="instructions-box-top-bar__setup_link"
             >
-              Follow our setup guide
+              Follow our configuration guide
             </a>
           </div>
           <span
