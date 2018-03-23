@@ -100,7 +100,7 @@ func init() {
 				if err != nil {
 					return err
 				}
-				return c.RunL(ctx, quietL, nodes+1, cmd)
+				return c.RunL(ctx, quietL, c.Node(nodes+1), cmd)
 			})
 		}
 
@@ -139,7 +139,7 @@ func init() {
 
 			stop := func(node int) error {
 				port := fmt.Sprintf("{pgport:%d}", node)
-				if err := c.RunE(ctx, node, "./cockroach quit --insecure --port "+port); err != nil {
+				if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
 					return err
 				}
 				// NB: we still call Stop to make sure the process is dead when we try

@@ -19,11 +19,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	_ "github.com/lib/pq"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	_ "github.com/lib/pq"
 )
 
 func init() {
@@ -55,7 +56,7 @@ func init() {
 			run(`SET CLUSTER SETTING trace.debug.enable = true`)
 
 			t.Status("importing TPCC fixture")
-			c.Run(ctx, 1, fmt.Sprintf(
+			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
 
 			// Drop a constraint that would get in the way of deleting from tpcc.stock.
@@ -69,7 +70,7 @@ func init() {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInByte(ctx, j, c)
+				size, err := getDiskUsageInByte(ctx, c.Node(j), c)
 				if err != nil {
 					return err
 				}
@@ -119,7 +120,7 @@ gc:
 			for i := 0; i < 10; i++ {
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInByte(ctx, j, c)
+					size, err := getDiskUsageInByte(ctx, c.Node(j), c)
 					if err != nil {
 						return err
 					}
@@ -172,7 +173,7 @@ gc:
 	})
 }
 
-func getDiskUsageInByte(ctx context.Context, node int, c *cluster) (int, error) {
+func getDiskUsageInByte(ctx context.Context, node nodeListOption, c *cluster) (int, error) {
 	out, err := c.RunWithBuffer(ctx, c.l, node, fmt.Sprintf("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 	if err != nil {
 		return 0, err

@@ -51,7 +51,7 @@ func init() {
 			defer db.Close()
 
 			t.Status("importing Bank fixture")
-			c.Run(ctx, 1, fmt.Sprintf(
+			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load bank --rows=%d --payload-bytes=%d {pgurl:1}",
 				rows, payload))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
@@ -59,7 +59,7 @@ func init() {
 			}
 
 			t.Status("create copy of Bank schema")
-			c.Run(ctx, 1, "./workload init bank --rows=0 --ranges=1 {pgurl:1}")
+			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=1 {pgurl:1}")
 
 			rangeCount := func() int {
 				var count int
