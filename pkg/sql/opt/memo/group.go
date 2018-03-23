@@ -93,6 +93,12 @@ func (g *group) expr(nth ExprOrdinal) *Expr {
 	return &g.otherExprs[nth-1]
 }
 
+// addExpr adds a new logically equivalent expression to the memo group. This
+// is an alternate, denormalized expression that may have a lower cost.
+func (g *group) addExpr(denorm Expr) {
+	g.otherExprs = append(g.otherExprs, denorm)
+}
+
 // bestExprCount returns the number of bestExprs in the group.
 func (g *group) bestExprCount() int {
 	if !g.firstBestExpr.initialized() {

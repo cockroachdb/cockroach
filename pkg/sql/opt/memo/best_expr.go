@@ -25,6 +25,9 @@ type BestExprID struct {
 	ordinal bestOrdinal
 }
 
+// UnknownBestExprID is the uninitialized BestExprID.
+var UnknownBestExprID = BestExprID{}
+
 // BestExpr references the lowest cost expression in a memo group for a given
 // set of required physical properties. This may be any kind of expression,
 // including an enforcer expression like Sort. BestExpr also stores the ids of
@@ -77,6 +80,11 @@ func MakeBestExpr(op opt.Operator, eid ExprID, required PhysicalPropsID) BestExp
 // Operator returns the type of the expression.
 func (be *BestExpr) Operator() opt.Operator {
 	return be.op
+}
+
+// Group returns the memo group which contains this best expression.
+func (be *BestExpr) Group() GroupID {
+	return be.eid.Group
 }
 
 // Required is the set of physical properties that must be provided by this
