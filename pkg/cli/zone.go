@@ -47,6 +47,14 @@ func queryZoneSpecifiers(conn *sqlConn) ([]string, error) {
 			return nil, err
 		}
 
+		if vals[0] == nil {
+			// Zone configs for deleted tables and partitions are left around until
+			// their table descriptors are deleted, which happens after the
+			// configured GC TTL duration. Such zones have no cli_specifier and
+			// shouldn't be displayed.
+			continue
+		}
+
 		s, ok := vals[0].(string)
 		if !ok {
 			return nil, fmt.Errorf("unexpected value: %T", vals[0])
