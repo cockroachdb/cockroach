@@ -605,7 +605,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 }
 
-// Run a command on the specified node
+// Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node int, args ...string) {
 	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
