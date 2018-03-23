@@ -14,7 +14,10 @@
 
 package coltypes
 
-import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+)
 
 var (
 	// Bool is an immutable T instance.
@@ -159,4 +162,29 @@ func ArrayOf(colType T, bounds []int32) (T, error) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
 	return &TArray{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
+}
+
+var typNameLiterals map[string]T
+
+func init() {
+	typNameLiterals = make(map[string]T)
+	for _, t := range types.OidToType {
+		name := types.PGDisplayName(t)
+		if _, ok := typNameLiterals[name]; !ok {
+			colTyp, err := DatumTypeToColumnType(t)
+			if err != nil {
+				continue
+			}
+			typNameLiterals[name] = colTyp
+		}
+	}
+}
+
+// TypeForNonKeywordTypeName returns the column type for the string name of a
+// type, if one exists.
+func TypeForNonKeywordTypeName(name string) (T, error) {
+	if typ, ok := typNameLiterals[name]; ok {
+		return typ, nil
+	}
+	return nil, pgerror.NewError(pgerror.CodeUndefinedObjectError, "type does not exist")
 }
