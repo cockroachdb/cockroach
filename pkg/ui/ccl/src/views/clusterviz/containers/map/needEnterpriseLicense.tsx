@@ -20,12 +20,12 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
       <section className="need-license">
         <div className="need-license-blurb">
           <div>
-            <h1 className="need-license-blurb__header">Get a Clearer View of Your Cluster</h1>
+            <h1 className="need-license-blurb__header">View the Node Map</h1>
             <p className="need-license-blurb__text">
-              The Node Map shows the geographical layout of your cluster,
-              along with metrics and health indicators. To enable it, all
-              you need is an <a href={LICENSE_DOCS_URL}>Enterprise license</a> and
-              some configuration.
+              The Node Map shows the geographical layout of your cluster, along
+              with metrics and health indicators. To enable the Node Map,
+              request an <a href={LICENSE_DOCS_URL}>Enterprise trial license</a> and refer to
+              this <a href={NODE_MAP_DOCS_URL}>configuration guide</a>.
             </p>
           </div>
           <a href={TRIAL_LICENSE_URL} className="need-license-blurb__trial-link">
@@ -34,15 +34,13 @@ export default class NeedEnterpriseLicense extends React.Component<NodeCanvasCon
         </div>
         <div className="need-license-steps">
           <Step num={1} img={step1Img}>
-            <a href={TRIAL_LICENSE_URL}>Get a trial license</a>{" "}
-            delivered straight to your inbox.
+            <a href={TRIAL_LICENSE_URL}>Get a trial license</a> delivered straight to your inbox.
           </Step>
           <Step num={2} img={step2Img}>
             Activate the trial license with two simple SQL commands.
           </Step>
           <Step num={3} img={step3Img}>
-            Add some configuration (<a href={NODE_MAP_DOCS_URL}>see our setup guide</a>)
-            and check out your cluster's Node Map.
+            Refer this <a href={NODE_MAP_DOCS_URL}>configuration guide</a> to configure the Node Map.
           </Step>
         </div>
       </section>
