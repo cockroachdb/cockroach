@@ -195,9 +195,10 @@ func TestIndexConstraints(t *testing.T) {
 }
 
 func BenchmarkIndexConstraints(b *testing.B) {
-	testCases := []struct {
+	type testCase struct {
 		name, varTypes, indexInfo, expr string
-	}{
+	}
+	testCases := []testCase{
 		{
 			name:      "point-lookup",
 			varTypes:  "int",
@@ -228,6 +229,23 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			indexInfo: "@1, @2, @3, @4, @5",
 			expr:      "@1 = 1 AND @2 >= 2 AND @2 <= 4 AND (@3, @4, @5) IN ((3, 4, 5), (6, 7, 8))",
 		},
+	}
+	// Generate a few testcases with many columns with single value constraint.
+	// This characterizes scaling w.r.t the number of columns.
+	for _, n := range []int{10, 100} {
+		var tc testCase
+		tc.name = fmt.Sprintf("single-jumbo-span-%d", n)
+		for i := 1; i <= n; i++ {
+			if i > 1 {
+				tc.varTypes += ", "
+				tc.indexInfo += ", "
+				tc.expr += " AND "
+			}
+			tc.varTypes += "int"
+			tc.indexInfo += fmt.Sprintf("@%d", i)
+			tc.expr += fmt.Sprintf("@%d=%d", i, i)
+		}
+		testCases = append(testCases, tc)
 	}
 
 	for _, tc := range testCases {
