@@ -40,13 +40,31 @@ func (f FuncOpDef) String() string {
 
 // ScanOpDef defines the value of the Def private field of the Scan operator.
 type ScanOpDef struct {
-	// Table identifies the table to scan. It is an index that can be passed to
-	// the Metadata.Table method in order to fetch optbase.Table metadata.
+	// Table identifies the table to scan. It is an id that can be passed to
+	// the Metadata.Table method in order to fetch opt.Table metadata.
 	Table opt.TableID
+
+	// Index identifies the index to scan (whether primary or secondary). It
+	// can be passed to the opt.Table.Index(i int) method in order to fetch the
+	// opt.Index metadata.
+	Index int
 
 	// Cols specifies the set of columns that the scan operator projects. This
 	// may be a subset of the columns that the table contains.
 	Cols opt.ColSet
+}
+
+// AltIndexHasCols returns true if the given alternate index on the table
+// contains the columns projected by the scan operator. This means that the
+// alternate index can be scanned instead.
+func (s *ScanOpDef) AltIndexHasCols(md *opt.Metadata, altIndex int) bool {
+	index := md.Table(s.Table).Index(altIndex)
+	var indexCols opt.ColSet
+	for col := 0; col < index.ColumnCount(); col++ {
+		ord := index.Column(col).Ordinal
+		indexCols.Add(int(md.TableColumn(s.Table, ord)))
+	}
+	return s.Cols.SubsetOf(indexCols)
 }
 
 // SetOpColMap defines the value of the ColMap private field of the set

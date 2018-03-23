@@ -87,7 +87,7 @@ func testLogicalProps(t *testing.T, md *opt.Metadata, ev memo.ExprView, expected
 	}
 
 	tp := treeprinter.New()
-	logical.FormatColSet("", logical.Relational.OutputCols, md, tp)
+	logical.FormatColSet(tp, md, "", logical.Relational.OutputCols)
 	actual := strings.Trim(tp.String(), " ")
 
 	if actual != expected {

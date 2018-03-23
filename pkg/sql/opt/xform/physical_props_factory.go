@@ -100,29 +100,30 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 		return true
 
 	case opt.ScanOp:
-		// Scan naturally orders according to the primary index.
+		// Scan naturally orders according to the order of the scanned index.
 		def := mexpr.Private(f.mem).(*memo.ScanOpDef)
-		primary := f.mem.Metadata().Table(def.Table).Index(opt.PrimaryIndex)
+		index := f.mem.Metadata().Table(def.Table).Index(def.Index)
 
-		// The scan can provide the required ordering in either of these cases:
-		// 1. The required columns are a prefix of the primary index columns.
-		// 2. The primary index columns are a prefix of the required columns
-		//    (this works because the primary index is always a key, so any
-		//    additional columns are unnecessary).
-		cnt := primary.ColumnCount()
+		// The index can provide the required ordering in either of these cases:
+		// 1. The ordering columns are a prefix of the index columns.
+		// 2. The index columns are a prefix of the ordering columns (this
+		//    works because the columns are always a key, so any additional
+		//    columns are unnecessary).
+		// TODO(andyk): Use UniqueColumnCount when issues with nulls are solved,
+		//              since unique index can still have duplicate nulls.
+		cnt := index.ColumnCount()
 		if len(required) < cnt {
 			cnt = len(required)
 		}
 
 		for i := 0; i < cnt; i++ {
-			primaryCol := primary.Column(i)
-			colID := f.mem.Metadata().TableColumn(def.Table, primaryCol.Ordinal)
-			orderingCol := opt.MakeOrderingColumn(colID, primaryCol.Descending)
+			indexCol := index.Column(i)
+			colID := f.mem.Metadata().TableColumn(def.Table, indexCol.Ordinal)
+			orderingCol := opt.MakeOrderingColumn(colID, indexCol.Descending)
 			if orderingCol != required[i] {
 				return false
 			}
 		}
-
 		return true
 
 	case opt.LimitOp:
