@@ -25,6 +25,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rate"
+	rateio "github.com/cockroachdb/cockroach/pkg/util/rate/io"
 	"google.golang.org/api/option"
 
 	gcs "cloud.google.com/go/storage"
@@ -76,7 +79,10 @@ const (
 
 	cloudstorageHTTPCASetting = cloudstorageHTTP + ".custom_ca"
 
-	cloudStorageTimeout = cloudstoragePrefix + ".timeout"
+	cloudStorageStallRate    = cloudstoragePrefix + ".stall_rate"
+	cloudStorageStallSamples = cloudstoragePrefix + ".stall_samples"
+	cloudStorageStallWindow  = cloudstoragePrefix + ".stall_window"
+	cloudStorageTimeout      = cloudstoragePrefix + ".timeout"
 )
 
 // ExportStorageConfFromURI generates an ExportStorage config from a URI string.
@@ -227,6 +233,21 @@ var (
 		"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 		"",
 	)
+	stallRateSetting = settings.RegisterByteSizeSetting(
+		cloudStorageStallRate,
+		"the minimum acceptable throughput for storage operations (in bytes/sec) before considering them stalled",
+		100*1024,
+	)
+	stallSamplesSetting = settings.RegisterIntSetting(
+		cloudStorageStallSamples,
+		"the number of times a transfer must be considered stalled before canceling it",
+		5,
+	)
+	stallWindowSetting = settings.RegisterDurationSetting(
+		cloudStorageStallWindow,
+		"how often to check if a storage operation is stalled",
+		time.Minute,
+	)
 	timeoutSetting = settings.RegisterDurationSetting(
 		cloudStorageTimeout,
 		"the timeout for import/export storage operations",
@@ -374,18 +395,25 @@ func (h *httpStorage) Conf() roachpb.ExportStorage {
 }
 
 func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	// https://github.com/cockroachdb/cockroach/issues/23859
+	ctx, cancel, setRater := stallContext(ctx, h.settings, "http read of "+basename)
+
 	resp, err := h.req(ctx, "GET", basename, nil)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
-	return resp.Body, nil
+	rc := rateio.NewReadCloser(resp.Body, cancel)
+	setRater(rc)
+	return rc, nil
 }
 
 func (h *httpStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&h.settings.SV))
+	rs := rateio.NewReadSeeker(content)
+	ctx, cancel, setRater := stallContext(ctx, h.settings, "http write of "+basename)
 	defer cancel()
-	_, err := h.reqNoBody(ctx, "PUT", basename, content)
+	setRater(rs)
+
+	_, err := h.reqNoBody(ctx, "PUT", basename, rs)
 	return err
 }
 
@@ -540,18 +568,23 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 }
 
 func (s *s3Storage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
+	ctx, cancel, setRater := stallContext(ctx, s.settings, "s3 write to "+basename)
 	defer cancel()
+
+	rs := rateio.NewReadSeeker(content)
+	setRater(rs)
+
 	_, err := s.s3.PutObjectWithContext(ctx, &s3.PutObjectInput{
 		Bucket: s.bucket,
 		Key:    aws.String(path.Join(s.prefix, basename)),
-		Body:   content,
+		Body:   rs,
 	})
 	return errors.Wrap(err, "failed to put s3 object")
 }
 
 func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	// https://github.com/cockroachdb/cockroach/issues/23859
+	ctx, cancel, setRater := stallContext(ctx, s.settings, "s3 write to "+basename)
+
 	out, err := s.s3.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: s.bucket,
 		Key:    aws.String(path.Join(s.prefix, basename)),
@@ -559,7 +592,9 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get s3 object")
 	}
-	return out.Body, nil
+	rc := rateio.NewReadCloser(out.Body, cancel)
+	setRater(rc)
+	return rc, nil
 }
 
 func (s *s3Storage) Delete(ctx context.Context, basename string) error {
@@ -657,14 +692,16 @@ func makeGCSStorage(
 func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
 	const maxAttempts = 3
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		// Set the timeout within the retry loop.
-		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
+		stallCtx, cancel, setRater := stallContext(ctx, g.settings, "gcs write to "+basename)
 		defer cancel()
-		if _, err := content.Seek(0, io.SeekStart); err != nil {
+
+		rs := rateio.NewReadSeeker(content)
+		setRater(rs)
+		if _, err := rs.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(deadlineCtx)
-		if _, err := io.Copy(w, content); err != nil {
+		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(stallCtx)
+		if _, err := io.Copy(w, rs); err != nil {
 			_ = w.Close()
 			return err
 		}
@@ -674,8 +711,14 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 }
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
-	// https://github.com/cockroachdb/cockroach/issues/23859
-	return g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+	ctx, cancel, setRater := stallContext(ctx, g.settings, "gcs read of "+basename)
+	rcontent, err := g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rc := rateio.NewReadCloser(rcontent, cancel)
+	setRater(rc)
+	return rc, nil
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
@@ -754,6 +797,9 @@ func (s *azureStorage) WriteFile(
 	blob := s.container.GetBlobReference(name)
 
 	writeFile := func(ctx context.Context) error {
+		ctx, cancel, setRater := stallContext(ctx, s.settings, "azure write to "+basename)
+		defer cancel()
+
 		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 			return blob.CreateBlockBlob(nil)
 		}); err != nil {
@@ -791,7 +837,10 @@ func (s *azureStorage) WriteFile(
 			})
 		}
 
-		if err := chunkReader(content, fourMiB, uploadBlockFunc); err != nil {
+		rs := rateio.NewReadSeeker(content)
+		setRater(rs)
+
+		if err := chunkReader(rs, fourMiB, uploadBlockFunc); err != nil {
 			return errors.Wrap(err, "putting blocks")
 		}
 
@@ -805,10 +854,7 @@ func (s *azureStorage) WriteFile(
 		if _, err := content.Seek(0, io.SeekStart); err != nil {
 			return errors.Wrap(err, "seek")
 		}
-		// Set the timeout within the retry loop.
-		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-		defer cancel()
-		return writeFile(deadlineCtx)
+		return writeFile(ctx)
 	})
 	return errors.Wrap(err, "write file")
 }
@@ -867,4 +913,27 @@ func (s *azureStorage) Size(_ context.Context, basename string) (int64, error) {
 
 func (s *azureStorage) Close() error {
 	return nil
+}
+
+// stallContext creates a new Context which looks at an ongoing
+// transfer rate to determine if the context should be canceled.
+//
+// This function returns an extra function which sets the Rater to use,
+// allowing the context to be constructed before it might be possible
+// to calculate a rate.  If the Rater isn't set, the cancellation
+// behavior will not be provided.
+func stallContext(
+	parent context.Context, settings *cluster.Settings, source string,
+) (context.Context, context.CancelFunc, func(rate.Rater)) {
+	ctx, cancel := rate.WithStallPrevention(parent,
+		rate.OptionCheckPeriod(stallWindowSetting.Get(&settings.SV)),
+		rate.OptionMaxFailures(int(stallSamplesSetting.Get(&settings.SV))),
+		rate.OptionMinRate(rate.NewRate(float64(stallRateSetting.Get(&settings.SV)), time.Second)),
+		rate.OptionWarnFunction(func() {
+			log.Infof(parent, "%s may be stalled", source)
+		}),
+	)
+	return ctx, cancel, func(rater rate.Rater) {
+		ctx.SetRater(rater)
+	}
 }

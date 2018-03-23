@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/rate"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -224,9 +226,17 @@ func doLocalCSVTransform(
 		}
 	}
 
+	// Ensure that we haven't stalled out during the operation.
+	activityCh := make(chan int, 4096)
+	defer close(activityCh)
+	stallCtx, cancel := rate.WithStallPrevention(ctx,
+		rate.OptionRater(rate.NewChannelRater(activityCh)),
+		rate.OptionMinRate(rate.NewRate(1, time.Minute)))
+	defer cancel()
+
 	// The first group reads the CSVs, converts them into KVs, and writes all
 	// KVs into a single RocksDB instance.
-	group, gCtx := errgroup.WithContext(ctx)
+	group, gCtx := errgroup.WithContext(stallCtx)
 	store := engine.NewRocksDBMultiMap(tempEngine)
 	group.Go(func() error {
 		defer close(recordCh)
@@ -235,13 +245,14 @@ func doLocalCSVTransform(
 		for i, f := range dataFiles {
 			readFiles[int32(i)] = f
 		}
-		csvCount, err = readCSV(gCtx, comma, comment, skip, len(tableDesc.VisibleColumns()), readFiles, recordCh, readProgressFn, st)
+		csvCount, err = readCSV(gCtx, comma, comment, skip, len(tableDesc.VisibleColumns()),
+			readFiles, recordCh, readProgressFn, st, activityCh)
 		return err
 	})
 	group.Go(func() error {
 		defer close(kvCh)
 		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, nullif, tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, nullif, tableDesc, activityCh)
 		})
 	})
 	group.Go(func() error {
@@ -419,6 +430,7 @@ func readCSV(
 	recordCh chan<- csvRecord,
 	progressFn func(float32) error,
 	settings *cluster.Settings,
+	activityCh chan<- int,
 ) (int64, error) {
 	const batchSize = 500
 	expectedColsExtra := expectedCols + 1
@@ -534,6 +546,8 @@ func readCSV(
 					return errors.Errorf("row %d: expected %d fields, got %d", i, expectedCols, len(record))
 				}
 				batch.r = append(batch.r, record)
+				// Report that we've done something useful.
+				activityCh <- 1
 			}
 			return nil
 		}()
@@ -575,6 +589,7 @@ func convertRecord(
 	kvCh chan<- []roachpb.KeyValue,
 	nullif *string,
 	tableDesc *sqlbase.TableDescriptor,
+	activityCh chan<- int,
 ) error {
 	done := ctx.Done()
 
@@ -663,6 +678,8 @@ func convertRecord(
 				ctx,
 				inserter(func(kv roachpb.KeyValue) {
 					kvBatch = append(kvBatch, kv)
+					// Report progress.
+					activityCh <- 1
 				}),
 				row,
 				true, /* ignoreConflicts */
@@ -1331,6 +1348,25 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
+// Settings used by readCSVProcessor.Run().
+var (
+	ingestMinRateSetting = settings.RegisterIntSetting(
+		"import.rate.minimum",
+		"the minimum record import rate (in records/sec) below which an import will fail",
+		1,
+	)
+	ingestPeriodSetting = settings.RegisterDurationSetting(
+		"import.rate.period",
+		"the period at which the import rate will be sampled",
+		time.Minute,
+	)
+	ingestMaxFailuresSetting = settings.RegisterIntSetting(
+		"import.rate.max_failures",
+		"the number of consecutive time periods to evaluate the import rate",
+		5,
+	)
+)
+
 func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(cp.flowCtx.Ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
@@ -1339,7 +1375,22 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	group, gCtx := errgroup.WithContext(ctx)
+	// Construct a context that requires a steady heartbeat of something
+	// happening during this process.  If none of our goroutines have
+	// done anything interesting in more than a minute, we'll cancel
+	// the whole process.  This channel is created with a small buffer to
+	// ensure that we don't delay our workers.
+	activityCh := make(chan int, 4096)
+	defer close(activityCh)
+	stallCtx, cancel := rate.WithStallPrevention(ctx,
+		rate.OptionCheckPeriod(ingestPeriodSetting.Get(&cp.settings.SV)),
+		rate.OptionRater(rate.NewChannelRater(activityCh)),
+		rate.OptionMaxFailures(int(ingestMaxFailuresSetting.Get(&cp.settings.SV))),
+		rate.OptionMinRate(rate.NewRate(float64(ingestMinRateSetting.Get(&cp.settings.SV)), time.Second)),
+	)
+	defer cancel()
+
+	group, gCtx := errgroup.WithContext(stallCtx)
 	done := gCtx.Done()
 	recordCh := make(chan csvRecord)
 	kvCh := make(chan []roachpb.KeyValue)
@@ -1370,7 +1421,7 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 		}
 
 		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment, cp.csvOptions.Skip,
-			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
+			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings, activityCh)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -1380,7 +1431,7 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 
 		defer close(kvCh)
 		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc, activityCh)
 		})
 	})
 	// Sample KVs
@@ -1412,6 +1463,8 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 						return sCtx.Err()
 					case sampleCh <- row:
 					}
+					// Report activity.
+					activityCh <- 1
 				}
 			}
 		}
@@ -1430,6 +1483,8 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 			if cs != distsqlrun.NeedMoreRows {
 				return errors.New("unexpected closure of consumer")
 			}
+			// Report activity.
+			activityCh <- 1
 		}
 		return nil
 	})

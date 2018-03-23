@@ -988,6 +988,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	activityCh := make(chan int, 4096)
 	recordCh := make(chan csvRecord)
 	kvCh := make(chan []roachpb.KeyValue)
 	group := errgroup.Group{}
@@ -998,10 +999,16 @@ func BenchmarkConvertRecord(b *testing.B) {
 		}
 	}()
 
+	// no-op drain activity channel.
+	go func() {
+		for range activityCh {
+		}
+	}()
+
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc, activityCh)
 		})
 	}
 	const batchSize = 500
@@ -1356,5 +1363,58 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 	// The job should have completed normally.
 	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Verify that the import job will not hang indefinitely if the server
+// has become slow.
+func TestImportWithStalledServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 1
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "HEAD":
+			// Play nicely when we try to estimate progress.
+			w.Header().Add("Content-Length", "4096")
+		case "GET":
+			// Just sleep until the server gets shut down below.
+			<-r.Context().Done()
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING import.rate.period = '1s'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING import.rate.max_failures = '2'`)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `SET DATABASE = d`)
+
+	const (
+		query = `IMPORT TABLE t (
+			a SERIAL,
+			b INT DEFAULT unique_rowid(),
+			c STRING DEFAULT 's',
+			d SERIAL,
+			e INT DEFAULT unique_rowid(),
+			f STRING DEFAULT 's',
+			PRIMARY KEY (a, b, c)
+		) CSV DATA ($1)`
+	)
+
+	if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `work has stalled`) {
+		t.Fatalf("unexpected: %v", err)
 	}
 }
