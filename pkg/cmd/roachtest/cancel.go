@@ -47,7 +47,7 @@ func init() {
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("importing TPCC fixture")
-			c.Run(ctx, 1, fmt.Sprintf(
+			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", warehouses))
 
 			conn := c.Conn(ctx, 1)
@@ -84,7 +84,7 @@ func init() {
 
 				const cancelQuery = `CANCEL QUERY (
 	SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query not like '%SHOW CLUSTER QUERIES%')`
-				c.Run(ctx, 1, `./cockroach sql --insecure -e "`+cancelQuery+`"`)
+				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "`+cancelQuery+`"`)
 				cancelStartTime := timeutil.Now()
 
 				select {

@@ -95,7 +95,7 @@ range_max_bytes: %d
 		// NB: workload init does not wait for upreplication after creating the
 		// schema but before populating it. This is ok because upreplication
 		// occurs much faster than we can actually create a large range.
-		c.Run(ctx, 1, fmt.Sprintf("./workload init bank "+
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
 			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
 
 		t.Status("checking for single range")

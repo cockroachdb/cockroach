@@ -51,7 +51,7 @@ func init() {
 			run(`SET CLUSTER SETTING trace.debug.enable = true`)
 
 			t.Status("importing TPCC fixture")
-			c.Run(ctx, 1, fmt.Sprintf(
+			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
 
 			// Drop a constraint that would get in the way of deleting from tpcc.stock.

@@ -89,7 +89,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			if err != nil {
 				return err
 			}
-			return c.RunL(ctx, quietL, nodes, cmd)
+			return c.RunL(ctx, quietL, c.Node(nodes), cmd)
 		})
 	}
 
@@ -107,12 +107,12 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
 			defer time.Sleep(time.Second) // work around quit returning too early
-			return c.RunE(ctx, node, "./cockroach quit --insecure --port "+port)
+			return c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port)
 		}
 
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
-			return c.RunE(ctx, nodes, "./cockroach node decommission --insecure --wait=live --port "+port+" "+id)
+			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --port "+port+" "+id)
 		}
 
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {
@@ -138,7 +138,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 					return err
 				}
 			}
-			if err := c.RunE(ctx, node, "rm -rf {store-dir}"); err != nil {
+			if err := c.RunE(ctx, c.Node(node), "rm -rf {store-dir}"); err != nil {
 				return err
 			}
 			u, err := url.Parse(c.PGUrl(ctx, nodes))
