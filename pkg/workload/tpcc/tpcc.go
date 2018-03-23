@@ -22,6 +22,9 @@ import (
 	"net/url"
 	"sync"
 
+	"fmt"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -49,6 +52,8 @@ type tpcc struct {
 	deck []int
 
 	auditor *auditor
+
+	reg *workload.HistogramRegistry
 
 	split   bool
 	scatter bool
@@ -176,8 +181,29 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 			return nil
 		},
-		PostRun: func() error {
+		PostRun: func(start time.Time) error {
 			w.auditor.runChecks()
+			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
+			fmt.Println(totalHeader)
+			startElapsed := timeutil.Since(start)
+
+			const newOrderName = `newOrder`
+			w.reg.Tick(func(t workload.HistogramTick) {
+				if newOrderName == t.Name {
+					tpmC := float64(t.Ops) / startElapsed.Seconds() * 60
+					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
+						startElapsed.Seconds(),
+						tpmC,
+						100*tpmC/(12.86*float64(w.warehouses)),
+						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
+						time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
+					)
+				}
+			})
 			return nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
@@ -332,6 +358,8 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		}
 	}
 
+	w.reg = reg
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		warehouse := workerIdx % w.warehouses
@@ -353,10 +381,9 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
-	if w.doWaits {
-		// TODO(dan): doWaits is currently our catch-all for "run this to spec".
-		// It should probably be renamed to match.
-		ql.ResultHist = `newOrder`
+	// Preregister all of the histograms so they always print.
+	for _, tx := range allTxs {
+		reg.GetHandle().Get(tx.name)
 	}
 	return ql, nil
 }
