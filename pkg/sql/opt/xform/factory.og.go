@@ -77,9 +77,9 @@ func (_f *Factory) ConstructSelect(
 
 	// [EnsureSelectFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(filter).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(filter).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureSelectFiltersAnd)
 			_group = _f.ConstructSelect(
 				input,
@@ -94,8 +94,8 @@ func (_f *Factory) ConstructSelect(
 
 	// [EnsureSelectFilters]
 	{
-		_norm := _f.mem.NormExpr(filter)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(filter)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureSelectFilters)
 			_group = _f.ConstructSelect(
 				input,
@@ -110,8 +110,8 @@ func (_f *Factory) ConstructSelect(
 
 	// [EliminateSelect]
 	{
-		_true := _f.mem.NormExpr(filter).AsTrue()
-		if _true != nil {
+		_trueExpr := _f.mem.NormExpr(filter).AsTrue()
+		if _trueExpr != nil {
 			_f.o.reportOptimization(EliminateSelect)
 			_group = input
 			_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -121,10 +121,10 @@ func (_f *Factory) ConstructSelect(
 
 	// [MergeSelects]
 	{
-		_select := _f.mem.NormExpr(input).AsSelect()
-		if _select != nil {
-			input := _select.Input()
-			innerFilter := _select.Filter()
+		_selectExpr2 := _f.mem.NormExpr(input).AsSelect()
+		if _selectExpr2 != nil {
+			input := _selectExpr2.Input()
+			innerFilter := _selectExpr2.Filter()
 			_f.o.reportOptimization(MergeSelects)
 			_group = _f.ConstructSelect(
 				input,
@@ -137,15 +137,15 @@ func (_f *Factory) ConstructSelect(
 
 	// [PushDownSelectJoinLeft]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.Operator() == opt.InnerJoinOp || _norm.Operator() == opt.InnerJoinApplyOp || _norm.Operator() == opt.LeftJoinOp || _norm.Operator() == opt.LeftJoinApplyOp {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			on := _norm.ChildGroup(_f.mem, 2)
-			_filters := _f.mem.NormExpr(filter).AsFilters()
-			if _filters != nil {
-				list := _filters.Conditions()
-				for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_expr := _f.mem.NormExpr(input)
+		if _expr.Operator() == opt.InnerJoinOp || _expr.Operator() == opt.InnerJoinApplyOp || _expr.Operator() == opt.LeftJoinOp || _expr.Operator() == opt.LeftJoinApplyOp {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			on := _expr.ChildGroup(_f.mem, 2)
+			_filtersExpr := _f.mem.NormExpr(filter).AsFilters()
+			if _filtersExpr != nil {
+				list := _filtersExpr.Conditions()
+				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, right) {
 						_f.o.reportOptimization(PushDownSelectJoinLeft)
@@ -177,15 +177,15 @@ func (_f *Factory) ConstructSelect(
 
 	// [PushDownSelectJoinRight]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.Operator() == opt.InnerJoinOp || _norm.Operator() == opt.InnerJoinApplyOp || _norm.Operator() == opt.RightJoinOp || _norm.Operator() == opt.RightJoinApplyOp {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			on := _norm.ChildGroup(_f.mem, 2)
-			_filters := _f.mem.NormExpr(filter).AsFilters()
-			if _filters != nil {
-				list := _filters.Conditions()
-				for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_expr := _f.mem.NormExpr(input)
+		if _expr.Operator() == opt.InnerJoinOp || _expr.Operator() == opt.InnerJoinApplyOp || _expr.Operator() == opt.RightJoinOp || _expr.Operator() == opt.RightJoinApplyOp {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			on := _expr.ChildGroup(_f.mem, 2)
+			_filtersExpr := _f.mem.NormExpr(filter).AsFilters()
+			if _filtersExpr != nil {
+				list := _filtersExpr.Conditions()
+				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, left) {
 						_f.o.reportOptimization(PushDownSelectJoinRight)
@@ -217,11 +217,11 @@ func (_f *Factory) ConstructSelect(
 
 	// [MergeSelectInnerJoin]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.Operator() == opt.InnerJoinOp || _norm.Operator() == opt.InnerJoinApplyOp {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			on := _norm.ChildGroup(_f.mem, 2)
+		_expr := _f.mem.NormExpr(input)
+		if _expr.Operator() == opt.InnerJoinOp || _expr.Operator() == opt.InnerJoinApplyOp {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			on := _expr.ChildGroup(_f.mem, 2)
 			_f.o.reportOptimization(MergeSelectInnerJoin)
 			_group = _f.DynamicConstruct(
 				_f.mem.NormExpr(input).Operator(),
@@ -238,16 +238,16 @@ func (_f *Factory) ConstructSelect(
 
 	// [PushDownSelectGroupBy]
 	{
-		_groupBy := _f.mem.NormExpr(input).AsGroupBy()
-		if _groupBy != nil {
-			input := _groupBy.Input()
-			aggregations := _groupBy.Aggregations()
-			groupingCols := _groupBy.GroupingCols()
+		_groupByExpr := _f.mem.NormExpr(input).AsGroupBy()
+		if _groupByExpr != nil {
+			input := _groupByExpr.Input()
+			aggregations := _groupByExpr.Aggregations()
+			groupingCols := _groupByExpr.GroupingCols()
 			if !_f.emptyGroupingCols(groupingCols) {
-				_filters := _f.mem.NormExpr(filter).AsFilters()
-				if _filters != nil {
-					list := _filters.Conditions()
-					for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+				_filtersExpr := _f.mem.NormExpr(filter).AsFilters()
+				if _filtersExpr != nil {
+					list := _filtersExpr.Conditions()
+					for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 						condition := _item
 						if !_f.isCorrelated(condition, aggregations) {
 							_f.o.reportOptimization(PushDownSelectGroupBy)
@@ -310,10 +310,10 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedProjectCols]
 	{
-		_project := _f.mem.NormExpr(input).AsProject()
-		if _project != nil {
-			innerInput := _project.Input()
-			innerProjections := _project.Projections()
+		_projectExpr2 := _f.mem.NormExpr(input).AsProject()
+		if _projectExpr2 != nil {
+			innerInput := _projectExpr2.Input()
+			innerProjections := _projectExpr2.Projections()
 			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedProjectCols)
 				_group = _f.ConstructProject(
@@ -331,8 +331,8 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedScanCols]
 	{
-		_scan := _f.mem.NormExpr(input).AsScan()
-		if _scan != nil {
+		_scanExpr := _f.mem.NormExpr(input).AsScan()
+		if _scanExpr != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedScanCols)
 				_group = _f.ConstructProject(
@@ -347,10 +347,10 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedSelectCols]
 	{
-		_select := _f.mem.NormExpr(input).AsSelect()
-		if _select != nil {
-			innerInput := _select.Input()
-			filter := _select.Filter()
+		_selectExpr := _f.mem.NormExpr(input).AsSelect()
+		if _selectExpr != nil {
+			innerInput := _selectExpr.Input()
+			filter := _selectExpr.Filter()
 			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
 				_f.o.reportOptimization(FilterUnusedSelectCols)
 				_group = _f.ConstructProject(
@@ -368,11 +368,11 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedLimitCols]
 	{
-		_limit := _f.mem.NormExpr(input).AsLimit()
-		if _limit != nil {
-			input := _limit.Input()
-			limit := _limit.Limit()
-			ordering := _limit.Ordering()
+		_limitExpr := _f.mem.NormExpr(input).AsLimit()
+		if _limitExpr != nil {
+			input := _limitExpr.Input()
+			limit := _limitExpr.Limit()
+			ordering := _limitExpr.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				_f.o.reportOptimization(FilterUnusedLimitCols)
 				_group = _f.ConstructProject(
@@ -391,11 +391,11 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedOffsetCols]
 	{
-		_offset := _f.mem.NormExpr(input).AsOffset()
-		if _offset != nil {
-			input := _offset.Input()
-			offset := _offset.Offset()
-			ordering := _offset.Ordering()
+		_offsetExpr := _f.mem.NormExpr(input).AsOffset()
+		if _offsetExpr != nil {
+			input := _offsetExpr.Input()
+			offset := _offsetExpr.Offset()
+			ordering := _offsetExpr.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				_f.o.reportOptimization(FilterUnusedOffsetCols)
 				_group = _f.ConstructProject(
@@ -414,11 +414,11 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedJoinLeftCols]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.IsJoin() {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			on := _norm.ChildGroup(_f.mem, 2)
+		_expr := _f.mem.NormExpr(input)
+		if _expr.IsJoin() {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			on := _expr.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
 				_f.o.reportOptimization(FilterUnusedJoinLeftCols)
 				_group = _f.ConstructProject(
@@ -440,11 +440,11 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedJoinRightCols]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.IsJoin() {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			on := _norm.ChildGroup(_f.mem, 2)
+		_expr := _f.mem.NormExpr(input)
+		if _expr.IsJoin() {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			on := _expr.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
 				_f.o.reportOptimization(FilterUnusedJoinRightCols)
 				_group = _f.ConstructProject(
@@ -466,11 +466,11 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedAggCols]
 	{
-		_groupBy := _f.mem.NormExpr(input).AsGroupBy()
-		if _groupBy != nil {
-			innerInput := _groupBy.Input()
-			aggregations := _groupBy.Aggregations()
-			groupingCols := _groupBy.GroupingCols()
+		_groupByExpr := _f.mem.NormExpr(input).AsGroupBy()
+		if _groupByExpr != nil {
+			innerInput := _groupByExpr.Input()
+			aggregations := _groupByExpr.Aggregations()
+			groupingCols := _groupByExpr.GroupingCols()
 			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedAggCols)
 				_group = _f.ConstructProject(
@@ -489,8 +489,8 @@ func (_f *Factory) ConstructProject(
 
 	// [FilterUnusedValueCols]
 	{
-		_values := _f.mem.NormExpr(input).AsValues()
-		if _values != nil {
+		_valuesExpr := _f.mem.NormExpr(input).AsValues()
+		if _valuesExpr != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedValueCols)
 				_group = _f.ConstructProject(
@@ -529,9 +529,9 @@ func (_f *Factory) ConstructInnerJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructInnerJoin(
 				left,
@@ -548,8 +548,8 @@ func (_f *Factory) ConstructInnerJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructInnerJoin(
 				left,
@@ -565,10 +565,10 @@ func (_f *Factory) ConstructInnerJoin(
 
 	// [PushDownJoinLeft]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
@@ -593,10 +593,10 @@ func (_f *Factory) ConstructInnerJoin(
 
 	// [PushDownJoinRight]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
@@ -640,9 +640,9 @@ func (_f *Factory) ConstructLeftJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructLeftJoin(
 				left,
@@ -659,8 +659,8 @@ func (_f *Factory) ConstructLeftJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructLeftJoin(
 				left,
@@ -676,10 +676,10 @@ func (_f *Factory) ConstructLeftJoin(
 
 	// [PushDownJoinRight]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
@@ -723,9 +723,9 @@ func (_f *Factory) ConstructRightJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructRightJoin(
 				left,
@@ -742,8 +742,8 @@ func (_f *Factory) ConstructRightJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructRightJoin(
 				left,
@@ -759,10 +759,10 @@ func (_f *Factory) ConstructRightJoin(
 
 	// [PushDownJoinLeft]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
@@ -806,9 +806,9 @@ func (_f *Factory) ConstructFullJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructFullJoin(
 				left,
@@ -825,8 +825,8 @@ func (_f *Factory) ConstructFullJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructFullJoin(
 				left,
@@ -861,9 +861,9 @@ func (_f *Factory) ConstructSemiJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructSemiJoin(
 				left,
@@ -880,8 +880,8 @@ func (_f *Factory) ConstructSemiJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructSemiJoin(
 				left,
@@ -916,9 +916,9 @@ func (_f *Factory) ConstructAntiJoin(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructAntiJoin(
 				left,
@@ -935,8 +935,8 @@ func (_f *Factory) ConstructAntiJoin(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructAntiJoin(
 				left,
@@ -974,9 +974,9 @@ func (_f *Factory) ConstructInnerJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructInnerJoinApply(
 				left,
@@ -993,8 +993,8 @@ func (_f *Factory) ConstructInnerJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructInnerJoinApply(
 				left,
@@ -1010,10 +1010,10 @@ func (_f *Factory) ConstructInnerJoinApply(
 
 	// [PushDownJoinLeft]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
@@ -1038,10 +1038,10 @@ func (_f *Factory) ConstructInnerJoinApply(
 
 	// [PushDownJoinRight]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
@@ -1085,9 +1085,9 @@ func (_f *Factory) ConstructLeftJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructLeftJoinApply(
 				left,
@@ -1104,8 +1104,8 @@ func (_f *Factory) ConstructLeftJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructLeftJoinApply(
 				left,
@@ -1121,10 +1121,10 @@ func (_f *Factory) ConstructLeftJoinApply(
 
 	// [PushDownJoinRight]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
@@ -1168,9 +1168,9 @@ func (_f *Factory) ConstructRightJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructRightJoinApply(
 				left,
@@ -1187,8 +1187,8 @@ func (_f *Factory) ConstructRightJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructRightJoinApply(
 				left,
@@ -1204,10 +1204,10 @@ func (_f *Factory) ConstructRightJoinApply(
 
 	// [PushDownJoinLeft]
 	{
-		_filters := _f.mem.NormExpr(on).AsFilters()
-		if _filters != nil {
-			list := _filters.Conditions()
-			for _, _item := range _f.mem.LookupList(_filters.Conditions()) {
+		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
+		if _filtersExpr != nil {
+			list := _filtersExpr.Conditions()
+			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
@@ -1251,9 +1251,9 @@ func (_f *Factory) ConstructFullJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructFullJoinApply(
 				left,
@@ -1270,8 +1270,8 @@ func (_f *Factory) ConstructFullJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructFullJoinApply(
 				left,
@@ -1306,9 +1306,9 @@ func (_f *Factory) ConstructSemiJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructSemiJoinApply(
 				left,
@@ -1325,8 +1325,8 @@ func (_f *Factory) ConstructSemiJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructSemiJoinApply(
 				left,
@@ -1361,9 +1361,9 @@ func (_f *Factory) ConstructAntiJoinApply(
 
 	// [EnsureJoinFiltersAnd]
 	{
-		_and := _f.mem.NormExpr(on).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(on).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructAntiJoinApply(
 				left,
@@ -1380,8 +1380,8 @@ func (_f *Factory) ConstructAntiJoinApply(
 	// [EnsureJoinFilters]
 	{
 		filter := on
-		_norm := _f.mem.NormExpr(on)
-		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
+		_expr := _f.mem.NormExpr(on)
+		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructAntiJoinApply(
 				left,
@@ -1985,8 +1985,8 @@ func (_f *Factory) ConstructFilters(
 	// [SimplifyFilters]
 	{
 		for _, _item := range _f.mem.LookupList(conditions) {
-			_norm := _f.mem.NormExpr(_item)
-			if _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp || _norm.Operator() == opt.NullOp {
+			_expr := _f.mem.NormExpr(_item)
+			if _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp || _expr.Operator() == opt.NullOp {
 				_f.o.reportOptimization(SimplifyFilters)
 				_group = _f.simplifyFilters(conditions)
 				_f.mem.AddAltFingerprint(_filtersExpr.Fingerprint(), _group)
@@ -2040,8 +2040,8 @@ func (_f *Factory) ConstructAnd(
 	// [SimplifyAnd]
 	{
 		for _, _item := range _f.mem.LookupList(conditions) {
-			_norm := _f.mem.NormExpr(_item)
-			if _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp {
+			_expr := _f.mem.NormExpr(_item)
+			if _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp {
 				_f.o.reportOptimization(SimplifyAnd)
 				_group = _f.simplifyAnd(conditions)
 				_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
@@ -2054,8 +2054,8 @@ func (_f *Factory) ConstructAnd(
 	{
 		if conditions.Length > 0 {
 			_item := _f.mem.LookupList(conditions)[0]
-			_null := _f.mem.NormExpr(_item).AsNull()
-			if _null != nil {
+			_nullExpr := _f.mem.NormExpr(_item).AsNull()
+			if _nullExpr != nil {
 				if _f.listOnlyHasNulls(conditions) {
 					_f.o.reportOptimization(FoldNullAndOr)
 					_group = _f.ConstructNull(
@@ -2113,8 +2113,8 @@ func (_f *Factory) ConstructOr(
 	// [SimplifyOr]
 	{
 		for _, _item := range _f.mem.LookupList(conditions) {
-			_norm := _f.mem.NormExpr(_item)
-			if _norm.Operator() == opt.OrOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp {
+			_expr := _f.mem.NormExpr(_item)
+			if _expr.Operator() == opt.OrOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp {
 				_f.o.reportOptimization(SimplifyOr)
 				_group = _f.simplifyOr(conditions)
 				_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
@@ -2127,8 +2127,8 @@ func (_f *Factory) ConstructOr(
 	{
 		if conditions.Length > 0 {
 			_item := _f.mem.LookupList(conditions)[0]
-			_null := _f.mem.NormExpr(_item).AsNull()
-			if _null != nil {
+			_nullExpr := _f.mem.NormExpr(_item).AsNull()
+			if _nullExpr != nil {
 				if _f.listOnlyHasNulls(conditions) {
 					_f.o.reportOptimization(FoldNullAndOr)
 					_group = _f.ConstructNull(
@@ -2162,12 +2162,12 @@ func (_f *Factory) ConstructNot(
 
 	// [NegateComparison]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.IsComparison() {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			_contains := _f.mem.NormExpr(input).AsContains()
-			if _contains == nil {
+		_expr := _f.mem.NormExpr(input)
+		if _expr.IsComparison() {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			_containsExpr := _f.mem.NormExpr(input).AsContains()
+			if _containsExpr == nil {
 				_f.o.reportOptimization(NegateComparison)
 				_group = _f.negateComparison(_f.mem.NormExpr(input).Operator(), left, right)
 				_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
@@ -2178,9 +2178,9 @@ func (_f *Factory) ConstructNot(
 
 	// [EliminateNot]
 	{
-		_not := _f.mem.NormExpr(input).AsNot()
-		if _not != nil {
-			input := _not.Input()
+		_notExpr2 := _f.mem.NormExpr(input).AsNot()
+		if _notExpr2 != nil {
+			input := _notExpr2.Input()
 			_f.o.reportOptimization(EliminateNot)
 			_group = input
 			_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
@@ -2190,9 +2190,9 @@ func (_f *Factory) ConstructNot(
 
 	// [NegateAnd]
 	{
-		_and := _f.mem.NormExpr(input).AsAnd()
-		if _and != nil {
-			conditions := _and.Conditions()
+		_andExpr := _f.mem.NormExpr(input).AsAnd()
+		if _andExpr != nil {
+			conditions := _andExpr.Conditions()
 			_f.o.reportOptimization(NegateAnd)
 			_group = _f.ConstructOr(
 				_f.negateConditions(conditions),
@@ -2204,9 +2204,9 @@ func (_f *Factory) ConstructNot(
 
 	// [NegateOr]
 	{
-		_or := _f.mem.NormExpr(input).AsOr()
-		if _or != nil {
-			conditions := _or.Conditions()
+		_orExpr := _f.mem.NormExpr(input).AsOr()
+		if _orExpr != nil {
+			conditions := _orExpr.Conditions()
 			_f.o.reportOptimization(NegateOr)
 			_group = _f.ConstructAnd(
 				_f.negateConditions(conditions),
@@ -2236,11 +2236,11 @@ func (_f *Factory) ConstructEq(
 
 	// [NormalizeCmpPlusConst]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _plus.Right()
+				leftRight := _plusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
@@ -2263,11 +2263,11 @@ func (_f *Factory) ConstructEq(
 
 	// [NormalizeCmpMinusConst]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
@@ -2290,11 +2290,11 @@ func (_f *Factory) ConstructEq(
 
 	// [NormalizeCmpConstMinus]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if _f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
@@ -2317,12 +2317,12 @@ func (_f *Factory) ConstructEq(
 
 	// [NormalizeTupleEquality]
 	{
-		_tuple := _f.mem.NormExpr(left).AsTuple()
-		if _tuple != nil {
-			left := _tuple.Elems()
-			_tuple2 := _f.mem.NormExpr(right).AsTuple()
-			if _tuple2 != nil {
-				right := _tuple2.Elems()
+		_tupleExpr := _f.mem.NormExpr(left).AsTuple()
+		if _tupleExpr != nil {
+			left := _tupleExpr.Elems()
+			_tupleExpr2 := _f.mem.NormExpr(right).AsTuple()
+			if _tupleExpr2 != nil {
+				right := _tupleExpr2.Elems()
 				_f.o.reportOptimization(NormalizeTupleEquality)
 				_group = _f.normalizeTupleEquality(left, right)
 				_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
@@ -2333,8 +2333,8 @@ func (_f *Factory) ConstructEq(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2346,8 +2346,8 @@ func (_f *Factory) ConstructEq(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2359,10 +2359,10 @@ func (_f *Factory) ConstructEq(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructEq(
 					right,
@@ -2409,10 +2409,10 @@ func (_f *Factory) ConstructLt(
 
 	// [CommuteVarInequality]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.LtOp, left, right)
 				_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
@@ -2435,11 +2435,11 @@ func (_f *Factory) ConstructLt(
 
 	// [NormalizeCmpPlusConst]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _plus.Right()
+				leftRight := _plusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
@@ -2462,11 +2462,11 @@ func (_f *Factory) ConstructLt(
 
 	// [NormalizeCmpMinusConst]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
@@ -2489,11 +2489,11 @@ func (_f *Factory) ConstructLt(
 
 	// [NormalizeCmpConstMinus]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if _f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
@@ -2516,8 +2516,8 @@ func (_f *Factory) ConstructLt(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2529,8 +2529,8 @@ func (_f *Factory) ConstructLt(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2560,10 +2560,10 @@ func (_f *Factory) ConstructGt(
 
 	// [CommuteVarInequality]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.GtOp, left, right)
 				_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
@@ -2586,11 +2586,11 @@ func (_f *Factory) ConstructGt(
 
 	// [NormalizeCmpPlusConst]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _plus.Right()
+				leftRight := _plusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
@@ -2613,11 +2613,11 @@ func (_f *Factory) ConstructGt(
 
 	// [NormalizeCmpMinusConst]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
@@ -2640,11 +2640,11 @@ func (_f *Factory) ConstructGt(
 
 	// [NormalizeCmpConstMinus]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if _f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
@@ -2667,8 +2667,8 @@ func (_f *Factory) ConstructGt(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2680,8 +2680,8 @@ func (_f *Factory) ConstructGt(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2711,10 +2711,10 @@ func (_f *Factory) ConstructLe(
 
 	// [CommuteVarInequality]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.LeOp, left, right)
 				_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
@@ -2737,11 +2737,11 @@ func (_f *Factory) ConstructLe(
 
 	// [NormalizeCmpPlusConst]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _plus.Right()
+				leftRight := _plusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
@@ -2764,11 +2764,11 @@ func (_f *Factory) ConstructLe(
 
 	// [NormalizeCmpMinusConst]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
@@ -2791,11 +2791,11 @@ func (_f *Factory) ConstructLe(
 
 	// [NormalizeCmpConstMinus]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if _f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
@@ -2818,8 +2818,8 @@ func (_f *Factory) ConstructLe(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2831,8 +2831,8 @@ func (_f *Factory) ConstructLe(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2862,10 +2862,10 @@ func (_f *Factory) ConstructGe(
 
 	// [CommuteVarInequality]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.GeOp, left, right)
 				_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
@@ -2888,11 +2888,11 @@ func (_f *Factory) ConstructGe(
 
 	// [NormalizeCmpPlusConst]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _plus.Right()
+				leftRight := _plusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
@@ -2915,11 +2915,11 @@ func (_f *Factory) ConstructGe(
 
 	// [NormalizeCmpMinusConst]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if !_f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
@@ -2942,11 +2942,11 @@ func (_f *Factory) ConstructGe(
 
 	// [NormalizeCmpConstMinus]
 	{
-		_minus := _f.mem.NormExpr(left).AsMinus()
-		if _minus != nil {
-			leftLeft := _minus.Left()
+		_minusExpr := _f.mem.NormExpr(left).AsMinus()
+		if _minusExpr != nil {
+			leftLeft := _minusExpr.Left()
 			if _f.onlyConstants(leftLeft) {
-				leftRight := _minus.Right()
+				leftRight := _minusExpr.Right()
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
@@ -2969,8 +2969,8 @@ func (_f *Factory) ConstructGe(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -2982,8 +2982,8 @@ func (_f *Factory) ConstructGe(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3013,8 +3013,8 @@ func (_f *Factory) ConstructNe(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3026,8 +3026,8 @@ func (_f *Factory) ConstructNe(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3039,10 +3039,10 @@ func (_f *Factory) ConstructNe(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructNe(
 					right,
@@ -3089,11 +3089,11 @@ func (_f *Factory) ConstructIn(
 
 	// [FoldNullInNonEmpty]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
-			_tuple := _f.mem.NormExpr(right).AsTuple()
-			if _tuple != nil {
-				if _tuple.Elems().Length != 0 {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+			if _tupleExpr != nil {
+				if _tupleExpr.Elems().Length != 0 {
 					_f.o.reportOptimization(FoldNullInNonEmpty)
 					_group = _f.ConstructNull(
 						_f.boolType(),
@@ -3107,11 +3107,11 @@ func (_f *Factory) ConstructIn(
 
 	// [FoldNullInEmpty]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
-			_tuple := _f.mem.NormExpr(right).AsTuple()
-			if _tuple != nil {
-				if _tuple.Elems().Length == 0 {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+			if _tupleExpr != nil {
+				if _tupleExpr.Elems().Length == 0 {
 					_f.o.reportOptimization(FoldNullInEmpty)
 					_group = _f.ConstructFalse()
 					_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
@@ -3123,9 +3123,9 @@ func (_f *Factory) ConstructIn(
 
 	// [NormalizeInConst]
 	{
-		_tuple := _f.mem.NormExpr(right).AsTuple()
-		if _tuple != nil {
-			elems := _tuple.Elems()
+		_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+		if _tupleExpr != nil {
+			elems := _tupleExpr.Elems()
 			if !_f.isSortedUniqueList(elems) {
 				_f.o.reportOptimization(NormalizeInConst)
 				_group = _f.ConstructIn(
@@ -3142,12 +3142,12 @@ func (_f *Factory) ConstructIn(
 
 	// [FoldInNull]
 	{
-		_tuple := _f.mem.NormExpr(right).AsTuple()
-		if _tuple != nil {
-			if _tuple.Elems().Length == 1 {
-				_item := _f.mem.LookupList(_tuple.Elems())[0]
-				_null := _f.mem.NormExpr(_item).AsNull()
-				if _null != nil {
+		_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+		if _tupleExpr != nil {
+			if _tupleExpr.Elems().Length == 1 {
+				_item := _f.mem.LookupList(_tupleExpr.Elems())[0]
+				_nullExpr := _f.mem.NormExpr(_item).AsNull()
+				if _nullExpr != nil {
 					_f.o.reportOptimization(FoldInNull)
 					_group = _f.ConstructNull(
 						_f.boolType(),
@@ -3179,11 +3179,11 @@ func (_f *Factory) ConstructNotIn(
 
 	// [FoldNullInNonEmpty]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
-			_tuple := _f.mem.NormExpr(right).AsTuple()
-			if _tuple != nil {
-				if _tuple.Elems().Length != 0 {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+			if _tupleExpr != nil {
+				if _tupleExpr.Elems().Length != 0 {
 					_f.o.reportOptimization(FoldNullInNonEmpty)
 					_group = _f.ConstructNull(
 						_f.boolType(),
@@ -3197,11 +3197,11 @@ func (_f *Factory) ConstructNotIn(
 
 	// [FoldNullNotInEmpty]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
-			_tuple := _f.mem.NormExpr(right).AsTuple()
-			if _tuple != nil {
-				if _tuple.Elems().Length == 0 {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+			if _tupleExpr != nil {
+				if _tupleExpr.Elems().Length == 0 {
 					_f.o.reportOptimization(FoldNullNotInEmpty)
 					_group = _f.ConstructTrue()
 					_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
@@ -3213,9 +3213,9 @@ func (_f *Factory) ConstructNotIn(
 
 	// [NormalizeInConst]
 	{
-		_tuple := _f.mem.NormExpr(right).AsTuple()
-		if _tuple != nil {
-			elems := _tuple.Elems()
+		_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+		if _tupleExpr != nil {
+			elems := _tupleExpr.Elems()
 			if !_f.isSortedUniqueList(elems) {
 				_f.o.reportOptimization(NormalizeInConst)
 				_group = _f.ConstructNotIn(
@@ -3232,12 +3232,12 @@ func (_f *Factory) ConstructNotIn(
 
 	// [FoldInNull]
 	{
-		_tuple := _f.mem.NormExpr(right).AsTuple()
-		if _tuple != nil {
-			if _tuple.Elems().Length == 1 {
-				_item := _f.mem.LookupList(_tuple.Elems())[0]
-				_null := _f.mem.NormExpr(_item).AsNull()
-				if _null != nil {
+		_tupleExpr := _f.mem.NormExpr(right).AsTuple()
+		if _tupleExpr != nil {
+			if _tupleExpr.Elems().Length == 1 {
+				_item := _f.mem.LookupList(_tupleExpr.Elems())[0]
+				_nullExpr := _f.mem.NormExpr(_item).AsNull()
+				if _nullExpr != nil {
 					_f.o.reportOptimization(FoldInNull)
 					_group = _f.ConstructNull(
 						_f.boolType(),
@@ -3269,8 +3269,8 @@ func (_f *Factory) ConstructLike(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3282,8 +3282,8 @@ func (_f *Factory) ConstructLike(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3313,8 +3313,8 @@ func (_f *Factory) ConstructNotLike(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3326,8 +3326,8 @@ func (_f *Factory) ConstructNotLike(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3357,8 +3357,8 @@ func (_f *Factory) ConstructILike(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3370,8 +3370,8 @@ func (_f *Factory) ConstructILike(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3401,8 +3401,8 @@ func (_f *Factory) ConstructNotILike(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3414,8 +3414,8 @@ func (_f *Factory) ConstructNotILike(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3445,8 +3445,8 @@ func (_f *Factory) ConstructSimilarTo(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3458,8 +3458,8 @@ func (_f *Factory) ConstructSimilarTo(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3489,8 +3489,8 @@ func (_f *Factory) ConstructNotSimilarTo(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3502,8 +3502,8 @@ func (_f *Factory) ConstructNotSimilarTo(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3533,8 +3533,8 @@ func (_f *Factory) ConstructRegMatch(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3546,8 +3546,8 @@ func (_f *Factory) ConstructRegMatch(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3577,8 +3577,8 @@ func (_f *Factory) ConstructNotRegMatch(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3590,8 +3590,8 @@ func (_f *Factory) ConstructNotRegMatch(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3621,8 +3621,8 @@ func (_f *Factory) ConstructRegIMatch(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3634,8 +3634,8 @@ func (_f *Factory) ConstructRegIMatch(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3665,8 +3665,8 @@ func (_f *Factory) ConstructNotRegIMatch(
 
 	// [FoldNullComparisonLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3678,8 +3678,8 @@ func (_f *Factory) ConstructNotRegIMatch(
 
 	// [FoldNullComparisonRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(
 				_f.boolType(),
@@ -3709,10 +3709,10 @@ func (_f *Factory) ConstructIs(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructIs(
 					right,
@@ -3759,10 +3759,10 @@ func (_f *Factory) ConstructIsNot(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructIsNot(
 					right,
@@ -3827,10 +3827,10 @@ func (_f *Factory) ConstructBitand(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitand(
 					right,
@@ -3859,8 +3859,8 @@ func (_f *Factory) ConstructBitand(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitandOp, left, right)
@@ -3872,8 +3872,8 @@ func (_f *Factory) ConstructBitand(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitandOp, left, right)
@@ -3903,10 +3903,10 @@ func (_f *Factory) ConstructBitor(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitor(
 					right,
@@ -3935,8 +3935,8 @@ func (_f *Factory) ConstructBitor(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitorOp, left, right)
@@ -3948,8 +3948,8 @@ func (_f *Factory) ConstructBitor(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitorOp, left, right)
@@ -3979,10 +3979,10 @@ func (_f *Factory) ConstructBitxor(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitxor(
 					right,
@@ -4011,8 +4011,8 @@ func (_f *Factory) ConstructBitxor(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
@@ -4024,8 +4024,8 @@ func (_f *Factory) ConstructBitxor(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
@@ -4055,8 +4055,8 @@ func (_f *Factory) ConstructPlus(
 
 	// [FoldPlusZero]
 	{
-		_const := _f.mem.NormExpr(right).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(right).AsConst()
+		if _constExpr != nil {
 			if _f.isZero(right) {
 				_f.o.reportOptimization(FoldPlusZero)
 				_group = left
@@ -4068,8 +4068,8 @@ func (_f *Factory) ConstructPlus(
 
 	// [FoldZeroPlus]
 	{
-		_const := _f.mem.NormExpr(left).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(left).AsConst()
+		if _constExpr != nil {
 			if _f.isZero(left) {
 				_f.o.reportOptimization(FoldZeroPlus)
 				_group = right
@@ -4081,10 +4081,10 @@ func (_f *Factory) ConstructPlus(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructPlus(
 					right,
@@ -4113,8 +4113,8 @@ func (_f *Factory) ConstructPlus(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.PlusOp, left, right)
@@ -4126,8 +4126,8 @@ func (_f *Factory) ConstructPlus(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.PlusOp, left, right)
@@ -4157,8 +4157,8 @@ func (_f *Factory) ConstructMinus(
 
 	// [FoldMinusZero]
 	{
-		_const := _f.mem.NormExpr(right).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(right).AsConst()
+		if _constExpr != nil {
 			if _f.isZero(right) {
 				_f.o.reportOptimization(FoldMinusZero)
 				_group = left
@@ -4170,8 +4170,8 @@ func (_f *Factory) ConstructMinus(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.MinusOp, left, right)
@@ -4183,8 +4183,8 @@ func (_f *Factory) ConstructMinus(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.MinusOp, left, right)
@@ -4214,8 +4214,8 @@ func (_f *Factory) ConstructMult(
 
 	// [FoldMultOne]
 	{
-		_const := _f.mem.NormExpr(right).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(right).AsConst()
+		if _constExpr != nil {
 			if _f.isOne(right) {
 				_f.o.reportOptimization(FoldMultOne)
 				_group = left
@@ -4227,8 +4227,8 @@ func (_f *Factory) ConstructMult(
 
 	// [FoldOneMult]
 	{
-		_const := _f.mem.NormExpr(left).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(left).AsConst()
+		if _constExpr != nil {
 			if _f.isOne(left) {
 				_f.o.reportOptimization(FoldOneMult)
 				_group = right
@@ -4240,10 +4240,10 @@ func (_f *Factory) ConstructMult(
 
 	// [CommuteVar]
 	{
-		_variable := _f.mem.NormExpr(left).AsVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.NormExpr(right).AsVariable()
-			if _variable2 != nil {
+		_variableExpr := _f.mem.NormExpr(left).AsVariable()
+		if _variableExpr == nil {
+			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
+			if _variableExpr2 != nil {
 				_f.o.reportOptimization(CommuteVar)
 				_group = _f.ConstructMult(
 					right,
@@ -4272,8 +4272,8 @@ func (_f *Factory) ConstructMult(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.MultOp, left, right)
@@ -4285,8 +4285,8 @@ func (_f *Factory) ConstructMult(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.MultOp, left, right)
@@ -4316,8 +4316,8 @@ func (_f *Factory) ConstructDiv(
 
 	// [FoldDivOne]
 	{
-		_const := _f.mem.NormExpr(right).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(right).AsConst()
+		if _constExpr != nil {
 			if _f.isOne(right) {
 				_f.o.reportOptimization(FoldDivOne)
 				_group = left
@@ -4329,8 +4329,8 @@ func (_f *Factory) ConstructDiv(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.DivOp, left, right)
@@ -4342,8 +4342,8 @@ func (_f *Factory) ConstructDiv(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.DivOp, left, right)
@@ -4373,8 +4373,8 @@ func (_f *Factory) ConstructFloorDiv(
 
 	// [FoldDivOne]
 	{
-		_const := _f.mem.NormExpr(right).AsConst()
-		if _const != nil {
+		_constExpr := _f.mem.NormExpr(right).AsConst()
+		if _constExpr != nil {
 			if _f.isOne(right) {
 				_f.o.reportOptimization(FoldDivOne)
 				_group = left
@@ -4386,8 +4386,8 @@ func (_f *Factory) ConstructFloorDiv(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
@@ -4399,8 +4399,8 @@ func (_f *Factory) ConstructFloorDiv(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
@@ -4430,8 +4430,8 @@ func (_f *Factory) ConstructMod(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.ModOp, left, right)
@@ -4443,8 +4443,8 @@ func (_f *Factory) ConstructMod(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.ModOp, left, right)
@@ -4474,8 +4474,8 @@ func (_f *Factory) ConstructPow(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.PowOp, left, right)
@@ -4487,8 +4487,8 @@ func (_f *Factory) ConstructPow(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.PowOp, left, right)
@@ -4518,8 +4518,8 @@ func (_f *Factory) ConstructConcat(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
@@ -4531,8 +4531,8 @@ func (_f *Factory) ConstructConcat(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
@@ -4562,8 +4562,8 @@ func (_f *Factory) ConstructLShift(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
@@ -4575,8 +4575,8 @@ func (_f *Factory) ConstructLShift(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
@@ -4606,8 +4606,8 @@ func (_f *Factory) ConstructRShift(
 
 	// [FoldNullBinaryLeft]
 	{
-		_null := _f.mem.NormExpr(left).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
@@ -4619,8 +4619,8 @@ func (_f *Factory) ConstructRShift(
 
 	// [FoldNullBinaryRight]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
@@ -4651,8 +4651,8 @@ func (_f *Factory) ConstructFetchVal(
 	// [FoldNullBinaryLeft]
 	{
 		left := json
-		_null := _f.mem.NormExpr(json).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(json).AsNull()
+		if _nullExpr != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
@@ -4667,8 +4667,8 @@ func (_f *Factory) ConstructFetchVal(
 	{
 		left := json
 		right := index
-		_null := _f.mem.NormExpr(index).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(index).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchValOp, left, right)
@@ -4699,8 +4699,8 @@ func (_f *Factory) ConstructFetchText(
 	// [FoldNullBinaryLeft]
 	{
 		left := json
-		_null := _f.mem.NormExpr(json).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(json).AsNull()
+		if _nullExpr != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
@@ -4715,8 +4715,8 @@ func (_f *Factory) ConstructFetchText(
 	{
 		left := json
 		right := index
-		_null := _f.mem.NormExpr(index).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(index).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
@@ -4747,8 +4747,8 @@ func (_f *Factory) ConstructFetchValPath(
 	// [FoldNullBinaryLeft]
 	{
 		left := json
-		_null := _f.mem.NormExpr(json).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(json).AsNull()
+		if _nullExpr != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
@@ -4763,8 +4763,8 @@ func (_f *Factory) ConstructFetchValPath(
 	{
 		left := json
 		right := path
-		_null := _f.mem.NormExpr(path).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(path).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
@@ -4795,8 +4795,8 @@ func (_f *Factory) ConstructFetchTextPath(
 	// [FoldNullBinaryLeft]
 	{
 		left := json
-		_null := _f.mem.NormExpr(json).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(json).AsNull()
+		if _nullExpr != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryLeft)
@@ -4811,8 +4811,8 @@ func (_f *Factory) ConstructFetchTextPath(
 	{
 		left := json
 		right := path
-		_null := _f.mem.NormExpr(path).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(path).AsNull()
+		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
 				_f.o.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
@@ -4841,10 +4841,10 @@ func (_f *Factory) ConstructUnaryMinus(
 
 	// [InvertMinus]
 	{
-		_minus := _f.mem.NormExpr(input).AsMinus()
-		if _minus != nil {
-			left := _minus.Left()
-			right := _minus.Right()
+		_minusExpr := _f.mem.NormExpr(input).AsMinus()
+		if _minusExpr != nil {
+			left := _minusExpr.Left()
+			right := _minusExpr.Right()
 			if _f.canConstructBinary(opt.MinusOp, right, left) {
 				_f.o.reportOptimization(InvertMinus)
 				_group = _f.ConstructMinus(
@@ -4859,9 +4859,9 @@ func (_f *Factory) ConstructUnaryMinus(
 
 	// [EliminateUnaryMinus]
 	{
-		_unaryMinus := _f.mem.NormExpr(input).AsUnaryMinus()
-		if _unaryMinus != nil {
-			input := _unaryMinus.Input()
+		_unaryMinusExpr2 := _f.mem.NormExpr(input).AsUnaryMinus()
+		if _unaryMinusExpr2 != nil {
+			input := _unaryMinusExpr2.Input()
 			_f.o.reportOptimization(EliminateUnaryMinus)
 			_group = input
 			_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
@@ -4871,8 +4871,8 @@ func (_f *Factory) ConstructUnaryMinus(
 
 	// [FoldNullUnary]
 	{
-		_null := _f.mem.NormExpr(input).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(input).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullUnary)
 			_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
 			_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
@@ -4899,8 +4899,8 @@ func (_f *Factory) ConstructUnaryComplement(
 
 	// [FoldNullUnary]
 	{
-		_null := _f.mem.NormExpr(input).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(input).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullUnary)
 			_group = _f.foldNullUnary(opt.UnaryComplementOp, input)
 			_f.mem.AddAltFingerprint(_unaryComplementExpr.Fingerprint(), _group)
@@ -4938,8 +4938,8 @@ func (_f *Factory) ConstructCast(
 
 	// [FoldNullCast]
 	{
-		_null := _f.mem.NormExpr(input).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(input).AsNull()
+		if _nullExpr != nil {
 			_f.o.reportOptimization(FoldNullCast)
 			_group = _f.ConstructNull(
 				typ,
@@ -5058,8 +5058,8 @@ func (_f *Factory) ConstructCoalesce(
 	{
 		if args.Length > 0 {
 			_item := _f.mem.LookupList(args)[0]
-			_norm := _f.mem.NormExpr(_item)
-			if _norm.IsConstValue() {
+			_expr := _f.mem.NormExpr(_item)
+			if _expr.IsConstValue() {
 				_f.o.reportOptimization(SimplifyCoalesce)
 				_group = _f.simplifyCoalesce(args)
 				_f.mem.AddAltFingerprint(_coalesceExpr.Fingerprint(), _group)

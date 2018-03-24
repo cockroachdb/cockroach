@@ -29,6 +29,8 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 	varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 
 	g.uniquifier.init()
+	g.uniquifier.makeUnique(varName)
+
 	g.w.writeIndent("// [%s]\n", rule.Name)
 	marker := g.w.nestIndent("{\n")
 
@@ -260,7 +262,7 @@ func (g *factoryGen) genMatchNameAndChildren(
 func (g *factoryGen) genConstantMatch(
 	match *lang.MatchExpr, opName string, contextName string, noMatch bool,
 ) {
-	varName := g.uniquifier.makeUnique(fmt.Sprintf("_%s", unTitle(opName)))
+	varName := g.uniquifier.makeUnique(fmt.Sprintf("_%sExpr", unTitle(opName)))
 
 	// Match expression name.
 	g.w.writeIndent("%s := _f.mem.NormExpr(%s).As%s()\n", varName, contextName, opName)
@@ -291,8 +293,8 @@ func (g *factoryGen) genDynamicMatch(
 	match *lang.MatchExpr, names lang.NamesExpr, contextName string, noMatch bool,
 ) {
 	// Match expression name.
-	normName := g.uniquifier.makeUnique("_norm")
-	g.w.writeIndent("%s := _f.mem.NormExpr(%s)\n", normName, contextName)
+	exprName := g.uniquifier.makeUnique("_expr")
+	g.w.writeIndent("%s := _f.mem.NormExpr(%s)\n", exprName, contextName)
 
 	var buf bytes.Buffer
 	for i, name := range names {
@@ -303,10 +305,10 @@ func (g *factoryGen) genDynamicMatch(
 		define := g.compiled.LookupDefine(string(name))
 		if define != nil {
 			// Match operator name.
-			fmt.Fprintf(&buf, "%s.Operator() == opt.%sOp", normName, name)
+			fmt.Fprintf(&buf, "%s.Operator() == opt.%sOp", exprName, name)
 		} else {
 			// Match tag name.
-			fmt.Fprintf(&buf, "%s.Is%s()", normName, name)
+			fmt.Fprintf(&buf, "%s.Is%s()", exprName, name)
 		}
 	}
 
@@ -325,7 +327,7 @@ func (g *factoryGen) genDynamicMatch(
 		// operator. If there are fewer arguments than there are children, then
 		// only the first N children need to be matched.
 		for index, matchArg := range match.Args {
-			childGroup := fmt.Sprintf("%s.ChildGroup(_f.mem, %d)", normName, index)
+			childGroup := fmt.Sprintf("%s.ChildGroup(_f.mem, %d)", exprName, index)
 			g.genMatch(matchArg, childGroup, false /* noMatch */)
 		}
 	}
