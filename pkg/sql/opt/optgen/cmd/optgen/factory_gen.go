@@ -24,14 +24,15 @@ import (
 // factoryGen generates implementation code for the factory that supports
 // building normalized expression trees.
 type factoryGen struct {
-	compiled   *lang.CompiledExpr
-	w          *matchWriter
-	uniquifier uniquifier
+	compiled *lang.CompiledExpr
+	w        *matchWriter
+	ruleGen  ruleGen
 }
 
 func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
 	g.w = &matchWriter{writer: w}
+	g.ruleGen.init(compiled, g.w)
 
 	g.w.writeIndent("package xform\n\n")
 
@@ -45,7 +46,27 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 }
 
 // genConstructFuncs generates the factory Construct functions for each
-// expression type.
+// expression type. The code is similar to this:
+//
+//   // ConstructScan constructs an expression for the Scan operator.
+//   func (_f *Factory) ConstructScan(
+//     def memo.PrivateID,
+//   ) memo.GroupID {
+//     _scanExpr := memo.MakeScanExpr(def)
+//     _group := _f.mem.GroupByFingerprint(_scanExpr.Fingerprint())
+//     if _group != 0 {
+//       return _group
+//     }
+//
+//     if !_f.o.allowOptimizations() {
+//       return _f.mem.MemoizeNormExpr(memo.Expr(_scanExpr))
+//     }
+//
+//     ... normalization rule code goes here ...
+//
+//     return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_scanExpr)))
+//   }
+//
 func (g *factoryGen) genConstructFuncs() {
 	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
 		varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
@@ -84,7 +105,7 @@ func (g *factoryGen) genConstructFuncs() {
 		// Only include normalization rules for the current define.
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
 		for _, rule := range rules {
-			g.genRule(rule)
+			g.ruleGen.genRule(rule)
 		}
 		if len(rules) > 0 {
 			g.w.newline()
@@ -96,8 +117,27 @@ func (g *factoryGen) genConstructFuncs() {
 }
 
 // genDynamicConstructLookup generates a lookup table used by the factory's
-// DynamicConstruct method. This method constructs expressions from a dynamic
-// type and arguments.
+// DynamicConstruct method. The DynamicConstruct method constructs expressions
+// from a dynamic type and arguments. The code looks similar to this:
+//
+//   type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+//
+//   var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+//
+//   func init() {
+//     // ScanOp
+//     dynConstructLookup[opt.ScanOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+//       return f.ConstructScan(memo.PrivateID(operands[0]))
+//     }
+//
+//     // SelectOp
+//     dynConstructLookup[opt.SelectOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+//       return f.ConstructSelect(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+//     }
+//
+//     ... code for other ops ...
+//   }
+//
 func (g *factoryGen) genDynamicConstructLookup() {
 	funcType := "func(f *Factory, operands DynamicOperands) memo.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)

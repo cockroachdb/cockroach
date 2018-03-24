@@ -95,6 +95,7 @@ func (g *optgen) run(args ...string) bool {
 
 	switch cmd {
 	case "compile":
+	case "explorer":
 	case "exprs":
 	case "factory":
 	case "ops":
@@ -159,6 +160,10 @@ func (g *optgen) run(args ...string) bool {
 	switch cmd {
 	case "compile":
 		err = g.writeOutputFile([]byte(compiled.String()))
+
+	case "explorer":
+		var gen explorerGen
+		err = g.generate(compiled, gen.generate)
 
 	case "exprs":
 		var gen exprsGen
@@ -302,6 +307,7 @@ func (g *optgen) usage() {
 
 	fmt.Fprintf(g.stdErr, "The commands are:\n\n")
 	fmt.Fprintf(g.stdErr, "\tcompile    generate the optgen compiled format\n")
+	fmt.Fprintf(g.stdErr, "\texplorer   generate expression tree exploration rules\n")
 	fmt.Fprintf(g.stdErr, "\texprs      generate expression definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
