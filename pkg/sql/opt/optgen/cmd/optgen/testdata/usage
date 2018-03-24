@@ -16,6 +16,7 @@ Usage:
 The commands are:
 
 	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
@@ -47,6 +48,7 @@ Usage:
 The commands are:
 
 	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
@@ -79,6 +81,7 @@ Usage:
 The commands are:
 
 	compile    generate the optgen compiled format
+	explorer   generate expression tree exploration rules
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
 	ops        generate operator definitions and functions
