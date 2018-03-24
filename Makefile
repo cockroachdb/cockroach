@@ -142,9 +142,6 @@ export CGO_LDFLAGS
 override CFLAGS += $(MSAN_CPPFLAGS)
 override CXXFLAGS += $(MSAN_CPPFLAGS)
 override LDFLAGS += $(MSAN_LDFLAGS)
-export CFLAGS
-export CXXFLAGS
-export LDFLAGS
 else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
@@ -175,6 +172,14 @@ BUILD_TYPE := release
 else
 $(error unknown build type $(TYPE))
 endif
+
+# Build C/C++ with basic debugging information.
+CFLAGS += -g1
+CXXFLAGS += -g1
+
+export CFLAGS
+export CXXFLAGS
+export LDFLAGS
 
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
 
