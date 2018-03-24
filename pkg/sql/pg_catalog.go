@@ -1187,6 +1187,12 @@ CREATE TABLE pg_catalog.pg_operator (
 			return err
 		}
 		for cmpOp, overloads := range tree.CmpOps {
+			// n.b. the In operator cannot be included in this list because it isn't
+			// a generalized operator. It is a special syntax form, because it only
+			// permits parenthesized subqueries or row expressions on the RHS.
+			if cmpOp == tree.In {
+				continue
+			}
 			for _, overload := range overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
@@ -1707,8 +1713,6 @@ var (
 	_ = typCategoryComposite
 	_ = typCategoryEnum
 	_ = typCategoryGeometric
-	_ = typCategoryNetworkAddr
-	_ = typCategoryPseudo
 	_ = typCategoryRange
 	_ = typCategoryBitString
 	_ = typCategoryUnknown
