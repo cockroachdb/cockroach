@@ -58,11 +58,7 @@ func (g *opsGen) genOperatorNames() {
 	var indexes bytes.Buffer
 
 	genByTag := func(tag string) {
-		for _, define := range g.compiled.Defines {
-			if !define.Tags.Contains(tag) {
-				continue
-			}
-
+		for _, define := range g.compiled.Defines.WithTag(tag) {
 			fmt.Fprintf(&indexes, "%d, ", names.Len())
 
 			// Trim the Op suffix and convert to "dash case".
@@ -86,11 +82,7 @@ func (g *opsGen) genOperatorEnumByTag(tag string) {
 	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n")
 	fmt.Fprintf(g.w, "  // %s Operators\n", tag)
 	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n")
-	for _, define := range g.compiled.Defines {
-		if !define.Tags.Contains(tag) {
-			continue
-		}
-
+	for _, define := range g.compiled.Defines.WithTag(tag) {
 		fmt.Fprintf(g.w, "\n")
 		generateDefineComments(g.w, define, string(define.Name)+"Op")
 		fmt.Fprintf(g.w, "  %sOp\n", define.Name)
@@ -101,10 +93,8 @@ func (g *opsGen) genOperatorEnumByTag(tag string) {
 func (g *opsGen) genOperatorsByTag() {
 	for _, tag := range g.compiled.DefineTags {
 		fmt.Fprintf(g.w, "var %sOperators = [...]Operator{\n", tag)
-		for _, define := range g.compiled.Defines {
-			if define.Tags.Contains(tag) {
-				fmt.Fprintf(g.w, "  %sOp,\n", define.Name)
-			}
+		for _, define := range g.compiled.Defines.WithTag(tag) {
+			fmt.Fprintf(g.w, "  %sOp,\n", define.Name)
 		}
 		fmt.Fprintf(g.w, "}\n\n")
 	}

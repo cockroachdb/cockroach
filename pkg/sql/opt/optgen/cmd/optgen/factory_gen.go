@@ -36,7 +36,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.w.writeIndent("package xform\n\n")
 
-	g.w.nest("import (\n")
+	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
 	g.w.unnest(")\n\n")
@@ -48,21 +48,21 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 // genConstructFuncs generates the factory Construct functions for each
 // expression type.
 func (g *factoryGen) genConstructFuncs() {
-	for _, define := range filterEnforcerDefines(g.compiled.Defines) {
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
 		varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 
 		format := "// Construct%s constructs an expression for the %s operator.\n"
 		g.w.writeIndent(format, define.Name, define.Name)
 		generateDefineComments(g.w.writer, define, string(define.Name))
-		g.w.writeIndent("func (_f *Factory) Construct%s(\n", define.Name)
+		g.w.nestIndent("func (_f *Factory) Construct%s(\n", define.Name)
 
 		for _, field := range define.Fields {
 			fieldName := unTitle(string(field.Name))
-			g.w.writeIndent("  %s memo.%s,\n", fieldName, mapType(string(field.Type)))
+			g.w.writeIndent("%s memo.%s,\n", fieldName, mapType(string(field.Type)))
 		}
 
-		g.w.nest(") memo.GroupID {\n")
-
+		g.w.unnest(") memo.GroupID ")
+		g.w.nestIndent("{\n")
 		g.w.writeIndent("%s := memo.Make%sExpr(", varName, define.Name)
 
 		for i, field := range define.Fields {
@@ -74,24 +74,20 @@ func (g *factoryGen) genConstructFuncs() {
 
 		g.w.write(")\n")
 		g.w.writeIndent("_group := _f.mem.GroupByFingerprint(%s.Fingerprint())\n", varName)
-		g.w.nest("if _group != 0 {\n")
+		g.w.nestIndent("if _group != 0 {\n")
 		g.w.writeIndent("return _group\n")
 		g.w.unnest("}\n\n")
 
-		g.w.nest("if !_f.o.allowOptimizations() {\n")
+		g.w.nestIndent("if !_f.o.allowOptimizations() {\n")
 		g.w.writeIndent("return _f.mem.MemoizeNormExpr(memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
-		found := false
-		rules := g.compiled.LookupMatchingRules(string(define.Name))
+		// Only include normalization rules for the current define.
+		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
 		for _, rule := range rules {
-			// Only include normalization rules.
-			if rule.Tags.Contains("Normalize") {
-				g.genRule(rule)
-				found = true
-			}
+			g.genRule(rule)
 		}
-		if found {
+		if len(rules) > 0 {
 			g.w.newline()
 		}
 
@@ -109,7 +105,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 
 	g.uniquifier.init()
 	g.w.writeIndent("// [%s]\n", rule.Name)
-	marker := g.w.nest("{\n")
+	marker := g.w.nestIndent("{\n")
 
 	for index, matchArg := range rule.Match.Args {
 		fieldName := unTitle(string(define.Fields[index].Name))
@@ -195,28 +191,28 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 
 	case *lang.StringExpr:
 		if noMatch {
-			g.w.nest("if %s != m.mem.InternPrivate(%s) {\n", contextName, t)
+			g.w.nestIndent("if %s != m.mem.InternPrivate(%s) {\n", contextName, t)
 		} else {
-			g.w.nest("if %s == m.mem.InternPrivate(%s) {\n", contextName, t)
+			g.w.nestIndent("if %s == m.mem.InternPrivate(%s) {\n", contextName, t)
 		}
 
 	case *lang.MatchAnyExpr:
 		if noMatch {
-			g.w.nest("if false {\n")
+			g.w.nestIndent("if false {\n")
 		}
 
 	case *lang.MatchListAnyExpr:
 		if noMatch {
 			panic("noMatch is not yet supported by the list match any op")
 		}
-		g.w.nest("for _, _item := range _f.mem.LookupList(%s) {\n", contextName)
+		g.w.nestIndent("for _, _item := range _f.mem.LookupList(%s) {\n", contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
 	case *lang.MatchListFirstExpr:
 		if noMatch {
 			panic("noMatch is not yet supported by the list match first op")
 		}
-		g.w.nest("if %s.Length > 0 {\n", contextName)
+		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
 		g.w.writeIndent("_item := _f.mem.LookupList(%s)[0]\n", contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
@@ -224,7 +220,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 		if noMatch {
 			panic("noMatch is not yet supported by the list match last op")
 		}
-		g.w.nest("if %s.Length > 0 {\n", contextName)
+		g.w.nestIndent("if %s.Length > 0 {\n", contextName)
 		g.w.writeIndent("_item := _f.mem.LookupList(%s)[%s.Length-1]\n", contextName, contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
@@ -233,18 +229,18 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 			if t.MatchItem.Op() != lang.MatchAnyOp {
 				panic("noMatch is not yet fully supported by the list match single op")
 			}
-			g.w.nest("if %s.Length != 1 {\n", contextName)
+			g.w.nestIndent("if %s.Length != 1 {\n", contextName)
 		} else {
-			g.w.nest("if %s.Length == 1 {\n", contextName)
+			g.w.nestIndent("if %s.Length == 1 {\n", contextName)
 			g.w.writeIndent("_item := _f.mem.LookupList(%s)[0]\n", contextName)
 			g.genMatch(t.MatchItem, "_item", noMatch)
 		}
 
 	case *lang.MatchListEmptyExpr:
 		if noMatch {
-			g.w.nest("if %s.Length != 0 {\n", contextName)
+			g.w.nestIndent("if %s.Length != 0 {\n", contextName)
 		} else {
-			g.w.nest("if %s.Length == 0 {\n", contextName)
+			g.w.nestIndent("if %s.Length == 0 {\n", contextName)
 		}
 
 	default:
@@ -328,7 +324,7 @@ func (g *factoryGen) genMatchNameAndChildren(
 		g.w.writeIndent("_match = true\n")
 		g.w.unnestToMarker(marker, "}\n")
 		g.w.newline()
-		g.w.nest("if !_match {\n")
+		g.w.nestIndent("if !_match {\n")
 	}
 }
 
@@ -345,14 +341,14 @@ func (g *factoryGen) genConstantMatch(
 	g.w.writeIndent("%s := _f.mem.NormExpr(%s).As%s()\n", varName, contextName, opName)
 
 	if noMatch {
-		g.w.nest("if %s == nil {\n", varName)
+		g.w.nestIndent("if %s == nil {\n", varName)
 		if len(match.Args) > 0 {
 			panic("noMatch=true only supported without args")
 		}
 		return
 	}
 
-	g.w.nest("if %s != nil {\n", varName)
+	g.w.nestIndent("if %s != nil {\n", varName)
 
 	// Match expression children in the same order as arguments to the match
 	// operator. If there are fewer arguments than there are children, then
@@ -390,14 +386,14 @@ func (g *factoryGen) genDynamicMatch(
 	}
 
 	if noMatch {
-		g.w.nest("if !(%s) {\n", buf.String())
+		g.w.nestIndent("if !(%s) {\n", buf.String())
 		if len(match.Args) > 0 {
 			panic("noMatch=true only supported without args")
 		}
 		return
 	}
 
-	g.w.nest("if %s {\n", buf.String())
+	g.w.nestIndent("if %s {\n", buf.String())
 
 	if len(match.Args) > 0 {
 		// Match expression children in the same order as arguments to the match
@@ -413,9 +409,9 @@ func (g *factoryGen) genDynamicMatch(
 // genMatchCustom generates code to invoke a custom matching function.
 func (g *factoryGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool) {
 	if noMatch {
-		g.w.nest("if !")
+		g.w.nestIndent("if !")
 	} else {
-		g.w.nest("if ")
+		g.w.nestIndent("if ")
 	}
 
 	g.genNestedExpr(matchCustom)
@@ -474,31 +470,27 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 	switch t := construct.Name.(type) {
 	case *lang.NameExpr:
 		// Standard op construction function.
-		g.w.write("_f.Construct%s(", *t)
-		for i, arg := range construct.Args {
-			if i != 0 {
-				g.w.write(", ")
-			}
+		g.w.nest("_f.Construct%s(\n", *t)
+		for _, arg := range construct.Args {
+			g.w.writeIndent("")
 			g.genNestedExpr(arg)
+			g.w.write(",\n")
 		}
-		g.w.write(")")
+		g.w.unnest(")")
 
 	case *lang.CustomFuncExpr:
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
-		g.w.write(
-			"_f.DynamicConstruct(_f.mem.NormExpr(%s).Operator(), DynamicOperands{",
-			ref.Label,
-		)
-		for i, arg := range construct.Args {
-			if i != 0 {
-				g.w.write(", ")
-			}
-			g.w.write("DynamicID(")
+		g.w.nest("_f.DynamicConstruct(\n")
+		g.w.writeIndent("_f.mem.NormExpr(%s).Operator(),\n", ref.Label)
+		g.w.nestIndent("DynamicOperands{\n")
+		for _, arg := range construct.Args {
+			g.w.writeIndent("DynamicID(")
 			g.genNestedExpr(arg)
-			g.w.write(")")
+			g.w.write("),\n")
 		}
-		g.w.write("})")
+		g.w.unnest("},\n")
+		g.w.unnest(")")
 
 	default:
 		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
@@ -521,22 +513,20 @@ func (g *factoryGen) genConstructList(list *lang.ConstructListExpr) {
 // DynamicConstruct method. This method constructs expressions from a dynamic
 // type and arguments.
 func (g *factoryGen) genDynamicConstructLookup() {
-	defines := filterEnforcerDefines(g.compiled.Defines)
-
 	funcType := "func(f *Factory, operands DynamicOperands) memo.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
 	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc\n\n")
 
-	g.w.nest("func init() {\n")
+	g.w.nestIndent("func init() {\n")
 	g.w.writeIndent("// UnknownOp\n")
-	g.w.nest("dynConstructLookup[opt.UnknownOp] = %s {\n", funcType)
+	g.w.nestIndent("dynConstructLookup[opt.UnknownOp] = %s {\n", funcType)
 	g.w.writeIndent("  panic(\"op type not initialized\")\n")
 	g.w.unnest("}\n\n")
 
-	for _, define := range defines {
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
 		g.w.writeIndent("// %sOp\n", define.Name)
-		g.w.nest("dynConstructLookup[opt.%sOp] = %s {\n", define.Name, funcType)
+		g.w.nestIndent("dynConstructLookup[opt.%sOp] = %s {\n", define.Name, funcType)
 
 		g.w.writeIndent("return f.Construct%s(", define.Name)
 		for i, field := range define.Fields {
@@ -560,22 +550,7 @@ func (g *factoryGen) genDynamicConstructLookup() {
 	g.w.unnest("}\n\n")
 
 	args := "op opt.Operator, operands DynamicOperands"
-	g.w.nest("func (f *Factory) DynamicConstruct(%s) memo.GroupID {\n", args)
+	g.w.nestIndent("func (f *Factory) DynamicConstruct(%s) memo.GroupID {\n", args)
 	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
 	g.w.unnest("}\n")
-}
-
-// filterEnforcerDefines constructs a new define set with any enforcer ops
-// removed from the specified set.
-func filterEnforcerDefines(defines lang.DefineSetExpr) lang.DefineSetExpr {
-	newDefines := make(lang.DefineSetExpr, 0, len(defines))
-	for _, define := range defines {
-		if define.Tags.Contains("Enforcer") {
-			// Don't create factory methods for enforcers, since they're only
-			// created by the optimizer.
-			continue
-		}
-		newDefines = append(newDefines, define)
-	}
-	return newDefines
 }

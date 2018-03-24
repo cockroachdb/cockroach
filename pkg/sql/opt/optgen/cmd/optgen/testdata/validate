@@ -1,4 +1,15 @@
 #
+# Ensure that rules have Normalize or Explore tag.
+#
+optgen compile test.opt
+define True {}
+
+[Name]
+(True) => (True)
+----
+test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
+
+#
 # Ensure that there is only one private field in define, and that it is the
 # last field.
 #

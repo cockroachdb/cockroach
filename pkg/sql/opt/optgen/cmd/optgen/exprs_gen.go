@@ -42,12 +42,8 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.genTagLookup()
 	g.genIsTag()
 
-	for _, define := range g.compiled.Defines {
-		// Skip enforcers, since they are not memoized.
-		if define.Tags.Contains("Enforcer") {
-			continue
-		}
-
+	// Skip enforcers, since they are not memoized.
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
 		g.genExprType(define)
 		g.genExprFuncs(define)
 		g.genMemoFuncs(define)
@@ -88,11 +84,6 @@ func (g *exprsGen) genLayoutTable() {
 // expression is associated with that particular tag.
 func (g *exprsGen) genTagLookup() {
 	for _, tag := range g.compiled.DefineTags {
-		if tag == "Custom" {
-			// Don't create method, since this is compiler directive.
-			continue
-		}
-
 		fmt.Fprintf(g.w, "var is%sLookup = [...]bool{\n", tag)
 		fmt.Fprintf(g.w, "  opt.UnknownOp: false,\n\n")
 

@@ -137,7 +137,10 @@ func (_f *Factory) ConstructInnerJoin(
 		r := left
 		s := right
 		_f.o.reportOptimization(CommuteJoin)
-		_group = _f.ConstructInnerJoin(s, r)
+		_group = _f.ConstructInnerJoin(
+			s,
+			r,
+		)
 		_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 		return _group
 	}
@@ -249,7 +252,10 @@ func (_f *Factory) ConstructEq(
 					if _const3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeVarPlus)
-							_group = _f.ConstructEq(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
+							_group = _f.ConstructEq(
+								leftLeft,
+								_f.constructBinary(opt.MinusOp, right, leftRight),
+							)
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -291,7 +297,10 @@ func (_f *Factory) ConstructLt(
 					if _const3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeVarPlus)
-							_group = _f.ConstructLt(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
+							_group = _f.ConstructLt(
+								leftLeft,
+								_f.constructBinary(opt.MinusOp, right, leftRight),
+							)
 							_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -451,7 +460,10 @@ func (_f *Factory) ConstructFunc(
 				if _variable == nil {
 					if _f.isEmpty(item) {
 						_f.o.reportOptimization(Concat)
-						_group = _f.ConstructFunc(m.mem.InternPrivate(tree.NewDString("concat")), _f.removeListItem(args, item))
+						_group = _f.ConstructFunc(
+							m.mem.InternPrivate(tree.NewDString("concat")),
+							_f.removeListItem(args, item),
+						)
 						_f.mem.AddAltFingerprint(_funcExpr.Fingerprint(), _group)
 						return _group
 					}
@@ -593,7 +605,16 @@ func (_f *Factory) ConstructSelect(
 					t := _norm2.ChildGroup(_f.mem, 0)
 					u := _norm2.ChildGroup(_f.mem, 1)
 					_f.o.reportOptimization(Test)
-					_group = _f.DynamicConstruct(_f.mem.NormExpr(item).Operator(), DynamicOperands{DynamicID(_f.ConstructSelect(t, u)), DynamicID(_f.custom(item, opt.SelectOp))})
+					_group = _f.DynamicConstruct(
+						_f.mem.NormExpr(item).Operator(),
+						DynamicOperands{
+							DynamicID(_f.ConstructSelect(
+								t,
+								u,
+							)),
+							DynamicID(_f.custom(item, opt.SelectOp)),
+						},
+					)
 					_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -978,7 +999,10 @@ func (_f *Factory) ConstructOp(
 				if _list2 != nil {
 					if _list2.Items().Length != 1 {
 						_f.o.reportOptimization(ListNot)
-						_group = _f.ConstructOp(empty, single)
+						_group = _f.ConstructOp(
+							empty,
+							single,
+						)
 						_f.mem.AddAltFingerprint(_opExpr.Fingerprint(), _group)
 						return _group
 					}
