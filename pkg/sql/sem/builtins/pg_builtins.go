@@ -47,6 +47,7 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
+	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
 	types.Decimal.Oid():     {},
@@ -91,6 +92,9 @@ func initPGBuiltins() {
 	}
 	// Make array type i/o builtins.
 	for name, builtins := range makeTypeIOBuiltins("array_", types.AnyArray) {
+		Builtins[name] = builtins
+	}
+	for name, builtins := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		Builtins[name] = builtins
 	}
 }

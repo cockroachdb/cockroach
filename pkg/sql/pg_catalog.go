@@ -1709,7 +1709,6 @@ var (
 	typCategoryUnknown     = tree.NewDString("X")
 
 	// Avoid unused warning for constants.
-	_ = typCategoryArray
 	_ = typCategoryComposite
 	_ = typCategoryEnum
 	_ = typCategoryGeometric
@@ -1764,6 +1763,7 @@ CREATE TABLE pg_catalog.pg_type (
 
 			for o, typ := range types.OidToType {
 				cat := typCategory(typ)
+				typType := typTypeBase
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
@@ -1787,6 +1787,9 @@ CREATE TABLE pg_catalog.pg_type (
 				} else {
 					typArray = tree.NewDOid(tree.DInt(types.TArray{Typ: typ}.Oid()))
 				}
+				if cat == typCategoryPseudo {
+					typType = typTypePseudo
+				}
 				typname := types.PGDisplayName(typ)
 
 				if err := addRow(
@@ -1796,7 +1799,7 @@ CREATE TABLE pg_catalog.pg_type (
 					tree.DNull,                 // typowner
 					typLen(typ),                // typlen
 					typByVal(typ),              // typbyval
-					typTypeBase,                // typtype
+					typType,                    // typtype
 					cat,                        // typcategory
 					tree.DBoolFalse,            // typispreferred
 					tree.DBoolTrue,             // typisdefined
@@ -1945,6 +1948,9 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 
 func typCategory(typ types.T) tree.Datum {
 	if typ.FamilyEqual(types.FamArray) {
+		if typ == types.AnyArray {
+			return typCategoryPseudo
+		}
 		return typCategoryArray
 	}
 	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
