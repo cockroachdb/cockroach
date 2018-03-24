@@ -75,6 +75,10 @@ const (
 	MergeSelectInnerJoin
 	PushDownSelectGroupBy
 
+	// ------------------------------------------------------------
+	// Explore Rule Names
+	// ------------------------------------------------------------
+
 	// NumRuleNames tracks the total count of rule names.
 	NumRuleNames
 )
