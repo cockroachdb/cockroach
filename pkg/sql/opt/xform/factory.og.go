@@ -81,7 +81,12 @@ func (_f *Factory) ConstructSelect(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureSelectFiltersAnd)
-			_group = _f.ConstructSelect(input, _f.ConstructFilters(conditions))
+			_group = _f.ConstructSelect(
+				input,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -92,7 +97,12 @@ func (_f *Factory) ConstructSelect(
 		_norm := _f.mem.NormExpr(filter)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureSelectFilters)
-			_group = _f.ConstructSelect(input, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructSelect(
+				input,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -116,7 +126,10 @@ func (_f *Factory) ConstructSelect(
 			input := _select.Input()
 			innerFilter := _select.Filter()
 			_f.o.reportOptimization(MergeSelects)
-			_group = _f.ConstructSelect(input, _f.concatFilters(innerFilter, filter))
+			_group = _f.ConstructSelect(
+				input,
+				_f.concatFilters(innerFilter, filter),
+			)
 			_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -136,7 +149,24 @@ func (_f *Factory) ConstructSelect(
 					condition := _item
 					if !_f.isCorrelated(condition, right) {
 						_f.o.reportOptimization(PushDownSelectJoinLeft)
-						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.NormExpr(input).Operator(), DynamicOperands{DynamicID(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right)))), DynamicID(right), DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+						_group = _f.ConstructSelect(
+							_f.DynamicConstruct(
+								_f.mem.NormExpr(input).Operator(),
+								DynamicOperands{
+									DynamicID(_f.ConstructSelect(
+										left,
+										_f.ConstructFilters(
+											_f.extractUncorrelatedConditions(list, right),
+										),
+									)),
+									DynamicID(right),
+									DynamicID(on),
+								},
+							),
+							_f.ConstructFilters(
+								_f.extractCorrelatedConditions(list, right),
+							),
+						)
 						_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 						return _group
 					}
@@ -159,7 +189,24 @@ func (_f *Factory) ConstructSelect(
 					condition := _item
 					if !_f.isCorrelated(condition, left) {
 						_f.o.reportOptimization(PushDownSelectJoinRight)
-						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.NormExpr(input).Operator(), DynamicOperands{DynamicID(left), DynamicID(_f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left)))), DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+						_group = _f.ConstructSelect(
+							_f.DynamicConstruct(
+								_f.mem.NormExpr(input).Operator(),
+								DynamicOperands{
+									DynamicID(left),
+									DynamicID(_f.ConstructSelect(
+										right,
+										_f.ConstructFilters(
+											_f.extractUncorrelatedConditions(list, left),
+										),
+									)),
+									DynamicID(on),
+								},
+							),
+							_f.ConstructFilters(
+								_f.extractCorrelatedConditions(list, left),
+							),
+						)
 						_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 						return _group
 					}
@@ -176,7 +223,14 @@ func (_f *Factory) ConstructSelect(
 			right := _norm.ChildGroup(_f.mem, 1)
 			on := _norm.ChildGroup(_f.mem, 2)
 			_f.o.reportOptimization(MergeSelectInnerJoin)
-			_group = _f.DynamicConstruct(_f.mem.NormExpr(input).Operator(), DynamicOperands{DynamicID(left), DynamicID(right), DynamicID(_f.concatFilters(on, filter))})
+			_group = _f.DynamicConstruct(
+				_f.mem.NormExpr(input).Operator(),
+				DynamicOperands{
+					DynamicID(left),
+					DynamicID(right),
+					DynamicID(_f.concatFilters(on, filter)),
+				},
+			)
 			_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -197,7 +251,21 @@ func (_f *Factory) ConstructSelect(
 						condition := _item
 						if !_f.isCorrelated(condition, aggregations) {
 							_f.o.reportOptimization(PushDownSelectGroupBy)
-							_group = _f.ConstructSelect(_f.ConstructGroupBy(_f.ConstructSelect(input, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, aggregations))), aggregations, groupingCols), _f.ConstructFilters(_f.extractCorrelatedConditions(list, aggregations)))
+							_group = _f.ConstructSelect(
+								_f.ConstructGroupBy(
+									_f.ConstructSelect(
+										input,
+										_f.ConstructFilters(
+											_f.extractUncorrelatedConditions(list, aggregations),
+										),
+									),
+									aggregations,
+									groupingCols,
+								),
+								_f.ConstructFilters(
+									_f.extractCorrelatedConditions(list, aggregations),
+								),
+							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -248,7 +316,13 @@ func (_f *Factory) ConstructProject(
 			innerProjections := _project.Projections()
 			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedProjectCols)
-				_group = _f.ConstructProject(_f.ConstructProject(innerInput, _f.filterUnusedColumns(innerProjections, _f.neededCols(projections))), projections)
+				_group = _f.ConstructProject(
+					_f.ConstructProject(
+						innerInput,
+						_f.filterUnusedColumns(innerProjections, _f.neededCols(projections)),
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -261,7 +335,10 @@ func (_f *Factory) ConstructProject(
 		if _scan != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedScanCols)
-				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_group = _f.ConstructProject(
+					_f.filterUnusedColumns(input, _f.neededCols(projections)),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -276,7 +353,13 @@ func (_f *Factory) ConstructProject(
 			filter := _select.Filter()
 			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
 				_f.o.reportOptimization(FilterUnusedSelectCols)
-				_group = _f.ConstructProject(_f.ConstructSelect(_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)), filter), projections)
+				_group = _f.ConstructProject(
+					_f.ConstructSelect(
+						_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)),
+						filter,
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -292,7 +375,14 @@ func (_f *Factory) ConstructProject(
 			ordering := _limit.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				_f.o.reportOptimization(FilterUnusedLimitCols)
-				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
+				_group = _f.ConstructProject(
+					_f.ConstructLimit(
+						_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)),
+						limit,
+						ordering,
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -308,7 +398,14 @@ func (_f *Factory) ConstructProject(
 			ordering := _offset.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				_f.o.reportOptimization(FilterUnusedOffsetCols)
-				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
+				_group = _f.ConstructProject(
+					_f.ConstructOffset(
+						_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)),
+						offset,
+						ordering,
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -324,7 +421,17 @@ func (_f *Factory) ConstructProject(
 			on := _norm.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
 				_f.o.reportOptimization(FilterUnusedJoinLeftCols)
-				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.NormExpr(input).Operator(), DynamicOperands{DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), DynamicID(right), DynamicID(on)}), projections)
+				_group = _f.ConstructProject(
+					_f.DynamicConstruct(
+						_f.mem.NormExpr(input).Operator(),
+						DynamicOperands{
+							DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))),
+							DynamicID(right),
+							DynamicID(on),
+						},
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -340,7 +447,17 @@ func (_f *Factory) ConstructProject(
 			on := _norm.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
 				_f.o.reportOptimization(FilterUnusedJoinRightCols)
-				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.NormExpr(input).Operator(), DynamicOperands{DynamicID(left), DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))), DynamicID(on)}), projections)
+				_group = _f.ConstructProject(
+					_f.DynamicConstruct(
+						_f.mem.NormExpr(input).Operator(),
+						DynamicOperands{
+							DynamicID(left),
+							DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))),
+							DynamicID(on),
+						},
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -356,7 +473,14 @@ func (_f *Factory) ConstructProject(
 			groupingCols := _groupBy.GroupingCols()
 			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedAggCols)
-				_group = _f.ConstructProject(_f.ConstructGroupBy(innerInput, _f.filterUnusedColumns(aggregations, _f.neededCols(projections)), groupingCols), projections)
+				_group = _f.ConstructProject(
+					_f.ConstructGroupBy(
+						innerInput,
+						_f.filterUnusedColumns(aggregations, _f.neededCols(projections)),
+						groupingCols,
+					),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -369,7 +493,10 @@ func (_f *Factory) ConstructProject(
 		if _values != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
 				_f.o.reportOptimization(FilterUnusedValueCols)
-				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_group = _f.ConstructProject(
+					_f.filterUnusedColumns(input, _f.neededCols(projections)),
+					projections,
+				)
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -406,7 +533,13 @@ func (_f *Factory) ConstructInnerJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructInnerJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -418,7 +551,13 @@ func (_f *Factory) ConstructInnerJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructInnerJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -433,7 +572,18 @@ func (_f *Factory) ConstructInnerJoin(
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
-					_group = _f.ConstructInnerJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_group = _f.ConstructInnerJoin(
+						_f.ConstructSelect(
+							left,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, right),
+							),
+						),
+						right,
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, right),
+						),
+					)
 					_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -450,7 +600,18 @@ func (_f *Factory) ConstructInnerJoin(
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
-					_group = _f.ConstructInnerJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_group = _f.ConstructInnerJoin(
+						left,
+						_f.ConstructSelect(
+							right,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, left),
+							),
+						),
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, left),
+						),
+					)
 					_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -483,7 +644,13 @@ func (_f *Factory) ConstructLeftJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructLeftJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -495,7 +662,13 @@ func (_f *Factory) ConstructLeftJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructLeftJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -510,7 +683,18 @@ func (_f *Factory) ConstructLeftJoin(
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
-					_group = _f.ConstructLeftJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_group = _f.ConstructLeftJoin(
+						left,
+						_f.ConstructSelect(
+							right,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, left),
+							),
+						),
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, left),
+						),
+					)
 					_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -543,7 +727,13 @@ func (_f *Factory) ConstructRightJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructRightJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -555,7 +745,13 @@ func (_f *Factory) ConstructRightJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructRightJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -570,7 +766,18 @@ func (_f *Factory) ConstructRightJoin(
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
-					_group = _f.ConstructRightJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_group = _f.ConstructRightJoin(
+						_f.ConstructSelect(
+							left,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, right),
+							),
+						),
+						right,
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, right),
+						),
+					)
 					_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -603,7 +810,13 @@ func (_f *Factory) ConstructFullJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructFullJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_fullJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -615,7 +828,13 @@ func (_f *Factory) ConstructFullJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructFullJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_fullJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -646,7 +865,13 @@ func (_f *Factory) ConstructSemiJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructSemiJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_semiJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -658,7 +883,13 @@ func (_f *Factory) ConstructSemiJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructSemiJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_semiJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -689,7 +920,13 @@ func (_f *Factory) ConstructAntiJoin(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructAntiJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_antiJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -701,7 +938,13 @@ func (_f *Factory) ConstructAntiJoin(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructAntiJoin(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_antiJoinExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -735,7 +978,13 @@ func (_f *Factory) ConstructInnerJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructInnerJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -747,7 +996,13 @@ func (_f *Factory) ConstructInnerJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructInnerJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -762,7 +1017,18 @@ func (_f *Factory) ConstructInnerJoinApply(
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
-					_group = _f.ConstructInnerJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_group = _f.ConstructInnerJoinApply(
+						_f.ConstructSelect(
+							left,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, right),
+							),
+						),
+						right,
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, right),
+						),
+					)
 					_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -779,7 +1045,18 @@ func (_f *Factory) ConstructInnerJoinApply(
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
-					_group = _f.ConstructInnerJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_group = _f.ConstructInnerJoinApply(
+						left,
+						_f.ConstructSelect(
+							right,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, left),
+							),
+						),
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, left),
+						),
+					)
 					_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -812,7 +1089,13 @@ func (_f *Factory) ConstructLeftJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructLeftJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -824,7 +1107,13 @@ func (_f *Factory) ConstructLeftJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructLeftJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -839,7 +1128,18 @@ func (_f *Factory) ConstructLeftJoinApply(
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
 					_f.o.reportOptimization(PushDownJoinRight)
-					_group = _f.ConstructLeftJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_group = _f.ConstructLeftJoinApply(
+						left,
+						_f.ConstructSelect(
+							right,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, left),
+							),
+						),
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, left),
+						),
+					)
 					_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -872,7 +1172,13 @@ func (_f *Factory) ConstructRightJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructRightJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -884,7 +1190,13 @@ func (_f *Factory) ConstructRightJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructRightJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -899,7 +1211,18 @@ func (_f *Factory) ConstructRightJoinApply(
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
 					_f.o.reportOptimization(PushDownJoinLeft)
-					_group = _f.ConstructRightJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_group = _f.ConstructRightJoinApply(
+						_f.ConstructSelect(
+							left,
+							_f.ConstructFilters(
+								_f.extractUncorrelatedConditions(list, right),
+							),
+						),
+						right,
+						_f.ConstructFilters(
+							_f.extractCorrelatedConditions(list, right),
+						),
+					)
 					_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -932,7 +1255,13 @@ func (_f *Factory) ConstructFullJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructFullJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_fullJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -944,7 +1273,13 @@ func (_f *Factory) ConstructFullJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructFullJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_fullJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -975,7 +1310,13 @@ func (_f *Factory) ConstructSemiJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructSemiJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_semiJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -987,7 +1328,13 @@ func (_f *Factory) ConstructSemiJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructSemiJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_semiJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1018,7 +1365,13 @@ func (_f *Factory) ConstructAntiJoinApply(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(EnsureJoinFiltersAnd)
-			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_group = _f.ConstructAntiJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					conditions,
+				),
+			)
 			_f.mem.AddAltFingerprint(_antiJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1030,7 +1383,13 @@ func (_f *Factory) ConstructAntiJoinApply(
 		_norm := _f.mem.NormExpr(on)
 		if !(_norm.Operator() == opt.FiltersOp || _norm.Operator() == opt.AndOp || _norm.Operator() == opt.TrueOp || _norm.Operator() == opt.FalseOp) {
 			_f.o.reportOptimization(EnsureJoinFilters)
-			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(_f.mem.InternList([]memo.GroupID{filter})))
+			_group = _f.ConstructAntiJoinApply(
+				left,
+				right,
+				_f.ConstructFilters(
+					_f.mem.InternList([]memo.GroupID{filter}),
+				),
+			)
 			_f.mem.AddAltFingerprint(_antiJoinApplyExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1064,7 +1423,11 @@ func (_f *Factory) ConstructGroupBy(
 	{
 		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
 			_f.o.reportOptimization(FilterUnusedGroupByCols)
-			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
+			_group = _f.ConstructGroupBy(
+				_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)),
+				aggregations,
+				groupingCols,
+			)
 			_f.mem.AddAltFingerprint(_groupByExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1695,7 +2058,9 @@ func (_f *Factory) ConstructAnd(
 			if _null != nil {
 				if _f.listOnlyHasNulls(conditions) {
 					_f.o.reportOptimization(FoldNullAndOr)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -1766,7 +2131,9 @@ func (_f *Factory) ConstructOr(
 			if _null != nil {
 				if _f.listOnlyHasNulls(conditions) {
 					_f.o.reportOptimization(FoldNullAndOr)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -1827,7 +2194,9 @@ func (_f *Factory) ConstructNot(
 		if _and != nil {
 			conditions := _and.Conditions()
 			_f.o.reportOptimization(NegateAnd)
-			_group = _f.ConstructOr(_f.negateConditions(conditions))
+			_group = _f.ConstructOr(
+				_f.negateConditions(conditions),
+			)
 			_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1839,7 +2208,9 @@ func (_f *Factory) ConstructNot(
 		if _or != nil {
 			conditions := _or.Conditions()
 			_f.o.reportOptimization(NegateOr)
-			_group = _f.ConstructAnd(_f.negateConditions(conditions))
+			_group = _f.ConstructAnd(
+				_f.negateConditions(conditions),
+			)
 			_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1874,7 +2245,13 @@ func (_f *Factory) ConstructEq(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpPlusConst)
-							_group = _f.ConstructEq(leftLeft, _f.ConstructMinus(right, leftRight))
+							_group = _f.ConstructEq(
+								leftLeft,
+								_f.ConstructMinus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -1895,7 +2272,13 @@ func (_f *Factory) ConstructEq(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpMinusConst)
-							_group = _f.ConstructEq(leftLeft, _f.ConstructPlus(right, leftRight))
+							_group = _f.ConstructEq(
+								leftLeft,
+								_f.ConstructPlus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -1916,7 +2299,13 @@ func (_f *Factory) ConstructEq(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
 							_f.o.reportOptimization(NormalizeCmpConstMinus)
-							_group = _f.ConstructEq(_f.ConstructMinus(leftLeft, right), leftRight)
+							_group = _f.ConstructEq(
+								_f.ConstructMinus(
+									leftLeft,
+									right,
+								),
+								leftRight,
+							)
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -1947,7 +2336,9 @@ func (_f *Factory) ConstructEq(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1958,7 +2349,9 @@ func (_f *Factory) ConstructEq(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -1971,7 +2364,10 @@ func (_f *Factory) ConstructEq(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructEq(right, left)
+				_group = _f.ConstructEq(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -1983,7 +2379,10 @@ func (_f *Factory) ConstructEq(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructEq(right, left)
+				_group = _f.ConstructEq(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -2045,7 +2444,13 @@ func (_f *Factory) ConstructLt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpPlusConst)
-							_group = _f.ConstructLt(leftLeft, _f.ConstructMinus(right, leftRight))
+							_group = _f.ConstructLt(
+								leftLeft,
+								_f.ConstructMinus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2066,7 +2471,13 @@ func (_f *Factory) ConstructLt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpMinusConst)
-							_group = _f.ConstructLt(leftLeft, _f.ConstructPlus(right, leftRight))
+							_group = _f.ConstructLt(
+								leftLeft,
+								_f.ConstructPlus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2087,7 +2498,13 @@ func (_f *Factory) ConstructLt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
 							_f.o.reportOptimization(NormalizeCmpConstMinus)
-							_group = _f.ConstructLt(_f.ConstructMinus(leftLeft, right), leftRight)
+							_group = _f.ConstructLt(
+								_f.ConstructMinus(
+									leftLeft,
+									right,
+								),
+								leftRight,
+							)
 							_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2102,7 +2519,9 @@ func (_f *Factory) ConstructLt(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2113,7 +2532,9 @@ func (_f *Factory) ConstructLt(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2174,7 +2595,13 @@ func (_f *Factory) ConstructGt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpPlusConst)
-							_group = _f.ConstructGt(leftLeft, _f.ConstructMinus(right, leftRight))
+							_group = _f.ConstructGt(
+								leftLeft,
+								_f.ConstructMinus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2195,7 +2622,13 @@ func (_f *Factory) ConstructGt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpMinusConst)
-							_group = _f.ConstructGt(leftLeft, _f.ConstructPlus(right, leftRight))
+							_group = _f.ConstructGt(
+								leftLeft,
+								_f.ConstructPlus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2216,7 +2649,13 @@ func (_f *Factory) ConstructGt(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
 							_f.o.reportOptimization(NormalizeCmpConstMinus)
-							_group = _f.ConstructGt(_f.ConstructMinus(leftLeft, right), leftRight)
+							_group = _f.ConstructGt(
+								_f.ConstructMinus(
+									leftLeft,
+									right,
+								),
+								leftRight,
+							)
 							_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2231,7 +2670,9 @@ func (_f *Factory) ConstructGt(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2242,7 +2683,9 @@ func (_f *Factory) ConstructGt(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2303,7 +2746,13 @@ func (_f *Factory) ConstructLe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpPlusConst)
-							_group = _f.ConstructLe(leftLeft, _f.ConstructMinus(right, leftRight))
+							_group = _f.ConstructLe(
+								leftLeft,
+								_f.ConstructMinus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2324,7 +2773,13 @@ func (_f *Factory) ConstructLe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpMinusConst)
-							_group = _f.ConstructLe(leftLeft, _f.ConstructPlus(right, leftRight))
+							_group = _f.ConstructLe(
+								leftLeft,
+								_f.ConstructPlus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2345,7 +2800,13 @@ func (_f *Factory) ConstructLe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
 							_f.o.reportOptimization(NormalizeCmpConstMinus)
-							_group = _f.ConstructLe(_f.ConstructMinus(leftLeft, right), leftRight)
+							_group = _f.ConstructLe(
+								_f.ConstructMinus(
+									leftLeft,
+									right,
+								),
+								leftRight,
+							)
 							_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2360,7 +2821,9 @@ func (_f *Factory) ConstructLe(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2371,7 +2834,9 @@ func (_f *Factory) ConstructLe(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2432,7 +2897,13 @@ func (_f *Factory) ConstructGe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpPlusConst)
-							_group = _f.ConstructGe(leftLeft, _f.ConstructMinus(right, leftRight))
+							_group = _f.ConstructGe(
+								leftLeft,
+								_f.ConstructMinus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2453,7 +2924,13 @@ func (_f *Factory) ConstructGe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeCmpMinusConst)
-							_group = _f.ConstructGe(leftLeft, _f.ConstructPlus(right, leftRight))
+							_group = _f.ConstructGe(
+								leftLeft,
+								_f.ConstructPlus(
+									right,
+									leftRight,
+								),
+							)
 							_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2474,7 +2951,13 @@ func (_f *Factory) ConstructGe(
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
 							_f.o.reportOptimization(NormalizeCmpConstMinus)
-							_group = _f.ConstructGe(_f.ConstructMinus(leftLeft, right), leftRight)
+							_group = _f.ConstructGe(
+								_f.ConstructMinus(
+									leftLeft,
+									right,
+								),
+								leftRight,
+							)
 							_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -2489,7 +2972,9 @@ func (_f *Factory) ConstructGe(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2500,7 +2985,9 @@ func (_f *Factory) ConstructGe(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2529,7 +3016,9 @@ func (_f *Factory) ConstructNe(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2540,7 +3029,9 @@ func (_f *Factory) ConstructNe(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2553,7 +3044,10 @@ func (_f *Factory) ConstructNe(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructNe(right, left)
+				_group = _f.ConstructNe(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -2565,7 +3059,10 @@ func (_f *Factory) ConstructNe(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructNe(right, left)
+				_group = _f.ConstructNe(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -2598,7 +3095,9 @@ func (_f *Factory) ConstructIn(
 			if _tuple != nil {
 				if _tuple.Elems().Length != 0 {
 					_f.o.reportOptimization(FoldNullInNonEmpty)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -2629,7 +3128,12 @@ func (_f *Factory) ConstructIn(
 			elems := _tuple.Elems()
 			if !_f.isSortedUniqueList(elems) {
 				_f.o.reportOptimization(NormalizeInConst)
-				_group = _f.ConstructIn(left, _f.ConstructTuple(_f.constructSortedUniqueList(elems)))
+				_group = _f.ConstructIn(
+					left,
+					_f.ConstructTuple(
+						_f.constructSortedUniqueList(elems),
+					),
+				)
 				_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -2645,7 +3149,9 @@ func (_f *Factory) ConstructIn(
 				_null := _f.mem.NormExpr(_item).AsNull()
 				if _null != nil {
 					_f.o.reportOptimization(FoldInNull)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -2679,7 +3185,9 @@ func (_f *Factory) ConstructNotIn(
 			if _tuple != nil {
 				if _tuple.Elems().Length != 0 {
 					_f.o.reportOptimization(FoldNullInNonEmpty)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -2710,7 +3218,12 @@ func (_f *Factory) ConstructNotIn(
 			elems := _tuple.Elems()
 			if !_f.isSortedUniqueList(elems) {
 				_f.o.reportOptimization(NormalizeInConst)
-				_group = _f.ConstructNotIn(left, _f.ConstructTuple(_f.constructSortedUniqueList(elems)))
+				_group = _f.ConstructNotIn(
+					left,
+					_f.ConstructTuple(
+						_f.constructSortedUniqueList(elems),
+					),
+				)
 				_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -2726,7 +3239,9 @@ func (_f *Factory) ConstructNotIn(
 				_null := _f.mem.NormExpr(_item).AsNull()
 				if _null != nil {
 					_f.o.reportOptimization(FoldInNull)
-					_group = _f.ConstructNull(_f.boolType())
+					_group = _f.ConstructNull(
+						_f.boolType(),
+					)
 					_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -2757,7 +3272,9 @@ func (_f *Factory) ConstructLike(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_likeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2768,7 +3285,9 @@ func (_f *Factory) ConstructLike(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_likeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2797,7 +3316,9 @@ func (_f *Factory) ConstructNotLike(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notLikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2808,7 +3329,9 @@ func (_f *Factory) ConstructNotLike(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notLikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2837,7 +3360,9 @@ func (_f *Factory) ConstructILike(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_iLikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2848,7 +3373,9 @@ func (_f *Factory) ConstructILike(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_iLikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2877,7 +3404,9 @@ func (_f *Factory) ConstructNotILike(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notILikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2888,7 +3417,9 @@ func (_f *Factory) ConstructNotILike(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notILikeExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2917,7 +3448,9 @@ func (_f *Factory) ConstructSimilarTo(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_similarToExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2928,7 +3461,9 @@ func (_f *Factory) ConstructSimilarTo(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_similarToExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2957,7 +3492,9 @@ func (_f *Factory) ConstructNotSimilarTo(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notSimilarToExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2968,7 +3505,9 @@ func (_f *Factory) ConstructNotSimilarTo(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notSimilarToExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -2997,7 +3536,9 @@ func (_f *Factory) ConstructRegMatch(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_regMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3008,7 +3549,9 @@ func (_f *Factory) ConstructRegMatch(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_regMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3037,7 +3580,9 @@ func (_f *Factory) ConstructNotRegMatch(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notRegMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3048,7 +3593,9 @@ func (_f *Factory) ConstructNotRegMatch(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notRegMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3077,7 +3624,9 @@ func (_f *Factory) ConstructRegIMatch(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_regIMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3088,7 +3637,9 @@ func (_f *Factory) ConstructRegIMatch(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_regIMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3117,7 +3668,9 @@ func (_f *Factory) ConstructNotRegIMatch(
 		_null := _f.mem.NormExpr(left).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonLeft)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notRegIMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3128,7 +3681,9 @@ func (_f *Factory) ConstructNotRegIMatch(
 		_null := _f.mem.NormExpr(right).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullComparisonRight)
-			_group = _f.ConstructNull(_f.boolType())
+			_group = _f.ConstructNull(
+				_f.boolType(),
+			)
 			_f.mem.AddAltFingerprint(_notRegIMatchExpr.Fingerprint(), _group)
 			return _group
 		}
@@ -3159,7 +3714,10 @@ func (_f *Factory) ConstructIs(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructIs(right, left)
+				_group = _f.ConstructIs(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3171,7 +3729,10 @@ func (_f *Factory) ConstructIs(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructIs(right, left)
+				_group = _f.ConstructIs(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3203,7 +3764,10 @@ func (_f *Factory) ConstructIsNot(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructIsNot(right, left)
+				_group = _f.ConstructIsNot(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3215,7 +3779,10 @@ func (_f *Factory) ConstructIsNot(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructIsNot(right, left)
+				_group = _f.ConstructIsNot(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3265,7 +3832,10 @@ func (_f *Factory) ConstructBitand(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructBitand(right, left)
+				_group = _f.ConstructBitand(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3277,7 +3847,10 @@ func (_f *Factory) ConstructBitand(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructBitand(right, left)
+				_group = _f.ConstructBitand(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3335,7 +3908,10 @@ func (_f *Factory) ConstructBitor(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructBitor(right, left)
+				_group = _f.ConstructBitor(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3347,7 +3923,10 @@ func (_f *Factory) ConstructBitor(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructBitor(right, left)
+				_group = _f.ConstructBitor(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3405,7 +3984,10 @@ func (_f *Factory) ConstructBitxor(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructBitxor(right, left)
+				_group = _f.ConstructBitxor(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3417,7 +3999,10 @@ func (_f *Factory) ConstructBitxor(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructBitxor(right, left)
+				_group = _f.ConstructBitxor(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3501,7 +4086,10 @@ func (_f *Factory) ConstructPlus(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructPlus(right, left)
+				_group = _f.ConstructPlus(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3513,7 +4101,10 @@ func (_f *Factory) ConstructPlus(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructPlus(right, left)
+				_group = _f.ConstructPlus(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3654,7 +4245,10 @@ func (_f *Factory) ConstructMult(
 			_variable2 := _f.mem.NormExpr(right).AsVariable()
 			if _variable2 != nil {
 				_f.o.reportOptimization(CommuteVar)
-				_group = _f.ConstructMult(right, left)
+				_group = _f.ConstructMult(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -3666,7 +4260,10 @@ func (_f *Factory) ConstructMult(
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
 				_f.o.reportOptimization(CommuteConst)
-				_group = _f.ConstructMult(right, left)
+				_group = _f.ConstructMult(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -4250,7 +4847,10 @@ func (_f *Factory) ConstructUnaryMinus(
 			right := _minus.Right()
 			if _f.canConstructBinary(opt.MinusOp, right, left) {
 				_f.o.reportOptimization(InvertMinus)
-				_group = _f.ConstructMinus(right, left)
+				_group = _f.ConstructMinus(
+					right,
+					left,
+				)
 				_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
 				return _group
 			}
@@ -4341,7 +4941,9 @@ func (_f *Factory) ConstructCast(
 		_null := _f.mem.NormExpr(input).AsNull()
 		if _null != nil {
 			_f.o.reportOptimization(FoldNullCast)
-			_group = _f.ConstructNull(typ)
+			_group = _f.ConstructNull(
+				typ,
+			)
 			_f.mem.AddAltFingerprint(_castExpr.Fingerprint(), _group)
 			return _group
 		}

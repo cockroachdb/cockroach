@@ -191,6 +191,15 @@ func (g *optgen) run(args ...string) bool {
 func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
 	var errors []error
 
+	for _, rule := range compiled.Rules {
+		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
+			format := "%s rule is missing \"Normalize\" or \"Explore\" tag"
+			err := fmt.Errorf(format, rule.Name)
+			err = addErrorSource(err, rule.Source())
+			errors = append(errors, err)
+		}
+	}
+
 	for _, define := range compiled.Defines {
 		// Ensure that fields are defined in the following order:
 		//   Expr*
