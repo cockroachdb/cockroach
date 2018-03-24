@@ -1187,6 +1187,9 @@ CREATE TABLE pg_catalog.pg_operator (
 			return err
 		}
 		for cmpOp, overloads := range tree.CmpOps {
+			if cmpOp == tree.In {
+				continue
+			}
 			for _, overload := range overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
