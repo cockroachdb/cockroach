@@ -548,7 +548,8 @@ $(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(CRYPTOPP_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
-	cd $(CRYPTOPP_DIR) && cmake $(XCMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
+	cd $(CRYPTOPP_DIR) && cmake $(XCMAKE_FLAGS) $(CRYPTOPP_SRC_DIR) \
+	  -DCMAKE_BUILD_TYPE=Release
 
 $(JEMALLOC_SRC_DIR)/configure.ac: | $(SUBMODULES_TARGET)
 
@@ -570,7 +571,8 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOBUF_DIR) && cmake $(XCMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+	cd $(PROTOBUF_DIR) && cmake $(XCMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
+	  -DCMAKE_BUILD_TYPE=Release
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
 $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
@@ -578,7 +580,8 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
+	  -DCMAKE_BUILD_TYPE=Release
 endif
 
 $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
@@ -590,16 +593,16 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) li
 	  $(if $(findstring release,$(BUILD_TYPE)),-DPORTABLE=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
-	  -DCMAKE_CXX_FLAGS="$(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3) $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DNDEBUG)"
-	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
-	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
+	  -DCMAKE_CXX_FLAGS="$(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3)" \
+	  -DCMAKE_BUILD_TYPE=$(if $(ENABLE_ROCKSDB_ASSERTIONS),Debug,Release)
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
-	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR)
+	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR) \
+	  -DCMAKE_BUILD_TYPE=Release
 
 # TODO(benesch): make it possible to build libroach without CCL code. Because
 # libroach and libroachccl are defined in the same CMake project, CMake requires
