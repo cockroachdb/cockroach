@@ -5,7 +5,7 @@ optgen exprs test.opt
 define FuncCall {
     Name Expr
     Args ExprList
-    Def  FuncDef
+    Def  FuncOpDef
 }
 ----
 ----
@@ -15,6 +15,8 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 var opLayoutTable = [...]opLayout{
@@ -50,6 +52,13 @@ func (e *Expr) AsFuncCall() *FuncCallExpr {
 	}
 	return (*FuncCallExpr)(e)
 }
+
+// InternFuncOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternFuncOpDef(val *FuncOpDef) PrivateID {
+	return m.privateStorage.internFuncOpDef(val)
+}
 ----
 ----
 
@@ -69,6 +78,8 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 var opLayoutTable = [...]opLayout{

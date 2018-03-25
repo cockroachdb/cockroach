@@ -37,13 +37,13 @@ func TestTypingJson(t *testing.T) {
 
 	// (Const <json>)
 	json, _ := tree.ParseDJSON("[1, 2]")
-	jsonGroup := f.ConstructConst(f.InternPrivate(json))
+	jsonGroup := f.ConstructConst(f.InternDatum(json))
 
 	// (Const <int>)
-	intGroup := f.ConstructConst(f.InternPrivate(tree.NewDInt(1)))
+	intGroup := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
 
 	// (Const <string-array>)
-	arrGroup := f.ConstructConst(f.InternPrivate(tree.NewDArray(types.String)))
+	arrGroup := f.ConstructConst(f.InternDatum(tree.NewDArray(types.String)))
 
 	// (FetchVal (Const <json>) (Const <int>))
 	fetchValGroup := f.ConstructFetchVal(jsonGroup, intGroup)

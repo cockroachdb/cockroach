@@ -84,13 +84,6 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 	return f.mem.InternList(items)
 }
 
-// InternPrivate adds the given private value to the memo and returns an ID
-// that can be used for later lookup. If the same value was added previously,
-// this method is a no-op and returns the ID of the previous value.
-func (f *Factory) InternPrivate(private interface{}) memo.PrivateID {
-	return f.mem.InternPrivate(private)
-}
-
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(group memo.GroupID) memo.GroupID {
@@ -105,7 +98,7 @@ func (f *Factory) onConstruct(group memo.GroupID) memo.GroupID {
 // ----------------------------------------------------------------------
 
 func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
-	return *f.mem.LookupPrivate(private).(*opt.ColList)
+	return f.mem.LookupPrivate(private).(opt.ColList)
 }
 
 // ----------------------------------------------------------------------
@@ -228,7 +221,7 @@ func (f *Factory) hasType(group memo.GroupID, typ memo.PrivateID) bool {
 }
 
 func (f *Factory) boolType() memo.PrivateID {
-	return f.InternPrivate(types.Bool)
+	return f.InternType(types.Bool)
 }
 
 // canConstructBinary returns true if (op left right) has a valid binary op
@@ -339,7 +332,7 @@ func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
 func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.PrivateID) opt.ColSet {
-	colSet := *f.mem.LookupPrivate(groupingCols).(*opt.ColSet)
+	colSet := f.mem.LookupPrivate(groupingCols).(opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
 }
 
@@ -347,7 +340,7 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 // the Ordering of a Limit/Offset operator.
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
-	for _, col := range *f.mem.LookupPrivate(ordering).(*memo.Ordering) {
+	for _, col := range f.mem.LookupPrivate(ordering).(memo.Ordering) {
 		colSet.Add(int(col.ID()))
 	}
 	return colSet
@@ -409,17 +402,17 @@ func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet
 	default:
 		// Construct new variable groups for each output column that's needed.
 		colSet.ForEach(func(i int) {
-			v := f.ConstructVariable(f.InternPrivate(opt.ColumnID(i)))
+			v := f.ConstructVariable(f.InternColumnID(opt.ColumnID(i)))
 			groupList = append(groupList, v)
 			colList = append(colList, opt.ColumnID(i))
 		})
 	}
 
 	if targetExpr.Operator() == opt.AggregationsOp {
-		return f.ConstructAggregations(f.InternList(groupList), f.InternPrivate(&colList))
+		return f.ConstructAggregations(f.InternList(groupList), f.InternColList(colList))
 	}
 
-	projections := f.ConstructProjections(f.InternList(groupList), f.InternPrivate(&colList))
+	projections := f.ConstructProjections(f.InternList(groupList), f.InternColList(colList))
 	if targetExpr.Operator() == opt.ProjectionsOp {
 		return projections
 	}
@@ -435,7 +428,7 @@ func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColS
 	scanExpr := f.mem.NormExpr(scan).AsScan()
 	existing := f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
 	new := memo.ScanOpDef{Table: existing.Table, Cols: colSet}
-	return f.ConstructScan(f.mem.InternPrivate(&new))
+	return f.ConstructScan(f.mem.InternScanOpDef(&new))
 }
 
 // filterUnusedValuesColumns constructs a new Values operator based on the
@@ -479,7 +472,7 @@ func (f *Factory) filterUnusedValuesColumns(
 		newRows = append(newRows, f.ConstructTuple(f.InternList(newElems)))
 	}
 
-	return f.ConstructValues(f.InternList(newRows), f.InternPrivate(&newCols))
+	return f.ConstructValues(f.InternList(newRows), f.InternColList(newCols))
 }
 
 // ----------------------------------------------------------------------
@@ -492,7 +485,7 @@ func (f *Factory) filterUnusedValuesColumns(
 // emptyGroupingCols returns true if the given grouping columns for a GroupBy
 // operator are empty.
 func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(cols).(*opt.ColSet).Empty()
+	return f.mem.LookupPrivate(cols).(opt.ColSet).Empty()
 }
 
 // isCorrelated returns true if variables in the source expression reference
@@ -849,7 +842,7 @@ func (f *Factory) allowNullArgs(op opt.Operator, left, right memo.GroupID) bool 
 // same type as the unary operator would have.
 func (f *Factory) foldNullUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
 	typ := f.lookupScalar(input).Type
-	return f.ConstructNull(f.InternPrivate(memo.InferUnaryType(op, typ)))
+	return f.ConstructNull(f.InternType(memo.InferUnaryType(op, typ)))
 }
 
 // foldNullBinary replaces the binary operator with a typed null value having
@@ -857,7 +850,7 @@ func (f *Factory) foldNullUnary(op opt.Operator, input memo.GroupID) memo.GroupI
 func (f *Factory) foldNullBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
 	leftType := f.lookupScalar(left).Type
 	rightType := f.lookupScalar(right).Type
-	return f.ConstructNull(f.InternPrivate(memo.InferBinaryType(op, leftType, rightType)))
+	return f.ConstructNull(f.InternType(memo.InferBinaryType(op, leftType, rightType)))
 }
 
 // ----------------------------------------------------------------------
