@@ -169,7 +169,7 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) tree.Type
 	for i := range exprs {
 		exprs[i] = b.buildScalar(ctx, ev.Child(i))
 	}
-	funcDef := ev.Private().(memo.FuncOpDef)
+	funcDef := ev.Private().(*memo.FuncOpDef)
 	funcRef := tree.WrapFunction(funcDef.Name)
 	return tree.NewTypedFuncExpr(
 		funcRef,

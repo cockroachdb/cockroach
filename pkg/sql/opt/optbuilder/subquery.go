@@ -185,7 +185,7 @@ func (b *Builder) buildSubqueryProjection(
 		colGroups := make([]memo.GroupID, len(s.cols))
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
-			colGroups[i] = b.factory.ConstructVariable(b.factory.InternPrivate(s.cols[i].id))
+			colGroups[i] = b.factory.ConstructVariable(b.factory.InternColumnID(s.cols[i].id))
 		}
 
 		texpr := tree.NewTypedTuple(cols)
@@ -212,7 +212,7 @@ func (b *Builder) buildSingleRowSubquery(
 	}
 
 	out, outScope = b.buildSubqueryProjection(s, inScope)
-	v := b.factory.ConstructVariable(b.factory.InternPrivate(outScope.cols[0].id))
+	v := b.factory.ConstructVariable(b.factory.InternColumnID(outScope.cols[0].id))
 
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can

@@ -38,7 +38,7 @@ define Scan {
 # the same length (same with that of Cols).
 #
 # The Cols field contains the set of column indices returned by each row
-# as a *ColList. It is legal for Cols to be empty.
+# as an opt.ColList. It is legal for Cols to be empty.
 [Relational]
 define Values {
     Rows ExprList
@@ -285,7 +285,7 @@ define ExceptAll {
 
 # Limit returns a limited subset of the results in the input relation.
 # The limit expression is a scalar value; the operator returns at most this many
-# rows. The private field is an *opt.Ordering which indicates the desired
+# rows. The private field is an opt.Ordering which indicates the desired
 # row ordering (the first rows with respect to this ordering are returned).
 [Relational]
 define Limit {
