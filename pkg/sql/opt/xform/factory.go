@@ -105,7 +105,7 @@ func (f *Factory) onConstruct(group memo.GroupID) memo.GroupID {
 // ----------------------------------------------------------------------
 
 func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
-	return *f.mem.LookupPrivate(private).(*opt.ColList)
+	return f.mem.LookupPrivate(private).(opt.ColList)
 }
 
 // ----------------------------------------------------------------------
@@ -339,7 +339,7 @@ func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
 func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.PrivateID) opt.ColSet {
-	colSet := *f.mem.LookupPrivate(groupingCols).(*opt.ColSet)
+	colSet := f.mem.LookupPrivate(groupingCols).(opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
 }
 
@@ -347,7 +347,7 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 // the Ordering of a Limit/Offset operator.
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
-	for _, col := range *f.mem.LookupPrivate(ordering).(*memo.Ordering) {
+	for _, col := range f.mem.LookupPrivate(ordering).(memo.Ordering) {
 		colSet.Add(int(col.ID()))
 	}
 	return colSet
@@ -416,10 +416,10 @@ func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet
 	}
 
 	if targetExpr.Operator() == opt.AggregationsOp {
-		return f.ConstructAggregations(f.InternList(groupList), f.InternPrivate(&colList))
+		return f.ConstructAggregations(f.InternList(groupList), f.InternPrivate(colList))
 	}
 
-	projections := f.ConstructProjections(f.InternList(groupList), f.InternPrivate(&colList))
+	projections := f.ConstructProjections(f.InternList(groupList), f.InternPrivate(colList))
 	if targetExpr.Operator() == opt.ProjectionsOp {
 		return projections
 	}
@@ -479,7 +479,7 @@ func (f *Factory) filterUnusedValuesColumns(
 		newRows = append(newRows, f.ConstructTuple(f.InternList(newElems)))
 	}
 
-	return f.ConstructValues(f.InternList(newRows), f.InternPrivate(&newCols))
+	return f.ConstructValues(f.InternList(newRows), f.InternPrivate(newCols))
 }
 
 // ----------------------------------------------------------------------
@@ -492,7 +492,7 @@ func (f *Factory) filterUnusedValuesColumns(
 // emptyGroupingCols returns true if the given grouping columns for a GroupBy
 // operator are empty.
 func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(cols).(*opt.ColSet).Empty()
+	return f.mem.LookupPrivate(cols).(opt.ColSet).Empty()
 }
 
 // isCorrelated returns true if variables in the source expression reference

@@ -137,7 +137,7 @@ func (b *Builder) constructList(
 	}
 
 	list := b.factory.InternList(items)
-	private := b.factory.InternPrivate(&colList)
+	private := b.factory.InternPrivate(colList)
 
 	switch op {
 	case opt.ProjectionsOp:

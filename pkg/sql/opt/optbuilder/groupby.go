@@ -219,9 +219,10 @@ func (b *Builder) buildAggregation(
 			argCols = argCols[1:]
 			argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colID))
 		}
+		def := agg.def
 		aggExprs[i] = b.factory.ConstructFunction(
 			b.factory.InternList(argList),
-			b.factory.InternPrivate(agg.def),
+			b.factory.InternPrivate(&def),
 		)
 	}
 
@@ -230,7 +231,7 @@ func (b *Builder) buildAggregation(
 	for i := range groupings {
 		groupingColSet.Add(int(aggInScope.cols[i].id))
 	}
-	outGroup = b.factory.ConstructGroupBy(outGroup, aggList, b.factory.InternPrivate(&groupingColSet))
+	outGroup = b.factory.ConstructGroupBy(outGroup, aggList, b.factory.InternPrivate(groupingColSet))
 
 	// Wrap with having filter if it exists.
 	if having != 0 {

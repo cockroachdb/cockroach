@@ -167,9 +167,9 @@ func typeAsBinary(ev ExprView) types.T {
 }
 
 // typeFunction returns the type of a function expression by extracting it from
-// the function's private field, which is an instance of opt.FuncOpDef.
+// the function's private field, which is an instance of *opt.FuncOpDef.
 func typeFunction(ev ExprView) types.T {
-	return ev.Private().(FuncOpDef).Type
+	return ev.Private().(*FuncOpDef).Type
 }
 
 // typeAsAny returns types.Any for an operator that never has its type used.

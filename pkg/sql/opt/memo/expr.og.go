@@ -1142,7 +1142,7 @@ func (e *Expr) AsScan() *ScanExpr {
 // the same length (same with that of Cols).
 //
 // The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
+// as an opt.ColList. It is legal for Cols to be empty.
 type ValuesExpr Expr
 
 func MakeValuesExpr(rows ListID, cols PrivateID) ValuesExpr {
@@ -1864,7 +1864,7 @@ func (e *Expr) AsExceptAll() *ExceptAllExpr {
 
 // LimitExpr returns a limited subset of the results in the input relation.
 // The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
+// rows. The private field is an opt.Ordering which indicates the desired
 // row ordering (the first rows with respect to this ordering are returned).
 type LimitExpr Expr
 
@@ -2185,7 +2185,7 @@ func (e *Expr) AsTuple() *TupleExpr {
 
 // ProjectionsExpr is a set of typed scalar expressions that will become output
 // columns for a containing Project operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *opt.ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is not legal for Cols to be empty.
 type ProjectionsExpr Expr
 
@@ -2214,7 +2214,7 @@ func (e *Expr) AsProjections() *ProjectionsExpr {
 
 // AggregationsExpr is a set of aggregate expressions that will become output
 // columns for a containing GroupBy operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is legal for Cols to be empty.
 type AggregationsExpr Expr
 
@@ -3452,7 +3452,7 @@ func (e *Expr) AsWhen() *WhenExpr {
 }
 
 // FunctionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncOpDef struct that provides the
+// arguments. The private field is a *opt.FuncOpDef struct that provides the
 // name of the function as well as a pointer to the builtin overload definition.
 type FunctionExpr Expr
 

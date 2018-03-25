@@ -318,7 +318,7 @@ func (b *Builder) buildFunction(
 
 	// Construct a private FuncOpDef that refers to a resolved function overload.
 	return b.factory.ConstructFunction(
-		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
+		b.factory.InternList(argList), b.factory.InternPrivate(&funcDef),
 	), nil
 }
 

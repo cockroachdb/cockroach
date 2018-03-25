@@ -38,7 +38,7 @@ func (_f *Factory) ConstructScan(
 // the same length (same with that of Cols).
 //
 // The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
+// as an opt.ColList. It is legal for Cols to be empty.
 func (_f *Factory) ConstructValues(
 	rows memo.ListID,
 	cols memo.PrivateID,
@@ -1261,7 +1261,7 @@ func (_f *Factory) ConstructExceptAll(
 // ConstructLimit constructs an expression for the Limit operator.
 // Limit returns a limited subset of the results in the input relation.
 // The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
+// rows. The private field is an opt.Ordering which indicates the desired
 // row ordering (the first rows with respect to this ordering are returned).
 func (_f *Factory) ConstructLimit(
 	input memo.GroupID,
@@ -1527,7 +1527,7 @@ func (_f *Factory) ConstructTuple(
 // ConstructProjections constructs an expression for the Projections operator.
 // Projections is a set of typed scalar expressions that will become output
 // columns for a containing Project operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *opt.ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is not legal for Cols to be empty.
 func (_f *Factory) ConstructProjections(
 	elems memo.ListID,
@@ -1549,7 +1549,7 @@ func (_f *Factory) ConstructProjections(
 // ConstructAggregations constructs an expression for the Aggregations operator.
 // Aggregations is a set of aggregate expressions that will become output
 // columns for a containing GroupBy operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is legal for Cols to be empty.
 func (_f *Factory) ConstructAggregations(
 	aggs memo.ListID,
@@ -4408,7 +4408,7 @@ func (_f *Factory) ConstructWhen(
 
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncOpDef struct that provides the
+// arguments. The private field is a *opt.FuncOpDef struct that provides the
 // name of the function as well as a pointer to the builtin overload definition.
 func (_f *Factory) ConstructFunction(
 	args memo.ListID,

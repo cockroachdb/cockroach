@@ -277,7 +277,7 @@ func (b *Builder) buildFrom(
 		rows := []memo.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
 		out = b.factory.ConstructValues(
 			b.factory.InternList(rows),
-			b.factory.InternPrivate(&opt.ColList{}),
+			b.factory.InternPrivate(opt.ColList{}),
 		)
 		outScope = inScope
 	} else {

@@ -260,11 +260,11 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		case opt.ProjectOp:
 			// Get the list of columns from the ProjectionsOp, which has the
 			// natural order.
-			colList := *ev.Child(1).Private().(*opt.ColList)
+			colList := ev.Child(1).Private().(opt.ColList)
 			logProps.FormatColList("columns:", colList, ev.Metadata(), tp)
 
 		case opt.ValuesOp:
-			colList := *ev.Private().(*opt.ColList)
+			colList := ev.Private().(opt.ColList)
 			logProps.FormatColList("columns:", colList, ev.Metadata(), tp)
 
 		case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
@@ -283,7 +283,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	// Special-case handling for GroupBy private; print grouping columns in
 	// addition to full set of columns.
 	case opt.GroupByOp:
-		groupingColSet := *ev.Private().(*opt.ColSet)
+		groupingColSet := ev.Private().(opt.ColSet)
 		logProps.FormatColSet("grouping columns:", groupingColSet, ev.Metadata(), tp)
 
 		// Special-case handling for set operators to show the left and right
