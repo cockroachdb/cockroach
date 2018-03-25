@@ -47,8 +47,8 @@ func TestSimplifyFilters(t *testing.T) {
 	a := f.Metadata().AddTable(cat.Table("a"))
 	ax := f.Metadata().TableColumn(a, 0)
 
-	variable := f.ConstructVariable(f.InternPrivate(ax))
-	constant := f.ConstructConst(f.InternPrivate(tree.NewDInt(1)))
+	variable := f.ConstructVariable(f.InternColumnID(ax))
+	constant := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
 	eq := f.ConstructEq(variable, constant)
 
 	// Filters expression evaluates to False if any operand is False.
@@ -60,7 +60,7 @@ func TestSimplifyFilters(t *testing.T) {
 	}
 
 	// Filters expression evaluates to False if any operand is Null.
-	conditions = []memo.GroupID{f.ConstructNull(f.InternPrivate(types.Unknown)), eq, eq}
+	conditions = []memo.GroupID{f.ConstructNull(f.InternType(types.Unknown)), eq, eq}
 	result = f.ConstructFilters(f.InternList(conditions))
 	ev = o.Optimize(result, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FalseOp {

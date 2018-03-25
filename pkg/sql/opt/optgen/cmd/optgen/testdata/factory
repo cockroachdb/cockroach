@@ -11,7 +11,7 @@ define Not {
 define FuncCall {
     Name Expr
     Args ExprList
-    Def  FuncDef
+    Def  FuncOpDef
 }
 
 # This shouldn't be added to the factory.
@@ -28,7 +28,16 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+// InternFuncOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (_f *Factory) InternFuncOpDef(val *memo.FuncOpDef) memo.PrivateID {
+	return _f.mem.InternFuncOpDef(val)
+}
 
 // ConstructNot constructs an expression for the Not operator.
 // Not is a negate operator.
@@ -115,6 +124,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructInnerJoin constructs an expression for the InnerJoin operator.
@@ -198,6 +209,7 @@ define Minus {
 }
 
 define Const {
+    Value Datum
 }
 
 [NormalizeVarPlus, Normalize]
@@ -221,7 +233,16 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+// InternDatum adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (_f *Factory) InternDatum(val tree.Datum) memo.PrivateID {
+	return _f.mem.InternDatum(val)
+}
 
 // ConstructEq constructs an expression for the Eq operator.
 func (_f *Factory) ConstructEq(
@@ -350,8 +371,10 @@ func (_f *Factory) ConstructMinus(
 }
 
 // ConstructConst constructs an expression for the Const operator.
-func (_f *Factory) ConstructConst() memo.GroupID {
-	_constExpr := memo.MakeConstExpr()
+func (_f *Factory) ConstructConst(
+	value memo.PrivateID,
+) memo.GroupID {
+	_constExpr := memo.MakeConstExpr(value)
 	_group := _f.mem.GroupByFingerprint(_constExpr.Fingerprint())
 	if _group != 0 {
 		return _group
@@ -396,7 +419,7 @@ func init() {
 
 	// ConstOp
 	dynConstructLookup[opt.ConstOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
-		return f.ConstructConst()
+		return f.ConstructConst(memo.PrivateID(operands[0]))
 	}
 
 }
@@ -415,6 +438,7 @@ optgen factory test.opt
 define Func {
     Name Expr
     Args ExprList
+    Def  FuncOpDef
 }
 
 define Variable {
@@ -434,14 +458,31 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+// InternFuncOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (_f *Factory) InternFuncOpDef(val *memo.FuncOpDef) memo.PrivateID {
+	return _f.mem.InternFuncOpDef(val)
+}
+
+// InternColumnID adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (_f *Factory) InternColumnID(val opt.ColumnID) memo.PrivateID {
+	return _f.mem.InternColumnID(val)
+}
 
 // ConstructFunc constructs an expression for the Func operator.
 func (_f *Factory) ConstructFunc(
 	name memo.GroupID,
 	args memo.ListID,
+	def memo.PrivateID,
 ) memo.GroupID {
-	_funcExpr := memo.MakeFuncExpr(name, args)
+	_funcExpr := memo.MakeFuncExpr(name, args, def)
 	_group := _f.mem.GroupByFingerprint(_funcExpr.Fingerprint())
 	if _group != 0 {
 		return _group
@@ -504,7 +545,7 @@ func init() {
 
 	// FuncOp
 	dynConstructLookup[opt.FuncOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
-		return f.ConstructFunc(memo.GroupID(operands[0]), operands[1].ListID())
+		return f.ConstructFunc(memo.GroupID(operands[0]), operands[1].ListID(), memo.PrivateID(operands[2]))
 	}
 
 	// VariableOp
@@ -569,6 +610,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructSelect constructs an expression for the Select operator.
@@ -773,6 +816,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructList constructs an expression for the List operator.
@@ -876,6 +921,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructJoin constructs an expression for the Join operator.
@@ -956,6 +1003,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructList constructs an expression for the List operator.
@@ -1081,6 +1130,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructEq constructs an expression for the Eq operator.
@@ -1243,6 +1294,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructPlus constructs an expression for the Plus operator.
@@ -1394,6 +1447,8 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ConstructLt constructs an expression for the Lt operator.

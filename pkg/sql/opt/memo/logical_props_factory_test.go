@@ -46,8 +46,8 @@ func TestLogicalJoinProps(t *testing.T) {
 		t.Helper()
 
 		// (Join (Scan a) (Scan b) (True))
-		leftGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), a)))
-		rightGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), b)))
+		leftGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), a)))
+		rightGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), b)))
 		onGroup := f.ConstructTrue()
 		operands := xform.DynamicOperands{
 			xform.DynamicID(leftGroup),

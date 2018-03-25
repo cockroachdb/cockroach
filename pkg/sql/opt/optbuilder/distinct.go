@@ -54,5 +54,5 @@ func (b *Builder) buildDistinct(
 	}
 
 	aggList := b.constructList(opt.AggregationsOp, nil, nil)
-	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternPrivate(&groupCols)), outScope
+	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternColSet(groupCols)), outScope
 }
