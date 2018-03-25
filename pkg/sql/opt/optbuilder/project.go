@@ -134,7 +134,7 @@ func (b *Builder) buildVariableProjection(
 	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.id) {
 		panic(groupingError(col.String()))
 	}
-	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
+	out := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 	outScope.cols = append(outScope.cols, *col)
 
 	// Update the column name with the alias if it exists, and mark the column
@@ -193,7 +193,7 @@ func (b *Builder) buildDefaultScalarProjection(
 			outScope.cols = append(outScope.cols, *col)
 
 			// Replace the expression with a reference to the column.
-			return b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
+			return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 		}
 	}
 
