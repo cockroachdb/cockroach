@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
@@ -36,6 +37,8 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	fmt.Fprintf(g.w, "import (\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
 	g.genLayoutTable()
@@ -46,8 +49,9 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
 		g.genExprType(define)
 		g.genExprFuncs(define)
-		g.genMemoFuncs(define)
 	}
+
+	g.genMemoFuncs()
 }
 
 // genLayoutTable generates the layout table; see opLayout.
@@ -155,6 +159,7 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 // genExprFuncs generates the expression's accessor functions, one for each
 // field in the type.
 func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
+	opType := fmt.Sprintf("%sOp", define.Name)
 	exprType := fmt.Sprintf("%sExpr", define.Name)
 
 	// Generate the strongly-typed accessor methods.
@@ -181,13 +186,6 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "func (e *%s) Fingerprint() Fingerprint {\n", exprType)
 	fmt.Fprintf(g.w, "  return Fingerprint(*e)\n")
 	fmt.Fprintf(g.w, "}\n\n")
-}
-
-// genMemoFuncs generates conversion methods on the memo expression, one for
-// each more specialized expression type.
-func (g *exprsGen) genMemoFuncs(define *lang.DefineExpr) {
-	opType := fmt.Sprintf("%sOp", define.Name)
-	exprType := fmt.Sprintf("%sExpr", define.Name)
 
 	// Generate a conversion method from Expr to the more specialized
 	// expression type.
@@ -198,4 +196,19 @@ func (g *exprsGen) genMemoFuncs(define *lang.DefineExpr) {
 
 	fmt.Fprintf(g.w, "  return (*%s)(e)\n", exprType)
 	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genMemoFuncs generates methods on the memo.
+func (g *exprsGen) genMemoFuncs() {
+	for _, typ := range getUniquePrivateTypes(g.compiled.Defines) {
+		// Remove memo package qualifier from types.
+		goType := strings.Replace(mapPrivateType(typ), "memo.", "", -1)
+
+		fmt.Fprintf(g.w, "// Intern%s adds the given value to the memo and returns an ID that\n", typ)
+		fmt.Fprintf(g.w, "// can be used for later lookup. If the same value was added previously, \n")
+		fmt.Fprintf(g.w, "// this method is a no-op and returns the ID of the previous value.\n")
+		fmt.Fprintf(g.w, "func (m *Memo) Intern%s(val %s) PrivateID {\n", typ, goType)
+		fmt.Fprintf(g.w, "return m.privateStorage.intern%s(val)", typ)
+		fmt.Fprintf(g.w, "}\n\n")
+	}
 }

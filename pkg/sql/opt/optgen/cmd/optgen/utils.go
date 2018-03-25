@@ -42,6 +42,33 @@ func mapType(typ string) string {
 	}
 }
 
+func mapPrivateType(typ string) string {
+	switch typ {
+	case "ColumnID":
+		return "opt.ColumnID"
+	case "ColSet":
+		return "opt.ColSet"
+	case "ColList":
+		return "opt.ColList"
+	case "Ordering":
+		return "memo.Ordering"
+	case "FuncOpDef":
+		return "*memo.FuncOpDef"
+	case "ScanOpDef":
+		return "*memo.ScanOpDef"
+	case "SetOpColMap":
+		return "*memo.SetOpColMap"
+	case "Datum":
+		return "tree.Datum"
+	case "Type":
+		return "types.T"
+	case "TypedExpr":
+		return "tree.TypedExpr"
+	default:
+		panic(fmt.Sprintf("unrecognized private type: %s", typ))
+	}
+}
+
 // isListType returns true if the given type is ExprList. An expression may
 // have at most one field with a list type.
 func isListType(typ string) bool {
@@ -91,6 +118,26 @@ func privateField(d *lang.DefineExpr) *lang.DefineFieldExpr {
 	}
 
 	return nil
+}
+
+// getUniquePrivateTypes returns a list of the distinct private value types used
+// in the given set of define expressions. These are used to generating methods
+// to intern private values.
+func getUniquePrivateTypes(defines lang.DefineSetExpr) []string {
+	var types []string
+	unique := make(map[lang.StringExpr]bool)
+
+	for _, define := range defines {
+		defineField := privateField(define)
+		if defineField != nil {
+			if !unique[defineField.Type] {
+				types = append(types, string(defineField.Type))
+				unique[defineField.Type] = true
+			}
+		}
+	}
+
+	return types
 }
 
 // generateDefineComments is a helper function that generates a block of

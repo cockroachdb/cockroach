@@ -128,11 +128,11 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
-		return f.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(*memo.Ordering).Provides(required)
+		return f.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering).Provides(required)
 
 	case opt.OffsetOp:
 		// Offset can provide the same ordering it requires of its input.
-		return f.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(*memo.Ordering).Provides(required)
+		return f.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering).Provides(required)
 	}
 
 	return false
@@ -182,7 +182,7 @@ func (f physicalPropsFactory) constructChildProps(
 			} else {
 				ordering = mexpr.AsOffset().Ordering()
 			}
-			childProps.Ordering = *f.mem.LookupPrivate(ordering).(*memo.Ordering)
+			childProps.Ordering = f.mem.LookupPrivate(ordering).(memo.Ordering)
 		}
 	}
 

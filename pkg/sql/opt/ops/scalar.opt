@@ -120,7 +120,7 @@ define False {
 
 [Scalar]
 define Placeholder {
-    Value Interface
+    Value TypedExpr
 }
 
 [Scalar]
@@ -130,7 +130,7 @@ define Tuple {
 
 # Projections is a set of typed scalar expressions that will become output
 # columns for a containing Project operator. The private Cols field contains
-# the list of column indexes returned by the expression, as a *opt.ColList. It
+# the list of column indexes returned by the expression, as an opt.ColList. It
 # is not legal for Cols to be empty.
 [Scalar]
 define Projections {
@@ -140,7 +140,7 @@ define Projections {
 
 # Aggregations is a set of aggregate expressions that will become output
 # columns for a containing GroupBy operator. The private Cols field contains
-# the list of column indexes returned by the expression, as a *ColList. It
+# the list of column indexes returned by the expression, as an opt.ColList. It
 # is legal for Cols to be empty.
 [Scalar]
 define Aggregations {
@@ -468,7 +468,7 @@ define When {
 }
 
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-# arguments. The private field is an opt.FuncOpDef struct that provides the
+# arguments. The private field is a *opt.FuncOpDef struct that provides the
 # name of the function as well as a pointer to the builtin overload definition.
 [Scalar]
 define Function {

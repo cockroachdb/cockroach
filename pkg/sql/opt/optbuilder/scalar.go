@@ -93,7 +93,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.id) {
 			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.id)
 		}
-		return b.factory.ConstructVariable(b.factory.InternPrivate(t.id))
+		return b.factory.ConstructVariable(b.factory.InternColumnID(t.id))
 
 	case *tree.AndExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)
@@ -109,7 +109,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 				b.buildScalar(t.TypedRight(), inScope),
 			)
 		} else if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
 			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
 		}
@@ -143,7 +143,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 	case *tree.CastExpr:
 		arg := b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
 		typ := coltypes.CastTargetToDatumType(t.Type)
-		out = b.factory.ConstructCast(arg, b.factory.InternPrivate(typ))
+		out = b.factory.ConstructCast(arg, b.factory.InternType(typ))
 
 	case *tree.CoalesceExpr:
 		args := make([]memo.GroupID, len(t.Exprs))
@@ -169,7 +169,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 				// Most comparison ops map directly to a factory method.
 				out = fn(b.factory, left, right)
 			} else if b.AllowUnsupportedExpr {
-				out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+				out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 			} else {
 				// TODO(rytaft): remove this check when we are confident that
 				// all operators are included in comparisonOpMap.
@@ -191,7 +191,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
 			panic(errorf("invalid column ordinal @%d", t.Idx))
 		}
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(inScope.cols[t.Idx].id))
+		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
 		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:
@@ -215,7 +215,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 			}
 			out = b.buildDatum(d)
 		} else {
-			out = b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
+			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
 			// TODO(rytaft): Do we need to update varsUsed here?
 		}
 
@@ -251,7 +251,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 
 	default:
 		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
 			panic(errorf("not yet implemented: scalar expr: %T", scalar))
 		}
@@ -274,7 +274,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 // buildDatum maps certain datums to separate operators, for easier matching.
 func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 	if d == tree.DNull {
-		return b.factory.ConstructNull(b.factory.InternPrivate(types.Unknown))
+		return b.factory.ConstructNull(b.factory.InternType(types.Unknown))
 	}
 	if boolVal, ok := d.(*tree.DBool); ok {
 		// Map True/False datums to True/False operator.
@@ -283,7 +283,7 @@ func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 		}
 		return b.factory.ConstructFalse()
 	}
-	return b.factory.ConstructConst(b.factory.InternPrivate(d))
+	return b.factory.ConstructConst(b.factory.InternDatum(d))
 }
 
 // buildFunction builds a set of memo groups that represent a function
@@ -318,7 +318,7 @@ func (b *Builder) buildFunction(
 
 	// Construct a private FuncOpDef that refers to a resolved function overload.
 	return b.factory.ConstructFunction(
-		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
+		b.factory.InternList(argList), b.factory.InternFuncOpDef(&funcDef),
 	), nil
 }
 

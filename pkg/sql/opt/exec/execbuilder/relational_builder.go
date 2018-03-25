@@ -141,7 +141,7 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 
 func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 	md := ev.Metadata()
-	cols := *ev.Private().(*opt.ColList)
+	cols := ev.Private().(opt.ColList)
 	numCols := len(cols)
 
 	rows := make([][]tree.TypedExpr, ev.ChildCount())
@@ -226,7 +226,7 @@ func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	projections := ev.Child(1)
-	colList := *projections.Private().(*opt.ColList)
+	colList := projections.Private().(opt.ColList)
 	exprs := make(tree.TypedExprs, len(colList))
 	colNames := make([]string, len(exprs))
 	ctx := input.makeBuildScalarCtx()
@@ -284,7 +284,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	}
 	aggregations := ev.Child(1)
 	numAgg := aggregations.ChildCount()
-	groupingCols := *ev.Private().(*opt.ColSet)
+	groupingCols := ev.Private().(opt.ColSet)
 
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	var ep execPlan
@@ -293,11 +293,11 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnID(i)))
 	}
 
-	aggColList := *aggregations.Private().(*opt.ColList)
+	aggColList := aggregations.Private().(opt.ColList)
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
 		fn := aggregations.Child(i)
-		funcDef := fn.Private().(memo.FuncOpDef)
+		funcDef := fn.Private().(*memo.FuncOpDef)
 
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
