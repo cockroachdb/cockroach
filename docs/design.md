@@ -349,9 +349,7 @@ There are several scenarios in which transactions interact:
   to proceed; after all, it will be reading an older version of the
   value and so does not conflict. Recall that the write intent may
   be committed with a later timestamp than its candidate; it will
-  never commit with an earlier one. **Side note**: if a SI transaction
-  reader finds an intent with a newer timestamp which the reader’s own
-  transaction has written, the reader always returns that intent's value.
+  never commit with an earlier one. 
 
 - **Reader encounters write intent or value with newer timestamp in the
   near future:** In this case, we have to be careful. The newer
