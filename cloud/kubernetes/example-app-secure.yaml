@@ -13,7 +13,6 @@ spec:
       volumes:
       - name: client-certs
         emptyDir: {}
-
       initContainers:
       # The init-certs container sends a certificate signing request to the
       # kubernetes cluster.
@@ -23,7 +22,7 @@ spec:
       # In addition to the client certificate and key, the init-certs entrypoint will symlink
       # the cluster CA to the certs directory.
       - name: init-certs
-        image: cockroachdb/cockroach-k8s-request-cert:0.2
+        image: cockroachdb/cockroach-k8s-request-cert:0.3
         imagePullPolicy: IfNotPresent
         command:
         - "/bin/ash"
@@ -37,7 +36,6 @@ spec:
         volumeMounts:
         - name: client-certs
           mountPath: /cockroach-certs
-
       containers:
       - name: loadgen
         image: cockroachdb/loadgen-kv:0.1
