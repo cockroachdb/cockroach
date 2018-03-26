@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -156,7 +157,7 @@ func (p *planner) selectIndex(
 			); err != nil {
 				return nil, err
 			}
-			if spans, ok := c.ic.Spans(); ok && len(spans) == 0 {
+			if c.ic.Constraint().IsContradiction() {
 				// No spans (i.e. the filter is always false). Note that if a filter
 				// results in no constraints, ok would be false.
 				return newZeroNode(s.resultColumns), nil
@@ -167,8 +168,8 @@ func (p *planner) selectIndex(
 	// Remove any inverted indexes that don't generate any spans, a full-scan of
 	// an inverted index is always invalid.
 	for i := 0; i < len(candidates); {
-		spans, ok := candidates[i].ic.Spans()
-		if candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (!ok || len(spans) == 0) {
+		c := candidates[i].ic.Constraint()
+		if candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (c == nil || c.IsUnconstrained()) {
 			candidates[i] = candidates[len(candidates)-1]
 			candidates = candidates[:len(candidates)-1]
 		} else {
@@ -218,13 +219,10 @@ func (p *planner) selectIndex(
 
 	if log.V(2) {
 		for i, c := range candidates {
-			spans, ok := c.ic.Spans()
-			spansStr := "<none>"
-			if ok {
-				spansStr = fmt.Sprintf("%v", spans)
-			}
-			log.Infof(ctx, "%d: selectIndex(%s): cost=%v logicalSpans=%s reverse=%t",
-				i, c.index.Name, c.cost, spansStr, c.reverse)
+			log.Infof(
+				ctx, "%d: selectIndex(%s): cost=%v constraint=%s reverse=%t",
+				i, c.index.Name, c.cost, c.ic.Constraint(), c.reverse,
+			)
 		}
 	}
 
@@ -235,13 +233,12 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
-	logicalSpans, ok := c.ic.Spans()
 	var err error
-	s.spans, err = spansFromLogicalSpans(s.desc, c.index, logicalSpans, ok)
+	s.spans, err = spansFromConstraint(s.desc, c.index, c.ic.Constraint())
 	if err != nil {
 		return nil, errors.Wrapf(
-			err, "logicalSpans = %v, table ID = %d, index ID = %d",
-			logicalSpans, s.desc.ID, s.index.ID,
+			err, "constraint = %s, table ID = %d, index ID = %d",
+			c.ic.Constraint(), s.desc.ID, s.index.ID,
 		)
 	}
 
@@ -463,28 +460,28 @@ func (v *indexInfo) makeIndexConstraints(
 
 		colDesc := &v.desc.Columns[idx]
 		colInfos = append(colInfos, idxconstraint.IndexColumnInfo{
-			VarID:     opt.ColumnID(idx + 1),
-			Typ:       colDesc.Type.ToDatumType(),
-			Direction: dir,
-			Nullable:  colDesc.Nullable,
+			OrderingColumn: opt.MakeOrderingColumn(opt.ColumnID(idx+1), dir == encoding.Descending),
+			Typ:            colDesc.Type.ToDatumType(),
+			Nullable:       colDesc.Nullable,
 		})
 	}
 	v.ic.Init(filter, colInfos, isInverted, evalCtx, optimizer.Factory())
-	spans, ok := v.ic.Spans()
-	if !ok {
+	idxConstraint := v.ic.Constraint()
+	if idxConstraint.IsUnconstrained() {
 		// The index isn't being restricted at all, bump the cost significantly to
 		// make any index which does restrict the keys more desirable.
 		v.cost *= 1000
 	} else {
-		v.exactPrefix = idxconstraint.ExactPrefix(spans, evalCtx)
+		v.exactPrefix = idxConstraint.ExactPrefix(evalCtx)
 		// Find the number of columns that are restricted in all spans.
 		numCols := len(colInfos)
-		for _, sp := range spans {
+		for i := 0; i < idxConstraint.Spans.Count(); i++ {
+			sp := idxConstraint.Spans.Get(i)
 			// Take the max between the length of the start values and the end
 			// values.
-			n := len(sp.Start.Vals)
-			if n < len(sp.End.Vals) {
-				n = len(sp.End.Vals)
+			n := sp.StartKey().Length()
+			if e := sp.EndKey().Length(); n < e {
+				n = e
 			}
 			// Take the minimum n across all spans.
 			if numCols > n {
@@ -501,19 +498,15 @@ func (v *indexInfo) makeIndexConstraints(
 func unconstrainedSpans(
 	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
-	return spansFromLogicalSpans(
-		tableDesc, index, nil /* logicalSpans */, false, /* logicalSpansOk */
-	)
+	return spansFromConstraint(tableDesc, index, nil)
 }
 
-// spansFromLogicalSpans converts op.LogicalSpans to roachpb.Spans.  interstices
-// are pieces of the key that need to be inserted after each column (for
-// interleavings).
-func spansFromLogicalSpans(
-	tableDesc *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	logicalSpans idxconstraint.LogicalSpans,
-	logicalSpansOk bool,
+// spansFromConstraint converts the spans in a Constraint to roachpb.Spans.
+//
+// interstices are pieces of the key that need to be inserted after each column
+// (for interleavings).
+func spansFromConstraint(
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, c *constraint.Constraint,
 ) (roachpb.Spans, error) {
 	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
@@ -537,18 +530,18 @@ func spansFromLogicalSpans(
 			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
 	}
 
-	if !logicalSpansOk {
+	if c == nil || c.IsUnconstrained() {
 		// Encode a full span.
-		sp, err := spanFromLogicalSpan(tableDesc, index, idxconstraint.MakeFullSpan(), interstices)
+		sp, err := spanFromConstraintSpan(tableDesc, index, &constraint.UnconstrainedSpan, interstices)
 		if err != nil {
 			return nil, err
 		}
 		return roachpb.Spans{sp}, nil
 	}
 
-	spans := make(roachpb.Spans, len(logicalSpans))
-	for i, ls := range logicalSpans {
-		s, err := spanFromLogicalSpan(tableDesc, index, ls, interstices)
+	spans := make(roachpb.Spans, c.Spans.Count())
+	for i := range spans {
+		s, err := spanFromConstraintSpan(tableDesc, index, c.Spans.Get(i), interstices)
 		if err != nil {
 			return nil, err
 		}
@@ -557,13 +550,14 @@ func spansFromLogicalSpans(
 	return spans, nil
 }
 
-// encodeLogicalKey encodes each logical part of a key into a
+// encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key; interstices[i] is inserted before the i-th value.
-func encodeLogicalKey(
-	index *sqlbase.IndexDescriptor, vals tree.Datums, interstices [][]byte,
+func encodeConstraintKey(
+	index *sqlbase.IndexDescriptor, ck constraint.Key, interstices [][]byte,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
-	for i, val := range vals {
+	for i := 0; i < ck.Length(); i++ {
+		val := ck.Value(i)
 		key = append(key, interstices[i]...)
 
 		var err error
@@ -599,38 +593,38 @@ func encodeLogicalKey(
 	return key, nil
 }
 
-// spanFromLogicalSpan converts an opt.LogicalSpan to a
-// roachpb.Span.
-func spanFromLogicalSpan(
+// spanFromConstraintSpan converts a constraint.Span to a roachpb.Span.
+func spanFromConstraintSpan(
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	ls idxconstraint.LogicalSpan,
+	cs *constraint.Span,
 	interstices [][]byte,
 ) (roachpb.Span, error) {
 	var s roachpb.Span
 	var err error
 	// Encode each logical part of the start key.
-	s.Key, err = encodeLogicalKey(index, ls.Start.Vals, interstices)
+	s.Key, err = encodeConstraintKey(index, cs.StartKey(), interstices)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	if ls.Start.Inclusive {
-		s.Key = append(s.Key, interstices[len(ls.Start.Vals)]...)
+	if cs.StartBoundary() == constraint.IncludeBoundary {
+		s.Key = append(s.Key, interstices[cs.StartKey().Length()]...)
 	} else {
 		// We need to exclude the value this logical part refers to.
 		s.Key = s.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	s.EndKey, err = encodeLogicalKey(index, ls.End.Vals, interstices)
+	s.EndKey, err = encodeConstraintKey(index, cs.EndKey(), interstices)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
-	s.EndKey = append(s.EndKey, interstices[len(ls.End.Vals)]...)
+	s.EndKey = append(s.EndKey, interstices[cs.EndKey().Length()]...)
 
 	// We tighten the end key to prevent reading interleaved children after the
-	// last parent key. If ls.End.Inclusive is true, we also advance the key as
+	// last parent key. If cs.End.Inclusive is true, we also advance the key as
 	// necessary.
-	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, ls.End.Inclusive)
+	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
+	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, endInclusive)
 	if err != nil {
 		return roachpb.Span{}, err
 	}

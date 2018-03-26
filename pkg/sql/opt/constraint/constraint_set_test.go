@@ -33,15 +33,17 @@ func TestConstraintSetIntersect(t *testing.T) {
 		}
 	}
 
-	data := newSpanTestData(kc12)
+	data := newSpanTestData()
 
 	// Simple AND case.
 	// @1 > 20
-	gt20 := testSet(kc1, &data.spGt20)
+	var c Constraint
+	c.InitSingleSpan(kc1, &data.spGt20)
+	gt20 := SingleConstraint(&c)
 	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 <= 40
-	le40 := testSet(kc1, &data.spLe40)
+	le40 := SingleSpanConstraint(kc1, &data.spLe40)
 	test(le40, "/1: [ - /40]\n")
 
 	// @1 > 20 AND @1 <= 40
@@ -52,7 +54,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 
 	// Include constraint on multiple columns.
 	// (@1, @2) >= (10, 15)
-	gt1015 := testSet(kc12, &data.spGe1015)
+	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
 	test(gt1015, "/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
@@ -67,7 +69,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
-	lt80 := testSet(kc2, &data.spLt80)
+	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
 	multi3 := lt80.Intersect(evalCtx, multi2)
 	test(multi3, ""+
 		"/1: [ - /40]\n"+
@@ -81,7 +83,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)\n")
 
 	// Mismatched number of constraints in each set.
-	eq10 := testSet(kc1, &data.spEq10)
+	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
 	mismatched := eq10.Intersect(evalCtx, multi3)
 	test(mismatched, ""+
 		"/1: [/10 - /10]\n"+
@@ -95,7 +97,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)\n")
 
 	// Multiple intersecting constraints on different columns.
-	diffCols := eq10.Intersect(evalCtx, testSet(kc2, &data.spGt20))
+	diffCols := eq10.Intersect(evalCtx, SingleSpanConstraint(kc2, &data.spGt20))
 	res := diffCols.Intersect(evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10]\n"+
@@ -132,7 +134,7 @@ func TestConstraintSetUnion(t *testing.T) {
 	kc2 := testKeyContext(2)
 	kc12 := testKeyContext(1, 2)
 	evalCtx := kc1.EvalCtx
-	data := newSpanTestData(kc12)
+	data := newSpanTestData()
 
 	test := func(cs *Set, expected string) {
 		t.Helper()
@@ -143,11 +145,11 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Simple OR case.
 	// @1 > 20
-	gt20 := testSet(kc1, &data.spGt20)
+	gt20 := SingleSpanConstraint(kc1, &data.spGt20)
 	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 = 10
-	eq10 := testSet(kc1, &data.spEq10)
+	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
 	test(eq10, "/1: [/10 - /10]\n")
 
 	// @1 > 20 OR @1 = 10
@@ -158,7 +160,7 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
-	le40 := testSet(kc1, &data.spLe40)
+	le40 := SingleSpanConstraint(kc1, &data.spLe40)
 	res := gt20eq10.Union(evalCtx, le40)
 	test(res, "unconstrained\n")
 	res = le40.Union(evalCtx, gt20eq10)
@@ -166,13 +168,13 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
-	gt1015 := testSet(kc12, &data.spGe1015)
+	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
 	res = gt1015.Union(evalCtx, gt1015)
 	test(res, "/1/2: [/10/15 - ]\n")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
-	lt80 := testSet(kc2, &data.spLt80)
+	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
 	res = gt1015.Union(evalCtx, lt80)
 	test(res, "unconstrained\n")
 	res = lt80.Union(evalCtx, gt1015)
@@ -183,7 +185,7 @@ func TestConstraintSetUnion(t *testing.T) {
 	multi3 := gt1015.Intersect(evalCtx, lt80)
 	multi3 = multi3.Intersect(evalCtx, gt20)
 
-	eq80 := testSet(kc2, &data.spEq80)
+	eq80 := SingleSpanConstraint(kc2, &data.spEq80)
 	multi2 := eq10.Intersect(evalCtx, eq80)
 
 	res = multi3.Union(evalCtx, multi2)
@@ -232,7 +234,7 @@ type spanTestData struct {
 	spGe1015 Span // [/10/15 - ]
 }
 
-func newSpanTestData(keyCtx *KeyContext) *spanTestData {
+func newSpanTestData() *spanTestData {
 	data := &spanTestData{}
 
 	key10 := MakeKey(tree.NewDInt(10))
@@ -242,29 +244,23 @@ func newSpanTestData(keyCtx *KeyContext) *spanTestData {
 	key80 := MakeKey(tree.NewDInt(80))
 
 	// [/10 - /10]
-	data.spEq10.Set(keyCtx, key10, IncludeBoundary, key10, IncludeBoundary)
+	data.spEq10.Init(key10, IncludeBoundary, key10, IncludeBoundary)
 
 	// (/20 - ]
-	data.spGt20.Set(keyCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	data.spGt20.Init(key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	// [ - /40]
-	data.spLe40.Set(keyCtx, EmptyKey, IncludeBoundary, key40, IncludeBoundary)
+	data.spLe40.Init(EmptyKey, IncludeBoundary, key40, IncludeBoundary)
 
 	// [ - /80)
-	data.spLt80.Set(keyCtx, EmptyKey, IncludeBoundary, key80, ExcludeBoundary)
+	data.spLt80.Init(EmptyKey, IncludeBoundary, key80, ExcludeBoundary)
 
 	// [/80 - /80]
-	data.spEq80.Set(keyCtx, key80, IncludeBoundary, key80, IncludeBoundary)
+	data.spEq80.Init(key80, IncludeBoundary, key80, IncludeBoundary)
 
 	// [/10/15 - ]
 	key1015 := key10.Concat(key15)
-	data.spGe1015.Set(keyCtx, key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
+	data.spGe1015.Init(key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	return data
-}
-
-func testSet(keyCtx *KeyContext, sp *Span) *Set {
-	var c Constraint
-	c.Init(keyCtx, SingleSpan(sp))
-	return SingleConstraint(&c)
 }

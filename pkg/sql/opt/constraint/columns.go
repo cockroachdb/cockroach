@@ -69,11 +69,21 @@ func (c *Columns) Get(nth int) opt.OrderingColumn {
 
 // Equals returns true if the two lists of columns are identical.
 func (c *Columns) Equals(other *Columns) bool {
-	if c.Count() != other.Count() {
+	n := c.Count()
+	if n != other.Count() {
 		return false
 	}
-	for i := 0; i < c.Count(); i++ {
-		if c.Get(i) != other.Get(i) {
+	if c.firstCol != other.firstCol {
+		return false
+	}
+	// Fast path for when the two share the same slice.
+	if n == 1 || &c.otherCols[0] == &other.otherCols[0] {
+		return true
+	}
+	// Hint for the compiler to eliminate bounds check inside the loop.
+	tmp := other.otherCols[:len(c.otherCols)]
+	for i, v := range c.otherCols {
+		if v != tmp[i] {
 			return false
 		}
 	}

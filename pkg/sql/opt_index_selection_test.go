@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -86,7 +86,7 @@ func makeSpans(
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
-) (logicalSpans idxconstraint.LogicalSpans, spans roachpb.Spans) {
+) (_ *constraint.Constraint, spans roachpb.Spans) {
 	expr := parseAndNormalizeExpr(t, p, sql, sel)
 
 	c := &indexInfo{
@@ -116,15 +116,11 @@ func makeSpans(
 		t.Fatal(err)
 	}
 
-	logicalSpans, ok := c.ic.Spans()
-	spans, err = spansFromLogicalSpans(desc, index, logicalSpans, ok)
+	spans, err = spansFromConstraint(desc, index, c.ic.Constraint())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok {
-		logicalSpans = idxconstraint.LogicalSpans{idxconstraint.MakeFullSpan()}
-	}
-	return logicalSpans, spans
+	return c.ic.Constraint(), spans
 }
 
 func TestMakeSpans(t *testing.T) {
@@ -346,8 +342,8 @@ func TestExactPrefix(t *testing.T) {
 			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			logicalSpans, _ := makeSpans(t, p, d.expr, desc, index, sel)
-			prefix := idxconstraint.ExactPrefix(logicalSpans, p.EvalContext())
+			c, _ := makeSpans(t, p, d.expr, desc, index, sel)
+			prefix := c.ExactPrefix(p.EvalContext())
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}

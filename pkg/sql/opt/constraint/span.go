@@ -68,40 +68,44 @@ func (sp *Span) IsUnconstrained() bool {
 	return sp.start.IsEmpty() && sp.end.IsEmpty()
 }
 
-// Set sets the boundaries of this span to the given values. The following
-// spans are not allowed (causes panic):
-//  1. Empty span (should never be used in a constraint)
-//  2. Unconstrained span (should never be used in a constraint)
-//  3. Exclusive empty key boundary (use inclusive instead)
-func (sp *Span) Set(
-	keyCtx *KeyContext, start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary,
-) {
-	if start.IsEmpty() {
-		if end.IsEmpty() {
-			// Constraint should be discarded rather than using unconstrained
-			// span, because absence of constraint implies unconstrained span.
-			panic("unconstrained span should never be used")
-		}
-		if startBoundary == ExcludeBoundary {
-			// Enforce one representation for empty boundary.
-			panic("an empty start boundary must be inclusive")
-		}
-	} else if end.IsEmpty() {
-		if endBoundary == ExcludeBoundary {
-			// Enforce one representation for empty boundary.
-			panic("an empty end boundary must be inclusive")
-		}
+// StartKey returns the start key.
+func (sp *Span) StartKey() Key {
+	return sp.start
+}
+
+// StartBoundary returns whether the start key is included or excluded.
+func (sp *Span) StartBoundary() SpanBoundary {
+	return sp.startBoundary
+}
+
+// EndKey returns the end key.
+func (sp *Span) EndKey() Key {
+	return sp.end
+}
+
+// EndBoundary returns whether the end key is included or excluded.
+func (sp *Span) EndBoundary() SpanBoundary {
+	return sp.endBoundary
+}
+
+// Init sets the boundaries of this span to the given values. The following
+// spans are not allowed:
+//  1. Empty span (should never be used in a constraint); not verified.
+//  2. Exclusive empty key boundary (use inclusive instead); causes panic.
+func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary) {
+	if start.IsEmpty() && startBoundary == ExcludeBoundary {
+		// Enforce one representation for empty boundary.
+		panic("an empty start boundary must be inclusive")
+	}
+	if end.IsEmpty() && endBoundary == ExcludeBoundary {
+		// Enforce one representation for empty boundary.
+		panic("an empty end boundary must be inclusive")
 	}
 
 	sp.start = start
 	sp.startBoundary = startBoundary
 	sp.end = end
 	sp.endBoundary = endBoundary
-
-	// Ensure that start boundary is less than end boundary.
-	if sp.start.Compare(keyCtx, sp.end, sp.startExt(), sp.endExt()) >= 0 {
-		panic("span cannot be empty")
-	}
 }
 
 // Compare returns an integer indicating the ordering of the two spans. The
@@ -281,6 +285,12 @@ func (sp *Span) PreferInclusive(keyCtx *KeyContext) {
 			sp.endBoundary = IncludeBoundary
 		}
 	}
+}
+
+// CutFront removes the first numCols columns in both keys.
+func (sp *Span) CutFront(numCols int) {
+	sp.start = sp.start.CutFront(numCols)
+	sp.end = sp.end.CutFront(numCols)
 }
 
 func (sp *Span) startExt() KeyExtension {
