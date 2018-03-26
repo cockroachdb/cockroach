@@ -390,6 +390,7 @@ var (
 		types.Decimal,
 		types.Date,
 		types.Time,
+		types.TimeTZ,
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,
