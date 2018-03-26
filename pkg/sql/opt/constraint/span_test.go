@@ -54,12 +54,10 @@ func TestSpanSet(t *testing.T) {
 		},
 	}
 
-	keyCtx := testKeyContext(1, 2)
-
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			var sp Span
-			sp.Set(keyCtx, tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
 			}
@@ -80,55 +78,18 @@ func TestSpanSet(t *testing.T) {
 	}
 
 	var sp Span
-	// Try to create unconstrained span.
-	testPanic(t, func() {
-		sp.Set(keyCtx, EmptyKey, IncludeBoundary, EmptyKey, IncludeBoundary)
-	}, "unconstrained span should never be used")
-
 	// Create exclusive empty start boundary.
 	testPanic(t, func() {
-		sp.Set(keyCtx, EmptyKey, ExcludeBoundary, MakeKey(tree.DNull), IncludeBoundary)
+		sp.Init(EmptyKey, ExcludeBoundary, MakeKey(tree.DNull), IncludeBoundary)
 	}, "an empty start boundary must be inclusive")
 
 	// Create exclusive empty end boundary.
 	testPanic(t, func() {
-		sp.Set(keyCtx, MakeKey(tree.DNull), IncludeBoundary, EmptyKey, ExcludeBoundary)
+		sp.Init(MakeKey(tree.DNull), IncludeBoundary, EmptyKey, ExcludeBoundary)
 	}, "an empty end boundary must be inclusive")
-
-	// Try to create zero-length spans.
-	testPanic(t, func() {
-		sp.Set(
-			keyCtx,
-			MakeKey(tree.NewDInt(1)), IncludeBoundary,
-			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
-		)
-	}, "span cannot be empty")
-
-	testPanic(t, func() {
-		sp.Set(
-			keyCtx,
-			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(5)), ExcludeBoundary,
-			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(5)), IncludeBoundary,
-		)
-	}, "span cannot be empty")
-
-	// Try to create spans where start boundary > end boundary.
-	testPanic(t, func() {
-		sp.Set(keyCtx, MakeKey(tree.NewDInt(0)), IncludeBoundary, MakeKey(tree.DNull), ExcludeBoundary)
-	}, "span cannot be empty")
-
-	testPanic(t, func() {
-		sp.Set(
-			keyCtx,
-			MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(1)), IncludeBoundary,
-			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(5)), IncludeBoundary,
-		)
-	}, "span cannot be empty")
 }
 
 func TestSpanUnconstrained(t *testing.T) {
-	keyCtx := testKeyContext(1, 2)
-
 	// Test unconstrained span.
 	unconstrained := Span{}
 	if !unconstrained.IsUnconstrained() {
@@ -141,11 +102,7 @@ func TestSpanUnconstrained(t *testing.T) {
 
 	// Test constrained span's IsUnconstrained method.
 	var sp Span
-	sp.Set(
-		keyCtx,
-		MakeKey(tree.NewDInt(5)), IncludeBoundary,
-		MakeKey(tree.NewDInt(5)), IncludeBoundary,
-	)
+	sp.Init(MakeKey(tree.NewDInt(5)), IncludeBoundary, MakeKey(tree.NewDInt(5)), IncludeBoundary)
 	if sp.IsUnconstrained() {
 		t.Errorf("IsUnconstrained should have returned false")
 	}
@@ -170,55 +127,55 @@ func TestSpanCompare(t *testing.T) {
 	var spans [17]Span
 
 	// [ - /2)
-	spans[0].Set(keyCtx, EmptyKey, IncludeBoundary, two, ExcludeBoundary)
+	spans[0].Init(EmptyKey, IncludeBoundary, two, ExcludeBoundary)
 
 	// [ - /2/1)
-	spans[1].Set(keyCtx, EmptyKey, IncludeBoundary, twoone, ExcludeBoundary)
+	spans[1].Init(EmptyKey, IncludeBoundary, twoone, ExcludeBoundary)
 
 	// [ - /2/1]
-	spans[2].Set(keyCtx, EmptyKey, IncludeBoundary, twoone, IncludeBoundary)
+	spans[2].Init(EmptyKey, IncludeBoundary, twoone, IncludeBoundary)
 
 	// [ - /2]
-	spans[3].Set(keyCtx, EmptyKey, IncludeBoundary, two, IncludeBoundary)
+	spans[3].Init(EmptyKey, IncludeBoundary, two, IncludeBoundary)
 
 	// [ - ]
 	spans[4] = Span{}
 
 	// [/1 - /2/1)
-	spans[5].Set(keyCtx, one, IncludeBoundary, twoone, ExcludeBoundary)
+	spans[5].Init(one, IncludeBoundary, twoone, ExcludeBoundary)
 
 	// [/1 - /2/1]
-	spans[6].Set(keyCtx, one, IncludeBoundary, twoone, IncludeBoundary)
+	spans[6].Init(one, IncludeBoundary, twoone, IncludeBoundary)
 
 	// [/1 - ]
-	spans[7].Set(keyCtx, one, IncludeBoundary, EmptyKey, IncludeBoundary)
+	spans[7].Init(one, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	// [/1/1 - /2)
-	spans[8].Set(keyCtx, oneone, IncludeBoundary, two, ExcludeBoundary)
+	spans[8].Init(oneone, IncludeBoundary, two, ExcludeBoundary)
 
 	// [/1/1 - /2]
-	spans[9].Set(keyCtx, oneone, IncludeBoundary, two, IncludeBoundary)
+	spans[9].Init(oneone, IncludeBoundary, two, IncludeBoundary)
 
 	// [/1/1 - ]
-	spans[10].Set(keyCtx, oneone, IncludeBoundary, EmptyKey, IncludeBoundary)
+	spans[10].Init(oneone, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	// (/1/1 - /2)
-	spans[11].Set(keyCtx, oneone, ExcludeBoundary, two, ExcludeBoundary)
+	spans[11].Init(oneone, ExcludeBoundary, two, ExcludeBoundary)
 
 	// (/1/1 - /2]
-	spans[12].Set(keyCtx, oneone, ExcludeBoundary, two, IncludeBoundary)
+	spans[12].Init(oneone, ExcludeBoundary, two, IncludeBoundary)
 
 	// (/1/1 - ]
-	spans[13].Set(keyCtx, oneone, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	spans[13].Init(oneone, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	// (/1 - /2/1)
-	spans[14].Set(keyCtx, one, ExcludeBoundary, twoone, ExcludeBoundary)
+	spans[14].Init(one, ExcludeBoundary, twoone, ExcludeBoundary)
 
 	// (/1 - /2/1]
-	spans[15].Set(keyCtx, one, ExcludeBoundary, twoone, IncludeBoundary)
+	spans[15].Init(one, ExcludeBoundary, twoone, IncludeBoundary)
 
 	// (/1 - ]
-	spans[16].Set(keyCtx, one, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	spans[16].Init(one, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	for i := 0; i < len(spans)-1; i++ {
 		testComp(t, spans[i], spans[i+1], -1)
@@ -230,55 +187,55 @@ func TestSpanCompare(t *testing.T) {
 	keyCtx = testKeyContext(-1, 2)
 
 	// [ - /1)
-	spans[0].Set(keyCtx, EmptyKey, IncludeBoundary, one, ExcludeBoundary)
+	spans[0].Init(EmptyKey, IncludeBoundary, one, ExcludeBoundary)
 
 	// [ - /1/1)
-	spans[1].Set(keyCtx, EmptyKey, IncludeBoundary, oneone, ExcludeBoundary)
+	spans[1].Init(EmptyKey, IncludeBoundary, oneone, ExcludeBoundary)
 
 	// [ - /1/1]
-	spans[2].Set(keyCtx, EmptyKey, IncludeBoundary, oneone, IncludeBoundary)
+	spans[2].Init(EmptyKey, IncludeBoundary, oneone, IncludeBoundary)
 
 	// [ - /1]
-	spans[3].Set(keyCtx, EmptyKey, IncludeBoundary, one, IncludeBoundary)
+	spans[3].Init(EmptyKey, IncludeBoundary, one, IncludeBoundary)
 
 	// [ - ]
 	spans[4] = Span{}
 
 	// [/2 - /1/1)
-	spans[5].Set(keyCtx, two, IncludeBoundary, oneone, ExcludeBoundary)
+	spans[5].Init(two, IncludeBoundary, oneone, ExcludeBoundary)
 
 	// [/2 - /1/1]
-	spans[6].Set(keyCtx, two, IncludeBoundary, oneone, IncludeBoundary)
+	spans[6].Init(two, IncludeBoundary, oneone, IncludeBoundary)
 
 	// [/2 - ]
-	spans[7].Set(keyCtx, two, IncludeBoundary, EmptyKey, IncludeBoundary)
+	spans[7].Init(two, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	// [/2/1 - /1)
-	spans[8].Set(keyCtx, twoone, IncludeBoundary, one, ExcludeBoundary)
+	spans[8].Init(twoone, IncludeBoundary, one, ExcludeBoundary)
 
 	// [/2/1 - /1]
-	spans[9].Set(keyCtx, twoone, IncludeBoundary, one, IncludeBoundary)
+	spans[9].Init(twoone, IncludeBoundary, one, IncludeBoundary)
 
 	// [/2/1 - ]
-	spans[10].Set(keyCtx, twoone, IncludeBoundary, EmptyKey, IncludeBoundary)
+	spans[10].Init(twoone, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	// (/2/1 - /1)
-	spans[11].Set(keyCtx, twoone, ExcludeBoundary, one, ExcludeBoundary)
+	spans[11].Init(twoone, ExcludeBoundary, one, ExcludeBoundary)
 
 	// (/2/1 - /1]
-	spans[12].Set(keyCtx, twoone, ExcludeBoundary, one, IncludeBoundary)
+	spans[12].Init(twoone, ExcludeBoundary, one, IncludeBoundary)
 
 	// (/2/1 - ]
-	spans[13].Set(keyCtx, twoone, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	spans[13].Init(twoone, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	// (/2 - /1/1)
-	spans[14].Set(keyCtx, two, ExcludeBoundary, oneone, ExcludeBoundary)
+	spans[14].Init(two, ExcludeBoundary, oneone, ExcludeBoundary)
 
 	// (/2 - /1/1]
-	spans[15].Set(keyCtx, two, ExcludeBoundary, oneone, IncludeBoundary)
+	spans[15].Init(two, ExcludeBoundary, oneone, IncludeBoundary)
 
 	// (/2 - ]
-	spans[16].Set(keyCtx, two, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	spans[16].Init(two, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	for i := 0; i < len(spans)-1; i++ {
 		testComp(t, spans[i], spans[i+1], -1)
@@ -305,9 +262,9 @@ func TestSpanCompareStarts(t *testing.T) {
 	nine := MakeKey(tree.NewDInt(9))
 
 	var onefive Span
-	onefive.Set(keyCtx, one, IncludeBoundary, five, IncludeBoundary)
+	onefive.Init(one, IncludeBoundary, five, IncludeBoundary)
 	var twonine Span
-	twonine.Set(keyCtx, two, ExcludeBoundary, nine, ExcludeBoundary)
+	twonine.Init(two, ExcludeBoundary, nine, ExcludeBoundary)
 
 	// Same span.
 	test(onefive, onefive, 0)
@@ -334,9 +291,9 @@ func TestSpanCompareEnds(t *testing.T) {
 	nine := MakeKey(tree.NewDInt(9))
 
 	var onefive Span
-	onefive.Set(keyCtx, one, IncludeBoundary, five, IncludeBoundary)
+	onefive.Init(one, IncludeBoundary, five, IncludeBoundary)
 	var twonine Span
-	twonine.Set(keyCtx, two, ExcludeBoundary, nine, ExcludeBoundary)
+	twonine.Init(two, ExcludeBoundary, nine, ExcludeBoundary)
 
 	// Same span.
 	test(onefive, onefive, 0)
@@ -363,8 +320,7 @@ func TestSpanStartsAfter(t *testing.T) {
 
 	// Same span.
 	var banana Span
-	banana.Set(
-		keyCtx,
+	banana.Init(
 		MakeCompositeKey(tree.DNull, tree.NewDInt(100)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), IncludeBoundary,
 	)
@@ -372,8 +328,7 @@ func TestSpanStartsAfter(t *testing.T) {
 
 	// Right span's start equal to left span's end.
 	var cherry Span
-	cherry.Set(
-		keyCtx,
+	cherry.Init(
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), ExcludeBoundary,
 		MakeKey(tree.NewDString("cherry")), ExcludeBoundary,
 	)
@@ -382,8 +337,7 @@ func TestSpanStartsAfter(t *testing.T) {
 
 	// Right span's start greater than left span's end, and inverse.
 	var cherry2 Span
-	cherry2.Set(
-		keyCtx,
+	cherry2.Init(
 		MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(0)), IncludeBoundary,
 		MakeKey(tree.NewDString("mango")), ExcludeBoundary,
 	)
@@ -411,8 +365,7 @@ func TestSpanIntersect(t *testing.T) {
 
 	// Same span.
 	var banana Span
-	banana.Set(
-		keyCtx,
+	banana.Init(
 		MakeCompositeKey(tree.DNull, tree.NewDInt(100)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), IncludeBoundary,
 	)
@@ -420,8 +373,7 @@ func TestSpanIntersect(t *testing.T) {
 
 	// One span immediately after the other.
 	var grape Span
-	grape.Set(
-		keyCtx,
+	grape.Init(
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("grape")), ExcludeBoundary,
 	)
@@ -430,8 +382,7 @@ func TestSpanIntersect(t *testing.T) {
 
 	// Partial overlap.
 	var apple Span
-	apple.Set(
-		keyCtx,
+	apple.Init(
 		MakeCompositeKey(tree.NewDString("apple"), tree.NewDInt(200)), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(300)), ExcludeBoundary,
 	)
@@ -440,8 +391,7 @@ func TestSpanIntersect(t *testing.T) {
 
 	// One span is subset of other.
 	var mango Span
-	mango.Set(
-		keyCtx,
+	mango.Init(
 		MakeCompositeKey(tree.NewDString("apple"), tree.NewDInt(200)), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("mango")), ExcludeBoundary,
 	)
@@ -452,8 +402,7 @@ func TestSpanIntersect(t *testing.T) {
 
 	// Spans are disjoint.
 	var pear Span
-	pear.Set(
-		keyCtx,
+	pear.Init(
 		MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(0)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("pear"), tree.NewDInt(10)), IncludeBoundary,
 	)
@@ -473,8 +422,7 @@ func TestSpanIntersect(t *testing.T) {
 	}
 
 	// Partial overlap on second key.
-	pear2.Set(
-		keyCtx,
+	pear2.Init(
 		MakeCompositeKey(tree.NewDString("pear"), tree.NewDInt(5), tree.DNull), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("raspberry"), tree.NewDInt(100)), IncludeBoundary,
 	)
@@ -507,8 +455,7 @@ func TestSpanUnion(t *testing.T) {
 
 	// Same span.
 	var banana Span
-	banana.Set(
-		keyCtx,
+	banana.Init(
 		MakeCompositeKey(tree.DNull, tree.NewDInt(100)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), IncludeBoundary,
 	)
@@ -516,8 +463,7 @@ func TestSpanUnion(t *testing.T) {
 
 	// Partial overlap.
 	var apple Span
-	apple.Set(
-		keyCtx,
+	apple.Init(
 		MakeCompositeKey(tree.NewDString("apple"), tree.NewDInt(200)), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(300)), ExcludeBoundary,
 	)
@@ -526,8 +472,7 @@ func TestSpanUnion(t *testing.T) {
 
 	// One span is subset of other.
 	var mango Span
-	mango.Set(
-		keyCtx,
+	mango.Init(
 		MakeCompositeKey(tree.NewDString("apple"), tree.NewDInt(200)), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("mango")), ExcludeBoundary,
 	)
@@ -538,8 +483,7 @@ func TestSpanUnion(t *testing.T) {
 
 	// Spans are disjoint.
 	var pear Span
-	pear.Set(
-		keyCtx,
+	pear.Init(
 		MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(0)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("pear"), tree.NewDInt(10)), IncludeBoundary,
 	)
@@ -559,8 +503,7 @@ func TestSpanUnion(t *testing.T) {
 	}
 
 	// Partial overlap on second key.
-	pear2.Set(
-		keyCtx,
+	pear2.Init(
 		MakeCompositeKey(tree.NewDString("pear"), tree.NewDInt(5), tree.DNull), ExcludeBoundary,
 		MakeCompositeKey(tree.NewDString("raspberry"), tree.NewDInt(100)), IncludeBoundary,
 	)
@@ -622,7 +565,7 @@ func TestSpanPreferInclusive(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			var sp Span
-			sp.Set(keyCtx, tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			sp.Init(tc.start, tc.startBoundary, tc.end, tc.endBoundary)
 			sp.PreferInclusive(keyCtx)
 			if sp.String() != tc.expected {
 				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())

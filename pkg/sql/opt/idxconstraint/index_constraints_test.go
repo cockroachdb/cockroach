@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -167,14 +166,10 @@ func TestIndexConstraints(t *testing.T) {
 
 					var ic Instance
 					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
-					spans, ok := ic.Spans()
-
+					result := ic.Constraint()
 					var buf bytes.Buffer
-					if !ok {
-						spans = LogicalSpans{MakeFullSpan()}
-					}
-					for _, sp := range spans {
-						fmt.Fprintf(&buf, "%s\n", sp)
+					for i := 0; i < result.Spans.Count(); i++ {
+						fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
 					}
 					remainingFilter := ic.RemainingFilter()
 					remEv := o.Optimize(remainingFilter, &memo.PhysicalProps{})
@@ -195,9 +190,10 @@ func TestIndexConstraints(t *testing.T) {
 }
 
 func BenchmarkIndexConstraints(b *testing.B) {
-	testCases := []struct {
+	type testCase struct {
 		name, varTypes, indexInfo, expr string
-	}{
+	}
+	testCases := []testCase{
 		{
 			name:      "point-lookup",
 			varTypes:  "int",
@@ -228,6 +224,23 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			indexInfo: "@1, @2, @3, @4, @5",
 			expr:      "@1 = 1 AND @2 >= 2 AND @2 <= 4 AND (@3, @4, @5) IN ((3, 4, 5), (6, 7, 8))",
 		},
+	}
+	// Generate a few testcases with many columns with single value constraint.
+	// This characterizes scaling w.r.t the number of columns.
+	for _, n := range []int{10, 100} {
+		var tc testCase
+		tc.name = fmt.Sprintf("single-jumbo-span-%d", n)
+		for i := 1; i <= n; i++ {
+			if i > 1 {
+				tc.varTypes += ", "
+				tc.indexInfo += ", "
+				tc.expr += " AND "
+			}
+			tc.varTypes += "int"
+			tc.indexInfo += fmt.Sprintf("@%d", i)
+			tc.expr += fmt.Sprintf("@%d=%d", i, i)
+		}
+		testCases = append(testCases, tc)
 	}
 
 	for _, tc := range testCases {
@@ -265,7 +278,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var ic Instance
 				ic.Init(ev, colInfos, false /*isInverted */, &evalCtx, o.Factory())
-				_, _ = ic.Spans()
+				_ = ic.Constraint()
 				_ = ic.RemainingFilter()
 			}
 		})
@@ -289,9 +302,8 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 		if id < 1 || id > len(indexVarTypes) {
 			return nil, fmt.Errorf("invalid index var @%d", id)
 		}
-		res[i].VarID = opt.ColumnID(id)
-		res[i].Typ = indexVarTypes[res[i].VarID-1]
-		res[i].Direction = encoding.Ascending
+		res[i].OrderingColumn = opt.OrderingColumn(id)
+		res[i].Typ = indexVarTypes[id-1]
 		res[i].Nullable = true
 		fields = fields[1:]
 		for len(fields) > 0 {
@@ -300,7 +312,7 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 				// ascending is the default.
 				fields = fields[1:]
 			case "descending", "desc":
-				res[i].Direction = encoding.Descending
+				res[i].OrderingColumn = -res[i].OrderingColumn
 				fields = fields[1:]
 
 			case "not":
