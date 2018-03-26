@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
@@ -79,6 +80,8 @@ type payment struct{}
 var _ tpccTx = payment{}
 
 func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	atomic.AddUint64(&config.auditor.paymentTransactions, 1)
+
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	d := paymentData{
@@ -99,6 +102,9 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 		for d.cWID == wID && config.warehouses > 1 {
 			d.cWID = rand.Intn(config.warehouses)
 		}
+		config.auditor.Lock()
+		config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
+		config.auditor.Unlock()
 		d.cDID = rand.Intn(10) + 1
 	}
 

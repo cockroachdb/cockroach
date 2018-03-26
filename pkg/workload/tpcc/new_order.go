@@ -143,7 +143,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 				item.olSupplyWID = config.warehouses - 1
 			}
 			config.auditor.Lock()
-			config.auditor.remoteWarehouseFreq[item.olSupplyWID]++
+			config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
 			config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID
