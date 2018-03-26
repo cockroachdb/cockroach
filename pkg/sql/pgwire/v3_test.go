@@ -22,14 +22,17 @@ import (
 	"net"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -39,6 +42,7 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 	mon := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource, nil, nil, 1000, st,
 	)
+	physicalClock := func() int64 { return timeutil.Now().UnixNano() }
 	exec := sql.NewExecutor(
 		sql.ExecutorConfig{
 			AmbientCtx:              log.AmbientContext{Tracer: st.Tracer},
@@ -46,6 +50,10 @@ func makeTestV3Conn(c net.Conn) v3Conn {
 			HistogramWindowInterval: metric.TestSampleInterval,
 			TestingKnobs:            &sql.ExecutorTestingKnobs{},
 			SessionRegistry:         sql.MakeSessionRegistry(),
+			Clock:                   hlc.NewClock(physicalClock, 1),
+			NodeInfo: sql.NodeInfo{
+				NodeID: &base.NodeIDContainer{},
+			},
 		},
 		nil, /* stopper */
 	)
