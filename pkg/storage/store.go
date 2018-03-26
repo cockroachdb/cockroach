@@ -737,6 +737,8 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
+	// DisableGCQueue disables the GC queue.
+	DisableGCQueue bool
 	// DisableReplicaGCQueue disables the replica GC queue.
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
@@ -946,6 +948,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		}
 	}
 
+	if cfg.TestingKnobs.DisableGCQueue {
+		s.setGCQueueActive(false)
+	}
 	if cfg.TestingKnobs.DisableReplicaGCQueue {
 		s.setReplicaGCQueueActive(false)
 	}
@@ -4616,6 +4621,9 @@ func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.Clus
 // The methods below can be used to control a store's queues. Stopping a queue
 // is only meant to happen in tests.
 
+func (s *Store) setGCQueueActive(active bool) {
+	s.gcQueue.SetDisabled(!active)
+}
 func (s *Store) setRaftLogQueueActive(active bool) {
 	s.raftLogQueue.SetDisabled(!active)
 }

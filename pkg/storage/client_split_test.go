@@ -953,6 +953,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			splitKey := roachpb.RKey(keys.UserTableDataMin)
 			splitPending, blockSplits := make(chan struct{}), make(chan struct{})
 			storeCfg := storage.TestStoreConfig(nil)
+			storeCfg.TestingKnobs.DisableGCQueue = true
 			storeCfg.TestingKnobs.TestingRequestFilter =
 				func(ba roachpb.BatchRequest) *roachpb.Error {
 					for _, req := range ba.Requests {
