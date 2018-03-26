@@ -65,7 +65,7 @@ intersect
       │    ├── scan b
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       │    │    └── stats: [rows=1000]
-      │    └── eq [type=bool, outer=(3)]
+      │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │         ├── variable: b.x [type=int, outer=(3)]
       │         └── const: 1 [type=int]
       └── projections [outer=(3-5)]
@@ -103,7 +103,7 @@ except
       │    │    ├── scan b
       │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       │    │    │    └── stats: [rows=1000]
-      │    │    └── eq [type=bool, outer=(3)]
+      │    │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │    │         ├── variable: b.x [type=int, outer=(3)]
       │    │         └── const: 1 [type=int]
       │    └── projections [outer=(3,4)]

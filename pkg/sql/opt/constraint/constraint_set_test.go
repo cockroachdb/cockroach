@@ -29,7 +29,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 	test := func(cs *Set, expected string) {
 		t.Helper()
 		if cs.String() != expected {
-			t.Errorf("\nexpected:\n%vactual:\n%v", expected, cs.String())
+			t.Errorf("\nexpected:\n%v\nactual:\n%v", expected, cs.String())
 		}
 	}
 
@@ -40,93 +40,93 @@ func TestConstraintSetIntersect(t *testing.T) {
 	var c Constraint
 	c.InitSingleSpan(kc1, &data.spGt20)
 	gt20 := SingleConstraint(&c)
-	test(gt20, "/1: (/20 - ]\n")
+	test(gt20, "/1: (/20 - ]")
 
 	// @1 <= 40
 	le40 := SingleSpanConstraint(kc1, &data.spLe40)
-	test(le40, "/1: [ - /40]\n")
+	test(le40, "/1: [ - /40]")
 
 	// @1 > 20 AND @1 <= 40
 	range2040 := gt20.Intersect(evalCtx, le40)
-	test(range2040, "/1: (/20 - /40]\n")
+	test(range2040, "/1: (/20 - /40]")
 	range2040 = le40.Intersect(evalCtx, gt20)
-	test(range2040, "/1: (/20 - /40]\n")
+	test(range2040, "/1: (/20 - /40]")
 
 	// Include constraint on multiple columns.
 	// (@1, @2) >= (10, 15)
 	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
-	test(gt1015, "/1/2: [/10/15 - ]\n")
+	test(gt1015, "/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
 	multi2 := le40.Intersect(evalCtx, gt1015)
 	test(multi2, ""+
-		"/1: [ - /40]\n"+
-		"/1/2: [/10/15 - ]\n")
+		"/1: [ - /40]; "+
+		"/1/2: [/10/15 - ]")
 
 	multi2 = gt1015.Intersect(evalCtx, le40)
 	test(multi2, ""+
-		"/1: [ - /40]\n"+
-		"/1/2: [/10/15 - ]\n")
+		"/1: [ - /40]; "+
+		"/1/2: [/10/15 - ]")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
 	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
 	multi3 := lt80.Intersect(evalCtx, multi2)
 	test(multi3, ""+
-		"/1: [ - /40]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: [ - /80)\n")
+		"/1: [ - /40]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: [ - /80)")
 
 	multi3 = multi2.Intersect(evalCtx, lt80)
 	test(multi3, ""+
-		"/1: [ - /40]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: [ - /80)\n")
+		"/1: [ - /40]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: [ - /80)")
 
 	// Mismatched number of constraints in each set.
 	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
 	mismatched := eq10.Intersect(evalCtx, multi3)
 	test(mismatched, ""+
-		"/1: [/10 - /10]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: [ - /80)\n")
+		"/1: [/10 - /10]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: [ - /80)")
 
 	mismatched = multi3.Intersect(evalCtx, eq10)
 	test(mismatched, ""+
-		"/1: [/10 - /10]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: [ - /80)\n")
+		"/1: [/10 - /10]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: [ - /80)")
 
 	// Multiple intersecting constraints on different columns.
 	diffCols := eq10.Intersect(evalCtx, SingleSpanConstraint(kc2, &data.spGt20))
 	res := diffCols.Intersect(evalCtx, multi3)
 	test(res, ""+
-		"/1: [/10 - /10]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: (/20 - /80)\n")
+		"/1: [/10 - /10]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: (/20 - /80)")
 
 	res = multi3.Intersect(evalCtx, diffCols)
 	test(res, ""+
-		"/1: [/10 - /10]\n"+
-		"/1/2: [/10/15 - ]\n"+
-		"/2: (/20 - /80)\n")
+		"/1: [/10 - /10]; "+
+		"/1/2: [/10/15 - ]; "+
+		"/2: (/20 - /80)")
 
 	// Intersection results in Contradiction.
 	res = eq10.Intersect(evalCtx, gt20)
-	test(res, "contradiction\n")
+	test(res, "contradiction")
 	res = gt20.Intersect(evalCtx, eq10)
-	test(res, "contradiction\n")
+	test(res, "contradiction")
 
 	// Intersect with Unconstrained (identity op).
 	res = range2040.Intersect(evalCtx, Unconstrained)
-	test(res, "/1: (/20 - /40]\n")
+	test(res, "/1: (/20 - /40]")
 	res = Unconstrained.Intersect(evalCtx, range2040)
-	test(res, "/1: (/20 - /40]\n")
+	test(res, "/1: (/20 - /40]")
 
 	// Intersect with Contradiction (always contradiction).
 	res = eq10.Intersect(evalCtx, Contradiction)
-	test(res, "contradiction\n")
+	test(res, "contradiction")
 	res = Contradiction.Intersect(evalCtx, eq10)
-	test(res, "contradiction\n")
+	test(res, "contradiction")
 }
 
 func TestConstraintSetUnion(t *testing.T) {
@@ -146,39 +146,39 @@ func TestConstraintSetUnion(t *testing.T) {
 	// Simple OR case.
 	// @1 > 20
 	gt20 := SingleSpanConstraint(kc1, &data.spGt20)
-	test(gt20, "/1: (/20 - ]\n")
+	test(gt20, "/1: (/20 - ]")
 
 	// @1 = 10
 	eq10 := SingleSpanConstraint(kc1, &data.spEq10)
-	test(eq10, "/1: [/10 - /10]\n")
+	test(eq10, "/1: [/10 - /10]")
 
 	// @1 > 20 OR @1 = 10
 	gt20eq10 := gt20.Union(evalCtx, eq10)
-	test(gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
+	test(gt20eq10, "/1: [/10 - /10] (/20 - ]")
 	gt20eq10 = eq10.Union(evalCtx, gt20)
-	test(gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
+	test(gt20eq10, "/1: [/10 - /10] (/20 - ]")
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
 	le40 := SingleSpanConstraint(kc1, &data.spLe40)
 	res := gt20eq10.Union(evalCtx, le40)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 	res = le40.Union(evalCtx, gt20eq10)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
 	gt1015 := SingleSpanConstraint(kc12, &data.spGe1015)
 	res = gt1015.Union(evalCtx, gt1015)
-	test(res, "/1/2: [/10/15 - ]\n")
+	test(res, "/1/2: [/10/15 - ]")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
 	lt80 := SingleSpanConstraint(kc2, &data.spLt80)
 	res = gt1015.Union(evalCtx, lt80)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 	res = lt80.Union(evalCtx, gt1015)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 
 	// Union two sets with multiple and differing numbers of constraints.
 	// ((@1, @2) >= (10, 15) AND @2 < 80 AND @1 > 20) OR (@1 = 10 AND @2 = 80)
@@ -190,12 +190,12 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	res = multi3.Union(evalCtx, multi2)
 	test(res, ""+
-		"/1: [/10 - /10] (/20 - ]\n"+
-		"/2: [ - /80]\n")
+		"/1: [/10 - /10] (/20 - ]; "+
+		"/2: [ - /80]")
 	res = multi2.Union(evalCtx, multi3)
 	test(res, ""+
-		"/1: [/10 - /10] (/20 - ]\n"+
-		"/2: [ - /80]\n")
+		"/1: [/10 - /10] (/20 - ]; "+
+		"/2: [ - /80]")
 
 	// Do same as previous, but in different order so that discarded constraint
 	// is at end of list rather than beginning.
@@ -205,24 +205,24 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	res = multi3.Union(evalCtx, multi2)
 	test(res, ""+
-		"/1: [/10 - /10] (/20 - ]\n"+
-		"/2: [ - /80]\n")
+		"/1: [/10 - /10] (/20 - ]; "+
+		"/2: [ - /80]")
 	res = multi2.Union(evalCtx, multi3)
 	test(res, ""+
-		"/1: [/10 - /10] (/20 - ]\n"+
-		"/2: [ - /80]\n")
+		"/1: [/10 - /10] (/20 - ]; "+
+		"/2: [ - /80]")
 
 	// Union with Unconstrained (always unconstrained).
 	res = gt20.Union(evalCtx, Unconstrained)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 	res = Unconstrained.Union(evalCtx, gt20)
-	test(res, "unconstrained\n")
+	test(res, "unconstrained")
 
 	// Union with Contradiction (identity op).
 	res = eq10.Union(evalCtx, Contradiction)
-	test(res, "/1: [/10 - /10]\n")
+	test(res, "/1: [/10 - /10]")
 	res = Contradiction.Union(evalCtx, eq10)
-	test(res, "/1: [/10 - /10]\n")
+	test(res, "/1: [/10 - /10]")
 }
 
 type spanTestData struct {
