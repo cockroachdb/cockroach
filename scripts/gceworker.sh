@@ -51,6 +51,9 @@ case "${cmd}" in
     ssh)
     retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
+    ip)
+    gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
+    ;;
     sync)
     if ! hash unison 2>/dev/null; then
       echo 'unison not found (on macOS, run `brew install unison`)' >&2
