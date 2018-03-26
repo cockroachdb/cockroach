@@ -175,7 +175,6 @@ spec:
         volumeMounts:
         - name: certs
           mountPath: /cockroach-certs
-
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
