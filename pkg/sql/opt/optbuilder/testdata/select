@@ -364,16 +364,10 @@ SELECT * FROM xyzw OFFSET 1 + y
 ----
 error: column name "y" not found
 
-# TODO(rytaft): should be an error:
-# error: argument of LIMIT must be type int, not type decimal
 build
 SELECT * FROM xyzw LIMIT 3.3
 ----
-limit
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
- └── const: 3.3 [type=decimal]
+error: argument of LIMIT must be type int, not type decimal
 
 build
 SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
@@ -386,19 +380,12 @@ limit
  │    └── ordering: +1
  └── const: 1 [type=int]
 
-# TODO(rytaft): should be an error:
-# error: argument of OFFSET must be type int, not type decimal
 build
 SELECT * FROM xyzw OFFSET 1.5
 ----
-offset
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
- └── const: 1.5 [type=decimal]
+error: argument of OFFSET must be type int, not type decimal
 
-# TODO(rytaft): should be an error:
-# error: negative value for LIMIT
+# At execution time, this will cause the error: negative value for LIMIT
 build
 SELECT * FROM xyzw LIMIT -100
 ----
@@ -408,8 +395,7 @@ limit
  │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
  └── const: -100 [type=int]
 
-# TODO(rytaft): should be an error:
-# error: negative value for OFFSET
+# At execution time, this will cause the error: negative value for OFFSET
 build
 SELECT * FROM xyzw OFFSET -100
 ----
@@ -525,20 +511,10 @@ limit
            ├── function: random [type=float]
            └── const: 0.0 [type=float]
 
-# TODO(rytaft): should be an error:
-# error: multiple LIMIT clauses not allowed
 build
 ((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
 ----
-limit
- ├── columns: x:1(int!null)
- ├── project
- │    ├── columns: xyzw.x:1(int!null)
- │    ├── scan xyzw
- │    │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
- │    └── projections
- │         └── variable: xyzw.x [type=int]
- └── const: 1 [type=int]
+error: multiple LIMIT clauses not allowed
 
 build
 SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5

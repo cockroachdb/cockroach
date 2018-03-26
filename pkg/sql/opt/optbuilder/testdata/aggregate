@@ -357,40 +357,30 @@ project
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
 
-# TODO(rytaft): fix error message:
-# error: aggregate functions are not allowed in GROUP BY
 build
 SELECT * FROM kv GROUP BY v, COUNT(w)
 ----
-error: aggregate function is not allowed in this context
+error: aggregate functions are not allowed in GROUP BY
 
-# TODO(rytaft): fix error message:
-# error: aggregate functions are not allowed in GROUP BY
 build
 SELECT COUNT(w) FROM kv GROUP BY 1
 ----
-error: aggregate function is not allowed in this context
+error: aggregate functions are not allowed in GROUP BY
 
-# TODO(rytaft): fix error message:
-# error: aggregate functions are not allowed in LIMIT
 build
 SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
 ----
-error: column name "v" not found
+error: aggregate functions are not allowed in LIMIT
 
-# TODO(rytaft): fix error message:
-# error: aggregate functions are not allowed in OFFSET
 build
 SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
 ----
-error: column name "v" not found
+error: aggregate functions are not allowed in OFFSET
 
-# TODO(rytaft): fix error message:
-# error: aggregate functions are not allowed in VALUES
 build
 VALUES (99, COUNT(1))
 ----
-error: aggregate function is not allowed in this context
+error: aggregate functions are not allowed in VALUES
 
 build
 SELECT COUNT(*), k FROM t.kv GROUP BY 5
@@ -672,6 +662,8 @@ project
            ├── variable: kv.k [type=int]
            └── variable: kv.v [type=int]
 
+# TODO(rytaft): don't qualify the column name in the error message differently
+# than it was qualified in the query.
 build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k
 ----
@@ -690,12 +682,12 @@ error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggre
 build
 SELECT k FROM t.kv WHERE AVG(k) > 1
 ----
-error: aggregate function is not allowed in this context
+error: aggregate functions are not allowed in WHERE
 
 build
 SELECT MAX(AVG(k)) FROM t.kv
 ----
-error: aggregate function cannot be nested within another aggregate function
+error: aggregate functions are not allowed in the argument of max()
 
 # Test case from #2761.
 build
