@@ -139,22 +139,25 @@ func (ee *execEngine) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (ee *execEngine) ConstructScan(
-	table opt.Table, cols exec.ColumnOrdinalSet,
+	table opt.Table, index opt.Index, cols exec.ColumnOrdinalSet,
 ) (exec.Node, error) {
-	desc := table.(*optTable).desc
+	tabDesc := table.(*optTable).desc
+	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
 	scan := ee.planner.Scan()
 	colCfg := scanColumnsConfig{
 		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.Columns[c].ID))
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
 	}
-	if err := scan.initTable(context.TODO(), ee.planner, desc, nil /* hints */, colCfg); err != nil {
+	if err := scan.initTable(context.TODO(), ee.planner, tabDesc, nil, colCfg); err != nil {
 		return nil, err
 	}
+	scan.index = indexDesc
+	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	var err error
-	scan.spans, err = unconstrainedSpans(desc, &desc.PrimaryIndex)
+	scan.spans, err = unconstrainedSpans(tabDesc, indexDesc)
 	if err != nil {
 		return nil, err
 	}
