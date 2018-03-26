@@ -103,7 +103,7 @@ var tpccMeta = workload.Meta{
 			`split`:            {RuntimeOnly: true},
 			`wait`:             {RuntimeOnly: true},
 			`workers`:          {RuntimeOnly: true},
-			`expensive-checks`: {CheckConsistencyOnly: true},
+			`expensive-checks`: {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
