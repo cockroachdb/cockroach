@@ -15,8 +15,7 @@
 package constraint
 
 import (
-	"bytes"
-	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -291,11 +290,14 @@ func (s *Set) String() string {
 		return "contradiction\n"
 	}
 
-	var buf bytes.Buffer
+	var b strings.Builder
 	for i := 0; i < s.Length(); i++ {
-		fmt.Fprintf(&buf, "%s\n", s.Constraint(i))
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(s.Constraint(i).String())
 	}
-	return buf.String()
+	return b.String()
 }
 
 // compareConstraintsByCols orders constraints by the indexes of their columns,

@@ -1,0 +1,135 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+opt
+SELECT * FROM a WHERE x > 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x >= 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+      └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x < 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x <= 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
+      └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x = 1
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x > 1 AND x < 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE x = 1 AND y = 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      ├── ge [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 7 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 9 [type=int]

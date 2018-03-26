@@ -99,7 +99,7 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.unnest("}\n\n")
 
 		g.w.nestIndent("if !_f.o.allowOptimizations() {\n")
-		g.w.writeIndent("return _f.mem.MemoizeNormExpr(memo.Expr(%s))\n", varName)
+		g.w.writeIndent("return _f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
 		// Only include normalization rules for the current define.
@@ -111,7 +111,7 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.newline()
 		}
 
-		g.w.writeIndent("return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(%s)))\n", varName)
+		g.w.writeIndent("return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(%s)))\n", varName)
 		g.w.unnest("}\n\n")
 	}
 }

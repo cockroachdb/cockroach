@@ -205,8 +205,11 @@ const (
 	// ExprFmtHideCost does not show expression cost in the output.
 	ExprFmtHideCost
 
+	// ExprFmtHideConstraints does not show inferred constraints in the output.
+	ExprFmtHideConstraints
+
 	// ExprFmtHideAll shows only the most basic properties of the expression.
-	ExprFmtHideAll = ExprFmtHideStats | ExprFmtHideCost | ExprFmtHideOuterCols
+	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )
 
 // String returns a string representation of this expression for testing and
@@ -331,19 +334,31 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 			// already listed.
 			showType = false
 		}
+		hasOuterCols := !flags.HasFlags(ExprFmtHideOuterCols) && !scalar.OuterCols.Empty()
+		hasConstraints := !flags.HasFlags(ExprFmtHideConstraints) &&
+			scalar.Constraints != nil &&
+			!scalar.Constraints.IsUnconstrained()
 
-		hasOuterCols := !flags.HasFlags(ExprFmtHideOuterCols) && !ev.Logical().Scalar.OuterCols.Empty()
-
-		if showType || hasOuterCols {
+		if showType || hasOuterCols || hasConstraints {
 			buf.WriteString(" [")
 			if showType {
 				fmt.Fprintf(&buf, "type=%s", scalar.Type)
-				if hasOuterCols {
+				if hasOuterCols || hasConstraints {
 					buf.WriteString(", ")
 				}
 			}
 			if hasOuterCols {
 				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
+				if hasConstraints {
+					buf.WriteString(", ")
+				}
+			}
+			if hasConstraints {
+				fmt.Fprintf(&buf, "constraints=(%s", scalar.Constraints)
+				if scalar.TightConstraints {
+					buf.WriteString("; tight")
+				}
+				buf.WriteString(")")
 			}
 			buf.WriteString("]")
 		}
