@@ -683,6 +683,20 @@ func newProcessor(
 		}
 		return NewSSTWriterProcessor(flowCtx, *core.SSTWriter, inputs[0], outputs[0])
 	}
+	if core.MetadataTestSender != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newMetadataTestSender(flowCtx, inputs[0], post, outputs[0], core.MetadataTestSender.ID)
+	}
+	if core.MetadataTestReceiver != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newMetadataTestReceiver(
+			flowCtx, inputs[0], post, outputs[0], core.MetadataTestReceiver.SenderIDs,
+		)
+	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
