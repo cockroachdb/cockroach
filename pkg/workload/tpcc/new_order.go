@@ -97,6 +97,7 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 	config.auditor.Lock()
 	config.auditor.orderLinesFreq[d.oOlCnt]++
 	config.auditor.Unlock()
+	atomic.AddUint64(&config.auditor.totalOrderLines, uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -132,9 +133,18 @@ func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) 
 		}
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
 		item.remoteWarehouse = rand.Intn(100) == 0
-		if item.remoteWarehouse {
+		item.olSupplyWID = wID
+		if item.remoteWarehouse && config.warehouses > 1 {
 			allLocal = 0
-			item.olSupplyWID = rand.Intn(config.warehouses)
+			// To avoid picking the local warehouse again, randomly choose among n-1
+			// warehouses and swap in the nth if necessary.
+			item.olSupplyWID = rand.Intn(config.warehouses - 1)
+			if item.olSupplyWID == wID {
+				item.olSupplyWID = config.warehouses - 1
+			}
+			config.auditor.Lock()
+			config.auditor.remoteWarehouseFreq[item.olSupplyWID]++
+			config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID
 		}
