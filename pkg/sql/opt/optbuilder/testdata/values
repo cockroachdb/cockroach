@@ -163,21 +163,25 @@ values
  ├── columns: column1:3(int)
  ├── tuple [type=tuple{int}]
  │    └── subquery [type=int]
- │         ├── project
+ │         ├── max1-row
  │         │    ├── columns: column1:1(int)
- │         │    ├── values
- │         │    │    └── tuple [type=tuple{}]
- │         │    └── projections
- │         │         └── const: 1 [type=int]
+ │         │    └── project
+ │         │         ├── columns: column1:1(int)
+ │         │         ├── values
+ │         │         │    └── tuple [type=tuple{}]
+ │         │         └── projections
+ │         │              └── const: 1 [type=int]
  │         └── variable: column1 [type=int]
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
-           ├── project
+           ├── max1-row
            │    ├── columns: column2:2(int)
-           │    ├── values
-           │    │    └── tuple [type=tuple{}]
-           │    └── projections
-           │         └── const: 2 [type=int]
+           │    └── project
+           │         ├── columns: column2:2(int)
+           │         ├── values
+           │         │    └── tuple [type=tuple{}]
+           │         └── projections
+           │              └── const: 2 [type=int]
            └── variable: column2 [type=int]
 
 build
@@ -189,10 +193,12 @@ values
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
-           ├── project
+           ├── max1-row
            │    ├── columns: column1:1(int)
-           │    ├── values
-           │    │    └── tuple [type=tuple{}]
-           │    └── projections
-           │         └── const: 2 [type=int]
+           │    └── project
+           │         ├── columns: column1:1(int)
+           │         ├── values
+           │         │    └── tuple [type=tuple{}]
+           │         └── projections
+           │              └── const: 2 [type=int]
            └── variable: column1 [type=int]
