@@ -48,6 +48,7 @@ backup_stmt ::=
 cancel_stmt ::=
 	cancel_job_stmt
 	| cancel_query_stmt
+	| cancel_session_stmt
 
 copy_from_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN'
@@ -212,6 +213,11 @@ cancel_job_stmt ::=
 
 cancel_query_stmt ::=
 	'CANCEL' 'QUERY' a_expr
+	| 'CANCEL' 'QUERY' 'IF' 'EXISTS' a_expr
+
+cancel_session_stmt ::=
+	'CANCEL' 'SESSION' a_expr
+	| 'CANCEL' 'SESSION' 'IF' 'EXISTS' a_expr
 
 table_name ::=
 	db_object_name
