@@ -510,8 +510,8 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.Subquery:
 		if s.builder.AllowUnsupportedExpr {
-			// TODO(rytaft): Temporary fix for #24171 and #24170.
-			break
+			// TODO(rytaft): Temporary fix for #24171, #24170 and #24225.
+			return false, expr
 		}
 
 		if t.Exists {
