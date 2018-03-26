@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"runtime"
 	"strings"
 	"time"
@@ -85,12 +84,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 	// comma-separated list of node IP addresses with optional port specifiers.
 	var addrs []string
 	for i := 1; i <= roachNodeCount; i++ {
-		urlStr := c.PGUrl(ctx, i)
-		url, err := url.Parse(urlStr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		addrs = append(addrs, url.Host)
+		addrs = append(addrs, c.InternalIP(ctx, i))
 	}
 	addrStr := strings.Join(addrs, ",")
 
