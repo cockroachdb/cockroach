@@ -390,6 +390,7 @@ var (
 		types.Decimal,
 		types.Date,
 		types.Time,
+		types.TimeTZ,
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,
@@ -475,6 +476,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		return ParseDDate(expr.s, ctx.getLocation())
 	case types.Time:
 		return ParseDTime(expr.s)
+	case types.TimeTZ:
+		return ParseDTimeTZ(expr.s, ctx.getLocation())
 	case types.INet:
 		return ParseDIPAddrFromINetString(expr.s)
 	case types.JSON:
