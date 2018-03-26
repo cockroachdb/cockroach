@@ -102,3 +102,17 @@ func TestBadLicenseStrings(t *testing.T) {
 		}
 	}
 }
+
+func TestExpiredLicenseLanguage(t *testing.T) {
+	lic := License{
+		Type:              License_Evaluation,
+		ValidUntilUnixSec: 1,
+	}
+	err := lic.Check(timeutil.Now(), uuid.MakeV4(), "", "RESTORE")
+	expected := "Use of RESTORE requires an enterprise license. Your evaluation license expired on " +
+		"January 1, 1970. If you're interested in getting a new license, please contact " +
+		"subscriptions@cockroachlabs.com and we can help you out."
+	if err == nil || err.Error() != expected {
+		t.Fatalf("expected err %q, got %v", expected, err)
+	}
+}
