@@ -490,9 +490,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			t := pgBinaryToTime(i)
-			tod := timeofday.FromTime(t)
-			location, _ := t.Location()
-			return tree.MakeDTimeTZ(tod, location), nil
+			return tree.MakeDTimeTZ(timeofday.FromTime(t), t.Location()), nil
 		case oid.T_uuid:
 			u, err := tree.ParseDUuidFromBytes(b)
 			if err != nil {

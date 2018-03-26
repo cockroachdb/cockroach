@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
 // aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
@@ -563,9 +564,9 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
 	case *tree.DTimeTZ:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, t.ToTime()), nil
+			return encoding.EncodeTimeAscending(b, t.ToTime()), nil
 		}
-		return encoding.EncodeVarintDescending(b, t.ToTime()), nil
+		return encoding.EncodeTimeDescending(b, t.ToTime()), nil
 	case *tree.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
@@ -1114,7 +1115,7 @@ func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
 	if len(*buf) == 0 {
 		*buf = make([]tree.DTimeTZ, datumAllocSize)
 	}
-	r := &(*buf[0])
+	r := &(*buf)[0]
 	*r = v
 	*buf = (*buf)[1:]
 	return r
@@ -1860,7 +1861,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		}
 	case ColumnType_TIMETZ:
 		if v, ok := val.(*tree.DTimeTZ); ok {
-			r.SetTime(v.Time)
+			r.SetTime(v.ToTime())
 			return r, nil
 		}
 	case ColumnType_TIMESTAMP:
@@ -2011,7 +2012,7 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Decimal, nil
 	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case types.Timestamp, types.TimestampTZ, types,TimeTZ:
+	case types.Timestamp, types.TimestampTZ, types.TimeTZ:
 		return encoding.Time, nil
 	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
 	// first introduced. If any 1.1 users used date arrays, they would have been
@@ -2139,7 +2140,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(v), v.Location()}, nil
+		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(v), v.Location()}), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {

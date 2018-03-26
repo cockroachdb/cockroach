@@ -415,7 +415,7 @@ func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
 // formatTimeTZ formats ttz into a format lib/pq understands, appending to the
 // provided tmp buffer and reallocating if needed. The function will then return
 // the resulting buffer.
-func formatTimeTZ(ttz *DTimeTZ, offset *time.Location, tmp []byte) []byte {
+func formatTimeTZ(ttz *tree.DTimeTZ, offset *time.Location, tmp []byte) []byte {
 	t := ttz.ToTime()
 	if offset != nil {
 		t = t.In(offset)
