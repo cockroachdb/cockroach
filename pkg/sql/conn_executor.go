@@ -378,6 +378,7 @@ func (s *Server) ServeConn(
 	clientComm ClientComm,
 	reserved mon.BoundAccount,
 	memMetrics *MemoryMetrics,
+	cancel context.CancelFunc,
 ) error {
 	// Create the various monitors. They are Start()ed later.
 	//
@@ -487,7 +488,7 @@ func (s *Server) ServeConn(
 		r := recover()
 		ex.closeWrapper(ctx, r)
 	}()
-	return ex.run(ctx)
+	return ex.run(ctx, cancel)
 }
 
 type closeType bool
@@ -727,6 +728,7 @@ type connExecutor struct {
 type ctxHolder struct {
 	connCtx           context.Context
 	sessionTracingCtx context.Context
+	cancel            context.CancelFunc
 }
 
 func (ch *ctxHolder) ctx() context.Context {
@@ -865,8 +867,9 @@ func (ex *connExecutor) Ctx() context.Context {
 // also have an error from the reading side), or some other unexpected failure.
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
-func (ex *connExecutor) run(ctx context.Context) error {
+func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) error {
 	ex.ctxHolder.connCtx = ctx
+	ex.ctxHolder.cancel = cancel
 
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
@@ -1732,6 +1735,12 @@ func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
 		return true
 	}
 	return false
+}
+
+// cancelSession is part of the registrySession interface.
+func (ex *connExecutor) cancelSession() {
+	// TODO(abhimadan): figure out how to send a nice error message to the client.
+	ex.ctxHolder.cancel()
 }
 
 // user is part of the registrySession interface.
