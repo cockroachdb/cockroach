@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -69,7 +68,7 @@ func (ex *connExecutor) execStmt(
 		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
 	}
 
-	queryID := ex.generateQueryID()
+	queryID := ex.generateID()
 	stmt.queryID = queryID
 
 	// Dispatch the statement for execution based on the current state.
@@ -940,7 +939,7 @@ func (ex *connExecutor) runShowTransactionState(
 // longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
 // that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
-	queryID uint128.Uint128, stmt tree.Statement, cancelFun context.CancelFunc,
+	queryID ClusterWideID, stmt tree.Statement, cancelFun context.CancelFunc,
 ) func() {
 
 	_, hidden := stmt.(tree.HiddenFromShowQueries)

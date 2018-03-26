@@ -755,6 +755,7 @@ func populateQueriesTable(
 const sessionsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   node_id            INT NOT NULL,   -- the node on which the query is running
+  session_id         STRING,         -- the ID of the session
   username           STRING,         -- the user running the query
   client_address     STRING,         -- the address of the client that issued the query
   application_name   STRING,         -- the name of the application as per SET application_name
@@ -825,8 +826,11 @@ func populateSessionsTable(
 			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
 		}
 
+		sessionID := BytesToClusterWideID(session.ID)
+
 		if err := addRow(
 			tree.NewDInt(tree.DInt(session.NodeID)),
+			tree.NewDString(sessionID.String()),
 			tree.NewDString(session.Username),
 			tree.NewDString(session.ClientAddress),
 			tree.NewDString(session.ApplicationName),
@@ -846,6 +850,7 @@ func populateSessionsTable(
 			// Add a row with this node ID, and nulls for all other columns
 			if err := addRow(
 				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
+				tree.DNull,
 				tree.DNull,
 				tree.DNull,
 				tree.DNull,
