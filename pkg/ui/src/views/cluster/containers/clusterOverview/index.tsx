@@ -29,14 +29,14 @@ function renderCapacityUsage(props: CapacityUsageProps) {
   const usedPercentage = usableCapacity !== 0 ? usedCapacity / usableCapacity : 0;
   return [
     <h3 className="capacity-usage cluster-summary__title">Capacity Usage</h3>,
-    <div className="capacity-usage cluster-summary__metric">{ formatPercentage(usedPercentage) }</div>,
+    <div className="capacity-usage cluster-summary__metric storage-percent">{ formatPercentage(usedPercentage) }</div>,
     <div className="capacity-usage cluster-summary__chart">
       <CapacityChart used={usedCapacity} usable={usableCapacity} />
     </div>,
-    <div className="capacity-usage cluster-summary__aside">
-      <span className="label">Current Usage</span>
-      <span className="value">{ formatBytes(usedCapacity) }</span>
-    </div>,
+    <div className="capacity-usage cluster-summary__label storage-used">Used<br />Capcity</div>,
+    <div className="capacity-usage cluster-summary__metric storage-used">{ formatBytes(usedCapacity) }</div>,
+    <div className="capacity-usage cluster-summary__label storage-usable">Usable<br />Capcity</div>,
+    <div className="capacity-usage cluster-summary__metric storage-usable">{ formatBytes(usableCapacity) }</div>,
   ];
 }
 
