@@ -33,12 +33,17 @@
 #    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-# The Input field contains the subquery itself, and the Projection field
+# The Input field contains the subquery itself, which should be wrapped in a
+# Max1Row operator to enforce that the subquery can return at most one row
+# (Max1Row may be removed by the optimizer later if it can determine statically
+# that the subquery will always return at most one row). The Projection field
 # contains a single column representing the output of the subquery. For
 # example, `(SELECT 1, 'a')` would be represented by the following structure:
 #
 # (Subquery
-#   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#   (Max1Row
+#     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#   )
 #   (Variable 3)
 # )
 #
