@@ -475,11 +475,9 @@ a:int  b:int  c:int  d:string
 exec-explain
 SELECT a, b FROM abc ORDER BY b, a
 ----
-sort       0  sort  ·      ·            (a, b)  +b,+a
- │         0  ·     order  +b,+a        ·       ·
- └── scan  1  scan  ·      ·            (a, b)  ·
-·          1  ·     table  abc@primary  ·       ·
-·          1  ·     spans  ALL          ·       ·
+scan  0  scan  ·      ·       (a, b)  ·
+·     0  ·     table  abc@ba  ·       ·
+·     0  ·     spans  ALL     ·       ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, a
@@ -500,11 +498,9 @@ a:int  b:int
 exec-explain
 SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-sort       0  sort  ·      ·            (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c     ·          ·
- └── scan  1  scan  ·      ·            (a, b, c)  ·
-·          1  ·     table  abc@primary  ·          ·
-·          1  ·     spans  ALL          ·          ·
+scan  0  scan  ·      ·       (a, b, c)  ·
+·     0  ·     table  abc@ba  ·          ·
+·     0  ·     spans  ALL     ·          ·
 
 exec
 SELECT a, b, c FROM abc ORDER BY b, a, c
@@ -572,14 +568,12 @@ a:int  b:int  c:int  d:string
 exec-explain
 SELECT a, b FROM abc ORDER BY b, c
 ----
-render          0  render  ·         ·            (a, b)     ·
- │              0  ·       render 0  a            ·          ·
- │              0  ·       render 1  b            ·          ·
- └── sort       1  sort    ·         ·            (a, b, c)  +b,+c
-      │         1  ·       order     +b,+c        ·          ·
-      └── scan  2  scan    ·         ·            (a, b, c)  ·
-·               2  ·       table     abc@primary  ·          ·
-·               2  ·       spans     ALL          ·          ·
+render     0  render  ·         ·       (a, b)     ·
+ │         0  ·       render 0  a       ·          ·
+ │         0  ·       render 1  b       ·          ·
+ └── scan  1  scan    ·         ·       (a, b, c)  ·
+·          1  ·       table     abc@bc  ·          ·
+·          1  ·       spans     ALL     ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, c
@@ -624,14 +618,12 @@ a:int  b:int
 exec-explain
 SELECT a, b FROM abc ORDER BY b, c, a
 ----
-render          0  render  ·         ·            (a, b)     ·
- │              0  ·       render 0  a            ·          ·
- │              0  ·       render 1  b            ·          ·
- └── sort       1  sort    ·         ·            (a, b, c)  +b,+c,+a
-      │         1  ·       order     +b,+c,+a     ·          ·
-      └── scan  2  scan    ·         ·            (a, b, c)  ·
-·               2  ·       table     abc@primary  ·          ·
-·               2  ·       spans     ALL          ·          ·
+render     0  render  ·         ·       (a, b)     ·
+ │         0  ·       render 0  a       ·          ·
+ │         0  ·       render 1  b       ·          ·
+ └── scan  1  scan    ·         ·       (a, b, c)  ·
+·          1  ·       table     abc@bc  ·          ·
+·          1  ·       spans     ALL     ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, c, a
@@ -696,16 +688,24 @@ a:int
 1
 1
 
-# TODO(radu): LIMIT not supported.
-# exec
-# SELECT a FROM abc ORDER BY a DESC LIMIT 1
-# ----
-# a:int
-# 
-# exec
-# SELECT a FROM abc ORDER BY a DESC OFFSET 1
-# ----
-# a:int
+exec
+SELECT a FROM abc ORDER BY a DESC LIMIT 1
+----
+a:int
+3
+
+exec
+SELECT a FROM abc ORDER BY a DESC OFFSET 1
+----
+a:int
+3
+3
+2
+2
+2
+1
+1
+1
 
 exec-explain
 SELECT c FROM abc WHERE b = 2 ORDER BY c
@@ -737,44 +737,45 @@ sort                 0  sort    ·         ·            (c)     -c
 exec-explain
 SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render               0  render  ·         ·            (b, c)     ·
- │                   0  ·       render 0  b            ·          ·
- │                   0  ·       render 1  c            ·          ·
- └── sort            1  sort    ·         ·            (a, b, c)  +b,+c
-      │              1  ·       order     +b,+c        ·          ·
-      └── filter     2  filter  ·         ·            (a, b, c)  ·
-           │         2  ·       filter    a = 1        ·          ·
-           └── scan  3  scan    ·         ·            (a, b, c)  ·
-·                    3  ·       table     abc@primary  ·          ·
-·                    3  ·       spans     ALL          ·          ·
+render          0  render  ·         ·       (b, c)     ·
+ │              0  ·       render 0  b       ·          ·
+ │              0  ·       render 1  c       ·          ·
+ └── filter     1  filter  ·         ·       (a, b, c)  ·
+      │         1  ·       filter    a = 1   ·          ·
+      └── scan  2  scan    ·         ·       (a, b, c)  ·
+·               2  ·       table     abc@bc  ·          ·
+·               2  ·       spans     ALL     ·          ·
 
 exec-raw
-CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
+CREATE TABLE bar (
+    id INT PRIMARY KEY,
+    baz STRING,
+    extra INT,
+    UNIQUE INDEX i_bar (baz) STORING (extra)
+)
 ----
 
 exec-raw
-INSERT INTO bar VALUES (0, NULL), (1, NULL)
+INSERT INTO bar VALUES (0, NULL, 10), (1, NULL, 5)
 ----
 
 exec-explain
-SELECT * FROM bar ORDER BY baz, id
+SELECT * FROM bar ORDER BY baz, extra
 ----
-sort       0  sort  ·      ·            (id, baz)  +baz,+id
- │         0  ·     order  +baz,+id     ·          ·
- └── scan  1  scan  ·      ·            (id, baz)  ·
-·          1  ·     table  bar@primary  ·          ·
-·          1  ·     spans  ALL          ·          ·
+sort       0  sort  ·      ·            (id, baz, extra)  +baz,+extra
+ │         0  ·     order  +baz,+extra  ·                 ·
+ └── scan  1  scan  ·      ·            (id, baz, extra)  ·
+·          1  ·     table  bar@primary  ·                 ·
+·          1  ·     spans  ALL          ·                 ·
 
-# Here rowsort is needed because the ORDER BY clause does not guarantee any
-# relative ordering between rows where baz is NULL. As we see above, because
-# this is a unique index, the ordering `+baz,+id` is deemed equivalent to just
-# `+baz`.
+# Here rowsort is needed because a unique index still allows duplicate NULL
+# values. It's not correct to sort on baz alone, even though it is "unique".
 exec
-SELECT * FROM bar ORDER BY baz, id
+SELECT * FROM bar ORDER BY baz, extra
 ----
-id:int  baz:string
-0       NULL
-1       NULL
+id:int  baz:string  extra:int
+1       NULL        5
+0       NULL        10
 
 exec-raw
 CREATE TABLE abcd (

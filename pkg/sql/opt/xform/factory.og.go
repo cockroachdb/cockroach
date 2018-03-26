@@ -8,11 +8,10 @@ import (
 )
 
 // ConstructScan constructs an expression for the Scan operator.
-// Scan returns a result set containing every row in the specified table. The
-// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-// well as the subset of columns to project from it. Rows and columns are not
-// expected to have any particular ordering unless a physical property requires
-// it.
+// Scan returns a result set containing every row in the specified table, by
+// scanning one of the table's indexes according to its ordering. The private
+// Def field is an *opt.ScanOpDef that identifies the table and index to scan,
+// as well as the subset of columns to project from it.
 func (_f *Factory) ConstructScan(
 	def memo.PrivateID,
 ) memo.GroupID {
