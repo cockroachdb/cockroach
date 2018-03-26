@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -108,10 +109,6 @@ type Memo struct {
 	// the group ID 0 is invalid in order to allow zero initialization of an
 	// expression to indicate that it did not originate from the memo.
 	groups []group
-
-	// logPropsFactory is used to derive logical properties for an expression,
-	// based on the logical properties of its children.
-	logPropsFactory logicalPropsFactory
 
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
@@ -226,14 +223,15 @@ func (m *Memo) NormExpr(group GroupID) *Expr {
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
-func (m *Memo) MemoizeNormExpr(norm Expr) GroupID {
+func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	if m.exprMap[norm.Fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
 
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	mgrp.logical = m.logPropsFactory.constructProps(ev)
+	logPropsFactory := logicalPropsFactory{evalCtx: evalCtx}
+	mgrp.logical = logPropsFactory.constructProps(ev)
 
 	m.exprMap[norm.Fingerprint()] = mgrp.id
 	return mgrp.id

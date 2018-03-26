@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -115,6 +116,16 @@ type ScalarProps struct {
 	// b.y columns are not outer columns on the EXISTS expression, they *are*
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
+
+	// Constraints is the set of constraints deduced from a boolean expression.
+	// For the expression to be true, all constraints in the set must be
+	// satisfied. Unset for non-boolean scalars.
+	Constraints *constraint.Set
+
+	// TightConstraints is true if the expression is exactly equivalent to the
+	// constraints. If it is false, the constraints are weaker than the
+	// expression.
+	TightConstraints bool
 }
 
 // OuterCols is a helper method that returns either the relational or scalar

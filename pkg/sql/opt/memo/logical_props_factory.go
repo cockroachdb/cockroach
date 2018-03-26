@@ -18,6 +18,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // logicalPropsFactory is a helper class that consolidates the code that
@@ -25,7 +27,9 @@ import (
 // children.
 // NOTE: The factory is defined as an empty struct with methods rather than as
 //       functions in order to keep the methods grouped and self-contained.
-type logicalPropsFactory struct{}
+type logicalPropsFactory struct {
+	evalCtx *tree.EvalContext
+}
 
 // constructProps is called by the memo group construction code in order to
 // initialize the new group's logical properties.
@@ -279,6 +283,11 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 		} else {
 			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
 		}
+	}
+
+	if props.Scalar.Type == types.Bool {
+		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: f.evalCtx}
+		props.Scalar.Constraints, props.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}
 	return props
 }
