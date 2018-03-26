@@ -17,6 +17,7 @@ define VALID_VARS
   BUILD_TAGGED_RELEASE
   BUILD_TYPE
   CC_PATH
+  CFLAGS
   CGO_ENABLED
   CGO_FLAGS_FILES
   CGO_PKGS
@@ -39,6 +40,7 @@ define VALID_VARS
   CPP_SOURCES_CCL
   CRYPTOPP_DIR
   CRYPTOPP_SRC_DIR
+  CXXFLAGS
   CXX_PATH
   C_DEPS_DIR
   C_LIBS_CCL
@@ -152,6 +154,7 @@ define VALID_VARS
   optgen-package
   prefix
   space
+  sse
   term-reset
   yellow
 endef
