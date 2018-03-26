@@ -48,15 +48,22 @@ type Constraint struct {
 
 // Init initializes the constraint to the columns in the key context and with
 // the given spans.
-func (c *Constraint) Init(keyCtx *KeyContext, spans Spans) {
+func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
 			panic("spans must be ordered and non-overlapping")
 		}
 	}
 	c.Columns = keyCtx.Columns
-	c.Spans = spans
+	c.Spans = *spans
 	c.Spans.makeImmutable()
+}
+
+// InitSingleSpan initializes the constraint to the columns in the key context
+// and with one span.
+func (c *Constraint) InitSingleSpan(keyCtx *KeyContext, span *Span) {
+	c.Columns = keyCtx.Columns
+	c.Spans.InitSingleSpan(span)
 }
 
 // IsContradiction returns true if there are no spans in the constraint.
@@ -90,7 +97,8 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	right := &other.Spans
 	rightIndex := 0
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
-	result := MakeSpans(left.Count() + right.Count())
+	var result Spans
+	result.Alloc(left.Count() + right.Count())
 
 	for leftIndex < left.Count() || rightIndex < right.Count() {
 		if rightIndex < right.Count() {
@@ -177,7 +185,8 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 	right := &other.Spans
 	rightIndex := 0
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
-	result := MakeSpans(left.Count())
+	var result Spans
+	result.Alloc(left.Count())
 
 	for leftIndex < left.Count() && rightIndex < right.Count() {
 		if left.Get(leftIndex).StartsAfter(&keyCtx, right.Get(rightIndex)) {
@@ -221,78 +230,25 @@ func (c Constraint) String() string {
 	return b.String()
 }
 
-// SubsetOf returns true if the receiver constraint is stronger than the other
-// constraint (i.e. c.Spans are completely contained in other.Spans).
-//
-// The two constraints must be on the same set of columns.
-func (c *Constraint) SubsetOf(evalCtx *tree.EvalContext, other *Constraint) bool {
-	if !c.Columns.Equals(&other.Columns) {
-		panic("column mismatch")
-	}
-
-	left := &c.Spans
-	right := &other.Spans
+// ContainsSpan returns true if the constraint contains the given span (or a
+// span that contains it).
+func (c *Constraint) ContainsSpan(evalCtx *tree.EvalContext, sp *Span) bool {
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
-
-	for leftIndex, rightIndex := 0, 0; leftIndex < left.Count(); {
-		if rightIndex == right.Count() {
-			// There is no span that overlaps with leftSpan.
-			return false
-		}
-		leftSpan := left.Get(leftIndex)
-		rightSpan := right.Get(rightIndex)
-		if leftSpan.StartsAfter(&keyCtx, rightSpan) {
-			rightIndex++
-			continue
-		}
-		// Check if rightSpan includes leftSpan.
-		if leftSpan.CompareStarts(&keyCtx, rightSpan) < 0 ||
-			leftSpan.CompareEnds(&keyCtx, rightSpan) > 0 {
-			return false
-		}
-		leftIndex++
-	}
-	return true
-}
-
-// CutFirstColumn removes the first column from the constraint and tries to
-// deduce a constraint on the remaining suffix. If no constraint can be deduced,
-// the constraint becomes unconstrained.
-//
-// We can deduce a constraint only if all the spans have equal start and end
-// keys on the first column. For example:
-//   before: /a/b/c/d: [/1/5 - /1/6] [/2/3 - /2/4]
-//   after:  /b/c/d: [/3 - /4] [/5 - /6]
-// In contrast:
-//   before: /a/b/c/d: [/1/2 - /3/1]
-//   after:  /b/c/d: unconstrained.
-func (c *Constraint) CutFirstColumn(evalCtx *tree.EvalContext) {
-	c.Columns.firstCol = c.Columns.otherCols[0]
-	c.Columns.otherCols = c.Columns.otherCols[1:]
-	if c.Spans.Count() == 0 {
-		return
-	}
-	for i := 0; i < c.Spans.Count(); i++ {
-		sp := c.Spans.Get(i)
-		if sp.start.IsEmpty() || sp.end.IsEmpty() ||
-			sp.start.Value(0).Compare(evalCtx, sp.end.Value(0)) != 0 {
-			c.Spans = SingleSpan(&UnconstrainedSpan)
-			c.Spans.makeImmutable()
-			return
+	// Binary search to find an overlapping span.
+	for l, r := 0, c.Spans.Count()-1; l <= r; {
+		m := (l + r) / 2
+		cSpan := c.Spans.Get(m)
+		if sp.StartsAfter(&keyCtx, cSpan) {
+			l = m + 1
+		} else if cSpan.StartsAfter(&keyCtx, sp) {
+			r = m - 1
+		} else {
+			// The spans must overlap. Check if sp is fully contained.
+			return sp.CompareStarts(&keyCtx, cSpan) >= 0 &&
+				sp.CompareEnds(&keyCtx, cSpan) <= 0
 		}
 	}
-	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
-	result := MakeSpans(c.Spans.Count())
-	for i := 0; i < c.Spans.Count(); i++ {
-		sp := *c.Spans.Get(i)
-		sp.start = sp.start.CutFront(1)
-		sp.end = sp.end.CutFront(1)
-		result.Append(&sp)
-	}
-	result.SortAndMerge(&keyCtx)
-
-	c.Spans = result
-	c.Spans.makeImmutable()
+	return false
 }
 
 // Combine refines the receiver constraint using constraints on a suffix of the
@@ -352,7 +308,7 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 
 			if !resultInitialized {
 				resultInitialized = true
-				result = MakeSpans(c.Spans.Count() + other.Spans.Count())
+				result.Alloc(c.Spans.Count() + other.Spans.Count())
 				for j := 0; j < i; j++ {
 					result.Append(c.Spans.Get(j))
 				}
@@ -360,8 +316,7 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 			for j := 0; j < other.Spans.Count(); j++ {
 				extSp := other.Spans.Get(j)
 				var newSp Span
-				newSp.Set(
-					&keyCtx,
+				newSp.Init(
 					sp.start.Concat(extSp.start), extSp.startBoundary,
 					sp.end.Concat(extSp.end), extSp.endBoundary,
 				)
@@ -405,7 +360,7 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 			// We only initialize result if we need to modify the list of spans.
 			if !resultInitialized {
 				resultInitialized = true
-				result = MakeSpans(c.Spans.Count())
+				result.Alloc(c.Spans.Count())
 				for j := 0; j < i; j++ {
 					result.Append(c.Spans.Get(j))
 				}
@@ -441,7 +396,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 			sp.start.IsNextKey(&keyCtx, last.end) {
 			// We only initialize `result` if we need to change something.
 			if result.Count() == 0 {
-				result = MakeSpans(c.Spans.Count() - 1)
+				result.Alloc(c.Spans.Count() - 1)
 				for j := 0; j < i; j++ {
 					result.Append(c.Spans.Get(j))
 				}
