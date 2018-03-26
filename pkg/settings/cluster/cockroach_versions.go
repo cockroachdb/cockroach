@@ -39,6 +39,7 @@ const (
 	VersionRPCVersionCheck
 	VersionClearRange
 	VersionPartitioning
+	VersionProposedTSLeaseRequest
 	VersionLeaseSequence
 	VersionUnreplicatedTombstoneKey
 	VersionRecomputeStats
@@ -193,6 +194,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionImportSkipRecords is https://github.com/cockroachdb/cockroach/pull/23466
 		Key:     VersionImportSkipRecords,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 1},
+	},
+	{
+		// VersionProposedTSLeaseRequest is https://github.com/cockroachdb/cockroach/pull/23466
+		Key:     VersionProposedTSLeaseRequest,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).
