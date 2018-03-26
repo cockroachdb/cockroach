@@ -35,12 +35,16 @@ func (b *Builder) buildLimit(
 	orderingPrivID := b.factory.InternPrivate(&ordering)
 
 	if limit.Offset != nil {
-		texpr := parentScope.resolveType(limit.Offset, types.Int)
+		op := "OFFSET"
+		b.assertNoAggregationOrWindowing(limit.Offset, op)
+		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int, op)
 		offset := b.buildScalar(texpr, parentScope)
 		out = b.factory.ConstructOffset(out, offset, orderingPrivID)
 	}
 	if limit.Count != nil {
-		texpr := parentScope.resolveType(limit.Count, types.Int)
+		op := "LIMIT"
+		b.assertNoAggregationOrWindowing(limit.Count, op)
+		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int, op)
 		limit := b.buildScalar(texpr, parentScope)
 		out = b.factory.ConstructLimit(out, limit, orderingPrivID)
 	}

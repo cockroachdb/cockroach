@@ -53,6 +53,7 @@ func (b *Builder) buildValuesClause(
 		}
 
 		for i, expr := range tuple.Exprs {
+			b.assertNoAggregationOrWindowing(expr, "VALUES")
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
 			elems[i] = b.buildScalar(texpr, inScope)
