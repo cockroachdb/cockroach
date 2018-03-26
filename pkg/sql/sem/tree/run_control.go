@@ -49,11 +49,30 @@ func (node *CancelJob) Format(ctx *FmtCtx) {
 
 // CancelQuery represents a CANCEL QUERY statement.
 type CancelQuery struct {
-	ID Expr
+	ID       Expr
+	IfExists bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CancelQuery) Format(ctx *FmtCtx) {
 	ctx.WriteString("CANCEL QUERY ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.ID)
+}
+
+// CancelSession represents a CANCEL SESSION statement.
+type CancelSession struct {
+	ID       Expr
+	IfExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CancelSession) Format(ctx *FmtCtx) {
+	ctx.WriteString("CANCEL SESSION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
 	ctx.FormatNode(node.ID)
 }
