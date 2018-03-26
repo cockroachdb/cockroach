@@ -5159,9 +5159,6 @@ func (r *Replica) evaluateProposalInner(
 		}
 		result.Local.Reply = br
 		result.Local.Err = pErr
-		if batch == nil {
-			return result
-		}
 	}
 
 	if result.Local.Err != nil && ba.IsWrite() {
@@ -5293,20 +5290,20 @@ func (r *Replica) evaluateWriteBatch(
 			return batch, ms, br, res, nil
 		}
 
-		batch.Close()
 		ms = enginepb.MVCCStats{}
 
 		// Handle the case of a required one phase commit transaction.
 		if etArg.Require1PC {
 			if pErr != nil {
-				return nil, ms, nil, result.Result{}, pErr
+				return batch, ms, nil, result.Result{}, pErr
 			} else if ba.Timestamp != br.Timestamp {
 				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
-				return nil, ms, nil, result.Result{}, roachpb.NewError(err)
+				return batch, ms, nil, result.Result{}, roachpb.NewError(err)
 			}
 			log.Fatal(ctx, "unreachable")
 		}
 
+		batch.Close()
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
 	}
 
