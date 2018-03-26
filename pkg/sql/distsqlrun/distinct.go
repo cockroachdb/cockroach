@@ -183,9 +183,14 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		if !matched {
+			// Since the sorted distinct columns have changed, we know that all the
+			// distinct keys in the 'seen' set will never be seen again. This allows
+			// us to keep the current arena block and overwrite strings previously
+			// allocated on it, which implies that UnsafeReset() is safe to call here.
 			d.lastGroupKey = row
-			d.memAcc.Clear(d.ctx)
-			d.arena = stringarena.Make(&d.memAcc)
+			if err := d.arena.UnsafeReset(d.ctx); err != nil {
+				return nil, d.producerMeta(err)
+			}
 			d.seen = make(map[string]struct{})
 		}
 
