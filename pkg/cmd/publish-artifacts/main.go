@@ -154,43 +154,11 @@ func main() {
 	}
 
 	if *isRelease {
-		for _, releaseVersionStr := range releaseVersionStrs {
-			archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
-			srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
-			cmd := exec.Command(
-				"make",
-				"archive",
-				fmt.Sprintf("ARCHIVE_BASE=%s", archiveBase),
-				fmt.Sprintf("ARCHIVE=%s", srcArchive),
-			)
-			cmd.Dir = pkg.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Printf("%s %s", cmd.Env, cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatalf("%s: %s", cmd.Args, err)
-			}
-
-			absoluteSrcArchivePath := filepath.Join(pkg.Dir, srcArchive)
-			f, err := os.Open(absoluteSrcArchivePath)
-			if err != nil {
-				log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
-			}
-			putObjectInput := s3.PutObjectInput{
-				Bucket: &bucketName,
-				Key:    &srcArchive,
-				Body:   f,
-			}
-			if releaseVersionStr == latestStr {
-				putObjectInput.CacheControl = &noCache
-			}
-			if _, err := svc.PutObject(&putObjectInput); err != nil {
-				log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
-			}
-			if err := f.Close(); err != nil {
-				log.Fatal(err)
-			}
-		}
+		buildArchive(svc, opts{
+			PkgDir:             pkg.Dir,
+			BucketName:         bucketName,
+			ReleaseVersionStrs: releaseVersionStrs,
+		})
 	}
 
 	for _, target := range []struct {
@@ -245,14 +213,63 @@ func main() {
 				continue
 			}
 
-			buildOne(svc, o)
+			buildOneCockroach(svc, o)
+		}
+	}
+
+	if !*isRelease {
+		buildOneWorkload(svc, opts{
+			PkgDir:     pkg.Dir,
+			BucketName: bucketName,
+			Branch:     branch,
+			VersionStr: versionStr,
+		})
+	}
+}
+
+func buildArchive(svc s3putter, o opts) {
+	for _, releaseVersionStr := range o.ReleaseVersionStrs {
+		archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
+		srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
+		cmd := exec.Command(
+			"make",
+			"archive",
+			fmt.Sprintf("ARCHIVE_BASE=%s", archiveBase),
+			fmt.Sprintf("ARCHIVE=%s", srcArchive),
+		)
+		cmd.Dir = o.PkgDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("%s: %s", cmd.Args, err)
+		}
+
+		absoluteSrcArchivePath := filepath.Join(o.PkgDir, srcArchive)
+		f, err := os.Open(absoluteSrcArchivePath)
+		if err != nil {
+			log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
+		}
+		putObjectInput := s3.PutObjectInput{
+			Bucket: &o.BucketName,
+			Key:    &srcArchive,
+			Body:   f,
+		}
+		if releaseVersionStr == latestStr {
+			putObjectInput.CacheControl = &noCache
+		}
+		if _, err := svc.PutObject(&putObjectInput); err != nil {
+			log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
+		}
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
 		}
 	}
 }
 
-func buildOne(svc s3putter, o opts) {
+func buildOneCockroach(svc s3putter, o opts) {
 	defer func() {
-		log.Printf("done building: %s", pretty.Sprint(o))
+		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
 	{
@@ -330,6 +347,42 @@ func buildOne(svc s3putter, o opts) {
 	} else {
 		putRelease(svc, o)
 	}
+	if err := o.Binary.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func buildOneWorkload(svc s3putter, o opts) {
+	defer func() {
+		log.Printf("done building workload: %s", pretty.Sprint(o))
+	}()
+
+	if *isRelease {
+		log.Fatalf("refusing to build workload in release mode")
+	}
+
+	{
+		cmd := exec.Command("make", "bin/workload")
+		cmd.Dir = o.PkgDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("%s: %s", cmd.Args, err)
+		}
+	}
+
+	o.Base = "workload"
+	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", o.Base)
+	{
+		var err error
+		o.Binary, err = os.Open(o.AbsolutePath)
+
+		if err != nil {
+			log.Fatalf("os.Open(%s): %s", o.AbsolutePath, err)
+		}
+	}
+	putNonRelease(svc, o)
 	if err := o.Binary.Close(); err != nil {
 		log.Fatal(err)
 	}
