@@ -51,7 +51,7 @@ func init() {
 		// Start the remaining nodes to kick off upreplication/rebalancing.
 		c.Start(ctx, c.Range(start+1, c.nodes), args)
 
-		c.Run(ctx, 1, `./workload init kv --drop`)
+		c.Run(ctx, c.Node(1), `./workload init kv --drop`)
 		for node := 1; node <= c.nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
