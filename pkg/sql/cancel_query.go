@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 type cancelQueryNode struct {
@@ -58,7 +57,7 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 	}
 
 	queryIDString := tree.AsStringWithFlags(queryIDDatum, tree.FmtBareStrings)
-	queryID, err := uint128.FromString(queryIDString)
+	queryID, err := StringToClusterWideID(queryIDString)
 	if err != nil {
 		return errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
 	}
