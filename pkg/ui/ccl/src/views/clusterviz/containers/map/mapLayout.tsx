@@ -71,10 +71,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
 
   // updateZoom programmatically requests zoom transition to the target
   // specified by the provided ZoomTransformer. If 'animate' is true, this
-  // transition is animated; otherwise, the transition is instant. Note that the
-  // non-animated updates must still go through a d3 transition of 0 duration,
-  // or else the next animated zoom will not have the correct initial state - it
-  // establishes the starting point of future animations.
+  // transition is animated; otherwise, the transition is instant.
   //
   // During the transition, d3 will repeatedly call the 'onZoom' method with the
   // appropriate translations for the animation; that is the point where this
@@ -86,14 +83,29 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
       .scaleExtent([minScale, minScale * 10])
       .size(zt.viewportSize());
 
-    // Update both the d3 zoom behavior and the local state.
-    d3.select(this.gEl)
-      .transition()
-      .duration(animate ? 750 : 0)
-      .call(this.zoom
-        .scale(zt.scale())
-        .translate(zt.translate())
-        .event);
+    if (animate) {
+      // Call zoom.event on the current zoom state, then transition to the
+      // target zoom state. This is needed because free pan-and-zoom does not
+      // update the internal animation state used by zoom.event, and will cause
+      // animations after the first to have the wrong starting position.
+      d3.select(this.gEl)
+        .call(this.zoom.event)
+        .transition()
+        .duration(750)
+        .call(this.zoom
+          .scale(zt.scale())
+          .translate(zt.translate())
+          .event,
+        );
+    } else {
+      // Call zoom.event on the element itself, rather than a transition.
+      d3.select(this.gEl)
+        .call(this.zoom
+          .scale(zt.scale())
+          .translate(zt.translate())
+          .event,
+        );
+    }
   }
 
   // onZoom is called by d3 whenever the zoom needs to be updated. We apply
@@ -103,6 +115,13 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     const zoomTransform = this.state.zoomTransform.withScaleAndTranslate(
       this.zoom.scale(), this.zoom.translate(),
     );
+
+    // In case the transform was adjusted, apply the scale and translation back
+    // to the d3 zoom behavior.
+    this.zoom
+      .scale(zoomTransform.scale())
+      .translate(zoomTransform.translate());
+
     this.setState({ zoomTransform });
   }
 
