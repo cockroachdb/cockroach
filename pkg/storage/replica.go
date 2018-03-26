@@ -32,7 +32,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -4544,6 +4544,11 @@ func (r *Replica) checkForcedErrLocked(
 	leaseMismatch := false
 	if raftCmd.DeprecatedProposerLease != nil {
 		// VersionLeaseSequence must not have been active when this was proposed.
+		//
+		// This does not prevent the lease race condition described below. The
+		// reason we don't fix this here as well is because fixing the race
+		// requires a new cluster version which implies that we'll already be
+		// using lease sequence numbers and will fall into the case below.
 		leaseMismatch = !raftCmd.DeprecatedProposerLease.Equivalent(*r.mu.state.Lease)
 	} else {
 		leaseMismatch = raftCmd.ProposerLeaseSequence != r.mu.state.Lease.Sequence
@@ -4566,6 +4571,16 @@ func (r *Replica) checkForcedErrLocked(
 				// It is only possible for this to fail when expiration-based
 				// lease extensions are proposed concurrently.
 				leaseMismatch = !r.mu.state.Lease.Equivalent(requestedLease)
+			}
+
+			// This is a check to see if the lease we proposed this lease request against is the same
+			// lease that we're trying to update. We need to check proposal timestamps because
+			// extensions don't increment sequence numbers. Without this check a lease could
+			// be extended and then another lease proposed against the original lease would
+			// be applied over the extension.
+			if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
+				(*raftCmd.ReplicatedEvalResult.PrevLeaseProposal != *r.mu.state.Lease.ProposedTS) {
+				leaseMismatch = true
 			}
 		}
 	}
