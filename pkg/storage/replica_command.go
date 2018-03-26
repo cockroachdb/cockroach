@@ -748,7 +748,7 @@ func (r *Replica) AdminSplit(
 }
 
 func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
-	if detail, ok := err.(*roachpb.ConditionFailedError); ok {
+	if detail, ok := err.(*roachpb.ConditionFailedError); ok && detail.ActualValue != nil {
 		// Provide a better message in the common case that the range being changed
 		// was already changed by a concurrent transaction.
 		var actualDesc roachpb.RangeDescriptor
