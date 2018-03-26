@@ -165,7 +165,6 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	}
 
 	log.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
-
 	resp, err := http.Get(opts.URL.String())
 	if err != nil {
 		return "", err
@@ -174,6 +173,9 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	if resp.StatusCode != 200 {
 		body, _ := ioutil.ReadAll(resp.Body)
 		return "", errors.Errorf("unexpected HTTP response from %s: %d\n%s", opts.URL.String(), resp.StatusCode, body)
+	}
+	if opts.Version == "LATEST" {
+		log.Infof(ctx, "LATEST redirected to %s", resp.Request.URL.String())
 	}
 
 	destFile, err := os.Create(destFileName)
