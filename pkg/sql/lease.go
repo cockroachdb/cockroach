@@ -1505,7 +1505,9 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 						table := union.Table
 						table.MaybeFillInDescriptor()
 						if err := table.ValidateTable(m.execCfg.Settings); err != nil {
-							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
+							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
+								kv.Key, err, table,
+							)
 							return
 						}
 						if log.V(2) {
