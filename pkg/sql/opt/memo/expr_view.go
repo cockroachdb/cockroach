@@ -325,7 +325,7 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 	} else {
 		showType := true
 		switch ev.Operator() {
-		case opt.ProjectionsOp, opt.AggregationsOp:
+		case opt.ProjectionsOp, opt.AggregationsOp, opt.Max1RowOp:
 			// Don't show the type of these ops because they are simply tuple
 			// types of their children's types, and the types of children are
 			// already listed.
