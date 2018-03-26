@@ -55,8 +55,7 @@ type FlagMeta struct {
 	// impact on the behavior of any Tables in this workload.
 	RuntimeOnly bool
 	// CheckConsistencyOnly is expected to be true only if the corresponding
-	// flag only has an effect on the CheckConsistency hook. Setting
-	// CheckConsistencyOnly to true also implies true for RuntimeOnly.
+	// flag only has an effect on the CheckConsistency hook.
 	CheckConsistencyOnly bool
 }
 
