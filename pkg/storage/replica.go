@@ -4488,6 +4488,16 @@ func (r *Replica) checkForcedErrLocked(
 				// lease extensions are proposed concurrently.
 				leaseMismatch = !r.mu.state.Lease.Equivalent(requestedLease)
 			}
+
+			// This is a check to see if the lease we created this lease request again is the same
+			// lease that we're trying to update. We need to check proposal timestamps because
+			// extensions don't increment sequence numbers. Without this check a lease could
+			// be extended and then another lease evaluated against the original lease would
+			// be applied over the extension.
+			if raftCmd.ReplicatedEvalResult.PrevLeaseProposal != nil &&
+				(*raftCmd.ReplicatedEvalResult.PrevLeaseProposal != *r.mu.state.Lease.ProposedTS) {
+				leaseMismatch = true
+			}
 		}
 	}
 	if leaseMismatch {
