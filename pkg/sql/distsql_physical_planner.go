@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -77,6 +78,10 @@ type DistSQLPlanner struct {
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
 	testingKnobs DistSQLPlannerTestingKnobs
+
+	// metadataTestTolerance is the minimum level required to plan metadata test
+	// processors.
+	metadataTestTolerance distsqlrun.MetadataTestLevel
 
 	// runnerChan is used to send out requests (for running SetupFlow RPCs) to a
 	// pool of workers.
@@ -133,19 +138,24 @@ func NewDistSQLPlanner(
 		panic("must specify liveness")
 	}
 	dsp := &DistSQLPlanner{
-		planVersion:  planVersion,
-		st:           st,
-		nodeDesc:     nodeDesc,
-		rpcContext:   rpcCtx,
-		stopper:      stopper,
-		distSQLSrv:   distSQLSrv,
-		gossip:       gossip,
-		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
-		liveness:     liveness,
-		testingKnobs: testingKnobs,
+		planVersion:           planVersion,
+		st:                    st,
+		nodeDesc:              nodeDesc,
+		rpcContext:            rpcCtx,
+		stopper:               stopper,
+		distSQLSrv:            distSQLSrv,
+		gossip:                gossip,
+		spanResolver:          distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		liveness:              liveness,
+		testingKnobs:          testingKnobs,
+		metadataTestTolerance: distsqlrun.NoExplain,
 	}
 	dsp.initRunners()
 	return dsp
+}
+
+func (dsp *DistSQLPlanner) shouldPlanTestMetadata() bool {
+	return dsp.distSQLSrv.TestingKnobs.MetadataTestLevel >= dsp.metadataTestTolerance
 }
 
 // SetNodeDesc sets the planner's node descriptor.
@@ -1926,27 +1936,32 @@ func applySortBasedOnFirst(source, target []uint32) ([]uint32, error) {
 
 func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx *planningCtx, node planNode,
-) (physicalPlan, error) {
+) (plan physicalPlan, err error) {
 	switch n := node.(type) {
+	case *explainDistSQLNode:
+		curTol := dsp.metadataTestTolerance
+		dsp.metadataTestTolerance = distsqlrun.On
+		defer func() { dsp.metadataTestTolerance = curTol }()
+		plan, err = dsp.createPlanForNode(planCtx, n.plan)
+
 	case *scanNode:
-		return dsp.createTableReaders(planCtx, n, nil)
+		plan, err = dsp.createTableReaders(planCtx, n, nil)
 
 	case *indexJoinNode:
-		return dsp.createPlanForIndexJoin(planCtx, n)
+		plan, err = dsp.createPlanForIndexJoin(planCtx, n)
 
 	case *joinNode:
-		return dsp.createPlanForJoin(planCtx, n)
+		plan, err = dsp.createPlanForJoin(planCtx, n)
 
 	case *renderNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
+		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 		dsp.selectRenders(&plan, n, planCtx.EvalContext())
-		return plan, nil
 
 	case *groupNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
@@ -1955,30 +1970,24 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		return plan, nil
-
 	case *sortNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 
 		dsp.addSorters(&plan, n)
 
-		return plan, nil
-
 	case *filterNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.source.plan)
+		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 
 		plan.AddFilter(n.filter, planCtx.EvalContext(), plan.planToStreamColMap)
 
-		return plan, nil
-
 	case *limitNode:
-		plan, err := dsp.createPlanForNode(planCtx, n.plan)
+		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
@@ -1988,23 +1997,39 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err := plan.AddLimit(n.count, n.offset, dsp.nodeDesc.NodeID); err != nil {
 			return physicalPlan{}, err
 		}
-		return plan, nil
 
 	case *distinctNode:
-		return dsp.createPlanForDistinct(planCtx, n)
+		plan, err = dsp.createPlanForDistinct(planCtx, n)
 
 	case *unionNode:
-		return dsp.createPlanForSetOp(planCtx, n)
+		plan, err = dsp.createPlanForSetOp(planCtx, n)
 
 	case *valuesNode:
-		return dsp.createPlanForValues(planCtx, n)
+		plan, err = dsp.createPlanForValues(planCtx, n)
 
 	case *createStatsNode:
-		return dsp.createPlanForCreateStats(planCtx, n)
+		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))
 	}
+
+	if dsp.shouldPlanTestMetadata() {
+		plan.AddNoGroupingStageWithCoreFunc(
+			func(_ int, _ *distsqlplan.Processor) distsqlrun.ProcessorCoreUnion {
+				return distsqlrun.ProcessorCoreUnion{
+					MetadataTestSender: &distsqlrun.MetadataTestSenderSpec{
+						ID: uuid.MakeV4().String(),
+					},
+				}
+			},
+			distsqlrun.PostProcessSpec{},
+			plan.ResultTypes,
+			plan.MergeOrdering,
+		)
+	}
+
+	return plan, err
 }
 
 func (dsp *DistSQLPlanner) createPlanForValues(
@@ -2427,6 +2452,14 @@ func (dsp *DistSQLPlanner) newPlanningCtx(
 // FinalizePlan adds a final "result" stage if necessary and populates the
 // endpoints of the plan.
 func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan) {
+	// Find all MetadataTestSenders in the plan, so that the MetadataTestReceiver
+	// knows how many sender IDs it should expect.
+	var metadataSenders []string
+	for _, proc := range plan.Processors {
+		if proc.Spec.Core.MetadataTestSender != nil {
+			metadataSenders = append(metadataSenders, proc.Spec.Core.MetadataTestSender.ID)
+		}
+	}
 	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.
@@ -2441,6 +2474,19 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan
 		if len(plan.ResultRouters) != 1 {
 			panic(fmt.Sprintf("%d results after single group stage", len(plan.ResultRouters)))
 		}
+	}
+
+	if len(metadataSenders) > 0 {
+		plan.AddSingleGroupStage(
+			thisNodeID,
+			distsqlrun.ProcessorCoreUnion{
+				MetadataTestReceiver: &distsqlrun.MetadataTestReceiverSpec{
+					SenderIDs: metadataSenders,
+				},
+			},
+			distsqlrun.PostProcessSpec{},
+			plan.ResultTypes,
+		)
 	}
 
 	// Set up the endpoints for p.streams.
