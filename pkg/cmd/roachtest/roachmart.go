@@ -49,7 +49,7 @@ func init() {
 				t.Fatal(err)
 			}
 			defer l.close()
-			if err := c.RunL(ctx, l, nodes[i].i, args...); err != nil {
+			if err := c.RunL(ctx, l, c.Node(nodes[i].i), args...); err != nil {
 				t.Fatal(err)
 			}
 		}

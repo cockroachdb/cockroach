@@ -30,9 +30,7 @@ func init() {
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
 		c.Start(ctx)
-		for node := 1; node <= c.nodes; node++ {
-			c.Run(ctx, node, `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-		}
+		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c)
@@ -41,7 +39,7 @@ func init() {
 				`./workload fixtures make tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
 					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
 				warehouses, gcsTestBucket, c.name)
-			c.Run(ctx, 1, cmd)
+			c.Run(ctx, c.Node(1), cmd)
 			return nil
 		})
 		m.Wait()

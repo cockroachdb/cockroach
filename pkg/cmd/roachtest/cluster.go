@@ -538,6 +538,24 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
+// GitClone clones a git repo from src into dest and checks out
+// origin's version of the given branch. The src, dest, and branch
+// arguments must not contain shell special characters.
+func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
+	c.Run(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
+if ! test -d %s; then
+  git clone -b %s --depth 1 %s %s
+else
+  cd %s
+  git fetch origin
+  git checkout origin/%s
+fi
+'`, dest,
+		branch, src, dest,
+		dest,
+		branch))
+}
+
 // startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
 func startArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
@@ -617,7 +635,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 }
 
 // Run a command on the specified node
-func (c *cluster) Run(ctx context.Context, node int, args ...string) {
+func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
 	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -625,17 +643,17 @@ func (c *cluster) Run(ctx context.Context, node int, args ...string) {
 }
 
 // RunE runs a command on the specified node, returning an error.
-func (c *cluster) RunE(ctx context.Context, node int, args ...string) error {
+func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
 	return c.RunL(ctx, c.l, node, args...)
 }
 
 // RunL runs a command on the specified node, returning an error.
-func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string) error {
+func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args ...string) error {
 	if err := c.preRunChecks(); err != nil {
 		return err
 	}
 	return execCmd(ctx, l,
-		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
+		append([]string{"roachprod", "ssh", c.makeNodes(node), "--"}, args...)...)
 }
 
 // preRunChecks runs checks to see if it makes sense to run a command.
@@ -654,13 +672,13 @@ func (c *cluster) preRunChecks() error {
 // RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
 // and stdout or an error.
 func (c *cluster) RunWithBuffer(
-	ctx context.Context, l *logger, node int, args ...string,
+	ctx context.Context, l *logger, node nodeListOption, args ...string,
 ) ([]byte, error) {
 	if err := c.preRunChecks(); err != nil {
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
-		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
+		append([]string{"roachprod", "ssh", c.makeNodes(node), "--"}, args...)...)
 }
 
 // PGUrl returns the Postgres endpoint for the specified node.

@@ -18,7 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 func init() {
@@ -38,7 +37,7 @@ func init() {
 					concurrency+duration+
 					" {pgurl:1-%d}",
 				percent, nodes)
-			c.Run(ctx, nodes+1, cmd)
+			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
 		})
 		m.Wait()
@@ -78,7 +77,7 @@ func init() {
 						concurrency+splits+
 						" {pgurl:1-%d}",
 					nodes)
-				c.Run(ctx, nodes+1, cmd)
+				c.Run(ctx, c.Node(nodes+1), cmd)
 				return nil
 			})
 			m.Wait()
@@ -91,18 +90,10 @@ func init() {
 		nodes := c.nodes - 1
 
 		if !c.isLocal() {
-			var wg sync.WaitGroup
-			wg.Add(nodes)
-			for i := 1; i <= 6; i++ {
-				go func(i int) {
-					defer wg.Done()
-					c.Run(ctx, i,
-						"sudo", "umount", "/mnt/data1", ";",
-						"sudo", "mount", "-o", "discard,defaults,nobarrier",
-						"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
-				}(i)
-			}
-			wg.Wait()
+			c.Run(ctx, c.All(),
+				"sudo", "umount", "/mnt/data1", ";",
+				"sudo", "mount", "-o", "discard,defaults,nobarrier",
+				"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
 		}
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -127,7 +118,7 @@ func init() {
 				}
 				defer l.close()
 
-				return c.RunL(ctx, l, nodes+1, cmd)
+				return c.RunL(ctx, l, c.Node(nodes+1), cmd)
 			})
 			m.Wait()
 		}
