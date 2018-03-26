@@ -1,0 +1,116 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+@require nib
+@require "~styl/base/palette.styl"
+
+.overhang
+  border-top 1px dotted
+.catalog-description
+  color: #5F6C87
+  font-size 18px
+  max-width 500px
+  padding-top 28px
+  padding-bottom 37px
+
+.catalog-section
+  background-color white
+  border 1px solid #EDEDED
+  padding-top 34px
+  padding-left 34px
+  h2
+    margin 0px
+    padding-top 3px
+    color #3A7DE1
+    text-transform uppercase
+  .section-description
+    color #5F6C87
+    font-size 14px
+    max-width 370px
+
+.catalog-table
+  display table
+  border 0
+  color $body-color
+
+  &__section-header
+    vertical-align top
+    width 30rem
+  
+  &__chart-links
+    column-count 2
+    -webkit-column-count 2
+    column-gap 0
+    -webkit-column-gap 0
+
+  .inner-table
+    // margin 0 0 20px
+    padding-bottom 30px
+    display table
+    border 0
+    color $body-color
+    border-top: 1px dotted
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+
+  .catalog-table-level-1
+    margin-left 20px
+
+  &__row
+    display table-row
+  
+   &__cell
+     padding-top 4px
+
+  &__header
+    font-size 16px 
+    padding 6px 0px
+    margin-left -50px
+    display table-cell
+    text-align left
+    vertical-align top
+    width 8rem
+
+    &--header
+      font-weight 900
+      color $headings-color
+      text-align right
+      width 18rem
+      padding-top 7px
+
+.catalog-inner-table
+  margin 0
+  display table
+  border 0
+  color $body-color
+
+  &__row
+    display table-row
+
+  &__header
+    display table-cell
+    text-align left
+    vertical-align top
+    width 25rem
+
+    &--notes
+      width fit-content
+
+.catalog-link
+  color $link-color
+  text-decoration none
+
+hr
+  display block;
+  height 1px;
+  border 0;
+  border-top 1px solid lightgray;
+  margin 1em 0;
+  padding 0; 
