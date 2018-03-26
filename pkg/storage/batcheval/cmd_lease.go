@@ -162,6 +162,11 @@ func evalNewLease(
 	pd.Replicated.State = &storagebase.ReplicaState{
 		Lease: &lease,
 	}
+
+	if rec.ClusterSettings().Version.IsMinSupported(cluster.VersionProposedTSLeaseRequest) {
+		pd.Replicated.PrevLeaseProposal = prevLease.ProposedTS
+	}
+
 	pd.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
 	if isTransfer {
 		*pd.Local.LeaseMetricsResult = result.LeaseTransferSuccess
