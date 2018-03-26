@@ -522,7 +522,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   SYMMETRIC SYNTAX SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -5684,6 +5684,14 @@ const_datetime:
   {
     $$.val = coltypes.Time
   }
+| TIMETZ
+  {
+    $$.val = coltypes.TimeTZ
+  }
+| TIME WITH TIME ZONE
+  {
+    $$.val = coltypes.TimeTZ
+  }
 | TIMESTAMP
   {
     $$.val = coltypes.Timestamp
@@ -7666,6 +7674,7 @@ col_name_keyword:
 | STRING
 | SUBSTRING
 | TIME
+| TIMETZ
 | TIMESTAMP
 | TIMESTAMPTZ
 | TREAT

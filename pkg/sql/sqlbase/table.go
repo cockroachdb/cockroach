@@ -118,6 +118,7 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 		}
 	case *coltypes.TDate:
 	case *coltypes.TTime:
+	case *coltypes.TTimeTZ:
 	case *coltypes.TTimestamp:
 	case *coltypes.TTimestampTZ:
 	case *coltypes.TInterval:
@@ -560,6 +561,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *tree.DTimeTZ:
+		if dir == encoding.Ascending {
+			return encoding.EncodeVarintAscending(b, t.ToTime()), nil
+		}
+		return encoding.EncodeVarintDescending(b, t.ToTime()), nil
 	case *tree.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
@@ -645,6 +651,8 @@ func EncodeTableValue(
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
+	case *tree.DTimeTZ:
+		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.ToTime()), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *tree.DTimestampTZ:
@@ -999,6 +1007,7 @@ type DatumAlloc struct {
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
 	dtimeAlloc        []tree.DTime
+	dtimeTzAlloc      []tree.DTimeTZ
 	dtimestampAlloc   []tree.DTimestamp
 	dtimestampTzAlloc []tree.DTimestampTZ
 	dintervalAlloc    []tree.DInterval
@@ -1094,6 +1103,18 @@ func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
 		*buf = make([]tree.DTime, datumAllocSize)
 	}
 	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTimeTZ allocates a DTimeTZ.
+func (a *DatumAlloc) NewDTimeTZ(v tree.DTimeTZ) *tree.DTimeTZ {
+	buf := &a.dtimeTzAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DTimeTZ, datumAllocSize)
+	}
+	r := &(*buf[0])
 	*r = v
 	*buf = (*buf)[1:]
 	return r
@@ -1274,6 +1295,14 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDTime(tree.DTime(t)), rkey, err
+	case types.TimeTZ:
+		var t time.Time
+		if dir == encoding.Ascending {
+			rkey, t, err = encoding.DecodeTimeAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeTimeDescending(key)
+		}
+		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(t), t.Location()}), rkey, err
 	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -1497,6 +1526,12 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return a.NewDTime(tree.DTime(data)), b, nil
+	case types.TimeTZ:
+		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(data), data.Location()}), b, nil
 	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
@@ -1823,6 +1858,11 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetInt(int64(*v))
 			return r, nil
 		}
+	case ColumnType_TIMETZ:
+		if v, ok := val.(*tree.DTimeTZ); ok {
+			r.SetTime(v.Time)
+			return r, nil
+		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(*tree.DTimestamp); ok {
 			r.SetTime(v.Time)
@@ -1971,7 +2011,7 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Decimal, nil
 	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case types.Timestamp, types.TimestampTZ:
+	case types.Timestamp, types.TimestampTZ, types,TimeTZ:
 		return encoding.Time, nil
 	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
 	// first introduced. If any 1.1 users used date arrays, they would have been
@@ -2016,6 +2056,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *tree.DTimeTZ:
+		return encoding.EncodeUntaggedTimeValue(b, t.ToTime()), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
 	case *tree.DTimestampTZ:
@@ -2092,6 +2134,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 			return nil, err
 		}
 		return a.NewDTime(tree.DTime(v)), nil
+	case ColumnType_TIMETZ:
+		v, err := value.GetTime()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(v), v.Location()}, nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {

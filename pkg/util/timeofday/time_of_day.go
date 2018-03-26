@@ -109,6 +109,11 @@ func Difference(t1 TimeOfDay, t2 TimeOfDay) duration.Duration {
 	return duration.Duration{Nanos: int64(t1-t2) * nanosPerMicro}
 }
 
+// Sum returns the TimeOfDay that is the sum of t1 and t2.
+func Sum(t1 TimeOfDay, t2 TimeOfDay) TimeOfDay {
+	return TimeOfDay(int64(t1+t2))
+}
+
 // Hour returns the hour specified by t, in the range [0, 23].
 func (t TimeOfDay) Hour() int {
 	return int(int64(t)%microsecondsPerDay) / microsecondsPerHour
