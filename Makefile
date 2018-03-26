@@ -703,6 +703,7 @@ $(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
 $(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
 
 BUILDINFO = .buildinfo/tag .buildinfo/rev
+BUILD_TAGGED_RELEASE =
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
