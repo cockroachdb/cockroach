@@ -1278,6 +1278,18 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"current_time": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.TimeTZ),
+			Impure:     true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTime(), nil
+			},
+			Info: "Returns the current transaction's time with time zone.",
+		},
+	},
+
 	"now":                   txnTSImpl,
 	"current_timestamp":     txnTSImpl,
 	"transaction_timestamp": txnTSImpl,
@@ -1387,6 +1399,19 @@ CockroachDB supports the following flags:
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractStringFromTime(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryDateAndTime,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTimeTZ := args[1].(*tree.DTimeTZ)
+				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return extractStringFromTime(fromTime, timeSpan)
 			},
@@ -3762,7 +3787,7 @@ func AsJSON(d tree.Datum) (json.JSON, error) {
 			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
 		return builder.Build(), nil
-	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
+	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime, *tree.DTimeTZ:
 		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
 	default:
 		if d == tree.DNull {
