@@ -1299,10 +1299,11 @@ var (
 	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON}
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.JSON}
 	bytesCastTypes     = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
 	dateCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	timeCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.Timestamp, types.TimestampTZ, types.Interval}
+	timeCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Interval}
+	timetzCastTypes    = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.TimestampTZ}
 	timestampCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
 	intervalCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval}
 	oidCastTypes       = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid}
@@ -1331,6 +1332,8 @@ func validCastTypes(t types.T) []types.T {
 		return dateCastTypes
 	case types.Time:
 		return timeCastTypes
+	case types.TimeTZ:
+		return timetzCastTypes
 	case types.Timestamp, types.TimestampTZ:
 		return timestampCastTypes
 	case types.Interval:
@@ -1455,6 +1458,7 @@ func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
+func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }

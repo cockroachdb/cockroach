@@ -240,6 +240,7 @@ array_agg(string) -> string[]
 array_agg(bytes) -> bytes[]
 array_agg(date) -> date[]
 array_agg(time) -> time[]
+array_agg(timetz) -> timetz[]
 array_agg(timestamp) -> timestamp[]
 array_agg(timestamptz) -> timestamptz[]
 array_agg(interval) -> interval[]
@@ -2593,7 +2594,7 @@ project
            └── unary-minus [type=int]
                 └── variable: kv.w [type=int]
 
-build 
+build
 SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
 ----
 project
