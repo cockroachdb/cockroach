@@ -41,8 +41,8 @@ type Factory interface {
 
 	// ConstructScan returns a node that represents a scan of the given table.
 	// Only the given set of needed columns are part of the result.
-	// TODO(radu): support index, index constraints
-	ConstructScan(table opt.Table, needed ColumnOrdinalSet) (Node, error)
+	// TODO(radu): support index constraints
+	ConstructScan(table opt.Table, index opt.Index, needed ColumnOrdinalSet) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.

@@ -243,6 +243,25 @@ func (m *Memo) MemoizeNormExpr(norm Expr) GroupID {
 	return mgrp.id
 }
 
+// MemoizeDenormExpr enters a denormalized expression into the given memo
+// group. A denormalized expression is logically equivalent to the group's
+// normalized expression, but is an alternate form that may have a lower cost.
+// The group must already exist, since the normalized version of the expression
+// should have triggered its creation earlier.
+func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
+	existing := m.exprMap[denorm.Fingerprint()]
+	if existing != 0 {
+		// Expression has already been entered into the memo.
+		if existing != group {
+			panic("denormalized expression's group doesn't match fingerprint group")
+		}
+	} else {
+		// Add the denormalized expression to the memo.
+		m.group(group).addExpr(denorm)
+		m.exprMap[denorm.Fingerprint()] = group
+	}
+}
+
 // --------------------------------------------------------------------
 // Best expression methods.
 // --------------------------------------------------------------------
@@ -360,22 +379,22 @@ func (m *Memo) String() string {
 			if ord != 0 {
 				buf.WriteByte(' ')
 			}
-			m.formatExpr(mgrp.expr(ExprOrdinal(ord)), &buf)
+			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)))
 		}
 
 		child := root.Childf("%d: %s", i, buf.String())
-		m.formatBestExprSet(mgrp, child)
+		m.formatBestExprSet(child, mgrp)
 	}
 
 	return tp.String()
 }
 
-func (m *Memo) formatExpr(e *Expr, buf *bytes.Buffer) {
+func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
 	fmt.Fprintf(buf, "(%s", e.op)
 	for i := 0; i < e.ChildCount(); i++ {
 		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
 	}
-	m.formatPrivate(e.Private(m), buf)
+	m.formatPrivate(buf, e.Private(m))
 	buf.WriteString(")")
 }
 
@@ -385,7 +404,7 @@ type bestExprSort struct {
 	best        *BestExpr
 }
 
-func (m *Memo) formatBestExprSet(mgrp *group, tp treeprinter.Node) {
+func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 	// Sort the bestExprs by required properties.
 	cnt := mgrp.bestExprCount()
 	beSort := make([]bestExprSort, 0, cnt)
@@ -410,13 +429,13 @@ func (m *Memo) formatBestExprSet(mgrp *group, tp treeprinter.Node) {
 		// interesting.
 		if !isScalarLookup[sort.best.op] {
 			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
-			m.formatBestExpr(sort.best, &buf)
+			m.formatBestExpr(&buf, sort.best)
 			child.Childf("best: %s", buf.String())
 		}
 	}
 }
 
-func (m *Memo) formatBestExpr(be *BestExpr, buf *bytes.Buffer) {
+func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr) {
 	fmt.Fprintf(buf, "(%s", be.op)
 
 	for i := 0; i < be.ChildCount(); i++ {
@@ -430,20 +449,30 @@ func (m *Memo) formatBestExpr(be *BestExpr, buf *bytes.Buffer) {
 		}
 	}
 
-	m.formatPrivate(be.Private(m), buf)
+	m.formatPrivate(buf, be.Private(m))
 	buf.WriteString(")")
 }
 
-func (m *Memo) formatPrivate(private interface{}, buf *bytes.Buffer) {
+func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	if private != nil {
 		switch t := private.(type) {
 		case nil:
+
 		case *ScanOpDef:
-			fmt.Fprintf(buf, " %s", m.metadata.Table(t.Table).TabName())
+			// Don't output name of index if it's the primary index.
+			tab := m.metadata.Table(t.Table)
+			if t.Index == opt.PrimaryIndex {
+				fmt.Fprintf(buf, " %s", tab.TabName())
+			} else {
+				fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
+			}
+
 		case opt.ColumnID:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
+
 		case *opt.ColSet, *opt.ColMap, *opt.ColList:
 			// Don't show anything, because it's mostly redundant.
+
 		default:
 			fmt.Fprintf(buf, " %s", private)
 		}
