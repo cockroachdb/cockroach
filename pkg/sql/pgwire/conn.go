@@ -258,7 +258,7 @@ func (c *conn) serveImpl(
 		wg.Add(1)
 		go func() {
 			writerErr = sqlServer.ServeConn(
-				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, &c.metrics.SQLMemMetrics)
+				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, &c.metrics.SQLMemMetrics, stopProcessor)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()

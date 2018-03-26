@@ -100,6 +100,8 @@
 		ListSessionsResponse
 		CancelQueryRequest
 		CancelQueryResponse
+		CancelSessionRequest
+		CancelSessionResponse
 		SpanStatsRequest
 		SpanStatsResponse
 		ProblemRangesRequest

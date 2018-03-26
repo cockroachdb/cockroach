@@ -26,7 +26,8 @@ import (
 )
 
 type cancelQueryNode struct {
-	queryID tree.TypedExpr
+	queryID  tree.TypedExpr
+	ifExists bool
 }
 
 func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
@@ -44,7 +45,8 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 	}
 
 	return &cancelQueryNode{
-		queryID: typedQueryID,
+		queryID:  typedQueryID,
+		ifExists: n.IfExists,
 	}, nil
 }
 
@@ -76,7 +78,7 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 		return err
 	}
 
-	if !response.Canceled {
+	if !response.Canceled && !n.ifExists {
 		return fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
 	}
 

@@ -464,10 +464,15 @@ func (ex *connExecutor) execStmtInParallel(
 		p:               planner,
 	}
 
+	// TODO(abhimadan): remove the locking once the name resolution done in
+	// makePlan no longer mutates stmt.
+	ex.mu.Lock()
 	if err := planner.makePlan(ctx, stmt); err != nil {
+		ex.mu.Unlock()
 		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
 		return nil, err
 	}
+	ex.mu.Unlock()
 
 	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
@@ -548,7 +553,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// Experimental path (disabled by default).
 		err = planner.makeOptimizerPlan(ctx, stmt)
 	} else {
+		// TODO(abhimadan): remove the locking once the name resolution done in
+		// makePlan no longer mutates stmt.
+		ex.mu.Lock()
 		err = planner.makePlan(ctx, stmt)
+		ex.mu.Unlock()
 	}
 
 	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
