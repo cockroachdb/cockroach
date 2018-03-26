@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	minSignificantOrders = 10000
+	minSignificantOrders   = 10000
+	minSignificantPayments = 10000
 )
 
 // auditor maintains statistics about TPC-C input data and runs distribution
@@ -36,19 +37,24 @@ type auditor struct {
 
 	newOrderTransactions uint64
 	newOrderRollbacks    uint64
+	paymentTransactions  uint64
 
 	// map from order-lines count to the number of orders with that count
 	orderLinesFreq  map[int]uint64
 	totalOrderLines uint64
 
-	remoteWarehouseFreq map[int]uint64
+	// map from warehouse to number of remote order lines for that warehouse
+	orderLineRemoteWarehouseFreq map[int]uint64
+	// map from warehouse to number of remote payments for that warehouse
+	paymentRemoteWarehouseFreq map[int]uint64
 }
 
 func newAuditor(warehouses int) *auditor {
 	return &auditor{
-		warehouses:          warehouses,
-		orderLinesFreq:      make(map[int]uint64),
-		remoteWarehouseFreq: make(map[int]uint64),
+		warehouses:                   warehouses,
+		orderLinesFreq:               make(map[int]uint64),
+		orderLineRemoteWarehouseFreq: make(map[int]uint64),
+		paymentRemoteWarehouseFreq:   make(map[int]uint64),
 	}
 }
 
@@ -78,6 +84,7 @@ func (a *auditor) runChecks() {
 		{"9.2.2.5.1", check92251},
 		{"9.2.2.5.2", check92252},
 		{"9.2.2.5.3", check92253},
+		{"9.2.2.5.4", check92254},
 	}
 	for _, check := range checks {
 		result := check.f(a)
@@ -152,7 +159,7 @@ func check92253(a *auditor) auditResult {
 	}
 
 	var remoteOrderLines uint64
-	for _, freq := range a.remoteWarehouseFreq {
+	for _, freq := range a.orderLineRemoteWarehouseFreq {
 		remoteOrderLines += freq
 	}
 	remotePct := 100 * float64(remoteOrderLines) / float64(a.totalOrderLines)
@@ -170,8 +177,42 @@ func check92253(a *auditor) auditResult {
 		return newSkipResult("insufficient data for remote warehouse distribution check")
 	}
 	for i := 0; i < a.warehouses; i++ {
-		if _, ok := a.remoteWarehouseFreq[i]; !ok {
+		if _, ok := a.orderLineRemoteWarehouseFreq[i]; !ok {
 			return newFailResult("no remote order-lines for warehouses %d", i)
+		}
+	}
+
+	return passResult
+}
+
+func check92254(a *auditor) auditResult {
+	// The number of remote Payment transactions is at least 14% and at most 16%
+	// of the number of Payment transactions that are submitted to the SUT during
+	// the measurement interval, and the remote warehouse numbers are uniformly
+	// distributed within the range of active warehouses.
+	a.Lock()
+	defer a.Unlock()
+
+	if a.paymentTransactions < minSignificantPayments {
+		return newSkipResult("not enough payments to be statistically significant")
+	}
+
+	var remotePayments uint64
+	for _, freq := range a.paymentRemoteWarehouseFreq {
+		remotePayments += freq
+	}
+	remotePct := 100 * float64(remotePayments) / float64(a.paymentTransactions)
+	if remotePct < 14 || remotePct > 16 {
+		return newFailResult(
+			"remote payment percent %.1f is not between allowed bounds [14, 16]", remotePct)
+	}
+
+	if remotePayments < 15*uint64(a.warehouses) {
+		return newSkipResult("insufficient data for remote warehouse distribution check")
+	}
+	for i := 0; i < a.warehouses; i++ {
+		if _, ok := a.paymentRemoteWarehouseFreq[i]; !ok {
+			return newFailResult("no remote payments for warehouses %d", i)
 		}
 	}
 
