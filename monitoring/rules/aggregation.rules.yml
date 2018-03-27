@@ -1,0 +1,88 @@
+groups:
+- name: prometheus/rules/aggregation.rules
+  rules:
+  - record: node:capacity
+    expr: sum(capacity{job="cockroach"}) WITHOUT (store)
+  - record: cluster:capacity
+    expr: sum(node:capacity{job="cockroach"}) WITHOUT (instance)
+  - record: node:capacity_available
+    expr: sum(capacity_available{job="cockroach"}) WITHOUT (store)
+  - record: cluster:capacity_available
+    expr: sum(node:capacity_available{job="cockroach"}) WITHOUT (instance)
+  - record: capacity_available:ratio
+    expr: capacity_available{job="cockroach"} / capacity{job="cockroach"}
+  - record: node:capacity_available:ratio
+    expr: node:capacity_available{job="cockroach"} / node:capacity{job="cockroach"}
+  - record: cluster:capacity_available:ratio
+    expr: cluster:capacity_available{job="cockroach"} / cluster:capacity{job="cockroach"}
+  - record: mutex_storenanos_bucket:rate1m
+    expr: rate(mutex_storenanos_bucket{job="cockroach"}[1m])
+  - record: node:mutex_storenanos_bucket:rate1m
+    expr: sum(mutex_storenanos_bucket:rate1m{job="cockroach"}) WITHOUT (store)
+  - record: cluster:mutex_storenanos_bucket:rate1m
+    expr: sum(node:mutex_storenanos_bucket:rate1m{job="cockroach"}) WITHOUT (instance)
+  - record: cluster:mutex_storenanos:rate1m:quantile_50
+    expr: histogram_quantile(0.5, cluster:mutex_storenanos_bucket:rate1m)
+  - record: cluster:mutex_storenanos:rate1m:quantile_75
+    expr: histogram_quantile(0.75, cluster:mutex_storenanos_bucket:rate1m)
+  - record: cluster:mutex_storenanos:rate1m:quantile_90
+    expr: histogram_quantile(0.9, cluster:mutex_storenanos_bucket:rate1m)
+  - record: cluster:mutex_storenanos:rate1m:quantile_95
+    expr: histogram_quantile(0.95, cluster:mutex_storenanos_bucket:rate1m)
+  - record: mutex_raftnanos_bucket:rate1m
+    expr: rate(mutex_raftnanos_bucket{job="cockroach"}[1m])
+  - record: node:mutex_raftnanos_bucket:rate1m
+    expr: sum(mutex_raftnanos_bucket:rate1m{job="cockroach"}) WITHOUT (store)
+  - record: cluster:mutex_raftnanos_bucket:rate1m
+    expr: sum(node:mutex_raftnanos_bucket:rate1m{job="cockroach"}) WITHOUT (instance)
+  - record: cluster:mutex_raftnanos:rate1m:quantile_50
+    expr: histogram_quantile(0.5, cluster:mutex_raftnanos_bucket:rate1m)
+  - record: cluster:mutex_raftnanos:rate1m:quantile_75
+    expr: histogram_quantile(0.75, cluster:mutex_raftnanos_bucket:rate1m)
+  - record: cluster:mutex_raftnanos:rate1m:quantile_90
+    expr: histogram_quantile(0.9, cluster:mutex_raftnanos_bucket:rate1m)
+  - record: cluster:mutex_raftnanos:rate1m:quantile_95
+    expr: histogram_quantile(0.95, cluster:mutex_raftnanos_bucket:rate1m)
+  - record: mutex_replicananos_bucket:rate1m
+    expr: rate(mutex_replicananos_bucket{job="cockroach"}[1m])
+  - record: node:mutex_replicananos_bucket:rate1m
+    expr: sum(mutex_replicananos_bucket:rate1m{job="cockroach"}) WITHOUT (store)
+  - record: cluster:mutex_replicananos_bucket:rate1m
+    expr: sum(node:mutex_replicananos_bucket:rate1m{job="cockroach"}) WITHOUT (instance)
+  - record: cluster:mutex_replicananos:rate1m:quantile_50
+    expr: histogram_quantile(0.5, cluster:mutex_replicananos_bucket:rate1m)
+  - record: cluster:mutex_replicananos:rate1m:quantile_75
+    expr: histogram_quantile(0.75, cluster:mutex_replicananos_bucket:rate1m)
+  - record: cluster:mutex_replicananos:rate1m:quantile_90
+    expr: histogram_quantile(0.9, cluster:mutex_replicananos_bucket:rate1m)
+  - record: cluster:mutex_replicananos:rate1m:quantile_95
+    expr: histogram_quantile(0.95, cluster:mutex_replicananos_bucket:rate1m)
+  - record: mutex_commandqueuenanos_bucket:rate1m
+    expr: rate(mutex_commandqueuenanos_bucket{job="cockroach"}[1m])
+  - record: node:mutex_commandqueuenanos_bucket:rate1m
+    expr: sum(mutex_commandqueuenanos_bucket:rate1m{job="cockroach"}) WITHOUT (store)
+  - record: cluster:mutex_commandqueuenanos_bucket:rate1m
+    expr: sum(node:mutex_commandqueuenanos_bucket:rate1m{job="cockroach"}) WITHOUT
+      (instance)
+  - record: cluster:mutex_commandqueuenanos:rate1m:quantile_50
+    expr: histogram_quantile(0.5, cluster:mutex_commandqueuenanos_bucket:rate1m)
+  - record: cluster:mutex_commandqueuenanos:rate1m:quantile_75
+    expr: histogram_quantile(0.75, cluster:mutex_commandqueuenanos_bucket:rate1m)
+  - record: cluster:mutex_commandqueuenanos:rate1m:quantile_90
+    expr: histogram_quantile(0.9, cluster:mutex_commandqueuenanos_bucket:rate1m)
+  - record: cluster:mutex_commandqueuenanos:rate1m:quantile_95
+    expr: histogram_quantile(0.95, cluster:mutex_commandqueuenanos_bucket:rate1m)
+  - record: mutex_schedulernanos_bucket:rate1m
+    expr: rate(mutex_schedulernanos_bucket{job="cockroach"}[1m])
+  - record: node:mutex_schedulernanos_bucket:rate1m
+    expr: sum(mutex_schedulernanos_bucket:rate1m{job="cockroach"}) WITHOUT (store)
+  - record: cluster:mutex_schedulernanos_bucket:rate1m
+    expr: sum(node:mutex_schedulernanos_bucket:rate1m{job="cockroach"}) WITHOUT (instance)
+  - record: cluster:mutex_schedulernanos:rate1m:quantile_50
+    expr: histogram_quantile(0.5, cluster:mutex_schedulernanos_bucket:rate1m)
+  - record: cluster:mutex_schedulernanos:rate1m:quantile_75
+    expr: histogram_quantile(0.75, cluster:mutex_schedulernanos_bucket:rate1m)
+  - record: cluster:mutex_schedulernanos:rate1m:quantile_90
+    expr: histogram_quantile(0.9, cluster:mutex_schedulernanos_bucket:rate1m)
+  - record: cluster:mutex_schedulernanos:rate1m:quantile_95
+    expr: histogram_quantile(0.95, cluster:mutex_schedulernanos_bucket:rate1m)

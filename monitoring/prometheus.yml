@@ -7,8 +7,8 @@ global:
   evaluation_interval: 10s
 
 rule_files:
-- "rules/alerts.rules"
-- "rules/aggregation.rules"
+- "rules/alerts.rules.yml"
+- "rules/aggregation.rules.yml"
 
 scrape_configs:
   - job_name: 'cockroach'
