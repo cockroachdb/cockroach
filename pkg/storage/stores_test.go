@@ -435,6 +435,21 @@ func TestStoresClusterVersionWriteSynthesize(t *testing.T) {
 	}
 
 	ls0 := makeStores()
+
+	// If there are no stores, default to minSupportedVersion
+	// (VersionBase in this test)
+	if initialCV, err := ls0.SynthesizeClusterVersion(ctx); err != nil {
+		t.Fatal(err)
+	} else {
+		expCV := cluster.ClusterVersion{
+			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
+			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
+		}
+		if !reflect.DeepEqual(initialCV, expCV) {
+			t.Fatalf("expected %+v; got %+v", expCV, initialCV)
+		}
+	}
+
 	ls0.AddStore(stores[0])
 
 	versionA := roachpb.Version{Major: 1, Minor: 0, Unstable: 1} // 1.0-1
