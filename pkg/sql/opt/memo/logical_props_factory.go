@@ -67,7 +67,7 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	case opt.GroupByOp:
 		return f.constructGroupByProps(ev)
 
-	case opt.LimitOp, opt.OffsetOp:
+	case opt.LimitOp, opt.OffsetOp, opt.Max1RowOp:
 		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
 	}
 

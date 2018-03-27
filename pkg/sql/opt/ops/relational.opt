@@ -302,3 +302,11 @@ define Offset {
     Offset   Expr
     Ordering Ordering
 }
+
+# Max1Row is an operator which enforces that its input must return at most one
+# row. It is used as input to the Subquery operator. See the comment above
+# Subquery for more details.
+[Relational]
+define Max1Row {
+    Input Expr
+}

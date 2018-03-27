@@ -34,6 +34,7 @@ var opLayoutTable = [...]opLayout{
 	opt.ExceptAllOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
+	opt.Max1RowOp:         makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.SubqueryOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.AnyOp:             makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.VariableOp:        makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
@@ -127,6 +128,7 @@ var isEnforcerLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -220,6 +222,7 @@ var isRelationalLookup = [...]bool{
 	opt.ExceptAllOp:       true,
 	opt.LimitOp:           true,
 	opt.OffsetOp:          true,
+	opt.Max1RowOp:         true,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -313,6 +316,7 @@ var isJoinLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -406,6 +410,7 @@ var isJoinApplyLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -499,6 +504,7 @@ var isScalarLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        true,
 	opt.AnyOp:             true,
 	opt.VariableOp:        true,
@@ -592,6 +598,7 @@ var isConstValueLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -685,6 +692,7 @@ var isBooleanLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -778,6 +786,7 @@ var isComparisonLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -871,6 +880,7 @@ var isBinaryLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -964,6 +974,7 @@ var isUnaryLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -1925,6 +1936,30 @@ func (e *Expr) AsOffset() *OffsetExpr {
 	return (*OffsetExpr)(e)
 }
 
+// Max1RowExpr is an operator which enforces that its input must return at most one
+// row. It is used as input to the Subquery operator. See the comment above
+// Subquery for more details.
+type Max1RowExpr Expr
+
+func MakeMax1RowExpr(input GroupID) Max1RowExpr {
+	return Max1RowExpr{op: opt.Max1RowOp, state: exprState{uint32(input)}}
+}
+
+func (e *Max1RowExpr) Input() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *Max1RowExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsMax1Row() *Max1RowExpr {
+	if e.op != opt.Max1RowOp {
+		return nil
+	}
+	return (*Max1RowExpr)(e)
+}
+
 // SubqueryExpr is a subquery in a single-row context such as
 // `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
 // In a single-row context, the outer query is only valid if the subquery
@@ -1951,12 +1986,17 @@ func (e *Expr) AsOffset() *OffsetExpr {
 //    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //
-// The Input field contains the subquery itself, and the Projection field
+// The Input field contains the subquery itself, which should be wrapped in a
+// Max1Row operator to enforce that the subquery can return at most one row
+// (Max1Row may be removed by the optimizer later if it can determine statically
+// that the subquery will always return at most one row). The Projection field
 // contains a single column representing the output of the subquery. For
 // example, `(SELECT 1, 'a')` would be represented by the following structure:
 //
 // (Subquery
-//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   (Max1Row
+//     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   )
 //   (Variable 3)
 // )
 //
