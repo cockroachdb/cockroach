@@ -182,6 +182,11 @@ const (
 	// conjunction with Limit.
 	OffsetOp
 
+	// Max1RowOp is an operator which enforces that its input must return at most one
+	// row. It is used as input to the Subquery operator. See the comment above
+	// Subquery for more details.
+	Max1RowOp
+
 	// ------------------------------------------------------------
 	// Scalar Operators
 	// ------------------------------------------------------------
@@ -212,12 +217,17 @@ const (
 	//    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	//
-	// The Input field contains the subquery itself, and the Projection field
+	// The Input field contains the subquery itself, which should be wrapped in a
+	// Max1Row operator to enforce that the subquery can return at most one row
+	// (Max1Row may be removed by the optimizer later if it can determine statically
+	// that the subquery will always return at most one row). The Projection field
 	// contains a single column representing the output of the subquery. For
 	// example, `(SELECT 1, 'a')` would be represented by the following structure:
 	//
 	// (Subquery
-	//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+	//   (Max1Row
+	//     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+	//   )
 	//   (Variable 3)
 	// )
 	//
@@ -437,9 +447,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetmax1-rowsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 264, 272, 277, 281, 285, 290, 301, 306, 317, 329, 335, 342, 345, 347, 350, 352, 354, 356, 358, 360, 362, 364, 370, 374, 382, 388, 398, 408, 422, 431, 444, 455, 470, 472, 478, 486, 492, 497, 503, 507, 512, 516, 519, 528, 531, 534, 540, 547, 554, 563, 573, 587, 602, 613, 629, 633, 637, 641, 649, 657, 673}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 272, 280, 285, 289, 293, 298, 309, 314, 325, 337, 343, 350, 353, 355, 358, 360, 362, 364, 366, 368, 370, 372, 378, 382, 390, 396, 406, 416, 430, 439, 452, 463, 478, 480, 486, 494, 500, 505, 511, 515, 520, 524, 527, 536, 539, 542, 548, 555, 562, 571, 581, 595, 610, 621, 637, 641, 645, 649, 657, 665, 681}
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
@@ -471,6 +481,7 @@ var RelationalOperators = [...]Operator{
 	ExceptAllOp,
 	LimitOp,
 	OffsetOp,
+	Max1RowOp,
 }
 
 var JoinOperators = [...]Operator{

@@ -1664,6 +1664,26 @@ func (_f *Factory) ConstructOffset(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_offsetExpr)))
 }
 
+// ConstructMax1Row constructs an expression for the Max1Row operator.
+// Max1Row is an operator which enforces that its input must return at most one
+// row. It is used as input to the Subquery operator. See the comment above
+// Subquery for more details.
+func (_f *Factory) ConstructMax1Row(
+	input memo.GroupID,
+) memo.GroupID {
+	_max1RowExpr := memo.MakeMax1RowExpr(input)
+	_group := _f.mem.GroupByFingerprint(_max1RowExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.o.allowOptimizations() {
+		return _f.mem.MemoizeNormExpr(memo.Expr(_max1RowExpr))
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_max1RowExpr)))
+}
+
 // ConstructSubquery constructs an expression for the Subquery operator.
 // Subquery is a subquery in a single-row context such as
 // `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
@@ -1691,12 +1711,17 @@ func (_f *Factory) ConstructOffset(
 //    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //
-// The Input field contains the subquery itself, and the Projection field
+// The Input field contains the subquery itself, which should be wrapped in a
+// Max1Row operator to enforce that the subquery can return at most one row
+// (Max1Row may be removed by the optimizer later if it can determine statically
+// that the subquery will always return at most one row). The Projection field
 // contains a single column representing the output of the subquery. For
 // example, `(SELECT 1, 'a')` would be represented by the following structure:
 //
 // (Subquery
-//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   (Max1Row
+//     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   )
 //   (Variable 3)
 // )
 //
@@ -5223,6 +5248,11 @@ func init() {
 	// OffsetOp
 	dynConstructLookup[opt.OffsetOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
 		return f.ConstructOffset(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.PrivateID(operands[2]))
+	}
+
+	// Max1RowOp
+	dynConstructLookup[opt.Max1RowOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructMax1Row(memo.GroupID(operands[0]))
 	}
 
 	// SubqueryOp
