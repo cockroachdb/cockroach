@@ -399,12 +399,9 @@ func SynthesizeClusterVersionFromEngines(
 		origin:  "(no store)",
 	}
 
-	// FIXME(tschottdorf): when we don't have anything on the stores, we need to
-	// set this to `minSupportedVersions`. It looks like currently it would be
-	// set to `v1.0` which may not even be supported.
-	// This is the case in which the node is joining an existing cluster.
+	maxPossibleVersion := roachpb.Version{Major: 999999} // sort above any real version
 	minUseVersion := originVersion{
-		Version: serverVersion,
+		Version: maxPossibleVersion,
 		origin:  "(no store)",
 	}
 
@@ -440,6 +437,14 @@ func SynthesizeClusterVersionFromEngines(
 			minUseVersion.Version = cv.UseVersion
 			minUseVersion.origin = fmt.Sprint(eng)
 		}
+	}
+
+	// If no use version was found, fall back to our
+	// minSupportedVersion. This is the case when a brand new node is
+	// joining an existing cluster (which may be on any older version
+	// this binary supports).
+	if minUseVersion.Version == maxPossibleVersion {
+		minUseVersion.Version = minSupportedVersion
 	}
 
 	cv := cluster.ClusterVersion{
