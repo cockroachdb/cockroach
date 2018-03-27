@@ -16,8 +16,10 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -85,9 +87,12 @@ import (
 // themselves match this same rule. However, adding their replace expressions to
 // the memo group will be a no-op, because they're already present.
 type explorer struct {
-	o     *Optimizer
-	mem   *memo.Memo
-	f     *norm.Factory
+	o       *Optimizer
+	mem     *memo.Memo
+	f       *norm.Factory
+	evalCtx *tree.EvalContext
+
+	// exprs is a buffer reused by custom replace functions.
 	exprs []memo.Expr
 }
 
@@ -95,6 +100,7 @@ func (e *explorer) init(o *Optimizer) {
 	e.o = o
 	e.mem = o.mem
 	e.f = o.f
+	e.evalCtx = o.evalCtx
 }
 
 // exploreGroup generates alternate expressions that are logically equivalent
@@ -189,6 +195,46 @@ func (e *explorer) exploreGroup(group memo.GroupID) *exploreState {
 	return state
 }
 
+//func (e *explorer) exploreSelect(selectState *exploreState, sel memo.ExprID) (fullyExplored bool) {
+//	fullyExplored = true
+//	// [ConstrainScan, Explore]
+//	// (Select (Scan $def:* & (IsUnconstrainedScan $def)) $filter:*)
+//	// =>
+//	// (ConstrainScan $filter $def)
+//	{
+//		selectExpr := e.mem.Expr(sel).AsSelect()
+//		filter := selectExpr.Filter()
+//		scanGroup := selectExpr.Input()
+//		partlyExplored := sel.Expr < selectState.start
+//
+//		state := e.exploreGroup(selectExpr.Input())
+//		if !state.fullyExplored {
+//			fullyExplored = false
+//		}
+//		start := memo.ExprOrdinal(0)
+//		if partlyExplored {
+//			start = state.start
+//		}
+//		for i := start; i < state.end; i++ {
+//			scanExprID := memo.ExprID{Group: scanGroup, Expr: memo.ExprOrdinal(i)}
+//			scanExpr := e.mem.Expr(scanExprID).AsScan()
+//			if scanExpr != nil {
+//				def := scanExpr.Def()
+//				if e.isUnconstrainedScan(def) {
+//					if e.o.allowOptimizations() {
+//						e.o.reportOptimization(ConstrainScan)
+//						exprs := e.constrainScan(filter, def)
+//						for i := range exprs {
+//							e.mem.MemoizeDenormExpr(sel.Group, exprs[i])
+//						}
+//					}
+//				}
+//			}
+//		}
+//	}
+//	return fullyExplored
+//}
+
 // ensureExploreState allocates the exploration state in the optState struct
 // associated with the memo group, with respect to the min physical props.
 func (e *explorer) ensureExploreState(group memo.GroupID) *exploreState {
@@ -204,9 +250,9 @@ func (e *explorer) ensureExploreState(group memo.GroupID) *exploreState {
 
 // isPrimaryScan returns true if the given expression is scanning a primary
 // index rather than a secondary index.
-func (e *explorer) isPrimaryScan(def memo.PrivateID) bool {
+func (e *explorer) isUnconstrainedPrimaryScan(def memo.PrivateID) bool {
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Index == opt.PrimaryIndex
+	return scanOpDef.Index == opt.PrimaryIndex && scanOpDef.Constraint == nil
 }
 
 // generateIndexScans enumerates all indexes on the scan operator's table and
@@ -229,6 +275,62 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 		}
 	}
 
+	return e.exprs
+}
+
+// ----------------------------------------------------------------------
+//
+// Select Rules
+//   Custom match and replace functions used with select.opt rules.
+//
+// ----------------------------------------------------------------------
+
+func (e *explorer) isUnconstrainedScan(def memo.PrivateID) bool {
+	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	return scanOpDef.Constraint == nil
+}
+
+func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateID) []memo.Expr {
+	e.exprs = e.exprs[:0]
+
+	scanOpDef := e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
+
+	md := e.mem.Metadata()
+	index := md.Table(scanOpDef.Table).Index(scanOpDef.Index)
+	columns := make([]opt.OrderingColumn, index.UniqueColumnCount())
+	var notNullCols opt.ColSet
+	for i := range columns {
+		col := index.Column(i)
+		colID := md.TableColumn(scanOpDef.Table, col.Ordinal)
+		columns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.Column.IsNullable() {
+			notNullCols.Add(int(colID))
+		}
+	}
+
+	// Generate index constraints.
+	var ic idxconstraint.Instance
+	filter := memo.MakeNormExprView(e.mem, filterGroup)
+	ic.Init(filter, columns, notNullCols, false /* isInverted */, e.evalCtx, e.f)
+	constraint := ic.Constraint()
+	if constraint.IsUnconstrained() {
+		return nil
+	}
+	newDef := *scanOpDef
+	newDef.Constraint = constraint
+
+	remainingFilter := ic.RemainingFilter()
+	if e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+		// No remaining filter. Add the constrained scan node to select's group.
+		constrainedScan := memo.MakeScanExpr(e.mem.InternScanOpDef(&newDef))
+		e.exprs = append(e.exprs, memo.Expr(constrainedScan))
+	} else {
+		// We have a remaining filter. We create the constrained scan in a new group
+		// and create a select node in the same group with the original select.
+		constrainedScan := e.f.ConstructScan(e.mem.InternScanOpDef(&newDef))
+		newSelect := memo.MakeSelectExpr(constrainedScan, remainingFilter)
+		e.exprs = append(e.exprs, memo.Expr(newSelect))
+	}
 	return e.exprs
 }
 

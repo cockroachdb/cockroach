@@ -16,6 +16,7 @@ package exec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -41,8 +42,13 @@ type Factory interface {
 
 	// ConstructScan returns a node that represents a scan of the given table.
 	// Only the given set of needed columns are part of the result.
-	// TODO(radu): support index constraints
-	ConstructScan(table opt.Table, index opt.Index, needed ColumnOrdinalSet) (Node, error)
+	// Note: indexConstraint can be nil.
+	ConstructScan(
+		table opt.Table,
+		index opt.Index,
+		needed ColumnOrdinalSet,
+		indexConstraint *constraint.Constraint,
+	) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.

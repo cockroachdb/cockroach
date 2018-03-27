@@ -129,12 +129,12 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 		if rule.Match == g.innerExploreMatch {
 			// The top-level match is the only match in this rule. Skip the
 			// expression if it was processed in a previous exploration pass.
-			g.w.nestIndent("if _eid.Expr >= _state.start {\n")
+			g.w.nestIndent("if _root.Expr >= _state.start {\n")
 		} else {
 			// Initialize _partlyExplored for the top-level match. This variable
 			// will be shadowed by each nested loop. Only if all loops are bound
 			// to already explored expressions can the innermost match skip.
-			g.w.writeIndent("_partlyExplored := _eid.Expr < _state.start\n")
+			g.w.writeIndent("_partlyExplored := _root.Expr < _state.start\n")
 		}
 
 		for index, matchArg := range rule.Match.Args {
@@ -576,7 +576,7 @@ func (g *ruleGen) genReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
 				g.w.write(",\n")
 			}
 			g.w.unnest(")\n")
-			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))\n")
+			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))\n")
 
 		case *lang.CustomFuncExpr:
 			// Top-level custom function returns a memo.Expr slice, so iterate
@@ -585,7 +585,7 @@ func (g *ruleGen) genReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
 			g.genNestedExpr(rule.Replace)
 			g.w.newline()
 			g.w.nestIndent("for i := range exprs {\n")
-			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])\n")
+			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])\n")
 			g.w.unnest("}\n")
 
 		default:

@@ -85,8 +85,8 @@ func (g *explorerGen) genDispatcher() {
 // genRuleFuncs generates a method for each operator that has at least one
 // explore rule defined. The code is similar to this:
 //
-//   func (_e *explorer) exploreScan(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {
-//     _scanExpr := _e.mem.Expr(_eid).AsScan()
+//   func (_e *explorer) exploreScan(_state *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+//     _scanExpr := _e.mem.Expr(_root).AsScan()
 //     _fullyExplored = true
 //
 //     ... exploration rule code goes here ...
@@ -102,9 +102,9 @@ func (g *explorerGen) genRuleFuncs() {
 		}
 
 		exprName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
-		format := "func (_e *explorer) explore%s(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {\n"
+		format := "func (_e *explorer) explore%s(_state *exploreState, _root memo.ExprID) (_fullyExplored bool) {\n"
 		g.w.nestIndent(format, define.Name)
-		g.w.writeIndent("%s := _e.mem.Expr(_eid).As%s()\n", exprName, define.Name)
+		g.w.writeIndent("%s := _e.mem.Expr(_root).As%s()\n", exprName, define.Name)
 		g.w.writeIndent("_fullyExplored = true\n\n")
 
 		for _, rule := range rules {

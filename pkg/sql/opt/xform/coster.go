@@ -47,6 +47,9 @@ func (c *coster) computeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	case opt.ScanOp:
 		cost = c.computeScanCost(candidate, props)
 
+	case opt.SelectOp:
+		cost = c.computeSelectCost(candidate, props)
+
 	case opt.ValuesOp:
 		cost = c.computeValuesCost(candidate, props)
 
@@ -65,6 +68,13 @@ func (c *coster) computeSortCost(candidate *memo.BestExpr, props *memo.LogicalPr
 
 func (c *coster) computeScanCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
 	return memo.Cost(props.Relational.Stats.RowCount)
+}
+
+func (c *coster) computeSelectCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+	// The filter has to be evaluated on each input row.
+	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	cost := memo.Cost(inputRowCount) * 0.1
+	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeValuesCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {

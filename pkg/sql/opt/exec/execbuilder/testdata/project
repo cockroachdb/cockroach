@@ -13,11 +13,9 @@ INSERT INTO t.a VALUES (1, 10), (2, 20), (3, 30)
 exec-explain
 SELECT * FROM t.a WHERE x > 1
 ----
-filter     0  filter  ·       ·          (x, y)  ·
- │         0  ·       filter  x > 1      ·       ·
- └── scan  1  scan    ·       ·          (x, y)  ·
-·          1  ·       table   a@primary  ·       ·
-·          1  ·       spans   ALL        ·       ·
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  /2-        ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1
@@ -46,11 +44,9 @@ x:int  y:int
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
-filter     0  filter  ·       ·                    (x, y)  ·
- │         0  ·       filter  (x > 1) AND (x < 3)  ·       ·
- └── scan  1  scan    ·       ·                    (x, y)  ·
-·          1  ·       table   a@primary            ·       ·
-·          1  ·       spans   ALL                  ·       ·
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  /2-/2/#    ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
@@ -179,13 +175,11 @@ x:int  y:int
 exec-explain
 SELECT x FROM t.b WHERE rowid > 0
 ----
-render          0  render  ·         ·          (x)                 ·
- │              0  ·       render 0  x          ·                   ·
- └── filter     1  filter  ·         ·          (x, rowid[hidden])  ·
-      │         1  ·       filter    rowid > 0  ·                   ·
-      └── scan  2  scan    ·         ·          (x, rowid[hidden])  ·
-·               2  ·       table     b@primary  ·                   ·
-·               2  ·       spans     ALL        ·                   ·
+render     0  render  ·         ·          (x)                 ·
+ │         0  ·       render 0  x          ·                   ·
+ └── scan  1  scan    ·         ·          (x, rowid[hidden])  ·
+·          1  ·       table     b@primary  ·                   ·
+·          1  ·       spans     /1-        ·                   ·
 
 exec
 SELECT x FROM t.b WHERE rowid > 0

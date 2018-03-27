@@ -28,14 +28,9 @@ scan a
 opt
 SELECT a.y, a.x, a.y y2 FROM a WHERE x=1
 ----
-select
+scan a,constrained
  ├── columns: y:2(int) x:1(int!null) y2:2(int)
- ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
- └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: a.x [type=int]
-           └── const: 1 [type=int]
+ └── constraint: /1: [/1 - /1]
 
 # Project operator.
 opt

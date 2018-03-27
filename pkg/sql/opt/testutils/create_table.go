@@ -186,7 +186,10 @@ func (ti *TestIndex) addColumn(
 }
 
 func (tt *TestTable) addPrimaryColumnIndex(col *TestColumn) {
-	idxCol := opt.IndexColumn{Column: col}
+	idxCol := opt.IndexColumn{
+		Column:  col,
+		Ordinal: tt.FindOrdinal(col.Name),
+	}
 	tt.Indexes = append(
 		tt.Indexes,
 		&TestIndex{
