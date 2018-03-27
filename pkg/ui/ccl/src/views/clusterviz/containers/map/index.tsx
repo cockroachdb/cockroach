@@ -20,6 +20,7 @@ import spinner from "assets/spinner.gif";
 import Loading from "src/views/shared/components/loading";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
+import { selectEnterpriseEnabled } from "src/redux/license";
 import "./tweaks.styl";
 
 // tslint:disable-next-line:variable-name
@@ -27,6 +28,7 @@ const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContain
 
 interface ClusterVisualizationProps {
   licenseDataExists: boolean;
+  enterpriseEnabled: boolean;
 }
 
 class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
@@ -41,15 +43,19 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
       { value: "list", label: "Node List" },
     ];
 
+    // TODO(couchand): integrate with license swapper
+    const showingLicensePage = this.props.licenseDataExists && !this.props.enterpriseEnabled;
+
     // TODO(vilterp): dedup with NodeList
     return (
       <div
         style={{
           width: "100%",
-          height: "100%",
+          height: showingLicensePage ? null : "100%",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          backgroundColor: "white",
         }}
         className="clusterviz"
       >
@@ -86,6 +92,7 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
 function mapStateToProps(state: AdminUIState) {
   return {
     licenseDataExists: !!state.cachedData.cluster.data,
+    enterpriseEnabled: selectEnterpriseEnabled(state),
   };
 }
 
