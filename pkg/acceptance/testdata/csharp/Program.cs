@@ -25,7 +25,7 @@ namespace CockroachDrivers
 
         static void ProvideClientCertificatesCallback(X509CertificateCollection clientCerts)
         {
-              clientCerts.Add(new X509Certificate2("node.pfx"));
+              clientCerts.Add(new X509Certificate2("/certs/client.root.pk12"));
         }
 
         static void Simple(string connString)
