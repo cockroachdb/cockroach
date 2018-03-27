@@ -112,6 +112,7 @@ func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	// and 40% by number.
 	if rand.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
+		atomic.AddUint64(&config.auditor.paymentsByLastName, 1)
 	} else {
 		d.cID = randCustomerID(rng)
 	}
