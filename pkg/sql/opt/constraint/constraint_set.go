@@ -15,8 +15,7 @@
 package constraint
 
 import (
-	"bytes"
-	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -285,17 +284,20 @@ func (s *Set) undoAllocConstraint() {
 
 func (s *Set) String() string {
 	if s.IsUnconstrained() {
-		return "unconstrained\n"
+		return "unconstrained"
 	}
 	if s == Contradiction {
-		return "contradiction\n"
+		return "contradiction"
 	}
 
-	var buf bytes.Buffer
+	var b strings.Builder
 	for i := 0; i < s.Length(); i++ {
-		fmt.Fprintf(&buf, "%s\n", s.Constraint(i))
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(s.Constraint(i).String())
 	}
-	return buf.String()
+	return b.String()
 }
 
 // compareConstraintsByCols orders constraints by the indexes of their columns,
