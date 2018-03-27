@@ -2928,13 +2928,6 @@ func (r *Replica) requestToProposal(
 // while still handling LocalEvalResult.
 //
 // Replica.mu must not be held.
-//
-// TODO(tschottdorf): the setting of WriteTooOld does not work. With
-// proposer-evaluated KV, TestStoreResolveWriteIntentPushOnRead fails in the
-// SNAPSHOT case since the transactional write in that test *always* catches
-// a WriteTooOldError. With proposer-evaluated KV disabled the same happens,
-// but the resulting WriteTooOld flag on the transaction is lost, letting the
-// test pass erroneously.
 func (r *Replica) evaluateProposal(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*result.Result, *roachpb.Error) {
