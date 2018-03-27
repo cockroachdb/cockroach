@@ -124,10 +124,20 @@ func IsCCLRequiredError(err error) bool {
 // IsPermanentSchemaChangeError returns true if the error results in
 // a permanent failure of a schema change.
 func IsPermanentSchemaChangeError(err error) bool {
-	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
-		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError) ||
-		errHasCode(err, CodeCCLRequired)
+	if errHasCode(err,
+		pgerror.CodeNotNullViolationError,
+		pgerror.CodeUniqueViolationError,
+		pgerror.CodeInvalidSchemaDefinitionError,
+		CodeCCLRequired,
+	) {
+		return true
+	}
+	switch err.(type) {
+	case *roachpb.BatchTimestampBeforeGCError:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
@@ -236,9 +246,13 @@ func IsQueryCanceledError(err error) bool {
 	return errHasCode(err, pgerror.CodeQueryCanceledError)
 }
 
-func errHasCode(err error, code string) bool {
+func errHasCode(err error, code ...string) bool {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return pgErr.Code == code
+		for _, c := range code {
+			if pgErr.Code == c {
+				return true
+			}
+		}
 	}
 	return false
 }
