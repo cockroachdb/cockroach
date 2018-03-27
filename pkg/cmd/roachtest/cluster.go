@@ -22,6 +22,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -634,7 +635,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 }
 
-// Run a command on the specified node
+// Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
 	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
@@ -681,11 +682,18 @@ func (c *cluster) RunWithBuffer(
 		append([]string{"roachprod", "ssh", c.makeNodes(node), "--"}, args...)...)
 }
 
-// PGUrl returns the Postgres endpoint for the specified node.
-func (c *cluster) PGUrl(ctx context.Context, node int) string {
-	cmd := exec.CommandContext(
-		ctx, `roachprod`, `pgurl`, `--external`, c.makeNodes(c.Node(node)),
-	)
+// pgURL returns the Postgres endpoint for the specified node. It accepts a flag
+// specifying whether the URL should include the node's internal or external IP
+// address. In general, inter-cluster communication and should use internal IPs
+// and communication from a test driver to nodes in a cluster should use
+// external IPs.
+func (c *cluster) pgURL(ctx context.Context, node int, external bool) string {
+	args := []string{`pgurl`}
+	if external {
+		args = append(args, `--external`)
+	}
+	args = append(args, c.makeNodes(c.Node(node)))
+	cmd := exec.CommandContext(ctx, `roachprod`, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(strings.Join(cmd.Args, ` `))
@@ -694,9 +702,42 @@ func (c *cluster) PGUrl(ctx context.Context, node int) string {
 	return strings.Trim(string(output), "' \n")
 }
 
+// InternalPGUrl returns the internal Postgres endpoint for the specified node.
+func (c *cluster) InternalPGUrl(ctx context.Context, node int) string {
+	return c.pgURL(ctx, node, false /* external */)
+}
+
+// ExternalPGUrl returns the external Postgres endpoint for the specified node.
+func (c *cluster) ExternalPGUrl(ctx context.Context, node int) string {
+	return c.pgURL(ctx, node, true /* external */)
+}
+
+func urlToIP(c *cluster, pgURL string) string {
+	u, err := url.Parse(pgURL)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return u.Host
+}
+
+// InternalIP returns the internal IP address in the form host:port for the
+// specified node.
+func (c *cluster) InternalIP(ctx context.Context, node int) string {
+	return urlToIP(c, c.InternalPGUrl(ctx, node))
+}
+
+// ExternalIP returns the external IP address in the form host:port for the
+// specified node.
+func (c *cluster) ExternalIP(ctx context.Context, node int) string {
+	return urlToIP(c, c.ExternalPGUrl(ctx, node))
+}
+
+// Silence unused warning.
+var _ = (&cluster{}).ExternalIP
+
 // Conn returns a SQL connection to the specified node.
 func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
-	url := c.PGUrl(ctx, node)
+	url := c.ExternalPGUrl(ctx, node)
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		c.t.Fatal(err)
