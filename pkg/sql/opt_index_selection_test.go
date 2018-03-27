@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -94,17 +93,12 @@ func makeSpans(
 		index: index,
 	}
 	o := xform.NewOptimizer(nil /* Catalog */)
-	colNames := make([]string, len(desc.Columns))
-	colTypes := make([]types.T, len(desc.Columns))
-	for i := range desc.Columns {
-		colNames[i] = desc.Columns[i].Name
-		colTypes[i] = desc.Columns[i].Type.ToDatumType()
+	for _, c := range desc.Columns {
+		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	bld := optbuilder.NewScalar(
-		context.Background(), &semaCtx, &evalCtx, o.Factory(), colNames, colTypes,
-	)
+	bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
 	bld.AllowUnsupportedExpr = true
 	filterGroup, err := bld.Build(expr)
 	if err != nil {
