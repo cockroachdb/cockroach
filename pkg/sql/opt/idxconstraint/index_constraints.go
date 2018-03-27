@@ -859,6 +859,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		}
 
 		rightDatum := memo.ExtractConstDatum(rhs)
+
+		// NULL is never contained, return no spans.
+		if rightDatum == tree.DNull {
+			return LogicalSpans{}, true, true
+		}
+
 		rd := rightDatum.(*tree.DJSON).JSON
 
 		switch rd.Type() {
