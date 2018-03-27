@@ -1,0 +1,26 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── s string
+ ├── d decimal not null
+ └── INDEX primary
+      └── k int not null
+
+opt
+SELECT k, s FROM a WHERE s >= 'foo'
+----
+select
+ ├── columns: k:1(int!null) s:3(string)
+ ├── stats: [rows=100]
+ ├── cost: 1100.00
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.s:3(string)
+ │    ├── stats: [rows=1000]
+ │    └── cost: 1000.00
+ └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
+      └── ge [type=bool, outer=(3), constraints=(/3: [/'foo' - ]; tight)]
+           ├── variable: a.s [type=string, outer=(3)]
+           └── const: 'foo' [type=string]

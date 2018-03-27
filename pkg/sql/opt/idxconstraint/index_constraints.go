@@ -583,6 +583,11 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	}
 
 	switch ev.Operator() {
+	case opt.FiltersOp:
+		if ev.ChildCount() == 1 {
+			return c.makeSpansForExpr(offset, ev.Child(0), out)
+		}
+		fallthrough
 	case opt.AndOp:
 		// We don't have enough information to know if the spans are "tight".
 		c.makeSpansForAnd(offset, ev, out)
@@ -661,7 +666,7 @@ func opRequiresNotNullArgs(op opt.Operator) bool {
 	return false
 }
 
-// makeSpansForAndcalculates spans for an AndOp.
+// makeSpansForAnd calculates spans for an AndOp or FiltersOp.
 func (c *indexConstraintCtx) makeSpansForAnd(
 	offset int, ev memo.ExprView, out *constraint.Constraint,
 ) {
@@ -799,9 +804,13 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			return true
 		}
 
-	case opt.AndOp:
+	case opt.AndOp, opt.FiltersOp:
 		for i, n := 0, ev.ChildCount(); i < n; i++ {
-			c.makeInvertedIndexSpansForExpr(ev.Child(i), out)
+			tight := c.makeInvertedIndexSpansForExpr(ev.Child(i), out)
+			if n == 1 {
+				// Single child.
+				return tight
+			}
 			if !out.IsUnconstrained() {
 				// TODO(radu, masha): for now, the best we can do is to generate
 				// constraints for at most one "contains" op in the disjunction; the
@@ -910,7 +919,7 @@ func (c *indexConstraintCtx) simplifyFilter(
 	ev memo.ExprView, final *constraint.Constraint, maxSimplifyPrefix int,
 ) memo.GroupID {
 	// Special handling for AND and OR.
-	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp {
+	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp || ev.Operator() == opt.FiltersOp {
 		newChildren := make([]memo.GroupID, ev.ChildCount())
 		for i := range newChildren {
 			newChildren[i] = c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix)
@@ -922,6 +931,8 @@ func (c *indexConstraintCtx) simplifyFilter(
 		switch ev.Operator() {
 		case opt.AndOp:
 			return c.factory.ConstructAnd(c.factory.InternList(newChildren))
+		case opt.FiltersOp:
+			return c.factory.ConstructFilters(c.factory.InternList(newChildren))
 		case opt.OrOp:
 			return c.factory.ConstructOr(c.factory.InternList(newChildren))
 		}

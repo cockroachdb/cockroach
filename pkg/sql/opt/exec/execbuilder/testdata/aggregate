@@ -798,13 +798,11 @@ column4:int
 exec-explain
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group           0  group   ·            ·               (column4)  ·
- │              0  ·       aggregate 0  min(x)          ·          ·
- └── filter     1  filter  ·            ·               (x)        ·
-      │         1  ·       filter       x IN (0, 4, 7)  ·          ·
-      └── scan  2  scan    ·            ·               (x)        ·
-·               2  ·       table        xyz@primary     ·          ·
-·               2  ·       spans        ALL             ·          ·
+group      0  group  ·            ·                        (column4)  ·
+ │         0  ·      aggregate 0  min(x)                   ·          ·
+ └── scan  1  scan   ·            ·                        (x)        ·
+·          1  ·      table        xyz@primary              ·          ·
+·          1  ·      spans        /0-/0/# /4-/4/# /7-/7/#  ·          ·
 
 exec
 SELECT MAX(x) FROM xyz
@@ -831,15 +829,13 @@ column4:int
 exec-explain
 SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-group                0  group   ·            ·            (column4)  ·
- │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
- └── render          1  render  ·            ·            ("xyz.y")  ·
-      │              1  ·       render 0     y            ·          ·
-      └── filter     2  filter  ·            ·            (x, y)     ·
-           │         2  ·       filter       x = 1        ·          ·
-           └── scan  3  scan    ·            ·            (x, y)     ·
-·                    3  ·       table        xyz@primary  ·          ·
-·                    3  ·       spans        ALL          ·          ·
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  min(xyz.y)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.y")  ·
+      │         1  ·       render 0     y            ·          ·
+      └── scan  2  scan    ·            ·            (x, y)     ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        /1-/1/#      ·          ·
 
 exec
 SELECT MAX(y) FROM xyz WHERE x = 1
@@ -850,15 +846,13 @@ column4:int
 exec-explain
 SELECT MAX(y) FROM xyz WHERE x = 1
 ----
-group                0  group   ·            ·            (column4)  ·
- │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
- └── render          1  render  ·            ·            ("xyz.y")  ·
-      │              1  ·       render 0     y            ·          ·
-      └── filter     2  filter  ·            ·            (x, y)     ·
-           │         2  ·       filter       x = 1        ·          ·
-           └── scan  3  scan    ·            ·            (x, y)     ·
-·                    3  ·       table        xyz@primary  ·          ·
-·                    3  ·       spans        ALL          ·          ·
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  max(xyz.y)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.y")  ·
+      │         1  ·       render 0     y            ·          ·
+      └── scan  2  scan    ·            ·            (x, y)     ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        /1-/1/#      ·          ·
 
 exec
 SELECT MIN(y) FROM xyz WHERE x = 7
@@ -869,15 +863,13 @@ NULL
 exec-explain
 SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-group                0  group   ·            ·            (column4)  ·
- │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
- └── render          1  render  ·            ·            ("xyz.y")  ·
-      │              1  ·       render 0     y            ·          ·
-      └── filter     2  filter  ·            ·            (x, y)     ·
-           │         2  ·       filter       x = 7        ·          ·
-           └── scan  3  scan    ·            ·            (x, y)     ·
-·                    3  ·       table        xyz@primary  ·          ·
-·                    3  ·       spans        ALL          ·          ·
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  min(xyz.y)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.y")  ·
+      │         1  ·       render 0     y            ·          ·
+      └── scan  2  scan    ·            ·            (x, y)     ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        /7-/7/#      ·          ·
 
 exec
 SELECT MAX(y) FROM xyz WHERE x = 7
@@ -888,15 +880,13 @@ NULL
 exec-explain
 SELECT MAX(y) FROM xyz WHERE x = 7
 ----
-group                0  group   ·            ·            (column4)  ·
- │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
- └── render          1  render  ·            ·            ("xyz.y")  ·
-      │              1  ·       render 0     y            ·          ·
-      └── filter     2  filter  ·            ·            (x, y)     ·
-           │         2  ·       filter       x = 7        ·          ·
-           └── scan  3  scan    ·            ·            (x, y)     ·
-·                    3  ·       table        xyz@primary  ·          ·
-·                    3  ·       spans        ALL          ·          ·
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  max(xyz.y)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.y")  ·
+      │         1  ·       render 0     y            ·          ·
+      └── scan  2  scan    ·            ·            (x, y)     ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        /7-/7/#      ·          ·
 
 exec
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -907,15 +897,13 @@ column4:int
 exec-explain
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-group                0  group   ·            ·                      (column4)  ·
- │                   0  ·       aggregate 0  min(xyz.x)             ·          ·
- └── render          1  render  ·            ·                      ("xyz.x")  ·
-      │              1  ·       render 0     x                      ·          ·
-      └── filter     2  filter  ·            ·                      (x, y, z)  ·
-           │         2  ·       filter       (y = 2) AND (z = 3.0)  ·          ·
-           └── scan  3  scan    ·            ·                      (x, y, z)  ·
-·                    3  ·       table        xyz@primary            ·          ·
-·                    3  ·       spans        ALL                    ·          ·
+group           0  group   ·            ·           (column4)  ·
+ │              0  ·       aggregate 0  min(xyz.x)  ·          ·
+ └── render     1  render  ·            ·           ("xyz.x")  ·
+      │         1  ·       render 0     x           ·          ·
+      └── scan  2  scan    ·            ·           (x, y, z)  ·
+·               2  ·       table        xyz@zyx     ·          ·
+·               2  ·       spans        /3/2-/3/3   ·          ·
 
 exec
 SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
@@ -926,15 +914,13 @@ column4:int
 exec-explain
 SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-group                0  group   ·            ·                      (column4)  ·
- │                   0  ·       aggregate 0  max(xyz.x)             ·          ·
- └── render          1  render  ·            ·                      ("xyz.x")  ·
-      │              1  ·       render 0     x                      ·          ·
-      └── filter     2  filter  ·            ·                      (x, y, z)  ·
-           │         2  ·       filter       (z = 3.0) AND (y = 2)  ·          ·
-           └── scan  3  scan    ·            ·                      (x, y, z)  ·
-·                    3  ·       table        xyz@primary            ·          ·
-·                    3  ·       spans        ALL                    ·          ·
+group           0  group   ·            ·           (column4)  ·
+ │              0  ·       aggregate 0  max(xyz.x)  ·          ·
+ └── render     1  render  ·            ·           ("xyz.x")  ·
+      │         1  ·       render 0     x           ·          ·
+      └── scan  2  scan    ·            ·           (x, y, z)  ·
+·               2  ·       table        xyz@zyx     ·          ·
+·               2  ·       spans        /3/2-/3/3   ·          ·
 
 # VARIANCE/STDDEV
 
@@ -959,13 +945,11 @@ NULL
 exec-explain
 SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
-group           0  group   ·            ·            (column4)  ·
- │              0  ·       aggregate 0  variance(x)  ·          ·
- └── filter     1  filter  ·            ·            (x)        ·
-      │         1  ·       filter       x = 1        ·          ·
-      └── scan  2  scan    ·            ·            (x)        ·
-·               2  ·       table        xyz@primary  ·          ·
-·               2  ·       spans        ALL          ·          ·
+group      0  group  ·            ·            (column4)  ·
+ │         0  ·      aggregate 0  variance(x)  ·          ·
+ └── scan  1  scan   ·            ·            (x)        ·
+·          1  ·      table        xyz@primary  ·          ·
+·          1  ·      spans        /1-/1/#      ·          ·
 
 exec
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz

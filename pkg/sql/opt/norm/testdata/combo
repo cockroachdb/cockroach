@@ -233,6 +233,8 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
 
 *** GenerateIndexScans applied; best expr unchanged.
 
+*** ConstrainScan applied; best expr unchanged.
+
 *** GenerateIndexScans applied; best expr unchanged.
 
 *** Final best expr:
