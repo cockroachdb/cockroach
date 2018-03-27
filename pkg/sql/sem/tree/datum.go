@@ -1550,17 +1550,7 @@ func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTime)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-	if *d < *v {
-		return -1
-	}
-	if *v < *d {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1626,31 +1616,18 @@ type DTimeTZ struct {
 }
 
 // ToTime converts a DTimeTZ to a time.Time, using the Unix epoch as the date.
-func (d *DTimeTZ) ToTime2() time.Time {
+func (d *DTimeTZ) ToTime() time.Time {
 	t := d.TimeOfDay.ToTime().In(d.Location)
 	tSeconds := t.Unix() * int64(time.Second)
 	_, tOffset := t.Zone()
 	tNanos := int64(t.Nanosecond())
-	nanos := tSeconds - int64(tOffset) * int64(time.Second) + tNanos
-	return time.Unix(0, nanos).In(d.Location)
-}
-
-func (d *DTimeTZ) ToTime() time.Time {
-	return d.TimeOfDay.ToTime().In(d.Location)
-}
-
-func (d *DTimeTZ) Simplify() string {
-	ds := d.ToTime().String()
-
-	// Get the time zone information, eg. -05
-	tz := strings.Split(ds, " ")[2][0:3]
-	tod := timeofday.TimeOfDay(d.TimeOfDay).String()
-	return tod + tz
+	nanos := tSeconds - int64(tOffset)*int64(time.Second) + tNanos
+	return timeutil.Unix(0, nanos).In(d.Location)
 }
 
 // MakeDTimeTZ creates a DTimeTZ from a TimeOfDay and time.Location.
 func MakeDTimeTZ(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
-	d := DTimeTZ{t, loc};
+	d := DTimeTZ{t, loc}
 	return &d
 }
 
@@ -1676,21 +1653,7 @@ func (d *DTimeTZ) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTimeTZ)
-	if !ok {
-		panic(makeUnsupportedComparisonMessage(d, other))
-	}
-
-	dTime := d.ToTime()
-	vTime := v.ToTime()
-
-	if dTime.Before(vTime) {
-		return -1
-	}
-	if vTime.Before(dTime) {
-		return 1
-	}
-	return 0
+	return compareTimestamps(ctx, d, other)
 }
 
 // Prev implements the Datum interface.
@@ -1739,7 +1702,15 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.Simplify())
+
+	ds := d.ToTime().String()
+	// Get the time zone information, eg. -05:00
+	tz := strings.Split(ds, " ")[2]
+	tz = tz[0:3] + ":" + tz[3:]
+	tod := d.TimeOfDay.String()
+	ds = tod + tz
+
+	ctx.WriteString(ds)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1749,7 +1720,6 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 func (d *DTimeTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
-
 
 // DTimestamp is the timestamp Datum.
 type DTimestamp struct {
@@ -1900,6 +1870,10 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 		return t.Time, true
 	case *DTimestamp:
 		return t.Time, true
+	case *DTimeTZ:
+		return timeofday.FromTime(t.ToTime().UTC()).ToTime(), true
+	case *DTime:
+		return timeofday.TimeOfDay(*t).ToTime(), true
 	default:
 		return time.Time{}, false
 	}

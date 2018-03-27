@@ -569,16 +569,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Interval,
 			ReturnType: types.TimeTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := timeofday.TimeOfDay(left.(*DTimeTZ).TimeOfDay)
+				t := left.(*DTimeTZ).TimeOfDay
 				return MakeDTimeTZ(t.Add(right.(*DInterval).Duration), left.(*DTimeTZ).Location), nil
 			},
 		},
 		BinOp{
 			LeftType:   types.Interval,
 			RightType:  types.TimeTZ,
-			ReturnType: types.Time,
+			ReturnType: types.TimeTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t := timeofday.TimeOfDay(right.(*DTimeTZ).TimeOfDay)
+				t := right.(*DTimeTZ).TimeOfDay
 				return MakeDTimeTZ(t.Add(left.(*DInterval).Duration), right.(*DTimeTZ).Location), nil
 			},
 		},
@@ -587,9 +587,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Time,
 			ReturnType: types.TimeTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := timeofday.TimeOfDay(left.(*DTimeTZ).TimeOfDay)
+				t1 := left.(*DTimeTZ).TimeOfDay
 				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				return MakeDTimeTZ(timeofday.Sum(t1, t2), left.(*DTimeTZ).Location), nil
+				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), left.(*DTimeTZ).Location), nil
 			},
 		},
 		BinOp{
@@ -597,9 +597,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.TimeTZ,
 			ReturnType: types.TimeTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				t1 := timeofday.TimeOfDay(right.(*DTimeTZ).TimeOfDay)
+				t1 := right.(*DTimeTZ).TimeOfDay
 				t2 := timeofday.TimeOfDay(*left.(*DTime))
-				return MakeDTimeTZ(timeofday.Sum(t1, t2), right.(*DTimeTZ).Location), nil
+				return MakeDTimeTZ(timeofday.FromInt(int64(t1+t2)), right.(*DTimeTZ).Location), nil
 			},
 		},
 		BinOp{
@@ -794,8 +794,8 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t1 := left.(*DTimeTZ).TimeOfDay
 				t2 := timeofday.TimeOfDay(*right.(*DTime))
-				diff := timeofday.Difference(t1, t2)
-				return MakeDTimeTZ(t1.Add(diff.Mul(-1)), left.(*DTimeTZ).Location), nil
+				diff := timeofday.FromInt(int64(t1 - t2))
+				return MakeDTimeTZ(diff, left.(*DTimeTZ).Location), nil
 			},
 		},
 		BinOp{
@@ -1695,6 +1695,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Timestamp, types.TimestampTZ),
 		makeEqFn(types.TimestampTZ, types.Date),
 		makeEqFn(types.TimestampTZ, types.Timestamp),
+		makeEqFn(types.TimeTZ, types.Time),
+		makeEqFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1738,6 +1740,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Timestamp, types.TimestampTZ),
 		makeLtFn(types.TimestampTZ, types.Date),
 		makeLtFn(types.TimestampTZ, types.Timestamp),
+		makeLtFn(types.TimeTZ, types.Time),
+		makeLtFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1781,6 +1785,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Timestamp, types.TimestampTZ),
 		makeLeFn(types.TimestampTZ, types.Date),
 		makeLeFn(types.TimestampTZ, types.Timestamp),
+		makeLeFn(types.TimeTZ, types.Time),
+		makeLeFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -1833,6 +1839,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Timestamp, types.TimestampTZ),
 		makeIsFn(types.TimestampTZ, types.Date),
 		makeIsFn(types.TimestampTZ, types.Timestamp),
+		makeIsFn(types.TimeTZ, types.Time),
+		makeIsFn(types.Time, types.TimeTZ),
 
 		// Tuple comparison.
 		CmpOp{
@@ -2551,9 +2559,8 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
-
-// GetTxnTimestamp retrieves the current transaction timestamp as per
-// the evaluation context. The timestamp is guaranteed to be nonzero.
+// GetTxnTime retrieves the current transaction time as per
+// the evaluation context. The time is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTime() *DTimeTZ {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
@@ -2562,7 +2569,6 @@ func (ctx *EvalContext) GetTxnTime() *DTimeTZ {
 	}
 	return MakeDTimeTZ(timeofday.FromTime(ctx.TxnTimestamp), ctx.TxnTimestamp.Location())
 }
-
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.

@@ -1286,7 +1286,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetTxnTime(), nil
 			},
-			Info: "Returns the current transaction's time.",
+			Info: "Returns the current transaction's time with time zone.",
 		},
 	},
 
@@ -1406,17 +1406,17 @@ CockroachDB supports the following flags:
 				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
 		},
 		tree.Builtin{
-				Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
-				ReturnType: tree.FixedReturnType(types.Int),
-				Category:   categoryDateAndTime,
-				Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-					fromTimeTZ := args[1].(*tree.DTimeTZ)
-					fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
-					timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-					return extractStringFromTime(fromTime, timeSpan)
-				},
-				Info: "Extracts `element` from `input`.\n\n" +
-					"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryDateAndTime,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTimeTZ := args[1].(*tree.DTimeTZ)
+				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractStringFromTime(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
 		},
 	},
 

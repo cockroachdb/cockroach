@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // aliasToVisibleTypeMap maps type aliases to ColumnType_VisibleType variants
@@ -1303,7 +1303,7 @@ func DecodeTableKey(
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(t), t.Location()}), rkey, err
+		return a.NewDTimeTZ(tree.DTimeTZ{TimeOfDay: timeofday.FromTime(t), Location: t.Location()}), rkey, err
 	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -1532,7 +1532,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(data), data.Location()}), b, nil
+		return a.NewDTimeTZ(tree.DTimeTZ{TimeOfDay: timeofday.FromTime(data), Location: data.Location()}), b, nil
 	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
@@ -2140,7 +2140,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimeTZ(tree.DTimeTZ{timeofday.FromTime(v), v.Location()}), nil
+		return a.NewDTimeTZ(tree.DTimeTZ{TimeOfDay: timeofday.FromTime(v), Location: v.Location()}), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
