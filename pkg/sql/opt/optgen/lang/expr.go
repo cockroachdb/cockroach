@@ -126,6 +126,40 @@ func (e TagsExpr) Contains(tag string) bool {
 	return false
 }
 
+// WithTag returns the subset of defines in the set that have the given tag.
+func (e DefineSetExpr) WithTag(tag string) DefineSetExpr {
+	var defines DefineSetExpr
+	for _, define := range e {
+		if define.Tags.Contains(tag) {
+			defines = append(defines, define)
+		}
+	}
+	return defines
+}
+
+// WithoutTag returns the subset of defines in the set that do not have the
+// given tag.
+func (e DefineSetExpr) WithoutTag(tag string) DefineSetExpr {
+	var defines DefineSetExpr
+	for _, define := range e {
+		if !define.Tags.Contains(tag) {
+			defines = append(defines, define)
+		}
+	}
+	return defines
+}
+
+// WithTag returns the subset of rules in the set that have the given tag.
+func (e RuleSetExpr) WithTag(tag string) RuleSetExpr {
+	var rules RuleSetExpr
+	for _, rule := range e {
+		if rule.Tags.Contains(tag) {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
+}
+
 // visitChildren is a helper function called by the Visit function on AST
 // expressions. It invokes the visit function on each child of the specified
 // expression and returns the resulting children as a slice. If none of the

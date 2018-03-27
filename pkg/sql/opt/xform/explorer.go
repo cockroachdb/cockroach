@@ -70,10 +70,10 @@ import (
 //    (InnerJoin
 //      $r
 //      $t
-//      (Filters (ConstructConditionsNotUsing $t $lowerOn $upperOn))
+//      (Filters (ConstructConditionsNotUsing $s $lowerOn $upperOn))
 //    )
 //    $s
-//    (Filters (ConstructConditionsUsing $t $lowerOn $upperOn))
+//    (Filters (ConstructConditionsUsing $s $lowerOn $upperOn))
 //  )
 //
 // In this example, if the upper and lower groups each contain two InnerJoin

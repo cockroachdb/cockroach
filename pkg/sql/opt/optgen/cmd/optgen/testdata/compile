@@ -7,7 +7,7 @@ define Not {
     Input Expr
 }
 
-[EliminateNot]
+[EliminateNot, Normalize]
 (Not (Not $input:*)) => $input
 ----
 (Compiled
@@ -26,7 +26,7 @@ define Not {
 		(Rule
 			Comments=(Comments)
 			Name="EliminateNot"
-			Tags=(Tags)
+			Tags=(Tags Normalize)
 			Match=(Match
 				Names=(Names Not)
 				Args=(List
@@ -87,10 +87,10 @@ test.opt:2:1: duplicate 'Lt' define statement
 optgen compile test.opt
 define {}
 
-[Name]
+[Name, Normalize]
 (Foo) => ()
 
-[Name]
+[Name, Normalize]
 (Foo) =>
 ----
 test.opt:1:8: expected define name, found '{'
