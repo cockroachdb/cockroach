@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,16 +134,12 @@ func (p *planner) selectIndex(
 	var optimizer *xform.Optimizer
 
 	if s.filter != nil {
-		colNames := make([]string, len(s.resultColumns))
-		colTypes := make([]types.T, len(s.resultColumns))
-		for i := range s.resultColumns {
-			colNames[i] = s.resultColumns[i].Name
-			colTypes[i] = s.resultColumns[i].Typ
-		}
 		optimizer = xform.NewOptimizer(p.EvalContext())
-		bld := optbuilder.NewScalar(
-			ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory(), colNames, colTypes,
-		)
+		md := optimizer.Memo().Metadata()
+		for i := range s.resultColumns {
+			md.AddColumn(s.resultColumns[i].Name, s.resultColumns[i].Typ)
+		}
+		bld := optbuilder.NewScalar(ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory())
 		bld.AllowUnsupportedExpr = true
 		filterGroup, err := bld.Build(s.filter)
 		if err != nil {
@@ -433,8 +428,8 @@ func (v *indexInfo) makeIndexConstraints(
 		colIdxMap[v.desc.Columns[i].ID] = i
 	}
 
-	// Set up the IndexColumnInfo structures.
-	colInfos := make([]idxconstraint.IndexColumnInfo, 0, numIndexCols+numExtraCols)
+	columns := make([]opt.OrderingColumn, 0, numIndexCols+numExtraCols)
+	var notNullCols opt.ColSet
 	for i := 0; i < numIndexCols+numExtraCols; i++ {
 		var colID sqlbase.ColumnID
 		var dir encoding.Direction
@@ -458,14 +453,13 @@ func (v *indexInfo) makeIndexConstraints(
 			break
 		}
 
-		colDesc := &v.desc.Columns[idx]
-		colInfos = append(colInfos, idxconstraint.IndexColumnInfo{
-			OrderingColumn: opt.MakeOrderingColumn(opt.ColumnID(idx+1), dir == encoding.Descending),
-			Typ:            colDesc.Type.ToDatumType(),
-			Nullable:       colDesc.Nullable,
-		})
+		col := opt.MakeOrderingColumn(opt.ColumnID(idx+1), dir == encoding.Descending)
+		columns = append(columns, col)
+		if !v.desc.Columns[idx].Nullable {
+			notNullCols.Add(idx + 1)
+		}
 	}
-	v.ic.Init(filter, colInfos, isInverted, evalCtx, optimizer.Factory())
+	v.ic.Init(filter, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
 	idxConstraint := v.ic.Constraint()
 	if idxConstraint.IsUnconstrained() {
 		// The index isn't being restricted at all, bump the cost significantly to
@@ -474,7 +468,7 @@ func (v *indexInfo) makeIndexConstraints(
 	} else {
 		v.exactPrefix = idxConstraint.ExactPrefix(evalCtx)
 		// Find the number of columns that are restricted in all spans.
-		numCols := len(colInfos)
+		numCols := len(columns)
 		for i := 0; i < idxConstraint.Spans.Count(); i++ {
 			sp := idxConstraint.Spans.Get(i)
 			// Take the max between the length of the start values and the end
