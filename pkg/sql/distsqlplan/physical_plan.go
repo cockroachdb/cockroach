@@ -142,6 +142,22 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 	outputTypes []sqlbase.ColumnType,
 	newOrdering distsqlrun.Ordering,
 ) {
+	p.AddNoGroupingStageWithCoreFunc(
+		func(_ int, _ *Processor) distsqlrun.ProcessorCoreUnion { return core },
+		post,
+		outputTypes,
+		newOrdering,
+	)
+}
+
+// AddNoGroupingStageWithCoreFunc is like AddNoGroupingStage, but creates a core
+// spec based on the input processor's spec.
+func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
+	coreFunc func(int, *Processor) distsqlrun.ProcessorCoreUnion,
+	post distsqlrun.PostProcessSpec,
+	outputTypes []sqlbase.ColumnType,
+	newOrdering distsqlrun.Ordering,
+) {
 	stageID := p.NewStageID()
 	for i, resultProc := range p.ResultRouters {
 		prevProc := &p.Processors[resultProc]
@@ -153,7 +169,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 					Type:        distsqlrun.InputSyncSpec_UNORDERED,
 					ColumnTypes: p.ResultTypes,
 				}},
-				Core: core,
+				Core: coreFunc(int(resultProc), prevProc),
 				Post: post,
 				Output: []distsqlrun.OutputRouterSpec{{
 					Type: distsqlrun.OutputRouterSpec_PASS_THROUGH,

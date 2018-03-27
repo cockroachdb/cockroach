@@ -95,6 +95,7 @@ func (g *optgen) run(args ...string) bool {
 
 	switch cmd {
 	case "compile":
+	case "explorer":
 	case "exprs":
 	case "factory":
 	case "ops":
@@ -160,6 +161,10 @@ func (g *optgen) run(args ...string) bool {
 	case "compile":
 		err = g.writeOutputFile([]byte(compiled.String()))
 
+	case "explorer":
+		var gen explorerGen
+		err = g.generate(compiled, gen.generate)
+
 	case "exprs":
 		var gen exprsGen
 		err = g.generate(compiled, gen.generate)
@@ -190,6 +195,15 @@ func (g *optgen) run(args ...string) bool {
 // the compiler does not do these checks.
 func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
 	var errors []error
+
+	for _, rule := range compiled.Rules {
+		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
+			format := "%s rule is missing \"Normalize\" or \"Explore\" tag"
+			err := fmt.Errorf(format, rule.Name)
+			err = addErrorSource(err, rule.Source())
+			errors = append(errors, err)
+		}
+	}
 
 	for _, define := range compiled.Defines {
 		// Ensure that fields are defined in the following order:
@@ -293,6 +307,7 @@ func (g *optgen) usage() {
 
 	fmt.Fprintf(g.stdErr, "The commands are:\n\n")
 	fmt.Fprintf(g.stdErr, "\tcompile    generate the optgen compiled format\n")
+	fmt.Fprintf(g.stdErr, "\texplorer   generate expression tree exploration rules\n")
 	fmt.Fprintf(g.stdErr, "\texprs      generate expression definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")

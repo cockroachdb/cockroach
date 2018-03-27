@@ -27,15 +27,26 @@ type matchWriter struct {
 	nesting int
 }
 
-// marker opaquely stores a nesting level. The nest method returns the marker
-// for the nesting level that existed before the nest, and the unnestToMarker
-// method returns to that level given the marker.
+// marker opaquely stores a nesting level. The nest methods return the marker
+// for the nesting level that existed before the nest call, and the
+// unnestToMarker method returns to that level given the marker.
 type marker int
 
-// nest writes an indented formatted string and then increases the indentation.
-// It returns a marker for the indentation level before the increase. This
-// marker can be passed to unnestToMarker to return to that level.
+// nest writes a formatted string with no identation and then increases the
+// indentation. It returns a marker for the indentation level before the
+// increase. This marker can be passed to unnestToMarker to return to that
+// level.
 func (w *matchWriter) nest(format string, args ...interface{}) marker {
+	w.write(format, args...)
+	w.nesting++
+	return marker(w.nesting - 1)
+}
+
+// nestIndent writes an indented formatted string and then increases the
+// indentation. It returns a marker for the indentation level before the
+// increase. This marker can be passed to unnestToMarker to return to that
+// level.
+func (w *matchWriter) nestIndent(format string, args ...interface{}) marker {
 	w.writeIndent(format, args...)
 	w.nesting++
 	return marker(w.nesting - 1)

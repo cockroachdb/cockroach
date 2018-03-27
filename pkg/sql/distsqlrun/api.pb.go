@@ -33,6 +33,8 @@
 		PostProcessSpec
 		ProcessorCoreUnion
 		NoopCoreSpec
+		MetadataTestSenderSpec
+		MetadataTestReceiverSpec
 		ValuesCoreSpec
 		TableReaderSpan
 		TableReaderSpec

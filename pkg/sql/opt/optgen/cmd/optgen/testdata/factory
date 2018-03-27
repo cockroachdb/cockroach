@@ -137,7 +137,10 @@ func (_f *Factory) ConstructInnerJoin(
 		r := left
 		s := right
 		_f.o.reportOptimization(CommuteJoin)
-		_group = _f.ConstructInnerJoin(s, r)
+		_group = _f.ConstructInnerJoin(
+			s,
+			r,
+		)
 		_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
 		return _group
 	}
@@ -237,19 +240,22 @@ func (_f *Factory) ConstructEq(
 
 	// [NormalizeVarPlus]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
-			_const := _f.mem.NormExpr(_plus.Left()).AsConst()
-			if _const == nil {
-				leftRight := _plus.Right()
-				_const2 := _f.mem.NormExpr(_plus.Right()).AsConst()
-				if _const2 != nil {
-					_const3 := _f.mem.NormExpr(right).AsConst()
-					if _const3 != nil {
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
+			_constExpr := _f.mem.NormExpr(_plusExpr.Left()).AsConst()
+			if _constExpr == nil {
+				leftRight := _plusExpr.Right()
+				_constExpr2 := _f.mem.NormExpr(_plusExpr.Right()).AsConst()
+				if _constExpr2 != nil {
+					_constExpr3 := _f.mem.NormExpr(right).AsConst()
+					if _constExpr3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeVarPlus)
-							_group = _f.ConstructEq(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
+							_group = _f.ConstructEq(
+								leftLeft,
+								_f.constructBinary(opt.MinusOp, right, leftRight),
+							)
 							_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -279,19 +285,22 @@ func (_f *Factory) ConstructLt(
 
 	// [NormalizeVarPlus]
 	{
-		_plus := _f.mem.NormExpr(left).AsPlus()
-		if _plus != nil {
-			leftLeft := _plus.Left()
-			_const := _f.mem.NormExpr(_plus.Left()).AsConst()
-			if _const == nil {
-				leftRight := _plus.Right()
-				_const2 := _f.mem.NormExpr(_plus.Right()).AsConst()
-				if _const2 != nil {
-					_const3 := _f.mem.NormExpr(right).AsConst()
-					if _const3 != nil {
+		_plusExpr := _f.mem.NormExpr(left).AsPlus()
+		if _plusExpr != nil {
+			leftLeft := _plusExpr.Left()
+			_constExpr := _f.mem.NormExpr(_plusExpr.Left()).AsConst()
+			if _constExpr == nil {
+				leftRight := _plusExpr.Right()
+				_constExpr2 := _f.mem.NormExpr(_plusExpr.Right()).AsConst()
+				if _constExpr2 != nil {
+					_constExpr3 := _f.mem.NormExpr(right).AsConst()
+					if _constExpr3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
 							_f.o.reportOptimization(NormalizeVarPlus)
-							_group = _f.ConstructLt(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
+							_group = _f.ConstructLt(
+								leftLeft,
+								_f.constructBinary(opt.MinusOp, right, leftRight),
+							)
 							_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
 							return _group
 						}
@@ -447,11 +456,14 @@ func (_f *Factory) ConstructFunc(
 		if name == m.mem.InternPrivate("concat") {
 			for _, _item := range _f.mem.LookupList(args) {
 				item := _item
-				_variable := _f.mem.NormExpr(_item).AsVariable()
-				if _variable == nil {
+				_variableExpr := _f.mem.NormExpr(_item).AsVariable()
+				if _variableExpr == nil {
 					if _f.isEmpty(item) {
 						_f.o.reportOptimization(Concat)
-						_group = _f.ConstructFunc(m.mem.InternPrivate(tree.NewDString("concat")), _f.removeListItem(args, item))
+						_group = _f.ConstructFunc(
+							m.mem.InternPrivate(tree.NewDString("concat")),
+							_f.removeListItem(args, item),
+						)
 						_f.mem.AddAltFingerprint(_funcExpr.Fingerprint(), _group)
 						return _group
 					}
@@ -577,10 +589,10 @@ func (_f *Factory) ConstructSelect(
 	// [Test]
 	{
 		_match := false
-		_norm := _f.mem.NormExpr(input)
-		if _norm.IsJoin() || _norm.Operator() == opt.UnionOp {
-			r := _norm.ChildGroup(_f.mem, 0)
-			s := _norm.ChildGroup(_f.mem, 1)
+		_expr := _f.mem.NormExpr(input)
+		if _expr.IsJoin() || _expr.Operator() == opt.UnionOp {
+			r := _expr.ChildGroup(_f.mem, 0)
+			s := _expr.ChildGroup(_f.mem, 1)
 			_match = true
 		}
 
@@ -588,12 +600,21 @@ func (_f *Factory) ConstructSelect(
 			args := filter
 			for _, _item := range _f.mem.LookupList(filter) {
 				item := _item
-				_norm2 := _f.mem.NormExpr(_item)
-				if _norm2.IsJoin() {
-					t := _norm2.ChildGroup(_f.mem, 0)
-					u := _norm2.ChildGroup(_f.mem, 1)
+				_expr2 := _f.mem.NormExpr(_item)
+				if _expr2.IsJoin() {
+					t := _expr2.ChildGroup(_f.mem, 0)
+					u := _expr2.ChildGroup(_f.mem, 1)
 					_f.o.reportOptimization(Test)
-					_group = _f.DynamicConstruct(_f.mem.NormExpr(item).Operator(), DynamicOperands{DynamicID(_f.ConstructSelect(t, u)), DynamicID(_f.custom(item, opt.SelectOp))})
+					_group = _f.DynamicConstruct(
+						_f.mem.NormExpr(item).Operator(),
+						DynamicOperands{
+							DynamicID(_f.ConstructSelect(
+								t,
+								u,
+							)),
+							DynamicID(_f.custom(item, opt.SelectOp)),
+						},
+					)
 					_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
 					return _group
 				}
@@ -772,25 +793,25 @@ func (_f *Factory) ConstructList(
 	{
 		any := items
 		for _, _item := range _f.mem.LookupList(items) {
-			_list := _f.mem.NormExpr(_item).AsList()
-			if _list != nil {
-				first := _list.Items()
-				if _list.Items().Length > 0 {
-					_item := _f.mem.LookupList(_list.Items())[0]
-					_list2 := _f.mem.NormExpr(_item).AsList()
-					if _list2 != nil {
-						last := _list2.Items()
-						if _list2.Items().Length > 0 {
-							_item := _f.mem.LookupList(_list2.Items())[_list2.Items().Length-1]
-							_list3 := _f.mem.NormExpr(_item).AsList()
-							if _list3 != nil {
-								single := _list3.Items()
-								if _list3.Items().Length == 1 {
-									_item := _f.mem.LookupList(_list3.Items())[0]
-									_list4 := _f.mem.NormExpr(_item).AsList()
-									if _list4 != nil {
-										empty := _list4.Items()
-										if _list4.Items().Length == 0 {
+			_listExpr2 := _f.mem.NormExpr(_item).AsList()
+			if _listExpr2 != nil {
+				first := _listExpr2.Items()
+				if _listExpr2.Items().Length > 0 {
+					_item := _f.mem.LookupList(_listExpr2.Items())[0]
+					_listExpr3 := _f.mem.NormExpr(_item).AsList()
+					if _listExpr3 != nil {
+						last := _listExpr3.Items()
+						if _listExpr3.Items().Length > 0 {
+							_item := _f.mem.LookupList(_listExpr3.Items())[_listExpr3.Items().Length-1]
+							_listExpr4 := _f.mem.NormExpr(_item).AsList()
+							if _listExpr4 != nil {
+								single := _listExpr4.Items()
+								if _listExpr4.Items().Length == 1 {
+									_item := _f.mem.LookupList(_listExpr4.Items())[0]
+									_listExpr5 := _f.mem.NormExpr(_item).AsList()
+									if _listExpr5 != nil {
+										empty := _listExpr5.Items()
+										if _listExpr5.Items().Length == 0 {
 											_f.o.reportOptimization(List)
 											_group = _f.construct(any, first, last, single, empty)
 											_f.mem.AddAltFingerprint(_listExpr.Fingerprint(), _group)
@@ -971,14 +992,17 @@ func (_f *Factory) ConstructOp(
 
 	// [ListNot]
 	{
-		_list := _f.mem.NormExpr(empty).AsList()
-		if _list != nil {
-			if _list.Items().Length != 0 {
-				_list2 := _f.mem.NormExpr(single).AsList()
-				if _list2 != nil {
-					if _list2.Items().Length != 1 {
+		_listExpr := _f.mem.NormExpr(empty).AsList()
+		if _listExpr != nil {
+			if _listExpr.Items().Length != 0 {
+				_listExpr2 := _f.mem.NormExpr(single).AsList()
+				if _listExpr2 != nil {
+					if _listExpr2.Items().Length != 1 {
 						_f.o.reportOptimization(ListNot)
-						_group = _f.ConstructOp(empty, single)
+						_group = _f.ConstructOp(
+							empty,
+							single,
+						)
 						_f.mem.AddAltFingerprint(_opExpr.Fingerprint(), _group)
 						return _group
 					}
@@ -1076,19 +1100,19 @@ func (_f *Factory) ConstructEq(
 
 	// [Constant]
 	{
-		_eq := _f.mem.NormExpr(left).AsEq()
-		if _eq != nil {
-			_eq2 := _f.mem.NormExpr(_eq.Left()).AsEq()
-			if _eq2 != nil {
-				_eq3 := _f.mem.NormExpr(_eq.Right()).AsEq()
-				if _eq3 == nil {
+		_eqExpr2 := _f.mem.NormExpr(left).AsEq()
+		if _eqExpr2 != nil {
+			_eqExpr3 := _f.mem.NormExpr(_eqExpr2.Left()).AsEq()
+			if _eqExpr3 != nil {
+				_eqExpr4 := _f.mem.NormExpr(_eqExpr2.Right()).AsEq()
+				if _eqExpr4 == nil {
 					_match := false
-					_eq4 := _f.mem.NormExpr(right).AsEq()
-					if _eq4 != nil {
-						_eq5 := _f.mem.NormExpr(_eq4.Left()).AsEq()
-						if _eq5 != nil {
-							_eq6 := _f.mem.NormExpr(_eq4.Right()).AsEq()
-							if _eq6 == nil {
+					_eqExpr5 := _f.mem.NormExpr(right).AsEq()
+					if _eqExpr5 != nil {
+						_eqExpr6 := _f.mem.NormExpr(_eqExpr5.Left()).AsEq()
+						if _eqExpr6 != nil {
+							_eqExpr7 := _f.mem.NormExpr(_eqExpr5.Right()).AsEq()
+							if _eqExpr7 == nil {
 								_match = true
 							}
 						}
@@ -1125,19 +1149,19 @@ func (_f *Factory) ConstructNe(
 
 	// [Dynamic]
 	{
-		_norm := _f.mem.NormExpr(left)
-		if _norm.Operator() == opt.EqOp || _norm.Operator() == opt.NeOp {
-			_norm2 := _f.mem.NormExpr(_norm.ChildGroup(_f.mem, 0))
-			if _norm2.Operator() == opt.EqOp || _norm2.Operator() == opt.NeOp {
-				_norm3 := _f.mem.NormExpr(_norm.ChildGroup(_f.mem, 1))
-				if !(_norm3.Operator() == opt.EqOp || _norm3.Operator() == opt.NeOp) {
+		_expr := _f.mem.NormExpr(left)
+		if _expr.Operator() == opt.EqOp || _expr.Operator() == opt.NeOp {
+			_expr2 := _f.mem.NormExpr(_expr.ChildGroup(_f.mem, 0))
+			if _expr2.Operator() == opt.EqOp || _expr2.Operator() == opt.NeOp {
+				_expr3 := _f.mem.NormExpr(_expr.ChildGroup(_f.mem, 1))
+				if !(_expr3.Operator() == opt.EqOp || _expr3.Operator() == opt.NeOp) {
 					_match := false
-					_norm4 := _f.mem.NormExpr(right)
-					if _norm4.Operator() == opt.EqOp || _norm4.Operator() == opt.NeOp {
-						_norm5 := _f.mem.NormExpr(_norm4.ChildGroup(_f.mem, 0))
-						if _norm5.Operator() == opt.EqOp || _norm5.Operator() == opt.NeOp {
-							_norm6 := _f.mem.NormExpr(_norm4.ChildGroup(_f.mem, 1))
-							if !(_norm6.Operator() == opt.EqOp || _norm6.Operator() == opt.NeOp) {
+					_expr4 := _f.mem.NormExpr(right)
+					if _expr4.Operator() == opt.EqOp || _expr4.Operator() == opt.NeOp {
+						_expr5 := _f.mem.NormExpr(_expr4.ChildGroup(_f.mem, 0))
+						if _expr5.Operator() == opt.EqOp || _expr5.Operator() == opt.NeOp {
+							_expr6 := _f.mem.NormExpr(_expr4.ChildGroup(_f.mem, 1))
+							if !(_expr6.Operator() == opt.EqOp || _expr6.Operator() == opt.NeOp) {
 								_match = true
 							}
 						}
@@ -1238,8 +1262,8 @@ func (_f *Factory) ConstructPlus(
 
 	// [Fold]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.hasNullableArgs(opt.PlusOp, _f.anotherFunc(_f.mem.NormExpr(left).Operator())) {
 				_f.o.reportOptimization(Fold)
 				_group = _f.ConstructNull()
@@ -1269,8 +1293,8 @@ func (_f *Factory) ConstructMinus(
 
 	// [Fold]
 	{
-		_null := _f.mem.NormExpr(right).AsNull()
-		if _null != nil {
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
 			if !_f.hasNullableArgs(opt.MinusOp, _f.anotherFunc(_f.mem.NormExpr(left).Operator())) {
 				_f.o.reportOptimization(Fold)
 				_group = _f.ConstructNull()
@@ -1442,12 +1466,12 @@ func (_f *Factory) ConstructNot(
 
 	// [Invert]
 	{
-		_norm := _f.mem.NormExpr(input)
-		if _norm.IsComparison() {
-			left := _norm.ChildGroup(_f.mem, 0)
-			right := _norm.ChildGroup(_f.mem, 1)
-			_contains := _f.mem.NormExpr(input).AsContains()
-			if _contains == nil {
+		_expr := _f.mem.NormExpr(input)
+		if _expr.IsComparison() {
+			left := _expr.ChildGroup(_f.mem, 0)
+			right := _expr.ChildGroup(_f.mem, 1)
+			_containsExpr := _f.mem.NormExpr(input).AsContains()
+			if _containsExpr == nil {
 				if _f.someOtherCondition(input) {
 					_f.o.reportOptimization(Invert)
 					_group = _f.invert(_f.mem.NormExpr(input).Operator(), left, right)
