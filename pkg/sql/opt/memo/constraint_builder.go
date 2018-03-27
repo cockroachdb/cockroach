@@ -44,7 +44,30 @@ type constraintsBuilder struct {
 func (cb *constraintsBuilder) buildSingleColumnConstraint(
 	col opt.ColumnID, op opt.Operator, val ExprView,
 ) (_ *constraint.Set, tight bool) {
-	// TODO(radu): handle IN
+	if op == opt.InOp && MatchesTupleOfConstants(val) {
+		keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+		keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
+
+		var spans constraint.Spans
+		spans.Alloc(val.ChildCount())
+		var sp constraint.Span
+		for i, n := 0, val.ChildCount(); i < n; i++ {
+			datum := ExtractConstDatum(val.Child(i))
+			if !cb.verifyType(col, datum.ResolvedType()) {
+				return unconstrained, false
+			}
+			if datum == tree.DNull {
+				// Ignore NULLs - they can't match any values
+				continue
+			}
+			key := constraint.MakeKey(datum)
+			sp.Init(key, includeBoundary, key, includeBoundary)
+			spans.Append(&sp)
+		}
+		var c constraint.Constraint
+		c.Init(&keyCtx, &spans)
+		return constraint.SingleConstraint(&c), true
+	}
 
 	if val.IsConstValue() {
 		return cb.buildSingleColumnConstraintConst(col, op, ExtractConstDatum(val))

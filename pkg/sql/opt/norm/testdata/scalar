@@ -373,7 +373,7 @@ project
  ├── scan a
  │    └── columns: a.i:2(int)
  └── projections [outer=(2)]
-      └── in [type=bool, outer=(2)]
+      └── in [type=bool, outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
            └── tuple [type=tuple{unknown, int, int, int}]
                 ├── null [type=unknown]
