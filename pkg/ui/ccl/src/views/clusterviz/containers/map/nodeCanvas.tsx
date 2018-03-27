@@ -22,6 +22,7 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
+import InstructionsBox, { showInstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.storage.Liveness;
 
@@ -71,7 +72,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     window.removeEventListener("resize", this.debouncedOnResize);
   }
 
-  renderContent() {
+  renderContent(asMap: boolean) {
     if (!this.state) {
       return null;
     }
@@ -79,7 +80,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const { localityTree, locationTree, livenessStatuses, livenesses } = this.props;
     const { viewportSize } = this.state;
 
-    if (renderAsMap(locationTree, localityTree)) {
+    if (asMap) {
       return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
@@ -137,6 +138,8 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   render() {
+    const showMap = renderAsMap(this.props.locationTree, this.props.localityTree);
+
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
@@ -153,10 +156,14 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
             className="cluster-viz"
             ref={svg => this.graphEl = svg}
           >
-            { this.renderContent() }
+            { this.renderContent(showMap) }
           </svg>
         </div>
         { this.renderBackButton() }
+        { showInstructionsBox(showMap, this.props.tiers)
+            ? <InstructionsBox />
+            : null
+        }
       </div>
     );
   }
