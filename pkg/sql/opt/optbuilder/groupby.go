@@ -46,6 +46,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -347,6 +348,9 @@ func (b *Builder) buildGrouping(
 		label = string(selects[col].As)
 	}
 
+	// Make sure the GROUP BY columns have no aggregates or window functions.
+	b.assertNoAggregationOrWindowing(groupBy, "GROUP BY")
+
 	// Resolve types, expand stars, and flatten tuples.
 	exprs := b.expandStarAndResolveType(groupBy, inScope)
 	exprs = flattenTuples(exprs)
@@ -368,6 +372,13 @@ func (b *Builder) buildGrouping(
 func (b *Builder) buildAggregateFunction(
 	f *tree.FuncExpr, funcDef memo.FuncOpDef, label string, inScope *scope,
 ) (out memo.GroupID, col *columnProps) {
+	if len(f.Exprs) > 1 {
+		// TODO: #10495
+		panic(builderError{
+			pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet"),
+		})
+	}
+
 	aggInScope, aggOutScope := inScope.startAggFunc()
 
 	info := aggregateInfo{
@@ -376,6 +387,8 @@ func (b *Builder) buildAggregateFunction(
 	}
 	aggInScopeColsBefore := len(aggInScope.cols)
 	for i, pexpr := range f.Exprs {
+		b.assertNoAggregationOrWindowing(pexpr, fmt.Sprintf("the argument of %s()", &f.Func))
+
 		// This synthesizes a new aggInScope column, unless the argument is a simple
 		// VariableOp.
 		info.args[i] = b.buildScalarProjection(

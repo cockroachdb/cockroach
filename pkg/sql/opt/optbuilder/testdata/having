@@ -115,7 +115,7 @@ project
 build
 SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(MIN(v)) > 2
 ----
-error: aggregate function cannot be nested within another aggregate function
+error: aggregate functions are not allowed in the argument of max()
 
 build
 SELECT MAX(k), MIN(v) FROM t.kv HAVING k

@@ -1164,7 +1164,6 @@ select
       ├── variable: xyz.x [type=int]
       └── const: 7 [type=int]
 
-# TODO(rytaft): moo1 should be foo1
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
 ----
