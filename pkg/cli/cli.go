@@ -132,6 +132,7 @@ func init() {
 		certCmd,
 		quitCmd,
 
+		demoCmd,
 		sqlShellCmd,
 		userCmd,
 		zoneCmd,
