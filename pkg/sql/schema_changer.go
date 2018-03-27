@@ -1069,7 +1069,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						table := union.Table
 						table.MaybeFillInDescriptor()
 						if err := table.ValidateTable(s.execCfg.Settings); err != nil {
-							log.Errorf(ctx, "%s: received invalid table descriptor: %v: %s", kv.Key, table, err)
+							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
+								kv.Key, err, table,
+							)
 							return
 						}
 
