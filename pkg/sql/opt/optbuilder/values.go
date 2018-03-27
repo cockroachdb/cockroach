@@ -77,6 +77,6 @@ func (b *Builder) buildValuesClause(
 	}
 
 	colList := colsToColList(outScope.cols)
-	out = b.factory.ConstructValues(b.factory.InternList(rows), b.factory.InternPrivate(&colList))
+	out = b.factory.ConstructValues(b.factory.InternList(rows), b.factory.InternColList(colList))
 	return out, outScope
 }

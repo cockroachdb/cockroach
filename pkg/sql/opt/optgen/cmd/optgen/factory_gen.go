@@ -39,10 +39,24 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
 	g.w.unnest(")\n\n")
 
+	g.genInternPrivateFuncs()
 	g.genConstructFuncs()
 	g.genDynamicConstructLookup()
+}
+
+func (g *factoryGen) genInternPrivateFuncs() {
+	for _, typ := range getUniquePrivateTypes(g.compiled.Defines) {
+		g.w.writeIndent("// Intern%s adds the given value to the memo and returns an ID that\n", typ)
+		g.w.writeIndent("// can be used for later lookup. If the same value was added previously, \n")
+		g.w.writeIndent("// this method is a no-op and returns the ID of the previous value.\n")
+		g.w.nestIndent("func (_f *Factory) Intern%s(val %s) memo.PrivateID {\n", typ, mapPrivateType(typ))
+		g.w.writeIndent("return _f.mem.Intern%s(val)", typ)
+		g.w.unnest("}\n\n")
+	}
 }
 
 // genConstructFuncs generates the factory Construct functions for each

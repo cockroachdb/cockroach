@@ -40,7 +40,7 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 	o := xform.NewOptimizer(&evalCtx)
 	f := o.Factory()
 
-	null := f.ConstructNull(f.InternPrivate(types.Unknown))
+	null := f.ConstructNull(f.InternType(types.Unknown))
 	empty := f.ConstructTuple(memo.EmptyList)
 	in := f.ConstructIn(null, empty)
 	ev := o.Optimize(in, &memo.PhysicalProps{})
