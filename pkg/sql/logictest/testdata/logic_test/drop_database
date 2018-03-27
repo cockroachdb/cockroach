@@ -210,6 +210,9 @@ CREATE DATABASE foo; CREATE TABLE foo.bar(x INT);
 statement ok
 SET sql_safe_updates = TRUE;
 
+statement error DROP DATABASE on current database
+DROP DATABASE test
+
 statement error DROP DATABASE on non-empty database without explicit CASCADE
 DROP DATABASE foo
 
