@@ -251,7 +251,7 @@ func (e *explorer) generateIndexScans(scan memo.ExprID) {
 		// then construct a new Scan operator using that index.
 		if def.AltIndexHasCols(e.mem.Metadata(), i) {
 			newDef := &memo.ScanOpDef{Table: def.Table, Index: i, Cols: def.Cols}
-			indexScan := memo.MakeScanExpr(e.mem.InternPrivate(newDef))
+			indexScan := memo.MakeScanExpr(e.mem.InternScanOpDef(newDef))
 			e.mem.MemoizeDenormExpr(scan.Group, memo.Expr(indexScan))
 		}
 	}

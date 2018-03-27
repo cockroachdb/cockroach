@@ -34,7 +34,7 @@ const (
 	// the same length (same with that of Cols).
 	//
 	// The Cols field contains the set of column indices returned by each row
-	// as a *ColList. It is legal for Cols to be empty.
+	// as an opt.ColList. It is legal for Cols to be empty.
 	ValuesOp
 
 	// SelectOp filters rows from its input result set, based on the boolean filter
@@ -174,7 +174,7 @@ const (
 
 	// LimitOp returns a limited subset of the results in the input relation.
 	// The limit expression is a scalar value; the operator returns at most this many
-	// rows. The private field is an *opt.Ordering which indicates the desired
+	// rows. The private field is an opt.Ordering which indicates the desired
 	// row ordering (the first rows with respect to this ordering are returned).
 	LimitOp
 
@@ -288,13 +288,13 @@ const (
 
 	// ProjectionsOp is a set of typed scalar expressions that will become output
 	// columns for a containing Project operator. The private Cols field contains
-	// the list of column indexes returned by the expression, as a *opt.ColList. It
+	// the list of column indexes returned by the expression, as an opt.ColList. It
 	// is not legal for Cols to be empty.
 	ProjectionsOp
 
 	// AggregationsOp is a set of aggregate expressions that will become output
 	// columns for a containing GroupBy operator. The private Cols field contains
-	// the list of column indexes returned by the expression, as a *ColList. It
+	// the list of column indexes returned by the expression, as an opt.ColList. It
 	// is legal for Cols to be empty.
 	AggregationsOp
 
@@ -433,7 +433,7 @@ const (
 	WhenOp
 
 	// FunctionOp invokes a builtin SQL function like CONCAT or NOW, passing the given
-	// arguments. The private field is an opt.FuncOpDef struct that provides the
+	// arguments. The private field is a *opt.FuncOpDef struct that provides the
 	// name of the function as well as a pointer to the builtin overload definition.
 	FunctionOp
 

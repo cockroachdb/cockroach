@@ -32,7 +32,7 @@ func (b *Builder) buildLimit(
 	out, outScope = in, inScope
 
 	ordering := inScope.ordering
-	orderingPrivID := b.factory.InternPrivate(&ordering)
+	orderingPrivID := b.factory.InternOrdering(ordering)
 
 	if limit.Offset != nil {
 		op := "OFFSET"

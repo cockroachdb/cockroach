@@ -4,6 +4,8 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 var opLayoutTable = [...]opLayout{
@@ -1152,7 +1154,7 @@ func (e *Expr) AsScan() *ScanExpr {
 // the same length (same with that of Cols).
 //
 // The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
+// as an opt.ColList. It is legal for Cols to be empty.
 type ValuesExpr Expr
 
 func MakeValuesExpr(rows ListID, cols PrivateID) ValuesExpr {
@@ -1874,7 +1876,7 @@ func (e *Expr) AsExceptAll() *ExceptAllExpr {
 
 // LimitExpr returns a limited subset of the results in the input relation.
 // The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
+// rows. The private field is an opt.Ordering which indicates the desired
 // row ordering (the first rows with respect to this ordering are returned).
 type LimitExpr Expr
 
@@ -2224,7 +2226,7 @@ func (e *Expr) AsTuple() *TupleExpr {
 
 // ProjectionsExpr is a set of typed scalar expressions that will become output
 // columns for a containing Project operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *opt.ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is not legal for Cols to be empty.
 type ProjectionsExpr Expr
 
@@ -2253,7 +2255,7 @@ func (e *Expr) AsProjections() *ProjectionsExpr {
 
 // AggregationsExpr is a set of aggregate expressions that will become output
 // columns for a containing GroupBy operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is legal for Cols to be empty.
 type AggregationsExpr Expr
 
@@ -3491,7 +3493,7 @@ func (e *Expr) AsWhen() *WhenExpr {
 }
 
 // FunctionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncOpDef struct that provides the
+// arguments. The private field is a *opt.FuncOpDef struct that provides the
 // name of the function as well as a pointer to the builtin overload definition.
 type FunctionExpr Expr
 
@@ -3560,4 +3562,74 @@ func (e *Expr) AsUnsupportedExpr() *UnsupportedExprExpr {
 		return nil
 	}
 	return (*UnsupportedExprExpr)(e)
+}
+
+// InternScanOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternScanOpDef(val *ScanOpDef) PrivateID {
+	return m.privateStorage.internScanOpDef(val)
+}
+
+// InternColList adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColList(val opt.ColList) PrivateID {
+	return m.privateStorage.internColList(val)
+}
+
+// InternColSet adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColSet(val opt.ColSet) PrivateID {
+	return m.privateStorage.internColSet(val)
+}
+
+// InternSetOpColMap adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternSetOpColMap(val *SetOpColMap) PrivateID {
+	return m.privateStorage.internSetOpColMap(val)
+}
+
+// InternOrdering adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternOrdering(val Ordering) PrivateID {
+	return m.privateStorage.internOrdering(val)
+}
+
+// InternColumnID adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColumnID(val opt.ColumnID) PrivateID {
+	return m.privateStorage.internColumnID(val)
+}
+
+// InternDatum adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternDatum(val tree.Datum) PrivateID {
+	return m.privateStorage.internDatum(val)
+}
+
+// InternType adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternType(val types.T) PrivateID {
+	return m.privateStorage.internType(val)
+}
+
+// InternTypedExpr adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternTypedExpr(val tree.TypedExpr) PrivateID {
+	return m.privateStorage.internTypedExpr(val)
+}
+
+// InternFuncOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternFuncOpDef(val *FuncOpDef) PrivateID {
+	return m.privateStorage.internFuncOpDef(val)
 }

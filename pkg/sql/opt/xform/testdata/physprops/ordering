@@ -186,26 +186,25 @@ project
 memo
 SELECT y, x-1 FROM a WHERE x=1 ORDER BY x, y DESC
 ----
-[13: "p:y:2,column5:5 o:+1,-2"]
+[12: "p:y:2,column5:5 o:+1,-2"]
 memo
- ├── 13: (project 12 10)
+ ├── 12: (project 11 9)
  │    ├── "" [cost=1000.00]
- │    │    └── best: (project 12 10)
+ │    │    └── best: (project 11 9)
  │    └── "p:y:2,column5:5 o:+1,-2" [cost=1000.00]
- │         └── best: (project 12="o:+1,-2" 10)
- ├── 12: (select 11 5)
+ │         └── best: (project 11="o:+1,-2" 9)
+ ├── 11: (select 10 5)
  │    ├── "" [cost=1000.00]
- │    │    └── best: (select 11 5)
+ │    │    └── best: (select 10 5)
  │    └── "o:+1,-2" [cost=1000.00]
- │         └── best: (select 11="o:+1,-2" 5)
- ├── 11: (scan a)
+ │         └── best: (select 10="o:+1,-2" 5)
+ ├── 10: (scan a)
  │    ├── "" [cost=1000.00]
  │    │    └── best: (scan a)
  │    └── "o:+1,-2" [cost=1000.00]
  │         └── best: (scan a)
- ├── 10: (projections 7 9 2)
- ├── 9: (minus 2 8)
- ├── 8: (const 1)
+ ├── 9: (projections 7 8 2)
+ ├── 8: (minus 2 3)
  ├── 7: (variable a.y)
  ├── 6: (select 1 5)
  ├── 5: (filters 4)

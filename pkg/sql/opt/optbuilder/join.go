@@ -145,7 +145,7 @@ func (b *Builder) buildUsingJoin(
 			if mergedCol, ok := mergedCols[col.id]; ok {
 				projections = append(projections, mergedCol)
 			} else {
-				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.id))
+				v := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 				projections = append(projections, v)
 			}
 		}
@@ -256,8 +256,8 @@ func (b *Builder) buildUsingJoinPredicate(
 		}
 
 		// Construct the predicate.
-		leftVar := b.factory.ConstructVariable(b.factory.InternPrivate(leftCol.id))
-		rightVar := b.factory.ConstructVariable(b.factory.InternPrivate(rightCol.id))
+		leftVar := b.factory.ConstructVariable(b.factory.InternColumnID(leftCol.id))
+		rightVar := b.factory.ConstructVariable(b.factory.InternColumnID(rightCol.id))
 		eq := b.factory.ConstructEq(leftVar, rightVar)
 		conditions = append(conditions, eq)
 

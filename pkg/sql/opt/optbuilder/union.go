@@ -97,7 +97,7 @@ func (b *Builder) buildUnion(
 		newCols = leftCols
 	}
 	setOpColMap := memo.SetOpColMap{Left: leftCols, Right: rightCols, Out: newCols}
-	private := b.factory.InternPrivate(&setOpColMap)
+	private := b.factory.InternSetOpColMap(&setOpColMap)
 
 	if clause.All {
 		switch clause.Type {

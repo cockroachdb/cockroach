@@ -218,11 +218,12 @@ func (b *Builder) buildAggregation(
 		for j := range agg.args {
 			colID := argCols[0].id
 			argCols = argCols[1:]
-			argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colID))
+			argList[j] = b.factory.ConstructVariable(b.factory.InternColumnID(colID))
 		}
+		def := agg.def
 		aggExprs[i] = b.factory.ConstructFunction(
 			b.factory.InternList(argList),
-			b.factory.InternPrivate(agg.def),
+			b.factory.InternFuncOpDef(&def),
 		)
 	}
 
@@ -231,7 +232,7 @@ func (b *Builder) buildAggregation(
 	for i := range groupings {
 		groupingColSet.Add(int(aggInScope.cols[i].id))
 	}
-	outGroup = b.factory.ConstructGroupBy(outGroup, aggList, b.factory.InternPrivate(&groupingColSet))
+	outGroup = b.factory.ConstructGroupBy(outGroup, aggList, b.factory.InternColSet(groupingColSet))
 
 	// Wrap with having filter if it exists.
 	if having != 0 {
@@ -415,7 +416,7 @@ func (b *Builder) buildAggregateFunction(
 	}
 
 	// Replace the function call with a reference to the column.
-	return b.factory.ConstructVariable(b.factory.InternPrivate(col.id)), col
+	return b.factory.ConstructVariable(b.factory.InternColumnID(col.id)), col
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {

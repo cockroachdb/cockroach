@@ -131,30 +131,29 @@ WHERE a.y=1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-[26: "p:y:2,x:3,column5:5 o:+2"]
+[25: "p:y:2,x:3,column5:5 o:+2"]
 memo
- ├── 26: (limit 24 25 +2)
+ ├── 25: (limit 23 24 +2)
  │    ├── "" [cost=4500.00]
- │    │    └── best: (limit 24="o:+2" 25 +2)
+ │    │    └── best: (limit 23="o:+2" 24 +2)
  │    └── "p:y:2,x:3,column5:5 o:+2" [cost=4500.00]
- │         └── best: (limit 24="o:+2" 25 +2)
- ├── 25: (const 10)
- ├── 24: (project 23 21)
+ │         └── best: (limit 23="o:+2" 24 +2)
+ ├── 24: (const 10)
+ ├── 23: (project 22 20)
  │    ├── "" [cost=2000.00]
- │    │    └── best: (project 23 21)
- │    └── "o:+2" [cost=4500.00]
- │         └── best: (sort 24)
- ├── 23: (inner-join 15 22 17)
- │    ├── "" [cost=2000.00]
- │    │    └── best: (inner-join 15 22 17)
+ │    │    └── best: (project 22 20)
  │    └── "o:+2" [cost=4500.00]
  │         └── best: (sort 23)
- ├── 22: (scan b)
+ ├── 22: (inner-join 15 21 17)
+ │    ├── "" [cost=2000.00]
+ │    │    └── best: (inner-join 15 21 17)
+ │    └── "o:+2" [cost=4500.00]
+ │         └── best: (sort 22)
+ ├── 21: (scan b)
  │    └── "" [cost=1000.00]
  │         └── best: (scan b)
- ├── 21: (projections 5 10 20)
- ├── 20: (plus 5 19)
- ├── 19: (const 1)
+ ├── 20: (projections 5 10 19)
+ ├── 19: (plus 5 6)
  ├── 18: (inner-join 15 2 17)
  ├── 17: (filters 11)
  ├── 16: (inner-join 15 2 3)
@@ -177,3 +176,35 @@ memo
  └── 1: (scan a)
       └── "" [cost=1000.00]
            └── best: (scan a)
+
+# Test interning of expressions.
+memo
+SELECT 1, 1+z, now()::timestamp, now()::timestamptz
+FROM b
+WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
+----
+[17: "p:column3:3,column4:4,column5:5,column6:6"]
+memo
+ ├── 17: (project 11 16)
+ │    └── "p:column3:3,column4:4,column5:5,column6:6" [cost=1000.00]
+ │         └── best: (project 11 16)
+ ├── 16: (projections 12 13 15 14)
+ ├── 15: (cast 14 timestamp)
+ ├── 14: (function now)
+ ├── 13: (plus 2 3)
+ ├── 12: (const 1)
+ ├── 11: (select 1 10)
+ │    └── "" [cost=1000.00]
+ │         └── best: (select 1 10)
+ ├── 10: (filters 4 8)
+ ├── 9: (and 4 8)
+ ├── 8: (eq 7 7)
+ ├── 7: (function 5 6 5 concat)
+ ├── 6: (const 'foo')
+ ├── 5: (variable b.x)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 1)
+ ├── 2: (variable b.z)
+ └── 1: (scan b)
+      └── "" [cost=1000.00]
+           └── best: (scan b)

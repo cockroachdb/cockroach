@@ -134,7 +134,7 @@ func (b *Builder) buildScan(
 		outScope.cols = append(outScope.cols, colProps)
 	}
 
-	return b.factory.ConstructScan(b.factory.InternPrivate(&scanOpDef)), outScope
+	return b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef)), outScope
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -282,7 +282,7 @@ func (b *Builder) buildFrom(
 		rows := []memo.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
 		out = b.factory.ConstructValues(
 			b.factory.InternList(rows),
-			b.factory.InternPrivate(&opt.ColList{}),
+			b.factory.InternColList(opt.ColList{}),
 		)
 		outScope = inScope
 	} else {
