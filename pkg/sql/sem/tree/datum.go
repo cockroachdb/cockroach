@@ -1626,13 +1626,17 @@ type DTimeTZ struct {
 }
 
 // ToTime converts a DTimeTZ to a time.Time, using the Unix epoch as the date.
-func (d *DTimeTZ) ToTime() time.Time {
+func (d *DTimeTZ) ToTime2() time.Time {
 	t := d.TimeOfDay.ToTime().In(d.Location)
 	tSeconds := t.Unix() * int64(time.Second)
 	_, tOffset := t.Zone()
 	tNanos := int64(t.Nanosecond())
 	nanos := tSeconds - int64(tOffset) * int64(time.Second) + tNanos
 	return time.Unix(0, nanos).In(d.Location)
+}
+
+func (d *DTimeTZ) ToTime() time.Time {
+	return d.TimeOfDay.ToTime().In(d.Location)
 }
 
 func (d *DTimeTZ) Simplify() string {
@@ -1658,7 +1662,7 @@ func ParseDTimeTZ(s string, loc *time.Location) (*DTimeTZ, error) {
 		// Build our own error message to avoid exposing the dummy date.
 		return nil, makeParseError(s, types.TimeTZ, nil)
 	}
-	return MakeDTimeTZ(timeofday.FromTime(t), loc), nil
+	return MakeDTimeTZ(timeofday.FromTime(t), t.Location()), nil
 }
 
 // ResolvedType implements the TypedExpr interface.

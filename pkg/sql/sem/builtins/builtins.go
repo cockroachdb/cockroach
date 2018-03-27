@@ -1278,6 +1278,18 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"current_time": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.TimeTZ),
+			Impure:     true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTime(), nil
+			},
+			Info: "Returns the current transaction's time.",
+		},
+	},
+
 	"now":                   txnTSImpl,
 	"current_timestamp":     txnTSImpl,
 	"transaction_timestamp": txnTSImpl,
