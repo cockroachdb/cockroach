@@ -1,6 +1,6 @@
 import React from "react";
 
-import step1Img from "assets/nodeMapSteps/1-getLicense.svg";
+import step1Img from "assets/nodeMapSteps/1-getLicense.png";
 import step2Img from "assets/nodeMapSteps/2-setKey.svg";
 import step3Img from "assets/nodeMapSteps/3-seeMap.png";
 
