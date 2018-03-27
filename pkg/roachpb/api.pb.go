@@ -389,8 +389,9 @@ type ResponseHeader struct {
 	ResumeSpan *Span `protobuf:"bytes,4,opt,name=resume_span,json=resumeSpan" json:"resume_span,omitempty"`
 	// When resume_span is populated, this specifies the reason why the operation
 	// wasn't completed and needs to be resumed.
-	// This field appeared in v1.2. Responses from storage coming from older
-	// servers will not contain it, but the DistSender always fills it in.
+	// This field appeared in v2.0. Responses from storage coming from older
+	// servers will not contain it, but the conversion from a BatchResponse to a
+	// client.Result always fills it in.
 	ResumeReason ResponseHeader_ResumeReason `protobuf:"varint,7,opt,name=resume_reason,json=resumeReason,proto3,enum=cockroach.roachpb.ResponseHeader_ResumeReason" json:"resume_reason,omitempty"`
 	// The number of keys operated on.
 	NumKeys int64 `protobuf:"varint,5,opt,name=num_keys,json=numKeys,proto3" json:"num_keys,omitempty"`
