@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 
@@ -189,7 +190,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(errorf("invalid column ordinal @%d", t.Idx))
+			panic(errorf("invalid column ordinal @%d", t.Idx+1))
 		}
 		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
 		// TODO(rytaft): Do we need to update varsUsed here?
@@ -374,30 +375,37 @@ type ScalarBuilder struct {
 	scope scope
 }
 
-// NewScalar creates a new ScalarBuilder. The provided columns are accessible
+// NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
-// columnNames and columnTypes must have the same length.
 func NewScalar(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	factory *xform.Factory,
-	columnNames []string,
-	columnTypes []types.T,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *xform.Factory,
 ) *ScalarBuilder {
+	md := factory.Metadata()
 	sb := &ScalarBuilder{
 		Builder: Builder{
 			factory: factory,
-			colMap:  make([]columnProps, 1),
+			colMap:  make([]columnProps, 1, 1+md.NumColumns()),
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
 		},
 	}
 	sb.scope.builder = &sb.Builder
-	for i := range columnNames {
-		sb.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i], nil)
+
+	// Put all the columns in the current scope.
+	sb.scope.cols = make([]columnProps, 0, md.NumColumns())
+	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
+		name := tree.Name(md.ColumnLabel(colID))
+		col := columnProps{
+			origName: name,
+			name:     name,
+			typ:      md.ColumnType(colID),
+			id:       colID,
+		}
+		sb.colMap = append(sb.colMap, col)
+		sb.scope.cols = append(sb.scope.cols, col)
 	}
+
 	return sb
 }
 

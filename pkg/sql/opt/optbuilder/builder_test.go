@@ -127,17 +127,14 @@ func TestBuilder(t *testing.T) {
 					semaCtx := tree.MakeSemaContext(false /* privileged */)
 					evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-					varNames := make([]string, len(varTypes))
-					for i := range varNames {
-						varNames[i] = fmt.Sprintf("@%d", i+1)
+					o := xform.NewOptimizer(&evalCtx)
+					for i, typ := range varTypes {
+						o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 					}
 					// Disable normalization rules: we want the tests to check the result
 					// of the build process.
-					o := xform.NewOptimizer(&evalCtx)
 					o.MaxSteps = xform.OptimizeNone
-					b := optbuilder.NewScalar(
-						ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes,
-					)
+					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)
 					if err != nil {
