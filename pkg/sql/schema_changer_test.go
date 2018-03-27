@@ -2896,3 +2896,48 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 		t.Fatal(err)
 	}
 }
+
+// TestIndexBackfillAfterGC verifies that if a GC is done after an index
+// backfill has started, it will error instead of spin forever.
+func TestIndexBackfillAfterGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var tc serverutils.TestClusterInterface
+	ctx := context.Background()
+
+	runGC := func(sp roachpb.Span) error {
+		if tc == nil {
+			return nil
+		}
+		gcr := roachpb.GCRequest{
+			Span:      sp,
+			Threshold: tc.Server(0).Clock().Now(),
+		}
+		_, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr)
+		if err != nil {
+			panic(err)
+		}
+		return nil
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				return runGC(sp)
+			},
+		},
+	}
+
+	tc = serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(context.TODO())
+	db := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE t`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
+	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); !testutils.IsError(err, `batch timestamp .* must be after GC threshold`) {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
