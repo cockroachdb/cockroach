@@ -167,6 +167,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	seq := &sequence{config: w, val: w.writeSeq}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := kvOp{
 			config:    w,
@@ -175,7 +176,6 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
 		}
-		seq := &sequence{config: w, val: w.writeSeq}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
 		} else {
@@ -258,7 +258,7 @@ type hashGenerator struct {
 func newHashGenerator(seq *sequence) *hashGenerator {
 	return &hashGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		hasher: sha1.New(),
 	}
 }
@@ -296,7 +296,7 @@ type sequentialGenerator struct {
 func newSequentialGenerator(seq *sequence) *sequentialGenerator {
 	return &sequentialGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 	}
 }
 
