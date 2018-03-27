@@ -101,6 +101,12 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
+	// andrei: Also, the current code runs the risk of executing the truncation at
+	// prepare time. That doesn't happen currently because we don't prepare
+	// TRUNCATE statements.
+	if p.extendedEvalCtx.PrepareOnly {
+		return nil, errors.Errorf("programming error: cannot prepare a TRUNCATE statement")
+	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id := range toTruncate {
 		if err := p.truncateTable(p.EvalContext().Ctx(), id, traceKV); err != nil {
