@@ -26,7 +26,7 @@ select
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    └── stats: [rows=1000]
- └── lt [type=bool, outer=(1)]
+ └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 5 [type=int]
 
