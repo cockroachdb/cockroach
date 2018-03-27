@@ -5465,8 +5465,12 @@ const_typename:
     if $1 == "char" {
       $$.val = coltypes.Char
     } else {
-      sqllex.Error("syntax error")
-      return 1
+      var err error
+      $$.val, err = coltypes.TypeForNonKeywordTypeName($1)
+      if err != nil {
+        sqllex.Error(err.Error())
+        return 1
+      }
     }
   }
 
@@ -7423,8 +7427,12 @@ unreserved_keyword:
 | AT
 | BACKUP
 | BEGIN
+| BIGSERIAL
 | BLOB
+| BOOL
 | BY
+| BYTEA
+| BYTES
 | CACHE
 | CANCEL
 | CASCADE
@@ -7448,6 +7456,7 @@ unreserved_keyword:
 | DATA
 | DATABASE
 | DATABASES
+| DATE
 | DAY
 | DEALLOCATE
 | DELETE
@@ -7463,6 +7472,8 @@ unreserved_keyword:
 | EXPLAIN
 | FILTER
 | FIRST
+| FLOAT4
+| FLOAT8
 | FOLLOWING
 | FORCE_INDEX
 | GIN
@@ -7474,13 +7485,20 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
+| INET
 | INSERT
+| INT2
 | INT2VECTOR
+| INT4
+| INT8
+| INT64
 | INTERLEAVE
 | INVERTED
 | ISOLATION
 | JOB
 | JOBS
+| JSON
+| JSONB
 | KEY
 | KEYS
 | KV
@@ -7496,6 +7514,7 @@ unreserved_keyword:
 | MONTH
 | NAMES
 | NAN
+| NAME
 | NEXT
 | NO
 | NORMAL
@@ -7553,7 +7572,11 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
+| SERIAL
 | SERIALIZABLE
+| SERIAL2
+| SERIAL4
+| SERIAL8
 | SEQUENCE
 | SEQUENCES
 | SESSION
@@ -7561,6 +7584,7 @@ unreserved_keyword:
 | SET
 | SHOW
 | SIMPLE
+| SMALLSERIAL
 | SNAPSHOT
 | SQL
 | START
@@ -7569,6 +7593,7 @@ unreserved_keyword:
 | STORE
 | STORING
 | STRICT
+| STRING
 | SPLIT
 | SYNTAX
 | SYSTEM
@@ -7580,6 +7605,7 @@ unreserved_keyword:
 | TESTING_RELOCATE
 | TEXT
 | THAN
+| TIMESTAMPTZ
 | TRACE
 | TRANSACTION
 | TRUNCATE
@@ -7589,6 +7615,7 @@ unreserved_keyword:
 | UNKNOWN
 | UPDATE
 | UPSERT
+| UUID
 | USE
 | USERS
 | VALID
@@ -7614,41 +7641,26 @@ col_name_keyword:
   ANNOTATE_TYPE
 | BETWEEN
 | BIGINT
-| BIGSERIAL
 | BIT
-| BOOL
 | BOOLEAN
-| BYTEA
-| BYTES
 | CHAR
 | CHARACTER
 | CHARACTERISTICS
 | COALESCE
-| DATE
 | DEC
 | DECIMAL
 | EXISTS
 | EXTRACT
 | EXTRACT_DURATION
 | FLOAT
-| FLOAT4
-| FLOAT8
 | GREATEST
 | GROUPING
 | IF
 | IFNULL
-| INET
 | INT
-| INT2
-| INT4
-| INT8
-| INT64
 | INTEGER
 | INTERVAL
-| JSON
-| JSONB
 | LEAST
-| NAME
 | NULLIF
 | NUMERIC
 | OUT
@@ -7657,20 +7669,12 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
-| SERIAL
-| SERIAL2
-| SERIAL4
-| SERIAL8
 | SMALLINT
-| SMALLSERIAL
-| STRING
 | SUBSTRING
 | TIME
 | TIMESTAMP
-| TIMESTAMPTZ
 | TREAT
 | TRIM
-| UUID
 | VALUES
 | VARCHAR
 

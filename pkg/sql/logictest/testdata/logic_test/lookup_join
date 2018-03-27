@@ -191,7 +191,7 @@ EXPLAIN (EXPRS) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books A
 ----
 distinct                  ·               ·
  └── render               ·               ·
-      │                   render 0        "name"
+      │                   render 0        name
       └── join            ·               ·
            │              type            inner
            │              equality        (book) = (title)

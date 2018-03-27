@@ -22,7 +22,11 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,6 +47,7 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
+	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
 	types.Decimal.Oid():     {},
@@ -87,6 +92,9 @@ func initPGBuiltins() {
 	}
 	// Make array type i/o builtins.
 	for name, builtins := range makeTypeIOBuiltins("array_", types.AnyArray) {
+		Builtins[name] = builtins
+	}
+	for name, builtins := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		Builtins[name] = builtins
 	}
 }
@@ -616,6 +624,23 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.DNull, nil
+			},
+			Info: notUsableInfo,
+		},
+	},
+	"quote_ident": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"text", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				/* From the PG source code:
+				 * Can avoid quoting if ident starts with a lowercase letter or underscore
+				 * and contains only lowercase letters, digits, and underscores, *and* is
+				 * not any SQL keyword.  Otherwise, supply quotes.
+				 */
+				var buf bytes.Buffer
+				lex.EncodeRestrictedSQLIdent(&buf, string(tree.MustBeDString(args[0])), lex.EncBareStrings)
+				return tree.NewDString(buf.String()), nil
 			},
 			Info: notUsableInfo,
 		},

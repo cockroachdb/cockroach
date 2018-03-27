@@ -1677,3 +1677,8 @@ query TITI
 SELECT pg_catalog.inet_client_addr(), pg_catalog.inet_client_port(), pg_catalog.inet_server_addr(), pg_catalog.inet_server_port()
 ----
 ::/0  0  ::/0  0
+
+query TTTT
+SELECT quote_ident('foo'), quote_ident('select'), quote_ident('int8'), quote_ident('numeric')
+----
+foo  "select"  int8  "numeric"

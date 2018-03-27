@@ -1187,6 +1187,12 @@ CREATE TABLE pg_catalog.pg_operator (
 			return err
 		}
 		for cmpOp, overloads := range tree.CmpOps {
+			// n.b. the In operator cannot be included in this list because it isn't
+			// a generalized operator. It is a special syntax form, because it only
+			// permits parenthesized subqueries or row expressions on the RHS.
+			if cmpOp == tree.In {
+				continue
+			}
 			for _, overload := range overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
@@ -1703,12 +1709,9 @@ var (
 	typCategoryUnknown     = tree.NewDString("X")
 
 	// Avoid unused warning for constants.
-	_ = typCategoryArray
 	_ = typCategoryComposite
 	_ = typCategoryEnum
 	_ = typCategoryGeometric
-	_ = typCategoryNetworkAddr
-	_ = typCategoryPseudo
 	_ = typCategoryRange
 	_ = typCategoryBitString
 	_ = typCategoryUnknown
@@ -1760,6 +1763,7 @@ CREATE TABLE pg_catalog.pg_type (
 
 			for o, typ := range types.OidToType {
 				cat := typCategory(typ)
+				typType := typTypeBase
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
@@ -1783,6 +1787,9 @@ CREATE TABLE pg_catalog.pg_type (
 				} else {
 					typArray = tree.NewDOid(tree.DInt(types.TArray{Typ: typ}.Oid()))
 				}
+				if cat == typCategoryPseudo {
+					typType = typTypePseudo
+				}
 				typname := types.PGDisplayName(typ)
 
 				if err := addRow(
@@ -1792,7 +1799,7 @@ CREATE TABLE pg_catalog.pg_type (
 					tree.DNull,                 // typowner
 					typLen(typ),                // typlen
 					typByVal(typ),              // typbyval
-					typTypeBase,                // typtype
+					typType,                    // typtype
 					cat,                        // typcategory
 					tree.DBoolFalse,            // typispreferred
 					tree.DBoolTrue,             // typisdefined
@@ -1941,6 +1948,9 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 
 func typCategory(typ types.T) tree.Datum {
 	if typ.FamilyEqual(types.FamArray) {
+		if typ == types.AnyArray {
+			return typCategoryPseudo
+		}
 		return typCategoryArray
 	}
 	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
