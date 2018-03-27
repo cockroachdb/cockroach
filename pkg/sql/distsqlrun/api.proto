@@ -55,6 +55,21 @@ message EvalContext {
   optional string database = 5 [(gogoproto.nullable) = false];
   repeated string searchPath = 6;
   optional string user = 7 [(gogoproto.nullable) = false];
+  optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
+}
+
+// SequenceState is used to marshall the sessiondata.SequenceState struct.
+message SequenceState {
+  // Seq represents the last value of one sequence modified by the session.
+  message Seq {
+    optional uint32 seq_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SeqID"];
+    optional int64 latest_val = 2 [(gogoproto.nullable) = false];
+  }
+
+  repeated Seq seqs = 1;
+  // last_seq_incremented is the id of the last sequence incremented by the
+  // session. This field is filled in iff seqs is not empty.
+  optional uint32 last_seq_incremented = 2;
 }
 
 message SimpleResponse {

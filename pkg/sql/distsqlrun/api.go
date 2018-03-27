@@ -19,11 +19,27 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // distsqlrun.EvalContext proto.
 func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
-	return EvalContext{
+	res := EvalContext{
 		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
 		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.SessionData.Database,
 		User:               evalCtx.SessionData.User,
 	}
+
+	// Populate the search path.
+	iter := evalCtx.SessionData.SearchPath.Iter()
+	for s, ok := iter(); ok; s, ok = iter() {
+		res.SearchPath = append(res.SearchPath, s)
+	}
+
+	// Populate the sequences state.
+	latestValues, lastIncremented := evalCtx.SessionData.SequenceState.Export()
+	if len(latestValues) > 0 {
+		res.SeqState.LastSeqIncremented = &lastIncremented
+		for seqID, latestVal := range latestValues {
+			res.SeqState.Seqs = append(res.SeqState.Seqs, &SequenceState_Seq{SeqID: seqID, LatestVal: latestVal})
+		}
+	}
+	return res
 }
