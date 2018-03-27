@@ -32,7 +32,7 @@ interface NodeViewProps {
   liveness: Liveness$Properties;
 }
 
-const SCALE_FACTOR = 0.6;
+const SCALE_FACTOR = 0.8;
 const TRANSLATE_X = -90 * SCALE_FACTOR;
 const TRANSLATE_Y = -100 * SCALE_FACTOR;
 
