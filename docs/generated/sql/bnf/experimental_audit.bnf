@@ -1,0 +1,2 @@
+alter_onetable_stmt ::=
+	'ALTER' 'TABLE' table_name 'EXPERIMENTAL_AUDIT' 'SET' ( 'READ' 'WRITE' | 'OFF' )

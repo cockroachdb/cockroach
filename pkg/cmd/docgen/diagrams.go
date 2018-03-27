@@ -573,6 +573,17 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'VIEW'")},
 	},
 	{
+		name:   "experimental_audit",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"audit_mode", "alter_table_cmd", "alter_table_cmds"},
+		match:  []*regexp.Regexp{regexp.MustCompile("'ALTER' 'TABLE' relation_expr 'EXPERIMENTAL_AUDIT' 'SET' 'READ' 'WRITE'")},
+		replace: map[string]string{
+			"'EXPERIMENTAL_AUDIT' 'SET' 'READ' 'WRITE' ( ( ',' ( 'ADD' column_def | 'ADD' 'IF' 'NOT' 'EXISTS' column_def | 'ADD' 'COLUMN' column_def | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def | 'ALTER' opt_column column_name alter_column_default | 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL' | 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior | 'DROP' opt_column column_name opt_drop_behavior | 'ADD' table_constraint opt_validate_behavior | 'VALIDATE' 'CONSTRAINT' constraint_name | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior | ": "",
+			" | partition_by ) ) )*": "",
+			"relation_expr":          "table_name",
+		},
+	},
+	{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
