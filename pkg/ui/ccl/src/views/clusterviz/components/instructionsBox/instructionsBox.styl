@@ -56,9 +56,14 @@
 
   &__todo-item
     padding-bottom 2px
+    position relative
 
-    &--done
-      text-decoration line-through
+  &__todo-check
+    position absolute
+    font-size 32px
+    top -4px
+    left -25px
+    color: $link-color
 
   &__screenshot
     // Crop the image.

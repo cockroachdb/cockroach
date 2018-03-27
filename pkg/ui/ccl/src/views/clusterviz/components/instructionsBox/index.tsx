@@ -57,6 +57,7 @@ class InstructionsBox extends React.Component<InstructionsBoxProps> {
                 { "instructions-box-content__todo-item--done": firstTodoDone },
               )}
             >
+              { firstTodoDone ? (<div className="instructions-box-content__todo-check">{"\u2714"}</div>) : null }
               Ensure every node in your cluster was started with a <code>--locality</code> flag.
               (<Link to={"/reports/localities"}>See current locality tree</Link>)
             </li>
