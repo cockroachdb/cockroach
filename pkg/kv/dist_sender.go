@@ -850,6 +850,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				responseCh <- response{pErr: errNo1PCTxn}
 				return
 			}
+			if ba.IsUnsplittable() {
+				mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+				responseCh <- response{pErr: roachpb.NewError(mismatch)}
+				return
+			}
 		}
 
 		// Determine next seek key, taking a potentially sparse batch into
@@ -1124,6 +1129,9 @@ func (ds *DistSender) sendPartialBatch(
 			// Same as Evict() if replacements is empty.
 			if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
 				return response{pErr: roachpb.NewError(err)}
+			}
+			if ba.IsUnsplittable() {
+				return response{pErr: pErr}
 			}
 			// On addressing errors (likely a split), we need to re-invoke
 			// the range descriptor lookup machinery, so we recurse by
