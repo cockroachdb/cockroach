@@ -34,8 +34,8 @@ func defaultContainerConfig() container.Config {
 		Env: []string{
 			fmt.Sprintf("PGUSER=%s", security.RootUser),
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
-			"PGSSLCERT=/certs/node.crt",
-			"PGSSLKEY=/certs/node.key",
+			"PGSSLCERT=/certs/client.root.crt",
+			"PGSSLKEY=/certs/client.root.key",
 		},
 		Entrypoint: []string{"autouseradd", "-u", "roach", "-C", "/home/roach", "--"},
 	}
