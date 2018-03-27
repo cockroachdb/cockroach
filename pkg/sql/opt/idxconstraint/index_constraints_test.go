@@ -90,11 +90,14 @@ func TestIndexConstraints(t *testing.T) {
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var varTypes []types.T
-				var colInfos []IndexColumnInfo
+				var indexCols []opt.OrderingColumn
+				var notNullCols opt.ColSet
 				var iVarHelper tree.IndexedVarHelper
 				var invertedIndex bool
 				var normalizeTypedExpr bool
-				normalize := true
+
+				o := xform.NewOptimizer(&evalCtx)
+				md := o.Memo().Metadata()
 
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
@@ -106,25 +109,25 @@ func TestIndexConstraints(t *testing.T) {
 						}
 
 						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+						// Set up the columns in the metadata.
+						for i, typ := range varTypes {
+							md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+						}
 
 					case "index", "inverted-index":
 						if varTypes == nil {
 							d.Fatalf(t, "vars must precede index")
 						}
-						var err error
-						colInfos, err = parseIndexColumns(varTypes, vals)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
+						indexCols, notNullCols = parseIndexColumns(t, md, vals)
 						if key == "inverted-index" {
-							if len(colInfos) > 1 {
+							if len(indexCols) > 1 {
 								d.Fatalf(t, "inverted index must be on a single column")
 							}
 							invertedIndex = true
 						}
 
 					case "nonormalize":
-						normalize = false
+						o.MaxSteps = xform.OptimizeNone
 
 					case "semtree-normalize":
 						normalizeTypedExpr = true
@@ -152,11 +155,7 @@ func TestIndexConstraints(t *testing.T) {
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
-					o := xform.NewOptimizer(&evalCtx)
-					if !normalize {
-						o.MaxSteps = xform.OptimizeNone
-					}
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
+					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
 					if err != nil {
@@ -165,7 +164,7 @@ func TestIndexConstraints(t *testing.T) {
 					ev := o.Optimize(group, &memo.PhysicalProps{})
 
 					var ic Instance
-					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
+					ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, o.Factory())
 					result := ic.Constraint()
 					var buf bytes.Buffer
 					for i := 0; i < result.Spans.Count(); i++ {
@@ -249,10 +248,12 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			colInfos, err := parseIndexColumns(varTypes, strings.Split(tc.indexInfo, ", "))
-			if err != nil {
-				b.Fatal(err)
+			o := xform.NewOptimizer(nil /* catalog */)
+			md := o.Memo().Metadata()
+			for i, typ := range varTypes {
+				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
 			}
+			indexCols, notNullCols := parseIndexColumns(b, md, strings.Split(tc.indexInfo, ", "))
 
 			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 			typedExpr, err := testutils.ParseScalarExpr(tc.expr, iVarHelper.Container())
@@ -260,14 +261,9 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			o := xform.NewOptimizer(nil /* catalog */)
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			varNames := make([]string, len(varTypes))
-			for i := range varNames {
-				varNames[i] = fmt.Sprintf("@%d", i+1)
-			}
-			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
+			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
 
 			group, err := bld.Build(typedExpr)
 			if err != nil {
@@ -277,7 +273,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic Instance
-				ic.Init(ev, colInfos, false /*isInverted */, &evalCtx, o.Factory())
+				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, o.Factory())
 				_ = ic.Constraint()
 				_ = ic.RemainingFilter()
 			}
@@ -287,24 +283,21 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 // parseIndexColumns parses descriptions of index columns; each
 // string corresponds to an index column and is of the form:
-//   <type> [ascending|descending]
-func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumnInfo, error) {
-	res := make([]IndexColumnInfo, len(colStrs))
+//   @id [ascending|asc|descending|desc] [not null]
+func parseIndexColumns(
+	tb testing.TB, md *opt.Metadata, colStrs []string,
+) (columns []opt.OrderingColumn, notNullCols opt.ColSet) {
+	columns = make([]opt.OrderingColumn, len(colStrs))
 	for i := range colStrs {
 		fields := strings.Fields(colStrs[i])
 		if fields[0][0] != '@' {
-			return nil, fmt.Errorf("index column must start with @<index>")
+			tb.Fatal("index column must start with @<index>")
 		}
 		id, err := strconv.Atoi(fields[0][1:])
 		if err != nil {
-			return nil, err
+			tb.Fatal(err)
 		}
-		if id < 1 || id > len(indexVarTypes) {
-			return nil, fmt.Errorf("invalid index var @%d", id)
-		}
-		res[i].OrderingColumn = opt.OrderingColumn(id)
-		res[i].Typ = indexVarTypes[id-1]
-		res[i].Nullable = true
+		columns[i] = opt.MakeOrderingColumn(opt.ColumnID(id), false /* descending */)
 		fields = fields[1:]
 		for len(fields) > 0 {
 			switch strings.ToLower(fields[0]) {
@@ -312,19 +305,19 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 				// ascending is the default.
 				fields = fields[1:]
 			case "descending", "desc":
-				res[i].OrderingColumn = -res[i].OrderingColumn
+				columns[i] = -columns[i]
 				fields = fields[1:]
 
 			case "not":
 				if len(fields) < 2 || strings.ToLower(fields[1]) != "null" {
-					return nil, fmt.Errorf("unknown column attribute %s", fields)
+					tb.Fatalf("unknown column attribute %s", fields)
 				}
-				res[i].Nullable = false
+				notNullCols.Add(id)
 				fields = fields[2:]
 			default:
-				return nil, fmt.Errorf("unknown column attribute %s", fields)
+				tb.Fatalf("unknown column attribute %s", fields)
 			}
 		}
 	}
-	return res, nil
+	return columns, notNullCols
 }

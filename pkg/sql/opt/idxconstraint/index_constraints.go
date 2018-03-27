@@ -79,7 +79,7 @@ func (c *indexConstraintCtx) eqSpan(offset int, value tree.Datum, out *constrain
 }
 
 func (c *indexConstraintCtx) notNullStartKey(offset int) (constraint.Key, constraint.SpanBoundary) {
-	if !c.colInfos[offset].Nullable {
+	if !c.isNullable(offset) {
 		return emptyKey, includeBoundary
 	}
 	return constraint.MakeKey(tree.DNull), excludeBoundary
@@ -88,7 +88,7 @@ func (c *indexConstraintCtx) notNullStartKey(offset int) (constraint.Key, constr
 // makeNotNullSpan returns a span that constrains the column to non-NULL values.
 // If the column is not nullable, returns a full span.
 func (c *indexConstraintCtx) makeNotNullSpan(offset int, out *constraint.Constraint) {
-	if !c.colInfos[offset].Nullable {
+	if !c.isNullable(offset) {
 		// The column is not nullable; not-null constraints aren't useful.
 		c.unconstrained(offset, out)
 		return
@@ -97,7 +97,7 @@ func (c *indexConstraintCtx) makeNotNullSpan(offset int, out *constraint.Constra
 		offset,
 		constraint.MakeKey(tree.DNull), excludeBoundary,
 		emptyKey, includeBoundary,
-		c.colInfos[offset].Descending(),
+		c.columns[offset].Descending(),
 		out,
 	)
 }
@@ -130,7 +130,7 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 	c.singleSpan(
 		offset,
 		startKey, startBoundary, endKey, endBoundary,
-		c.colInfos[offset].Descending(),
+		c.columns[offset].Descending(),
 		out,
 	)
 }
@@ -139,7 +139,7 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
 func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
-	return typ == types.Unknown || c.colInfos[offset].Typ.Equivalent(typ)
+	return typ == types.Unknown || c.colType(offset).Equivalent(typ)
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
@@ -170,7 +170,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 			)
 			spans.Append(&sp)
 		}
-		if c.colInfos[offset].Descending() {
+		if c.columns[offset].Descending() {
 			// Reverse the order of the spans.
 			for i, j := 0, spans.Count()-1; i < j; i, j = i+1, j-1 {
 				si, sj := spans.Get(i), spans.Get(j)
@@ -208,7 +208,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 			return true
 
 		case opt.IsOp:
-			if !c.colInfos[offset].Nullable {
+			if !c.isNullable(offset) {
 				// The column is not nullable; IS NULL is always false.
 				c.contradiction(offset, out)
 				return true
@@ -246,7 +246,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 		c.singleSpan(
 			offset, startKey, startBoundary, endKey, endBoundary,
-			c.colInfos[offset].Descending(),
+			c.columns[offset].Descending(),
 			out,
 		)
 		return true
@@ -257,7 +257,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 		//   if not nullable: (/NULL - key) (key - ]
 		startKey, startBoundary := c.notNullStartKey(offset)
 		key := constraint.MakeKey(datum)
-		descending := c.colInfos[offset].Descending()
+		descending := c.columns[offset].Descending()
 		c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
 		var other constraint.Constraint
 		c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
@@ -315,11 +315,11 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// Find the longest prefix of the tuple that maps to index columns (with the
 	// same direction) starting at <offset>.
 	prefixLen := 0
-	descending := c.colInfos[offset].Descending()
+	descending := c.columns[offset].Descending()
 	nullVal := false
 	for i, n := 0, lhs.ChildCount(); i < n; i++ {
 		leftChild, rightChild := lhs.Child(i), rhs.Child(i)
-		if !(offset+i < len(c.colInfos) && c.isIndexColumn(leftChild, offset+i)) {
+		if !(offset+i < len(c.columns) && c.isIndexColumn(leftChild, offset+i)) {
 			// Variable doesn't refer to the column of interest.
 			break
 		}
@@ -338,7 +338,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			nullVal = true
 			break
 		}
-		if c.colInfos[offset+i].Descending() != descending && ev.Operator() != opt.NeOp {
+		if c.columns[offset+i].Descending() != descending && ev.Operator() != opt.NeOp {
 			// The direction changed. For example:
 			//   a ASCENDING, b DESCENDING, c ASCENDING
 			//   (a, b, c) >= (1, 2, 3)
@@ -396,7 +396,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		//   (NULL, 5, 5)
 		tight = true
 		for i := 0; i < prefixLen; i++ {
-			if c.colInfos[offset+i].Nullable {
+			if c.isNullable(offset + i) {
 				tight = false
 				break
 			}
@@ -469,7 +469,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	// Note that if the direction is descending, the handling of < and > flips.
 	if tight && (less != descending) {
 		for i := 1; i < prefixLen; i++ {
-			if c.colInfos[offset+i].Nullable {
+			if c.isNullable(offset + i) {
 				tight = false
 				break
 			}
@@ -494,7 +494,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	// in the left-hand tuple; tuplePos[i] is the position of column <offset+i> in
 	// the tuple.
 	var tuplePos []int
-	for i := offset; i < len(c.colInfos); i++ {
+	for i := offset; i < len(c.columns); i++ {
 		found := false
 		for j, n := 0, lhs.ChildCount(); j < n; j++ {
 			if c.isIndexColumn(lhs.Child(j), i) {
@@ -593,13 +593,13 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	case opt.VariableOp:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
-		if c.colInfos[offset].Typ == types.Bool && c.isIndexColumn(ev, offset) {
+		if c.colType(offset) == types.Bool && c.isIndexColumn(ev, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolTrue, out)
 		}
 
 	case opt.NotOp:
 		// Support (NOT @1) as (@1 = FALSE) if @1 is boolean.
-		if c.colInfos[offset].Typ == types.Bool && c.isIndexColumn(ev.Child(0), offset) {
+		if c.colType(offset) == types.Bool && c.isIndexColumn(ev.Child(0), offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolFalse, out)
 		}
 	}
@@ -619,7 +619,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		}
 		// We couldn't get any constraints for the column; see if we can at least
 		// deduce a not-NULL constraint.
-		if c.colInfos[offset].Nullable && opRequiresNotNullArgs(ev.Operator()) {
+		if c.isNullable(offset) && opRequiresNotNullArgs(ev.Operator()) {
 			c.makeNotNullSpan(offset, out)
 			return false
 		}
@@ -638,7 +638,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
-	if c.colInfos[offset].Nullable && c.isIndexColumn(child1, offset) &&
+	if c.isNullable(offset) && c.isIndexColumn(child1, offset) &&
 		opRequiresNotNullArgs(ev.Operator()) {
 		c.makeNotNullSpan(offset, out)
 		return false
@@ -688,7 +688,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 		// keys end.
 		// To calculate this, we get the minimum length of any key that doesn't ends
 		// at or after the current offset.
-		minLen := len(c.colInfos)
+		minLen := len(c.columns)
 		for j := 0; j < out.Spans.Count(); j++ {
 			sp := out.Spans.Get(j)
 			l := sp.StartKey().Length()
@@ -701,7 +701,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			}
 		}
 		delta = minLen
-		if offset+delta >= len(c.colInfos) {
+		if offset+delta >= len(c.columns) {
 			break
 		}
 
@@ -841,7 +841,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 //   Here maxSimplifyPrefix is 2; we can drop the IN and @3 >= 3 but we can't
 //   drop @4 = 4.
 func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Constraint) int {
-	maxOffset := len(c.colInfos) - 1
+	maxOffset := len(c.columns) - 1
 	for i := 0; i < idxConstraint.Spans.Count(); i++ {
 		sp := idxConstraint.Spans.Get(i)
 		j := 0
@@ -963,11 +963,11 @@ func (c *indexConstraintCtx) simplifyFilter(
 //
 // Sample usage:
 //   var ic Instance
-//   if err := ic.Init(filter, colInfos, evalCtx); err != nil {
+//   if err := ic.Init(...); err != nil {
 //     ..
 //   }
 //   spans, ok := ic.Spans()
-//   remFilterGroup := ic.RemainingFilter(&iVarHelper)
+//   remFilterGroup := ic.RemainingFilter()
 //   remFilter := o.Optimize(remFilterGroup, &opt.PhysicalProps{})
 type Instance struct {
 	indexConstraintCtx
@@ -983,13 +983,14 @@ type Instance struct {
 // Init processes the filter and calculates the spans.
 func (ic *Instance) Init(
 	filter memo.ExprView,
-	colInfos []IndexColumnInfo,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory *xform.Factory,
 ) {
 	ic.filter = filter
-	ic.indexConstraintCtx.init(colInfos, isInverted, evalCtx, factory)
+	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
 	if isInverted {
 		ic.tight = ic.makeInvertedIndexSpansForExpr(ic.filter, &ic.constraint)
 	} else {
@@ -1039,20 +1040,12 @@ func (ic *Instance) RemainingFilter() memo.GroupID {
 	return ic.simplifyFilter(ic.filter, &ic.constraint, ic.getMaxSimplifyPrefix(&ic.constraint))
 }
 
-// IndexColumnInfo encompasses the information for index columns, needed for
-// index constraints.
-type IndexColumnInfo struct {
-	opt.OrderingColumn
-
-	Typ types.T
-	// Nullable should be set to false if this column cannot store NULLs; used
-	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
-	Nullable bool
-}
-
 type indexConstraintCtx struct {
-	// types of the columns of the index we are generating constraints for.
-	colInfos []IndexColumnInfo
+	md *opt.Metadata
+
+	columns []opt.OrderingColumn
+
+	notNullCols opt.ColSet
 
 	// isInverted indicates if the index is an inverted index (e.g. JSONB).
 	// An inverted index behaves differently than a normal index because a PK
@@ -1070,30 +1063,41 @@ type indexConstraintCtx struct {
 }
 
 func (c *indexConstraintCtx) init(
-	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext, factory *xform.Factory,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
+	isInverted bool,
+	evalCtx *tree.EvalContext,
+	factory *xform.Factory,
 ) {
-	if isInverted && len(colInfos) > 1 {
+	if isInverted && len(columns) > 1 {
 		panic(fmt.Sprintf("inverted index on multiple columns"))
 	}
-	c.colInfos = colInfos
+	c.md = factory.Metadata()
+	c.columns = columns
+	c.notNullCols = notNullCols
 	c.isInverted = isInverted
 	c.evalCtx = evalCtx
 	c.factory = factory
-	cols := make([]opt.OrderingColumn, len(colInfos))
 
-	for i := range cols {
-		cols[i] = colInfos[i].OrderingColumn
-	}
-
-	c.keyCtx = make([]constraint.KeyContext, len(cols))
-	for i := range cols {
+	c.keyCtx = make([]constraint.KeyContext, len(columns))
+	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx
-		c.keyCtx[i].Columns.Init(cols[i:])
+		c.keyCtx[i].Columns.Init(columns[i:])
 	}
 }
 
 // isIndexColumn returns true if ev is a variable on the n indexed var that
 // corresponds to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(ev memo.ExprView, offset int) bool {
-	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnID) == c.colInfos[offset].ID()
+	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnID) == c.columns[offset].ID()
+}
+
+// isNullable returns true if the index column <offset> is nullable.
+func (c *indexConstraintCtx) isNullable(offset int) bool {
+	return !c.notNullCols.Contains(int(c.columns[offset].ID()))
+}
+
+// colType returns the type of the index column <offset>.
+func (c *indexConstraintCtx) colType(offset int) types.T {
+	return c.md.ColumnType(c.columns[offset].ID())
 }
