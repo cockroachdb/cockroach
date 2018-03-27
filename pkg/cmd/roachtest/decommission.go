@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -141,11 +140,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			if err := c.RunE(ctx, c.Node(node), "rm -rf {store-dir}"); err != nil {
 				return err
 			}
-			u, err := url.Parse(c.PGUrl(ctx, nodes))
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.Start(ctx, c.Node(node), startArgs("-a", "--join "+u.Host))
+			c.Start(ctx, c.Node(node), startArgs("-a", "--join "+c.InternalIP(ctx, nodes)))
 			t.Status("sleeping")
 			select {
 			case <-ctx.Done():
