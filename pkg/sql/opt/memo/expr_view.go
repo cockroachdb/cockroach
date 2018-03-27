@@ -415,3 +415,18 @@ func (ev ExprView) formatPresentation(tp treeprinter.Node, presentation Presenta
 	}
 	tp.Child(buf.String())
 }
+
+// MatchesTupleOfConstants returns true if the expression is a TupleOp with
+// ConstValue children.
+func MatchesTupleOfConstants(ev ExprView) bool {
+	if ev.Operator() != opt.TupleOp {
+		return false
+	}
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
+		if !child.IsConstValue() {
+			return false
+		}
+	}
+	return true
+}
