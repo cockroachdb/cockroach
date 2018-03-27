@@ -750,6 +750,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		}
 
 		rightDatum := memo.ExtractConstDatum(rhs)
+
+		if rightDatum == tree.DNull {
+			c.contradiction(0 /* offset */, out)
+			return true
+		}
+
 		rd := rightDatum.(*tree.DJSON).JSON
 
 		switch rd.Type() {
