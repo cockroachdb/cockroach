@@ -309,12 +309,10 @@ SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan a
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── filters [type=bool, outer=(1,2,4), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /4: [/'foo' - /'foo']; tight)]
-      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
+ ├── scan a,constrained
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── constraint: /1: [/1 - /1]
+ └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - /2]; /4: [/'foo' - /'foo']; tight)]
       ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 2 [type=int]
@@ -348,8 +346,6 @@ WHERE
     null::string ~* 'foo' AND 'foo' ~* null::string AND
     null::string !~* 'foo' AND 'foo' !~* null::string
 ----
-select
+scan a,constrained
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan a
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── false [type=bool]
+ └── constraint: /1: contradiction

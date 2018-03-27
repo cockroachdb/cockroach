@@ -1,11 +1,12 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE a (x INT, y INT)
 ----
 TABLE a
- ├── x int not null
+ ├── x int
  ├── y int
+ ├── rowid int not null (hidden)
  └── INDEX primary
-      └── x int not null
+      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
@@ -21,10 +22,10 @@ opt
 SELECT * FROM a WHERE x > 1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
@@ -35,10 +36,10 @@ opt
 SELECT * FROM a WHERE x >= 1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
       └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
@@ -49,10 +50,10 @@ opt
 SELECT * FROM a WHERE x < 1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
@@ -63,10 +64,10 @@ opt
 SELECT * FROM a WHERE x <= 1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
       └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
@@ -77,10 +78,10 @@ opt
 SELECT * FROM a WHERE x = 1
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -91,10 +92,10 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
@@ -108,10 +109,10 @@ opt
 SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -125,10 +126,10 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
@@ -149,10 +150,10 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
@@ -171,10 +172,10 @@ opt
 SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - ])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
@@ -196,10 +197,10 @@ opt
 SELECT * FROM a WHERE x > 1.0
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int) y:2(int)
  ├── stats: [rows=100]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]

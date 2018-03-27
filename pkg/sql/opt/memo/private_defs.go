@@ -16,6 +16,7 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -50,8 +51,12 @@ type ScanOpDef struct {
 	Index int
 
 	// Cols specifies the set of columns that the scan operator projects. This
-	// may be a subset of the columns that the table contains.
+	// may be a subset of the columns that the table/index contains.
 	Cols opt.ColSet
+
+	// If set, the scan is a constrained scan; the constraint contains the spans
+	// that need to be scanned.
+	Constraint *constraint.Constraint
 }
 
 // AltIndexHasCols returns true if the given alternate index on the table

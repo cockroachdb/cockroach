@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package idxconstraint
+package idxconstraint_test
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -149,7 +150,7 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				ev := memo.MakeNormExprView(f.Memo(), group)
 
-				var ic Instance
+				var ic idxconstraint.Instance
 				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
 				result := ic.Constraint()
 				var buf bytes.Buffer
@@ -257,7 +258,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			ev := memo.MakeNormExprView(f.Memo(), group)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				var ic Instance
+				var ic idxconstraint.Instance
 				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, f)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilter()
