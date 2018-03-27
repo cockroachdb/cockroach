@@ -82,8 +82,9 @@ message ResponseHeader {
   Span resume_span = 4;
   // When resume_span is populated, this specifies the reason why the operation
   // wasn't completed and needs to be resumed.
-  // This field appeared in v1.2. Responses from storage coming from older
-  // servers will not contain it, but the DistSender always fills it in.
+  // This field appeared in v2.0. Responses from storage coming from older
+  // servers will not contain it, but the conversion from a BatchResponse to a
+  // client.Result always fills it in.
   ResumeReason resume_reason = 7;
 
   // The number of keys operated on.
