@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	minSignificantOrders   = 10000
-	minSignificantPayments = 10000
+	minSignificantTransactions = 10000
 )
 
 // auditor maintains statistics about TPC-C input data and runs distribution
@@ -35,18 +34,26 @@ type auditor struct {
 
 	warehouses int
 
-	newOrderTransactions uint64
-	newOrderRollbacks    uint64
-	paymentTransactions  uint64
+	// transaction counts
+	newOrderTransactions    uint64
+	newOrderRollbacks       uint64
+	paymentTransactions     uint64
+	orderStatusTransactions uint64
 
 	// map from order-lines count to the number of orders with that count
-	orderLinesFreq  map[int]uint64
+	orderLinesFreq map[int]uint64
+
+	// sum of order lines across all orders
 	totalOrderLines uint64
 
 	// map from warehouse to number of remote order lines for that warehouse
 	orderLineRemoteWarehouseFreq map[int]uint64
 	// map from warehouse to number of remote payments for that warehouse
 	paymentRemoteWarehouseFreq map[int]uint64
+
+	// counts of how many transactions select the customer by last name
+	paymentsByLastName    uint64
+	orderStatusByLastName uint64
 }
 
 func newAuditor(warehouses int) *auditor {
@@ -85,6 +92,8 @@ func (a *auditor) runChecks() {
 		{"9.2.2.5.2", check92252},
 		{"9.2.2.5.3", check92253},
 		{"9.2.2.5.4", check92254},
+		{"9.2.2.5.5", check92255},
+		{"9.2.2.5.6", check92256},
 	}
 	for _, check := range checks {
 		result := check.f(a)
@@ -101,7 +110,7 @@ func check92251(a *auditor) auditResult {
 	// At least 0.9% and at most 1.1% of the New-Order transactions roll back as a
 	// result of an unused item number.
 	orders := atomic.LoadUint64(&a.newOrderTransactions)
-	if orders < minSignificantOrders {
+	if orders < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
 	rollbacks := atomic.LoadUint64(&a.newOrderRollbacks)
@@ -121,7 +130,7 @@ func check92252(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.newOrderTransactions < minSignificantOrders {
+	if a.newOrderTransactions < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
 
@@ -154,7 +163,7 @@ func check92253(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.newOrderTransactions < minSignificantOrders {
+	if a.newOrderTransactions < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
 
@@ -193,7 +202,7 @@ func check92254(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
-	if a.paymentTransactions < minSignificantPayments {
+	if a.paymentTransactions < minSignificantTransactions {
 		return newSkipResult("not enough payments to be statistically significant")
 	}
 
@@ -214,6 +223,46 @@ func check92254(a *auditor) auditResult {
 		if _, ok := a.paymentRemoteWarehouseFreq[i]; !ok {
 			return newFailResult("no remote payments for warehouses %d", i)
 		}
+	}
+
+	return passResult
+}
+
+func check92255(a *auditor) auditResult {
+	// The number of customer selections by customer last name in the Payment
+	// transaction is at least 57% and at most 63% of the number of Payment
+	// transactions.
+	a.Lock()
+	defer a.Unlock()
+
+	if a.paymentTransactions < minSignificantTransactions {
+		return newSkipResult("not enough payments to be statistically significant")
+	}
+	lastNamePct := 100 * float64(a.paymentsByLastName) / float64(a.paymentTransactions)
+	if lastNamePct < 57 || lastNamePct > 63 {
+		return newFailResult(
+			"percent of customer selections by last name in payment transactions %.1f is not between "+
+				"allowed bounds [57, 63]", lastNamePct)
+	}
+
+	return passResult
+}
+
+func check92256(a *auditor) auditResult {
+	// The number of customer selections by customer last name in the Order-Status
+	// transaction is at least 57% and at most 63% of the number of Order-Status
+	// transactions.
+	a.Lock()
+	defer a.Unlock()
+
+	if a.orderStatusTransactions < minSignificantTransactions {
+		return newSkipResult("not enough order status transactions to be statistically significant")
+	}
+	lastNamePct := 100 * float64(a.orderStatusByLastName) / float64(a.orderStatusTransactions)
+	if lastNamePct < 57 || lastNamePct > 63 {
+		return newFailResult(
+			"percent of customer selections by last name in order status transactions %.1f is not "+
+				"between allowed bounds [57, 63]", lastNamePct)
 	}
 
 	return passResult

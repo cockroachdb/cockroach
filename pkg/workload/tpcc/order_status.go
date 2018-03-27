@@ -18,6 +18,7 @@ package tpcc
 import (
 	gosql "database/sql"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -65,6 +66,8 @@ type orderStatus struct{}
 var _ tpccTx = orderStatus{}
 
 func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	atomic.AddUint64(&config.auditor.orderStatusTransactions, 1)
+
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	d := orderStatusData{
@@ -75,6 +78,7 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
+		atomic.AddUint64(&config.auditor.orderStatusByLastName, 1)
 	} else {
 		d.cID = randCustomerID(rng)
 	}
