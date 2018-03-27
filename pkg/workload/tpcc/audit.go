@@ -39,6 +39,7 @@ type auditor struct {
 	newOrderRollbacks       uint64
 	paymentTransactions     uint64
 	orderStatusTransactions uint64
+	deliveryTransactions    uint64
 
 	// map from order-lines count to the number of orders with that count
 	orderLinesFreq map[int]uint64
@@ -54,6 +55,8 @@ type auditor struct {
 	// counts of how many transactions select the customer by last name
 	paymentsByLastName    uint64
 	orderStatusByLastName uint64
+
+	skippedDelivieries uint64
 }
 
 func newAuditor(warehouses int) *auditor {
@@ -88,6 +91,7 @@ func (a *auditor) runChecks() {
 		f    func(a *auditor) auditResult
 	}
 	checks := []check{
+		{"9.2.1.7", check9217},
 		{"9.2.2.5.1", check92251},
 		{"9.2.2.5.2", check92252},
 		{"9.2.2.5.3", check92253},
@@ -104,6 +108,30 @@ func (a *auditor) runChecks() {
 			fmt.Println(msg + ": " + result.description)
 		}
 	}
+}
+
+func check9217(a *auditor) auditResult {
+	// Verify that no more than 1%, or no more than one (1), whichever is greater,
+	// of the Delivery transactions skipped because there were fewer than
+	// necessary orders present in the New-Order table.
+	a.Lock()
+	defer a.Unlock()
+
+	if a.deliveryTransactions < minSignificantTransactions {
+		return newSkipResult("not enough delivery transactions to be statistically significant")
+	}
+
+	var threshold uint64
+	if a.deliveryTransactions > 100 {
+		threshold = a.deliveryTransactions / 100
+	} else {
+		threshold = 1
+	}
+	if a.skippedDelivieries > threshold {
+		return newFailResult(
+			"expected no more than %d skipped deliveries, got %d", threshold, a.skippedDelivieries)
+	}
+	return passResult
 }
 
 func check92251(a *auditor) auditResult {
