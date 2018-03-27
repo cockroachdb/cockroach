@@ -388,13 +388,13 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan a
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── filters [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/3 - /3] [/4 - /4])]
       ├── not-in [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 1 [type=int]
       │         └── const: 2 [type=int]
-      ├── in [type=bool, outer=(2)]
+      ├── in [type=bool, outer=(2), constraints=(/2: [/3 - /3] [/4 - /4]; tight)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 3 [type=int]
