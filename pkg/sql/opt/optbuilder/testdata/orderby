@@ -69,6 +69,24 @@ sort
            └── variable: t.b [type=int]
 
 build
+SELECT a, b FROM t ORDER BY b DESC LIMIT 2
+----
+limit
+ ├── columns: a:1(int!null) b:2(int)
+ ├── ordering: -2
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int)
+ │    ├── ordering: -2
+ │    └── project
+ │         ├── columns: t.a:1(int!null) t.b:2(int)
+ │         ├── scan t
+ │         │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │         └── projections
+ │              ├── variable: t.a [type=int]
+ │              └── variable: t.b [type=int]
+ └── const: 2 [type=int]
+
+build
 SELECT a FROM t ORDER BY 1 DESC
 ----
 sort
@@ -116,17 +134,21 @@ error: ORDER BY "foo" is ambiguous
 # Check that no ambiguity is reported if the ORDER BY name refers
 # to two or more equivalent renders (special case in SQL92).
 build
-SELECT a AS foo, (a) AS foo FROM t ORDER BY foo
+SELECT a AS foo, (a) AS foo FROM t ORDER BY foo LIMIT 1
 ----
-project
+limit
  ├── columns: foo:1(int!null) foo:1(int!null)
  ├── ordering: +1
- ├── scan t
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    └── ordering: +1
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.a [type=int]
+ ├── project
+ │    ├── columns: t.a:1(int!null) t.a:1(int!null)
+ │    ├── ordering: +1
+ │    ├── scan t
+ │    │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    │    └── ordering: +1
+ │    └── projections
+ │         ├── variable: t.a [type=int]
+ │         └── variable: t.a [type=int]
+ └── const: 1 [type=int]
 
 # Check that this orders by the aliased column b (i.e., column a), not the
 # original column b.
@@ -184,6 +206,23 @@ sort
       └── projections
            ├── variable: t.b [type=int]
            └── variable: t.a [type=int]
+
+build
+SELECT b FROM t ORDER BY a LIMIT 1
+----
+limit
+ ├── columns: b:2(int)
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: t.b:2(int) t.a:1(int!null)
+ │    ├── ordering: +1
+ │    ├── scan t
+ │    │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    │    └── ordering: +1
+ │    └── projections
+ │         ├── variable: t.b [type=int]
+ │         └── variable: t.a [type=int]
+ └── const: 1 [type=int]
 
 build
 SELECT b FROM t ORDER BY a DESC, b ASC
@@ -350,30 +389,38 @@ project
       └── variable: t.a [type=int]
 
 build
-(((SELECT a FROM t))) ORDER BY a DESC
+(((SELECT a FROM t))) ORDER BY a DESC LIMIT 4
 ----
-sort
+limit
  ├── columns: a:1(int!null)
  ├── ordering: -1
- └── project
-      ├── columns: t.a:1(int!null)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
-      └── projections
-           └── variable: t.a [type=int]
+ ├── sort
+ │    ├── columns: t.a:1(int!null)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: t.a:1(int!null)
+ │         ├── scan t
+ │         │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │         └── projections
+ │              └── variable: t.a [type=int]
+ └── const: 4 [type=int]
 
 build
-(((SELECT a FROM t ORDER BY a DESC)))
+(((SELECT a FROM t ORDER BY a DESC LIMIT 4)))
 ----
-sort
+limit
  ├── columns: a:1(int!null)
  ├── ordering: -1
- └── project
-      ├── columns: t.a:1(int!null)
-      ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
-      └── projections
-           └── variable: t.a [type=int]
+ ├── sort
+ │    ├── columns: t.a:1(int!null)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: t.a:1(int!null)
+ │         ├── scan t
+ │         │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │         └── projections
+ │              └── variable: t.a [type=int]
+ └── const: 4 [type=int]
 
 build
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
@@ -558,6 +605,208 @@ sort
                 └── const: 2 [type=int]
 
 exec-ddl
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX bc (b, c),
+  INDEX ba (b, a),
+  FAMILY (a, b, c),
+  FAMILY (d)
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    ├── b int not null
+ │    └── c int not null
+ ├── INDEX bc
+ │    ├── b int not null
+ │    ├── c int not null
+ │    └── a int not null (storing)
+ └── INDEX ba
+      ├── b int not null
+      ├── a int not null
+      └── c int not null
+
+build
+SELECT d FROM abc ORDER BY LOWER(d)
+----
+sort
+ ├── columns: d:4(string)
+ ├── ordering: +5
+ └── project
+      ├── columns: abc.d:4(string) column5:5(string)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      └── projections
+           ├── variable: abc.d [type=string]
+           └── function: lower [type=string]
+                └── variable: abc.d [type=string]
+
+build
+SELECT * FROM abc ORDER BY a
+----
+scan abc
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ └── ordering: +1
+
+build
+SELECT a, b FROM abc ORDER BY b, a
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +2,+1
+ └── project
+      ├── columns: abc.a:1(int!null) abc.b:2(int!null)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      └── projections
+           ├── variable: abc.a [type=int]
+           └── variable: abc.b [type=int]
+
+build
+SELECT a, b FROM abc ORDER BY b, c
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +2,+3
+ └── project
+      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      └── projections
+           ├── variable: abc.a [type=int]
+           ├── variable: abc.b [type=int]
+           └── variable: abc.c [type=int]
+
+build
+SELECT a, b FROM abc ORDER BY b, c, a DESC
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── ordering: +2,+3,-1
+ └── project
+      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      └── projections
+           ├── variable: abc.a [type=int]
+           ├── variable: abc.b [type=int]
+           └── variable: abc.c [type=int]
+
+build
+SELECT a FROM abc ORDER BY a DESC
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ └── project
+      ├── columns: abc.a:1(int!null)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      └── projections
+           └── variable: abc.a [type=int]
+
+build
+SELECT a FROM abc ORDER BY a DESC LIMIT 1
+----
+limit
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: abc.a:1(int!null)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: abc.a:1(int!null)
+ │         ├── scan abc
+ │         │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+ │         └── projections
+ │              └── variable: abc.a [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT a FROM abc ORDER BY a DESC OFFSET 1
+----
+offset
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: abc.a:1(int!null)
+ │    ├── ordering: -1
+ │    └── project
+ │         ├── columns: abc.a:1(int!null)
+ │         ├── scan abc
+ │         │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+ │         └── projections
+ │              └── variable: abc.a [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT c FROM abc WHERE b = 2 ORDER BY c
+----
+sort
+ ├── columns: c:3(int!null)
+ ├── ordering: +3
+ └── project
+      ├── columns: abc.c:3(int!null)
+      ├── select
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    ├── scan abc
+      │    │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    └── eq [type=bool]
+      │         ├── variable: abc.b [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: abc.c [type=int]
+
+build
+SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
+----
+sort
+ ├── columns: c:3(int!null)
+ ├── ordering: -3
+ └── project
+      ├── columns: abc.c:3(int!null)
+      ├── select
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    ├── scan abc
+      │    │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    └── eq [type=bool]
+      │         ├── variable: abc.b [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: abc.c [type=int]
+
+# Verify that the ordering of the primary index is still used for the outer sort.
+# TODO(rytaft): Verify that the sort node is removed before execution.
+build
+SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
+----
+sort
+ ├── columns: b:2(int!null) c:3(int!null)
+ ├── ordering: +2,+3
+ └── project
+      ├── columns: abc.b:2(int!null) abc.c:3(int!null) abc.a:1(int!null)
+      ├── select
+      │    ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    ├── scan abc
+      │    │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    └── eq [type=bool]
+      │         ├── variable: abc.a [type=int]
+      │         └── const: 1 [type=int]
+      └── projections
+           ├── variable: abc.b [type=int]
+           ├── variable: abc.c [type=int]
+           └── variable: abc.a [type=int]
+
+exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
 ----
 TABLE bar
@@ -674,19 +923,23 @@ TABLE blocks
 
 # Regression test for #13696.
 build
-SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num
+SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-project
+limit
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
  ├── ordering: +1,+2,+3
- ├── scan blocks
- │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
- │    └── ordering: +1,+2,+3
- └── projections
-      ├── variable: blocks.block_id [type=int]
-      ├── variable: blocks.writer_id [type=string]
-      ├── variable: blocks.block_num [type=int]
-      └── variable: blocks.block_id [type=int]
+ ├── project
+ │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.block_id:1(int!null)
+ │    ├── ordering: +1,+2,+3
+ │    ├── scan blocks
+ │    │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
+ │    │    └── ordering: +1,+2,+3
+ │    └── projections
+ │         ├── variable: blocks.block_id [type=int]
+ │         ├── variable: blocks.writer_id [type=string]
+ │         ├── variable: blocks.block_num [type=int]
+ │         └── variable: blocks.block_id [type=int]
+ └── const: 1 [type=int]
 
 exec-ddl
 CREATE TABLE abcd (

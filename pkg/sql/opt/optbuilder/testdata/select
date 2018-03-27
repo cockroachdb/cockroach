@@ -350,28 +350,183 @@ TABLE xyzw
       ├── y int
       └── x int not null
 
+# TODO(rytaft): Fix error message:
+# error: name "x" is not defined
 build
-SELECT * FROM xyzw ORDER BY 1
+SELECT * FROM xyzw LIMIT x
 ----
-scan xyzw
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── ordering: +1
+error: column name "x" not found
+
+# TODO(rytaft): Fix error message:
+# error: name "y" is not defined
+build
+SELECT * FROM xyzw OFFSET 1 + y
+----
+error: column name "y" not found
 
 build
-SELECT * FROM xyzw ORDER BY x
+SELECT * FROM xyzw LIMIT 3.3
 ----
-scan xyzw
- ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- └── ordering: +1
+error: argument of LIMIT must be type int, not type decimal
 
 build
-SELECT * FROM xyzw ORDER BY y
+SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
 ----
-sort
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw OFFSET 1.5
+----
+error: argument of OFFSET must be type int, not type decimal
+
+# At execution time, this will cause the error: negative value for LIMIT
+build
+SELECT * FROM xyzw LIMIT -100
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ └── const: -100 [type=int]
+
+# At execution time, this will cause the error: negative value for OFFSET
+build
+SELECT * FROM xyzw OFFSET -100
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ └── const: -100 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x OFFSET 1 + 0.0
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT (x,y) FROM xyzw
+----
+project
+ ├── columns: column5:5(tuple{int, int})
+ ├── scan xyzw
+ │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ └── projections
+      └── tuple [type=tuple{int, int}]
+           ├── variable: xyzw.x [type=int]
+           └── variable: xyzw.y [type=int]
+
+build
+SELECT * FROM xyzw LIMIT 0
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── scan xyzw
+ │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ └── const: 0 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +1
+ ├── scan xyzw
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── ordering: +1
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY x LIMIT 1 OFFSET 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── ordering: +1
+ │    ├── scan xyzw
+ │    │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    └── ordering: +1
+ │    └── const: 1 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1
+----
+offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +2
- └── scan xyzw
-      └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ ├── sort
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── ordering: +2
+ │    └── scan xyzw
+ │         └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw ORDER BY y OFFSET 1 LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +2
+ ├── offset
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan xyzw
+ │    │         └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── const: 1 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── offset
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── scan xyzw
+ │    │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── cast: int [type=int]
+ │         └── mult [type=float]
+ │              ├── function: random [type=float]
+ │              └── const: 0.0 [type=float]
+ └── cast: int [type=int]
+      └── mult [type=float]
+           ├── function: random [type=float]
+           └── const: 0.0 [type=float]
+
+build
+((SELECT x FROM xyzw LIMIT 1)) LIMIT 1
+----
+error: multiple LIMIT clauses not allowed
+
+build
+SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
+----
+offset
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── limit
+ │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── scan xyzw
+ │    │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── const: 5 [type=int]
+ └── const: 5 [type=int]
 
 exec-ddl
 CREATE TABLE boolean_table (
@@ -487,6 +642,236 @@ project
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
                      └── const: 1 [type=int]
+
+# Tests with a tuple coming from a subquery.
+build
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+project
+ ├── columns: column3:3(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── any [type=bool]
+           └── project
+                ├── columns: column2:2(bool)
+                ├── values
+                │    ├── columns: column1:1(int)
+                │    └── tuple [type=tuple{int}]
+                │         └── const: 1 [type=int]
+                └── projections
+                     └── eq [type=bool]
+                          ├── cast: int [type=int]
+                          │    └── null [type=unknown]
+                          └── variable: column1 [type=int]
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+project
+ ├── columns: column5:5(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── any [type=bool]
+           └── project
+                ├── columns: column4:4(bool)
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── values
+                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    └── tuple [type=tuple{int, int}]
+                │    │         ├── const: 1 [type=int]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── projections
+                     └── eq [type=bool]
+                          ├── tuple [type=tuple{int, int}]
+                          │    ├── const: 1 [type=int]
+                          │    └── cast: int [type=int]
+                          │         └── null [type=unknown]
+                          └── variable: column3 [type=tuple{int, int}]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a))
+----
+project
+ ├── columns: column3:3(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any [type=bool]
+                └── project
+                     ├── columns: column2:2(bool)
+                     ├── values
+                     │    ├── columns: column1:1(int)
+                     │    └── tuple [type=tuple{int}]
+                     │         └── const: 1 [type=int]
+                     └── projections
+                          └── eq [type=bool]
+                               ├── cast: int [type=int]
+                               │    └── null [type=unknown]
+                               └── variable: column1 [type=int]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b))
+----
+project
+ ├── columns: column5:5(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any [type=bool]
+                └── project
+                     ├── columns: column4:4(bool)
+                     ├── project
+                     │    ├── columns: column3:3(tuple{int, int})
+                     │    ├── values
+                     │    │    ├── columns: column1:1(int) column2:2(int)
+                     │    │    └── tuple [type=tuple{int, int}]
+                     │    │         ├── const: 1 [type=int]
+                     │    │         └── const: 1 [type=int]
+                     │    └── projections
+                     │         └── tuple [type=tuple{int, int}]
+                     │              ├── variable: column1 [type=int]
+                     │              └── variable: column2 [type=int]
+                     └── projections
+                          └── eq [type=bool]
+                               ├── tuple [type=tuple{int, int}]
+                               │    ├── const: 1 [type=int]
+                               │    └── cast: int [type=int]
+                               │         └── null [type=unknown]
+                               └── variable: column3 [type=tuple{int, int}]
+
+# Tests with an empty IN tuple.
+build
+SELECT NULL::int IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+project
+ ├── columns: column3:3(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── any [type=bool]
+           └── project
+                ├── columns: column2:2(bool)
+                ├── select
+                │    ├── columns: column1:1(int)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── gt [type=bool]
+                │         ├── variable: column1 [type=int]
+                │         └── const: 1 [type=int]
+                └── projections
+                     └── eq [type=bool]
+                          ├── cast: int [type=int]
+                          │    └── null [type=unknown]
+                          └── variable: column1 [type=int]
+
+build
+SELECT (1, NULL::int) IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+project
+ ├── columns: column5:5(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── any [type=bool]
+           └── project
+                ├── columns: column4:4(bool)
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── gt [type=bool]
+                │    │         ├── variable: column1 [type=int]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── projections
+                     └── eq [type=bool]
+                          ├── tuple [type=tuple{int, int}]
+                          │    ├── const: 1 [type=int]
+                          │    └── cast: int [type=int]
+                          │         └── null [type=unknown]
+                          └── variable: column3 [type=tuple{int, int}]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+project
+ ├── columns: column3:3(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any [type=bool]
+                └── project
+                     ├── columns: column2:2(bool)
+                     ├── select
+                     │    ├── columns: column1:1(int)
+                     │    ├── values
+                     │    │    ├── columns: column1:1(int)
+                     │    │    └── tuple [type=tuple{int}]
+                     │    │         └── const: 1 [type=int]
+                     │    └── gt [type=bool]
+                     │         ├── variable: column1 [type=int]
+                     │         └── const: 1 [type=int]
+                     └── projections
+                          └── eq [type=bool]
+                               ├── cast: int [type=int]
+                               │    └── null [type=unknown]
+                               └── variable: column1 [type=int]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+project
+ ├── columns: column5:5(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any [type=bool]
+                └── project
+                     ├── columns: column4:4(bool)
+                     ├── project
+                     │    ├── columns: column3:3(tuple{int, int})
+                     │    ├── select
+                     │    │    ├── columns: column1:1(int) column2:2(int)
+                     │    │    ├── values
+                     │    │    │    ├── columns: column1:1(int) column2:2(int)
+                     │    │    │    └── tuple [type=tuple{int, int}]
+                     │    │    │         ├── const: 1 [type=int]
+                     │    │    │         └── const: 1 [type=int]
+                     │    │    └── gt [type=bool]
+                     │    │         ├── variable: column1 [type=int]
+                     │    │         └── const: 1 [type=int]
+                     │    └── projections
+                     │         └── tuple [type=tuple{int, int}]
+                     │              ├── variable: column1 [type=int]
+                     │              └── variable: column2 [type=int]
+                     └── projections
+                          └── eq [type=bool]
+                               ├── tuple [type=tuple{int, int}]
+                               │    ├── const: 1 [type=int]
+                               │    └── cast: int [type=int]
+                               │         └── null [type=unknown]
+                               └── variable: column3 [type=tuple{int, int}]
 
 exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)

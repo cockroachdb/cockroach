@@ -77,10 +77,10 @@ func (s *scope) appendColumns(src *scope) {
 	s.cols = append(s.cols, src.cols...)
 }
 
-// resolveType converts the given expr to a tree.TypedExpr. As part of the
-// conversion, it performs name resolution and replaces unresolved column names
-// with columnProps.
-func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+// walkExprTree walks the given expression and performs name resolution,
+// replaces unresolved column names with columnProps, and replaces subqueries
+// with typed subquery structs.
+func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 	// TODO(peter): The caller should specify the desired number of columns. This
 	// is needed when a subquery is used by an UPDATE statement.
 	// TODO(andy): shouldn't this be part of the desired type rather than yet
@@ -89,7 +89,43 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
+	return expr
+}
+
+// resolveType converts the given expr to a tree.TypedExpr. As part of the
+// conversion, it performs name resolution, replaces unresolved column names
+// with columnProps, and replaces subqueries with typed subquery structs.
+//
+// The desired type is a suggestion, but resolveType does not throw an error if
+// the resolved type turns out to be different from desired (in contrast to
+// resolveAndRequireType, which panics with a builderError).
+func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	return texpr
+}
+
+// resolveAndRequireType converts the given expr to a tree.TypedExpr. As part
+// of the conversion, it performs name resolution, replaces unresolved
+// column names with columnProps, and replaces subqueries with typed subquery
+// structs.
+//
+// If the resolved type does not match the desired type, resolveAndRequireType
+// panics with a builderError (in contrast to resolveType, which returns the
+// typed expression with no error).
+//
+// typingContext is a string used for error reporting in case the resolved
+// type and desired type do not match. It shows the context in which
+// this function was called (e.g., "LIMIT", "OFFSET").
+func (s *scope) resolveAndRequireType(
+	expr tree.Expr, desired types.T, typingContext string,
+) tree.TypedExpr {
+	expr = s.walkExprTree(expr)
+	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, typingContext)
 	if err != nil {
 		panic(builderError{err})
 	}

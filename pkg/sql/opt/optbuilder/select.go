@@ -157,6 +157,11 @@ func (b *Builder) buildSelect(
 				panic(errorf("multiple ORDER BY clauses not allowed"))
 			}
 			orderBy = stmt.OrderBy
+		}
+		if stmt.Limit != nil {
+			if limit != nil {
+				panic(errorf("multiple LIMIT clauses not allowed"))
+			}
 			limit = stmt.Limit
 		}
 	}
@@ -287,6 +292,11 @@ func (b *Builder) buildFrom(
 	if where != nil {
 		// All "from" columns are visible to the filter expression.
 		texpr := outScope.resolveType(where.Expr, types.Bool)
+
+		// Make sure there are no aggregation/window functions in the filter
+		// (after subqueries have been expanded).
+		b.assertNoAggregationOrWindowing(texpr, "WHERE")
+
 		filter := b.buildScalar(texpr, outScope)
 		out = b.factory.ConstructSelect(out, filter)
 	}

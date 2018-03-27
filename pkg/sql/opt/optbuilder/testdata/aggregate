@@ -279,6 +279,36 @@ group-by
            └── variable: column1 [type=string]
 
 build
+SELECT (SELECT COALESCE(MAX(1), 0) FROM kv)
+----
+project
+ ├── columns: column8:8(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── subquery [type=int]
+           ├── max1-row
+           │    ├── columns: column7:7(int)
+           │    └── project
+           │         ├── columns: column7:7(int)
+           │         ├── group-by
+           │         │    ├── columns: column6:6(int)
+           │         │    ├── project
+           │         │    │    ├── columns: column5:5(int)
+           │         │    │    ├── scan kv
+           │         │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+           │         │    │    └── projections
+           │         │    │         └── const: 1 [type=int]
+           │         │    └── aggregations
+           │         │         └── function: max [type=int]
+           │         │              └── variable: column5 [type=int]
+           │         └── projections
+           │              └── coalesce [type=int]
+           │                   ├── variable: column6 [type=int]
+           │                   └── const: 0 [type=int]
+           └── variable: column7 [type=int]
+
+build
 SELECT COUNT(*), k FROM t.kv
 ----
 error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
@@ -328,6 +358,31 @@ project
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
+
+build
+SELECT * FROM kv GROUP BY v, COUNT(w)
+----
+error: aggregate functions are not allowed in GROUP BY
+
+build
+SELECT COUNT(w) FROM kv GROUP BY 1
+----
+error: aggregate functions are not allowed in GROUP BY
+
+build
+SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
+----
+error: aggregate functions are not allowed in LIMIT
+
+build
+SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
+----
+error: aggregate functions are not allowed in OFFSET
+
+build
+VALUES (99, COUNT(1))
+----
+error: aggregate functions are not allowed in VALUES
 
 build
 SELECT COUNT(*), k FROM t.kv GROUP BY 5
@@ -609,6 +664,8 @@ project
            ├── variable: kv.k [type=int]
            └── variable: kv.v [type=int]
 
+# TODO(rytaft): don't qualify the column name in the error message differently
+# than it was qualified in the query.
 build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k
 ----
@@ -627,12 +684,12 @@ error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggre
 build
 SELECT k FROM t.kv WHERE AVG(k) > 1
 ----
-error: aggregate function is not allowed in this context
+error: aggregate functions are not allowed in WHERE
 
 build
 SELECT MAX(AVG(k)) FROM t.kv
 ----
-error: aggregate function cannot be nested within another aggregate function
+error: aggregate functions are not allowed in the argument of max()
 
 # Test case from #2761.
 build
@@ -830,21 +887,44 @@ group-by
            └── variable: column5 [type=tuple{int, int, int, string}]
 
 build
-SELECT COUNT((k, v)) FROM t.kv
+SELECT COUNT((k, v)) FROM t.kv LIMIT 1
 ----
-group-by
+limit
  ├── columns: column6:6(int)
- ├── project
- │    ├── columns: column5:5(tuple{int, int})
- │    ├── scan kv
- │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    └── projections
- │         └── tuple [type=tuple{int, int}]
- │              ├── variable: kv.k [type=int]
- │              └── variable: kv.v [type=int]
- └── aggregations
-      └── function: count [type=int]
-           └── variable: column5 [type=tuple{int, int}]
+ ├── group-by
+ │    ├── columns: column6:6(int)
+ │    ├── project
+ │    │    ├── columns: column5:5(tuple{int, int})
+ │    │    ├── scan kv
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── projections
+ │    │         └── tuple [type=tuple{int, int}]
+ │    │              ├── variable: kv.k [type=int]
+ │    │              └── variable: kv.v [type=int]
+ │    └── aggregations
+ │         └── function: count [type=int]
+ │              └── variable: column5 [type=tuple{int, int}]
+ └── const: 1 [type=int]
+
+build
+SELECT COUNT((k, v)) FROM t.kv OFFSET 1
+----
+offset
+ ├── columns: column6:6(int)
+ ├── group-by
+ │    ├── columns: column6:6(int)
+ │    ├── project
+ │    │    ├── columns: column5:5(tuple{int, int})
+ │    │    ├── scan kv
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── projections
+ │    │         └── tuple [type=tuple{int, int}]
+ │    │              ├── variable: kv.k [type=int]
+ │    │              └── variable: kv.v [type=int]
+ │    └── aggregations
+ │         └── function: count [type=int]
+ │              └── variable: column5 [type=tuple{int, int}]
+ └── const: 1 [type=int]
 
 build
 SELECT COUNT(k)+COUNT(kv.v) FROM t.kv
@@ -1620,6 +1700,13 @@ group-by
       └── function: stddev [type=decimal]
            └── variable: column5 [type=decimal]
 
+# Ensure subqueries don't trigger aggregation.
+# TODO(rytaft): This is a bug - this query should build.
+build
+SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
+----
+error: column "xyz.x" must appear in the GROUP BY clause or be used in an aggregate function
+
 exec-ddl
 CREATE TABLE t.bools (b BOOL)
 ----
@@ -1728,6 +1815,8 @@ sort
            ├── variable: xor_bytes.b [type=int]
            └── variable: column7 [type=int]
 
+# TODO(rytaft): this is a bug - should cause an error:
+# error: arguments to xor must all be the same length
 build
 SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 ----
