@@ -151,6 +151,7 @@
 		TxnPrevAttemptError
 		IntegerOverflowError
 		MixedSuccessError
+		BatchTimestampBeforeGCError
 		ErrorDetail
 		ErrPosition
 		Error

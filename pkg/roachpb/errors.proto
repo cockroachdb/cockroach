@@ -356,6 +356,15 @@ message MixedSuccessError {
   optional Error wrapped = 1;
 }
 
+// A BatchTimestampBeforeGCError indicates that a request's timestamp was
+// before the GC threshold.
+message BatchTimestampBeforeGCError {
+  option (gogoproto.equal) = true;
+
+  optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -394,6 +403,7 @@ message ErrorDetail {
   optional IntegerOverflowError integer_overflow = 31;
   optional UnsupportedRequestError unsupported_request = 32;
   optional MixedSuccessError mixed_success = 33;
+  optional BatchTimestampBeforeGCError timestamp_before = 34;
 }
 
 // TransactionRestart indicates how an error should be handled in a
