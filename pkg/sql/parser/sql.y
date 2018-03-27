@@ -5688,7 +5688,7 @@ const_datetime:
   {
     $$.val = coltypes.TimeTZ
   }
-| TIME WITH TIME ZONE
+| TIME WITH_LA TIME ZONE
   {
     $$.val = coltypes.TimeTZ
   }
