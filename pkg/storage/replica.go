@@ -5137,10 +5137,6 @@ func (r *Replica) applyRaftCommand(
 func (r *Replica) evaluateProposalInner(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) result.Result {
-	// Keep track of original txn Writing state to sanitize txn
-	// reported with any error except TransactionRetryError.
-	wasWriting := ba.Txn != nil && ba.Txn.Writing
-
 	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed.
 	var result result.Result
@@ -5177,7 +5173,7 @@ func (r *Replica) evaluateProposalInner(
 				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
 			}
 			if txn.ID == ba.Txn.ID {
-				txn.Writing = wasWriting
+				txn.Writing = ba.Txn.Writing
 			}
 		}
 		return result
