@@ -183,6 +183,13 @@ In summary (the wiki page details the rationales and provides further suggestion
   contributors aren't allowed to merge themselves; in that case, we'll
   do it for you.
 
+- Direct merges using GitHub's "big green button" are avoided.  Instead, we use
+  [bors-ng](https://bors.tech/documentation/) to manage our merges to prevent
+  "merge skew".  When you're ready to merge, add a comment to your PR of the
+  form `bors r+`. Craig (our Bors bot)
+  will run CI on your changes, and if it passes, merge them.  For more
+  information, see [the wiki](https://github.com/cockroachdb/cockroach/wiki/Bors-merge-bot).
+
 ## Debugging
 
 Peeking into a running cluster can be done in several ways:
