@@ -1,0 +1,62 @@
+@require '~styl/base/palette.styl'
+
+.need-license
+  padding-left 70px
+  padding-right 70px
+  padding-top 70px
+  padding-bottom 30px
+
+.need-license-blurb
+  margin-bottom 30px
+  display flex
+  justify-content space-between
+  align-items flex-start
+
+  a
+    color $link-color
+    text-decoration none
+
+  &__header
+    text-transform none
+    letter-spacing normal
+
+  &__text
+    margin-top 20px
+    width 470px
+    line-height 26px
+
+  &__trial-link
+    font-size 16px
+    border 1px solid $button-border-color
+    border-radius 5px
+    padding-left 30px
+    padding-right 30px
+    padding-top 10px
+    padding-bottom 10px
+
+.need-license-steps
+  border-top 1px solid $button-border-color
+  padding-top 30px
+  display flex
+  justify-content space-between
+
+  a
+    color $link-color
+    text-decoration none
+
+.license-step
+  width 320px
+  border 1px solid $table-border-color
+  border-radius 3px
+
+  &__text
+    margin 26px
+    line-height 26px
+
+  &__image
+    width 318px
+    height 200px
+    overflow hidden
+
+  &__stepnum
+    font-family Lato-Bold

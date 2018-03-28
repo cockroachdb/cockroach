@@ -7,11 +7,13 @@ import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
 import { Store } from "redux";
+import { Dispatch } from "react-redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataState,
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  saveUIData, loadUIData, isInFlight, UIDataState, UIDataStatus,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
@@ -41,6 +43,53 @@ export interface Alert extends AlertInfo {
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
+
+// Clusterviz Instruction Box collapsed
+
+export const instructionsBoxCollapsedSetting = new LocalSetting(
+  INSTRUCTIONS_BOX_COLLAPSED_KEY, localSettingsSelector, false,
+);
+
+const instructionsBoxCollapsedPersistentLoadedSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY)
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID
+  ),
+);
+
+const instructionsBoxCollapsedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_COLLAPSED_KEY)
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].status === UIDataStatus.VALID
+      && uiData[INSTRUCTIONS_BOX_COLLAPSED_KEY].data
+  ),
+);
+
+export const instructionsBoxCollapsedSelector = createSelector(
+  instructionsBoxCollapsedPersistentLoadedSelector,
+  instructionsBoxCollapsedPersistentSelector,
+  instructionsBoxCollapsedSetting.selector,
+  (persistentLoaded, persistentCollapsed, localSettingCollapsed): boolean => {
+    if (persistentLoaded) {
+      return persistentCollapsed;
+    }
+    return localSettingCollapsed;
+  },
+);
+
+export function setInstructionsBoxCollapsed(collapsed: boolean) {
+  return (dispatch: Dispatch<AdminUIState>) => {
+    dispatch(instructionsBoxCollapsedSetting.set(collapsed));
+    dispatch(saveUIData({
+      key: INSTRUCTIONS_BOX_COLLAPSED_KEY,
+      value: collapsed,
+    }));
+  };
+}
 
 ////////////////////////////////////////
 // Version mismatch.
@@ -262,7 +311,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
