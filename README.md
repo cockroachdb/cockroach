@@ -95,6 +95,9 @@ CockroachDB supports the PostgreSQL wire protocol, so you can use any available 
 
 We're an open source project and welcome contributions. See our [Contributing Guide](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html) for more details.
 
+Engineering discussion takes place on our public mailing list,
+[cockroach-db@googlegroups.com](https://groups.google.com/forum/#!forum/cockroach-db).
+
 
 ## Design
 
