@@ -20,6 +20,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/binary"
+	"fmt"
 	"hash"
 	"hash/fnv"
 	"math"
@@ -41,6 +42,7 @@ const (
 
 	usertableSchemaRelational = `(
 		ycsb_key BIGINT PRIMARY KEY NOT NULL,
+		FIELD0 TEXT,
 		FIELD1 TEXT,
 		FIELD2 TEXT,
 		FIELD3 TEXT,
@@ -49,8 +51,7 @@ const (
 		FIELD6 TEXT,
 		FIELD7 TEXT,
 		FIELD8 TEXT,
-		FIELD9 TEXT,
-		FIELD10 TEXT
+		FIELD9 TEXT
 	)`
 	usertableSchemaJSON = `(
 		ycsb_key BIGINT PRIMARY KEY NOT NULL,
@@ -67,8 +68,8 @@ type ycsb struct {
 	json        bool
 	splits      int
 
-	workload                      string
-	readFreq, writeFreq, scanFreq float32
+	workload                                   string
+	readFreq, insertFreq, updateFreq, scanFreq float32
 }
 
 func init() {
@@ -113,24 +114,24 @@ func (g *ycsb) Hooks() workload.Hooks {
 			switch g.workload {
 			case "A", "a":
 				g.readFreq = 0.5
-				g.writeFreq = 0.5
+				g.updateFreq = 0.5
 			case "B", "b":
 				g.readFreq = 0.95
-				g.writeFreq = 0.05
+				g.updateFreq = 0.05
 			case "C", "c":
 				g.readFreq = 1.0
 			case "D", "d":
 				g.readFreq = 0.95
-				g.writeFreq = 0.95
+				g.insertFreq = 0.95
 				return errors.New("Workload D (read latest) not implemented yet")
 				// TODO(arjun): workload D (read latest) requires modifying the
 				// RNG to skew to the latest keys, so not done yet.
 			case "E", "e":
 				g.scanFreq = 0.95
-				g.writeFreq = 0.05
+				g.insertFreq = 0.05
 				return errors.New("Workload E (scans) not implemented yet")
 			case "F", "f":
-				g.writeFreq = 1.0
+				g.insertFreq = 1.0
 			}
 			return nil
 		},
@@ -145,10 +146,11 @@ func (g *ycsb) Tables() []workload.Table {
 			g.initialRows,
 			func(rowIdx int) []interface{} {
 				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-				return []interface{}{
-					w.hashKey(uint64(rowIdx)),
-					nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				key := w.hashKey(uint64(rowIdx))
+				if g.json {
+					return []interface{}{key, "{}"}
 				}
+				return []interface{}{key, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
 			},
 		),
 		Splits: workload.Tuples(
@@ -188,27 +190,45 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		return workload.QueryLoad{}, err
 	}
 
-	var writeStmt *gosql.Stmt
+	var insertStmt *gosql.Stmt
 	if g.json {
-		writeStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES ($1, json_build_object(
-			'field1',  $2:::text,
-			'field2',  $3:::text,
-			'field3',  $4:::text,
-			'field4',  $5:::text,
-			'field5',  $6:::text,
-			'field6',  $7:::text,
-			'field7',  $8:::text,
-			'field8',  $9:::text,
-			'field9',  $10:::text,
-			'field10', $11:::text
+		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES ($1, json_build_object(
+			'field0',  $2:::text,
+			'field1',  $3:::text,
+			'field2',  $4:::text,
+			'field3',  $5:::text,
+			'field4',  $6:::text,
+			'field5',  $7:::text,
+			'field6',  $8:::text,
+			'field7',  $9:::text,
+			'field8',  $10:::text,
+			'field9',  $11:::text
 		))`)
 	} else {
-		writeStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES (
+		insertStmt, err = db.Prepare(`INSERT INTO ycsb.usertable VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 		)`)
 	}
 	if err != nil {
 		return workload.QueryLoad{}, err
+	}
+
+	updateStmts := make([]*gosql.Stmt, numTableFields)
+	if g.json {
+		stmt, err := db.Prepare(`UPDATE ycsb.usertable SET field = field || $2 WHERE ycsb_key = $1`)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		updateStmts[0] = stmt
+	} else {
+		for i := 0; i < numTableFields; i++ {
+			q := fmt.Sprintf(`UPDATE ycsb.usertable SET field%d = $2 WHERE ycsb_key = $1`, i)
+			stmt, err := db.Prepare(q)
+			if err != nil {
+				return workload.QueryLoad{}, err
+			}
+			updateStmts[i] = stmt
+		}
 	}
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
@@ -221,14 +241,15 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			return workload.QueryLoad{}, err
 		}
 		w := &ycsbWorker{
-			config:    g,
-			hists:     reg.GetHandle(),
-			db:        db,
-			readStmt:  readStmt,
-			writeStmt: writeStmt,
-			zipfR:     zipfR,
-			rng:       rng,
-			hashFunc:  fnv.New64(),
+			config:      g,
+			hists:       reg.GetHandle(),
+			db:          db,
+			readStmt:    readStmt,
+			insertStmt:  insertStmt,
+			updateStmts: updateStmts,
+			zipfR:       zipfR,
+			rng:         rng,
+			hashFunc:    fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -236,10 +257,14 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 }
 
 type ycsbWorker struct {
-	config              *ycsb
-	hists               *workload.Histograms
-	db                  *gosql.DB
-	readStmt, writeStmt *gosql.Stmt
+	config               *ycsb
+	hists                *workload.Histograms
+	db                   *gosql.DB
+	readStmt, insertStmt *gosql.Stmt
+
+	// In normal mode this is one statement per field, since the field name cannot
+	// be parametrized. In JSON mode it's a single statement.
+	updateStmts []*gosql.Stmt
 
 	zipfR    *ZipfGenerator // used to generate random keys
 	rng      *rand.Rand     // used to generate random strings for the values
@@ -253,10 +278,12 @@ func (yw *ycsbWorker) run(ctx context.Context) error {
 
 	start := timeutil.Now()
 	switch op {
+	case updateOp:
+		err = yw.updateRow()
 	case readOp:
 		err = yw.readRow()
-	case writeOp:
-		err = yw.insertRow(yw.nextWriteKey(), true)
+	case insertOp:
+		err = yw.insertRow(yw.nextInsertKey(), true)
 	case scanOp:
 		err = yw.scanRows()
 	default:
@@ -275,9 +302,10 @@ var readOnly int32
 type operation string
 
 const (
-	writeOp operation = `write`
-	readOp  operation = `read`
-	scanOp  operation = `scan`
+	updateOp operation = `update`
+	insertOp operation = `insert`
+	readOp   operation = `read`
+	scanOp   operation = `scan`
 )
 
 func (yw *ycsbWorker) hashKey(key uint64) uint64 {
@@ -302,7 +330,7 @@ func (yw *ycsbWorker) nextReadKey() uint64 {
 	return hashedKey
 }
 
-func (yw *ycsbWorker) nextWriteKey() uint64 {
+func (yw *ycsbWorker) nextInsertKey() uint64 {
 	key := yw.zipfR.IMaxHead()
 	hashedKey := yw.hashKey(key)
 	return hashedKey
@@ -325,7 +353,7 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
 	}
-	if _, err := yw.writeStmt.Exec(args...); err != nil {
+	if _, err := yw.insertStmt.Exec(args...); err != nil {
 		return err
 	}
 
@@ -333,6 +361,25 @@ func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
 		if err := yw.zipfR.IncrementIMax(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (yw *ycsbWorker) updateRow() error {
+	var stmt *gosql.Stmt
+	args := make([]interface{}, 2)
+	args[0] = yw.nextReadKey()
+	fieldIdx := yw.rng.Intn(numTableFields)
+	value := yw.randString(fieldLength)
+	if yw.config.json {
+		stmt = yw.updateStmts[0]
+		args[1] = fmt.Sprintf(`{"field%d": "%s"}`, fieldIdx, value)
+	} else {
+		stmt = yw.updateStmts[fieldIdx]
+		args[1] = value
+	}
+	if _, err := stmt.Exec(args...); err != nil {
+		return err
 	}
 	return nil
 }
@@ -356,10 +403,14 @@ func (yw *ycsbWorker) scanRows() error {
 // Choose an operation in proportion to the frequencies.
 func (yw *ycsbWorker) chooseOp() operation {
 	p := yw.rng.Float32()
-	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.writeFreq {
-		return writeOp
+	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.updateFreq {
+		return updateOp
 	}
-	p -= yw.config.writeFreq
+	p -= yw.config.updateFreq
+	if atomic.LoadInt32(&readOnly) == 0 && p <= yw.config.insertFreq {
+		return insertOp
+	}
+	p -= yw.config.insertFreq
 	// If both scanFreq and readFreq are 0 default to readOp if we've reached
 	// this point because readOnly is true.
 	if p <= yw.config.scanFreq {
