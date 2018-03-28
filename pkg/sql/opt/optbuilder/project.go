@@ -15,9 +15,28 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
+
+// constructProject constructs a projection if it will result in a different
+// set of columns than its input.
+func (b *Builder) constructProject(
+	projections []memo.GroupID, in memo.GroupID, projectionsScope, inScope *scope,
+) (out memo.GroupID, outScope *scope) {
+	// Don't add an unnecessary "pass through" project expression.
+	if projectionsScope.hasSameColumns(inScope) {
+		out = in
+	} else {
+		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
+		out = b.factory.ConstructProject(in, p)
+	}
+
+	// Return projectionsScope even if it has the same columns as inScope
+	// since the column names and hidden status may be different.
+	return out, projectionsScope
+}
 
 // buildProjectionList builds a set of memo groups that represent the given
 // list of select expressions.

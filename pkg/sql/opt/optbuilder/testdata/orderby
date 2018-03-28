@@ -103,13 +103,10 @@ sort
 # CockroachDB with the semantics:
 #   SELECT c FROM t GROUP BY c ORDER BY max(b) DESC;
 # We may decide to support this later, but for now this should cause an error.
-# TODO(rytaft): Improve this error message to be more descriptive. E.g., the
-# Postgres error message is "for SELECT DISTINCT, ORDER BY expressions must
-# appear in select list".
 build
 SELECT DISTINCT c FROM t ORDER BY b DESC
 ----
-error: column name "b" not found
+error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
 
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC

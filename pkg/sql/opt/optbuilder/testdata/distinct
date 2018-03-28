@@ -80,8 +80,13 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      ├── project
+      │    ├── columns: xyz.y:2(int) xyz.z:3(float)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         ├── variable: xyz.y [type=int]
+      │         └── variable: xyz.z [type=float]
       └── aggregations
 
 build
@@ -93,8 +98,13 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      ├── project
+      │    ├── columns: xyz.y:2(int) xyz.z:3(float)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         ├── variable: xyz.y [type=int]
+      │         └── variable: xyz.z [type=float]
       └── aggregations
 
 build
@@ -106,8 +116,13 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      ├── project
+      │    ├── columns: xyz.y:2(int) xyz.z:3(float)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         ├── variable: xyz.y [type=int]
+      │         └── variable: xyz.z [type=float]
       └── aggregations
 
 # TODO(rytaft): This is a bug. This query is valid.
@@ -126,19 +141,27 @@ error: unsupported binary operator: <int> + <float>
 # CockroachDB with the semantics:
 #   SELECT y AS w FROM t GROUP BY y ORDER BY min(z);
 # We may decide to support this later, but for now this should cause an error.
-# TODO(rytaft): Improve this error message to be more descriptive. E.g., the
-# Postgres error message is "for SELECT DISTINCT, ORDER BY expressions must
-# appear in select list".
 build
 SELECT DISTINCT y AS w FROM xyz ORDER by z
 ----
-error: column name "z" not found
+error: for SELECT DISTINCT, ORDER BY expressions must appear in select list
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT DISTINCT y AS w FROM xyz ORDER by y
 ----
-error: column name "y" not found
+sort
+ ├── columns: w:2(int)
+ ├── ordering: +2
+ └── group-by
+      ├── columns: xyz.y:2(int)
+      ├── grouping columns: xyz.y:2(int)
+      ├── project
+      │    ├── columns: xyz.y:2(int)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         └── variable: xyz.y [type=int]
+      └── aggregations
 
 build
 SELECT DISTINCT (y,z) FROM t.xyz
@@ -346,6 +369,12 @@ sort
  └── group-by
       ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
       ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
-      ├── scan abcd
-      │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
+      ├── project
+      │    ├── columns: column5:5(int) abcd.d:4(int!null) abcd.b:2(int!null)
+      │    ├── scan abcd
+      │    │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         ├── variable: abcd.d [type=int]
+      │         └── variable: abcd.b [type=int]
       └── aggregations

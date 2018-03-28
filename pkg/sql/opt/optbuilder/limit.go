@@ -31,7 +31,7 @@ func (b *Builder) buildLimit(
 ) (out memo.GroupID, outScope *scope) {
 	out, outScope = in, inScope
 
-	ordering := inScope.ordering
+	ordering := inScope.physicalProps.Ordering
 	orderingPrivID := b.factory.InternOrdering(ordering)
 
 	if limit.Offset != nil {
