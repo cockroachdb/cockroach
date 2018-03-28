@@ -91,13 +91,12 @@ project
  │    ├── group-by
  │    │    ├── columns: column5:5(int) column6:6(int) column7:7(int)
  │    │    ├── project
- │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null) kv.v:2(int)
+ │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
  │    │    │    ├── scan kv
  │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    └── projections
  │    │    │         ├── variable: kv.v [type=int]
- │    │    │         ├── variable: kv.k [type=int]
- │    │    │         └── variable: kv.v [type=int]
+ │    │    │         └── variable: kv.k [type=int]
  │    │    └── aggregations
  │    │         ├── function: max [type=int]
  │    │         │    └── variable: kv.v [type=int]
@@ -186,11 +185,10 @@ project
  │    │    ├── columns: kv.v:2(int) column5:5(int)
  │    │    ├── grouping columns: kv.v:2(int)
  │    │    ├── project
- │    │    │    ├── columns: kv.v:2(int) kv.v:2(int)
+ │    │    │    ├── columns: kv.v:2(int)
  │    │    │    ├── scan kv
  │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    └── projections
- │    │    │         ├── variable: kv.v [type=int]
  │    │    │         └── variable: kv.v [type=int]
  │    │    └── aggregations
  │    │         └── function: max [type=int]
@@ -296,25 +294,23 @@ build
 SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
 ----
 select
- ├── columns: column5:5(string) column6:6(int) column8:8(int)
+ ├── columns: column5:5(string) column6:6(int) column7:7(int)
  ├── group-by
- │    ├── columns: column5:5(string) column6:6(int) column8:8(int)
+ │    ├── columns: column5:5(string) column6:6(int) column7:7(int)
  │    ├── grouping columns: column5:5(string)
  │    ├── project
- │    │    ├── columns: column5:5(string) kv.s:4(string) column7:7(string)
+ │    │    ├── columns: column5:5(string) kv.s:4(string)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
  │    │         ├── function: upper [type=string]
  │    │         │    └── variable: kv.s [type=string]
- │    │         ├── variable: kv.s [type=string]
- │    │         └── function: upper [type=string]
- │    │              └── variable: kv.s [type=string]
+ │    │         └── variable: kv.s [type=string]
  │    └── aggregations
  │         ├── function: count [type=int]
  │         │    └── variable: kv.s [type=string]
  │         └── function: count [type=int]
- │              └── variable: column7 [type=string]
+ │              └── variable: column5 [type=string]
  └── gt [type=bool]
       ├── variable: column6 [type=int]
       └── const: 1 [type=int]

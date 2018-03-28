@@ -105,9 +105,6 @@ project
  └── projections
       ├── variable: abc.a [type=int]
       ├── variable: abc.b [type=int]
-      ├── variable: abc.c [type=int]
-      ├── variable: abc.a [type=int]
-      ├── variable: abc.b [type=int]
       └── variable: abc.c [type=int]
 
 build
@@ -118,9 +115,6 @@ project
  ├── scan abc
  │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections
-      ├── variable: abc.a [type=int]
-      ├── variable: abc.a [type=int]
-      ├── variable: abc.a [type=int]
       └── variable: abc.a [type=int]
 
 build
@@ -330,8 +324,6 @@ project
  ├── scan kw
  │    └── columns: kw.from:1(int!null)
  └── projections
-      ├── variable: kw.from [type=int]
-      ├── variable: kw.from [type=int]
       └── variable: kw.from [type=int]
 
 exec-ddl

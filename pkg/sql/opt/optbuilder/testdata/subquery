@@ -1289,8 +1289,6 @@ project
  │         └── const: 'three' [type=string]
  └── projections
       ├── variable: column1 [type=int]
-      ├── variable: column1 [type=int]
-      ├── variable: column2 [type=string]
       └── variable: column2 [type=string]
 
 build

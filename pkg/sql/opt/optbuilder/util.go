@@ -132,12 +132,21 @@ func (b *Builder) synthesizeColumn(
 func (b *Builder) constructList(
 	op opt.Operator, items []memo.GroupID, cols []columnProps,
 ) memo.GroupID {
-	colList := make(opt.ColList, len(cols))
+	colList := make(opt.ColList, 0, len(cols))
+	itemList := make([]memo.GroupID, 0, len(cols))
+
+	// Deduplicate the lists. We only need to project each column once.
+	colSet := opt.ColSet{}
 	for i := range cols {
-		colList[i] = cols[i].id
+		id := cols[i].id
+		if !colSet.Contains(int(id)) {
+			colList = append(colList, id)
+			itemList = append(itemList, items[i])
+			colSet.Add(int(id))
+		}
 	}
 
-	list := b.factory.InternList(items)
+	list := b.factory.InternList(itemList)
 	private := b.factory.InternColList(colList)
 
 	switch op {
