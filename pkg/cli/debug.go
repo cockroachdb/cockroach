@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/google/pprof/driver"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -1041,6 +1042,28 @@ func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	return synctest.Run(syncTestOpts)
 }
 
+var debugPProfCmd = &cobra.Command{
+	Use:   "pprof [options]",
+	Short: "run the 'pprof' tool",
+	Long: `
+Run the vendored copy of the pprof tool (https://github.com/google/pprof), which
+collects, manipulates, and visualizes performance profiles.
+
+Prefer this command to 'go tool pprof', as it is capable of symbolizing a
+profile created by a binary without debug symbols provided the debug symbols are
+available locally.
+`,
+	DisableFlagParsing: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		// PProf expects to see only PProf arguments in os.Args.
+		os.Args = append([]string{os.Args[0]}, args...)
+		if err := driver.PProf(&driver.Options{}); err != nil {
+			fmt.Fprintf(os.Stderr, "pprof: %s\n", err)
+			os.Exit(2)
+		}
+	},
+}
+
 func init() {
 	debugCmd.AddCommand(debugCmds...)
 
@@ -1068,6 +1091,7 @@ var debugCmds = []*cobra.Command{
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
+	debugPProfCmd,
 }
 
 var debugCmd = &cobra.Command{
