@@ -97,7 +97,7 @@ func runDataDrivenTest(t *testing.T, testdataGlob string, fmtFlags memo.ExprFmtF
 					return ev.FormatString(fmtFlags)
 
 				case "optsteps":
-					result, err := tester.OptSteps(fmtFlags)
+					result, err := tester.OptSteps(fmtFlags, testing.Verbose())
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
