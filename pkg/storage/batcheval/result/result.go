@@ -31,13 +31,6 @@ import (
 // the proposing node may die before the local results are processed,
 // so any side effects here are only best-effort.
 type LocalResult struct {
-	// The error resulting from the proposal. Most failing proposals will
-	// fail-fast, i.e. will return an error to the client above Raft. However,
-	// some proposals need to commit data even on error, and in that case we
-	// treat the proposal like a successful one, except that the error stored
-	// here will be sent to the client when the associated batch commits. In
-	// the common case, this field is nil.
-	Err   *roachpb.Error
 	Reply *roachpb.BatchResponse
 
 	// Intents stores any intents encountered but not conflicted with.

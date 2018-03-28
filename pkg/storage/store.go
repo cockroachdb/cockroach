@@ -2870,11 +2870,12 @@ func (s *Store) Send(
 
 		// Handle push txn failures and write intent conflicts locally and
 		// retry. Other errors are returned to caller.
-		switch pErr.GetDetail().(type) {
+		switch t := pErr.GetDetail().(type) {
 		case *roachpb.TransactionPushError:
 			// On a transaction push error, retry immediately if doing so will
-			// enqueue into the txnWaitQueue in order to await further updates to the
-			// unpushed txn's status.
+			// enqueue into the txnWaitQueue in order to await further updates to
+			// the unpushed txn's status. We check ShouldPushImmediately to avoid
+			// retrying non-queueable PushTxnRequests (see #18191).
 			dontRetry := s.cfg.DontRetryPushTxnFailures
 			if !dontRetry && ba.IsSinglePushTxnRequest() {
 				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
@@ -2889,7 +2890,11 @@ func (s *Store) Send(
 				}
 				return nil, pErr
 			}
-			pErr = nil // retry command
+
+			// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and
+			// retry the command.
+			repl.txnWaitQueue.Enqueue(&t.PusheeTxn)
+			pErr = nil
 
 		case *roachpb.WriteIntentError:
 			// Process and resolve write intent error. We do this here because
