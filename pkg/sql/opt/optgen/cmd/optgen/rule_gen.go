@@ -126,16 +126,15 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 	} else {
 		// For exploration rules, the memo expression is passed as a parameter,
 		// so use accessors to get its fields.
-		eidName := fmt.Sprintf("_%s", unTitle(string(define.Name)))
 		if rule.Match == g.innerExploreMatch {
 			// The top-level match is the only match in this rule. Skip the
 			// expression if it was processed in a previous exploration pass.
-			g.w.nestIndent("if %s.Expr >= _state.start {\n", eidName)
+			g.w.nestIndent("if _eid.Expr >= _state.start {\n")
 		} else {
 			// Initialize _partlyExplored for the top-level match. This variable
 			// will be shadowed by each nested loop. Only if all loops are bound
 			// to already explored expressions can the innermost match skip.
-			g.w.writeIndent("_partlyExplored := %s.Expr < _state.start\n", eidName)
+			g.w.writeIndent("_partlyExplored := _eid.Expr < _state.start\n")
 		}
 
 		for index, matchArg := range rule.Match.Args {
@@ -553,35 +552,47 @@ func (g *ruleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool)
 // the top-level expression. Instead, they construct the raw expression and
 // pass it to Memo.MemoizeDenormExpr in order to add it to an existing group.
 func (g *ruleGen) genReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
-	varName := fmt.Sprintf("_%s", unTitle(string(define.Name)))
 	if g.normalize {
+		exprName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 		g.w.writeIndent("_f.o.reportOptimization(%s)\n", rule.Name)
 		g.w.writeIndent("_group = ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
-		g.w.writeIndent("_f.mem.AddAltFingerprint(%sExpr.Fingerprint(), _group)\n", varName)
+		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
 		g.w.writeIndent("return _group\n")
 	} else {
 		g.w.nestIndent("if _e.o.allowOptimizations() {\n")
 		g.w.writeIndent("_e.o.reportOptimization(%s)\n", rule.Name)
 
-		if construct, ok := rule.Replace.(*lang.ConstructExpr); ok {
-			name, ok := construct.Name.(*lang.NameExpr)
+		switch t := rule.Replace.(type) {
+		case *lang.ConstructExpr:
+			name, ok := t.Name.(*lang.NameExpr)
 			if !ok {
 				panic("exploration pattern with dynamic replace name not yet supported")
 			}
-			g.w.nestIndent("_e.mem.MemoizeDenormExpr(%s, memo.Make%sExpr(\n", varName, *name)
-			for _, arg := range construct.Args {
+			g.w.nestIndent("_expr := memo.Make%sExpr(\n", *name)
+			for _, arg := range t.Args {
 				g.w.writeIndent("")
 				g.genNestedExpr(arg)
 				g.w.write(",\n")
 			}
-			g.w.unnest("))\n")
-		} else {
+			g.w.unnest(")\n")
+			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))\n")
+
+		case *lang.CustomFuncExpr:
+			// Top-level custom function returns a memo.Expr slice, so iterate
+			// through that and memoize each expression.
+			g.w.writeIndent("exprs := ")
 			g.genNestedExpr(rule.Replace)
+			g.w.newline()
+			g.w.nestIndent("for i := range exprs {\n")
+			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])\n")
+			g.w.unnest("}\n")
+
+		default:
+			panic(fmt.Sprintf("unsupported replace expression in explore rule: %s", rule.Replace))
 		}
 
-		g.w.newline()
 		g.w.unnest("}\n")
 	}
 }
@@ -597,22 +608,7 @@ func (g *ruleGen) genNestedExpr(e lang.Expr) {
 		g.genConstructList(t)
 
 	case *lang.CustomFuncExpr:
-		if t.Name == "OpName" {
-			// Handle OpName function that couldn't be statically resolved by
-			// looking up op name at runtime.
-			ref := t.Args[0].(*lang.RefExpr)
-			g.w.write("%s.mem.%s(%s).Operator()", g.thisVar, g.exprLookup, ref.Label)
-		} else {
-			funcName := unTitle(string(t.Name))
-			g.w.write("%s.%s(", g.thisVar, funcName)
-			for index, arg := range t.Args {
-				if index != 0 {
-					g.w.write(", ")
-				}
-				g.genNestedExpr(arg)
-			}
-			g.w.write(")")
-		}
+		g.genCustomFunc(t)
 
 	case *lang.RefExpr:
 		g.w.write(string(t.Label))
@@ -668,6 +664,26 @@ func (g *ruleGen) genConstruct(construct *lang.ConstructExpr) {
 
 	default:
 		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
+	}
+}
+
+// genCustomFunc generates code to invoke a custom replace function.
+func (g *ruleGen) genCustomFunc(customFunc *lang.CustomFuncExpr) {
+	if customFunc.Name == "OpName" {
+		// Handle OpName function that couldn't be statically resolved by
+		// looking up op name at runtime.
+		ref := customFunc.Args[0].(*lang.RefExpr)
+		g.w.write("%s.mem.%s(%s).Operator()", g.thisVar, g.exprLookup, ref.Label)
+	} else {
+		funcName := unTitle(string(customFunc.Name))
+		g.w.write("%s.%s(", g.thisVar, funcName)
+		for index, arg := range customFunc.Args {
+			if index != 0 {
+				g.w.write(", ")
+			}
+			g.genNestedExpr(arg)
+		}
+		g.w.write(")")
 	}
 }
 
