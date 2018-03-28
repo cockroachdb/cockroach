@@ -584,6 +584,12 @@ var specs = []stmtSpec{
 		},
 	},
 	{
+		name:    "partition_by",
+		stmt:    "alter_onetable_stmt",
+		replace: map[string]string{"alter_table_cmds": "'PARTITION' 'BY' 'expr_list'", "relation_expr": "table_name"},
+		unlink:  []string{"constraint_name", "table_name"},
+	},
+	{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
