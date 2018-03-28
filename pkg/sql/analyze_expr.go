@@ -44,18 +44,16 @@ func (p *planner) analyzeExpr(
 	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
 	// counter-example; cases where a subquery is an operand of a
 	// comparison are handled specially in the subqueryVisitor already.)
-	replaced, err := p.analyzeSubqueries(ctx, raw, 1 /* one value expected */)
+	err := p.analyzeSubqueries(ctx, raw, 1 /* one value expected */)
 	if err != nil {
 		return nil, err
 	}
 
 	// Perform optional name resolution.
-	var resolved tree.Expr
-	if sources == nil {
-		resolved = replaced
-	} else {
+	resolved := raw
+	if sources != nil {
 		var hasStar bool
-		resolved, _, hasStar, err = p.resolveNames(replaced, sources, iVarHelper)
+		resolved, _, hasStar, err = p.resolveNames(raw, sources, iVarHelper)
 		if err != nil {
 			return nil, err
 		}

@@ -27,9 +27,8 @@ import (
 )
 
 // subquery represents a subquery expression in an expression tree
-// after it has been converted to a query plan. It is carried
-// in the expression tree from the point type checking occurs to
-// the point the query starts execution / evaluation.
+// after it has been converted to a query plan. It is stored in
+// planTop.subqueryPlans.
 type subquery struct {
 	subquery *tree.Subquery
 	execMode subqueryExecMode
@@ -242,9 +241,16 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	return false, 0
 }
 
-// subqueryVisitor replaces tree.Subquery syntax nodes by a
-// sql.subquery node and an initial query plan for running the
-// subquery.
+// analyzeSubqueries finds tree.Subquery syntax nodes; for each one, it builds
+// an initial plan, adds an entry in planTop.subqueryPlans, and annotates the
+// Subquery node with a type and a link (Idx) to that entry.
+func (p *planner) analyzeSubqueries(ctx context.Context, expr tree.Expr, columns int) error {
+	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns, ctx: ctx}
+	tree.WalkExprConst(&p.subqueryVisitor, expr)
+	return p.subqueryVisitor.err
+}
+
+// subqueryVisitor is used to implement analyzeSubqueries.
 type subqueryVisitor struct {
 	*planner
 	columns int
@@ -257,7 +263,7 @@ type subqueryVisitor struct {
 var _ tree.Visitor = &subqueryVisitor{}
 
 // subqueryAlreadyAnalyzed returns true iff VisitPre already has
-// called extractSubquery on the given subquery node.  The condition
+// called extractSubquery on the given subquery node. The condition
 // `t.Idx > 0` is not sufficient because the AST may be reused more
 // than once (AST caching between PREPARE and EXECUTE). In between
 // uses, the Idx and Typ fields are preserved but the current plan's
@@ -455,16 +461,4 @@ func (v *subqueryVisitor) extractSubquery(
 	}
 
 	return result, nil
-}
-
-// analyzeSubqueries extracts all the sub-query plans in the Expr
-// tree, annotates the Subquery Expr in-place with a link (Idx) to
-// their index in the planner's sqPlan slice, and annotates their type
-// annotation so that it is ready during type checking.
-func (p *planner) analyzeSubqueries(
-	ctx context.Context, expr tree.Expr, columns int,
-) (tree.Expr, error) {
-	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns, ctx: ctx}
-	expr, _ = tree.WalkExpr(&p.subqueryVisitor, expr)
-	return expr, p.subqueryVisitor.err
 }
