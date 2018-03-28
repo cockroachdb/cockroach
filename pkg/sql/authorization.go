@@ -219,7 +219,7 @@ func (p *planner) MemberOfWithAdminOption(
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 // TODO(mberhault): this is the naive way and performs a full lookup for each user,
-// we could save detailed memberships (as opposed to fully expanded) and reuser them
+// we could save detailed memberships (as opposed to fully expanded) and reuse them
 // across users. We may then want to lookup more than just this user.
 func (p *planner) resolveMemberOfWithAdminOption(
 	ctx context.Context, member string,
@@ -228,9 +228,7 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 	// Keep track of members we looked up.
 	visited := map[string]struct{}{}
-
 	toVisit := []string{member}
-
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
 	internalExecutor := InternalExecutor{ExecCfg: p.ExecCfg()}
@@ -244,10 +242,9 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, _ /* cols */, err := internalExecutor.QueryRowsInTransaction(
+		rows, _ /* cols */, err := internalExecutor.QueryRows(
 			ctx,
 			"expand-roles",
-			p.Txn(),
 			lookupRolesStmt,
 			m,
 		)
