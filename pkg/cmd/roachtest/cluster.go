@@ -679,7 +679,7 @@ func (c *cluster) RunWithBuffer(
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
-		append([]string{"roachprod", "ssh", c.makeNodes(node), "--"}, args...)...)
+		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
