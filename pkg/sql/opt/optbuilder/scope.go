@@ -76,6 +76,14 @@ func (s *scope) appendColumns(src *scope) {
 	s.cols = append(s.cols, src.cols...)
 }
 
+// appendColumn adds a new column to the scope with an optional new label.
+func (s *scope) appendColumn(col *columnProps, label string) {
+	s.cols = append(s.cols, *col)
+	if label != "" {
+		s.cols[len(s.cols)-1].name = tree.Name(label)
+	}
+}
+
 // walkExprTree walks the given expression and performs name resolution,
 // replaces unresolved column names with columnProps, and replaces subqueries
 // with typed subquery structs.
@@ -176,6 +184,20 @@ func (s *scope) removeHiddenCols() {
 		}
 	}
 	s.cols = s.cols[:n]
+}
+
+// findExistingCol finds the given expression among the bound variables
+// in this scope. Returns nil if the expression is not found.
+func (s *scope) findExistingCol(expr tree.TypedExpr) *columnProps {
+	exprStr := symbolicExprStr(expr)
+	for i := range s.cols {
+		col := &s.cols[i]
+		if exprStr == col.getExprStr() {
+			return col
+		}
+	}
+
+	return nil
 }
 
 // getAggregateCols returns the columns in this scope corresponding
