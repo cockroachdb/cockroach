@@ -177,8 +177,12 @@ limit
  │    └── group-by
  │         ├── columns: t.v:2(int)
  │         ├── grouping columns: t.v:2(int)
- │         ├── scan t
- │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         ├── project
+ │         │    ├── columns: t.v:2(int)
+ │         │    ├── scan t
+ │         │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         │    └── projections
+ │         │         └── variable: t.v [type=int]
  │         └── aggregations
  └── const: 10 [type=int]
 
