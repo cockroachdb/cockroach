@@ -178,6 +178,20 @@ func (s *scope) removeHiddenCols() {
 	s.cols = s.cols[:n]
 }
 
+// findExistingCol finds the given expression among the bound variables
+// in this scope. Returns nil if the expression is not found.
+func (s *scope) findExistingCol(expr tree.TypedExpr) *columnProps {
+	exprStr := symbolicExprStr(expr)
+	for i := range s.cols {
+		col := &s.cols[i]
+		if exprStr == col.getExprStr() {
+			return col
+		}
+	}
+
+	return nil
+}
+
 // getAggregateCols returns the columns in this scope corresponding
 // to aggregate functions.
 func (s *scope) getAggregateCols() []columnProps {

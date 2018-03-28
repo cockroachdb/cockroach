@@ -216,6 +216,15 @@ func (b *Builder) buildDefaultScalarProjection(
 		}
 	}
 
+	// Avoid synthesizing a new column if possible.
+	if col := outScope.findExistingCol(texpr); col != nil {
+		outScope.cols = append(outScope.cols, *col)
+		if label != "" {
+			outScope.cols[len(outScope.cols)-1].name = tree.Name(label)
+		}
+		return group
+	}
+
 	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr)
 	return group
 }

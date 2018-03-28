@@ -547,21 +547,17 @@ sort
            └── function: length [type=int]
                 └── const: 'abc' [type=string]
 
-# TODO(rytaft): The sort should reuse the synthesized column for b+2.
 build
 SELECT b+2 FROM t ORDER BY b+2
 ----
 sort
  ├── columns: column4:4(int)
- ├── ordering: +5
+ ├── ordering: +4
  └── project
-      ├── columns: column4:4(int) column5:5(int)
+      ├── columns: column4:4(int)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: t.b [type=int]
-           │    └── const: 2 [type=int]
            └── plus [type=int]
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
@@ -582,21 +578,17 @@ sort
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
 
-# TODO(rytaft): The sort should reuse a synthesized column even after a rename.
 build
 SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort
  ├── columns: y:4(int)
- ├── ordering: +5
+ ├── ordering: +4
  └── project
-      ├── columns: y:4(int) column5:5(int)
+      ├── columns: y:4(int)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: t.b [type=int]
-           │    └── const: 2 [type=int]
            └── plus [type=int]
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
