@@ -298,10 +298,12 @@ func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
 }
 
 func makePresentation(cols []columnProps) memo.Presentation {
-	presentation := make(memo.Presentation, len(cols))
+	presentation := make(memo.Presentation, 0, len(cols))
 	for i := range cols {
 		col := &cols[i]
-		presentation[i] = opt.LabeledColumn{Label: string(col.name), ID: col.id}
+		if !col.hidden {
+			presentation = append(presentation, opt.LabeledColumn{Label: string(col.name), ID: col.id})
+		}
 	}
 	return presentation
 }
