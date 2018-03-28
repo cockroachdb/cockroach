@@ -28,7 +28,6 @@ const (
 	// ------------------------------------------------------------
 	// Manual Rule Names
 	// ------------------------------------------------------------
-	GenerateIndexScans
 
 	// NumManualRules tracks the number of manually-defined rules.
 	NumManualRuleNames
