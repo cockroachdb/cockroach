@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
 //go:generate stringer -output=rule_name_string.go -type=RuleName rule_name.go rule_name.og.go
 
