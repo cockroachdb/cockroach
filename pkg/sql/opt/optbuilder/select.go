@@ -169,7 +169,7 @@ func (b *Builder) buildSelect(
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.SelectClause:
-		out, outScope = b.buildSelectClause(stmt, inScope)
+		out, outScope = b.buildSelectClause(t, orderBy, inScope)
 
 	case *tree.UnionClause:
 		out, outScope = b.buildUnion(t, inScope)
@@ -181,7 +181,7 @@ func (b *Builder) buildSelect(
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
 	}
 
-	if outScope.ordering == nil && orderBy != nil {
+	if outScope.physicalProps.Ordering == nil && orderBy != nil {
 		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
 		projections := make([]memo.GroupID, 0, len(outScope.cols))
@@ -189,7 +189,8 @@ func (b *Builder) buildSelect(
 			p := b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
 			projections = append(projections, p)
 		}
-		out, outScope = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
+		projections = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
+		out, outScope = b.constructProject(projections, out, projectionsScope, outScope)
 	}
 
 	if limit != nil {
@@ -209,10 +210,8 @@ func (b *Builder) buildSelect(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectClause(
-	stmt *tree.Select, inScope *scope,
+	sel *tree.SelectClause, orderBy tree.OrderBy, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
-	sel := stmt.Select.(*tree.SelectClause)
-
 	var fromScope *scope
 	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
 	outScope = fromScope
@@ -220,34 +219,18 @@ func (b *Builder) buildSelectClause(
 	var projections []memo.GroupID
 	var projectionsScope *scope
 	if b.needsAggregation(sel) {
-		out, outScope, projections, projectionsScope = b.buildAggregation(sel, out, fromScope)
+		out, outScope, projections, projectionsScope = b.buildAggregation(sel, orderBy, out, fromScope)
 	} else {
 		projectionsScope = fromScope.replace()
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
+		projections = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
 	}
 
-	if stmt.OrderBy != nil {
-		// Wrap with distinct operator if it exists.
-		out, outScope = b.buildDistinct(out, sel.Distinct, projectionsScope.cols, outScope)
-
-		// OrderBy can reference columns from either the from/grouping clause or
-		// the projections clause.
-		out, outScope = b.buildOrderBy(stmt.OrderBy, out, projections, outScope, projectionsScope)
-		return out, outScope
-	}
-
-	// Don't add an unnecessary "pass through" project expression.
-	if !projectionsScope.hasSameColumns(outScope) {
-		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
-		out = b.factory.ConstructProject(out, p)
-	}
-
-	// Assign projectionsScope to outScope even if they have the same columns
-	// since the column names and hidden status may have changed.
-	outScope = projectionsScope
+	// Construct the projection.
+	out, outScope = b.constructProject(projections, out, projectionsScope, outScope)
 
 	// Wrap with distinct operator if it exists.
-	out, outScope = b.buildDistinct(out, sel.Distinct, outScope.cols, outScope)
+	out, outScope = b.buildDistinct(out, sel.Distinct, outScope)
 	return out, outScope
 }
 
