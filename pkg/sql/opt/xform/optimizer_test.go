@@ -23,6 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
+// TestCoster files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
+//   ...
+func TestCoster(t *testing.T) {
+	runDataDrivenTest(t, "testdata/coster/*", memo.ExprFmtShowAll)
+}
+
 // TestPhysicalPropsFactory files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
@@ -31,12 +39,12 @@ func TestPhysicalPropsFactory(t *testing.T) {
 	runDataDrivenTest(t, "testdata/physprops/*", memo.ExprFmtHideAll)
 }
 
-// TestCoster files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
+// TestRules files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/scan"
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
 //   ...
-func TestCoster(t *testing.T) {
-	runDataDrivenTest(t, "testdata/coster/*", memo.ExprFmtShowAll)
+func TestRules(t *testing.T) {
+	runDataDrivenTest(t, "testdata/rules/*", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form

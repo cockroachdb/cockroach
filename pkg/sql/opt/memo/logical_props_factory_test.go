@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -34,9 +34,10 @@ func TestLogicalPropsFactory(t *testing.T) {
 // Test joins that cannot yet be tested using SQL syntax + optimizer.
 func TestLogicalJoinProps(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	o := xform.NewOptimizer(&evalCtx)
-	o.MaxSteps = xform.OptimizeNone
-	f := o.Factory()
+	f := norm.NewFactory(&evalCtx)
+
+	// Disable all rules so that the expected operators are constructed.
+	f.DisableOptimizations()
 
 	cat := createLogPropsCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
@@ -49,14 +50,14 @@ func TestLogicalJoinProps(t *testing.T) {
 		leftGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), a)))
 		rightGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), b)))
 		onGroup := f.ConstructTrue()
-		operands := xform.DynamicOperands{
-			xform.DynamicID(leftGroup),
-			xform.DynamicID(rightGroup),
-			xform.DynamicID(onGroup),
+		operands := norm.DynamicOperands{
+			norm.DynamicID(leftGroup),
+			norm.DynamicID(rightGroup),
+			norm.DynamicID(onGroup),
 		}
 		joinGroup := f.DynamicConstruct(op, operands)
 
-		ev := o.Optimize(joinGroup, &memo.PhysicalProps{})
+		ev := memo.MakeNormExprView(f.Memo(), joinGroup)
 		testLogicalProps(t, f.Metadata(), ev, expected)
 	}
 

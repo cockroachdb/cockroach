@@ -130,8 +130,7 @@ func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_f
 		if _eid.Expr >= _state.start {
 			r := _innerJoinExpr.Left()
 			s := _innerJoinExpr.Right()
-			if _e.o.allowOptimizations() {
-				_e.o.reportOptimization(CommuteJoin)
+			if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.CommuteJoin) {
 				_expr := memo.MakeInnerJoinExpr(
 					s,
 					r,
@@ -170,8 +169,7 @@ func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_f
 						upperConditions := _filtersExpr.Conditions()
 						if _e.isCorrelated(filters, r) {
 							if _e.isCorrelated(filters, t) {
-								if _e.o.allowOptimizations() {
-									_e.o.reportOptimization(AssociateJoin)
+								if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.AssociateJoin) {
 									_expr := memo.MakeInnerJoinExpr(
 										_e.f.ConstructInnerJoin(
 											r,
@@ -234,8 +232,7 @@ func (_e *explorer) exploreSelect(_state *exploreState, _eid memo.ExprID) (_full
 						groupingCols := _groupByExpr.GroupingCols()
 						filter := _selectExpr.Filter()
 						if !_e.isCorrelated(filter, right) {
-							if _e.o.allowOptimizations() {
-								_e.o.reportOptimization(PushDownGroupBy)
+							if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.PushDownGroupBy) {
 								_expr := memo.MakeInnerJoinExpr(
 									_e.f.ConstructSelect(
 										_e.f.ConstructGroupBy(
@@ -269,8 +266,7 @@ func (_e *explorer) exploreScan(_state *exploreState, _eid memo.ExprID) (_fullyE
 		if _eid.Expr >= _state.start {
 			def := _scanExpr.Def()
 			if _e.isPrimaryScan(def) {
-				if _e.o.allowOptimizations() {
-					_e.o.reportOptimization(GenerateIndexScans)
+				if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.GenerateIndexScans) {
 					exprs := _e.generateIndexScans(def)
 					for i := range exprs {
 						_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])
