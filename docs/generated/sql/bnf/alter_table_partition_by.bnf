@@ -1,3 +1,3 @@
 alter_onetable_stmt ::=
-	'ALTER' 'TABLE' table_name 'PARTITION' 'BY' 'expr_list'
-	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'PARTITION' 'BY' 'expr_list'
+	'ALTER' 'TABLE' table_name opt_partition
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name opt_partition
