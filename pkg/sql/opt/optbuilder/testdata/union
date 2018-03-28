@@ -799,11 +799,10 @@ union
  ├── left columns: xy.x:1(string) xy.x:1(string) xy.y:2(string)
  ├── right columns: abc.a:4(string) abc.b:5(string) abc.c:6(string)
  ├── project
- │    ├── columns: xy.x:1(string!null) xy.x:1(string!null) xy.y:2(string!null)
+ │    ├── columns: xy.x:1(string!null) xy.y:2(string!null)
  │    ├── scan xy
  │    │    └── columns: xy.x:1(string!null) xy.y:2(string!null) xy.rowid:3(int!null)
  │    └── projections
- │         ├── variable: xy.x [type=string]
  │         ├── variable: xy.x [type=string]
  │         └── variable: xy.y [type=string]
  └── project

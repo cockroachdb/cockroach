@@ -267,7 +267,7 @@ func (b *Builder) buildFrom(
 			b.factory.InternList(rows),
 			b.factory.InternColList(opt.ColList{}),
 		)
-		outScope = inScope
+		outScope = inScope.push()
 	} else {
 		out = left
 	}

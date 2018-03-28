@@ -2066,7 +2066,6 @@ project
  │         └── variable: t2.x [type=int]
  └── projections
       ├── variable: t2.x [type=int]
-      ├── variable: t1.x [type=int]
       └── variable: t1.x [type=int]
 
 build
@@ -2319,7 +2318,6 @@ project
  │         └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  └── projections
       ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
-      ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
       └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
 
 build
@@ -2337,7 +2335,6 @@ project
  │         ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │         └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  └── projections
-      ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
       ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
       └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
 

@@ -12,39 +12,32 @@ CREATE TABLE kv (
 exec-explain
 SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
-group           0  group   ·             ·                   (column6, column8, column10, column12, column14, column16, column18, column20, column22, column24, column26)  ·
- │              0  ·       aggregate 0   min(column5)        ·                                                                                                             ·
- │              0  ·       aggregate 1   max(column7)        ·                                                                                                             ·
- │              0  ·       aggregate 2   count(column9)      ·                                                                                                             ·
- │              0  ·       aggregate 3   sum_int(column11)   ·                                                                                                             ·
- │              0  ·       aggregate 4   avg(column13)       ·                                                                                                             ·
- │              0  ·       aggregate 5   sum(column15)       ·                                                                                                             ·
- │              0  ·       aggregate 6   stddev(column17)    ·                                                                                                             ·
- │              0  ·       aggregate 7   variance(column19)  ·                                                                                                             ·
- │              0  ·       aggregate 8   bool_and(column21)  ·                                                                                                             ·
- │              0  ·       aggregate 9   bool_or(column23)   ·                                                                                                             ·
- │              0  ·       aggregate 10  xor_agg(column25)   ·                                                                                                             ·
- └── render     1  render  ·             ·                   (column5, column7, column9, column11, column13, column15, column17, column19, column21, column23, column25)   ·
-      │         1  ·       render 0      1                   ·                                                                                                             ·
-      │         1  ·       render 1      1                   ·                                                                                                             ·
-      │         1  ·       render 2      1                   ·                                                                                                             ·
-      │         1  ·       render 3      1                   ·                                                                                                             ·
-      │         1  ·       render 4      1                   ·                                                                                                             ·
-      │         1  ·       render 5      1                   ·                                                                                                             ·
-      │         1  ·       render 6      1                   ·                                                                                                             ·
-      │         1  ·       render 7      1                   ·                                                                                                             ·
-      │         1  ·       render 8      true                ·                                                                                                             ·
-      │         1  ·       render 9      false               ·                                                                                                             ·
-      │         1  ·       render 10     '\x01'              ·                                                                                                             ·
-      └── scan  2  scan    ·             ·                   ()                                                                                                            ·
-·               2  ·       table         kv@primary          ·                                                                                                             ·
-·               2  ·       spans         ALL                 ·                                                                                                             ·
+group           0  group   ·             ·                   (column6, column7, column8, column9, column10, column11, column12, column13, column15, column17, column19)  ·
+ │              0  ·       aggregate 0   min(column5)        ·                                                                                                           ·
+ │              0  ·       aggregate 1   max(column5)        ·                                                                                                           ·
+ │              0  ·       aggregate 2   count(column5)      ·                                                                                                           ·
+ │              0  ·       aggregate 3   sum_int(column5)    ·                                                                                                           ·
+ │              0  ·       aggregate 4   avg(column5)        ·                                                                                                           ·
+ │              0  ·       aggregate 5   sum(column5)        ·                                                                                                           ·
+ │              0  ·       aggregate 6   stddev(column5)     ·                                                                                                           ·
+ │              0  ·       aggregate 7   variance(column5)   ·                                                                                                           ·
+ │              0  ·       aggregate 8   bool_and(column14)  ·                                                                                                           ·
+ │              0  ·       aggregate 9   bool_or(column16)   ·                                                                                                           ·
+ │              0  ·       aggregate 10  xor_agg(column18)   ·                                                                                                           ·
+ └── render     1  render  ·             ·                   (column5, column14, column16, column18)                                                                     ·
+      │         1  ·       render 0      1                   ·                                                                                                           ·
+      │         1  ·       render 1      true                ·                                                                                                           ·
+      │         1  ·       render 2      false               ·                                                                                                           ·
+      │         1  ·       render 3      '\x01'              ·                                                                                                           ·
+      └── scan  2  scan    ·             ·                   ()                                                                                                          ·
+·               2  ·       table         kv@primary          ·                                                                                                           ·
+·               2  ·       spans         ALL                 ·                                                                                                           ·
 
 exec
 SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
-column6:int  column8:int  column10:int  column12:int  column14:decimal  column16:decimal  column18:decimal  column20:decimal  column22:bool  column24:bool  column26:bytes
-NULL         NULL         0             NULL          NULL              NULL              NULL              NULL              NULL           NULL           NULL
+column6:int  column7:int  column8:int  column9:int  column10:decimal  column11:decimal  column12:decimal  column13:decimal  column15:bool  column17:bool  column19:bytes
+NULL         NULL         0            NULL         NULL              NULL              NULL              NULL              NULL           NULL           NULL
 
 # Aggregate functions return NULL if there are no rows.
 exec
@@ -68,7 +61,7 @@ NULL
 exec-explain
 SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
-render               0  render  ·            ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column15, column18)  ·
+render               0  render  ·            ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column15, column17)  ·
  │                   0  ·       render 0     agg0                ·                                                                                                           ·
  │                   0  ·       render 1     agg1                ·                                                                                                           ·
  │                   0  ·       render 2     agg2                ·                                                                                                           ·
@@ -90,18 +83,12 @@ render               0  render  ·            ·                   (column5, col
       │              1  ·       aggregate 6  stddev(kv.v)        ·                                                                                                           ·
       │              1  ·       aggregate 7  variance(kv.v)      ·                                                                                                           ·
       │              1  ·       aggregate 8  bool_and(column14)  ·                                                                                                           ·
-      │              1  ·       aggregate 9  xor_agg(column17)   ·                                                                                                           ·
-      └── render     2  render  ·            ·                   ("kv.v", "kv.v", "kv.v", column8, "kv.v", "kv.v", "kv.v", "kv.v", column14, column17)                       ·
+      │              1  ·       aggregate 9  xor_agg(column16)   ·                                                                                                           ·
+      └── render     2  render  ·            ·                   ("kv.v", column8, column14, column16)                                                                       ·
            │         2  ·       render 0     v                   ·                                                                                                           ·
-           │         2  ·       render 1     v                   ·                                                                                                           ·
-           │         2  ·       render 2     v                   ·                                                                                                           ·
-           │         2  ·       render 3     1                   ·                                                                                                           ·
-           │         2  ·       render 4     v                   ·                                                                                                           ·
-           │         2  ·       render 5     v                   ·                                                                                                           ·
-           │         2  ·       render 6     v                   ·                                                                                                           ·
-           │         2  ·       render 7     v                   ·                                                                                                           ·
-           │         2  ·       render 8     v = 1               ·                                                                                                           ·
-           │         2  ·       render 9     s::BYTES            ·                                                                                                           ·
+           │         2  ·       render 1     1                   ·                                                                                                           ·
+           │         2  ·       render 2     v = 1               ·                                                                                                           ·
+           │         2  ·       render 3     s::BYTES            ·                                                                                                           ·
            └── scan  3  scan    ·            ·                   (v, s)                                                                                                      ·
 ·                    3  ·       table        kv@primary          ·                                                                                                           ·
 ·                    3  ·       spans        ALL                 ·                                                                                                           ·
@@ -109,7 +96,7 @@ render               0  render  ·            ·                   (column5, col
 exec
 SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
-column5:int  column6:int  column7:int  column9:int  column10:decimal  column11:decimal  column12:decimal  column13:decimal  column15:bool  column15:bool  column18:bytes
+column5:int  column6:int  column7:int  column9:int  column10:decimal  column11:decimal  column12:decimal  column13:decimal  column15:bool  column15:bool  column17:bytes
 NULL         NULL         0            NULL         NULL              NULL              NULL              NULL              NULL           NULL           NULL
 
 exec
@@ -134,57 +121,49 @@ NULL
 exec-explain
 SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-render                 0  render  ·             ·                   (column2, column4, column6, column8, column11, column13, column15, column17, column19, column21, column24)  ·
- │                     0  ·       render 0      agg0                ·                                                                                                           ·
- │                     0  ·       render 1      agg1                ·                                                                                                           ·
- │                     0  ·       render 2      agg2                ·                                                                                                           ·
- │                     0  ·       render 3      agg3                ·                                                                                                           ·
- │                     0  ·       render 4      agg4::FLOAT         ·                                                                                                           ·
- │                     0  ·       render 5      agg5                ·                                                                                                           ·
- │                     0  ·       render 6      agg6                ·                                                                                                           ·
- │                     0  ·       render 7      agg7                ·                                                                                                           ·
- │                     0  ·       render 8      agg8                ·                                                                                                           ·
- │                     0  ·       render 9      agg9                ·                                                                                                           ·
- │                     0  ·       render 10     to_hex(agg10)       ·                                                                                                           ·
- └── group             1  group   ·             ·                   (agg0, agg1, agg2, agg3, agg4, agg5, agg6, agg7, agg8, agg9, agg10)                                         ·
-      │                1  ·       aggregate 0   min(column1)        ·                                                                                                           ·
-      │                1  ·       aggregate 1   count(column3)      ·                                                                                                           ·
-      │                1  ·       aggregate 2   max(column5)        ·                                                                                                           ·
-      │                1  ·       aggregate 3   sum_int(column7)    ·                                                                                                           ·
-      │                1  ·       aggregate 4   avg(column9)        ·                                                                                                           ·
-      │                1  ·       aggregate 5   sum(column12)       ·                                                                                                           ·
-      │                1  ·       aggregate 6   stddev(column14)    ·                                                                                                           ·
-      │                1  ·       aggregate 7   variance(column16)  ·                                                                                                           ·
-      │                1  ·       aggregate 8   bool_and(column18)  ·                                                                                                           ·
-      │                1  ·       aggregate 9   bool_or(column20)   ·                                                                                                           ·
-      │                1  ·       aggregate 10  xor_agg(column22)   ·                                                                                                           ·
-      └── render       2  render  ·             ·                   (column1, column3, column5, column7, column9, column12, column14, column16, column18, column20, column22)   ·
-           │           2  ·       render 0      1                   ·                                                                                                           ·
-           │           2  ·       render 1      1                   ·                                                                                                           ·
-           │           2  ·       render 2      1                   ·                                                                                                           ·
-           │           2  ·       render 3      1                   ·                                                                                                           ·
-           │           2  ·       render 4      1                   ·                                                                                                           ·
-           │           2  ·       render 5      1                   ·                                                                                                           ·
-           │           2  ·       render 6      1                   ·                                                                                                           ·
-           │           2  ·       render 7      1                   ·                                                                                                           ·
-           │           2  ·       render 8      true                ·                                                                                                           ·
-           │           2  ·       render 9      true                ·                                                                                                           ·
-           │           2  ·       render 10     '\x01'              ·                                                                                                           ·
-           └── values  3  values  ·             ·                   ()                                                                                                          ·
-·                      3  ·       size          0 columns, 1 row    ·                                                                                                           ·
+render                 0  render  ·             ·                   (column2, column3, column4, column5, column7, column8, column9, column10, column12, column13, column16)  ·
+ │                     0  ·       render 0      agg0                ·                                                                                                        ·
+ │                     0  ·       render 1      agg1                ·                                                                                                        ·
+ │                     0  ·       render 2      agg2                ·                                                                                                        ·
+ │                     0  ·       render 3      agg3                ·                                                                                                        ·
+ │                     0  ·       render 4      agg4::FLOAT         ·                                                                                                        ·
+ │                     0  ·       render 5      agg5                ·                                                                                                        ·
+ │                     0  ·       render 6      agg6                ·                                                                                                        ·
+ │                     0  ·       render 7      agg7                ·                                                                                                        ·
+ │                     0  ·       render 8      agg8                ·                                                                                                        ·
+ │                     0  ·       render 9      agg9                ·                                                                                                        ·
+ │                     0  ·       render 10     to_hex(agg10)       ·                                                                                                        ·
+ └── group             1  group   ·             ·                   (agg0, agg1, agg2, agg3, agg4, agg5, agg6, agg7, agg8, agg9, agg10)                                      ·
+      │                1  ·       aggregate 0   min(column1)        ·                                                                                                        ·
+      │                1  ·       aggregate 1   count(column1)      ·                                                                                                        ·
+      │                1  ·       aggregate 2   max(column1)        ·                                                                                                        ·
+      │                1  ·       aggregate 3   sum_int(column1)    ·                                                                                                        ·
+      │                1  ·       aggregate 4   avg(column1)        ·                                                                                                        ·
+      │                1  ·       aggregate 5   sum(column1)        ·                                                                                                        ·
+      │                1  ·       aggregate 6   stddev(column1)     ·                                                                                                        ·
+      │                1  ·       aggregate 7   variance(column1)   ·                                                                                                        ·
+      │                1  ·       aggregate 8   bool_and(column11)  ·                                                                                                        ·
+      │                1  ·       aggregate 9   bool_or(column11)   ·                                                                                                        ·
+      │                1  ·       aggregate 10  xor_agg(column14)   ·                                                                                                        ·
+      └── render       2  render  ·             ·                   (column1, column11, column14)                                                                            ·
+           │           2  ·       render 0      1                   ·                                                                                                        ·
+           │           2  ·       render 1      true                ·                                                                                                        ·
+           │           2  ·       render 2      '\x01'              ·                                                                                                        ·
+           └── values  3  values  ·             ·                   ()                                                                                                       ·
+·                      3  ·       size          0 columns, 1 row    ·                                                                                                        ·
 
 exec
 SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-column2:int  column4:int  column6:int  column8:int  column11:float  column13:decimal  column15:decimal  column17:decimal  column19:bool  column21:bool  column24:string
-1            1            1            1            1.0             1                 NULL              NULL              true           true           01
+column2:int  column3:int  column4:int  column5:int  column7:float  column8:decimal  column9:decimal  column10:decimal  column12:bool  column13:bool  column16:string
+1            1            1            1            1.0            1                NULL             NULL              true           true           01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 exec
 SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-column2:int  column4:int  column6:int  column8:int  column11:float  column13:decimal  column15:decimal  column17:decimal  column19:bool  column21:bool  column24:string
-1            1            1            1            1.0             1                 NULL              NULL              true           true           01
+column2:int  column3:int  column4:int  column5:int  column7:float  column8:decimal  column9:decimal  column10:decimal  column12:bool  column13:bool  column16:string
+1            1            1            1            1.0            1                NULL             NULL              true           true           01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 exec
@@ -282,8 +261,8 @@ INSERT INTO kv VALUES
 exec
 SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
 ----
-column6:int  column8:int  column10:int  column12:int  column15:float  column17:decimal  column19:decimal  column22:float  column24:bool  column26:bool  column29:string
-1            6            1             6             1.0             6                 0                 0.0             true           true           00
+column6:int  column7:int  column8:int  column9:int  column11:float  column12:decimal  column13:decimal  column15:float  column17:bool  column18:bool  column21:string
+1            6            1            6            1.0             6                 0                 0.0             true           true           00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 exec
@@ -678,8 +657,8 @@ column5:decimal  column6:decimal  column7:decimal  column8:decimal
 exec
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
-column6:decimal  column8:decimal  column10:decimal  column12:decimal
-5                2.8              30                14
+column6:decimal  column8:decimal  column9:decimal  column10:decimal
+5                2.8              30               14
 
 #exec
 #SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
@@ -1472,7 +1451,7 @@ column6:string  column7:int
 exec
 SELECT MAX(true), MIN(true)
 ----
-column2:bool  column4:bool
+column2:bool  column3:bool
 true          true
 
 exec-raw

@@ -154,14 +154,9 @@ func (b *Builder) buildVariableProjection(
 		panic(groupingError(col.String()))
 	}
 	out := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
-	outScope.cols = append(outScope.cols, *col)
+	col = outScope.appendColumn(col, label)
 
-	// Update the column name with the alias if it exists, and mark the column
-	// as a visible member of an anonymous table.
-	col = &outScope.cols[len(outScope.cols)-1]
-	if label != "" {
-		col.name = tree.Name(label)
-	}
+	// Mark the column as a visible member of an anonymous table.
 	col.table.TableName = ""
 	col.hidden = false
 	return out
@@ -205,15 +200,17 @@ func (b *Builder) buildDefaultScalarProjection(
 
 		if col := inScope.findGrouping(group); col != nil {
 			// The column already exists, so use that instead.
-			col = &b.colMap[col.id]
-			if label != "" {
-				col.name = tree.Name(label)
-			}
-			outScope.cols = append(outScope.cols, *col)
+			outScope.appendColumn(col, label)
 
 			// Replace the expression with a reference to the column.
 			return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 		}
+	}
+
+	// Avoid synthesizing a new column if possible.
+	if col := outScope.findExistingCol(texpr); col != nil {
+		outScope.appendColumn(col, label)
+		return group
 	}
 
 	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr)

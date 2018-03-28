@@ -137,13 +137,12 @@ limit
  ├── columns: foo:1(int!null) foo:1(int!null)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.a:1(int!null) t.a:1(int!null)
+ │    ├── columns: t.a:1(int!null)
  │    ├── ordering: +1
  │    ├── scan t
  │    │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    │    └── ordering: +1
  │    └── projections
- │         ├── variable: t.a [type=int]
  │         └── variable: t.a [type=int]
  └── const: 1 [type=int]
 
@@ -257,12 +256,11 @@ sort
  ├── columns: a:1(int!null) b:2(int) b:2(int)
  ├── ordering: +3
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int) t.b:2(int) t.c:3(bool)
+      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
            ├── variable: t.a [type=int]
-           ├── variable: t.b [type=int]
            ├── variable: t.b [type=int]
            └── variable: t.c [type=bool]
 
@@ -547,21 +545,17 @@ sort
            └── function: length [type=int]
                 └── const: 'abc' [type=string]
 
-# TODO(rytaft): The sort should reuse the synthesized column for b+2.
 build
 SELECT b+2 FROM t ORDER BY b+2
 ----
 sort
  ├── columns: column4:4(int)
- ├── ordering: +5
+ ├── ordering: +4
  └── project
-      ├── columns: column4:4(int) column5:5(int)
+      ├── columns: column4:4(int)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: t.b [type=int]
-           │    └── const: 2 [type=int]
            └── plus [type=int]
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
@@ -582,21 +576,17 @@ sort
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
 
-# TODO(rytaft): The sort should reuse a synthesized column even after a rename.
 build
 SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort
  ├── columns: y:4(int)
- ├── ordering: +5
+ ├── ordering: +4
  └── project
-      ├── columns: y:4(int) column5:5(int)
+      ├── columns: y:4(int)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
-           ├── plus [type=int]
-           │    ├── variable: t.b [type=int]
-           │    └── const: 2 [type=int]
            └── plus [type=int]
                 ├── variable: t.b [type=int]
                 └── const: 2 [type=int]
@@ -926,7 +916,7 @@ limit
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
  ├── ordering: +1,+2,+3
  ├── project
- │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.block_id:1(int!null)
+ │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null)
  │    ├── ordering: +1,+2,+3
  │    ├── scan blocks
  │    │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
@@ -934,8 +924,7 @@ limit
  │    └── projections
  │         ├── variable: blocks.block_id [type=int]
  │         ├── variable: blocks.writer_id [type=string]
- │         ├── variable: blocks.block_num [type=int]
- │         └── variable: blocks.block_id [type=int]
+ │         └── variable: blocks.block_num [type=int]
  └── const: 1 [type=int]
 
 exec-ddl

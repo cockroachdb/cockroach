@@ -354,16 +354,13 @@ render               0  render  ·         ·              (a, b, c)            
 exec-explain
 SELECT b+2 FROM t ORDER BY b+2
 ----
-render               0  render  ·         ·          (column4)           ·
- │                   0  ·       render 0  column4    ·                   ·
- └── sort            1  sort    ·         ·          (column4, column5)  +column5
-      │              1  ·       order     +column5   ·                   ·
-      └── render     2  render  ·         ·          (column4, column5)  ·
-           │         2  ·       render 0  b + 2      ·                   ·
-           │         2  ·       render 1  b + 2      ·                   ·
-           └── scan  3  scan    ·         ·          (b)                 ·
-·                    3  ·       table     t@primary  ·                   ·
-·                    3  ·       spans     ALL        ·                   ·
+sort            0  sort    ·         ·          (column4)  +column4
+ │              0  ·       order     +column4   ·          ·
+ └── render     1  render  ·         ·          (column4)  ·
+      │         1  ·       render 0  b + 2      ·          ·
+      └── scan  2  scan    ·         ·          (b)        ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
 exec-explain
@@ -381,16 +378,13 @@ sort            0  sort    ·         ·          (y)  +y
 exec-explain
 SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-render               0  render  ·         ·          (y)           ·
- │                   0  ·       render 0  y          ·             ·
- └── sort            1  sort    ·         ·          (y, column5)  +column5
-      │              1  ·       order     +column5   ·             ·
-      └── render     2  render  ·         ·          (y, column5)  ·
-           │         2  ·       render 0  b + 2      ·             ·
-           │         2  ·       render 1  b + 2      ·             ·
-           └── scan  3  scan    ·         ·          (b)           ·
-·                    3  ·       table     t@primary  ·             ·
-·                    3  ·       spans     ALL        ·             ·
+sort            0  sort    ·         ·          (y)  +y
+ │              0  ·       order     +y         ·    ·
+ └── render     1  render  ·         ·          (y)  ·
+      │         1  ·       render 0  b + 2      ·    ·
+      └── scan  2  scan    ·         ·          (b)  ·
+·               2  ·       table     t@primary  ·    ·
+·               2  ·       spans     ALL        ·    ·
 
 exec-raw
 CREATE TABLE abc (
