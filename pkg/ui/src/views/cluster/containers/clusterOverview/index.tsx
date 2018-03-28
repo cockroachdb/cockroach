@@ -33,9 +33,9 @@ function renderCapacityUsage(props: CapacityUsageProps) {
     <div className="capacity-usage cluster-summary__chart">
       <CapacityChart used={usedCapacity} usable={usableCapacity} />
     </div>,
-    <div className="capacity-usage cluster-summary__label storage-used">Used<br />Capcity</div>,
+    <div className="capacity-usage cluster-summary__label storage-used">Used<br />Capacity</div>,
     <div className="capacity-usage cluster-summary__metric storage-used">{ formatBytes(usedCapacity) }</div>,
-    <div className="capacity-usage cluster-summary__label storage-usable">Usable<br />Capcity</div>,
+    <div className="capacity-usage cluster-summary__label storage-usable">Usable<br />Capacity</div>,
     <div className="capacity-usage cluster-summary__metric storage-usable">{ formatBytes(usableCapacity) }</div>,
   ];
 }
