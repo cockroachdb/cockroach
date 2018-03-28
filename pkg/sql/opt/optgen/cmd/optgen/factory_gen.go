@@ -34,7 +34,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w = &matchWriter{writer: w}
 	g.ruleGen.init(compiled, g.w)
 
-	g.w.writeIndent("package xform\n\n")
+	g.w.writeIndent("package norm\n\n")
 
 	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
@@ -72,10 +72,6 @@ func (g *factoryGen) genInternPrivateFuncs() {
 //       return _group
 //     }
 //
-//     if !_f.o.allowOptimizations() {
-//       return _f.mem.MemoizeNormExpr(memo.Expr(_scanExpr))
-//     }
-//
 //     ... normalization rule code goes here ...
 //
 //     return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_scanExpr)))
@@ -110,10 +106,6 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.writeIndent("_group := _f.mem.GroupByFingerprint(%s.Fingerprint())\n", varName)
 		g.w.nestIndent("if _group != 0 {\n")
 		g.w.writeIndent("return _group\n")
-		g.w.unnest("}\n\n")
-
-		g.w.nestIndent("if !_f.o.allowOptimizations() {\n")
-		g.w.writeIndent("return _f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
 		// Only include normalization rules for the current define.

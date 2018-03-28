@@ -23,20 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-// TestPhysicalPropsFactory files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
+// TestOptimizer files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="coster/scan"
+//   make test PKG=./pkg/sql/opt/xform TESTS="physprops/ordering"
+//   make test PKG=./pkg/sql/opt/xform TESTS="rules/scan"
 //   ...
-func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/*", memo.ExprFmtHideAll)
-}
-
-// TestCoster files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
-//   ...
-func TestCoster(t *testing.T) {
+func TestOptimizer(t *testing.T) {
 	runDataDrivenTest(t, "testdata/coster/*", memo.ExprFmtShowAll)
+	runDataDrivenTest(t, "testdata/physprops/*", memo.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/rules/*", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
