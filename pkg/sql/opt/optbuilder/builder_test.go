@@ -133,7 +133,7 @@ func TestBuilder(t *testing.T) {
 					}
 					// Disable normalization rules: we want the tests to check the result
 					// of the build process.
-					o.MaxSteps = xform.OptimizeNone
+					o.DisableOptimizations()
 					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)

@@ -554,15 +554,14 @@ func (g *ruleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool)
 func (g *ruleGen) genReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
 	if g.normalize {
 		exprName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
-		g.w.writeIndent("_f.o.reportOptimization(%s)\n", rule.Name)
+		g.w.nestIndent("if _f.onRuleMatch == nil || _f.onRuleMatch(opt.%s) {\n", rule.Name)
 		g.w.writeIndent("_group = ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
 		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
 		g.w.writeIndent("return _group\n")
 	} else {
-		g.w.nestIndent("if _e.o.allowOptimizations() {\n")
-		g.w.writeIndent("_e.o.reportOptimization(%s)\n", rule.Name)
+		g.w.nestIndent("if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.%s) {\n", rule.Name)
 
 		switch t := rule.Replace.(type) {
 		case *lang.ConstructExpr:

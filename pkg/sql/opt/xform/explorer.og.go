@@ -27,8 +27,7 @@ func (_e *explorer) exploreScan(_state *exploreState, _eid memo.ExprID) (_fullyE
 		if _eid.Expr >= _state.start {
 			def := _scanExpr.Def()
 			if _e.isPrimaryScan(def) {
-				if _e.o.allowOptimizations() {
-					_e.o.reportOptimization(GenerateIndexScans)
+				if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.GenerateIndexScans) {
 					exprs := _e.generateIndexScans(def)
 					for i := range exprs {
 						_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])

@@ -17,6 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -86,7 +87,7 @@ import (
 type explorer struct {
 	o     *Optimizer
 	mem   *memo.Memo
-	f     *Factory
+	f     *norm.Factory
 	exprs []memo.Expr
 }
 
