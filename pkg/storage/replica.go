@@ -2948,6 +2948,8 @@ func (r *Replica) evaluateProposal(
 	defer batch.Close()
 
 	if pErr != nil {
+		pErr = r.maybeSetCorrupt(ctx, pErr)
+
 		// Restore the original txn's Writing bool if the error specifies
 		// a transaction.
 		if txn := pErr.GetTxn(); txn != nil {
@@ -2966,11 +2968,10 @@ func (r *Replica) evaluateProposal(
 		res.Local = result.LocalResult{
 			Intents:            &intents,
 			EndTxns:            &endTxns,
-			Err:                r.maybeSetCorrupt(ctx, pErr),
 			LeaseMetricsResult: res.Local.LeaseMetricsResult,
 		}
 		res.Replicated.Reset()
-		return &res, res.Local.Err
+		return &res, pErr
 	}
 
 	// Set the local reply, which is held only on the proposing replica and is
@@ -4868,10 +4869,6 @@ func (r *Replica) processRaftCommand(
 				// for instance due to its log position) or the Replica is now
 				// corrupted.
 				response.Err = pErr
-			} else if proposal.Local.Err != nil {
-				// Everything went as expected, but this proposal should return
-				// an error to the client.
-				response.Err = proposal.Local.Err
 			} else if proposal.Local.Reply != nil {
 				response.Reply = proposal.Local.Reply
 			} else {
