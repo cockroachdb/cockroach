@@ -98,9 +98,13 @@ func (e *OptTester) Memo() (string, error) {
 
 // OptSteps returns a string that shows each optimization step using the
 // standard unified diff format. It is used for debugging the optimizer.
-func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags) (string, error) {
+// If verbose is true, each step is also printed on stdout.
+func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, error) {
 	var buf bytes.Buffer
 	var prev, next string
+	if verbose {
+		fmt.Print("------ optsteps verbose output starts ------\n")
+	}
 	for i := 0; ; i++ {
 		o := xform.NewOptimizer(&e.evalCtx)
 		o.MaxSteps = xform.OptimizeSteps(i)
@@ -118,6 +122,9 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags) (string, error) {
 		if i == 0 {
 			// Output starting tree.
 			buf.WriteString(next)
+			if verbose {
+				fmt.Print(next)
+			}
 		} else {
 			// Diffs can be equal if a part of the tree changed that does not
 			// affect the final best expression. In that case, just don't show
@@ -131,8 +138,12 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags) (string, error) {
 					Context:  100,
 				}
 
-				text, _ := difflib.GetUnifiedDiffString(diff)
-				buf.WriteString(strings.Trim(text, " \t\r\n") + "\n")
+				diffStr, _ := difflib.GetUnifiedDiffString(diff)
+				text := strings.Trim(diffStr, " \t\r\n") + "\n"
+				buf.WriteString(text)
+				if verbose {
+					fmt.Print(text)
+				}
 			}
 		}
 
@@ -143,6 +154,10 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags) (string, error) {
 	buf.WriteString("---\n")
 	buf.WriteString("+++\n")
 	buf.WriteString(next)
+	if verbose {
+		fmt.Printf("---\n+++\n%s", next)
+		fmt.Print("------ optsteps verbose output ends ------\n")
+	}
 
 	return buf.String(), nil
 }
