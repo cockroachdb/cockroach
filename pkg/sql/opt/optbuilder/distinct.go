@@ -38,19 +38,28 @@ func (b *Builder) buildDistinct(
 		return in, inScope
 	}
 
-	// After DISTINCT, FROM columns are no longer visible. As a side effect,
-	// ORDER BY cannot reference columns outside of the SELECT list. This
-	// will cause an error for queries like:
-	//   SELECT DISTINCT a FROM t ORDER BY b
-	// TODO(rytaft): This is not valid syntax in Postgres, but it works in
-	// CockroachDB, so we may need to support it eventually.
 	outScope = inScope.replace()
+	outScope.ordering = inScope.ordering
+	outScope.presentation = inScope.presentation
 
 	// Distinct is equivalent to group by without any aggregations.
 	var groupCols opt.ColSet
 	for i := range byCols {
-		groupCols.Add(int(byCols[i].id))
-		outScope.cols = append(outScope.cols, byCols[i])
+		if !byCols[i].hidden {
+			groupCols.Add(int(byCols[i].id))
+			outScope.cols = append(outScope.cols, byCols[i])
+		}
+	}
+
+	// Check that the ordering can be provided by the projected columns.
+	// This will cause an error for queries like:
+	//   SELECT DISTINCT a FROM t ORDER BY b
+	// TODO(rytaft): This is not valid syntax in Postgres, but it works in
+	// CockroachDB, so we may need to support it eventually.
+	for _, col := range outScope.ordering {
+		if !groupCols.Contains(int(col.ID())) {
+			panic(errorf("for SELECT DISTINCT, ORDER BY expressions must appear in select list"))
+		}
 	}
 
 	aggList := b.constructList(opt.AggregationsOp, nil, nil)

@@ -33,20 +33,19 @@ import (
 // The `c` column must be retained in the projection (and the presentation
 // property then omits it).
 //
-// buildOrderBy builds a projection combining the projected columns and
-// order by columns (only if it's not a "pass through" projection), and sets
-// the ordering and presentation properties on the output scope. These
-// properties later become part of the required physical properties returned
-// by Build.
+// buildOrderBy builds a list of projections combining the projected columns
+// and order by columns, and sets the ordering and presentation properties on
+// the output scope. These properties later become part of the required
+// physical properties returned by Build.
 func (b *Builder) buildOrderBy(
 	orderBy tree.OrderBy,
 	in memo.GroupID,
 	projections []memo.GroupID,
 	inScope,
 	projectionsScope *scope,
-) (out memo.GroupID, outScope *scope) {
+) (combinedProjections []memo.GroupID, combinedProjectionsScope *scope) {
 	if orderBy == nil {
-		return in, nil
+		return projections, projectionsScope
 	}
 
 	orderByScope := inScope.push()
@@ -62,11 +61,11 @@ func (b *Builder) buildOrderBy(
 		)
 	}
 
-	out, outScope = b.buildOrderByProject(
+	combinedProjections, combinedProjectionsScope = b.buildOrderByProject(
 		in, projections, orderByProjections, inScope, projectionsScope, orderByScope,
 	)
-	return out, outScope
 
+	return combinedProjections, combinedProjectionsScope
 }
 
 // buildOrdering sets up the projection(s) of a single ORDER BY argument.
@@ -156,46 +155,34 @@ func (b *Builder) buildOrdering(
 	return projections
 }
 
-// buildOrderByProject builds a projection that combines projected
+// buildOrderByProject builds a list of projections that combines projected
 // columns from a SELECT list and ORDER BY columns.
-// If the combined set of output columns matches the set of input columns,
-// buildOrderByProject simply returns the input -- it does not construct
-// a "pass through" projection.
 func (b *Builder) buildOrderByProject(
 	in memo.GroupID,
 	projections, orderByProjections []memo.GroupID,
 	inScope, projectionsScope, orderByScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	outScope = inScope.replace()
+) (combined []memo.GroupID, combinedScope *scope) {
+	combinedScope = inScope.replace()
 
-	outScope.cols = make([]columnProps, 0, len(projectionsScope.cols)+len(orderByScope.cols))
-	outScope.appendColumns(projectionsScope)
-	combined := make([]memo.GroupID, 0, len(projectionsScope.cols)+len(orderByScope.cols))
+	combinedScope.cols = make([]columnProps, 0, len(projectionsScope.cols)+len(orderByScope.cols))
+	combinedScope.appendColumns(projectionsScope)
+	combined = make([]memo.GroupID, 0, len(projectionsScope.cols)+len(orderByScope.cols))
 	combined = append(combined, projections...)
 
 	for i := range orderByScope.cols {
 		col := &orderByScope.cols[i]
 
 		// Only append order by columns that aren't already present.
-		if findColByIndex(outScope.cols, col.id) == nil {
-			outScope.cols = append(outScope.cols, *col)
-			outScope.cols[len(outScope.cols)-1].hidden = true
+		if findColByIndex(combinedScope.cols, col.id) == nil {
+			combinedScope.cols = append(combinedScope.cols, *col)
+			combinedScope.cols[len(combinedScope.cols)-1].hidden = true
 			combined = append(combined, orderByProjections[i])
 		}
 	}
 
-	outScope.ordering = orderByScope.ordering
-	outScope.presentation = makePresentation(projectionsScope.cols)
-
-	if outScope.hasSameColumns(inScope) {
-		// All order by and projection columns were already present, so no need to
-		// construct the projection expression.
-		return in, outScope
-	}
-
-	p := b.constructList(opt.ProjectionsOp, combined, outScope.cols)
-	out = b.factory.ConstructProject(in, p)
-	return out, outScope
+	combinedScope.ordering = orderByScope.ordering
+	combinedScope.presentation = makePresentation(projectionsScope.cols)
+	return combined, combinedScope
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {
