@@ -134,10 +134,10 @@ func errorf(format string, a ...interface{}) builderError {
 // buildPhysicalProps construct a set of required physical properties from the
 // given scope.
 func (b *Builder) buildPhysicalProps(scope *scope) *memo.PhysicalProps {
-	if scope.presentation == nil {
-		scope.presentation = makePresentation(scope.cols)
+	if scope.physicalProps.Presentation == nil {
+		scope.physicalProps.Presentation = makePresentation(scope.cols)
 	}
-	return &memo.PhysicalProps{Presentation: scope.presentation, Ordering: scope.ordering}
+	return &scope.physicalProps
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

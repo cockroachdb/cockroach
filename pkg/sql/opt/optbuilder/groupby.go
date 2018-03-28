@@ -146,7 +146,7 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
 //  - the group with the aggregation operator and the corresponding scope
 //  - post-projections with corresponding scope.
 func (b *Builder) buildAggregation(
-	sel *tree.SelectClause, fromGroup memo.GroupID, fromScope *scope,
+	sel *tree.SelectClause, orderBy tree.OrderBy, fromGroup memo.GroupID, fromScope *scope,
 ) (outGroup memo.GroupID, outScope *scope, projections []memo.GroupID, projectionsScope *scope) {
 	// We use two scopes:
 	//   - aggInScope contains columns that are used as input by the
@@ -202,6 +202,10 @@ func (b *Builder) buildAggregation(
 	// function that refers to variables in fromScope, buildAggregateFunction is
 	// called which adds columns to the aggInScope and aggOutScope.
 	projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
+
+	// Any additional columns or aggregates in the ORDER BY clause (if it exists)
+	// will be added here.
+	projections = b.buildOrderBy(orderBy, fromGroup, projections, fromScope, projectionsScope)
 
 	aggInfos := aggOutScope.groupby.aggs
 

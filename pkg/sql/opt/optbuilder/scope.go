@@ -33,12 +33,11 @@ import (
 //
 // See builder.go for more details.
 type scope struct {
-	builder      *Builder
-	parent       *scope
-	cols         []columnProps
-	groupby      groupby
-	ordering     memo.Ordering
-	presentation memo.Presentation
+	builder       *Builder
+	parent        *scope
+	cols          []columnProps
+	groupby       groupby
+	physicalProps memo.PhysicalProps
 
 	// Desired number of columns for subqueries found during name resolution and
 	// type checking. This only applies to the top-level subqueries that are
@@ -135,10 +134,14 @@ func (s *scope) resolveAndRequireType(
 
 // hasColumn returns true if the given column id is found within this scope.
 func (s *scope) hasColumn(id opt.ColumnID) bool {
-	for curr := s; curr != nil; curr = curr.parent {
+	// We only allow hidden columns in the current scope. Hidden columns
+	// in parent scopes are not accessible.
+	allowHidden := true
+
+	for curr := s; curr != nil; curr, allowHidden = curr.parent, false {
 		for i := range curr.cols {
 			col := &curr.cols[i]
-			if col.id == id {
+			if col.id == id && (allowHidden || !col.hidden) {
 				return true
 			}
 		}

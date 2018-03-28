@@ -825,17 +825,73 @@ sort
            └── function: count [type=int]
                 └── variable: kv.k [type=int]
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
 ----
-error: column name "k" not found
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: -5
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections
+      │         ├── variable: kv.v [type=int]
+      │         └── variable: kv.k [type=int]
+      └── aggregations
+           └── function: count [type=int]
+                └── variable: kv.k [type=int]
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
 ----
-error: column name "k" not found
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: +6
+ └── project
+      ├── columns: kv.v:2(int) column5:5(int) column6:6(int)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── function: count [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           ├── variable: kv.v [type=int]
+           ├── variable: column5 [type=int]
+           └── minus [type=int]
+                ├── variable: kv.v [type=int]
+                └── variable: column5 [type=int]
+
+build
+SELECT v FROM kv GROUP BY v ORDER BY SUM(k)
+----
+sort
+ ├── columns: v:2(int)
+ ├── ordering: +5
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(decimal)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections
+      │         ├── variable: kv.v [type=int]
+      │         └── variable: kv.k [type=int]
+      └── aggregations
+           └── function: sum [type=decimal]
+                └── variable: kv.k [type=int]
 
 build
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
@@ -1985,23 +2041,63 @@ project
            ├── variable: ab.b [type=int]
            └── variable: ab.a [type=int]
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 ----
-error: column name "k" not found
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: +5
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections
+      │         ├── variable: kv.v [type=int]
+      │         └── variable: kv.k [type=int]
+      └── aggregations
+           └── function: count [type=int]
+                └── variable: kv.k [type=int]
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 ----
-error: aggregate function is not allowed in this context
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: +5
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections
+      │         └── variable: kv.v [type=int]
+      └── aggregations
+           └── function: count_rows [type=int]
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
 SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 ----
-error: aggregate function is not allowed in this context
+sort
+ ├── columns: v:2(int) column6:6(int)
+ ├── ordering: +6
+ └── group-by
+      ├── columns: kv.v:2(int) column6:6(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections
+      │         ├── variable: kv.v [type=int]
+      │         └── const: 1 [type=int]
+      └── aggregations
+           └── function: count [type=int]
+                └── variable: column5 [type=int]
 
 build
 SELECT (k+v)/(v+w) FROM t.kv GROUP BY k+v, v+w;
