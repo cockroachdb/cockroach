@@ -1,0 +1,13 @@
+show_grants_stmt ::=
+	'SHOW' 'GRANTS' 'ON' 'ROLE' role_name ( ( ',' role_name ) )* 'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'ROLE' role_name ( ( ',' role_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'ROLE'  'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'ROLE'  
+	| 'SHOW' 'GRANTS' 'ON' table_name ( ( ',' table_name ) )* 'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' table_name ( ( ',' table_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'TABLE' table_name ( ( ',' table_name ) )* 'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'TABLE' table_name ( ( ',' table_name ) )* 
+	| 'SHOW' 'GRANTS' 'ON' 'DATABASE' database_name ( ( ',' database_name ) )* 'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' 'DATABASE' database_name ( ( ',' database_name ) )* 
+	| 'SHOW' 'GRANTS'  'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS'  
