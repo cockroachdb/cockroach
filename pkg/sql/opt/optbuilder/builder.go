@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -54,7 +54,7 @@ type Builder struct {
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
 
-	factory *xform.Factory
+	factory *norm.Factory
 	stmt    tree.Statement
 
 	ctx     context.Context
@@ -73,7 +73,7 @@ func New(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	catalog opt.Catalog,
-	factory *xform.Factory,
+	factory *norm.Factory,
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -74,14 +75,14 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
 func (e *OptTester) OptBuild() (memo.ExprView, error) {
-	return e.optimizeExpr(xform.OptimizeNone)
+	return e.optimizeExpr(false /* allowOptimizations */)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
 func (e *OptTester) Optimize() (memo.ExprView, error) {
-	return e.optimizeExpr(xform.OptimizeAll)
+	return e.optimizeExpr(true /* allowOptimizations */)
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -120,14 +121,26 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 	}
 	for i := 0; ; i++ {
 		o := xform.NewOptimizer(&e.evalCtx)
-		o.MaxSteps = xform.OptimizeSteps(i)
+
+		// Override SetOnRuleMatch to stop optimizing after the ith rule matches.
+		steps := i
+		lastRuleName := opt.InvalidRuleName
+		o.SetOnRuleMatch(func(ruleName opt.RuleName) bool {
+			if steps == 0 {
+				return false
+			}
+			steps--
+			lastRuleName = ruleName
+			return true
+		})
+
 		root, required, err := e.buildExpr(o.Factory())
 		if err != nil {
 			return "", err
 		}
 
 		next = o.Optimize(root, required).FormatString(fmtFlags)
-		if o.MaxSteps != 0 {
+		if steps != 0 {
 			// All steps were not used, so must be done.
 			break
 		}
@@ -137,7 +150,7 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 			// Output starting tree.
 			indent(next)
 		} else {
-			output("\n*** %s applied; ", o.LastRuleName())
+			output("\n*** %s applied; ", lastRuleName.String())
 
 			if prev == next {
 				// The expression can be unchanged if a part of the memo changed that
@@ -210,7 +223,7 @@ func (e *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Dat
 }
 
 func (e *OptTester) buildExpr(
-	factory *xform.Factory,
+	factory *norm.Factory,
 ) (root memo.GroupID, required *memo.PhysicalProps, _ error) {
 	stmt, err := parser.ParseOne(e.sql)
 	if err != nil {
@@ -222,9 +235,11 @@ func (e *OptTester) buildExpr(
 	return b.Build()
 }
 
-func (e *OptTester) optimizeExpr(maxSteps xform.OptimizeSteps) (memo.ExprView, error) {
+func (e *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error) {
 	o := xform.NewOptimizer(&e.evalCtx)
-	o.MaxSteps = maxSteps
+	if !allowOptimizations {
+		o.DisableOptimizations()
+	}
 	root, required, err := e.buildExpr(o.Factory())
 	if err != nil {
 		return memo.ExprView{}, err

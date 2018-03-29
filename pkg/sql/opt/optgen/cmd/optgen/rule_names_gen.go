@@ -33,7 +33,7 @@ func (g *ruleNamesGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w = w
 	g.unique = make(map[lang.StringExpr]struct{})
 
-	fmt.Fprintf(g.w, "package xform\n\n")
+	fmt.Fprintf(g.w, "package opt\n\n")
 
 	fmt.Fprintf(g.w, "const (\n")
 	fmt.Fprintf(g.w, "  startAutoRule RuleName = iota + NumManualRuleNames\n\n")

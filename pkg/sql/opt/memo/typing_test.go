@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -31,9 +31,7 @@ func TestTyping(t *testing.T) {
 
 func TestTypingJson(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	o := xform.NewOptimizer(&evalCtx)
-	o.MaxSteps = xform.OptimizeNone
-	f := o.Factory()
+	f := norm.NewFactory(&evalCtx)
 
 	// (Const <json>)
 	json, _ := tree.ParseDJSON("[1, 2]")
@@ -47,22 +45,22 @@ func TestTypingJson(t *testing.T) {
 
 	// (FetchVal (Const <json>) (Const <int>))
 	fetchValGroup := f.ConstructFetchVal(jsonGroup, intGroup)
-	ev := o.Optimize(fetchValGroup, &memo.PhysicalProps{})
+	ev := memo.MakeNormExprView(f.Memo(), fetchValGroup)
 	testTyping(t, ev, types.JSON)
 
 	// (FetchValPath (Const <json>) (Const <string-array>))
 	fetchValPathGroup := f.ConstructFetchValPath(jsonGroup, arrGroup)
-	ev = o.Optimize(fetchValPathGroup, &memo.PhysicalProps{})
+	ev = memo.MakeNormExprView(f.Memo(), fetchValPathGroup)
 	testTyping(t, ev, types.JSON)
 
 	// (FetchText (Const <json>) (Const <int>))
 	fetchTextGroup := f.ConstructFetchText(jsonGroup, intGroup)
-	ev = o.Optimize(fetchTextGroup, &memo.PhysicalProps{})
+	ev = memo.MakeNormExprView(f.Memo(), fetchTextGroup)
 	testTyping(t, ev, types.String)
 
 	// (FetchTextPath (Const <json>) (Const <string-array>))
 	fetchTextPathGroup := f.ConstructFetchTextPath(jsonGroup, arrGroup)
-	ev = o.Optimize(fetchTextPathGroup, &memo.PhysicalProps{})
+	ev = memo.MakeNormExprView(f.Memo(), fetchTextPathGroup)
 	testTyping(t, ev, types.String)
 }
 
