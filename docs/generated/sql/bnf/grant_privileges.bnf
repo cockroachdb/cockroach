@@ -1,0 +1,4 @@
+grant_stmt ::=
+	'GRANT' ( 'ALL' | ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) ) 'ON' ( ( ( table_name ) ( ( ',' table_name ) )* ) | 'TABLE' ( ( table_name ) ( ( ',' table_name ) )* ) | 'DATABASE' ( ( database_name ) ( ( ',' database_name ) )* ) ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )
+	
+	 
