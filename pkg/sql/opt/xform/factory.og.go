@@ -5032,6 +5032,25 @@ func (_f *Factory) ConstructWhen(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_whenExpr)))
 }
 
+// ConstructArray constructs an expression for the Array operator.
+// Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+func (_f *Factory) ConstructArray(
+	elems memo.ListID,
+	typ memo.PrivateID,
+) memo.GroupID {
+	_arrayExpr := memo.MakeArrayExpr(elems, typ)
+	_group := _f.mem.GroupByFingerprint(_arrayExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.o.allowOptimizations() {
+		return _f.mem.MemoizeNormExpr(memo.Expr(_arrayExpr))
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_arrayExpr)))
+}
+
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 // arguments. The private field is an opt.FuncOpDef struct that provides the
@@ -5548,6 +5567,11 @@ func init() {
 	// WhenOp
 	dynConstructLookup[opt.WhenOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
 		return f.ConstructWhen(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// ArrayOp
+	dynConstructLookup[opt.ArrayOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructArray(operands[0].ListID(), memo.PrivateID(operands[1]))
 	}
 
 	// FunctionOp

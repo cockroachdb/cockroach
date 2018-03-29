@@ -764,7 +764,7 @@ error: column name "z" not found
 build
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
 ----
-error: not yet implemented: scalar expr: *tree.Array
+error: UNION types int[] and string[] cannot be matched
 
 exec-ddl
 CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)
