@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Linq;
 using Npgsql;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
@@ -19,6 +20,7 @@ namespace CockroachDrivers
             // Npgsql needs to connect to a database that already exists.
             connStringBuilder.Database = "system";
             Simple(connStringBuilder.ConnectionString);
+            ArrayTest(connStringBuilder.ConnectionString);
             TxnSample(connStringBuilder.ConnectionString);
             UnitTest(connStringBuilder.ConnectionString);
         }
@@ -399,6 +401,33 @@ namespace CockroachDrivers
                         throw new DataException(String.Format("INSERT reports {0} rows changed, expecting 1", rows));
                     }
                 }
+            }
+        }
+
+        static void ArrayTest(string connString)
+        {
+            using (var conn = new NpgsqlConnection(connString))
+            {
+                conn.ProvideClientCertificatesCallback += new ProvideClientCertificatesCallback(ProvideClientCertificatesCallback);
+                conn.Open();
+
+                new NpgsqlCommand("CREATE DATABASE IF NOT EXISTS test", conn).ExecuteNonQuery();
+                new NpgsqlCommand("CREATE TABLE IF NOT EXISTS test.arrays (a INT[])", conn).ExecuteNonQuery();
+                using (var cmd = new NpgsqlCommand())
+                {
+                    cmd.Connection = conn;
+                    cmd.CommandText = "INSERT INTO test.arrays(a) VALUES(@val)";
+                    cmd.Parameters.AddWithValue("val", new int[] {1, 2, 3});
+                    cmd.ExecuteNonQuery();
+                }
+                using (var cmd = new NpgsqlCommand("SELECT a FROM test.arrays", conn))
+                using (var reader = cmd.ExecuteReader())
+                    while (reader.Read()) {
+                      var ary = reader["a"] as long[];
+                      if (!ary.SequenceEqual(new long[] {1, 2, 3})) {
+                        throw new DataException(String.Format("Expected result to be [1, 2, 3], was {0}", String.Join(", ", ary)));
+                      }
+                    }
             }
         }
     }
