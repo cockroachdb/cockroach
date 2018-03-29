@@ -58,13 +58,29 @@ func SetAbortSpan(
 	txn enginepb.TxnMeta,
 	poison bool,
 ) error {
+	// Read the current state of the AbortSpan so we can detect when
+	// no changes are needed. This can help us avoid unnecessary Raft
+	// proposals.
+	var curEntry roachpb.AbortSpanEntry
+	exists, err := rec.AbortSpan().Get(ctx, batch, txn.ID, &curEntry)
+	if err != nil {
+		return err
+	}
+
 	if !poison {
+		if !exists {
+			return nil
+		}
 		return rec.AbortSpan().Del(ctx, batch, ms, txn.ID)
 	}
+
 	entry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
 		Priority:  txn.Priority,
+	}
+	if exists && curEntry.Equal(entry) {
+		return nil
 	}
 	return rec.AbortSpan().Put(ctx, batch, ms, txn.ID, &entry)
 }
