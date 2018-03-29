@@ -354,6 +354,11 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
+		name:    "alter_user_stmt",
+		inline:  []string{"alter_user_password_stmt"},
+		replace: map[string]string{"'USER' string_or_placeholder": "name", "'PASSWORD' string_or_placeholder": "password"},
+	},
+	{
 		name:    "alter_sequence_options_stmt",
 		inline:  []string{"sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer"},
@@ -466,7 +471,14 @@ var specs = []stmtSpec{
 		name:   "create_view_stmt",
 		inline: []string{"opt_column_list"},
 	},
-	{name: "create_user_stmt",
+	{
+		name: "create_role_stmt",
+		replace: map[string]string{
+			"string_or_placeholder": "name",
+		},
+	},
+	{
+		name:   "create_user_stmt",
 		inline: []string{"opt_with", "opt_password"},
 		replace: map[string]string{
 			"'PASSWORD' string_or_placeholder": "'PASSWORD' password",
@@ -552,6 +564,10 @@ var specs = []stmtSpec{
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"}, unlink: []string{"table_name", "index_name"},
 	},
 	{
+		name:    "drop_role_stmt",
+		replace: map[string]string{"string_or_placeholder_list": "name"},
+	},
+	{
 		name:   "drop_sequence_stmt",
 		inline: []string{"table_name_list", "opt_drop_behavior"},
 		unlink: []string{"sequence_name"},
@@ -618,8 +634,8 @@ var specs = []stmtSpec{
 	{
 		name:    "grant_stmt",
 		inline:  []string{"privileges", "privilege_list", "privilege", "targets", "table_pattern_list", "name_list"},
-		replace: map[string]string{"table_pattern": "table_name", "'DATABASE' ( name ( ',' name )* )": "'DATABASE' ( database_name ( ',' database_name )* )", "'TO' ( name ( ',' name )* )": "'TO' ( user_name ( ',' user_name )* )"},
-		unlink:  []string{"table_name", "database_name", "user_name"},
+		replace: map[string]string{"table_pattern": "table_name", "'DATABASE' ( name ( ',' name )* )": "'DATABASE' ( database_name ( ',' database_name )* )"},
+		unlink:  []string{"table_name", "database_name"},
 		nosplit: true,
 	},
 	{
@@ -834,16 +850,10 @@ var specs = []stmtSpec{
 		unlink:  []string{"location"},
 	},
 	{
-		name:   "show_grants",
-		stmt:   "show_stmt",
-		inline: []string{"on_privilege_target_clause", "targets", "for_grantee_clause", "table_pattern_list", "name_list"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'SHOW' 'GRANTS'")},
-		replace: map[string]string{
-			"table_pattern":                 "table_name",
-			"'DATABASE' name ( ',' name )*": "'DATABASE' database_name ( ',' database_name )*",
-			"'FOR' name ( ',' name )*":      "'FOR' user_name ( ',' user_name )*",
-		},
-		unlink: []string{"table_name", "database_name", "user_name"},
+		name:    "show_grants_stmt",
+		inline:  []string{"opt_name_list", "name_list", "on_privilege_target_clause", "targets", "table_pattern_list", "for_grantee_clause", "name_list"},
+		replace: map[string]string{"'ROLE' name ( ( ',' name ) )*": "'ROLE' role_name ( ( ',' role_name ) )*", "table_pattern": "table_name", "'DATABASE' name ( ( ',' name ) )*": "'DATABASE' database_name ( ( ',' database_name ) )*", "'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*"},
+		unlink:  []string{"role_name", "table_name", "database_name", "user_name"},
 	},
 	{
 		name:    "show_index",
@@ -864,6 +874,9 @@ var specs = []stmtSpec{
 	{
 		name: "show_queries",
 		stmt: "show_queries_stmt",
+	},
+	{
+		name: "show_roles_stmt",
 	},
 	{
 		name: "show_schemas",
