@@ -171,6 +171,8 @@ func StringToColType(s string) (coltypes.T, error) {
 		return coltypes.Date, nil
 	case "TIME":
 		return coltypes.Time, nil
+	case "TIMETZ", "TIME WITH TIME ZONE":
+		return coltypes.TimeTZ, nil
 	case "STRING":
 		return coltypes.String, nil
 	case "NAME":
