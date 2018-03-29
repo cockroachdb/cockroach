@@ -86,11 +86,11 @@ func (p *planner) Update(
 	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		// Analyze the sub-query nodes.
-		newExpr, err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
+		err := p.analyzeSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
-		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
+		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: expr.Expr, Names: expr.Names}
 	}
 
 	// Determine which columns we're inserting into.
