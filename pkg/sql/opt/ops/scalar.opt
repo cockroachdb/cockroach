@@ -467,6 +467,13 @@ define When {
     Value     Expr
 }
 
+# Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+[Scalar]
+define Array {
+    Elems ExprList
+    Typ   Type
+}
+
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 # arguments. The private field is a *opt.FuncOpDef struct that provides the
 # name of the function as well as a pointer to the builtin overload definition.

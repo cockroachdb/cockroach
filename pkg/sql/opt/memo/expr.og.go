@@ -96,6 +96,7 @@ var opLayoutTable = [...]opLayout{
 	opt.CastOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 2 /*priv*/),
 	opt.CaseOp:            makeOpLayout(1 /*base*/, 2 /*list*/, 0 /*priv*/),
 	opt.WhenOp:            makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.ArrayOp:           makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/),
 	opt.FunctionOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/),
 	opt.CoalesceOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/),
 	opt.UnsupportedExprOp: makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
@@ -190,6 +191,7 @@ var isEnforcerLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -284,6 +286,7 @@ var isRelationalLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -378,6 +381,7 @@ var isJoinLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -472,6 +476,7 @@ var isJoinApplyLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -566,6 +571,7 @@ var isScalarLookup = [...]bool{
 	opt.CastOp:            true,
 	opt.CaseOp:            true,
 	opt.WhenOp:            true,
+	opt.ArrayOp:           true,
 	opt.FunctionOp:        true,
 	opt.CoalesceOp:        true,
 	opt.UnsupportedExprOp: true,
@@ -660,6 +666,7 @@ var isConstValueLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -754,6 +761,7 @@ var isBooleanLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -848,6 +856,7 @@ var isComparisonLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -942,6 +951,7 @@ var isBinaryLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -1036,6 +1046,7 @@ var isUnaryLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -3490,6 +3501,32 @@ func (e *Expr) AsWhen() *WhenExpr {
 		return nil
 	}
 	return (*WhenExpr)(e)
+}
+
+// ArrayExpr is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+type ArrayExpr Expr
+
+func MakeArrayExpr(elems ListID, typ PrivateID) ArrayExpr {
+	return ArrayExpr{op: opt.ArrayOp, state: exprState{elems.Offset, elems.Length, uint32(typ)}}
+}
+
+func (e *ArrayExpr) Elems() ListID {
+	return ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *ArrayExpr) Typ() PrivateID {
+	return PrivateID(e.state[2])
+}
+
+func (e *ArrayExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsArray() *ArrayExpr {
+	if e.op != opt.ArrayOp {
+		return nil
+	}
+	return (*ArrayExpr)(e)
 }
 
 // FunctionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given

@@ -452,3 +452,12 @@ render     0  render  ·         ·                                             
  └── scan  1  scan    ·         ·                                              (a, b, d)  ·
 ·          1  ·       table     t@primary                                      ·          ·
 ·          1  ·       spans     ALL                                            ·          ·
+
+exec-explain
+SELECT ARRAY[a + 1, 2, 3] FROM t.t
+----
+render     0  render  ·         ·                   (column8)  ·
+ │         0  ·       render 0  ARRAY[a + 1, 2, 3]  ·          ·
+ └── scan  1  scan    ·         ·                   (a)        ·
+·          1  ·       table     t@primary           ·          ·
+·          1  ·       spans     ALL                 ·          ·

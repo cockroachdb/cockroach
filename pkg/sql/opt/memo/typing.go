@@ -100,6 +100,7 @@ func init() {
 		opt.WhenOp:            typeWhen,
 		opt.CastOp:            typeAsPrivate,
 		opt.SubqueryOp:        typeSubquery,
+		opt.ArrayOp:           typeAsPrivate,
 	}
 
 	for _, op := range opt.BooleanOperators {

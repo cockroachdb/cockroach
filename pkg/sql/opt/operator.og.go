@@ -432,6 +432,9 @@ const (
 	// a raw expression for the ELSE statement).
 	WhenOp
 
+	// ArrayOp is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+	ArrayOp
+
 	// FunctionOp invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is a *opt.FuncOpDef struct that provides the
 	// name of the function as well as a pointer to the builtin overload definition.
@@ -447,9 +450,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetmax1-rowsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetmax1-rowsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenarrayfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 272, 280, 285, 289, 293, 298, 309, 314, 325, 337, 343, 350, 353, 355, 358, 360, 362, 364, 366, 368, 370, 372, 378, 382, 390, 396, 406, 416, 430, 439, 452, 463, 478, 480, 486, 494, 500, 505, 511, 515, 520, 524, 527, 536, 539, 542, 548, 555, 562, 571, 581, 595, 610, 621, 637, 641, 645, 649, 657, 665, 681}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 272, 280, 285, 289, 293, 298, 309, 314, 325, 337, 343, 350, 353, 355, 358, 360, 362, 364, 366, 368, 370, 372, 378, 382, 390, 396, 406, 416, 430, 439, 452, 463, 478, 480, 486, 494, 500, 505, 511, 515, 520, 524, 527, 536, 539, 542, 548, 555, 562, 571, 581, 595, 610, 621, 637, 641, 645, 649, 654, 662, 670, 686}
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
@@ -568,6 +571,7 @@ var ScalarOperators = [...]Operator{
 	CastOp,
 	CaseOp,
 	WhenOp,
+	ArrayOp,
 	FunctionOp,
 	CoalesceOp,
 	UnsupportedExprOp,

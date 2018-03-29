@@ -280,6 +280,11 @@ SELECT kv.*[1] FROM kv
 error: cannot subscript type tuple{string, string} because it is not an array
 
 build
+SELECT ARRAY[]
+----
+error: cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY[]:::int[]
+
+build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
