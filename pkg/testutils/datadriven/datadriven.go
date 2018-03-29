@@ -144,9 +144,9 @@ func (arg *CmdArg) String() string {
 
 // Fatalf wraps a fatal testing error with test file position information, so
 // that it's easy to locate the source of the error.
-func (td TestData) Fatalf(t *testing.T, format string, args ...interface{}) {
-	t.Helper()
-	t.Fatalf("%s: %s", td.Pos, fmt.Sprintf(format, args...))
+func (td TestData) Fatalf(tb testing.TB, format string, args ...interface{}) {
+	tb.Helper()
+	tb.Fatalf("%s: %s", td.Pos, fmt.Sprintf(format, args...))
 }
 
 func hasBlankLine(s string) bool {
