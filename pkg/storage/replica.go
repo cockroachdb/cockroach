@@ -2925,45 +2925,74 @@ func (r *Replica) requestToProposal(
 //
 // If an *Error is returned, the proposal should fail fast, i.e. be
 // sent directly back to the client without going through Raft, but
-// while still handling LocalEvalResult. Note that even if this method
-// returns a nil error, the command could still return an error to the
-// client, but only after going through raft (e.g. to lay down
-// intents).
+// while still handling LocalEvalResult.
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*result.Result, *roachpb.Error) {
-	// Note that we don't hold any locks at this point. This is important
-	// since evaluating a proposal is expensive (at least under proposer-
-	// evaluated KV).
-	var res result.Result
-
 	if ba.Timestamp == (hlc.Timestamp{}) {
 		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
-	res = r.evaluateProposalInner(ctx, idKey, ba, spans)
+	// Evaluate the commands. If this returns without an error, the batch should
+	// be committed. Note that we don't hold any locks at this point. This is
+	// important since evaluating a proposal is expensive.
+	// TODO(tschottdorf): absorb all returned values in `res` below this point
+	// in the call stack as well.
+	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, spans)
 
-	if res.Local.Err != nil {
-		// Failed proposals (whether they're failfast or not) can't have any
-		// Result except what's whitelisted here.
+	// Note: reusing the proposer's batch when applying the command on the
+	// proposer was explored as an optimization but resulted in no performance
+	// benefit.
+	defer batch.Close()
+
+	if pErr != nil {
+		pErr = r.maybeSetCorrupt(ctx, pErr)
+
+		// Restore the original txn's Writing bool if the error specifies
+		// a transaction.
+		if txn := pErr.GetTxn(); txn != nil {
+			if ba.Txn == nil {
+				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
+			}
+			if txn.ID == ba.Txn.ID {
+				txn.Writing = ba.Txn.Writing
+			}
+		}
+
+		// Failed proposals can't have any Result except for what's
+		// whitelisted here.
 		intents := res.Local.DetachIntents()
 		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
 			Intents:            &intents,
 			EndTxns:            &endTxns,
-			Err:                r.maybeSetCorrupt(ctx, res.Local.Err),
 			LeaseMetricsResult: res.Local.LeaseMetricsResult,
 		}
-		if res.WriteBatch == nil {
-			res.Replicated.Reset()
-		}
+		res.Replicated.Reset()
+		return &res, pErr
 	}
 
+	// Set the local reply, which is held only on the proposing replica and is
+	// returned to the client after the proposal completes.
+	res.Local.Reply = br
+
+	// Set the proposal's WriteBatch, which is the serialized representation of
+	// the proposals effect on RocksDB.
+	res.WriteBatch = &storagebase.WriteBatch{
+		Data: batch.Repr(),
+	}
+
+	// Set the proposal's replicated result, which contains metadata and
+	// side-effects that are to be replicated to all replicas.
 	res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 	res.Replicated.Timestamp = ba.Timestamp
-
+	if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
+		res.Replicated.Delta = ms.ToNetworkStats()
+	} else {
+		res.Replicated.DeprecatedDelta = &ms
+	}
 	// If the cluster version is and always will be VersionNoRaftProposalKeys or
 	// greater, we don't need to send the key range through Raft. This decision
 	// is based on the minimum supported version and not the active version
@@ -2978,15 +3007,6 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.DeprecatedEndKey = rSpan.EndKey
 	}
 
-	if res.WriteBatch == nil {
-		if res.Local.Err == nil {
-			log.Fatalf(ctx, "proposal must fail fast with an error: %+v", ba)
-		}
-		return &res, res.Local.Err
-	}
-
-	// If there is an error, it will be returned to the client when the
-	// proposal (and thus WriteBatch) applies.
 	return &res, nil
 }
 
@@ -4849,10 +4869,6 @@ func (r *Replica) processRaftCommand(
 				// for instance due to its log position) or the Replica is now
 				// corrupted.
 				response.Err = pErr
-			} else if proposal.Local.Err != nil {
-				// Everything went as expected, but this proposal should return
-				// an error to the client.
-				response.Err = proposal.Local.Err
 			} else if proposal.Local.Reply != nil {
 				response.Reply = proposal.Local.Reply
 			} else {
@@ -5119,83 +5135,6 @@ func (r *Replica) applyRaftCommand(
 	return deltaStats, nil
 }
 
-// evaluateProposalInner executes the command in a batch engine and returns
-// the batch containing the results. If the return value contains a non-nil
-// WriteBatch, the caller should go ahead with the proposal (eventually
-// committing the data contained in the batch), even when the Err field is set
-// (which is then the result sent to the client).
-//
-// TODO(tschottdorf): the setting of WriteTooOld does not work. With
-// proposer-evaluated KV, TestStoreResolveWriteIntentPushOnRead fails in the
-// SNAPSHOT case since the transactional write in that test *always* catches
-// a WriteTooOldError. With proposer-evaluated KV disabled the same happens,
-// but the resulting WriteTooOld flag on the transaction is lost, letting the
-// test pass erroneously.
-//
-// TODO(bdarnell): merge evaluateProposal and evaluateProposalInner. There
-// is no longer a clear distinction between them.
-func (r *Replica) evaluateProposalInner(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
-) result.Result {
-	// Keep track of original txn Writing state to sanitize txn
-	// reported with any error except TransactionRetryError.
-	wasWriting := ba.Txn != nil && ba.Txn.Writing
-
-	// Evaluate the commands. If this returns without an error, the batch should
-	// be committed.
-	var result result.Result
-	var batch engine.Batch
-	{
-		// TODO(tschottdorf): absorb all returned values in `pd` below this point
-		// in the call stack as well.
-		var pErr *roachpb.Error
-		var ms enginepb.MVCCStats
-		var br *roachpb.BatchResponse
-		batch, ms, br, result, pErr = r.evaluateWriteBatch(ctx, idKey, ba, spans)
-		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			result.Replicated.Delta = ms.ToNetworkStats()
-		} else {
-			result.Replicated.DeprecatedDelta = &ms
-		}
-		result.Local.Reply = br
-		result.Local.Err = pErr
-		if batch == nil {
-			return result
-		}
-	}
-
-	if result.Local.Err != nil && ba.IsWrite() {
-		// TODO(tschottdorf): make `nil` acceptable. Corresponds to
-		// roachpb.Response{With->Or}Error.
-		result.Local.Reply = &roachpb.BatchResponse{}
-		// Reset the batch to clear out partial execution. Don't set
-		// a WriteBatch to signal to the caller that we fail-fast this
-		// proposal.
-		batch.Close()
-		batch = nil
-		// Restore the original txn's Writing bool if the error specifies a
-		// transaction.
-		if txn := result.Local.Err.GetTxn(); txn != nil {
-			if ba.Txn == nil {
-				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
-			}
-			if txn.ID == ba.Txn.ID {
-				txn.Writing = wasWriting
-			}
-		}
-		return result
-	}
-
-	result.WriteBatch = &storagebase.WriteBatch{
-		Data: batch.Repr(),
-	}
-	// Note: reusing the proposer's batch when applying the command on the
-	// proposer was explored as an optimization but resulted in no performance
-	// benefit.
-	batch.Close()
-	return result
-}
-
 // checkIfTxnAborted checks the txn AbortSpan for the given
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
@@ -5293,20 +5232,20 @@ func (r *Replica) evaluateWriteBatch(
 			return batch, ms, br, res, nil
 		}
 
-		batch.Close()
 		ms = enginepb.MVCCStats{}
 
 		// Handle the case of a required one phase commit transaction.
 		if etArg.Require1PC {
 			if pErr != nil {
-				return nil, ms, nil, result.Result{}, pErr
+				return batch, ms, nil, result.Result{}, pErr
 			} else if ba.Timestamp != br.Timestamp {
 				err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
-				return nil, ms, nil, result.Result{}, roachpb.NewError(err)
+				return batch, ms, nil, result.Result{}, roachpb.NewError(err)
 			}
 			log.Fatal(ctx, "unreachable")
 		}
 
+		batch.Close()
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
 	}
 
