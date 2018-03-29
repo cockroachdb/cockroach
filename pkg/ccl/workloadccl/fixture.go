@@ -263,9 +263,12 @@ func csvServerPaths(
 	// files also means larger jobs table entries, so this is a balance. The
 	// IMPORT code round-robins the files in an import per node, so it's best to
 	// have some integer multiple of the number of nodes in the cluster, which
-	// will guarantee that the work is balanced across the cluster.
-	numFiles := numNodes * 10
-	rowStep := table.InitialRows.NumBatches / (numFiles)
+	// will guarantee that the work is balanced across the cluster. In practice,
+	// even as few as 100 files caused jobs badness when creating tpcc fixtures,
+	// so our "integer multiple" is picked to be 1 to minimize this effect. Too
+	// bad about the progress tracking granularity.
+	numFiles := numNodes
+	rowStep := table.InitialRows.NumBatches / numFiles
 	if rowStep == 0 {
 		rowStep = 1
 	}
