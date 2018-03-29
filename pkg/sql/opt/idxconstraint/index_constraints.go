@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -149,7 +149,7 @@ func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
 func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	offset int, op opt.Operator, val memo.ExprView, out *constraint.Constraint,
 ) (tight bool) {
-	if op == opt.InOp && xform.MatchesTupleOfConstants(val) {
+	if op == opt.InOp && norm.MatchesTupleOfConstants(val) {
 		keyCtx := &c.keyCtx[offset]
 		var spans constraint.Spans
 		spans.Alloc(val.ChildCount())
@@ -987,7 +987,7 @@ func (ic *Instance) Init(
 	notNullCols opt.ColSet,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
-	factory *xform.Factory,
+	factory *norm.Factory,
 ) {
 	ic.filter = filter
 	ic.indexConstraintCtx.init(columns, notNullCols, isInverted, evalCtx, factory)
@@ -1059,7 +1059,7 @@ type indexConstraintCtx struct {
 	// We pre-initialize the KeyContext for each suffix of the index columns.
 	keyCtx []constraint.KeyContext
 
-	factory *xform.Factory
+	factory *norm.Factory
 }
 
 func (c *indexConstraintCtx) init(
@@ -1067,7 +1067,7 @@ func (c *indexConstraintCtx) init(
 	notNullCols opt.ColSet,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
-	factory *xform.Factory,
+	factory *norm.Factory,
 ) {
 	if isInverted && len(columns) > 1 {
 		panic(fmt.Sprintf("inverted index on multiple columns"))

@@ -12,7 +12,9 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
+
+//go:generate optgen -out rule_name.og.go rulenames ops/*.opt norm/rules/*.opt xform/rules/*.opt
 
 //go:generate stringer -output=rule_name_string.go -type=RuleName rule_name.go rule_name.og.go
 
@@ -23,7 +25,7 @@ type RuleName uint32
 
 // Enumeration of all manual rule names.
 const (
-	Invalid RuleName = iota
+	InvalidRuleName RuleName = iota
 
 	// ------------------------------------------------------------
 	// Manual Rule Names
@@ -34,5 +36,5 @@ const (
 )
 
 // Make linter happy.
-var _ = Invalid
+var _ = InvalidRuleName
 var _ = NumManualRuleNames

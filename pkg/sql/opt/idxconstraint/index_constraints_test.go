@@ -28,9 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -96,8 +96,8 @@ func TestIndexConstraints(t *testing.T) {
 				var invertedIndex bool
 				var normalizeTypedExpr bool
 
-				o := xform.NewOptimizer(&evalCtx)
-				md := o.Memo().Metadata()
+				f := norm.NewFactory(&evalCtx)
+				md := f.Metadata()
 
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
@@ -127,7 +127,7 @@ func TestIndexConstraints(t *testing.T) {
 						}
 
 					case "nonormalize":
-						o.MaxSteps = xform.OptimizeNone
+						f.DisableOptimizations()
 
 					case "semtree-normalize":
 						normalizeTypedExpr = true
@@ -155,23 +155,23 @@ func TestIndexConstraints(t *testing.T) {
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
+					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
-					ev := o.Optimize(group, &memo.PhysicalProps{})
+					ev := memo.MakeNormExprView(f.Memo(), group)
 
 					var ic Instance
-					ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, o.Factory())
+					ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
 					result := ic.Constraint()
 					var buf bytes.Buffer
 					for i := 0; i < result.Spans.Count(); i++ {
 						fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
 					}
 					remainingFilter := ic.RemainingFilter()
-					remEv := o.Optimize(remainingFilter, &memo.PhysicalProps{})
+					remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
 					if remEv.Operator() != opt.TrueOp {
 						execBld := execbuilder.New(nil /* execFactory */, remEv)
 						expr := execBld.BuildScalar(&iVarHelper)
@@ -248,8 +248,8 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			o := xform.NewOptimizer(nil /* catalog */)
-			md := o.Memo().Metadata()
+			f := norm.NewFactory(nil /* evalCtx */)
+			md := f.Metadata()
 			for i, typ := range varTypes {
 				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
 			}
@@ -263,17 +263,17 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
+			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, f)
 
 			group, err := bld.Build(typedExpr)
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := o.Optimize(group, &memo.PhysicalProps{})
+			ev := memo.MakeNormExprView(f.Memo(), group)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic Instance
-				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, o.Factory())
+				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, f)
 				_ = ic.Constraint()
 				_ = ic.RemainingFilter()
 			}

@@ -215,7 +215,7 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 
 		opt := xform.NewOptimizer(&evalCtx)
 		if bmType == optbuild {
-			opt.MaxSteps = xform.OptimizeNone
+			opt.DisableOptimizations()
 		}
 		bld := optbuilder.New(ctx, &semaCtx, &evalCtx, eng.Catalog(), opt.Factory(), stmt)
 		root, props, err := bld.Build()
