@@ -61,7 +61,7 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
-	command storagebase.RaftCommand
+	command *storagebase.RaftCommand
 
 	// endCmds.finish is called after command execution to update the timestamp cache &
 	// command queue.
@@ -71,7 +71,7 @@ type ProposalData struct {
 	// proposalResult come from LocalEvalResult).
 	//
 	// Attention: this channel is not to be signaled directly downstream of Raft.
-	// Always use ProposalData.finishRaftApplication().
+	// Always use ProposalData.finishApplication().
 	doneCh chan proposalResult
 
 	// Local contains the results of evaluating the request
@@ -90,9 +90,10 @@ type ProposalData struct {
 	Request *roachpb.BatchRequest
 }
 
-// finishRaftApplication is called downstream of Raft when a command application
-// has finished. proposal.doneCh is signaled with pr so that the proposer is
-// unblocked.
+// finishApplication is when a command application has finished. This will be
+// called downstream of Raft if the command required consensus, but can be
+// called upstream of Raft if the command did not and was never proposed.
+// proposal.doneCh is signaled with pr so that the proposer is unblocked.
 //
 // It first invokes the endCmds function and then sends the specified
 // proposalResult on the proposal's done channel. endCmds is invoked here in
@@ -106,7 +107,7 @@ type ProposalData struct {
 // encountered upstream of Raft, we might still want to resolve intents:
 // upstream of Raft, pr.intents represent intents encountered by a request, not
 // the current txn's intents.
-func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
+func (proposal *ProposalData) finishApplication(pr proposalResult) {
 	if proposal.endCmds != nil {
 		proposal.endCmds.done(pr.Reply, pr.Err, pr.ProposalRetry)
 		proposal.endCmds = nil
