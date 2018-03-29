@@ -43,6 +43,12 @@ type sorterBase struct {
 	// tempStorage is used to store rows when the working set is larger than can
 	// be stored in memory.
 	tempStorage engine.Engine
+
+	// meta stores metadata that the sorter has accumulated for pushing later.
+	meta []ProducerMetadata
+	// close is a callback provided by the sorter that is called the first time
+	// producerMeta is called.
+	close func()
 }
 
 func (s *sorterBase) init(
@@ -52,6 +58,7 @@ func (s *sorterBase) init(
 	output RowReceiver,
 	ordering sqlbase.ColumnOrdering,
 	matchLen uint32,
+	close func(),
 ) error {
 	count := int64(0)
 	if post.Limit != 0 {
@@ -66,9 +73,36 @@ func (s *sorterBase) init(
 	s.count = count
 	s.tempStorage = flowCtx.TempStorage
 	s.evalCtx = flowCtx.NewEvalCtx()
-	return s.processorBase.init(
-		post, input.OutputTypes(), flowCtx, s.evalCtx, output,
-	)
+	s.close = close
+	return s.processorBase.init(post, input.OutputTypes(), flowCtx, s.evalCtx, output)
+}
+
+// producerMeta constructs the ProducerMetadata after consumption of
+// rows has terminated, either due to being indicated by the consumer, or
+// because the processor ran out of rows or encountered an error. It is ok for
+// err to be nil indicating that we're done producing rows even though no error
+// occurred.
+func (s *sorterBase) producerMeta(err error) *ProducerMetadata {
+	if !s.closed {
+		var meta *ProducerMetadata
+		if err != nil {
+			meta = &ProducerMetadata{Err: err}
+			// We need to close as soon as we send error metadata as we're done
+			// sending rows. The consumer is allowed to not call ConsumerDone().
+		} else if trace := getTraceData(s.ctx); trace != nil {
+			meta = &ProducerMetadata{TraceData: trace}
+		}
+		s.close()
+		if meta != nil {
+			return meta
+		}
+	}
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
+		return meta
+	}
+	return nil
 }
 
 func newSorter(
@@ -124,11 +158,6 @@ type sortAllProcessor struct {
 	// to determine where to resume emitting rows.
 	i      rowIterator
 	closed bool
-
-	// sortAllProcessor first calls Next() on its input stream to completion before
-	// outputting a single row. Thus when it receives ProducerMetadata, it has to
-	// cache it and output the rows its received so far, before emitting that metadata.
-	meta []ProducerMetadata
 }
 
 var _ Processor = &sortAllProcessor{}
@@ -166,7 +195,7 @@ func newSortAllProcessor(
 	if err := proc.sorterBase.init(
 		flowCtx, input, post, out,
 		convertToColumnOrdering(spec.OutputOrdering),
-		spec.OrderingMatchLen,
+		spec.OrderingMatchLen, proc.close,
 	); err != nil {
 		return nil, err
 	}
@@ -330,33 +359,6 @@ func (s *sortAllProcessor) ConsumerClosed() {
 	s.close()
 }
 
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
-	if !s.closed {
-		var meta *ProducerMetadata
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-			// We need to close as soon as we send error metadata as we're done
-			// sending rows. The consumer is allowed to not call ConsumerDone().
-		} else if trace := getTraceData(s.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		s.close()
-		if meta != nil {
-			return meta
-		}
-	}
-	if len(s.meta) > 0 {
-		meta := &s.meta[0]
-		s.meta = s.meta[1:]
-		return meta
-	}
-	return nil
-}
-
 // sortTopKProcessor creates a max-heap in its wrapped rows and keeps
 // this heap populated with only the top k values seen. It accomplishes this
 // by comparing new values (before the deep copy) with the top of the heap.
@@ -382,8 +384,6 @@ type sortTopKProcessor struct {
 	rows            memRowContainer
 	rowContainerMon *mon.BytesMonitor
 	k               int64
-
-	meta []ProducerMetadata
 }
 
 var _ Processor = &sortTopKProcessor{}
@@ -406,7 +406,7 @@ func newSortTopKProcessor(
 	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
 	if err := proc.sorterBase.init(
 		flowCtx, input, post, out,
-		ordering, spec.OrderingMatchLen,
+		ordering, spec.OrderingMatchLen, proc.close,
 	); err != nil {
 		return nil, err
 	}
@@ -500,33 +500,6 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 	s.close()
 }
 
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
-	if !s.closed {
-		var meta *ProducerMetadata
-		if err != nil {
-			// We need to close as soon as we send error metadata as we're done
-			// sending rows. The consumer is allowed to not call ConsumerDone().
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(s.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		s.close()
-		if meta != nil {
-			return meta
-		}
-	}
-	if len(s.meta) > 0 {
-		meta := &s.meta[0]
-		s.meta = s.meta[1:]
-		return meta
-	}
-	return nil
-}
-
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
 type sortChunksProcessor struct {
@@ -540,7 +513,6 @@ type sortChunksProcessor struct {
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
 	prefix       sqlbase.EncDatumRow
 	nextChunkRow sqlbase.EncDatumRow
-	meta         []ProducerMetadata
 }
 
 var _ Processor = &sortChunksProcessor{}
@@ -557,7 +529,7 @@ func newSortChunksProcessor(
 	}
 	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
 	if err := proc.sorterBase.init(
-		flowCtx, input, post, out, ordering, spec.OrderingMatchLen,
+		flowCtx, input, post, out, ordering, spec.OrderingMatchLen, proc.close,
 	); err != nil {
 		return nil, err
 	}
@@ -690,31 +662,4 @@ func (s *sortChunksProcessor) ConsumerDone() {
 func (s *sortChunksProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	s.close()
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (s *sortChunksProcessor) producerMeta(err error) *ProducerMetadata {
-	if !s.closed {
-		var meta *ProducerMetadata
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-			// We need to close as soon as we send error metadata as we're done
-			// sending rows. The consumer is allowed to not call ConsumerDone().
-		} else if trace := getTraceData(s.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		s.close()
-		if meta != nil {
-			return meta
-		}
-	}
-	if len(s.meta) > 0 {
-		meta := &s.meta[0]
-		s.meta = s.meta[1:]
-		return meta
-	}
-	return nil
 }
