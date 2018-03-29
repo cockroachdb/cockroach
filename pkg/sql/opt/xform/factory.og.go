@@ -5117,10 +5117,10 @@ func (_f *Factory) ConstructArray(
 	}
 
 	if !_f.o.allowOptimizations() {
-		return _f.mem.MemoizeNormExpr(memo.Expr(_arrayExpr))
+		return _f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_arrayExpr))
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_arrayExpr)))
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_arrayExpr)))
 }
 
 // ConstructFunction constructs an expression for the Function operator.
