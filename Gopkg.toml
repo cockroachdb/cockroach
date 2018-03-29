@@ -22,6 +22,10 @@ ignored = [
   "github.com/google/protobuf/examples/tutorial",
 ]
 
+[[constraint]]
+  name = "github.com/google/pprof"
+  source = "https://github.com/tschottdorf/pprof"
+
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"
