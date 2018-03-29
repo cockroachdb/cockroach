@@ -150,10 +150,8 @@ func TestTableReader(t *testing.T) {
 					var res sqlbase.EncDatumRows
 					for {
 						row, meta := out.Next()
-						if meta != nil {
-							if meta.TxnMeta == nil {
-								t.Fatalf("unexpected metadata: %+v", meta)
-							}
+						if meta != nil && meta.TxnMeta == nil {
+							t.Fatalf("unexpected metadata: %+v", meta)
 						}
 						if row == nil {
 							break
@@ -315,7 +313,7 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 		for {
 			row, meta := tr.Next()
-			if meta != nil {
+			if meta != nil && meta.TxnMeta == nil {
 				b.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {
