@@ -110,7 +110,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 			els[i] = b.buildScalar(inScope.resolveType(t.Exprs[i], elementType), inScope)
 		}
 		elements := b.factory.InternList(els)
-		out = b.factory.ConstructArray(elements, b.factory.InternPrivate(arrayType))
+		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.BinaryExpr:
 		fn := binaryOpMap[t.Operator]
