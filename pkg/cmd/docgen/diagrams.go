@@ -631,6 +631,15 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name: "grant_roles",
+		stmt: "grant_stmt",
+		replace: map[string]string{
+			"'GRANT' privileges 'ON' targets 'TO' name_list\n	| ": "",
+			"'GRANT' privilege_list 'TO' name_list": "'GRANT' ( ( ',' role_name ) )* 'TO' ( ( ',' user_name ) )*",
+		},
+		unlink: []string{"role_name", "user_name"},
+	},
+	{
 		name:    "foreign_key_column_level",
 		stmt:    "stmt_block",
 		replace: map[string]string{"stmt_list": "'CREATE' 'TABLE' table_name '(' column_name column_type 'REFERENCES' parent_table ( '(' ref_column_name ')' | ) ( column_constraints | ) ( ',' ( column_def ( ',' column_def )* ) | ) ( table_constraints | ) ')' ')'"},
