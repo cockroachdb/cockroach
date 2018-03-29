@@ -185,7 +185,7 @@ func (r *testDataReader) emit(s string) {
 	}
 }
 
-var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-\.]+(|=[a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
+var splitDirectivesRE = regexp.MustCompile(`^ *[a-zA-Z0-9_,-\.]+(|=[-a-zA-Z0-9_@]+|=\([^)]*\))( |$)`)
 
 // splits a directive line into tokens, where each token is
 // either:

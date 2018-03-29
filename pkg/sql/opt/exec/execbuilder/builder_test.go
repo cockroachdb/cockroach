@@ -14,60 +14,6 @@
 
 package execbuilder_test
 
-// This file is home to the execbuild tests, which are similar to the logic
-// tests.
-//
-// Each testfile contains testcases of the form
-//   <command> [<args>]...
-//   <SQL statement or expression>
-//   ----
-//   <expected results>
-//
-// The supported commands are:
-//
-//  - exec-raw
-//
-//    Runs a SQL statement against the database (not through the execbuilder).
-//
-//  - opt
-//
-//    Builds a memo structure from a SQL query and outputs a representation of
-//    the "expression view" of the memo structure, after normalization.
-//    Note: tests for the build process belong in the optbuilder tests; this is
-//    here only to have the expression view in the testfiles (for
-//    documentation).
-//
-//  - exec
-//
-//    Builds a memo structure from a SQL statement, then builds an
-//    execution plan and runs it, outputting the results. Supported args:
-//      - rowsort: if specified, the results are sorted. Used for queries where
-//        result ordering can be arbitrary.
-//
-//      - partialsort=(x,y,z..): if specified, the results are partially sorted,
-//        preserving the relative ordering of rows that differ on the specified
-//        columns (1-indexed). Used for queries which guarantee a partial order.
-//        See partialSort() for more information.
-//
-//  - exec-explain
-//
-//    Builds a memo structure from a SQL statement, then builds an
-//    execution plan and outputs the details of that plan.
-//
-//  - catalog
-//
-//    Prints information about a table, retrieved through the Catalog interface.
-//
-// The supported args are:
-//
-//  - vars=(type1,type2,...)
-//
-//    Information about IndexedVar columns.
-//
-//  - allow-unsupported
-//
-//    Allows building unsupported scalar expressions into UnsupportedExprOp.
-
 import (
 	"bytes"
 	"context"
@@ -98,6 +44,41 @@ var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
+// TestBuilder runs data-driven testcases of the form
+//
+//   <command> [<args]...
+//   <SQL statement>
+//   ----
+//   <expected results>
+//
+// See OptTester.Handle for supported commands and arguments. In addition to
+// those, we support:
+//
+//  - exec-raw
+//
+//    Runs a SQL statement against the database (not through the execbuilder).
+//
+//  - exec
+//
+//    Builds a memo structure from a SQL statement, then builds an
+//    execution plan and runs it, outputting the results. Supported args:
+//      - rowsort: if specified, the results are sorted. Used for queries where
+//        result ordering can be arbitrary.
+//
+//      - partialsort=(x,y,z..): if specified, the results are partially sorted,
+//        preserving the relative ordering of rows that differ on the specified
+//        columns (1-indexed). Used for queries which guarantee a partial order.
+//        See partialSort() for more information.
+//
+//  - exec-explain
+//
+//    Builds a memo structure from a SQL statement, then builds an
+//    execution plan and outputs the details of that plan.
+//
+//  - catalog
+//
+//    Prints information about a table, retrieved through the Catalog interface.
+//
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -115,14 +96,16 @@ func TestBuild(t *testing.T) {
 			}
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				var allowUnsupportedExpr, rowSort bool
+				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+				defer eng.Close()
+
+				tester := testutils.NewOptTester(eng.Catalog(), d.Input)
+
+				var rowSort bool
 				var partialSortColumns []int
 
 				for _, arg := range d.CmdArgs {
 					switch arg.Key {
-					case "allow-unsupported":
-						allowUnsupportedExpr = true
-
 					case "rowsort":
 						// We will sort the resulting rows before comparing with the
 						// expected result.
@@ -140,7 +123,9 @@ func TestBuild(t *testing.T) {
 						}
 
 					default:
-						d.Fatalf(t, "unknown argument: %s", arg.Key)
+						if err := tester.Flags.Set(arg); err != nil {
+							d.Fatalf(t, "%s", err)
+						}
 					}
 				}
 
@@ -152,20 +137,9 @@ func TestBuild(t *testing.T) {
 					}
 					return ""
 
-				case "opt", "exec", "exec-explain":
+				case "exec", "exec-explain":
 					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
-
-					tester := testutils.NewOptTester(eng.Catalog(), d.Input)
-					tester.AllowUnsupportedExpr = allowUnsupportedExpr
-
-					if d.Cmd == "opt" {
-						ev, err := tester.Optimize()
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-						return ev.String()
-					}
 
 					var columns sqlbase.ResultColumns
 					var results []tree.Datums
@@ -241,8 +215,7 @@ func TestBuild(t *testing.T) {
 					return tp.String()
 
 				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
+					return tester.RunCommand(t, d)
 				}
 			})
 		})
