@@ -654,7 +654,7 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args
 		return err
 	}
 	return execCmd(ctx, l,
-		append([]string{"roachprod", "ssh", c.makeNodes(node), "--"}, args...)...)
+		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
 }
 
 // preRunChecks runs checks to see if it makes sense to run a command.
