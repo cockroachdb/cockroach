@@ -816,11 +816,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// the ranges involved in this chunk of the batch (as opposed to
 		// for each RPC individually). On RPC errors, there's no guarantee
 		// that the request hasn't made its way to the target regardless
-		// of the error; we'd like the second execution to be caught by
-		// the sequence cache if that happens. There is a small chance
-		// that we address a range twice in this chunk (stale/suboptimal
-		// descriptors due to splits/merges) which leads to a transaction
-		// retry.
+		// of the error; we'd like the second execution to be caught. There
+		// is a small chance that we address a range twice in this chunk
+		// (stale/suboptimal descriptors due to splits/merges) which leads
+		//to a transaction retry.
 		//
 		// TODO(tschottdorf): it's possible that if we don't evict from
 		// the cache we could be in for a busy loop.
