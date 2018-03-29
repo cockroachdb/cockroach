@@ -246,8 +246,14 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		ev.mem.formatPrivate(&buf, ev.Private())
 	}
 
+	var physProps *PhysicalProps
+	if ev.best == normBestOrdinal {
+		physProps = &PhysicalProps{}
+	} else {
+		physProps = ev.Physical()
+	}
+
 	logProps := ev.Logical()
-	physProps := ev.Physical()
 
 	tp = tp.Child(buf.String())
 	buf.Reset()
