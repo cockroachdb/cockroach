@@ -101,6 +101,16 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		conditions := b.factory.InternList([]memo.GroupID{left, right})
 		out = b.factory.ConstructAnd(conditions)
 
+	case *tree.Array:
+		els := make([]memo.GroupID, len(t.Exprs))
+		arrayType := t.ResolvedType()
+		elementType := arrayType.(types.TArray).Typ
+		for i := range t.Exprs {
+			els[i] = b.buildScalar(inScope.resolveType(t.Exprs[i], elementType), inScope)
+		}
+		elements := b.factory.InternList(els)
+		out = b.factory.ConstructArray(elements, b.factory.InternPrivate(arrayType))
+
 	case *tree.BinaryExpr:
 		fn := binaryOpMap[t.Operator]
 		if fn != nil {

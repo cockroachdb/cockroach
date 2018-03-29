@@ -49,6 +49,7 @@ func init() {
 		opt.CaseOp:            (*Builder).buildCase,
 		opt.CastOp:            (*Builder).buildCast,
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
+		opt.ArrayOp:           (*Builder).buildArray,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 	}
 
@@ -230,6 +231,14 @@ func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) tree.Type
 		exprs[i] = b.buildScalar(ctx, ev.Child(i))
 	}
 	return tree.NewTypedCoalesceExpr(exprs, ev.Logical().Scalar.Type)
+}
+
+func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+	exprs := make(tree.TypedExprs, ev.ChildCount())
+	for i := range exprs {
+		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+	}
+	return tree.NewTypedArray(exprs, ev.Logical().Scalar.Type)
 }
 
 func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
