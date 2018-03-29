@@ -114,15 +114,6 @@ func BoolFlag(f *pflag.FlagSet, valPtr *bool, flagInfo cliflags.FlagInfo, defaul
 	setFlagFromEnv(f, flagInfo)
 }
 
-// StringSliceFlag creates a string slice flag and registers it with the FlagSet.
-func StringSliceFlag(
-	f *pflag.FlagSet, valPtr *[]string, flagInfo cliflags.FlagInfo, defaultVal []string,
-) {
-	f.StringSliceVarP(valPtr, flagInfo.Name, flagInfo.Shorthand, defaultVal, flagInfo.Usage())
-
-	setFlagFromEnv(f, flagInfo)
-}
-
 // DurationFlag creates a duration flag and registers it with the FlagSet.
 func DurationFlag(
 	f *pflag.FlagSet, valPtr *time.Duration, flagInfo cliflags.FlagInfo, defaultVal time.Duration,
