@@ -203,8 +203,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify all stats on stores after addition.
 	verifyStats(t, mtc, 0, 1, 2)
 
-	// Create a transaction statement that fails, but will add an entry to the
-	// sequence cache. Regression test for #4969.
+	// Create a transaction statement that fails. Regression test for #4969.
 	if err := mtc.dbs[0].Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.CPut(dataKey, 7, 6)
@@ -213,7 +212,7 @@ func TestStoreMetrics(t *testing.T) {
 		t.Fatal("Expected transaction error, but none received")
 	}
 
-	// Verify stats after sequence cache addition.
+	// Verify stats after addition.
 	verifyStats(t, mtc, 0, 1, 2)
 	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 2)
 

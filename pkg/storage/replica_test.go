@@ -3485,7 +3485,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Overwrite Abort cache entry with garbage for the last op.
+	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
 	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
@@ -3999,7 +3999,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 		// Try a heartbeat to the already-committed transaction; should get
 		// committed txn back, but without last heartbeat timestamp set.
-		txn.Epoch++ // need to fake a higher epoch to sneak past sequence cache
+		txn.Epoch++ // need to fake a higher epoch to sneak past abort span
 		txn.Sequence++
 		hBA, h := heartbeatArgs(txn, tc.Clock().Now())
 
@@ -8788,7 +8788,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		{
 			name: "resolve aborted intent req",
 			req:  resolveAbortedIntentReq,
-			// Not a no-op - the request needs to poison the sequence cache.
+			// Not a no-op - the request needs to poison the abort span.
 			expProposal: true,
 		},
 		{
