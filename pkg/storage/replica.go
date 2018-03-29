@@ -849,7 +849,7 @@ func (r *Replica) cancelPendingCommandsLocked() {
 			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
 			ProposalRetry: proposalRangeNoLongerExists,
 		}
-		p.finishRaftApplication(resp)
+		p.finishApplication(resp)
 	}
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
 }
@@ -2883,7 +2883,8 @@ func (r *Replica) tryExecuteWriteBatch(
 
 // requestToProposal converts a BatchRequest into a ProposalData, by
 // evaluating it. The returned ProposalData is partially valid even
-// on a non-nil *roachpb.Error.
+// on a non-nil *roachpb.Error and should be proposed through Raft
+// if ProposalData.command is non-nil.
 func (r *Replica) requestToProposal(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
@@ -2891,29 +2892,30 @@ func (r *Replica) requestToProposal(
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
+	res, needConsensus, pErr := r.evaluateProposal(ctx, idKey, ba, spans)
+
+	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
 		ctx:     ctx,
 		idKey:   idKey,
 		endCmds: endCmds,
 		doneCh:  make(chan proposalResult, 1),
+		Local:   &res.Local,
 		Request: &ba,
 	}
-	var pErr *roachpb.Error
-	var result *result.Result
-	result, pErr = r.evaluateProposal(ctx, idKey, ba, spans)
 
-	// Fill out the results even if pErr != nil; we'll return the error below.
-	proposal.Local = &result.Local
-	proposal.command = storagebase.RaftCommand{
-		ReplicatedEvalResult: result.Replicated,
-		WriteBatch:           result.WriteBatch,
+	if needConsensus {
+		proposal.command = &storagebase.RaftCommand{
+			ReplicatedEvalResult: res.Replicated,
+			WriteBatch:           res.WriteBatch,
+		}
+		if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
+			// For backwards compatibility, tests that use TestingEvalFilter
+			// need the original request to be preserved. See #10493
+			proposal.command.TestingBatchRequest = &ba
+		}
 	}
 
-	if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
-		// For backwards compatibility, tests that use TestingEvalFilter
-		// need the original request to be preserved. See #10493
-		proposal.command.TestingBatchRequest = &ba
-	}
 	return proposal, pErr
 }
 
@@ -2923,16 +2925,18 @@ func (r *Replica) requestToProposal(
 // return value is ready to be inserted into Replica's proposal map
 // and subsequently passed to submitProposalLocked.
 //
-// If an *Error is returned, the proposal should fail fast, i.e. be
-// sent directly back to the client without going through Raft, but
-// while still handling LocalEvalResult.
+// The method also returns a flag indicating if the request needs to
+// be proposed through Raft and replicated. This flag will be false
+// either if the request was a no-op or if it hit an error. In this
+// case, the result can be sent directly back to the client without
+// going through Raft, but while still handling LocalEvalResult.
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
-) (*result.Result, *roachpb.Error) {
+) (*result.Result, bool, *roachpb.Error) {
 	if ba.Timestamp == (hlc.Timestamp{}) {
-		return nil, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
+		return nil, false, roachpb.NewErrorf("can't propose Raft command with zero timestamp")
 	}
 
 	// Evaluate the commands. If this returns without an error, the batch should
@@ -2971,43 +2975,60 @@ func (r *Replica) evaluateProposal(
 			LeaseMetricsResult: res.Local.LeaseMetricsResult,
 		}
 		res.Replicated.Reset()
-		return &res, pErr
+		return &res, false /* needConsensus */, pErr
 	}
 
 	// Set the local reply, which is held only on the proposing replica and is
-	// returned to the client after the proposal completes.
+	// returned to the client after the proposal completes, or immediately if
+	// replication is not necessary.
 	res.Local.Reply = br
 
-	// Set the proposal's WriteBatch, which is the serialized representation of
-	// the proposals effect on RocksDB.
-	res.WriteBatch = &storagebase.WriteBatch{
-		Data: batch.Repr(),
-	}
+	// needConsensus determines if the result needs to be replicated and
+	// proposed through Raft. This is necessary if at least one of the
+	// following conditions is true:
+	// 1. the request created a non-empty write batch.
+	// 2. the request had an impact on the MVCCStats. NB: this is possible
+	//    even with an empty write batch when stats are recomputed.
+	// 3. the request has replicated side-effects.
+	// 4. the cluster is in "clockless" mode, in which case consensus is
+	//    used to enforce a linearization of all reads and writes.
+	needConsensus := !batch.Empty() ||
+		ms != (enginepb.MVCCStats{}) ||
+		!res.Replicated.Equal(storagebase.ReplicatedEvalResult{}) ||
+		r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 
-	// Set the proposal's replicated result, which contains metadata and
-	// side-effects that are to be replicated to all replicas.
-	res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-	res.Replicated.Timestamp = ba.Timestamp
-	if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-		res.Replicated.Delta = ms.ToNetworkStats()
-	} else {
-		res.Replicated.DeprecatedDelta = &ms
-	}
-	// If the cluster version is and always will be VersionNoRaftProposalKeys or
-	// greater, we don't need to send the key range through Raft. This decision
-	// is based on the minimum supported version and not the active version
-	// because Raft entries need to be usable even across allowable version
-	// downgrades.
-	if !r.ClusterSettings().Version.IsMinSupported(cluster.VersionNoRaftProposalKeys) {
-		rSpan, err := keys.Range(ba)
-		if err != nil {
-			return nil, roachpb.NewError(err)
+	if needConsensus {
+		// Set the proposal's WriteBatch, which is the serialized representation of
+		// the proposals effect on RocksDB.
+		res.WriteBatch = &storagebase.WriteBatch{
+			Data: batch.Repr(),
 		}
-		res.Replicated.DeprecatedStartKey = rSpan.Key
-		res.Replicated.DeprecatedEndKey = rSpan.EndKey
+
+		// Set the proposal's replicated result, which contains metadata and
+		// side-effects that are to be replicated to all replicas.
+		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
+		res.Replicated.Timestamp = ba.Timestamp
+		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
+			res.Replicated.Delta = ms.ToNetworkStats()
+		} else {
+			res.Replicated.DeprecatedDelta = &ms
+		}
+		// If the cluster version is and always will be VersionNoRaftProposalKeys or
+		// greater, we don't need to send the key range through Raft. This decision
+		// is based on the minimum supported version and not the active version
+		// because Raft entries need to be usable even across allowable version
+		// downgrades.
+		if !r.ClusterSettings().Version.IsMinSupported(cluster.VersionNoRaftProposalKeys) {
+			rSpan, err := keys.Range(ba)
+			if err != nil {
+				return &res, false /* needConsensus */, roachpb.NewError(err)
+			}
+			res.Replicated.DeprecatedStartKey = rSpan.Key
+			res.Replicated.DeprecatedEndKey = rSpan.EndKey
+		}
 	}
 
-	return &res, nil
+	return &res, needConsensus, nil
 }
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
@@ -3064,7 +3085,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // propose prepares the necessary pending command struct and initializes a
 // client command ID if one hasn't been. A verified lease is supplied
 // as a parameter if the command requires a lease; nil otherwise. It
-// then proposes the command to Raft and returns
+// then proposes the command to Raft if necessary and returns
 // - a channel which receives a response or error upon application
 // - a closure used to attempt to abandon the command. When called, it tries to
 //   remove the pending command from the internal commands map. This is
@@ -3116,25 +3137,26 @@ func (r *Replica) propose(
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
 	log.Event(proposal.ctx, "evaluated request")
-	// An error here corresponds to a failfast-proposal: The command resulted
-	// in an error and did not need to commit a batch (the common error case).
-	if pErr != nil {
-		if proposal.Local == nil {
-			return nil, nil, noop, roachpb.NewError(errors.Errorf(
-				"requestToProposal returned error %s without eval results", pErr))
-		}
+
+	// There are two cases where request evaluation does not lead to a Raft
+	// proposal:
+	// 1. proposal.command == nil indicates that the evaluation was a no-op
+	//    and that no Raft command needs to be proposed.
+	// 2. pErr != nil corresponds to a failed proposal - the command resulted
+	//    in an error.
+	if proposal.command == nil {
 		intents := proposal.Local.DetachIntents()
-		endTxns := proposal.Local.DetachEndTxns(true /* alwaysOnly */)
-		if proposal.Local != nil {
-			r.handleLocalEvalResult(ctx, *proposal.Local)
+		endTxns := proposal.Local.DetachEndTxns(pErr != nil /* alwaysOnly */)
+		r.handleLocalEvalResult(ctx, *proposal.Local)
+
+		pr := proposalResult{
+			Reply:   proposal.Local.Reply,
+			Err:     pErr,
+			Intents: intents,
+			EndTxns: endTxns,
 		}
-		if endCmds != nil {
-			endCmds.done(nil, pErr, proposalNoRetry)
-		}
-		ch := make(chan proposalResult, 1)
-		ch <- proposalResult{Err: pErr, Intents: intents, EndTxns: endTxns}
-		close(ch)
-		return ch, func() bool { return false }, noop, nil
+		proposal.finishApplication(pr)
+		return proposal.doneCh, func() bool { return false }, noop, nil
 	}
 
 	// TODO(irfansharif): This int cast indicates that if someone configures a
@@ -3200,7 +3222,7 @@ func (r *Replica) propose(
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := storagebase.ProposalFilterArgs{
 			Ctx:   ctx,
-			Cmd:   proposal.command,
+			Cmd:   *proposal.command,
 			CmdID: idKey,
 			Req:   ba,
 		}
@@ -3258,7 +3280,7 @@ func (r *Replica) isSoloReplicaRLocked() bool {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	data, err := protoutil.Marshal(&p.command)
+	data, err := protoutil.Marshal(p.command)
 	if err != nil {
 		return err
 	}
@@ -4230,7 +4252,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			delete(r.mu.proposals, idKey)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
-			p.finishRaftApplication(proposalResult{Err: roachpb.NewError(
+			p.finishApplication(proposalResult{Err: roachpb.NewError(
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
@@ -4262,9 +4284,9 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			delete(r.mu.proposals, idKey)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
-				p.finishRaftApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
+				p.finishApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
 			} else {
-				p.finishRaftApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
+				p.finishApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}
 			numShouldRetry++
 		} else if reason == reasonTicks && p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
@@ -4315,7 +4337,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// https://github.com/cockroachdb/cockroach/issues/21849
 		} else if err != nil {
 			delete(r.mu.proposals, p.idKey)
-			p.finishRaftApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
+			p.finishApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
 }
@@ -4935,7 +4957,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
-		proposal.finishRaftApplication(response)
+		proposal.finishApplication(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", response.Err)
 	}

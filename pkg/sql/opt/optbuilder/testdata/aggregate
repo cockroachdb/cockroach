@@ -21,19 +21,12 @@ SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
   VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM t.kv
 ----
 group-by
- ├── columns: column6:6(int) column8:8(int) column10:10(int) column12:12(int) column14:14(decimal) column16:16(decimal) column18:18(decimal) column20:20(decimal) column22:22(bool) column24:24(bool) column26:26(bytes)
+ ├── columns: column6:6(int) column7:7(int) column8:8(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column17:17(bool) column19:19(bytes)
  ├── project
- │    ├── columns: column5:5(int) column7:7(int) column9:9(int) column11:11(int) column13:13(int) column15:15(int) column17:17(int) column19:19(int) column21:21(bool) column23:23(bool) column25:25(bytes)
+ │    ├── columns: column5:5(int) column14:14(bool) column16:16(bool) column18:18(bytes)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
- │         ├── const: 1 [type=int]
  │         ├── const: 1 [type=int]
  │         ├── true [type=bool]
  │         ├── false [type=bool]
@@ -42,47 +35,41 @@ group-by
       ├── function: min [type=int]
       │    └── variable: column5 [type=int]
       ├── function: max [type=int]
-      │    └── variable: column7 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: count [type=int]
-      │    └── variable: column9 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: sum_int [type=int]
-      │    └── variable: column11 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: avg [type=decimal]
-      │    └── variable: column13 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: sum [type=decimal]
-      │    └── variable: column15 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: stddev [type=decimal]
-      │    └── variable: column17 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: variance [type=decimal]
-      │    └── variable: column19 [type=int]
+      │    └── variable: column5 [type=int]
       ├── function: bool_and [type=bool]
-      │    └── variable: column21 [type=bool]
+      │    └── variable: column14 [type=bool]
       ├── function: bool_or [type=bool]
-      │    └── variable: column23 [type=bool]
+      │    └── variable: column16 [type=bool]
       └── function: xor_agg [type=bytes]
-           └── variable: column25 [type=bytes]
+           └── variable: column18 [type=bytes]
 
 build
 SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v),
   VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 project
- ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column15:15(bool) column18:18(bytes)
+ ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column15:15(bool) column17:17(bytes)
  ├── group-by
- │    ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column18:18(bytes)
+ │    ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column17:17(bytes)
  │    ├── project
- │    │    ├── columns: kv.v:2(int) kv.v:2(int) kv.v:2(int) column8:8(int) kv.v:2(int) kv.v:2(int) kv.v:2(int) kv.v:2(int) column14:14(bool) column17:17(bytes)
+ │    │    ├── columns: kv.v:2(int) column8:8(int) column14:14(bool) column16:16(bytes)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
  │    │         ├── variable: kv.v [type=int]
- │    │         ├── variable: kv.v [type=int]
- │    │         ├── variable: kv.v [type=int]
  │    │         ├── const: 1 [type=int]
- │    │         ├── variable: kv.v [type=int]
- │    │         ├── variable: kv.v [type=int]
- │    │         ├── variable: kv.v [type=int]
- │    │         ├── variable: kv.v [type=int]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: kv.v [type=int]
  │    │         │    └── const: 1 [type=int]
@@ -108,7 +95,7 @@ project
  │         ├── function: bool_and [type=bool]
  │         │    └── variable: column14 [type=bool]
  │         └── function: xor_agg [type=bytes]
- │              └── variable: column17 [type=bytes]
+ │              └── variable: column16 [type=bytes]
  └── projections
       ├── variable: column5 [type=int]
       ├── variable: column6 [type=int]
@@ -119,71 +106,62 @@ project
       ├── variable: column12 [type=decimal]
       ├── variable: column13 [type=decimal]
       ├── variable: column15 [type=bool]
-      ├── variable: column15 [type=bool]
-      └── variable: column18 [type=bytes]
+      └── variable: column17 [type=bytes]
 
 build
 SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1),
   VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 project
- ├── columns: column2:2(int) column4:4(int) column6:6(int) column8:8(int) column11:11(float) column13:13(decimal) column15:15(decimal) column18:18(float) column20:20(bool) column22:22(bool) column25:25(string)
+ ├── columns: column2:2(int) column3:3(int) column4:4(int) column5:5(int) column7:7(float) column8:8(decimal) column9:9(decimal) column11:11(float) column13:13(bool) column14:14(bool) column17:17(string)
  ├── group-by
- │    ├── columns: column2:2(int) column4:4(int) column6:6(int) column8:8(int) column10:10(decimal) column13:13(decimal) column15:15(decimal) column17:17(decimal) column20:20(bool) column22:22(bool) column24:24(bytes)
+ │    ├── columns: column2:2(int) column3:3(int) column4:4(int) column5:5(int) column6:6(decimal) column8:8(decimal) column9:9(decimal) column10:10(decimal) column13:13(bool) column14:14(bool) column16:16(bytes)
  │    ├── project
- │    │    ├── columns: column1:1(int) column3:3(int) column5:5(int) column7:7(int) column9:9(int) column12:12(int) column14:14(int) column16:16(int) column19:19(bool) column21:21(bool) column23:23(bytes)
+ │    │    ├── columns: column1:1(int) column12:12(bool) column15:15(bytes)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
  │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         ├── true [type=bool]
  │    │         ├── true [type=bool]
  │    │         └── const: '\x01' [type=bytes]
  │    └── aggregations
  │         ├── function: min [type=int]
  │         │    └── variable: column1 [type=int]
  │         ├── function: count [type=int]
- │         │    └── variable: column3 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: max [type=int]
- │         │    └── variable: column5 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: sum_int [type=int]
- │         │    └── variable: column7 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: avg [type=decimal]
- │         │    └── variable: column9 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: sum [type=decimal]
- │         │    └── variable: column12 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: stddev [type=decimal]
- │         │    └── variable: column14 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: variance [type=decimal]
- │         │    └── variable: column16 [type=int]
+ │         │    └── variable: column1 [type=int]
  │         ├── function: bool_and [type=bool]
- │         │    └── variable: column19 [type=bool]
+ │         │    └── variable: column12 [type=bool]
  │         ├── function: bool_or [type=bool]
- │         │    └── variable: column21 [type=bool]
+ │         │    └── variable: column12 [type=bool]
  │         └── function: xor_agg [type=bytes]
- │              └── variable: column23 [type=bytes]
+ │              └── variable: column15 [type=bytes]
  └── projections
       ├── variable: column2 [type=int]
+      ├── variable: column3 [type=int]
       ├── variable: column4 [type=int]
-      ├── variable: column6 [type=int]
-      ├── variable: column8 [type=int]
+      ├── variable: column5 [type=int]
+      ├── cast: float [type=float]
+      │    └── variable: column6 [type=decimal]
+      ├── variable: column8 [type=decimal]
+      ├── variable: column9 [type=decimal]
       ├── cast: float [type=float]
       │    └── variable: column10 [type=decimal]
-      ├── variable: column13 [type=decimal]
-      ├── variable: column15 [type=decimal]
-      ├── cast: float [type=float]
-      │    └── variable: column17 [type=decimal]
-      ├── variable: column20 [type=bool]
-      ├── variable: column22 [type=bool]
+      ├── variable: column13 [type=bool]
+      ├── variable: column14 [type=bool]
       └── function: to_hex [type=string]
-           └── variable: column24 [type=bytes]
+           └── variable: column16 [type=bytes]
 
 build
 SELECT ARRAY_AGG(1) FROM t.kv
@@ -1042,13 +1020,11 @@ SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
 group-by
  ├── columns: column5:5(int) column6:6(int) column7:7(int) column8:8(int)
  ├── project
- │    ├── columns: kv.k:1(int!null) kv.k:1(int!null) kv.v:2(int) kv.v:2(int)
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
  │         ├── variable: kv.k [type=int]
- │         ├── variable: kv.k [type=int]
- │         ├── variable: kv.v [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
       ├── function: min [type=int]
@@ -1066,7 +1042,7 @@ SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv WHERE k > 8
 group-by
  ├── columns: column5:5(int) column6:6(int) column7:7(int) column8:8(int)
  ├── project
- │    ├── columns: kv.k:1(int!null) kv.k:1(int!null) kv.v:2(int) kv.v:2(int)
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    ├── select
  │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    ├── scan kv
@@ -1076,8 +1052,6 @@ group-by
  │    │         └── const: 8 [type=int]
  │    └── projections
  │         ├── variable: kv.k [type=int]
- │         ├── variable: kv.k [type=int]
- │         ├── variable: kv.v [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
       ├── function: min [type=int]
@@ -1133,12 +1107,10 @@ SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM t.kv
 group-by
  ├── columns: column5:5(decimal) column6:6(decimal) column7:7(decimal) column8:8(decimal)
  ├── project
- │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.k:1(int!null) kv.v:2(int)
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         ├── variable: kv.k [type=int]
- │         ├── variable: kv.v [type=int]
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
@@ -1155,16 +1127,12 @@ build
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
 group-by
- ├── columns: column6:6(decimal) column8:8(decimal) column10:10(decimal) column12:12(decimal)
+ ├── columns: column6:6(decimal) column8:8(decimal) column9:9(decimal) column10:10(decimal)
  ├── project
- │    ├── columns: column5:5(decimal) column7:7(decimal) column9:9(decimal) column11:11(decimal)
+ │    ├── columns: column5:5(decimal) column7:7(decimal)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         ├── cast: decimal [type=decimal]
- │         │    └── variable: kv.k [type=int]
- │         ├── cast: decimal [type=decimal]
- │         │    └── variable: kv.v [type=int]
  │         ├── cast: decimal [type=decimal]
  │         │    └── variable: kv.k [type=int]
  │         └── cast: decimal [type=decimal]
@@ -1175,9 +1143,9 @@ group-by
       ├── function: avg [type=decimal]
       │    └── variable: column7 [type=decimal]
       ├── function: sum [type=decimal]
-      │    └── variable: column9 [type=decimal]
+      │    └── variable: column5 [type=decimal]
       └── function: sum [type=decimal]
-           └── variable: column11 [type=decimal]
+           └── variable: column7 [type=decimal]
 
 build
 SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
@@ -1296,13 +1264,11 @@ SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM t.abc
 group-by
  ├── columns: column5:5(float) column6:6(float) column7:7(decimal) column8:8(decimal)
  ├── project
- │    ├── columns: abc.b:2(float) abc.b:2(float) abc.d:4(decimal) abc.d:4(decimal)
+ │    ├── columns: abc.b:2(float) abc.d:4(decimal)
  │    ├── scan abc
  │    │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  │    └── projections
  │         ├── variable: abc.b [type=float]
- │         ├── variable: abc.b [type=float]
- │         ├── variable: abc.d [type=decimal]
  │         └── variable: abc.d [type=decimal]
  └── aggregations
       ├── function: avg [type=float]
@@ -1766,11 +1732,63 @@ group-by
            └── variable: column5 [type=decimal]
 
 # Ensure subqueries don't trigger aggregation.
-# TODO(rytaft): This is a bug - this query should build.
 build
 SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
 ----
-error: column "xyz.x" must appear in the GROUP BY clause or be used in an aggregate function
+limit
+ ├── columns: column6:6(bool)
+ ├── project
+ │    ├── columns: column6:6(bool)
+ │    ├── scan xyz
+ │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+ │    └── projections
+ │         └── gt [type=bool]
+ │              ├── variable: xyz.x [type=int]
+ │              └── subquery [type=decimal]
+ │                   ├── max1-row
+ │                   │    ├── columns: column5:5(decimal)
+ │                   │    └── group-by
+ │                   │         ├── columns: column5:5(decimal)
+ │                   │         ├── project
+ │                   │         │    ├── columns: column4:4(int)
+ │                   │         │    ├── values
+ │                   │         │    │    └── tuple [type=tuple{}]
+ │                   │         │    └── projections
+ │                   │         │         └── const: 0 [type=int]
+ │                   │         └── aggregations
+ │                   │              └── function: avg [type=decimal]
+ │                   │                   └── variable: column4 [type=int]
+ │                   └── variable: column5 [type=decimal]
+ └── const: 1 [type=int]
+
+build
+SELECT x > (SELECT avg(y) FROM xyz) FROM xyz LIMIT 1
+----
+limit
+ ├── columns: column8:8(bool)
+ ├── project
+ │    ├── columns: column8:8(bool)
+ │    ├── scan xyz
+ │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+ │    └── projections
+ │         └── gt [type=bool]
+ │              ├── variable: xyz.x [type=int]
+ │              └── subquery [type=decimal]
+ │                   ├── max1-row
+ │                   │    ├── columns: column7:7(decimal)
+ │                   │    └── group-by
+ │                   │         ├── columns: column7:7(decimal)
+ │                   │         ├── project
+ │                   │         │    ├── columns: xyz.y:5(int)
+ │                   │         │    ├── scan xyz
+ │                   │         │    │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(float)
+ │                   │         │    └── projections
+ │                   │         │         └── variable: xyz.y [type=int]
+ │                   │         └── aggregations
+ │                   │              └── function: avg [type=decimal]
+ │                   │                   └── variable: xyz.y [type=int]
+ │                   └── variable: column7 [type=decimal]
+ └── const: 1 [type=int]
 
 exec-ddl
 CREATE TABLE t.bools (b BOOL)
@@ -1787,11 +1805,10 @@ SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
 group-by
  ├── columns: column3:3(bool) column4:4(bool)
  ├── project
- │    ├── columns: bools.b:1(bool) bools.b:1(bool)
+ │    ├── columns: bools.b:1(bool)
  │    ├── scan bools
  │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    └── projections
- │         ├── variable: bools.b [type=bool]
  │         └── variable: bools.b [type=bool]
  └── aggregations
       ├── function: bool_and [type=bool]
@@ -1880,8 +1897,8 @@ sort
            ├── variable: xor_bytes.b [type=int]
            └── variable: column7 [type=int]
 
-# TODO(rytaft): this is a bug - should cause an error:
-# error: arguments to xor must all be the same length
+# At execution time, this query will cause the error:
+# "arguments to xor must all be the same length"
 build
 SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
 ----
@@ -1901,19 +1918,18 @@ build
 SELECT MAX(true), MIN(true)
 ----
 group-by
- ├── columns: column2:2(bool) column4:4(bool)
+ ├── columns: column2:2(bool) column3:3(bool)
  ├── project
- │    ├── columns: column1:1(bool) column3:3(bool)
+ │    ├── columns: column1:1(bool)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── true [type=bool]
  │         └── true [type=bool]
  └── aggregations
       ├── function: max [type=bool]
       │    └── variable: column1 [type=bool]
       └── function: min [type=bool]
-           └── variable: column3 [type=bool]
+           └── variable: column1 [type=bool]
 
 build
 SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
@@ -2613,11 +2629,10 @@ project
  │    ├── columns: kv.k:1(int!null) column5:5(int)
  │    ├── grouping columns: kv.k:1(int!null)
  │    ├── project
- │    │    ├── columns: kv.k:1(int!null) kv.k:1(int!null)
+ │    │    ├── columns: kv.k:1(int!null)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
- │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
  │         └── function: count_rows [type=int]
@@ -2628,24 +2643,22 @@ build
 SELECT COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s)
 ----
 project
- ├── columns: column7:7(int)
+ ├── columns: column6:6(int)
  ├── group-by
- │    ├── columns: column5:5(string) column7:7(int)
+ │    ├── columns: column5:5(string) column6:6(int)
  │    ├── grouping columns: column5:5(string)
  │    ├── project
- │    │    ├── columns: column5:5(string) column6:6(string)
+ │    │    ├── columns: column5:5(string)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
- │    │         ├── function: upper [type=string]
- │    │         │    └── variable: kv.s [type=string]
  │    │         └── function: upper [type=string]
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
  │         └── function: count [type=int]
- │              └── variable: column6 [type=string]
+ │              └── variable: column5 [type=string]
  └── projections
-      └── variable: column7 [type=int]
+      └── variable: column6 [type=int]
 
 build
 SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*

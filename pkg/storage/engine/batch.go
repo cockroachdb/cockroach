@@ -114,6 +114,11 @@ func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
 }
 
+// Empty returns whether the under construction repr is empty.
+func (b *RocksDBBatchBuilder) Empty() bool {
+	return len(b.repr) <= headerSize
+}
+
 // getRepr constructs the batch representation and returns it.
 func (b *RocksDBBatchBuilder) getRepr() []byte {
 	b.maybeInit()

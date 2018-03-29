@@ -125,13 +125,44 @@ sort
       │         └── variable: xyz.z [type=float]
       └── aggregations
 
-# TODO(rytaft): This is a bug. This query is valid.
 build
-SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
+SELECT DISTINCT y + x FROM xyz ORDER by (y + x)
 ----
-error: unsupported binary operator: <int> + <float>
+sort
+ ├── columns: column4:4(int)
+ ├── ordering: +4
+ └── group-by
+      ├── columns: column4:4(int)
+      ├── grouping columns: column4:4(int)
+      ├── project
+      │    ├── columns: column4:4(int)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: xyz.y [type=int]
+      │              └── variable: xyz.x [type=int]
+      └── aggregations
 
-# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT DISTINCT y + x FROM xyz ORDER BY y + x
+----
+sort
+ ├── columns: column4:4(int)
+ ├── ordering: +4
+ └── group-by
+      ├── columns: column4:4(int)
+      ├── grouping columns: column4:4(int)
+      ├── project
+      │    ├── columns: column4:4(int)
+      │    ├── scan xyz
+      │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── projections
+      │         └── plus [type=int]
+      │              ├── variable: xyz.y [type=int]
+      │              └── variable: xyz.x [type=int]
+      └── aggregations
+
 build
 SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
@@ -249,11 +280,10 @@ group-by
  │    │    ├── columns: xyz.x:1(int!null) column4:4(int)
  │    │    ├── grouping columns: xyz.x:1(int!null)
  │    │    ├── project
- │    │    │    ├── columns: xyz.x:1(int!null) xyz.x:1(int!null)
+ │    │    │    ├── columns: xyz.x:1(int!null)
  │    │    │    ├── scan xyz
  │    │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    │    └── projections
- │    │    │         ├── variable: xyz.x [type=int]
  │    │    │         └── variable: xyz.x [type=int]
  │    │    └── aggregations
  │    │         └── function: max [type=int]

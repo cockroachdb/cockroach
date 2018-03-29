@@ -137,6 +137,16 @@ func (b *Builder) buildOrdering(
 		// Ensure we can order on the given column.
 		ensureColumnOrderable(e)
 		scalar := b.buildScalarProjection(e, "", inScope, orderByScope)
+
+		// Use an existing projection if possible.
+		// TODO(rytaft): If we store the memo.GroupID in the column, we can avoid
+		// rebuilding the expression.
+		if col := projectionsScope.findExistingCol(e); col != nil {
+			// buildScalarProjection added a new column to the end of
+			// orderByScope.cols. Replace it with the already existing column.
+			orderByScope.cols[len(orderByScope.cols)-1] = *col
+		}
+
 		projections = append(projections, scalar)
 	}
 
