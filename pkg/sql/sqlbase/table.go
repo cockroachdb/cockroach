@@ -1922,7 +1922,9 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return scratch, err
 	}
 	scratch = scratch[0:0]
-	elementType, err := parserTypeToEncodingType(d.ParamTyp)
+	unwrapped := types.UnwrapType(d.ParamTyp)
+	elementType, err := parserTypeToEncodingType(unwrapped)
+
 	if err != nil {
 		return nil, err
 	}
