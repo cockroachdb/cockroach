@@ -755,6 +755,15 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name: "revoke_roles",
+		stmt: "revoke_stmt",
+		replace: map[string]string{
+			"'REVOKE' privileges 'ON' targets 'FROM' name_list\n	| ": "",
+			"'REVOKE' privilege_list 'FROM' name_list": "'REVOKE' ( ( ',' role_name ) )* 'FROM' ( ( ',' user_name ) )*",
+		},
+		unlink: []string{"role_name", "user_name"},
+	},
+	{
 		name:    "rollback_transaction",
 		stmt:    "rollback_stmt",
 		inline:  []string{"opt_to_savepoint"},
