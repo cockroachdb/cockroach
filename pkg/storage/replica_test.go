@@ -7628,10 +7628,11 @@ func TestReplicaIDChangePending(t *testing.T) {
 	magicTS := tc.Clock().Now()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = magicTS
-	ba.Add(&roachpb.GetRequest{
+	ba.Add(&roachpb.PutRequest{
 		Span: roachpb.Span{
 			Key: roachpb.Key("a"),
 		},
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
 	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
 	if err != nil {
@@ -8991,6 +8992,218 @@ func TestCancelPendingCommands(t *testing.T) {
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)
+	}
+}
+
+// TestProposalNoop verifies that batches that result in no-ops do not
+// get proposed through Raft and wait for consensus before returning to
+// the client.
+func TestNoopRequestsNotProposed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg := TestStoreConfig(nil)
+	sp := roachpb.Span{Key: roachpb.Key("a")}
+	txn := newTransaction(
+		"name",
+		sp.Key,
+		roachpb.NormalUserPriority,
+		enginepb.SERIALIZABLE,
+		cfg.Clock,
+	)
+
+	getReq := &roachpb.GetRequest{
+		Span: sp,
+	}
+	putReq := &roachpb.PutRequest{
+		Span:  sp,
+		Value: roachpb.MakeValueFromBytes([]byte("val")),
+	}
+	deleteReq := &roachpb.DeleteRequest{
+		Span: sp,
+	}
+	commitTxnReq := &roachpb.EndTransactionRequest{
+		Span:   sp,
+		Commit: true,
+	}
+	pushTxnReq := &roachpb.PushTxnRequest{
+		Span: roachpb.Span{
+			Key: txn.TxnMeta.Key,
+		},
+		PusheeTxn: txn.TxnMeta,
+		Now:       cfg.Clock.Now(),
+		PushType:  roachpb.PUSH_ABORT,
+	}
+	resolveCommittedIntentReq := &roachpb.ResolveIntentRequest{
+		Span:      sp,
+		IntentTxn: txn.TxnMeta,
+		Status:    roachpb.COMMITTED,
+		Poison:    false,
+	}
+	resolveAbortedIntentReq := &roachpb.ResolveIntentRequest{
+		Span:      sp,
+		IntentTxn: txn.TxnMeta,
+		Status:    roachpb.ABORTED,
+		Poison:    true,
+	}
+
+	testCases := []struct {
+		name        string
+		setup       func(context.Context, *Replica) *roachpb.Error // optional
+		useTxn      bool
+		req         roachpb.Request
+		expFailure  string // regexp pattern to match on error if not empty
+		expProposal bool
+	}{
+		{
+			name:        "get req",
+			req:         getReq,
+			expProposal: false,
+		},
+		{
+			name:        "put req",
+			req:         putReq,
+			expProposal: true,
+		},
+		{
+			name: "delete req",
+			req:  deleteReq,
+			// NB: a tombstone is written even if no value exists at the key.
+			expProposal: true,
+		},
+		{
+			name:        "get req in txn",
+			useTxn:      true,
+			req:         getReq,
+			expProposal: false,
+		},
+		{
+			name:        "put req in txn",
+			useTxn:      true,
+			req:         putReq,
+			expProposal: true,
+		},
+		{
+			name:   "delete req in txn",
+			useTxn: true,
+			req:    deleteReq,
+			// NB: a tombstone intent is written even if no value exists at the key.
+			expProposal: true,
+		},
+		{
+			name:       "failed commit txn req",
+			useTxn:     true,
+			req:        commitTxnReq,
+			expFailure: "txn .* does not exist",
+			// No-op - the request fails.
+			expProposal: false,
+		},
+		{
+			name:        "push txn req",
+			req:         pushTxnReq,
+			expProposal: true,
+		},
+		{
+			name: "redundant push txn req",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
+					RangeID: repl.RangeID,
+				}, pushTxnReq)
+				return pErr
+			},
+			req: pushTxnReq,
+			// No-op - the transaction has already been pushed successfully.
+			expProposal: false,
+		},
+		{
+			name: "resolve committed intent req, with intent",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
+					RangeID: repl.RangeID,
+					Txn:     txn,
+				}, putReq)
+				return pErr
+			},
+			req:         resolveCommittedIntentReq,
+			expProposal: true,
+		},
+		{
+			name: "resolve committed intent req, without intent",
+			req:  resolveCommittedIntentReq,
+			// No-op - the intent is missing.
+			expProposal: false,
+		},
+		{
+			name: "resolve aborted intent req",
+			req:  resolveAbortedIntentReq,
+			// Not a no-op - the request needs to poison the sequence cache.
+			expProposal: true,
+		},
+		{
+			name: "redundant resolve aborted intent req",
+			setup: func(ctx context.Context, repl *Replica) *roachpb.Error {
+				_, pErr := client.SendWrappedWith(ctx, repl, roachpb.Header{
+					RangeID: repl.RangeID,
+				}, resolveAbortedIntentReq)
+				return pErr
+			},
+			req: resolveAbortedIntentReq,
+			// Should be a no-op, see #23943.
+			expProposal: true,
+		},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			tc := testContext{}
+			tc.StartWithStoreConfig(t, stopper, cfg)
+			repl := tc.repl
+
+			if c.setup != nil {
+				if pErr := c.setup(ctx, repl); pErr != nil {
+					t.Fatalf("test setup failed: %v", pErr)
+				}
+			}
+
+			var propCount int32
+			markerTS := tc.Clock().Now()
+			repl.mu.Lock()
+			repl.store.TestingKnobs().TestingProposalFilter =
+				func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+					if args.Req.Timestamp == markerTS {
+						atomic.AddInt32(&propCount, 1)
+					}
+					return nil
+				}
+			repl.mu.Unlock()
+
+			ba := roachpb.BatchRequest{}
+			ba.Timestamp = markerTS
+			ba.RangeID = repl.RangeID
+			if c.useTxn {
+				ba.Txn = txn
+			}
+			ba.Add(c.req)
+			_, pErr := repl.Send(ctx, ba)
+
+			// Check return error.
+			if c.expFailure == "" {
+				if pErr != nil {
+					t.Fatalf("unexpected error: %v", pErr)
+				}
+			} else {
+				if !testutils.IsPError(pErr, c.expFailure) {
+					t.Fatalf("expected error %q, found %v", c.expFailure, pErr)
+				}
+			}
+
+			// Check proposal status.
+			if sawProp := (propCount > 0); sawProp != c.expProposal {
+				t.Errorf("expected proposal=%t, found %t", c.expProposal, sawProp)
+			}
+		})
 	}
 }
 

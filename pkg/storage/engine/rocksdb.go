@@ -1809,6 +1809,10 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 	return nil
 }
 
+func (r *rocksDBBatch) Empty() bool {
+	return r.flushes == 0 && r.builder.Empty()
+}
+
 func (r *rocksDBBatch) Repr() []byte {
 	if r.flushes == 0 {
 		// We've never flushed to C++. Return the mutations only.
