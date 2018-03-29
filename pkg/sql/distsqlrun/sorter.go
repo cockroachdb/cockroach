@@ -109,7 +109,7 @@ func newSorter(
 //
 // This processor is intended to be used when all values need to be sorted.
 type sortAllProcessor struct {
-	*sorterBase
+	sorterBase
 
 	useTempStorage  bool
 	diskContainer   *diskRowContainer
@@ -135,7 +135,7 @@ func newSortAllProcessor(s *sorterBase) Processor {
 		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
 
 	return &sortAllProcessor{
-		sorterBase:     s,
+		sorterBase:     *s,
 		rows:           &memRowContainer{},
 		useTempStorage: useTempStorage,
 	}
