@@ -14,42 +14,6 @@
 
 package optbuilder_test
 
-// This file is home to TestBuilder, which is similar to the logic tests, except it
-// is used for optimizer builder-specific testcases.
-//
-// Each testfile contains testcases of the form
-//   <command> [<args>]...
-//   <SQL statement or expression>
-//   ----
-//   <expected results>
-//
-// The supported commands are:
-//
-//  - build
-//
-//    Builds a memo structure from a SQL query and outputs a representation
-//    of the "expression view" of the memo structure.
-//
-//  - build-scalar
-//
-//    Builds a memo structure from a SQL scalar expression and outputs a
-//    representation of the "expression view" of the memo structure.
-//
-//  - exec-ddl
-//
-//    Parses a CREATE TABLE statement, creates a test table, and adds the
-//    table to the catalog.
-//
-// The supported args are:
-//
-//  - vars=(type1,type2,...)
-//
-//    Information about IndexedVar columns.
-//
-//  - allow-unsupported
-//
-//    Allows building unsupported scalar expressions into UnsupportedExprOp.
-
 import (
 	"context"
 	"flag"
@@ -75,6 +39,26 @@ var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
+// TestBuilder runs data-driven testcases of the form
+//   <command> [<args>]...
+//   <SQL statement or expression>
+//   ----
+//   <expected results>
+//
+// See OptTester.Handle for supported commands. In addition to those, we
+// support:
+//
+//  - build-scalar [args]
+//
+//    Builds a memo structure from a SQL scalar expression and outputs a
+//    representation of the "expression view" of the memo structure.
+//
+//    The supported args (in addition to the ones supported by OptTester:
+//
+//      - vars=(type1,type2,...)
+//
+//        Information about IndexedVar columns.
+//
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -85,8 +69,10 @@ func TestBuilder(t *testing.T) {
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
-				var allowUnsupportedExpr bool
 				var err error
+
+				tester := testutils.NewOptTester(catalog, d.Input)
+				tester.Flags.Format = memo.ExprFmtHideAll
 
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
@@ -99,24 +85,14 @@ func TestBuilder(t *testing.T) {
 
 						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
-					case "allow-unsupported":
-						allowUnsupportedExpr = true
-
 					default:
-						d.Fatalf(t, "unknown argument: %s", key)
+						if err := tester.Flags.Set(arg); err != nil {
+							d.Fatalf(t, "%s", err)
+						}
 					}
 				}
 
 				switch d.Cmd {
-				case "build":
-					tester := testutils.NewOptTester(catalog, d.Input)
-					tester.AllowUnsupportedExpr = allowUnsupportedExpr
-					ev, err := tester.OptBuild()
-					if err != nil {
-						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
-					}
-					return ev.FormatString(memo.ExprFmtHideAll)
-
 				case "build-scalar":
 					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
 					if err != nil {
@@ -135,7 +111,7 @@ func TestBuilder(t *testing.T) {
 					// of the build process.
 					o.DisableOptimizations()
 					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-					b.AllowUnsupportedExpr = allowUnsupportedExpr
+					b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
 					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
@@ -143,12 +119,8 @@ func TestBuilder(t *testing.T) {
 					exprView := o.Optimize(group, &memo.PhysicalProps{})
 					return exprView.FormatString(memo.ExprFmtHideAll)
 
-				case "exec-ddl":
-					return testutils.ExecuteTestDDL(t, d.Input, catalog)
-
 				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
+					return tester.Handle(t, d)
 				}
 			})
 		})
