@@ -1,0 +1,37 @@
+exec-ddl
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── s string
+ └── INDEX primary
+      └── k int not null
+
+opt
+SELECT SUM(w) FROM kv GROUP BY w HAVING SUM(w)=1
+----
+project
+ ├── columns: column5:5(decimal)
+ ├── select
+ │    ├── columns: kv.w:3(int) column5:5(decimal)
+ │    ├── group-by
+ │    │    ├── columns: kv.w:3(int) column5:5(decimal)
+ │    │    ├── grouping columns: kv.w:3(int)
+ │    │    ├── scan kv
+ │    │    │    └── columns: kv.w:3(int)
+ │    │    └── aggregations [outer=(3)]
+ │    │         └── function: sum [type=decimal, outer=(3)]
+ │    │              └── variable: kv.w [type=int, outer=(3)]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
+ │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
+ │              ├── variable: column5 [type=decimal, outer=(5)]
+ │              └── const: 1 [type=decimal]
+ └── projections [outer=(5)]
+      └── variable: column5 [type=decimal, outer=(5)]

@@ -69,6 +69,14 @@ type Factory struct {
 	mem     *memo.Memo
 	evalCtx *tree.EvalContext
 
+	// ruleCycles is used to detect cyclical rule invocations. Each rule with
+	// the "DetectCycles" tag adds its expression fingerprint into this map
+	// before constructing its replacement. If the replacement pattern recursively
+	// invokes the same rule (or another rule with the DetectCycles tag) with that
+	// same fingerprint, then the rule sees that the fingerprint is already in the
+	// map, and will skip application of the rule.
+	ruleCycles map[memo.Fingerprint]bool
+
 	// onRuleMatch is the callback function that is invoked each time a normalize
 	// rule has been matched by the factory. It can be set via a call to the
 	// SetOnRuleMatch method.
@@ -78,7 +86,11 @@ type Factory struct {
 // NewFactory returns a new Factory structure with a new, blank memo structure
 // inside.
 func NewFactory(evalCtx *tree.EvalContext) *Factory {
-	return &Factory{mem: memo.New(), evalCtx: evalCtx}
+	return &Factory{
+		mem:        memo.New(),
+		evalCtx:    evalCtx,
+		ruleCycles: make(map[memo.Fingerprint]bool),
+	}
 }
 
 // DisableOptimizations disables all transformation rules. The unaltered input
@@ -320,6 +332,16 @@ func (f *Factory) outerCols(group memo.GroupID) opt.ColSet {
 	return f.lookupLogical(group).OuterCols()
 }
 
+// synthesizedCols returns the set of columns which have been added by the given
+// Project operator to its input columns. For example, the "x+1" column is a
+// synthesized column in "SELECT x, x+1 FROM a".
+func (f *Factory) synthesizedCols(project memo.GroupID) opt.ColSet {
+	synth := f.outputCols(project).Copy()
+	input := f.mem.NormExpr(project).AsProject().Input()
+	synth.DifferenceWith(f.outputCols(input))
+	return synth
+}
+
 // onlyConstants returns true if the scalar expression is a "constant
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.
@@ -332,6 +354,12 @@ func (f *Factory) onlyConstants(group memo.GroupID) bool {
 // columns.
 func (f *Factory) hasSameCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).Equals(f.outputCols(right))
+}
+
+// hasSubsetCols returns true if the left group's output columns are a subset of
+// the right group's output columns.
+func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
+	return f.outputCols(left).SubsetOf(f.outputCols(right))
 }
 
 // ----------------------------------------------------------------------
@@ -507,6 +535,33 @@ func (f *Factory) filterUnusedValuesColumns(
 	return f.ConstructValues(f.InternList(newRows), f.InternColList(newCols))
 }
 
+// projectNoCycle constructs a Project operator and adds its fingerprint to the
+// ruleCycles map. Rules which have the DetectCycle tag will see that the
+// expression is already in the map, and will not match. Adding to the map in
+// this way is purely a performance optimization, and is used in patterns where
+// it's known that re-matching the operator is unnecessary.
+func (f *Factory) projectNoCycle(input, projections memo.GroupID) memo.GroupID {
+	projectExpr := memo.MakeProjectExpr(input, projections)
+	f.ruleCycles[projectExpr.Fingerprint()] = true
+	return f.ConstructProject(input, projections)
+}
+
+// limitNoCycle is similar to projectNoCycle, except that it constructs a Limit
+// operator. See projectNoCycle for details.
+func (f *Factory) limitNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
+	limitExpr := memo.MakeLimitExpr(input, limit, ordering)
+	f.ruleCycles[limitExpr.Fingerprint()] = true
+	return f.ConstructLimit(input, limit, ordering)
+}
+
+// offsetNoCycle is similar to projectNoCycle, except that it constructs an
+// Offset operator. See projectNoCycle for details.
+func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
+	offsetExpr := memo.MakeOffsetExpr(input, limit, ordering)
+	f.ruleCycles[offsetExpr.Fingerprint()] = true
+	return f.ConstructOffset(input, limit, ordering)
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -535,9 +590,22 @@ func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 	return f.outerCols(src).Intersects(f.outputCols(dst))
 }
 
+// isCorrelatedCols is similar to isCorrelated, except that it checks whether
+// variables in the given expression reference any of the given columns. This:
+//
+//   (IsCorrelated $src $dst)
+//
+// is equivalent to this:
+//
+//   (IsCorrelatedCols $src (OutputCols $dts))
+//
+func (f *Factory) isCorrelatedCols(group memo.GroupID, cols opt.ColSet) bool {
+	return f.outerCols(group).Intersects(cols)
+}
+
 // extractCorrelatedConditions returns a new list containing only those
-// expressions from the given list that are correlated with the destination
-// expression. For example:
+// expressions from the given list that are correlated with the given set of
+// columns. For example:
 //   (InnerJoin
 //     (Scan a)
 //     (Scan b)
@@ -547,13 +615,13 @@ func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 //     ])
 //   )
 //
-// Calling extractCorrelatedConditions with the filter conditions list and
-// (Scan b) as the destination would extract the (Eq) expression, since it
+// Calling extractCorrelatedConditions with the filter conditions list and the
+// output columns of (Scan b) would extract the (Eq) expression, since it
 // references columns from b.
-func (f *Factory) extractCorrelatedConditions(list memo.ListID, dst memo.GroupID) memo.ListID {
+func (f *Factory) extractCorrelatedConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
 	extracted := make([]memo.GroupID, 0, list.Length)
 	for _, item := range f.mem.LookupList(list) {
-		if f.isCorrelated(item, dst) {
+		if f.isCorrelatedCols(item, cols) {
 			extracted = append(extracted, item)
 		}
 	}
@@ -563,10 +631,10 @@ func (f *Factory) extractCorrelatedConditions(list memo.ListID, dst memo.GroupID
 // extractUncorrelatedConditions is the inverse of extractCorrelatedConditions.
 // Instead of extracting correlated expressions, it extracts list expressions
 // that are *not* correlated with the destination.
-func (f *Factory) extractUncorrelatedConditions(list memo.ListID, dst memo.GroupID) memo.ListID {
+func (f *Factory) extractUncorrelatedConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
 	extracted := make([]memo.GroupID, 0, list.Length)
 	for _, item := range f.mem.LookupList(list) {
-		if !f.isCorrelated(item, dst) {
+		if !f.isCorrelatedCols(item, cols) {
 			extracted = append(extracted, item)
 		}
 	}

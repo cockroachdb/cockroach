@@ -62,8 +62,8 @@ import (
 //    memo, and then outputs the memo containing the forest of trees.
 //
 // Rules files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestRules/bool"
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestRules/comp"
+//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/bool"
+//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
 	const testdataGlob = "testdata/*"
