@@ -161,10 +161,9 @@ func grantRolePlanHook(
 	var rowsAffected int
 	for _, r := range grant.Roles {
 		for _, m := range grant.Members {
-			affected, err := internalExecutor.ExecuteStatementInTransaction(
+			affected, err := internalExecutor.ExecuteStatement(
 				ctx,
 				"grant-role",
-				p.Txn(),
 				memberStmt,
 				r, m, grant.AdminOption,
 			)
@@ -255,10 +254,9 @@ func revokeRolePlanHook(
 					"user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, sqlbase.AdminRole)
 			}
-			affected, err := internalExecutor.ExecuteStatementInTransaction(
+			affected, err := internalExecutor.ExecuteStatement(
 				ctx,
 				"revoke-role",
-				p.Txn(),
 				memberStmt,
 				r, m,
 			)

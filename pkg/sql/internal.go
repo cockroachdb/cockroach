@@ -95,6 +95,21 @@ func (ie InternalExecutor) QueryRows(
 	return rows, cols, err
 }
 
+// ExecuteStatement is like ExecuteStatementInTransaction, except that it runs
+// a transaction internally.
+// Statements are currently executed as the root user with the system database as current database.
+func (ie InternalExecutor) ExecuteStatement(
+	ctx context.Context, opName string, statement string, qargs ...interface{},
+) (int, error) {
+	var numAffected int
+	err := ie.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		numAffected, err = ie.ExecuteStatementInTransaction(ctx, opName, txn, statement, qargs...)
+		return err
+	})
+	return numAffected, err
+}
+
 func (ie *InternalExecutor) initSession(p *planner) {
 	p.extendedEvalCtx.NodeID = ie.ExecCfg.LeaseManager.LeaseStore.execCfg.NodeID.Get()
 	p.extendedEvalCtx.Tables.leaseMgr = ie.ExecCfg.LeaseManager
