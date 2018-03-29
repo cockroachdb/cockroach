@@ -61,7 +61,7 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
-	command storagebase.RaftCommand
+	command *storagebase.RaftCommand
 
 	// endCmds.finish is called after command execution to update the timestamp cache &
 	// command queue.
