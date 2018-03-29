@@ -175,12 +175,8 @@ func (m *Memo) GroupByFingerprint(f Fingerprint) GroupID {
 // an alternate form of the group's normalized expression. Adding it to the
 // fingerprint map avoids re-adding the same expression in the future.
 func (m *Memo) AddAltFingerprint(alt Fingerprint, group GroupID) {
-	existing, ok := m.exprMap[alt]
-	if ok {
-		if existing != group {
-			panic("same fingerprint cannot map to different groups")
-		}
-	} else {
+	_, ok := m.exprMap[alt]
+	if !ok {
 		m.exprMap[alt] = group
 	}
 }

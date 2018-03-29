@@ -2,25 +2,44 @@
 # limit.opt contains normalization rules for the Limit and Offset operators.
 # =============================================================================
 
-#[PushLimitThroughProject, Normalize]
-#(Limit
-#    (Project $input:* $projections:*)
-#    $limit:*
-#)
-#=>
-#(Project $input:* $projections:*)
-#(Project
-#    (Limit $input $limit)
-#    $projections
-#)
+# PushLimitIntoProject pushes the Limit operator into its Project input. It is
+# desirable to push the Limit operator as low in the query as possible, in order
+# to minimize the number of rows that other operators need to process.
 #
-#[PushLimitThroughSelect, Normalize]
-#(Limit
-#    (Project $input:* $projections:*)
-#    $limit:*
-#)
-#=>
-#(Project
-#    (Limit $input $limit)
-#    $projections
-#)
+# This rule triggers a cycle with the FilterUnusedLimitCols rule. By tagging
+# this rule (instead of the other) with the DetectCycle tag, the cycle is broken
+# by choosing the (Limit (Project)) order rather than the (Project (Limit))
+# order. This and other rules will try to push Limit down as far as possible,
+# but if it gets stopped along the way, it will be ordered above Project.
+[PushLimitIntoProject, Normalize, DetectCycle]
+(Limit
+    (Project $input:* $projections:*)
+    $limit:*
+    $ordering:*
+)
+=>
+(Project
+    (Limit $input $limit $ordering)
+    $projections
+)
+
+# PushOffsetIntoProject pushes the Offset operator into its Project input. It is
+# desirable to push the Offset operator as low in the query as possible, in
+# order to minimize the number of rows that other operators need to process.
+#
+# This rule triggers a cycle with the FilterUnusedOffsetCols rule. By tagging
+# this rule (instead of the other) with the DetectCycle tag, the cycle is broken
+# by choosing the (Offset (Project)) order rather than the (Project (Offset))
+# order. This and other rules will try to push Offset down as far as possible,
+# but if it gets stopped along the way, it will be  ordered above Project.
+[PushOffsetIntoProject, Normalize, DetectCycle]
+(Offset
+    (Project $input:* $projections:*)
+    $limit:*
+    $ordering:*
+)
+=>
+(Project
+    (Offset $input $limit $ordering)
+    $projections
+)
