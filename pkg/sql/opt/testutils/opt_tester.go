@@ -105,6 +105,19 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 	if verbose {
 		fmt.Print("------ optsteps verbose output starts ------\n")
 	}
+	output := func(format string, args ...interface{}) {
+		fmt.Fprintf(&buf, format, args...)
+		if verbose {
+			fmt.Printf(format, args...)
+		}
+	}
+	indent := func(str string) {
+		str = strings.TrimRight(str, " \n\t\r")
+		lines := strings.Split(str, "\n")
+		for _, line := range lines {
+			output("  %s\n", line)
+		}
+	}
 	for i := 0; ; i++ {
 		o := xform.NewOptimizer(&e.evalCtx)
 		o.MaxSteps = xform.OptimizeSteps(i)
@@ -120,30 +133,28 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 		}
 
 		if i == 0 {
+			output("*** Initial expr:\n")
 			// Output starting tree.
-			buf.WriteString(next)
-			if verbose {
-				fmt.Print(next)
-			}
+			indent(next)
 		} else {
-			// Diffs can be equal if a part of the tree changed that does not
-			// affect the final best expression. In that case, just don't show
-			// anything.
-			if prev != next {
+			output("\n*** %s applied; ", o.LastRuleName())
+
+			if prev == next {
+				// The expression can be unchanged if a part of the memo changed that
+				// does not affect the final best expression.
+				output("best expr unchanged.\n")
+			} else {
+				output("best expr changed:\n")
 				diff := difflib.UnifiedDiff{
-					A:        difflib.SplitLines(prev),
-					B:        difflib.SplitLines(next),
-					FromFile: "",
-					ToFile:   o.LastRuleName().String(),
-					Context:  100,
+					A:       difflib.SplitLines(prev),
+					B:       difflib.SplitLines(next),
+					Context: 100,
 				}
 
-				diffStr, _ := difflib.GetUnifiedDiffString(diff)
-				text := strings.Trim(diffStr, " \t\r\n") + "\n"
-				buf.WriteString(text)
-				if verbose {
-					fmt.Print(text)
-				}
+				text, _ := difflib.GetUnifiedDiffString(diff)
+				// Skip the "@@ ... @@" header (first line).
+				text = strings.SplitN(text, "\n", 2)[1]
+				indent(text)
 			}
 		}
 
@@ -151,11 +162,10 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 	}
 
 	// Output ending tree.
-	buf.WriteString("---\n")
-	buf.WriteString("+++\n")
-	buf.WriteString(next)
+	output("\n*** Final best expr:\n")
+	indent(next)
+
 	if verbose {
-		fmt.Printf("---\n+++\n%s", next)
 		fmt.Print("------ optsteps verbose output ends ------\n")
 	}
 
