@@ -38,10 +38,10 @@ func init() {
 	const numNodes = 3
 
 	tests.Add(testSpec{
-		Name:  fmt.Sprintf("splits/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Name:  fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runSplit(ctx, t, c, size)
+			runLargeRangeSplits(ctx, t, c, size)
 		},
 	})
 }
@@ -54,7 +54,7 @@ func bytesStr(size uint64) string {
 // so by setting the max range size to a huge number before populating the
 // table. It then drops the range size back down to normal and watches as
 // the large range splits apart.
-func runSplit(ctx context.Context, t *test, c *cluster, size int) {
+func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 	// payload is the size of the payload column for each row in the Bank
 	// table.
 	const payload = 100
