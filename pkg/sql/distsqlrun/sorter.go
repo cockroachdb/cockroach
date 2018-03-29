@@ -45,9 +45,14 @@ type sorterBase struct {
 	tempStorage engine.Engine
 }
 
-func newSorterBase(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
-) (*sorterBase, error) {
+func (s *sorterBase) init(
+	flowCtx *FlowCtx,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
+	ordering sqlbase.ColumnOrdering,
+	matchLen uint32,
+) error {
 	count := int64(0)
 	if post.Limit != 0 {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
@@ -55,42 +60,41 @@ func newSorterBase(
 		count = int64(post.Limit) + int64(post.Offset)
 	}
 
-	s := &sorterBase{
-		input:       input,
-		ordering:    convertToColumnOrdering(spec.OutputOrdering),
-		matchLen:    spec.OrderingMatchLen,
-		count:       count,
-		tempStorage: flowCtx.TempStorage,
-		evalCtx:     flowCtx.NewEvalCtx(),
-	}
-	if err := s.init(post, input.OutputTypes(), flowCtx, s.evalCtx, output); err != nil {
-		return nil, err
-	}
-	return s, nil
+	s.input = input
+	s.ordering = ordering
+	s.matchLen = matchLen
+	s.count = count
+	s.tempStorage = flowCtx.TempStorage
+	s.evalCtx = flowCtx.NewEvalCtx()
+	return s.processorBase.init(
+		post, input.OutputTypes(), flowCtx, s.evalCtx, output,
+	)
 }
 
 func newSorter(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (Processor, error) {
-	s, err := newSorterBase(flowCtx, spec, input, post, output)
-	if err != nil {
-		return nil, err
+	count := int64(0)
+	if post.Limit != 0 {
+		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
+		// will discard the first Offset ones.
+		count = int64(post.Limit) + int64(post.Offset)
 	}
 
 	// Choose the optimal processor.
-	if s.matchLen == 0 {
-		if s.count == 0 {
+	if spec.OrderingMatchLen == 0 {
+		if count == 0 {
 			// No specified ordering match length and unspecified limit; no
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			return newSortAllProcessor(s), nil
+			return newSortAllProcessor(flowCtx, spec, input, post, output)
 		}
 		// No specified ordering match length but specified limit; we can optimize
 		// our sort procedure by maintaining a max-heap populated with only the
 		// smallest k rows seen. It has a worst-case time complexity of
 		// O(n*log(k)) and a worst-case space complexity of O(k).
-		return newSortTopKProcessor(s, s.count), nil
+		return newSortTopKProcessor(flowCtx, spec, input, post, output, count)
 	}
 	// Ordering match length is specified. We will be able to use existing
 	// ordering in order to avoid loading all the rows into memory. If we're
@@ -99,7 +103,7 @@ func newSorter(
 	// chunk and then output.
 	// TODO(irfansharif): Add optimization for case where both ordering match
 	// length and limit is specified.
-	return newSortChunksProcessor(s), nil
+	return newSortChunksProcessor(flowCtx, spec, input, post, output)
 
 }
 
@@ -109,7 +113,7 @@ func newSorter(
 //
 // This processor is intended to be used when all values need to be sorted.
 type sortAllProcessor struct {
-	*sorterBase
+	sorterBase
 
 	useTempStorage  bool
 	diskContainer   *diskRowContainer
@@ -130,33 +134,43 @@ type sortAllProcessor struct {
 var _ Processor = &sortAllProcessor{}
 var _ RowSource = &sortAllProcessor{}
 
-func newSortAllProcessor(s *sorterBase) Processor {
-	useTempStorage := settingUseTempStorageSorts.Get(&s.flowCtx.Settings.SV) ||
-		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
+func newSortAllProcessor(
+	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, out RowReceiver,
+) (Processor, error) {
+	ordering := convertToColumnOrdering(spec.OutputOrdering)
+	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
+		flowCtx.testingKnobs.MemoryLimitBytes > 0
 
-	rowContainerMon := s.flowCtx.EvalCtx.Mon
+	rowContainerMon := flowCtx.EvalCtx.Mon
 	if useTempStorage {
 		// We will use the sortAllProcessor in this case and potentially fall
 		// back to disk.
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The processor will overflow to disk if this limit is not enough.
-		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
+		limit := flowCtx.testingKnobs.MemoryLimitBytes
 		if limit <= 0 {
-			limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
+			limit = settingWorkMemBytes.Get(&flowCtx.Settings.SV)
 		}
 		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
+			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(s.flowCtx.Ctx, rowContainerMon, mon.BoundAccount{})
+		limitedMon.Start(flowCtx.Ctx, rowContainerMon, mon.BoundAccount{})
 		rowContainerMon = &limitedMon
 	}
+
 	proc := &sortAllProcessor{
-		sorterBase:      s,
 		rowContainerMon: rowContainerMon,
 		useTempStorage:  useTempStorage,
 	}
-	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-	return proc
+	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
+	if err := proc.sorterBase.init(
+		flowCtx, input, post, out,
+		convertToColumnOrdering(spec.OutputOrdering),
+		spec.OrderingMatchLen,
+	); err != nil {
+		return nil, err
+	}
+	return proc, nil
 }
 
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -375,15 +389,28 @@ type sortTopKProcessor struct {
 var _ Processor = &sortTopKProcessor{}
 var _ RowSource = &sortTopKProcessor{}
 
-func newSortTopKProcessor(s *sorterBase, k int64) Processor {
-	rowContainerMon := s.flowCtx.EvalCtx.Mon
+func newSortTopKProcessor(
+	flowCtx *FlowCtx,
+	spec *SorterSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	out RowReceiver,
+	k int64,
+) (Processor, error) {
+	rowContainerMon := flowCtx.EvalCtx.Mon
+	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{
-		sorterBase:      *s,
 		rowContainerMon: rowContainerMon,
 		k:               k,
 	}
-	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-	return proc
+	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
+	if err := proc.sorterBase.init(
+		flowCtx, input, post, out,
+		ordering, spec.OrderingMatchLen,
+	); err != nil {
+		return nil, err
+	}
+	return proc, nil
 }
 
 func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -519,14 +546,22 @@ type sortChunksProcessor struct {
 var _ Processor = &sortChunksProcessor{}
 var _ RowSource = &sortChunksProcessor{}
 
-func newSortChunksProcessor(s *sorterBase) Processor {
-	rowContainerMon := s.flowCtx.EvalCtx.Mon
+func newSortChunksProcessor(
+	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, out RowReceiver,
+) (Processor, error) {
+	rowContainerMon := flowCtx.EvalCtx.Mon
+	ordering := convertToColumnOrdering(spec.OutputOrdering)
+
 	proc := &sortChunksProcessor{
-		sorterBase:      *s,
 		rowContainerMon: rowContainerMon,
 	}
-	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-	return proc
+	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
+	if err := proc.sorterBase.init(
+		flowCtx, input, post, out, ordering, spec.OrderingMatchLen,
+	); err != nil {
+		return nil, err
+	}
+	return proc, nil
 }
 
 // chunkCompleted is a helper function that determines if the given row shares the same
