@@ -857,8 +857,7 @@ var specs = []stmtSpec{
 		stmt: "show_queries_stmt",
 	},
 	{
-		name: "show_roles",
-		stmt: "show_roles_stmt",
+		name: "show_roles_stmt",
 	},
 	{
 		name: "show_schemas",
