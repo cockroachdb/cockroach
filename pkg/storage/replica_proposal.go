@@ -459,6 +459,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.Timestamp = hlc.Timestamp{}
 		rResult.DeprecatedStartKey = nil
 		rResult.DeprecatedEndKey = nil
+		rResult.PrevLeaseProposal = nil
 	}
 
 	if rResult.BlockReads {

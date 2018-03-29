@@ -261,6 +261,13 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.SuggestedCompactions = nil
 
+	if p.Replicated.PrevLeaseProposal == nil {
+		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
+	} else if q.Replicated.PrevLeaseProposal != nil {
+		return errors.New("conflicting lease expiration")
+	}
+	q.Replicated.PrevLeaseProposal = nil
+
 	if q.Local.Intents != nil {
 		if p.Local.Intents == nil {
 			p.Local.Intents = q.Local.Intents
