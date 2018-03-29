@@ -831,7 +831,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ch: make(chan struct{}),
 	}
 	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
-		now := m.clocks[idx].Now()
+		now := clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
