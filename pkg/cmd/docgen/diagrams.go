@@ -586,6 +586,25 @@ var specs = []stmtSpec{
 		},
 	},
 	{
+		name:    "alter_table_partition_by",
+		stmt:    "alter_onetable_stmt",
+		inline:  []string{"alter_table_cmds", "alter_table_cmd", "partition_by"},
+		replace: map[string]string{"relation_expr": "table_name"},
+		regreplace: map[string]string{
+			`'NOTHING' .*`:        `'NOTHING'`,
+			`_partitions '\)' .*`: `_partitions ')'`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'PARTITION")},
+	},
+	{
+		name:    "create_table_partition_by",
+		stmt:    "create_table_stmt",
+		inline:  []string{"opt_partition_by", "partition_by"},
+		replace: map[string]string{"opt_table_elem_list": "table_definition", "opt_interleave": ""},
+		match:   []*regexp.Regexp{regexp.MustCompile("PARTITION")},
+		unlink:  []string{"table_definition"},
+	},
+	{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
