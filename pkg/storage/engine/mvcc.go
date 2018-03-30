@@ -2086,7 +2086,7 @@ func mvccResolveWriteIntent(
 	}
 
 	// A commit in an older epoch or timestamp is prevented by the
-	// sequence cache under normal operation. Replays of EndTransaction
+	// abort span under normal operation. Replays of EndTransaction
 	// commands which occur after the transaction record has been erased
 	// make this a possibility; we treat such intents as uncommitted.
 	//
