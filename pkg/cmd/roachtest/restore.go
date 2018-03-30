@@ -28,8 +28,8 @@ func init() {
 			c.Start(ctx)
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
+				t.Status(`running restore`)
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
-				c.status(`running 2tb restore`)
 				// TODO(dan): It'd be nice if we could keep track over time of how
 				// long this next line took.
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
