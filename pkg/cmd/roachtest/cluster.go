@@ -590,6 +590,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("starting cluster")
+	defer c.status()
 	args := []string{
 		"roachprod",
 		"start",
@@ -612,6 +613,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("stopping cluster")
+	defer c.status()
 	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
@@ -629,6 +631,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("wiping cluster")
+	defer c.status()
 	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
@@ -781,6 +784,10 @@ func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
 
 func (m *monitor) Go(fn func(context.Context) error) {
 	m.g.Go(func() error {
+		if impl, ok := m.t.(*test); ok {
+			// Automatically clear the worker status message when the goroutine exits.
+			defer impl.Status()
+		}
 		return fn(m.ctx)
 	})
 }
