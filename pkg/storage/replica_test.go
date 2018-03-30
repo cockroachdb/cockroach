@@ -8800,8 +8800,8 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 				return pErr
 			},
 			req: resolveAbortedIntentReq,
-			// Should be a no-op, see #23943.
-			expProposal: true,
+			// No-op - the abort span has already been poisoned.
+			expProposal: false,
 		},
 	}
 	for _, c := range testCases {
