@@ -193,11 +193,19 @@ UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-export GOPATH := $(realpath ../../../..)
-#                           ^  ^  ^  ^~ GOPATH
-#                           |  |  |~ GOPATH/src
-#                           |  |~ GOPATH/src/github.com
-#                           |~ GOPATH/src/github.com/cockroachdb
+GOPATH := $(shell $(GO) env GOPATH)
+
+ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
+$(error GOPATHs with multiple entries are not supported)
+endif
+
+ifeq "$(filter $(GOPATH)%,$(CURDIR))" ""
+$(error Current directory "$(CURDIR)" is not within GOPATH "$(GOPATH)")
+endif
+
+ifeq "$(GOPATH)" "/"
+$(error GOPATH=/ is not supported)
+endif
 
 # Avoid printing twice if Make restarts (because a Makefile was changed) or is
 # called recursively from another Makefile.
