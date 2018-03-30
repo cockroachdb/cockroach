@@ -12,69 +12,62 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// teamcity-trigger launches a variety of nightly build jobs on TeamCity using
+// its REST API. It is intended to be run from a meta-build on a schedule
+// trigger.
+//
+// One might think that TeamCity would support scheduling the same build to run
+// multiple times with different parameters, but alas. The feature request has
+// been open for ten years: https://youtrack.jetbrains.com/issue/TW-6439
 package main
 
 import (
-	"flag"
+	"fmt"
 	"log"
-	"net/url"
 	"os"
-	"strconv"
 
 	"github.com/abourget/teamcity"
+	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
 	"github.com/kisielk/gotool"
 )
 
-var buildTypeID = flag.String("build", "Cockroach_Nightlies_Stress", "the TeamCity build ID to start")
-var branchName = flag.String("branch", "", "the VCS branch to build")
-
-const teamcityServerURLEnv = "TC_SERVER_URL"
-const teamcityAPIUserEnv = "TC_API_USER"
-const teamcityAPIPasswordEnv = "TC_API_PASSWORD"
-
 func main() {
-	flag.Parse()
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "usage: %s BRANCH...\n", os.Args[0])
+		os.Exit(1)
+	}
+	branches := os.Args[1:]
 
-	serverURL, ok := os.LookupEnv(teamcityServerURLEnv)
-	if !ok {
-		log.Fatalf("teamcity server URL environment variable %s is not set", teamcityServerURLEnv)
-	}
-	u, err := url.Parse(serverURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-	username, ok := os.LookupEnv(teamcityAPIUserEnv)
-	if !ok {
-		log.Fatalf("teamcity API username environment variable %s is not set", teamcityAPIUserEnv)
-	}
-	password, ok := os.LookupEnv(teamcityAPIPasswordEnv)
-	if !ok {
-		log.Fatalf("teamcity API password environment variable %s is not set", teamcityAPIPasswordEnv)
-	}
-	client := teamcity.New(u.Host, username, password)
-	runTC(func(properties map[string]string) {
-		build, err := client.QueueBuild(*buildTypeID, *branchName, properties)
+	serverURL := cmdutil.RequireEnv("TC_SERVER_URL")
+	username := cmdutil.RequireEnv("TC_API_USER")
+	password := cmdutil.RequireEnv("TC_API_PASSWORD")
+
+	tcClient := teamcity.New(serverURL, username, password)
+	runTC(branches, func(buildID, branch string, opts map[string]string) {
+		build, err := tcClient.QueueBuild(buildID, branch, opts)
 		if err != nil {
-			log.Fatalf("failed to create teamcity build (*buildTypeID=%s *branchName=%s, properties=%+v): %s", *buildTypeID, *branchName, properties, err)
+			log.Fatalf("failed to create teamcity build (buildID=%s, branch=%s, opts=%+v): %s",
+				build, branch, opts, err)
 		}
-		log.Printf("created teamcity build (*buildTypeID=%s *branchName=%s, properties=%+v): %s", *buildTypeID, *branchName, properties, build)
+		log.Printf("created teamcity build (buildID=%s, branch=%s, opts=%+v): %s",
+			buildID, branch, opts, build)
 	})
 }
 
-func runTC(queueBuildFn func(map[string]string)) {
+func runTC(branches []string, queueBuild func(string, string, map[string]string)) {
 	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
 
-	// Queue a build per configuration per package.
-	for _, properties := range []map[string]string{
-		{}, // uninstrumented
-		{"env.GOFLAGS": "-race"},
-		{"env.TAGS": "deadlock"},
-	} {
-		properties["COCKROACH_NIGHTLY_STRESS"] = strconv.FormatBool(true)
-		for _, importPath := range importPaths {
-			properties["env.PKG"] = importPath
-
-			queueBuildFn(properties)
+	for _, branch := range branches {
+		// Queue stress builds. One per configuration per package.
+		for _, opts := range []map[string]string{
+			{}, // uninstrumented
+			{"env.GOFLAGS": "-race"},
+			{"env.TAGS": "deadlock"},
+		} {
+			for _, importPath := range importPaths {
+				opts["env.PKG"] = importPath
+				queueBuild("Cockroach_Nightlies_Stress", branch, opts)
+			}
 		}
 	}
 }
