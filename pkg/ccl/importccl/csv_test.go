@@ -132,6 +132,38 @@ d
 				`SELECT count(*) from d.t`: {{"1"}},
 			},
 		},
+		{
+			name: "computed columns",
+			create: `
+				a int,
+				b int,
+				c int as (3) stored,
+				d int as (a + b) stored,
+				e string as (a::string || b::string) stored
+			`,
+			csv: `1,5`,
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"1", "5", "3", "6", "15"}},
+			},
+		},
+		{
+			name: "computed columns must be last",
+			create: `
+				a int,
+				c int as (3) stored,
+				b int
+			`,
+			err: "computed columns must appear after other columns",
+		},
+		{
+			name: "computed columns cannot reference",
+			create: `
+				i int,
+				a int as (i) stored,
+				b int as (a) stored
+			`,
+			err: "computed columns cannot reference other computed columns",
+		},
 	}
 
 	var csvString string
@@ -359,14 +391,6 @@ func TestImportStmt(t *testing.T) {
 			files,
 			``,
 			"option \"transform\" requires a value",
-		},
-		{
-			"bad-computed-column",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2', transform = $1`,
-			nil,
-			filesWithOpts,
-			``,
-			"computed columns not supported",
 		},
 		{
 			"primary-key-dup",
@@ -688,7 +712,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc, tableDesc.VisibleColumns())
 		})
 	}
 	const batchSize = 500
