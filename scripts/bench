@@ -18,26 +18,36 @@ EOF
   exit 1
 fi
 
-OLD=$1
+OLDNAME=$1
+OLD=$(git rev-parse "$1")
+
+ORIGREF=$(git symbolic-ref -q HEAD)
+ORIG=${ORIGREF##refs/heads/}
 
 if [[ $# < 2 ]]; then
-  # Use the current branch.
-  REF=`git symbolic-ref -q HEAD`
-  NEW=${REF##refs/heads/}
+  NEWNAME="HEAD"
+  NEW=$ORIG
 else
-  NEW=$2
+  NEWNAME=$2
+  NEW=$(git rev-parse "$2")
 fi
 
-echo "Comparing $NEW (new) with $OLD (old)"
+echo "Comparing $NEWNAME (new) with $OLDNAME (old)"
 echo ""
 
 dest=$(mktemp -d)
 echo "Writing to ${dest}"
 
-for branch in "$NEW" "$OLD"; do
-  git checkout "${branch}"
-  (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${branch}" 2> "${dest}/log.txt")
-done
-benchstat "${dest}/bench.$OLD" "${dest}/bench.$NEW"
+shas=($OLD $NEW)
+names=($OLDNAME $NEWNAME)
 
-git checkout "$NEW"
+for (( i=0; i<${#shas[@]}; i+=1 )); do
+  name=${names[i]}
+  sha=${shas[i]}
+  echo "Switching to $name"
+  git checkout -q "$sha"
+  (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${name}" 2> "${dest}/log.txt")
+done
+benchstat "${dest}/bench.$OLDNAME" "${dest}/bench.$NEWNAME"
+
+git checkout "$ORIG"
