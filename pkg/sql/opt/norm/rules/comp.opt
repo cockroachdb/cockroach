@@ -119,7 +119,8 @@
 # left input is null.
 [FoldNullComparisonLeft, Normalize]
 (Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
+    Contains | JsonExists | JsonSomeExists | JsonAllExists
     $left:(Null)
     *
 )
@@ -130,7 +131,8 @@
 # right input is null.
 [FoldNullComparisonRight, Normalize]
 (Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
-    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
+    Contains | JsonExists | JsonSomeExists | JsonAllExists
     *
     $right:(Null)
 )

@@ -55,23 +55,30 @@ var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
 		// This is just syntatic sugar that reverses the operands.
 		return f.ConstructContains(right, left)
 	},
+	tree.JSONExists:     (*norm.Factory).ConstructJsonExists,
+	tree.JSONAllExists:  (*norm.Factory).ConstructJsonAllExists,
+	tree.JSONSomeExists: (*norm.Factory).ConstructJsonSomeExists,
 }
 
 // Map from tree.BinaryOperator to Factory constructor function.
 var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
-	tree.Bitand:   (*norm.Factory).ConstructBitand,
-	tree.Bitor:    (*norm.Factory).ConstructBitor,
-	tree.Bitxor:   (*norm.Factory).ConstructBitxor,
-	tree.Plus:     (*norm.Factory).ConstructPlus,
-	tree.Minus:    (*norm.Factory).ConstructMinus,
-	tree.Mult:     (*norm.Factory).ConstructMult,
-	tree.Div:      (*norm.Factory).ConstructDiv,
-	tree.FloorDiv: (*norm.Factory).ConstructFloorDiv,
-	tree.Mod:      (*norm.Factory).ConstructMod,
-	tree.Pow:      (*norm.Factory).ConstructPow,
-	tree.Concat:   (*norm.Factory).ConstructConcat,
-	tree.LShift:   (*norm.Factory).ConstructLShift,
-	tree.RShift:   (*norm.Factory).ConstructRShift,
+	tree.Bitand:            (*norm.Factory).ConstructBitand,
+	tree.Bitor:             (*norm.Factory).ConstructBitor,
+	tree.Bitxor:            (*norm.Factory).ConstructBitxor,
+	tree.Plus:              (*norm.Factory).ConstructPlus,
+	tree.Minus:             (*norm.Factory).ConstructMinus,
+	tree.Mult:              (*norm.Factory).ConstructMult,
+	tree.Div:               (*norm.Factory).ConstructDiv,
+	tree.FloorDiv:          (*norm.Factory).ConstructFloorDiv,
+	tree.Mod:               (*norm.Factory).ConstructMod,
+	tree.Pow:               (*norm.Factory).ConstructPow,
+	tree.Concat:            (*norm.Factory).ConstructConcat,
+	tree.LShift:            (*norm.Factory).ConstructLShift,
+	tree.RShift:            (*norm.Factory).ConstructRShift,
+	tree.JSONFetchText:     (*norm.Factory).ConstructFetchText,
+	tree.JSONFetchVal:      (*norm.Factory).ConstructFetchVal,
+	tree.JSONFetchValPath:  (*norm.Factory).ConstructFetchValPath,
+	tree.JSONFetchTextPath: (*norm.Factory).ConstructFetchTextPath,
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
