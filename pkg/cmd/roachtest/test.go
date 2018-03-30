@@ -29,6 +29,8 @@ import (
 	"sync"
 	"time"
 
+	"path/filepath"
+
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -365,9 +367,13 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 					}
 				} else {
 					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
+					// if testFailed is not present, teamCity regards the test as successful.
 				}
 				if teamCity {
 					fmt.Fprintf(out, "##teamcity[testFinished name='%s']\n", t.Name())
+					if teamCity {
+						fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(artifacts, t.Name()))
+					}
 				}
 			}
 
