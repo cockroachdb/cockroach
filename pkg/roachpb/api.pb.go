@@ -919,7 +919,7 @@ func (*EndTransactionResponse) Descriptor() ([]byte, []int) { return fileDescrip
 // The new range contains range replicas located on the same stores;
 // no range data is moved during this operation. The split can be
 // thought of as a mostly logical operation, though some other
-// metadata (e.g. sequence cache and range stats must be copied or
+// metadata (e.g. abort span and range stats must be copied or
 // recomputed).
 type AdminSplitRequest struct {
 	Span     `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
@@ -1240,7 +1240,7 @@ type ResolveIntentRequest struct {
 	IntentTxn cockroach_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
-	// Optionally poison the sequence cache for the transaction the intent's
+	// Optionally poison the abort span for the transaction the intent's
 	// range.
 	Poison bool `protobuf:"varint,4,opt,name=poison,proto3" json:"poison,omitempty"`
 }
@@ -1271,7 +1271,7 @@ type ResolveIntentRangeRequest struct {
 	IntentTxn cockroach_storage_engine_enginepb.TxnMeta `protobuf:"bytes,2,opt,name=intent_txn,json=intentTxn" json:"intent_txn"`
 	// The status of the transaction.
 	Status TransactionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=cockroach.roachpb.TransactionStatus" json:"status,omitempty"`
-	// Optionally poison the sequence cache for the transaction on all ranges
+	// Optionally poison the abort span for the transaction on all ranges
 	// on which the intents reside.
 	Poison bool `protobuf:"varint,4,opt,name=poison,proto3" json:"poison,omitempty"`
 	// The minimum timestamp for any intents written by this

@@ -155,7 +155,7 @@ System keys come in several subtypes:
 - **Replicated Range ID local** keys store range metadata that is
     present on all of the replicas for a range. These keys are updated
     via Raft operations. Examples include the range lease state and
-    abort cache entries.
+    abort span entries.
 - **Unreplicated Range ID local** keys store range metadata that is
     local to a replica. The primary examples of such keys are the Raft
     state and Raft log.

@@ -40,7 +40,7 @@ message RaftTombstone {
 }
 
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
-// all of the range's data and metadata, including the raft log, sequence cache, etc.
+// all of the range's data and metadata, including the raft log, abort span, etc.
 message RaftSnapshotData {
   message KeyValue {
     optional bytes key = 1;
