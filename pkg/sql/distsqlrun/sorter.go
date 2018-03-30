@@ -77,26 +77,33 @@ func (s *sorterBase) init(
 	return s.processorBase.init(post, input.OutputTypes(), flowCtx, s.evalCtx, output)
 }
 
-// producerMeta constructs the ProducerMetadata after consumption of
-// rows has terminated, either due to being indicated by the consumer, or
-// because the processor ran out of rows or encountered an error. It is ok for
-// err to be nil indicating that we're done producing rows even though no error
-// occurred.
-func (s *sorterBase) producerMeta(err error) *ProducerMetadata {
-	if !s.closed {
-		var meta *ProducerMetadata
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-			// We need to close as soon as we send error metadata as we're done
-			// sending rows. The consumer is allowed to not call ConsumerDone().
-		} else if trace := getTraceData(s.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		s.close()
-		if meta != nil {
-			return meta
-		}
+// closeAndQueueTrailingMeta closes input and puts the processor in a mode where
+// future calls to Next() will return only "trailing metadata". The first such
+// piece of metadata is returned. The next ones have to be retrieved with
+// popTrailingMeta().
+//
+// If an error is passed in, it will be part of the trailing metadata.
+//
+// This method is to be called when the processor is done producing rows and
+// draining its inputs (if it wants to drain them).
+func (s *sorterBase) closeAndQueueTrailingMeta(err error) *ProducerMetadata {
+	if s.closed {
+		log.Fatalf(s.ctx, "closeAndQueueTrailingMeta() called after close. err: %v", err)
 	}
+
+	if err != nil {
+		s.meta = append(s.meta, ProducerMetadata{Err: err})
+	}
+	if trace := getTraceData(s.ctx); trace != nil {
+		s.meta = append(s.meta, ProducerMetadata{TraceData: trace})
+	}
+	s.close()
+
+	return s.popTrailingMeta()
+}
+
+// popTrailingMeta peels off one piece of trailing metadata.
+func (s *sorterBase) popTrailingMeta() *ProducerMetadata {
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
 		s.meta = s.meta[1:]
@@ -205,21 +212,21 @@ func newSortAllProcessor(
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
 		if err := s.fill(); err != nil {
-			return nil, s.producerMeta(err)
+			return nil, s.closeAndQueueTrailingMeta(err)
 		}
 	}
 	if s.closed {
-		return nil, s.producerMeta(nil /* err */)
+		return nil, s.popTrailingMeta()
 	}
 
 	for {
 		if ok, err := s.i.Valid(); err != nil || !ok {
-			return nil, s.producerMeta(err)
+			return nil, s.closeAndQueueTrailingMeta(err)
 		}
 
 		row, err := s.i.Row()
 		if err != nil {
-			return nil, s.producerMeta(err)
+			return nil, s.closeAndQueueTrailingMeta(err)
 		}
 		s.i.Next()
 
@@ -230,7 +237,7 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		return nil, s.producerMeta(err)
+		return nil, s.closeAndQueueTrailingMeta(err)
 	}
 }
 
@@ -434,7 +441,7 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			if int64(s.rows.Len()) < s.k {
 				// Accumulate up to k values.
 				if err := s.rows.AddRow(ctx, row); err != nil {
-					return nil, s.producerMeta(err)
+					return nil, s.closeAndQueueTrailingMeta(err)
 				}
 			} else {
 				if !heapCreated {
@@ -445,15 +452,19 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				// Replace the max value if the new row is smaller, maintaining the
 				// max-heap.
 				if err := s.rows.MaybeReplaceMax(ctx, row); err != nil {
-					return nil, s.producerMeta(err)
+					return nil, s.closeAndQueueTrailingMeta(err)
 				}
 			}
 		}
 		s.rows.Sort(ctx)
 	}
 
-	if s.closed || s.rows.Len() == 0 {
-		return nil, s.producerMeta(nil /* err */)
+	if s.closed {
+		return nil, s.popTrailingMeta()
+	}
+
+	if s.rows.Len() == 0 {
+		return nil, s.closeAndQueueTrailingMeta(nil /* err */)
 	}
 
 	for {
@@ -467,7 +478,7 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		return nil, s.producerMeta(err)
+		return nil, s.closeAndQueueTrailingMeta(err)
 	}
 }
 
@@ -607,7 +618,7 @@ func (s *sortChunksProcessor) fill() error {
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.maybeStart("sortChunks", "SortChunks")
 	if s.closed {
-		return nil, s.producerMeta(nil /* err */)
+		return nil, s.popTrailingMeta()
 	}
 
 	for {
@@ -616,7 +627,7 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			s.rows.Clear(s.rows.evalCtx.Ctx())
 			// If that errored or didn't result in an active chunk, we are done.
 			if err := s.fill(); err != nil || s.rows.Len() == 0 {
-				return nil, s.producerMeta(err)
+				return nil, s.closeAndQueueTrailingMeta(err)
 			}
 		}
 
@@ -631,7 +642,7 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		return nil, s.producerMeta(err)
+		return nil, s.closeAndQueueTrailingMeta(err)
 	}
 }
 
