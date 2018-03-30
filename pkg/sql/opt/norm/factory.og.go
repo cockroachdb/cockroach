@@ -199,7 +199,41 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
-	// [PushDownSelectJoinLeft]
+	// [PushSelectIntoProject]
+	{
+		project := input
+		_projectExpr := _f.mem.NormExpr(input).AsProject()
+		if _projectExpr != nil {
+			input := _projectExpr.Input()
+			projections := _projectExpr.Projections()
+			_filtersExpr := _f.mem.NormExpr(filter).AsFilters()
+			if _filtersExpr != nil {
+				list := _filtersExpr.Conditions()
+				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
+					condition := _item
+					if !_f.isCorrelatedCols(condition, _f.synthesizedCols(project)) {
+						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoProject) {
+							_group = _f.ConstructSelect(
+								_f.projectNoCycle(_f.ConstructSelect(
+									input,
+									_f.ConstructFilters(
+										_f.extractUncorrelatedConditions(list, _f.synthesizedCols(project)),
+									),
+								), projections),
+								_f.ConstructFilters(
+									_f.extractCorrelatedConditions(list, _f.synthesizedCols(project)),
+								),
+							)
+							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+							return _group
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// [PushSelectIntoJoinLeft]
 	{
 		_expr := _f.mem.NormExpr(input)
 		if _expr.Operator() == opt.InnerJoinOp || _expr.Operator() == opt.InnerJoinApplyOp || _expr.Operator() == opt.LeftJoinOp || _expr.Operator() == opt.LeftJoinApplyOp {
@@ -212,7 +246,7 @@ func (_f *Factory) ConstructSelect(
 				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, right) {
-						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownSelectJoinLeft) {
+						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoJoinLeft) {
 							_group = _f.ConstructSelect(
 								_f.DynamicConstruct(
 									_f.mem.NormExpr(input).Operator(),
@@ -220,7 +254,7 @@ func (_f *Factory) ConstructSelect(
 										DynamicID(_f.ConstructSelect(
 											left,
 											_f.ConstructFilters(
-												_f.extractUncorrelatedConditions(list, right),
+												_f.extractUncorrelatedConditions(list, _f.outputCols(right)),
 											),
 										)),
 										DynamicID(right),
@@ -228,7 +262,7 @@ func (_f *Factory) ConstructSelect(
 									},
 								),
 								_f.ConstructFilters(
-									_f.extractCorrelatedConditions(list, right),
+									_f.extractCorrelatedConditions(list, _f.outputCols(right)),
 								),
 							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -240,7 +274,7 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
-	// [PushDownSelectJoinRight]
+	// [PushSelectIntoJoinRight]
 	{
 		_expr := _f.mem.NormExpr(input)
 		if _expr.Operator() == opt.InnerJoinOp || _expr.Operator() == opt.InnerJoinApplyOp || _expr.Operator() == opt.RightJoinOp || _expr.Operator() == opt.RightJoinApplyOp {
@@ -253,7 +287,7 @@ func (_f *Factory) ConstructSelect(
 				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, left) {
-						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownSelectJoinRight) {
+						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoJoinRight) {
 							_group = _f.ConstructSelect(
 								_f.DynamicConstruct(
 									_f.mem.NormExpr(input).Operator(),
@@ -262,14 +296,14 @@ func (_f *Factory) ConstructSelect(
 										DynamicID(_f.ConstructSelect(
 											right,
 											_f.ConstructFilters(
-												_f.extractUncorrelatedConditions(list, left),
+												_f.extractUncorrelatedConditions(list, _f.outputCols(left)),
 											),
 										)),
 										DynamicID(on),
 									},
 								),
 								_f.ConstructFilters(
-									_f.extractCorrelatedConditions(list, left),
+									_f.extractCorrelatedConditions(list, _f.outputCols(left)),
 								),
 							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -303,7 +337,7 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
-	// [PushDownSelectGroupBy]
+	// [PushSelectIntoGroupBy]
 	{
 		_groupByExpr := _f.mem.NormExpr(input).AsGroupBy()
 		if _groupByExpr != nil {
@@ -317,20 +351,20 @@ func (_f *Factory) ConstructSelect(
 					for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 						condition := _item
 						if !_f.isCorrelated(condition, aggregations) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownSelectGroupBy) {
+							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoGroupBy) {
 								_group = _f.ConstructSelect(
 									_f.ConstructGroupBy(
 										_f.ConstructSelect(
 											input,
 											_f.ConstructFilters(
-												_f.extractUncorrelatedConditions(list, aggregations),
+												_f.extractUncorrelatedConditions(list, _f.outputCols(aggregations)),
 											),
 										),
 										aggregations,
 										groupingCols,
 									),
 									_f.ConstructFilters(
-										_f.extractCorrelatedConditions(list, aggregations),
+										_f.extractCorrelatedConditions(list, _f.outputCols(aggregations)),
 									),
 								)
 								_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -369,6 +403,24 @@ func (_f *Factory) ConstructProject(
 				_group = input
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
 				return _group
+			}
+		}
+	}
+
+	// [EliminateProjectProject]
+	{
+		_projectExpr2 := _f.mem.NormExpr(input).AsProject()
+		if _projectExpr2 != nil {
+			innerInput := _projectExpr2.Input()
+			if _f.hasSubsetCols(input, innerInput) {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateProjectProject) {
+					_group = _f.ConstructProject(
+						innerInput,
+						projections,
+					)
+					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					return _group
+				}
 			}
 		}
 	}
@@ -416,19 +468,25 @@ func (_f *Factory) ConstructProject(
 	{
 		_selectExpr := _f.mem.NormExpr(input).AsSelect()
 		if _selectExpr != nil {
-			innerInput := _selectExpr.Input()
+			input := _selectExpr.Input()
 			filter := _selectExpr.Filter()
-			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedSelectCols) {
-					_group = _f.ConstructProject(
-						_f.ConstructSelect(
-							_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)),
-							filter,
-						),
-						projections,
-					)
-					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
-					return _group
+			if _f.hasUnusedColumns(input, _f.neededCols2(projections, filter)) {
+				if !_f.ruleCycles[_projectExpr.Fingerprint()] {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedSelectCols) {
+						_f.ruleCycles[_projectExpr.Fingerprint()] = true
+						_group = _f.ConstructProject(
+							_f.ConstructSelect(
+								_f.filterUnusedColumns(input, _f.neededCols2(projections, filter)),
+								filter,
+							),
+							projections,
+						)
+						delete(_f.ruleCycles, _projectExpr.Fingerprint())
+						if _f.mem.GroupByFingerprint(_projectExpr.Fingerprint()) == 0 {
+							_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+						}
+						return _group
+					}
 				}
 			}
 		}
@@ -444,11 +502,7 @@ func (_f *Factory) ConstructProject(
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedLimitCols) {
 					_group = _f.ConstructProject(
-						_f.ConstructLimit(
-							_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)),
-							limit,
-							ordering,
-						),
+						_f.limitNoCycle(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
@@ -468,11 +522,7 @@ func (_f *Factory) ConstructProject(
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedOffsetCols) {
 					_group = _f.ConstructProject(
-						_f.ConstructOffset(
-							_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)),
-							offset,
-							ordering,
-						),
+						_f.offsetNoCycle(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
@@ -635,7 +685,7 @@ func (_f *Factory) ConstructInnerJoin(
 		}
 	}
 
-	// [PushDownJoinLeft]
+	// [PushFilterIntoJoinLeft]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -643,17 +693,17 @@ func (_f *Factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinLeft) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructInnerJoin(
 							_f.ConstructSelect(
 								left,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, right),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(right)),
 								),
 							),
 							right,
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, right),
+								_f.extractCorrelatedConditions(list, _f.outputCols(right)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
@@ -664,7 +714,7 @@ func (_f *Factory) ConstructInnerJoin(
 		}
 	}
 
-	// [PushDownJoinRight]
+	// [PushFilterIntoJoinRight]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -672,17 +722,17 @@ func (_f *Factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinRight) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructInnerJoin(
 							left,
 							_f.ConstructSelect(
 								right,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, left),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(left)),
 								),
 							),
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, left),
+								_f.extractCorrelatedConditions(list, _f.outputCols(left)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
@@ -746,7 +796,7 @@ func (_f *Factory) ConstructLeftJoin(
 		}
 	}
 
-	// [PushDownJoinRight]
+	// [PushFilterIntoJoinRight]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -754,17 +804,17 @@ func (_f *Factory) ConstructLeftJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinRight) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructLeftJoin(
 							left,
 							_f.ConstructSelect(
 								right,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, left),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(left)),
 								),
 							),
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, left),
+								_f.extractCorrelatedConditions(list, _f.outputCols(left)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
@@ -828,7 +878,7 @@ func (_f *Factory) ConstructRightJoin(
 		}
 	}
 
-	// [PushDownJoinLeft]
+	// [PushFilterIntoJoinLeft]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -836,17 +886,17 @@ func (_f *Factory) ConstructRightJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinLeft) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructRightJoin(
 							_f.ConstructSelect(
 								left,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, right),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(right)),
 								),
 							),
 							right,
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, right),
+								_f.extractCorrelatedConditions(list, _f.outputCols(right)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
@@ -1072,7 +1122,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 		}
 	}
 
-	// [PushDownJoinLeft]
+	// [PushFilterIntoJoinLeft]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -1080,17 +1130,17 @@ func (_f *Factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinLeft) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructInnerJoinApply(
 							_f.ConstructSelect(
 								left,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, right),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(right)),
 								),
 							),
 							right,
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, right),
+								_f.extractCorrelatedConditions(list, _f.outputCols(right)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
@@ -1101,7 +1151,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 		}
 	}
 
-	// [PushDownJoinRight]
+	// [PushFilterIntoJoinRight]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -1109,17 +1159,17 @@ func (_f *Factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinRight) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructInnerJoinApply(
 							left,
 							_f.ConstructSelect(
 								right,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, left),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(left)),
 								),
 							),
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, left),
+								_f.extractCorrelatedConditions(list, _f.outputCols(left)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
@@ -1183,7 +1233,7 @@ func (_f *Factory) ConstructLeftJoinApply(
 		}
 	}
 
-	// [PushDownJoinRight]
+	// [PushFilterIntoJoinRight]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -1191,17 +1241,17 @@ func (_f *Factory) ConstructLeftJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinRight) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructLeftJoinApply(
 							left,
 							_f.ConstructSelect(
 								right,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, left),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(left)),
 								),
 							),
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, left),
+								_f.extractCorrelatedConditions(list, _f.outputCols(left)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
@@ -1265,7 +1315,7 @@ func (_f *Factory) ConstructRightJoinApply(
 		}
 	}
 
-	// [PushDownJoinLeft]
+	// [PushFilterIntoJoinLeft]
 	{
 		_filtersExpr := _f.mem.NormExpr(on).AsFilters()
 		if _filtersExpr != nil {
@@ -1273,17 +1323,17 @@ func (_f *Factory) ConstructRightJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushDownJoinLeft) {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructRightJoinApply(
 							_f.ConstructSelect(
 								left,
 								_f.ConstructFilters(
-									_f.extractUncorrelatedConditions(list, right),
+									_f.extractUncorrelatedConditions(list, _f.outputCols(right)),
 								),
 							),
 							right,
 							_f.ConstructFilters(
-								_f.extractCorrelatedConditions(list, right),
+								_f.extractCorrelatedConditions(list, _f.outputCols(right)),
 							),
 						)
 						_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
@@ -1667,6 +1717,33 @@ func (_f *Factory) ConstructLimit(
 		return _group
 	}
 
+	// [PushLimitIntoProject]
+	{
+		_projectExpr := _f.mem.NormExpr(input).AsProject()
+		if _projectExpr != nil {
+			input := _projectExpr.Input()
+			projections := _projectExpr.Projections()
+			if !_f.ruleCycles[_limitExpr.Fingerprint()] {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushLimitIntoProject) {
+					_f.ruleCycles[_limitExpr.Fingerprint()] = true
+					_group = _f.ConstructProject(
+						_f.ConstructLimit(
+							input,
+							limit,
+							ordering,
+						),
+						projections,
+					)
+					delete(_f.ruleCycles, _limitExpr.Fingerprint())
+					if _f.mem.GroupByFingerprint(_limitExpr.Fingerprint()) == 0 {
+						_f.mem.AddAltFingerprint(_limitExpr.Fingerprint(), _group)
+					}
+					return _group
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_limitExpr)))
 }
 
@@ -1682,6 +1759,33 @@ func (_f *Factory) ConstructOffset(
 	_group := _f.mem.GroupByFingerprint(_offsetExpr.Fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	// [PushOffsetIntoProject]
+	{
+		_projectExpr := _f.mem.NormExpr(input).AsProject()
+		if _projectExpr != nil {
+			input := _projectExpr.Input()
+			projections := _projectExpr.Projections()
+			if !_f.ruleCycles[_offsetExpr.Fingerprint()] {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushOffsetIntoProject) {
+					_f.ruleCycles[_offsetExpr.Fingerprint()] = true
+					_group = _f.ConstructProject(
+						_f.ConstructOffset(
+							input,
+							offset,
+							ordering,
+						),
+						projections,
+					)
+					delete(_f.ruleCycles, _offsetExpr.Fingerprint())
+					if _f.mem.GroupByFingerprint(_offsetExpr.Fingerprint()) == 0 {
+						_f.mem.AddAltFingerprint(_offsetExpr.Fingerprint(), _group)
+					}
+					return _group
+				}
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_offsetExpr)))

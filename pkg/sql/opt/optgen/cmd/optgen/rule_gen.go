@@ -123,6 +123,8 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 			contextName := unTitle(string(define.Fields[index].Name))
 			g.genMatch(matchArg, contextName, false /* noMatch */)
 		}
+
+		g.genNormalizeReplace(define, rule)
 	} else {
 		// For exploration rules, the memo expression is passed as a parameter,
 		// so use accessors to get its fields.
@@ -141,9 +143,10 @@ func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 			contextName := fmt.Sprintf("%s.%s()", exprName, define.Fields[index].Name)
 			g.genMatch(matchArg, contextName, false /* noMatch */)
 		}
+
+		g.genExploreReplace(define, rule)
 	}
 
-	g.genReplace(define, rule)
 	g.w.unnestToMarker(marker, "}\n")
 	g.w.newline()
 }
@@ -546,54 +549,103 @@ func (g *ruleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool)
 	g.w.write(" {\n")
 }
 
-// genReplace generates the replace pattern code for rules. Normalization rules
-// recursively call other factory methods in order to construct results.
-// Exploration rules are similar, but do not call a factory method to construct
-// the top-level expression. Instead, they construct the raw expression and
-// pass it to Memo.MemoizeDenormExpr in order to add it to an existing group.
-func (g *ruleGen) genReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
-	if g.normalize {
-		exprName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
-		g.w.nestIndent("if _f.onRuleMatch == nil || _f.onRuleMatch(opt.%s) {\n", rule.Name)
-		g.w.writeIndent("_group = ")
+// genNormalizeReplace generates the replace pattern code for normalization
+// rules. Normalization rules recursively call other factory methods in order to
+// construct results. They also need to detect rule invocation cycles when the
+// DetectCycle tag is present on the rule.
+func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
+	exprName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
+
+	// If the DetectCycle tag is specified on the rule, then generate a bit
+	// of additional code that detects cyclical rule invocations. Add the
+	// current expression's fingerprint into the ruleCycles map. If the
+	// replacement pattern recursively invokes the same rule, then this code
+	// will see that the fingerprint is already in the map, and will skip the
+	// rule.
+	detectCycle := rule.Tags.Contains("DetectCycle")
+	if detectCycle {
+		// Perform the cycle check before calling onRuleMatch, so that it
+		// isn't notified of a rule that will just be skipped.
+		g.w.nest("if !_f.ruleCycles[%s.Fingerprint()] {\n", exprName)
+	}
+
+	g.w.nestIndent("if _f.onRuleMatch == nil || _f.onRuleMatch(opt.%s) {\n", rule.Name)
+
+	if detectCycle {
+		g.w.writeIndent("_f.ruleCycles[%s.Fingerprint()] = true\n", exprName)
+	}
+
+	g.w.writeIndent("_group = ")
+	g.genNestedExpr(rule.Replace)
+	g.w.newline()
+
+	if detectCycle {
+		// Once any recursive calls are complete, the fingerprint is no longer
+		// needed to prevent cycles, so free up memory.
+		g.w.writeIndent("delete(_f.ruleCycles, %s.Fingerprint())\n", exprName)
+
+		// Cyclical rules + onRuleMatch can interact as follows:
+		//   1. Rule A recursively invokes itself.
+		//   2. The inner A calls AddAltFingerprint with its expression fingerprint
+		//      and normalized result group.
+		//   3. The outer A would normally resolve to the same normalized result
+		//      group, except that onRuleMatch blocks it from completing. Without
+		//      a check, it would try to map the same fingerprint to a different
+		//      group, causing AddAltFingerprint to panic.
+		//
+		// Non-cyclical rules do not have this problem, because they short-circuit
+		// at the top-level GroupByFingerprint lookup. The solution for cyclical
+		// rules is to add an extra call to GroupByFingerprint, in order to see
+		// if a nested invocation has already mapped the fingerprint to a group.
+		// If so, don't call AddAltFingerprint.
+		g.w.nestIndent("if _f.mem.GroupByFingerprint(%s.Fingerprint()) == 0 {\n", exprName)
+		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
+		g.w.unnest("}\n")
+	} else {
+		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
+	}
+
+	g.w.writeIndent("return _group\n")
+}
+
+// genExploreReplace generates the replace pattern code for exploration rules.
+// Like normalization rules, an exploration rule constructs sub-expressions
+// using the factory. However, it constructs the top-level expression using the
+// raw MakeXXXExpr method, and passes it to Memo.MemoizeDenormExpr, which adds
+// the expression to an existing group.
+func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
+	g.w.nestIndent("if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.%s) {\n", rule.Name)
+
+	switch t := rule.Replace.(type) {
+	case *lang.ConstructExpr:
+		name, ok := t.Name.(*lang.NameExpr)
+		if !ok {
+			panic("exploration pattern with dynamic replace name not yet supported")
+		}
+		g.w.nestIndent("_expr := memo.Make%sExpr(\n", *name)
+		for _, arg := range t.Args {
+			g.w.writeIndent("")
+			g.genNestedExpr(arg)
+			g.w.write(",\n")
+		}
+		g.w.unnest(")\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))\n")
+
+	case *lang.CustomFuncExpr:
+		// Top-level custom function returns a memo.Expr slice, so iterate
+		// through that and memoize each expression.
+		g.w.writeIndent("exprs := ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
-		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
-		g.w.writeIndent("return _group\n")
-	} else {
-		g.w.nestIndent("if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.%s) {\n", rule.Name)
-
-		switch t := rule.Replace.(type) {
-		case *lang.ConstructExpr:
-			name, ok := t.Name.(*lang.NameExpr)
-			if !ok {
-				panic("exploration pattern with dynamic replace name not yet supported")
-			}
-			g.w.nestIndent("_expr := memo.Make%sExpr(\n", *name)
-			for _, arg := range t.Args {
-				g.w.writeIndent("")
-				g.genNestedExpr(arg)
-				g.w.write(",\n")
-			}
-			g.w.unnest(")\n")
-			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))\n")
-
-		case *lang.CustomFuncExpr:
-			// Top-level custom function returns a memo.Expr slice, so iterate
-			// through that and memoize each expression.
-			g.w.writeIndent("exprs := ")
-			g.genNestedExpr(rule.Replace)
-			g.w.newline()
-			g.w.nestIndent("for i := range exprs {\n")
-			g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])\n")
-			g.w.unnest("}\n")
-
-		default:
-			panic(fmt.Sprintf("unsupported replace expression in explore rule: %s", rule.Replace))
-		}
-
+		g.w.nestIndent("for i := range exprs {\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])\n")
 		g.w.unnest("}\n")
+
+	default:
+		panic(fmt.Sprintf("unsupported replace expression in explore rule: %s", rule.Replace))
 	}
+
+	g.w.unnest("}\n")
 }
 
 // genNestedExpr recursively generates an Optgen expression as one large Go
