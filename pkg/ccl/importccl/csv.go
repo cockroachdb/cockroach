@@ -1030,15 +1030,16 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
-		flowCtx:    flowCtx,
-		csvOptions: spec.Options,
-		sampleSize: spec.SampleSize,
-		tableDesc:  spec.TableDesc,
-		uri:        spec.Uri,
-		output:     output,
-		settings:   flowCtx.Settings,
-		registry:   flowCtx.JobRegistry,
-		progress:   spec.Progress,
+		flowCtx:      flowCtx,
+		csvOptions:   spec.Options,
+		sampleSize:   spec.SampleSize,
+		tableDesc:    spec.TableDesc,
+		uri:          spec.Uri,
+		output:       output,
+		settings:     flowCtx.Settings,
+		registry:     flowCtx.JobRegistry,
+		progress:     spec.Progress,
+		dropComplete: spec.DropComplete,
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1047,16 +1048,17 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
-	flowCtx    *distsqlrun.FlowCtx
-	csvOptions roachpb.CSVOptions
-	sampleSize int32
-	tableDesc  sqlbase.TableDescriptor
-	uri        map[int32]string
-	out        distsqlrun.ProcOutputHelper
-	output     distsqlrun.RowReceiver
-	settings   *cluster.Settings
-	registry   *jobs.Registry
-	progress   distsqlrun.JobProgress
+	flowCtx      *distsqlrun.FlowCtx
+	csvOptions   roachpb.CSVOptions
+	sampleSize   int32
+	tableDesc    sqlbase.TableDescriptor
+	uri          map[int32]string
+	out          distsqlrun.ProcOutputHelper
+	output       distsqlrun.RowReceiver
+	settings     *cluster.Settings
+	registry     *jobs.Registry
+	progress     distsqlrun.JobProgress
+	dropComplete bool
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -1133,9 +1135,25 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 			}
 			fn = sr.sample
 		}
+
+		// Optionally populate the spans which have already been processed.
+		var completedSpans roachpb.SpanGroup
+		if cp.dropComplete {
+			job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+			if err != nil {
+				return err
+			}
+			details := job.Payload().Details.(*jobs.Payload_Import).Import
+			completedSpans.AddAll(details.Tables[0].SpanProgress)
+		}
+
 		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch {
+				// Allow KV pairs to be dropped if they belong to a completed span.
+				if cp.dropComplete && completedSpans.Contains(kv.Key) {
+					continue
+				}
 				if fn(kv) {
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
@@ -1396,6 +1414,22 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 					}
 					if cs != distsqlrun.NeedMoreRows {
 						return errors.New("unexpected closure of consumer")
+					}
+
+					// Mark the sst's span as being complete
+					if err := job.Progressed(gCtx, func(pCtx context.Context, details jobs.Details) float32 {
+						d := details.(*jobs.Payload_Import).Import
+
+						// Fold newly-completed table into existing progress.
+						// The SpanGroup will coalesce adjacent or overlapping ranges.
+						var sg roachpb.SpanGroup
+						sg.AddAll(d.Tables[0].SpanProgress)
+						sg.Add(sst.span)
+
+						d.Tables[0].SpanProgress = sg.Slice()
+						return d.Tables[0].Completed()
+					}); err != nil {
+						return err
 					}
 				}
 				return nil

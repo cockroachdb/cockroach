@@ -240,6 +240,9 @@ func (l *DistLoader) LoadCSV(
 	stageID := p.NewStageID()
 	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
 	for i, rcs := range csvSpecs {
+		// If we're resuming from a previous attempt, we might be able to
+		// avoid re-reading or importing certain rows.
+		rcs.DropComplete = true
 		rcs.SampleSize = 0
 		node := nodes[i]
 		proc := distsqlplan.Processor{

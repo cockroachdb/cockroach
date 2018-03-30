@@ -869,8 +869,8 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
 	sqlDB.Exec(t, `CREATE DATABASE liveness`)
 
+	const rows = 5000
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		const rows = 5000
 		if r.Method == "GET" {
 			for i := 0; i < rows; i++ {
 				fmt.Fprintln(w, i)
@@ -939,6 +939,14 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	if rescheduledLease.ModifiedMicros <= originalLease.ModifiedMicros {
 		t.Fatalf("expecting rescheduled job to have a later modification time: %d vs %d",
 			rescheduledLease.StartedMicros, originalLease.StartedMicros)
+	}
+
+	// Since this test reliably triggers the ReadCSV.DropComplete behavior,
+	// we want to verify that all expected rows are present.
+	var rowCount int
+	sqlDB.QueryRow(t, "SELECT COUNT(*) from liveness.t").Scan(&rowCount)
+	if rowCount != rows {
+		t.Fatalf("Not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}
 }
 

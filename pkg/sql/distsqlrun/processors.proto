@@ -524,6 +524,11 @@ message ReadCSVSpec {
 
   optional JobProgress progress = 6 [(gogoproto.nullable) = false];
 
+  // drop_complete indicates that the reader should refer to the job's
+  // progress information to discard rows that are destined for
+  // spans which are already marked as complete.
+  optional bool drop_complete = 8 [(gogoproto.nullable) = false];
+
   reserved 4;
   reserved 5;
 }
