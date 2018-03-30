@@ -53,6 +53,7 @@ var (
 	clusterWipe bool
 	username    = os.Getenv("ROACHPROD_USER")
 	zones       string
+	teamCity    bool
 )
 
 func ifLocal(trueVal, falseVal string) string {

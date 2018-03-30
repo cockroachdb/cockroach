@@ -134,6 +134,9 @@ func (r *registry) Run(filter []string) int {
 			t := tests[i]
 			sem <- struct{}{}
 			fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
+			if teamCity {
+				fmt.Printf("##teamcity[testStarted name='%s']\n", t.Name())
+			}
 			t.Status("starting")
 			status.Lock()
 			status.running[t] = struct{}{}
@@ -354,8 +357,17 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 				if t.Failed() {
 					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
+					if teamCity {
+						fmt.Fprintf(
+							out, "##teamcity[testFailed name='%s' details='%s']\n",
+							t.Name(), teamcityEscape(string(t.mu.output)),
+						)
+					}
 				} else {
 					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
+				}
+				if teamCity {
+					fmt.Fprintf(out, "##teamcity[testFinished name='%s']\n", t.Name())
 				}
 			}
 
@@ -370,4 +382,18 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			t.spec.Run(ctx, t, c)
 		}
 	}()
+}
+
+// teamcityEscape escapes a string for use as <value> in a key='<value>' attribute
+// in teamcity build output marker.
+// Documentation here: https://confluence.jetbrains.com/display/TCD8/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-servMsgsServiceMessages
+func teamcityEscape(s string) string {
+	r := strings.NewReplacer(
+		"\n", "|n",
+		"'", "|'",
+		"|", "||",
+		"[", "|[",
+		"]", "|]",
+	)
+	return r.Replace(s)
 }
