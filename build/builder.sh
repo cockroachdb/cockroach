@@ -3,7 +3,9 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20180220-200046
+#version=20180220-200046
+# WIP update before merging.
+version=latest
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
