@@ -17,9 +17,7 @@ package idxconstraint
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,10 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-)
-
-var (
-	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
 // The test files support only one command:
@@ -74,118 +68,109 @@ var (
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*testDataGlob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
-	}
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext(false /* privileged */)
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	for _, path := range paths {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			var varTypes []types.T
+			var indexCols []opt.OrderingColumn
+			var notNullCols opt.ColSet
+			var iVarHelper tree.IndexedVarHelper
+			var invertedIndex bool
+			var normalizeTypedExpr bool
+			var err error
 
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				var varTypes []types.T
-				var indexCols []opt.OrderingColumn
-				var notNullCols opt.ColSet
-				var iVarHelper tree.IndexedVarHelper
-				var invertedIndex bool
-				var normalizeTypedExpr bool
+			f := norm.NewFactory(&evalCtx)
+			md := f.Metadata()
 
-				f := norm.NewFactory(&evalCtx)
-				md := f.Metadata()
-
-				for _, arg := range d.CmdArgs {
-					key, vals := arg.Key, arg.Vals
-					switch key {
-					case "vars":
-						varTypes, err = testutils.ParseTypes(vals)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-
-						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-						// Set up the columns in the metadata.
-						for i, typ := range varTypes {
-							md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
-						}
-
-					case "index", "inverted-index":
-						if varTypes == nil {
-							d.Fatalf(t, "vars must precede index")
-						}
-						indexCols, notNullCols = parseIndexColumns(t, md, vals)
-						if key == "inverted-index" {
-							if len(indexCols) > 1 {
-								d.Fatalf(t, "inverted index must be on a single column")
-							}
-							invertedIndex = true
-						}
-
-					case "nonormalize":
-						f.DisableOptimizations()
-
-					case "semtree-normalize":
-						normalizeTypedExpr = true
-
-					default:
-						d.Fatalf(t, "unknown argument: %s", key)
-					}
-				}
-
-				switch d.Cmd {
-				case "index-constraints":
-					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+			for _, arg := range d.CmdArgs {
+				key, vals := arg.Key, arg.Vals
+				switch key {
+				case "vars":
+					varTypes, err = testutils.ParseTypes(vals)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 
-					if normalizeTypedExpr {
-						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
+					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+					// Set up the columns in the metadata.
+					for i, typ := range varTypes {
+						md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+					}
+
+				case "index", "inverted-index":
+					if varTypes == nil {
+						d.Fatalf(t, "vars must precede index")
+					}
+					indexCols, notNullCols = parseIndexColumns(t, md, vals)
+					if key == "inverted-index" {
+						if len(indexCols) > 1 {
+							d.Fatalf(t, "inverted index must be on a single column")
 						}
+						invertedIndex = true
 					}
 
-					varNames := make([]string, len(varTypes))
-					for i := range varNames {
-						varNames[i] = fmt.Sprintf("@%d", i+1)
-					}
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
-					b.AllowUnsupportedExpr = true
-					group, err := b.Build(typedExpr)
-					if err != nil {
-						return fmt.Sprintf("error: %v\n", err)
-					}
-					ev := memo.MakeNormExprView(f.Memo(), group)
+				case "nonormalize":
+					f.DisableOptimizations()
 
-					var ic Instance
-					ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
-					result := ic.Constraint()
-					var buf bytes.Buffer
-					for i := 0; i < result.Spans.Count(); i++ {
-						fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
-					}
-					remainingFilter := ic.RemainingFilter()
-					remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
-					if remEv.Operator() != opt.TrueOp {
-						execBld := execbuilder.New(nil /* execFactory */, remEv)
-						expr := execBld.BuildScalar(&iVarHelper)
-						fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
-					}
-					return buf.String()
+				case "semtree-normalize":
+					normalizeTypedExpr = true
 
 				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
+					d.Fatalf(t, "unknown argument: %s", key)
 				}
-			})
+			}
+
+			switch d.Cmd {
+			case "index-constraints":
+				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+
+				if normalizeTypedExpr {
+					typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+				}
+
+				varNames := make([]string, len(varTypes))
+				for i := range varNames {
+					varNames[i] = fmt.Sprintf("@%d", i+1)
+				}
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
+				b.AllowUnsupportedExpr = true
+				group, err := b.Build(typedExpr)
+				if err != nil {
+					return fmt.Sprintf("error: %v\n", err)
+				}
+				ev := memo.MakeNormExprView(f.Memo(), group)
+
+				var ic Instance
+				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
+				result := ic.Constraint()
+				var buf bytes.Buffer
+				for i := 0; i < result.Spans.Count(); i++ {
+					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
+				}
+				remainingFilter := ic.RemainingFilter()
+				remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
+				if remEv.Operator() != opt.TrueOp {
+					execBld := execbuilder.New(nil /* execFactory */, remEv)
+					expr := execBld.BuildScalar(&iVarHelper)
+					fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+				}
+				return buf.String()
+
+			default:
+				d.Fatalf(t, "unsupported command: %s", d.Cmd)
+				return ""
+			}
 		})
-	}
+	})
 }
 
 func BenchmarkIndexConstraints(b *testing.B) {

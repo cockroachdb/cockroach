@@ -19,6 +19,8 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -102,6 +104,52 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Walk goes through all the files in a subdirectory, creating subtests to match
+// the file hierarchy; for each "leaf" file, the given function is called.
+//
+// This can be used in conjunction with RunTest. For example:
+//
+//    datadriven.Walk(t, path, func (t *testing.T, path string) {
+//      // initialize per-test state
+//      datadriven.RunTest(t, path, func (d *datadriven.TestData) {
+//       // ...
+//      }
+//    }
+//
+//   Files:
+//     testdata/typing
+//     testdata/logprops/scan
+//     testdata/logprops/select
+//
+//   If path is "testdata/typing", the function is called once and no subtests
+//   care created.
+//
+//   If path is "testdata/logprops", the function is called two times, in
+//   separate subtests /scan, /select.
+//
+//   If path is "testdata", the function is called three times, in subtest
+//   hierarchy /typing, /logprops/scan, /logprops/select.
+//
+func Walk(t *testing.T, path string, f func(t *testing.T, path string)) {
+	finfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !finfo.IsDir() {
+		f(t, path)
+		return
+	}
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		t.Run(file.Name(), func(t *testing.T) {
+			Walk(t, filepath.Join(path, file.Name()), f)
+		})
 	}
 }
 

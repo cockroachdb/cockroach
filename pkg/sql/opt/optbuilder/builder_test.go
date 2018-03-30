@@ -16,9 +16,7 @@ package optbuilder_test
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,10 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-)
-
-var (
-	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
 // TestBuilder runs data-driven testcases of the form
@@ -62,67 +56,65 @@ var (
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, path := range testutils.GetTestFiles(t, *testDataGlob) {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			catalog := testutils.NewTestCatalog()
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		catalog := testutils.NewTestCatalog()
 
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				var varTypes []types.T
-				var iVarHelper tree.IndexedVarHelper
-				var err error
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			var varTypes []types.T
+			var iVarHelper tree.IndexedVarHelper
+			var err error
 
-				tester := testutils.NewOptTester(catalog, d.Input)
-				tester.Flags.Format = memo.ExprFmtHideAll
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.Format = memo.ExprFmtHideAll
 
-				for _, arg := range d.CmdArgs {
-					key, vals := arg.Key, arg.Vals
-					switch key {
-					case "vars":
-						varTypes, err = testutils.ParseTypes(vals)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-
-						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-
-					default:
-						if err := tester.Flags.Set(arg); err != nil {
-							d.Fatalf(t, "%s", err)
-						}
-					}
-				}
-
-				switch d.Cmd {
-				case "build-scalar":
-					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+			for _, arg := range d.CmdArgs {
+				key, vals := arg.Key, arg.Vals
+				switch key {
+				case "vars":
+					varTypes, err = testutils.ParseTypes(vals)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 
-					ctx := context.Background()
-					semaCtx := tree.MakeSemaContext(false /* privileged */)
-					evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-
-					o := xform.NewOptimizer(&evalCtx)
-					for i, typ := range varTypes {
-						o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
-					}
-					// Disable normalization rules: we want the tests to check the result
-					// of the build process.
-					o.DisableOptimizations()
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
-					b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
-					group, err := b.Build(typedExpr)
-					if err != nil {
-						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
-					}
-					exprView := o.Optimize(group, &memo.PhysicalProps{})
-					return exprView.FormatString(memo.ExprFmtHideAll)
+					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
 				default:
-					return tester.RunCommand(t, d)
+					if err := tester.Flags.Set(arg); err != nil {
+						d.Fatalf(t, "%s", err)
+					}
 				}
-			})
+			}
+
+			switch d.Cmd {
+			case "build-scalar":
+				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+
+				ctx := context.Background()
+				semaCtx := tree.MakeSemaContext(false /* privileged */)
+				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+				o := xform.NewOptimizer(&evalCtx)
+				for i, typ := range varTypes {
+					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
+				}
+				// Disable normalization rules: we want the tests to check the result
+				// of the build process.
+				o.DisableOptimizations()
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
+				b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
+				group, err := b.Build(typedExpr)
+				if err != nil {
+					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
+				}
+				exprView := o.Optimize(group, &memo.PhysicalProps{})
+				return exprView.FormatString(memo.ExprFmtHideAll)
+
+			default:
+				return tester.RunCommand(t, d)
+			}
 		})
-	}
+	})
 }
