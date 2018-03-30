@@ -59,6 +59,30 @@ project
       └── const: 1 [type=int]
 
 # --------------------------------------------------
+# EliminateProjectProject
+# --------------------------------------------------
+
+opt
+SELECT y+1 FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
+----
+project
+ ├── columns: column7:7(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(2)]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# --------------------------------------------------
 # FilterUnusedProjectCols
 # --------------------------------------------------
 
@@ -288,6 +312,32 @@ project
  └── projections [outer=(2)]
       └── variable: a.y [type=int, outer=(2)]
 
+# Detect FilterUnusedSelectCols and PushSelectIntoProject dependency cycle.
+opt
+SELECT f, f+1.1 FROM (SELECT f, x FROM a GROUP BY f, x HAVING SUM(x)=100) a
+----
+project
+ ├── columns: f:3(float) column6:6(float)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.f:3(float) column5:5(decimal)
+ │    ├── group-by
+ │    │    ├── columns: a.x:1(int!null) a.f:3(float) column5:5(decimal)
+ │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    └── aggregations [outer=(1)]
+ │    │         └── function: sum [type=decimal, outer=(1)]
+ │    │              └── variable: a.x [type=int, outer=(1)]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
+ │         └── eq [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
+ │              ├── variable: column5 [type=decimal, outer=(5)]
+ │              └── const: 100 [type=decimal]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]
+
 # --------------------------------------------------
 # FilterUnusedLimitCols
 # --------------------------------------------------
@@ -340,6 +390,31 @@ project
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: a.s [type=string, outer=(4)]
 
+# Project filter limit columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x LIMIT 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── project
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    └── aggregations
+ │    │    └── projections [outer=(3)]
+ │    │         └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
 # --------------------------------------------------
 # FilterUnusedOffsetCols
 # --------------------------------------------------
@@ -390,6 +465,31 @@ project
  └── projections [outer=(1,4)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: a.s [type=string, outer=(4)]
+
+# Project filter offset columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x OFFSET 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── offset
+ │    ├── columns: a.f:3(float)
+ │    ├── project
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    └── aggregations
+ │    │    └── projections [outer=(3)]
+ │    │         └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
 
 # --------------------------------------------------
 # FilterUnusedLimitCols + FilterUnusedOffsetCols
@@ -453,6 +553,34 @@ project
  └── projections [outer=(1,4)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: a.s [type=string, outer=(4)]
+
+# Project filter offset/limit columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x OFFSET 5 LIMIT 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── offset
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── project
+ │    │    │    ├── columns: a.f:3(float)
+ │    │    │    ├── group-by
+ │    │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    └── aggregations
+ │    │    │    └── projections [outer=(3)]
+ │    │    │         └── variable: a.f [type=float, outer=(3)]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
 
 # --------------------------------------------------
 # FilterUnusedJoinLeftCols

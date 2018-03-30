@@ -36,8 +36,8 @@ import (
 // See OptTester.Handle for supported commands.
 //
 // Rules files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestRules/bool"
-//   make test PKG=./pkg/sql/opt/norm TESTS="TestRules/comp"
+//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/bool"
+//   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
