@@ -2260,8 +2260,8 @@ func (_f *Factory) ConstructNot(
 		if _expr.IsComparison() {
 			left := _expr.ChildGroup(_f.mem, 0)
 			right := _expr.ChildGroup(_f.mem, 1)
-			_containsExpr := _f.mem.NormExpr(input).AsContains()
-			if _containsExpr == nil {
+			_expr2 := _f.mem.NormExpr(input)
+			if !(_expr2.Operator() == opt.ContainsOp || _expr2.Operator() == opt.JsonExistsOp || _expr2.Operator() == opt.JsonSomeExistsOp || _expr2.Operator() == opt.JsonAllExistsOp) {
 				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NegateComparison) {
 					_group = _f.negateComparison(_f.mem.NormExpr(input).Operator(), left, right)
 					_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
@@ -3893,7 +3893,161 @@ func (_f *Factory) ConstructContains(
 		return _group
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_containsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_containsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_containsExpr)))
+}
+
+// ConstructJsonExists constructs an expression for the JsonExists operator.
+func (_f *Factory) ConstructJsonExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonExistsExpr := memo.MakeJsonExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonExistsExpr)))
+}
+
+// ConstructJsonAllExists constructs an expression for the JsonAllExists operator.
+func (_f *Factory) ConstructJsonAllExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonAllExistsExpr := memo.MakeJsonAllExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonAllExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonAllExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonAllExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonAllExistsExpr)))
+}
+
+// ConstructJsonSomeExists constructs an expression for the JsonSomeExists operator.
+func (_f *Factory) ConstructJsonSomeExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonSomeExistsExpr := memo.MakeJsonSomeExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonSomeExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonSomeExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_nullExpr := _f.mem.NormExpr(right).AsNull()
+		if _nullExpr != nil {
+			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+				_group = _f.ConstructNull(
+					_f.boolType(),
+				)
+				_f.mem.AddAltFingerprint(_jsonSomeExistsExpr.Fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonSomeExistsExpr)))
 }
 
 // ConstructBitand constructs an expression for the Bitand operator.
@@ -5473,6 +5627,21 @@ func init() {
 	// ContainsOp
 	dynConstructLookup[opt.ContainsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
 		return f.ConstructContains(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonExistsOp
+	dynConstructLookup[opt.JsonExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonAllExistsOp
+	dynConstructLookup[opt.JsonAllExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonAllExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonSomeExistsOp
+	dynConstructLookup[opt.JsonSomeExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonSomeExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// BitandOp

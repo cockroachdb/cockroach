@@ -329,22 +329,26 @@ opt
 SELECT *
 FROM a
 WHERE
-    null::int = 1 AND 1 = null::int AND
-    null::int <> 1 AND 1 <> null::int AND
-    null::int > 1 AND 1 > null::int AND
-    null::int >= 1 AND 1 >= null::int AND
-    null::int < 1 AND 1 < null::int AND
-    null::int <= 1 AND 1 <= null::int AND
-    null::string LIKE 'foo' AND 'foo' LIKE null::string AND
-    null::string NOT LIKE 'foo' AND 'foo' NOT LIKE null::string AND
-    null::string ILIKE 'foo' AND 'foo' ILIKE null::string AND
-    null::string NOT ILIKE 'foo' AND 'foo' NOT ILIKE null::string AND
-    null::string SIMILAR TO 'foo' AND 'foo' SIMILAR TO null::string AND
-    null::string NOT SIMILAR TO 'foo' AND 'foo' NOT SIMILAR TO null::string AND
-    null::string ~ 'foo' AND 'foo' ~ null::string AND
-    null::string !~ 'foo' AND 'foo' !~ null::string AND
-    null::string ~* 'foo' AND 'foo' ~* null::string AND
-    null::string !~* 'foo' AND 'foo' !~* null::string
+    null::int = 1 OR 1 = null::int OR
+    null::int <> 1 OR 1 <> null::int OR
+    null::int > 1 OR 1 > null::int OR
+    null::int >= 1 OR 1 >= null::int OR
+    null::int < 1 OR 1 < null::int OR
+    null::int <= 1 OR 1 <= null::int OR
+    null::string LIKE 'foo' OR 'foo' LIKE null::string OR
+    null::string NOT LIKE 'foo' OR 'foo' NOT LIKE null::string OR
+    null::string ILIKE 'foo' OR 'foo' ILIKE null::string OR
+    null::string NOT ILIKE 'foo' OR 'foo' NOT ILIKE null::string OR
+    null::string SIMILAR TO 'foo' OR 'foo' SIMILAR TO null::string OR
+    null::string NOT SIMILAR TO 'foo' OR 'foo' NOT SIMILAR TO null::string OR
+    null::string ~ 'foo' OR 'foo' ~ null::string OR
+    null::string !~ 'foo' OR 'foo' !~ null::string OR
+    null::string ~* 'foo' OR 'foo' ~* null::string OR
+    null::string !~* 'foo' OR 'foo' !~* null::string OR
+    null::jsonb @> '"foo"' OR '"foo"' <@ null::jsonb OR
+    null::jsonb ? 'foo' OR '{}' ? null::string OR
+    null::jsonb ?| ARRAY['foo'] OR '{}' ?| null::string[] OR
+    null::jsonb ?& ARRAY['foo'] OR '{}' ?& null::string[]
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
