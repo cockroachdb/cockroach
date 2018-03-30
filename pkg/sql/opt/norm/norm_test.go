@@ -15,7 +15,6 @@
 package norm_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -41,19 +40,16 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const testdataGlob = "testdata/*"
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
 
-	for _, path := range testutils.GetTestFiles(t, testdataGlob) {
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				tester := testutils.NewOptTester(catalog, d.Input)
-				tester.Flags.Format = fmtFlags
-				return tester.RunCommand(t, d)
-			})
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.Format = fmtFlags
+			return tester.RunCommand(t, d)
 		})
-	}
+	})
 }
 
 // Test the FoldNullInEmpty rule. Can't create empty tuple on right side of

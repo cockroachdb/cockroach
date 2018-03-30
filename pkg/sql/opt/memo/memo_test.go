@@ -15,7 +15,6 @@
 package memo_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -34,15 +33,13 @@ func TestMemo(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, testdataGlob string, fmtFlags memo.ExprFmtFlags) {
-	for _, path := range testutils.GetTestFiles(t, testdataGlob) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
+	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				tester := testutils.NewOptTester(catalog, d.Input)
-				tester.Flags.Format = fmtFlags
-				return tester.RunCommand(t, d)
-			})
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.Format = fmtFlags
+			return tester.RunCommand(t, d)
 		})
-	}
+	})
 }

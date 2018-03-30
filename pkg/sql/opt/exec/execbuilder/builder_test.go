@@ -17,9 +17,7 @@ package execbuilder_test
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,10 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
-)
-
-var (
-	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
 // TestBuilder runs data-driven testcases of the form
@@ -82,144 +76,142 @@ var (
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, path := range testutils.GetTestFiles(t, *testDataGlob) {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx := context.Background()
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		ctx := context.Background()
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
 
-			_, err := sqlDB.Exec("CREATE DATABASE test; SET DATABASE = test;")
-			if err != nil {
-				t.Fatal(err)
+		_, err := sqlDB.Exec("CREATE DATABASE test; SET DATABASE = test;")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+			defer eng.Close()
+
+			tester := testutils.NewOptTester(eng.Catalog(), d.Input)
+
+			var rowSort bool
+			var partialSortColumns []int
+
+			for _, arg := range d.CmdArgs {
+				switch arg.Key {
+				case "rowsort":
+					// We will sort the resulting rows before comparing with the
+					// expected result.
+					rowSort = true
+
+				case "partialsort":
+					// See partialSort().
+					partialSortColumns = make([]int, len(arg.Vals))
+					for i, colStr := range arg.Vals {
+						val, err := strconv.Atoi(colStr)
+						if err != nil {
+							t.Fatalf("error parsing partialSort argument: %s", err)
+						}
+						partialSortColumns[i] = val - 1
+					}
+
+				default:
+					if err := tester.Flags.Set(arg); err != nil {
+						d.Fatalf(t, "%s", err)
+					}
+				}
 			}
 
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "exec-raw":
+				_, err := sqlDB.Exec(d.Input)
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+				return ""
+
+			case "exec", "exec-explain":
 				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 				defer eng.Close()
 
-				tester := testutils.NewOptTester(eng.Catalog(), d.Input)
-
-				var rowSort bool
-				var partialSortColumns []int
-
-				for _, arg := range d.CmdArgs {
-					switch arg.Key {
-					case "rowsort":
-						// We will sort the resulting rows before comparing with the
-						// expected result.
-						rowSort = true
-
-					case "partialsort":
-						// See partialSort().
-						partialSortColumns = make([]int, len(arg.Vals))
-						for i, colStr := range arg.Vals {
-							val, err := strconv.Atoi(colStr)
-							if err != nil {
-								t.Fatalf("error parsing partialSort argument: %s", err)
-							}
-							partialSortColumns[i] = val - 1
-						}
-
-					default:
-						if err := tester.Flags.Set(arg); err != nil {
-							d.Fatalf(t, "%s", err)
-						}
-					}
+				var columns sqlbase.ResultColumns
+				var results []tree.Datums
+				if d.Cmd == "exec-explain" {
+					results, err = tester.Explain(eng)
+				} else {
+					columns, results, err = tester.Exec(eng)
+				}
+				if err != nil {
+					d.Fatalf(t, "%v", err)
 				}
 
-				switch d.Cmd {
-				case "exec-raw":
-					_, err := sqlDB.Exec(d.Input)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return ""
-
-				case "exec", "exec-explain":
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
-					defer eng.Close()
-
-					var columns sqlbase.ResultColumns
-					var results []tree.Datums
-					if d.Cmd == "exec-explain" {
-						results, err = tester.Explain(eng)
-					} else {
-						columns, results, err = tester.Exec(eng)
-					}
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-
-					if rowSort {
-						sortRows(results, &evalCtx)
-					} else if partialSortColumns != nil {
-						partialSort(results, partialSortColumns, &evalCtx)
-					}
-
-					// Format the results.
-					var buf bytes.Buffer
-					tw := tabwriter.NewWriter(
-						&buf,
-						2,   /* minwidth */
-						1,   /* tabwidth */
-						2,   /* padding */
-						' ', /* padchar */
-						0,   /* flags */
-					)
-					if columns != nil {
-						for i := range columns {
-							if i > 0 {
-								fmt.Fprintf(tw, "\t")
-							}
-							fmt.Fprintf(tw, "%s:%s", columns[i].Name, columns[i].Typ)
-						}
-						fmt.Fprintf(tw, "\n")
-					}
-					for _, r := range results {
-						for j, val := range r {
-							if j > 0 {
-								fmt.Fprintf(tw, "\t")
-							}
-							if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
-								str := string(*d)
-								if str == "" {
-									str = "·"
-								}
-								// Avoid the quotes on strings.
-								fmt.Fprintf(tw, "%s", str)
-							} else {
-								fmt.Fprintf(tw, "%s", val)
-							}
-						}
-						fmt.Fprintf(tw, "\n")
-					}
-					_ = tw.Flush()
-					return buf.String()
-
-				case "catalog":
-					// Create the engine in order to get access to its catalog.
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
-					defer eng.Close()
-
-					parts := strings.Split(d.Input, ".")
-					name := tree.NewTableName(tree.Name(parts[0]), tree.Name(parts[1]))
-					tab, err := eng.Catalog().FindTable(context.Background(), name)
-					if err != nil {
-						d.Fatalf(t, "Catalog: %v", err)
-					}
-
-					tp := treeprinter.New()
-					opt.FormatCatalogTable(tab, tp)
-					return tp.String()
-
-				default:
-					return tester.RunCommand(t, d)
+				if rowSort {
+					sortRows(results, &evalCtx)
+				} else if partialSortColumns != nil {
+					partialSort(results, partialSortColumns, &evalCtx)
 				}
-			})
+
+				// Format the results.
+				var buf bytes.Buffer
+				tw := tabwriter.NewWriter(
+					&buf,
+					2,   /* minwidth */
+					1,   /* tabwidth */
+					2,   /* padding */
+					' ', /* padchar */
+					0,   /* flags */
+				)
+				if columns != nil {
+					for i := range columns {
+						if i > 0 {
+							fmt.Fprintf(tw, "\t")
+						}
+						fmt.Fprintf(tw, "%s:%s", columns[i].Name, columns[i].Typ)
+					}
+					fmt.Fprintf(tw, "\n")
+				}
+				for _, r := range results {
+					for j, val := range r {
+						if j > 0 {
+							fmt.Fprintf(tw, "\t")
+						}
+						if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
+							str := string(*d)
+							if str == "" {
+								str = "·"
+							}
+							// Avoid the quotes on strings.
+							fmt.Fprintf(tw, "%s", str)
+						} else {
+							fmt.Fprintf(tw, "%s", val)
+						}
+					}
+					fmt.Fprintf(tw, "\n")
+				}
+				_ = tw.Flush()
+				return buf.String()
+
+			case "catalog":
+				// Create the engine in order to get access to its catalog.
+				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+				defer eng.Close()
+
+				parts := strings.Split(d.Input, ".")
+				name := tree.NewTableName(tree.Name(parts[0]), tree.Name(parts[1]))
+				tab, err := eng.Catalog().FindTable(context.Background(), name)
+				if err != nil {
+					d.Fatalf(t, "Catalog: %v", err)
+				}
+
+				tp := treeprinter.New()
+				opt.FormatCatalogTable(tab, tp)
+				return tp.String()
+
+			default:
+				return tester.RunCommand(t, d)
+			}
 		})
-	}
+	})
 }
 
 func sortRows(rows []tree.Datums, evalCtx *tree.EvalContext) {
