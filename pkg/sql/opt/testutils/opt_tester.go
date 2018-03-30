@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"testing"
 
 	"github.com/pmezard/go-difflib/difflib"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
 // OptTester is a helper for testing the various optimizer components. It
@@ -46,16 +48,26 @@ import (
 //
 // The OptTester is used by tests in various sub-packages of the opt package.
 type OptTester struct {
+	Flags OptTesterFlags
+
 	catalog opt.Catalog
 	sql     string
 	ctx     context.Context
 	semaCtx tree.SemaContext
 	evalCtx tree.EvalContext
+}
 
-	// AllowUnsupportedExpr is a control knob: if set, when building a scalar,
-	// the optbuilder takes any TypedExpr node that it doesn't recognize and
-	// wraps that expression in an UnsupportedExpr node. This is temporary; it
-	// is used for interfacing with the old planning code.
+// OptTesterFlags are control knobs for tests. Note that specific testcases can
+// override these defaults.
+type OptTesterFlags struct {
+	// Format controls the output detail of build / opt/ optsteps
+	// directives.
+	Format memo.ExprFmtFlags
+
+	// AllowUnsupportedExpr if set: when building a scalar, the optbuilder takes
+	// any TypedExpr node that it doesn't recognize and wraps that expression in
+	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
+	// the old planning code.
 	AllowUnsupportedExpr bool
 }
 
@@ -69,6 +81,126 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 		semaCtx: tree.MakeSemaContext(false /* privileged */),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
 	}
+}
+
+// RunCommand implements commands that are used by most tests:
+//
+//  - exec-ddl
+//
+//    Runs a SQL DDL statement to build the test catalog. Only a small number
+//    of DDL statements are supported, and those not fully. This is only
+//    available when using a TestCatalog.
+//
+//  - build [flags]
+//
+//    Builds an expression tree from a SQL query and outputs it without any
+//    optimizations applied to it.
+//
+//  - opt [flags]
+//
+//    Builds an expression tree from a SQL query, fully optimizes it using the
+//    memo, and then outputs the lowest cost tree.
+//
+//  - optsteps [flags]
+//
+//    Outputs the lowest cost tree for each step in optimization using the
+//    standard unified diff format. Used for debugging the optimizer.
+//
+//  - memo [flags]
+//
+//    Builds an expression tree from a SQL query, fully optimizes it using the
+//    memo, and then outputs the memo containing the forest of trees.
+//
+// Supported flags:
+//
+//  - format: controls the formatting of expressions for build, opt, and
+//    optsteps commands. Possible values: show-all, hide-all, or any combination
+//    of hide-cost, hide-stats, hide-constraints. Example:
+//      build format={hide-cost,hide-stats}
+//
+//  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
+//
+func (e *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
+	// Allow testcases to override the flags.
+	for _, a := range d.CmdArgs {
+		if err := e.Flags.Set(a); err != nil {
+			d.Fatalf(tb, "%s", err)
+		}
+	}
+
+	switch d.Cmd {
+	case "exec-ddl":
+		testCatalog, ok := e.catalog.(*TestCatalog)
+		if !ok {
+			tb.Fatal("exec-ddl can only be used with TestCatalog")
+		}
+		return ExecuteTestDDL(tb, d.Input, testCatalog)
+
+	case "build":
+		ev, err := e.OptBuild()
+		if err != nil {
+			return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
+		}
+		return ev.FormatString(e.Flags.Format)
+
+	case "opt":
+		ev, err := e.Optimize()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return ev.FormatString(e.Flags.Format)
+
+	case "optsteps":
+		result, err := e.OptSteps(testing.Verbose())
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
+
+	case "memo":
+		result, err := e.Memo()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
+
+	default:
+		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
+		return ""
+	}
+}
+
+// Set parses an argument that refers to a flag. See OptTester.Handle for
+// supported flags.
+func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
+	switch arg.Key {
+	case "format":
+		f.Format = 0
+		if len(arg.Vals) == 0 {
+			return fmt.Errorf("format flag requires value(s)")
+		}
+		for _, v := range arg.Vals {
+			m := map[string]memo.ExprFmtFlags{
+				"show-all":         memo.ExprFmtShowAll,
+				"hide-all":         memo.ExprFmtHideAll,
+				"hide-stats":       memo.ExprFmtHideStats,
+				"hide-cost":        memo.ExprFmtHideCost,
+				"hide-constraints": memo.ExprFmtHideConstraints,
+			}
+			if val, ok := m[v]; ok {
+				f.Format |= val
+			} else {
+				return fmt.Errorf("unknown format value %s", v)
+			}
+		}
+
+	case "allow-unsupported":
+		f.AllowUnsupportedExpr = true
+
+	default:
+		return fmt.Errorf("unknown argument: %s", arg.Key)
+	}
+	return nil
 }
 
 // OptBuild constructs an opt expression tree for the SQL query, with no
@@ -100,7 +232,7 @@ func (e *OptTester) Memo() (string, error) {
 // OptSteps returns a string that shows each optimization step using the
 // standard unified diff format. It is used for debugging the optimizer.
 // If verbose is true, each step is also printed on stdout.
-func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, error) {
+func (e *OptTester) OptSteps(verbose bool) (string, error) {
 	var buf bytes.Buffer
 	var prev, next string
 	if verbose {
@@ -139,7 +271,7 @@ func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags, verbose bool) (string, 
 			return "", err
 		}
 
-		next = o.Optimize(root, required).FormatString(fmtFlags)
+		next = o.Optimize(root, required).FormatString(e.Flags.Format)
 		if steps != 0 {
 			// All steps were not used, so must be done.
 			break
@@ -231,7 +363,7 @@ func (e *OptTester) buildExpr(
 	}
 
 	b := optbuilder.New(e.ctx, &e.semaCtx, &e.evalCtx, e.catalog, factory, stmt)
-	b.AllowUnsupportedExpr = e.AllowUnsupportedExpr
+	b.AllowUnsupportedExpr = e.Flags.AllowUnsupportedExpr
 	return b.Build()
 }
 
