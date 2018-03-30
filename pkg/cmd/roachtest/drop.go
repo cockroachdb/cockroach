@@ -40,11 +40,19 @@ func init() {
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
-		db := c.Conn(ctx, 1)
-		defer db.Close()
-
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
+			t.Status("importing TPCC fixture")
+			c.Run(ctx, c.Node(1), fmt.Sprintf(
+				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
+
+			// Don't open the DB connection until after the data has been imported.
+			// Otherwise the ALTER TABLE query below might fail to find the
+			// tpcc.order_line table that we just imported (!) due to what seems to
+			// be a problem with table descriptor leases (#24374).
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+
 			run := func(stmt string) {
 				t.Status(stmt)
 				_, err := db.ExecContext(ctx, stmt)
@@ -54,10 +62,6 @@ func init() {
 			}
 
 			run(`SET CLUSTER SETTING trace.debug.enable = true`)
-
-			t.Status("importing TPCC fixture")
-			c.Run(ctx, c.Node(1), fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
 
 			// Drop a constraint that would get in the way of deleting from tpcc.stock.
 			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
