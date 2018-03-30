@@ -333,6 +333,70 @@ render     0  render  ·         ·                (column8)  ·
 ·          1  ·       spans     ALL              ·          ·
 
 exec-explain
+SELECT j->>'a' FROM t.t
+----
+render     0  render  ·         ·          (column8)  ·
+ │         0  ·       render 0  j->>'a'    ·          ·
+ └── scan  1  scan    ·         ·          (j)        ·
+·          1  ·       table     t@primary  ·          ·
+·          1  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT j->'a' FROM t.t
+----
+render     0  render  ·         ·          (column8)  ·
+ │         0  ·       render 0  j->'a'     ·          ·
+ └── scan  1  scan    ·         ·          (j)        ·
+·          1  ·       table     t@primary  ·          ·
+·          1  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT j ? 'a' FROM t.t
+----
+render     0  render  ·         ·          (column8)  ·
+ │         0  ·       render 0  j ? 'a'    ·          ·
+ └── scan  1  scan    ·         ·          (j)        ·
+·          1  ·       table     t@primary  ·          ·
+·          1  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT j ?| ARRAY['a', 'b', 'c'] FROM t.t
+----
+render     0  render  ·         ·                          (column8)  ·
+ │         0  ·       render 0  j ?| ARRAY['a', 'b', 'c']  ·          ·
+ └── scan  1  scan    ·         ·                          (j)        ·
+·          1  ·       table     t@primary                  ·          ·
+·          1  ·       spans     ALL                        ·          ·
+
+exec-explain
+SELECT j ?& ARRAY['a', 'b', 'c'] FROM t.t
+----
+render     0  render  ·         ·                          (column8)  ·
+ │         0  ·       render 0  j ?& ARRAY['a', 'b', 'c']  ·          ·
+ └── scan  1  scan    ·         ·                          (j)        ·
+·          1  ·       table     t@primary                  ·          ·
+·          1  ·       spans     ALL                        ·          ·
+
+exec-explain
+SELECT j#>ARRAY['a'] FROM t.t
+----
+render     0  render  ·         ·              (column8)  ·
+ │         0  ·       render 0  j#>ARRAY['a']  ·          ·
+ └── scan  1  scan    ·         ·              (j)        ·
+·          1  ·       table     t@primary      ·          ·
+·          1  ·       spans     ALL            ·          ·
+
+exec-explain
+SELECT j#>>ARRAY['a'] FROM t.t
+----
+render     0  render  ·         ·               (column8)  ·
+ │         0  ·       render 0  j#>>ARRAY['a']  ·          ·
+ └── scan  1  scan    ·         ·               (j)        ·
+·          1  ·       table     t@primary       ·          ·
+·          1  ·       spans     ALL             ·          ·
+
+
+exec-explain
 SELECT CAST(a AS string), b::float FROM t.t
 ----
 render     0  render  ·         ·          (column8, column9)  ·
