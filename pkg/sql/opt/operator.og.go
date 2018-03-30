@@ -369,6 +369,12 @@ const (
 
 	ContainsOp
 
+	JsonExistsOp
+
+	JsonAllExistsOp
+
+	JsonSomeExistsOp
+
 	BitandOp
 
 	BitorOp
@@ -450,9 +456,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetmax1-rowsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenarrayfunctioncoalesceunsupported-expr"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetmax1-rowsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsjson-existsjson-all-existsjson-some-existsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenarrayfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 272, 280, 285, 289, 293, 298, 309, 314, 325, 337, 343, 350, 353, 355, 358, 360, 362, 364, 366, 368, 370, 372, 378, 382, 390, 396, 406, 416, 430, 439, 452, 463, 478, 480, 486, 494, 500, 505, 511, 515, 520, 524, 527, 536, 539, 542, 548, 555, 562, 571, 581, 595, 610, 621, 637, 641, 645, 649, 654, 662, 670, 686}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 272, 280, 285, 289, 293, 298, 309, 314, 325, 337, 343, 350, 353, 355, 358, 360, 362, 364, 366, 368, 370, 372, 378, 382, 390, 396, 406, 416, 430, 439, 452, 463, 478, 480, 486, 494, 505, 520, 536, 542, 547, 553, 557, 562, 566, 569, 578, 581, 584, 590, 597, 604, 613, 623, 637, 652, 663, 679, 683, 687, 691, 696, 704, 712, 728}
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
@@ -549,6 +555,9 @@ var ScalarOperators = [...]Operator{
 	IsOp,
 	IsNotOp,
 	ContainsOp,
+	JsonExistsOp,
+	JsonAllExistsOp,
+	JsonSomeExistsOp,
 	BitandOp,
 	BitorOp,
 	BitxorOp,
@@ -615,6 +624,9 @@ var ComparisonOperators = [...]Operator{
 	IsOp,
 	IsNotOp,
 	ContainsOp,
+	JsonExistsOp,
+	JsonAllExistsOp,
+	JsonSomeExistsOp,
 }
 
 var BinaryOperators = [...]Operator{
