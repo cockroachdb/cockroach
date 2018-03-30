@@ -359,9 +359,6 @@ func normalizeContainsOp(e *Expr) {
 	default:
 		return
 	}
-	if dJSON.Len() == 1 {
-		return
-	}
 
 	// Normalize a contains condition on an n-path JSON value to n contains
 	// conditions on a single-path JSON value.
