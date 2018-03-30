@@ -44,7 +44,7 @@ func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger
 		}, nil
 	}
 
-	path := filepath.Join(artifacts, name, filename)
+	path := filepath.Join(artifacts, teamcityNameEscape(name), filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}

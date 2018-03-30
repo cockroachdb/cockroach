@@ -22,14 +22,13 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -135,9 +134,10 @@ func (r *registry) Run(filter []string) int {
 		for i := range tests {
 			t := tests[i]
 			sem <- struct{}{}
-			fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
 			if teamCity {
-				fmt.Printf("##teamcity[testStarted name='%s']\n", t.Name())
+				fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
+			} else {
+				fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
 			}
 			t.Status("starting")
 			status.Lock()
@@ -358,22 +358,24 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 				if t.Failed() {
-					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
 					if teamCity {
 						fmt.Fprintf(
-							out, "##teamcity[testFailed name='%s' details='%s']\n",
-							t.Name(), teamcityEscape(string(t.mu.output)),
+							out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
+							t.Name(), teamcityEscape(string(t.mu.output)), t.Name(),
 						)
 					}
+					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
 				} else {
 					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
 					// if testFailed is not present, teamCity regards the test as successful.
 				}
 				if teamCity {
-					fmt.Fprintf(out, "##teamcity[testFinished name='%s']\n", t.Name())
-					if teamCity {
-						fmt.Printf("##teamcity[publishArtifacts '%s']\n", filepath.Join(artifacts, t.Name()))
-					}
+					fmt.Fprintf(out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
+					escapedTestName := teamcityNameEscape(t.Name())
+					artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
+					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+					// teamcity doesn't parse a flowId if it's here.
+					fmt.Fprintf(out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
 				}
 			}
 
@@ -402,4 +404,8 @@ func teamcityEscape(s string) string {
 		"]", "|]",
 	)
 	return r.Replace(s)
+}
+
+func teamcityNameEscape(name string) string {
+	return strings.Replace(name, ",", "_", -1)
 }

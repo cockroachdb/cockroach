@@ -490,7 +490,7 @@ func (c *cluster) Destroy(ctx context.Context) {
 
 	c.status("retrieving logs")
 	_ = execCmd(execCtx, c.l, "roachprod", "get", c.name, "logs",
-		filepath.Join(artifacts, c.t.Name(), "logs"))
+		filepath.Join(artifacts, teamcityNameEscape(c.t.Name()), "logs"))
 
 	// Only destroy the cluster if it exists in the cluster registry. The cluster
 	// may not exist if the test was interrupted and the teardown machinery is
