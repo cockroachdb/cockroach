@@ -531,9 +531,13 @@ func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	n.maybeStart("noop", "" /* logTag */)
 
+	if n.closed {
+		return nil, n.producerMeta(nil /* err */)
+	}
+
 	for {
 		row, meta := n.input.Next()
-		if n.closed || meta != nil {
+		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
