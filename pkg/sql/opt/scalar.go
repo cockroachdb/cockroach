@@ -359,9 +359,6 @@ func normalizeContainsOp(e *Expr) {
 	default:
 		return
 	}
-	if dJSON.Len() == 1 {
-		return
-	}
 
 	// Normalize a contains condition on an n-path JSON value to n contains
 	// conditions on a single-path JSON value.
@@ -369,6 +366,11 @@ func normalizeContainsOp(e *Expr) {
 	if err != nil {
 		panic(fmt.Sprintf("programming error: %+v", err))
 	}
+
+	if len(paths) == 1 {
+		return
+	}
+
 	e.op = andOp
 	lhs := e.children[0]
 	e.children = make([]*Expr, len(paths))

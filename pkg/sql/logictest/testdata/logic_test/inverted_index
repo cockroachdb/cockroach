@@ -153,6 +153,9 @@ INSERT INTO d VALUES (30,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 statement ok
 INSERT INTO d VALUES (31,  '{"a": []}')
 
+statement ok
+INSERT INTO d VALUES (32,  '{"a": [1, 2, 3, 4]}')
+
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
@@ -330,6 +333,7 @@ SELECT * from d where b @> '{}' ORDER BY a;
 17  {}
 30  {"a": {"b": "c", "d": "e"}, "f": "g"}
 31  {"a": []}
+32  {"a": [1, 2, 3, 4]}
 
 query IT
 SELECT * from d where b @> '[]' ORDER BY a;
@@ -430,6 +434,7 @@ SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 25  {"a": [{}]}
 31  {"a": []}
+32  {"a": [1, 2, 3, 4]}
 
 query IT
 SELECT * from d where b @> '[{}]' ORDER BY a;
@@ -511,6 +516,11 @@ SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
 30  {"a": {"b": "c", "d": "e"}, "f": "g"}
 
+query IT
+SELECT * from d where b @> '{"a": [1, 2, 3]}'
+----
+32  {"a": [1, 2, 3, 4]}
+
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
@@ -591,6 +601,7 @@ SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 25  {"a": [{}]}
 31  {"a": []}
+32  {"a": [1, 2, 3, 4]}
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
