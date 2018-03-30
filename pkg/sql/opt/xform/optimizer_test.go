@@ -15,7 +15,6 @@
 package xform_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -28,7 +27,7 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
 //   ...
 func TestCoster(t *testing.T) {
-	runDataDrivenTest(t, "testdata/coster/*", memo.ExprFmtShowAll)
+	runDataDrivenTest(t, "testdata/coster/", memo.ExprFmtShowAll)
 }
 
 // TestPhysicalPropsFactory files can be run separately like this:
@@ -36,7 +35,7 @@ func TestCoster(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/*", memo.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
 }
 
 // TestRules files can be run separately like this:
@@ -44,7 +43,7 @@ func TestPhysicalPropsFactory(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
 //   ...
 func TestRules(t *testing.T) {
-	runDataDrivenTest(t, "testdata/rules/*", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
+	runDataDrivenTest(t, "testdata/rules/", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
@@ -53,76 +52,14 @@ func TestRules(t *testing.T) {
 //   ----
 //   <expected results>
 //
-// The supported commands are:
-//
-//  - exec-ddl
-//
-//    Runs a SQL DDL statement to build the test catalog. Only a small number
-//    of DDL statements are supported, and those not fully.
-//
-//  - build
-//
-//    Builds an expression tree from a SQL query and outputs it without any
-//    optimizations applied to it.
-//
-//  - opt
-//
-//    Builds an expression tree from a SQL query, fully optimizes it using the
-//    memo, and then outputs the lowest cost tree.
-//
-//  - optsteps
-//
-//    Outputs the lowest cost tree for each step in optimization using the
-//    standard unified diff format. Used for debugging the optimizer.
-//
-//  - memo
-//
-//    Builds an expression tree from a SQL query, fully optimizes it using the
-//    memo, and then outputs the memo containing the forest of trees.
-//
-func runDataDrivenTest(t *testing.T, testdataGlob string, fmtFlags memo.ExprFmtFlags) {
-	for _, path := range testutils.GetTestFiles(t, testdataGlob) {
+// See OptTester.Handle for supported commands.
+func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
+	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				tester := testutils.NewOptTester(catalog, d.Input)
-				switch d.Cmd {
-				case "exec-ddl":
-					return testutils.ExecuteTestDDL(t, d.Input, catalog)
-
-				case "build":
-					ev, err := tester.OptBuild()
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return ev.FormatString(fmtFlags)
-
-				case "opt":
-					ev, err := tester.Optimize()
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return ev.FormatString(fmtFlags)
-
-				case "optsteps":
-					result, err := tester.OptSteps(fmtFlags, testing.Verbose())
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return result
-
-				case "memo":
-					result, err := tester.Memo()
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return result
-
-				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
-				}
-			})
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.Format = fmtFlags
+			return tester.RunCommand(t, d)
 		})
-	}
+	})
 }
