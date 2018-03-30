@@ -52,21 +52,22 @@ RUN mkdir crosstool-ng \
  && cd .. \
  && rm -rf crosstool-ng
 
-COPY x86_64-unknown-linux-gnu.defconfig x86_64-unknown-linux-musl.defconfig x86_64-w64-mingw.defconfig ./
+COPY x86_64-unknown-linux-gnu.defconfig x86_64-unknown-linux-musl.defconfig x86_64-w64-mingw.defconfig aarch64-unknown-linux-gnueabi.defconfig ./
 RUN mkdir src \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-gnu.defconfig  /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-musl.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
- && mkdir build && (cd build && DEFCONFIG=../x86_64-w64-mingw.defconfig          /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-gnu.defconfig      /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && DEFCONFIG=../x86_64-unknown-linux-musl.defconfig     /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && DEFCONFIG=../x86_64-w64-mingw.defconfig              /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
+ && mkdir build && (cd build && DEFCONFIG=../aarch64-unknown-linux-gnueabi.defconfig /usr/local/ct-ng/bin/ct-ng defconfig && /usr/local/ct-ng/bin/ct-ng build) && rm -rf build \
  && rm -rf src
 
-# Build & install libtinfo (terminfo) for the linux targets.
+# Build & install libtinfo (terminfo) for the linux targets (x86 and arm).
 # (on BSD or BSD-derived like macOS it's already built-in; on windows we don't need it.)
 #
 # The patch is needed to work around a bug in Debian mawk, see
 # http://lists.gnu.org/archive/html/bug-ncurses/2015-08/msg00008.html
 COPY ncurses.patch ./
 #
-# Run the two builds.
+# Run the three builds.
 # As per the Debian rule file for ncurses, the two configure tests for
 # the type of bool and poll(2) are broken when cross-compiling, so we
 # need to feed the test results manually to configure via an environment
@@ -96,6 +97,14 @@ RUN mkdir ncurses \
        CXX=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-c++ \
        ../configure --prefix=/x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr \
          --host=x86_64-unknown-linux-gnu \
+         $(cat /ncurses.conf) \
+    && (cd ncurses && make all && make install.tinfo)) \
+ && mkdir build-aarch64-unknown-linux-gnueabi \
+ && (cd build-aarch64-unknown-linux-gnueabi \
+    && CC=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-cc \
+       CXX=/x-tools/aarch64-unknown-linux-gnueabi/bin/aarch64-unknown-linux-gnueabi-c++ \
+       ../configure --prefix=/x-tools/aarch64-unknown-linux-gnueabi/aarch64-unknown-linux-gnueabi/sysroot/usr \
+         --host=aarch64-unknown-linux-gnueabi \
          $(cat /ncurses.conf) \
     && (cd ncurses && make all && make install.tinfo)) \
  && cd .. \
