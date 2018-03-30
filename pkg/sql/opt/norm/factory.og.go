@@ -3792,6 +3792,48 @@ func (_f *Factory) ConstructContains(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_containsExpr)))
 }
 
+// ConstructJsonExists constructs an expression for the JsonExists operator.
+func (_f *Factory) ConstructJsonExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonExistsExpr := memo.MakeJsonExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonExistsExpr)))
+}
+
+// ConstructJsonAllExists constructs an expression for the JsonAllExists operator.
+func (_f *Factory) ConstructJsonAllExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonAllExistsExpr := memo.MakeJsonAllExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonAllExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonAllExistsExpr)))
+}
+
+// ConstructJsonSomeExists constructs an expression for the JsonSomeExists operator.
+func (_f *Factory) ConstructJsonSomeExists(
+	left memo.GroupID,
+	right memo.GroupID,
+) memo.GroupID {
+	_jsonSomeExistsExpr := memo.MakeJsonSomeExistsExpr(left, right)
+	_group := _f.mem.GroupByFingerprint(_jsonSomeExistsExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_jsonSomeExistsExpr)))
+}
+
 // ConstructBitand constructs an expression for the Bitand operator.
 func (_f *Factory) ConstructBitand(
 	left memo.GroupID,
@@ -5369,6 +5411,21 @@ func init() {
 	// ContainsOp
 	dynConstructLookup[opt.ContainsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
 		return f.ConstructContains(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonExistsOp
+	dynConstructLookup[opt.JsonExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonAllExistsOp
+	dynConstructLookup[opt.JsonAllExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonAllExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+	}
+
+	// JsonSomeExistsOp
+	dynConstructLookup[opt.JsonSomeExistsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructJsonSomeExists(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// BitandOp

@@ -318,6 +318,24 @@ define Contains {
    Right Expr
 }
 
+[Scalar, Comparison]
+define JsonExists {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar, Comparison]
+define JsonAllExists {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar, Comparison]
+define JsonSomeExists {
+   Left  Expr
+   Right Expr
+}
+
 [Scalar, Binary]
 define Bitand {
    Left  Expr
