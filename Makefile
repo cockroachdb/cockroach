@@ -107,10 +107,11 @@ help: ## Print help for targets with comments.
 
 # Possible values:
 # <empty>: use the default toolchain
-# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
-# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
-# release-darwin:     target OS X 10.9
-# release-windows:    target Windows 8, statically link all non-Windows libraries
+# release-linux-gnu:     target Linux 2.6.32, dynamically link GLIBC 2.12.2
+# release-linux-musl:    target Linux 2.6.32, statically link musl 1.1.16
+# release-aarch64-linux: target aarch64 Linux 3.7.10, dynamically link GLIBC 2.12.2
+# release-darwin:        target OS X 10.9
+# release-windows:       target Windows 8, statically link all non-Windows libraries
 #
 # All non-empty variants only work in the cockroachdb/builder docker image, as
 # they depend on cross-compilation toolchains available there.
@@ -151,10 +152,17 @@ override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
-BUILD_TYPE := release
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -extldflags "-static"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
+BUILD_TYPE := release
+else ifeq ($(TYPE),release-aarch64-linux)
+XGOARCH := arm64
+export CGO_ENABLED := 1
+XHOST_TRIPLE := aarch64-unknown-linux-gnueabi
+override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override SUFFIX := $(SUFFIX)-linux-3.7.10-gnu-aarch64
+BUILD_TYPE := release
 else ifeq ($(TYPE),release-darwin)
 XGOOS := darwin
 export CGO_ENABLED := 1
