@@ -227,12 +227,10 @@ SELECT x, y FROM t.a WHERE x=1 AND y<5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: (/NULL - /4]; tight)]
-      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
+ ├── scan a,constrained
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── constraint: /1: [/1 - /1]
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
            ├── variable: a.y [type=int, outer=(2)]
            └── const: 5 [type=int]
@@ -291,14 +289,9 @@ project
  │    ├── columns: a.y:2(int) f:5(float)
  │    ├── project
  │    │    ├── columns: a.y:2(int) f:5(float)
- │    │    ├── select
+ │    │    ├── scan a,constrained
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float)
- │    │    │    ├── scan a
- │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int) a.f:3(float)
- │    │    │    └── filters [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight)]
- │    │    │         └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight)]
- │    │    │              ├── variable: a.x [type=int, outer=(1)]
- │    │    │              └── const: 5 [type=int]
+ │    │    │    └── constraint: /1: [/5 - /5]
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: a.y [type=int, outer=(2)]
  │    │         └── plus [type=float, outer=(3)]

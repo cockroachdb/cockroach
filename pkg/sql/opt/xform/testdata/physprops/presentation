@@ -26,7 +26,7 @@ scan a
 
 # Select operator.
 opt
-SELECT a.y, a.x, a.y y2 FROM a WHERE x=1
+SELECT a.y, a.x, a.y y2 FROM a WHERE y=1
 ----
 select
  ├── columns: y:2(int) x:1(int!null) y2:2(int)
@@ -34,7 +34,7 @@ select
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── filters [type=bool]
       └── eq [type=bool]
-           ├── variable: a.x [type=int]
+           ├── variable: a.y [type=int]
            └── const: 1 [type=int]
 
 # Project operator.

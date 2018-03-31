@@ -99,8 +99,11 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	}
 
 	// TODO: Need actual number of rows.
-	props.Relational.Stats.RowCount = 1000
-
+	if def.Constraint != nil {
+		props.Relational.Stats.RowCount = 100
+	} else {
+		props.Relational.Stats.RowCount = 1000
+	}
 	return props
 }
 

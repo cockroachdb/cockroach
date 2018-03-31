@@ -26,21 +26,21 @@ LIMIT 10
 limit
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
  ├── stats: [rows=100000]
- ├── cost: 27000.00
+ ├── cost: 127000.00
  ├── ordering: +2
  ├── sort
  │    ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
  │    ├── stats: [rows=100000]
- │    ├── cost: 27000.00
+ │    ├── cost: 127000.00
  │    ├── ordering: +2
  │    └── project
  │         ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
  │         ├── stats: [rows=100000]
- │         ├── cost: 2000.00
+ │         ├── cost: 102000.00
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
  │         │    ├── stats: [rows=100000]
- │         │    ├── cost: 2000.00
+ │         │    ├── cost: 102000.00
  │         │    ├── inner-join
  │         │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
  │         │    │    ├── stats: [rows=1000000]
@@ -80,30 +80,30 @@ LIMIT 10
 project
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
  ├── stats: [rows=10000]
- ├── cost: 4500.00
+ ├── cost: 4600.00
  ├── ordering: +2
  ├── limit
  │    ├── columns: a.y:2(int) b.x:3(string!null)
  │    ├── stats: [rows=10000]
- │    ├── cost: 4500.00
+ │    ├── cost: 4600.00
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: a.y:2(int) b.x:3(string!null)
  │    │    ├── stats: [rows=10000]
- │    │    ├── cost: 4500.00
+ │    │    ├── cost: 4600.00
  │    │    ├── ordering: +2
  │    │    └── project
  │    │         ├── columns: a.y:2(int) b.x:3(string!null)
  │    │         ├── stats: [rows=10000]
- │    │         ├── cost: 2000.00
+ │    │         ├── cost: 2100.00
  │    │         ├── inner-join
  │    │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null)
  │    │         │    ├── stats: [rows=10000]
- │    │         │    ├── cost: 2000.00
+ │    │         │    ├── cost: 2100.00
  │    │         │    ├── select
  │    │         │    │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    │         │    │    ├── stats: [rows=100]
- │    │         │    │    ├── cost: 1000.00
+ │    │         │    │    ├── cost: 1100.00
  │    │         │    │    ├── scan a
  │    │         │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    │         │    │    │    ├── stats: [rows=1000]
@@ -142,28 +142,28 @@ LIMIT 10
 [29: "p:y:2,x:3,column5:5 o:+2"]
 memo
  ├── 29: (project 28 20)
- │    ├── "" [cost=4500.00]
+ │    ├── "" [cost=4600.00]
  │    │    └── best: (project 28 20)
- │    └── "p:y:2,x:3,column5:5 o:+2" [cost=4500.00]
+ │    └── "p:y:2,x:3,column5:5 o:+2" [cost=4600.00]
  │         └── best: (project 28="o:+2" 20)
  ├── 28: (limit 27 24 +2)
- │    ├── "" [cost=4500.00]
+ │    ├── "" [cost=4600.00]
  │    │    └── best: (limit 27="o:+2" 24 +2)
- │    └── "o:+2" [cost=4500.00]
+ │    └── "o:+2" [cost=4600.00]
  │         └── best: (limit 27="o:+2" 24 +2)
  ├── 27: (project 22 26)
- │    ├── "" [cost=2000.00]
+ │    ├── "" [cost=2100.00]
  │    │    └── best: (project 22 26)
- │    └── "o:+2" [cost=4500.00]
+ │    └── "o:+2" [cost=4600.00]
  │         └── best: (sort 27)
  ├── 26: (projections 5 10)
  ├── 25: (limit 22 24 +2)
  ├── 24: (const 10)
  ├── 23: (project 22 20)
  ├── 22: (inner-join 15 21 17)
- │    ├── "" [cost=2000.00]
+ │    ├── "" [cost=2100.00]
  │    │    └── best: (inner-join 15 21 17)
- │    └── "o:+2" [cost=4500.00]
+ │    └── "o:+2" [cost=4600.00]
  │         └── best: (sort 22)
  ├── 21: (scan b)
  │    └── "" [cost=1000.00]
@@ -174,7 +174,7 @@ memo
  ├── 17: (filters 11)
  ├── 16: (inner-join 15 2 3)
  ├── 15: (select 1 14)
- │    └── "" [cost=1000.00]
+ │    └── "" [cost=1100.00]
  │         └── best: (select 1 14)
  ├── 14: (filters 7)
  ├── 13: (filters 7 11)
@@ -202,7 +202,7 @@ WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 [17: "p:column3:3,column4:4,column5:5,column6:6"]
 memo
  ├── 17: (project 11 16)
- │    └── "p:column3:3,column4:4,column5:5,column6:6" [cost=1000.00]
+ │    └── "p:column3:3,column4:4,column5:5,column6:6" [cost=1100.00]
  │         └── best: (project 11 16)
  ├── 16: (projections 12 13 15 14)
  ├── 15: (cast 14 timestamp)
@@ -210,7 +210,7 @@ memo
  ├── 13: (plus 2 3)
  ├── 12: (const 1)
  ├── 11: (select 1 10)
- │    └── "" [cost=1000.00]
+ │    └── "" [cost=1100.00]
  │         └── best: (select 1 10)
  ├── 10: (filters 4 8)
  ├── 9: (and 4 8)
