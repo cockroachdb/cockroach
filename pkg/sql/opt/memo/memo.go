@@ -279,6 +279,11 @@ func (m *Memo) BestExprCost(best BestExprID) Cost {
 	return m.bestExpr(best).cost
 }
 
+// BestExprLogical returns the logical properties of the given best expression.
+func (m *Memo) BestExprLogical(best BestExprID) *LogicalProps {
+	return m.GroupProperties(best.group)
+}
+
 // bestExpr returns the best expression with the given id.
 // NOTE: The returned best expression is only valid until the next call to
 //       EnsureBestExpr, since that may trigger a resize of the bestExprs slice
@@ -434,6 +439,9 @@ func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
 				fmt.Fprintf(buf, " %s", tab.TabName())
 			} else {
 				fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
+			}
+			if t.Constraint != nil {
+				fmt.Fprintf(buf, ",constrained")
 			}
 
 		case opt.ColumnID:

@@ -28,7 +28,7 @@ func init() {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes
 
-			c.status(`downloading store dumps`)
+			t.Status(`downloading store dumps`)
 			var wg sync.WaitGroup
 			for node := 1; node <= nodes; node++ {
 				node := c.Node(node)
@@ -48,7 +48,7 @@ func init() {
 			c.Start(ctx)
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
-				c.status(`running 2tb backup`)
+				t.Status(`running backup`)
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+c.name+`'"`)
 				return nil

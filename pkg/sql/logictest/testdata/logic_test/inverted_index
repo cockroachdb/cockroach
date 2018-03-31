@@ -161,6 +161,14 @@ index-join  0  index-join  ·      ·                                           
 ·           1  ·           table  d@primary                                    ·                ·
 
 query IT
+SELECT * from d where b @> NULL ORDER BY a;
+----
+
+query IT
+SELECT * from d where b @> (NULL::JSONB) ORDER BY a;
+----
+
+query IT
 SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 ----
 1  {"a": "b"}

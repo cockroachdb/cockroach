@@ -12,25 +12,63 @@ func (_e *explorer) exploreExpr(_state *exploreState, _eid memo.ExprID) (_fullyE
 	switch _expr.Operator() {
 	case opt.ScanOp:
 		return _e.exploreScan(_state, _eid)
+	case opt.SelectOp:
+		return _e.exploreSelect(_state, _eid)
 	}
 
 	// No rules for other operator types.
 	return true
 }
 
-func (_e *explorer) exploreScan(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {
-	_scanExpr := _e.mem.Expr(_eid).AsScan()
+func (_e *explorer) exploreScan(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+	_rootExpr := _e.mem.Expr(_root).AsScan()
 	_fullyExplored = true
 
 	// [GenerateIndexScans]
 	{
-		if _eid.Expr >= _state.start {
-			def := _scanExpr.Def()
-			if _e.isPrimaryScan(def) {
+		if _root.Expr >= _rootState.start {
+			def := _rootExpr.Def()
+			if _e.isUnconstrainedPrimaryScan(def) {
 				if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.GenerateIndexScans) {
 					exprs := _e.generateIndexScans(def)
 					for i := range exprs {
-						_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])
+						_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])
+					}
+				}
+			}
+		}
+	}
+
+	return _fullyExplored
+}
+
+func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+	_rootExpr := _e.mem.Expr(_root).AsSelect()
+	_fullyExplored = true
+
+	// [ConstrainScan]
+	{
+		_partlyExplored := _root.Expr < _rootState.start
+		_state := _e.exploreGroup(_rootExpr.Input())
+		if !_state.fullyExplored {
+			_fullyExplored = false
+		}
+		start := memo.ExprOrdinal(0)
+		if _partlyExplored {
+			start = _state.start
+		}
+		for _ord := start; _ord < _state.end; _ord++ {
+			_eid := memo.ExprID{Group: _rootExpr.Input(), Expr: _ord}
+			_scanExpr := _e.mem.Expr(_eid).AsScan()
+			if _scanExpr != nil {
+				def := _scanExpr.Def()
+				if _e.isUnconstrainedScan(def) {
+					filter := _rootExpr.Filter()
+					if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.ConstrainScan) {
+						exprs := _e.constrainScan(filter, def)
+						for i := range exprs {
+							_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])
+						}
 					}
 				}
 			}

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"reflect"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -172,6 +173,10 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeUvarint(uint64(def.Table))
 	ps.keyBuf.writeUvarint(uint64(def.Index))
+	// TODO(radu): consider encoding the constraint rather than the pointer.
+	// It's unclear if we have cases where we expect the same constraints to be
+	// generated multiple times.
+	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.Constraint))))
 	ps.keyBuf.writeColSet(def.Cols)
 	typ := (*ScanOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {

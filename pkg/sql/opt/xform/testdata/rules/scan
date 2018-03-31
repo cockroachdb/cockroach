@@ -131,3 +131,28 @@ memo
  ├── 3: (variable a.k)
  ├── 2: (variable a.i)
  └── 1: (scan a)
+
+memo
+SELECT i, k FROM a WHERE s >= 'foo'
+----
+[12: "p:i:2,k:1"]
+memo
+ ├── 13: (true)
+ ├── 12: (project 11 9)
+ │    └── "p:i:2,k:1" [cost=100.00]
+ │         └── best: (project 11 9)
+ ├── 11: (select 10 5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@s_idx,constrained)
+ ├── 10: (scan a) (scan a@s_idx) (scan a@si_idx)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── 9: (projections 7 8)
+ ├── 8: (variable a.k)
+ ├── 7: (variable a.i)
+ ├── 6: (select 1 5)
+ ├── 5: (filters 4)
+ ├── 4: (ge 2 3)
+ ├── 3: (const 'foo')
+ ├── 2: (variable a.s)
+ └── 1: (scan a)

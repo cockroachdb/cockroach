@@ -75,7 +75,7 @@ inner-join
                 └── const: 10 [type=int]
 
 # --------------------------------------------------
-# PushDownJoinLeft
+# PushFilterIntoJoinLeft
 # --------------------------------------------------
 opt
 SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.s='foo'
@@ -146,7 +146,7 @@ left-join
            └── const: 1 [type=int]
 
 # --------------------------------------------------
-# PushDownJoinRight
+# PushFilterIntoJoinRight
 # --------------------------------------------------
 opt
 SELECT * FROM b INNER JOIN a ON b.x=a.x AND a.s='foo'
@@ -217,7 +217,7 @@ right-join
            └── const: 1 [type=int]
 
 # --------------------------------------------------
-# PushDownJoinLeft + PushDownJoinRight
+# PushFilterIntoJoinLeft + PushFilterIntoJoinRight
 # --------------------------------------------------
 
 opt

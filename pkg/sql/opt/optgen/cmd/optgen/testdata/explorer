@@ -121,29 +121,29 @@ func (_e *explorer) exploreExpr(_state *exploreState, _eid memo.ExprID) (_fullyE
 	return true
 }
 
-func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {
-	_innerJoinExpr := _e.mem.Expr(_eid).AsInnerJoin()
+func (_e *explorer) exploreInnerJoin(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+	_rootExpr := _e.mem.Expr(_root).AsInnerJoin()
 	_fullyExplored = true
 
 	// [CommuteJoin]
 	{
-		if _eid.Expr >= _state.start {
-			r := _innerJoinExpr.Left()
-			s := _innerJoinExpr.Right()
+		if _root.Expr >= _rootState.start {
+			r := _rootExpr.Left()
+			s := _rootExpr.Right()
 			if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.CommuteJoin) {
 				_expr := memo.MakeInnerJoinExpr(
 					s,
 					r,
 				)
-				_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))
+				_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))
 			}
 		}
 	}
 
 	// [AssociateJoin]
 	{
-		_partlyExplored := _eid.Expr < _state.start
-		_state := _e.exploreGroup(_innerJoinExpr.Left())
+		_partlyExplored := _root.Expr < _rootState.start
+		_state := _e.exploreGroup(_rootExpr.Left())
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
@@ -152,18 +152,18 @@ func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_f
 			start = _state.start
 		}
 		for _ord := start; _ord < _state.end; _ord++ {
-			_eid := memo.ExprID{Group: _innerJoinExpr.Left(), Expr: _ord}
-			_innerJoinExpr2 := _e.mem.Expr(_eid).AsInnerJoin()
-			if _innerJoinExpr2 != nil {
-				r := _innerJoinExpr2.Left()
-				s := _innerJoinExpr2.Right()
-				_eid := memo.MakeNormExprID(_innerJoinExpr2.On())
+			_eid := memo.ExprID{Group: _rootExpr.Left(), Expr: _ord}
+			_innerJoinExpr := _e.mem.Expr(_eid).AsInnerJoin()
+			if _innerJoinExpr != nil {
+				r := _innerJoinExpr.Left()
+				s := _innerJoinExpr.Right()
+				_eid := memo.MakeNormExprID(_innerJoinExpr.On())
 				_expr := _e.mem.Expr(_eid)
 				if _expr.Operator() == opt.FiltersOp || _expr.IsHasConditions() || _expr.Operator() == opt.AndOp {
 					lowerConditions := _expr.ChildGroup(_e.mem, 0)
-					t := _innerJoinExpr.Right()
-					filters := _innerJoinExpr.On()
-					_eid := memo.MakeNormExprID(_innerJoinExpr.On())
+					t := _rootExpr.Right()
+					filters := _rootExpr.On()
+					_eid := memo.MakeNormExprID(_rootExpr.On())
 					_filtersExpr := _e.mem.Expr(_eid).AsFilters()
 					if _filtersExpr != nil {
 						upperConditions := _filtersExpr.Conditions()
@@ -183,7 +183,7 @@ func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_f
 											_e.constructConditionsUsing(s, lowerConditions, upperConditions),
 										),
 									)
-									_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))
+									_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))
 								}
 							}
 						}
@@ -196,20 +196,20 @@ func (_e *explorer) exploreInnerJoin(_state *exploreState, _eid memo.ExprID) (_f
 	return _fullyExplored
 }
 
-func (_e *explorer) exploreSelect(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {
-	_selectExpr := _e.mem.Expr(_eid).AsSelect()
+func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+	_rootExpr := _e.mem.Expr(_root).AsSelect()
 	_fullyExplored = true
 
 	// [PushDownGroupBy]
 	{
-		_partlyExplored := _eid.Expr < _state.start
-		_state := _e.exploreGroup(_selectExpr.Input())
+		_partlyExplored := _root.Expr < _rootState.start
+		_state := _e.exploreGroup(_rootExpr.Input())
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
 		for _ord := 0; _ord < _state.end; _ord++ {
 			_partlyExplored := _partlyExplored && _ord < _state.start
-			_eid := memo.ExprID{Group: _selectExpr.Input(), Expr: _ord}
+			_eid := memo.ExprID{Group: _rootExpr.Input(), Expr: _ord}
 			_groupByExpr := _e.mem.Expr(_eid).AsGroupBy()
 			if _groupByExpr != nil {
 				input := _groupByExpr.Input()
@@ -230,7 +230,7 @@ func (_e *explorer) exploreSelect(_state *exploreState, _eid memo.ExprID) (_full
 						on := _expr.ChildGroup(_e.mem, 2)
 						aggregations := _groupByExpr.Aggregations()
 						groupingCols := _groupByExpr.GroupingCols()
-						filter := _selectExpr.Filter()
+						filter := _rootExpr.Filter()
 						if !_e.isCorrelated(filter, right) {
 							if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.PushDownGroupBy) {
 								_expr := memo.MakeInnerJoinExpr(
@@ -245,7 +245,7 @@ func (_e *explorer) exploreSelect(_state *exploreState, _eid memo.ExprID) (_full
 									right,
 									on,
 								)
-								_e.mem.MemoizeDenormExpr(_eid.Group, memo.Expr(_expr))
+								_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))
 							}
 						}
 					}
@@ -257,19 +257,19 @@ func (_e *explorer) exploreSelect(_state *exploreState, _eid memo.ExprID) (_full
 	return _fullyExplored
 }
 
-func (_e *explorer) exploreScan(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {
-	_scanExpr := _e.mem.Expr(_eid).AsScan()
+func (_e *explorer) exploreScan(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
+	_rootExpr := _e.mem.Expr(_root).AsScan()
 	_fullyExplored = true
 
 	// [GenerateIndexScans]
 	{
-		if _eid.Expr >= _state.start {
-			def := _scanExpr.Def()
+		if _root.Expr >= _rootState.start {
+			def := _rootExpr.Def()
 			if _e.isPrimaryScan(def) {
 				if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.GenerateIndexScans) {
 					exprs := _e.generateIndexScans(def)
 					for i := range exprs {
-						_e.mem.MemoizeDenormExpr(_eid.Group, exprs[i])
+						_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])
 					}
 				}
 			}
