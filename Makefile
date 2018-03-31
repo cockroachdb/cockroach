@@ -201,10 +201,10 @@ UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-GOPATH := $(shell readlink -f $(shell $(GO) env GOPATH))
+GOPATH := $(realpath $(shell $(GO) env GOPATH))
 # GOPATH need not be explicitly set if it is the default $HOME/go
 ifeq ($(strip $(GOPATH)),)
-GOPATH := $(shell readlink -f $$HOME/go)
+GOPATH := $(realpath $(shell echo $$HOME/go))
 endif
 
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
