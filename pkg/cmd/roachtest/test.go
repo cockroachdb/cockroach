@@ -36,6 +36,7 @@ import (
 var (
 	tests       = &registry{m: make(map[string]*test), out: os.Stdout}
 	parallelism = 10
+	debug       = false
 	dryrun      = false
 )
 
@@ -366,7 +367,13 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 		if !dryrun {
 			ctx := context.Background()
 			c := newCluster(ctx, t, t.spec.Nodes)
-			defer c.Destroy(ctx)
+			defer func() {
+				if !debug || !t.Failed() {
+					c.Destroy(ctx)
+				} else {
+					c.l.printf("not destroying cluster to allow debugging\n")
+				}
+			}()
 			t.spec.Run(ctx, t, c)
 		}
 	}()
