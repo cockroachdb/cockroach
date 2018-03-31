@@ -55,7 +55,8 @@ run bin/roachtest run \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
   --zones "us-central1-b,us-west1-b,europe-west2-b" \
-  --parallelism 5
+  --parallelism 5 \
+  --teamcity
 if_tc tc_end_block "Run roachtest"
 
 if_tc tc_start_block "Upload artifacts"
