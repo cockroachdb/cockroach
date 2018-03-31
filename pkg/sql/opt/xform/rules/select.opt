@@ -8,7 +8,7 @@
 # constrained Scan.
 [ConstrainScan, Explore]
 (Select
-  (Scan $def:* & (IsUnconstrainedScan $def))
+  (Scan $def:* & (CanConstrainScan $def))
   $filter:*
 )
 =>

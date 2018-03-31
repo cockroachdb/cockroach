@@ -80,6 +80,7 @@ const (
 	// ------------------------------------------------------------
 	// Explore Rule Names
 	// ------------------------------------------------------------
+	PushLimitIntoScan
 	GenerateIndexScans
 	ConstrainScan
 

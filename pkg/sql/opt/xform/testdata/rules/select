@@ -28,7 +28,7 @@ TABLE a
 opt
 SELECT k FROM a WHERE k = 1
 ----
-scan a,constrained
+scan a
  ├── columns: k:1(int!null)
  └── constraint: /1: [/1 - /1]
 
@@ -57,7 +57,7 @@ SELECT k FROM a WHERE v > 1
 ----
 project
  ├── columns: k:1(int!null)
- ├── scan a@v,constrained
+ ├── scan a@v
  │    ├── columns: a.k:1(int!null) a.v:3(int)
  │    └── constraint: /3: [/2 - ]
  └── projections [outer=(1)]
@@ -92,7 +92,7 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 ----
 project
  ├── columns: k:1(int!null)
- ├── scan a@u,constrained
+ ├── scan a@u
  │    ├── columns: a.k:1(int!null) a.u:2(int)
  │    └── constraint: /2/1: [/1/5 - /1/5]
  └── projections [outer=(1)]
@@ -128,3 +128,34 @@ memo
  ├── 3: (const 1)
  ├── 2: (variable a.u)
  └── 1: (scan a)
+
+# No constraint can be derived from filter (nothing should be pushed down).
+opt
+SELECT k FROM a WHERE u=v
+----
+project
+ ├── columns: k:1(int!null)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    └── filters [type=bool, outer=(2,3)]
+ │         └── eq [type=bool, outer=(2,3)]
+ │              ├── variable: a.u [type=int, outer=(2)]
+ │              └── variable: a.v [type=int, outer=(3)]
+ └── projections [outer=(1)]
+      └── variable: a.k [type=int, outer=(1)]
+
+# Don't push constraint into already limited scan.
+opt
+SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
+----
+select
+ ├── columns: k:1(int!null)
+ ├── scan a@u
+ │    ├── columns: a.k:1(int!null) a.u:2(int)
+ │    └── limit: 1
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── const: 1 [type=int]
