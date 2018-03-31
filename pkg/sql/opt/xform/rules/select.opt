@@ -1,0 +1,15 @@
+# =============================================================================
+# select.opt contains exploration rules for the Select operator.
+# =============================================================================
+
+# ConstrainScan matches a Select over an unconstrained Scan and tries to push
+# down the filter (or part of it) as index constraints. The result is either
+# a constrained Scan or a Select (with a remaining filter) on top of a
+# constrained Scan.
+[ConstrainScan, Explore]
+(Select
+  (Scan $def:* & (IsUnconstrainedScan $def))
+  $filter:*
+)
+=>
+(ConstrainScan $filter $def)

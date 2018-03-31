@@ -81,33 +81,44 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
 
-	// Check absolute values.
 	f := StartCmd.Flags()
-	args := []string{"--max-sql-memory", "100MB"}
-	if err := f.Parse(args); err != nil {
-		t.Fatal(err)
+
+	// Check absolute values.
+	testCases := []struct {
+		value    string
+		expected int64
+	}{
+		{"100MB", 100 * 1000 * 1000},
+		{".5GiB", 512 * 1024 * 1024},
+		{"1.3", 1},
+	}
+	for _, c := range testCases {
+		args := []string{"--max-sql-memory", c.value}
+		if err := f.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		if c.expected != serverCfg.SQLMemoryPoolSize {
+			t.Errorf("expected %d, but got %d", c.expected, serverCfg.SQLMemoryPoolSize)
+		}
 	}
 
-	const expectedSQLMemSize = 100 * 1000 * 1000
-	if expectedSQLMemSize != serverCfg.SQLMemoryPoolSize {
-		t.Errorf("expected %d, but got %d", expectedSQLMemSize, serverCfg.SQLMemoryPoolSize)
-	}
+	for _, c := range []string{".30", "0.3"} {
+		args := []string{"--max-sql-memory", c}
+		if err := f.Parse(args); err != nil {
+			t.Fatal(err)
+		}
 
-	args = []string{"--max-sql-memory", ".30"}
-	if err := f.Parse(args); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check fractional values.
-	maxMem, err := server.GetTotalMemory(context.TODO())
-	if err != nil {
-		t.Logf("total memory unknown: %v", err)
-		return
-	}
-	expectedLow := (maxMem * 28) / 100
-	expectedHigh := (maxMem * 32) / 100
-	if serverCfg.SQLMemoryPoolSize < expectedLow || serverCfg.SQLMemoryPoolSize > expectedHigh {
-		t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.SQLMemoryPoolSize)
+		// Check fractional values.
+		maxMem, err := server.GetTotalMemory(context.TODO())
+		if err != nil {
+			t.Logf("total memory unknown: %v", err)
+			return
+		}
+		expectedLow := (maxMem * 28) / 100
+		expectedHigh := (maxMem * 32) / 100
+		if serverCfg.SQLMemoryPoolSize < expectedLow || serverCfg.SQLMemoryPoolSize > expectedHigh {
+			t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.SQLMemoryPoolSize)
+		}
 	}
 }
 

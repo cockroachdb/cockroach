@@ -37,7 +37,7 @@
     (Filters [ $filter ])
 )
 
-# PushDownJoinLeft pushes Join filter conditions into the left side of the
+# PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
 # join. This is possible in the case of InnerJoin and RightJoin, as long as the
 # condition has no dependencies on the right side of the join. Left and Full
 # joins are not eligible, since filtering left rows will change the number of
@@ -50,7 +50,7 @@
 #   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a LEFT JOIN b ON a.x=b.x
 #
 # Citations: [1]
-[PushDownJoinLeft, Normalize]
+[PushFilterIntoJoinLeft, Normalize]
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
     $left:*
     $right:*
@@ -60,16 +60,16 @@
 ((OpName)
     (Select
         $left
-        (Filters (ExtractUncorrelatedConditions $list $right))
+        (Filters (ExtractUncorrelatedConditions $list (OutputCols $right)))
     )
     $right
-    (Filters (ExtractCorrelatedConditions $list $right))
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $right)))
 )
 
-# PushDownJoinRight is symmetric with PushDownJoinLeft. It pushes Join filter
-# conditions into the right side of the join rather than into the left side.
-# See that rule's comments for more details.
-[PushDownJoinRight, Normalize]
+# PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
+# Join filter conditions into the right side of the join rather than into the
+# left side. See that rule's comments for more details.
+[PushFilterIntoJoinRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
     $right:*
@@ -80,7 +80,7 @@
     $left
     (Select
         $right
-        (Filters (ExtractUncorrelatedConditions $list $left))
+        (Filters (ExtractUncorrelatedConditions $list (OutputCols $left)))
     )
-    (Filters (ExtractCorrelatedConditions $list $left))
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
 )

@@ -1,0 +1,2 @@
+revoke_stmt ::=
+	'REVOKE' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*

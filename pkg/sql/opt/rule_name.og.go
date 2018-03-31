@@ -29,8 +29,10 @@ const (
 	FoldNullComparisonRight
 	EnsureJoinFiltersAnd
 	EnsureJoinFilters
-	PushDownJoinLeft
-	PushDownJoinRight
+	PushFilterIntoJoinLeft
+	PushFilterIntoJoinRight
+	PushLimitIntoProject
+	PushOffsetIntoProject
 	FoldPlusZero
 	FoldZeroPlus
 	FoldMinusZero
@@ -40,6 +42,7 @@ const (
 	InvertMinus
 	EliminateUnaryMinus
 	EliminateProject
+	EliminateProjectProject
 	FilterUnusedProjectCols
 	FilterUnusedScanCols
 	FilterUnusedSelectCols
@@ -68,15 +71,17 @@ const (
 	EnsureSelectFilters
 	EliminateSelect
 	MergeSelects
-	PushDownSelectJoinLeft
-	PushDownSelectJoinRight
+	PushSelectIntoProject
+	PushSelectIntoJoinLeft
+	PushSelectIntoJoinRight
 	MergeSelectInnerJoin
-	PushDownSelectGroupBy
+	PushSelectIntoGroupBy
 
 	// ------------------------------------------------------------
 	// Explore Rule Names
 	// ------------------------------------------------------------
 	GenerateIndexScans
+	ConstrainScan
 
 	// NumRuleNames tracks the total count of rule names.
 	NumRuleNames

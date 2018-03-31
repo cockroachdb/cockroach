@@ -246,8 +246,14 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		ev.mem.formatPrivate(&buf, ev.Private())
 	}
 
+	var physProps *PhysicalProps
+	if ev.best == normBestOrdinal {
+		physProps = &PhysicalProps{}
+	} else {
+		physProps = ev.Physical()
+	}
+
 	logProps := ev.Logical()
-	physProps := ev.Physical()
 
 	tp = tp.Child(buf.String())
 	buf.Reset()
@@ -288,13 +294,18 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		groupingColSet := ev.Private().(opt.ColSet)
 		logProps.FormatColSet(tp, ev.Metadata(), "grouping columns:", groupingColSet)
 
-		// Special-case handling for set operators to show the left and right
-		// input columns that correspond to the output columns.
+	// Special-case handling for set operators to show the left and right
+	// input columns that correspond to the output columns.
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		colMap := ev.Private().(*SetOpColMap)
 		logProps.FormatColList(tp, ev.Metadata(), "left columns:", colMap.Left)
 		logProps.FormatColList(tp, ev.Metadata(), "right columns:", colMap.Right)
+
+	case opt.ScanOp:
+		if def := ev.Private().(*ScanOpDef); def.Constraint != nil {
+			tp.Childf("constraint: %s", def.Constraint)
+		}
 	}
 
 	if !flags.HasFlags(ExprFmtHideStats) {

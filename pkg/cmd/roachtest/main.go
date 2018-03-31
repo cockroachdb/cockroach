@@ -54,6 +54,8 @@ func main() {
 	rootCmd.AddCommand(runCmd)
 
 	runCmd.Flags().BoolVarP(
+		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
+	runCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
 	runCmd.Flags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")

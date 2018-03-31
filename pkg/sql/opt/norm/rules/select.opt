@@ -55,7 +55,39 @@
     (ConcatFilters $innerFilter $filter)
 )
 
-# PushDownSelectJoinLeft pushes Select filter conditions into the left side of
+# PushSelectIntoProject pushes the Select operator into its Project input. This
+# is typically preferable because it minimizes the number of rows which Project
+# needs to process. This is especially important if Project is adding expensive
+# computed columns.
+#
+# This rule triggers a cycle with the FilterUnusedSelectCols rule. That rule
+# has the DetectCycle tag to break the cycle. In addition, this rule uses
+# ProjectNoCycle to minimize the overhead of detecting the cycle by creating a
+# Project which will not match the FilterUnusedSelectCols rule (or any other
+# rule which has the DetectCycle tag).
+[PushSelectIntoProject, Normalize]
+(Select
+    $project:(Project
+        $input:*
+        $projections:*
+    )
+    (Filters
+        $list:[ ... $condition:* & ^(IsCorrelatedCols $condition (SynthesizedCols $project)) ... ]
+    )
+)
+=>
+(Select
+    (ProjectNoCycle
+        (Select
+            $input
+            (Filters (ExtractUncorrelatedConditions $list (SynthesizedCols $project)))
+        )
+        $projections
+    )
+    (Filters (ExtractCorrelatedConditions $list (SynthesizedCols $project)))
+)
+
+# PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
 # an input Join. This is possible in the case of InnerJoin and LeftJoin, as
 # long as the condition has no dependencies on the right side of the join.
 # Right and Full joins are not eligible, since attempting to filter left rows
@@ -69,7 +101,7 @@
 #   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a RIGHT JOIN b ON a.x=b.x
 #
 # Citations: [1]
-[PushDownSelectJoinLeft, Normalize]
+[PushSelectIntoJoinLeft, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
         $left:*
@@ -83,18 +115,18 @@
     ((OpName $input)
         (Select
             $left
-            (Filters (ExtractUncorrelatedConditions $list $right))
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $right)))
         )
         $right
         $on
     )
-    (Filters (ExtractCorrelatedConditions $list $right))
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $right)))
 )
 
-# PushDownSelectJoinRight is symmetric with PushdownSelectJoinLeft. It pushes
+# PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
 # Select filter conditions into the right side of an input Join rather than
 # into the left side. See that rule's comments for more details.
-[PushDownSelectJoinRight, Normalize]
+[PushSelectIntoJoinRight, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
         $left:*
@@ -109,11 +141,11 @@
         $left
         (Select
             $right
-            (Filters (ExtractUncorrelatedConditions $list $left))
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $left)))
         )
         $on
     )
-    (Filters (ExtractCorrelatedConditions $list $left))
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
 )
 
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
@@ -121,8 +153,8 @@
 # On condition. This is only safe to do with InnerJoin in the general case
 # where the conditions could filter either left or right rows. The special case
 # where a condition filters only one or the other is already taken care of by
-# the PushDownSelectJoin rules.
-# NOTE: Keep this rule ordered after the PushDownSelectJoin rules, for
+# the PushSelectIntoJoin rules.
+# NOTE: Keep this rule ordered after the PushSelectIntoJoin rules, for
 #       performance reasons. It's better to push down below the join in a
 #       single step, when possible.
 [MergeSelectInnerJoin, Normalize]
@@ -141,7 +173,7 @@
     (ConcatFilters $on $filter)
 )
 
-# PushDownSelectGroupBy pushes a Select condition below a GroupBy in the case
+# PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
 # where it does not reference any of the aggregation columns. This only works
 # if there are grouping columns. Otherwise, this is an instance of the "scalar"
 # GroupBy, which returns only one row, and which exhibits different behavior if
@@ -154,7 +186,7 @@
 #   SELECT MAX(y) FROM a GROUP BY x
 #
 # Citations: [2]
-[PushDownSelectGroupBy, Normalize]
+[PushSelectIntoGroupBy, Normalize]
 (Select
     (GroupBy
         $input:*
@@ -168,10 +200,10 @@
     (GroupBy
         (Select
             $input
-            (Filters (ExtractUncorrelatedConditions $list $aggregations))
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $aggregations)))
         )
         $aggregations
         $groupingCols
     )
-    (Filters (ExtractCorrelatedConditions $list $aggregations))
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $aggregations)))
 )

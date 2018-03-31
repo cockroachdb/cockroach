@@ -97,13 +97,17 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 
 	switch ev.Operator() {
 	case opt.AndOp, opt.FiltersOp:
-		c, tight := cb.buildConstraints(ev.Child(0))
-		for i := 1; i < ev.ChildCount(); i++ {
-			ci, tighti := cb.buildConstraints(ev.Child(i))
-			c = c.Intersect(cb.evalCtx, ci)
-			tight = tight && tighti
+		// ChildCount can be zero if this is not a fully normalized expression
+		// (e.g. when using optsteps).
+		if ev.ChildCount() > 0 {
+			c, tight := cb.buildConstraints(ev.Child(0))
+			for i := 1; i < ev.ChildCount(); i++ {
+				ci, tighti := cb.buildConstraints(ev.Child(i))
+				c = c.Intersect(cb.evalCtx, ci)
+				tight = tight && tighti
+			}
+			return c, tight
 		}
-		return c, tight
 	}
 
 	if ev.ChildCount() < 2 {
