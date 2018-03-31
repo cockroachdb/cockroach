@@ -144,13 +144,12 @@ render          0  render  ·         ·          (b)     ·
 exec-explain
 SELECT b FROM t ORDER BY a LIMIT 1
 ----
-render          0  render  ·         ·          (b)     ·
- │              0  ·       render 0  b          ·       ·
- └── limit      1  limit   ·         ·          (a, b)  ·
-      │         1  ·       count     1          ·       ·
-      └── scan  2  scan    ·         ·          (a, b)  ·
-·               2  ·       table     t@primary  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render     0  render  ·         ·          (b)     ·
+ │         0  ·       render 0  b          ·       ·
+ └── scan  1  scan    ·         ·          (a, b)  ·
+·          1  ·       table     t@primary  ·       ·
+·          1  ·       spans     ALL        ·       ·
+·          1  ·       limit     1          ·       ·
 
 exec-explain
 SELECT b FROM t ORDER BY a DESC, b ASC

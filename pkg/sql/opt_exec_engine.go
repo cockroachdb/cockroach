@@ -144,6 +144,7 @@ func (ee *execEngine) ConstructScan(
 	index opt.Index,
 	cols exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
+	hardLimit int64,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -160,6 +161,7 @@ func (ee *execEngine) ConstructScan(
 	}
 	scan.index = indexDesc
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
+	scan.hardLimit = hardLimit
 	var err error
 	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint)
 	if err != nil {

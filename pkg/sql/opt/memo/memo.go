@@ -433,16 +433,7 @@ func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		case nil:
 
 		case *ScanOpDef:
-			// Don't output name of index if it's the primary index.
-			tab := m.metadata.Table(t.Table)
-			if t.Index == opt.PrimaryIndex {
-				fmt.Fprintf(buf, " %s", tab.TabName())
-			} else {
-				fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
-			}
-			if t.Constraint != nil {
-				fmt.Fprintf(buf, ",constrained")
-			}
+			m.formatScanPrivate(buf, t, false /* short */)
 
 		case opt.ColumnID:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
@@ -452,6 +443,26 @@ func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
 
 		default:
 			fmt.Fprintf(buf, " %s", private)
+		}
+	}
+}
+
+func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) {
+	// Don't output name of index if it's the primary index.
+	tab := m.metadata.Table(def.Table)
+	if def.Index == opt.PrimaryIndex {
+		fmt.Fprintf(buf, " %s", tab.TabName())
+	} else {
+		fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
+	}
+
+	// Add additional fields when short=false.
+	if !short {
+		if def.Constraint != nil {
+			fmt.Fprintf(buf, ",constrained")
+		}
+		if def.HardLimit > 0 {
+			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
 		}
 	}
 }

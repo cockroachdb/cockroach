@@ -227,7 +227,7 @@ SELECT x, y FROM t.a WHERE x=1 AND y<5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan a,constrained
+ ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    └── constraint: /1: [/1 - /1]
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
@@ -289,7 +289,7 @@ project
  │    ├── columns: a.y:2(int) f:5(float)
  │    ├── project
  │    │    ├── columns: a.y:2(int) f:5(float)
- │    │    ├── scan a,constrained
+ │    │    ├── scan a
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float)
  │    │    │    └── constraint: /1: [/5 - /5]
  │    │    └── projections [outer=(2,3)]
@@ -358,12 +358,9 @@ SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
- ├── limit
+ ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    └── ordering: +1,+2
- │    └── const: 10 [type=int]
+ │    └── limit: 10
  └── projections [outer=(4)]
       └── variable: a.s [type=string, outer=(4)]
 
@@ -373,12 +370,9 @@ SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
- ├── limit
+ ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    └── ordering: +1,+2
- │    └── const: 10 [type=int]
+ │    └── limit: 10
  └── projections [outer=(1,4)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: a.s [type=string, outer=(4)]

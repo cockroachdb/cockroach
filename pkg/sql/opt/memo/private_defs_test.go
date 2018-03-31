@@ -23,17 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-func TestScanOpDef(t *testing.T) {
+func TestAltIndexHasCols(t *testing.T) {
 	cat := createDefsCatalog(t)
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))
+
+	// INDEX (i, k)
 	altIndex1 := 1
+	// INDEX (s DESC) STORING(f)
 	altIndex2 := 2
+
 	k := int(md.TableColumn(a, 0))
 	i := int(md.TableColumn(a, 1))
 	s := int(md.TableColumn(a, 2))
 
-	testHasCols := func(def *memo.ScanOpDef, altIndex int, expected bool) {
+	test := func(def *memo.ScanOpDef, altIndex int, expected bool) {
 		t.Helper()
 		if def.AltIndexHasCols(md, altIndex) != expected {
 			t.Errorf("expected %v, got %v", expected, !expected)
@@ -41,27 +45,74 @@ func TestScanOpDef(t *testing.T) {
 	}
 
 	def := &memo.ScanOpDef{Table: a, Index: opt.PrimaryIndex, Cols: util.MakeFastIntSet(k, i)}
-	testHasCols(def, altIndex1, true)
-	testHasCols(def, altIndex2, false)
+	test(def, altIndex1, true)
+	test(def, altIndex2, false)
 
 	def = &memo.ScanOpDef{Table: a, Index: opt.PrimaryIndex, Cols: util.MakeFastIntSet(k)}
-	testHasCols(def, altIndex1, true)
-	testHasCols(def, altIndex2, true)
+	test(def, altIndex1, true)
+	test(def, altIndex2, true)
 
 	def = &memo.ScanOpDef{Table: a, Index: opt.PrimaryIndex, Cols: util.MakeFastIntSet(s)}
-	testHasCols(def, altIndex1, false)
-	testHasCols(def, altIndex2, true)
+	test(def, altIndex1, false)
+	test(def, altIndex2, true)
 
 	def = &memo.ScanOpDef{Table: a, Index: opt.PrimaryIndex, Cols: util.MakeFastIntSet(k, i, s)}
-	testHasCols(def, altIndex1, false)
-	testHasCols(def, altIndex2, false)
+	test(def, altIndex1, false)
+	test(def, altIndex2, false)
+}
+
+func TestCanProvideOrdering(t *testing.T) {
+	cat := createDefsCatalog(t)
+	md := opt.NewMetadata()
+	a := md.AddTable(cat.Table("a"))
+
+	// INDEX (i, k)
+	altIndex1 := 1
+	// INDEX (s DESC) STORING(f)
+	altIndex2 := 2
+
+	k := opt.OrderingColumn(md.TableColumn(a, 0))
+	i := opt.OrderingColumn(md.TableColumn(a, 1))
+	s := opt.OrderingColumn(md.TableColumn(a, 2))
+	f := opt.OrderingColumn(md.TableColumn(a, 3))
+
+	test := func(def *memo.ScanOpDef, ordering memo.Ordering, expected bool) {
+		t.Helper()
+		if def.CanProvideOrdering(md, ordering) != expected {
+			t.Errorf("expected %v, got %v", expected, !expected)
+		}
+	}
+
+	// Ordering is longer than index.
+	def := &memo.ScanOpDef{Table: a, Index: altIndex1}
+	test(def, memo.Ordering{i, k, s}, true)
+	test(def, memo.Ordering{k, i, s}, false)
+
+	// Index is longer than ordering.
+	test(def, memo.Ordering{i}, true)
+	test(def, memo.Ordering{k}, false)
+
+	// Index contains descending column.
+	def = &memo.ScanOpDef{Table: a, Index: altIndex2}
+	test(def, memo.Ordering{-s}, true)
+	test(def, memo.Ordering{s}, false)
+
+	// Index contains storing column.
+	test(def, memo.Ordering{-s, k, f}, true)
+	test(def, memo.Ordering{-s, k, i}, false)
 }
 
 func createDefsCatalog(t *testing.T) *testutils.TestCatalog {
 	cat := testutils.NewTestCatalog()
 	testutils.ExecuteTestDDL(
 		t,
-		"CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, INDEX (i, k), INDEX(s DESC))",
+		"CREATE TABLE a ("+
+			"k INT PRIMARY KEY, "+
+			"i INT, "+
+			"s STRING, "+
+			"f FLOAT, "+
+			"INDEX (i, k), "+
+			"INDEX (s DESC) STORING(f))",
 		cat,
 	)
 	return cat

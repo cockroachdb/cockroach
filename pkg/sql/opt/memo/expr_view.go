@@ -243,7 +243,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	switch ev.Operator() {
 	case opt.ScanOp:
-		ev.mem.formatPrivate(&buf, ev.Private())
+		ev.mem.formatScanPrivate(&buf, ev.Private().(*ScanOpDef), true /* short */)
 	}
 
 	var physProps *PhysicalProps
@@ -303,8 +303,12 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		logProps.FormatColList(tp, ev.Metadata(), "right columns:", colMap.Right)
 
 	case opt.ScanOp:
-		if def := ev.Private().(*ScanOpDef); def.Constraint != nil {
+		def := ev.Private().(*ScanOpDef)
+		if def.Constraint != nil {
 			tp.Childf("constraint: %s", def.Constraint)
+		}
+		if def.HardLimit > 0 {
+			tp.Childf("limit: %d", def.HardLimit)
 		}
 	}
 

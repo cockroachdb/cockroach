@@ -96,6 +96,7 @@ func (g *ruleGen) init(compiled *lang.CompiledExpr, w *matchWriter) {
 func (g *ruleGen) genRule(rule *lang.RuleExpr) {
 	matchName := string(rule.Match.Names[0])
 	define := g.compiled.LookupDefine(matchName)
+
 	// Determine whether the rule is a normalization or exploration rule and
 	// set up context accordingly.
 	g.normalize = rule.Tags.Contains("Normalize")
