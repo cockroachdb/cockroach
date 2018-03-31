@@ -91,6 +91,12 @@ func (p *planner) changePrivileges(
 			changePrivilege(privileges, string(grantee))
 		}
 
+		// Validate privilege descriptors directly as the db/table level Validate
+		// may fix up the descriptor.
+		if err := privileges.Validate(descriptor.GetID()); err != nil {
+			return nil, err
+		}
+
 		switch d := descriptor.(type) {
 		case *sqlbase.DatabaseDescriptor:
 			if err := d.Validate(); err != nil {
