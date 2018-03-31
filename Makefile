@@ -989,7 +989,9 @@ CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.
 
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
-$(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) | bin/protoc-gen-gogoroach
+$(GOGOPROTO_PROTO): $(GO_PROTOS)
+
+$(GO_PROTOS_TARGET): $(PROTOC) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) | bin/protoc-gen-gogoroach
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
