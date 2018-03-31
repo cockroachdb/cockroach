@@ -81,6 +81,7 @@ const (
 	// Explore Rule Names
 	// ------------------------------------------------------------
 	GenerateIndexScans
+	ConstrainScan
 
 	// NumRuleNames tracks the total count of rule names.
 	NumRuleNames

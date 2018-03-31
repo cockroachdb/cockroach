@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -139,7 +140,10 @@ func (ee *execEngine) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (ee *execEngine) ConstructScan(
-	table opt.Table, index opt.Index, cols exec.ColumnOrdinalSet,
+	table opt.Table,
+	index opt.Index,
+	cols exec.ColumnOrdinalSet,
+	indexConstraint *constraint.Constraint,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -157,7 +161,7 @@ func (ee *execEngine) ConstructScan(
 	scan.index = indexDesc
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	var err error
-	scan.spans, err = unconstrainedSpans(tabDesc, indexDesc)
+	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint)
 	if err != nil {
 		return nil, err
 	}
