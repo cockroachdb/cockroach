@@ -208,11 +208,15 @@ func (e *explorer) ensureExploreState(group memo.GroupID) *exploreState {
 //
 // ----------------------------------------------------------------------
 
-// isUnconstrainedPrimaryScan returns true if the given expression is scanning a
-// primary index rather than a secondary index.
-func (e *explorer) isUnconstrainedPrimaryScan(def memo.PrivateID) bool {
+// canGenerateIndexScans returns true if new index Scan operators can be
+// generated, based on the given ScanOpDef. Index scans should only be generated
+// from the original unaltered primary index Scan operator (i.e. unconstrained
+// and not limited).
+func (e *explorer) canGenerateIndexScans(def memo.PrivateID) bool {
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Index == opt.PrimaryIndex && scanOpDef.Constraint == nil
+	return scanOpDef.Index == opt.PrimaryIndex &&
+		scanOpDef.Constraint == nil &&
+		scanOpDef.HardLimit == 0
 }
 
 // generateIndexScans enumerates all indexes on the scan operator's table and
@@ -245,11 +249,13 @@ func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 //
 // ----------------------------------------------------------------------
 
-// isUnconstrainedScan returns true if the given expression is a Scan
-// without any constraints.
-func (e *explorer) isUnconstrainedScan(def memo.PrivateID) bool {
+// canConstrainScan returns true if the given expression can have a constraint
+// applied to it. This is only possible when it has no constraints and when it
+// does not have a limit applied to it (since limit is applied after the
+// constraint).
+func (e *explorer) canConstrainScan(def memo.PrivateID) bool {
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Constraint == nil
+	return scanOpDef.Constraint == nil && scanOpDef.HardLimit == 0
 }
 
 // constrainScan tries to push filters into Scan operations as constraints. It
@@ -312,6 +318,33 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 		e.exprs = append(e.exprs, memo.Expr(newSelect))
 	}
 	return e.exprs
+}
+
+// ----------------------------------------------------------------------
+//
+// Limit Rules
+//   Custom match and replace functions used with limit.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// canLimitScan returns true if the given expression can have its output row
+// count limited. This is only possible when there is no existing limit and
+// when the required ordering of the rows to be limited can be satisfied by the
+// scan operator.
+func (e *explorer) canLimitScan(def memo.PrivateID, ordering memo.PrivateID) bool {
+	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	required := e.mem.LookupPrivate(ordering).(memo.Ordering)
+	return scanOpDef.HardLimit == 0 && scanOpDef.CanProvideOrdering(e.mem.Metadata(), required)
+}
+
+// limitScanDef constructs a new ScanOpDef private value that is based on the
+// given ScanOpDef. The new def's HardLimit is set to the given limit, which
+// must be a constant int datum value. The other fields are inherited from the
+// existing def.
+func (e *explorer) limitScanDef(def memo.PrivateID, limit memo.PrivateID) memo.PrivateID {
+	defCopy := *e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	defCopy.HardLimit = int64(*e.mem.LookupPrivate(limit).(*tree.DInt))
+	return e.mem.InternScanOpDef(&defCopy)
 }
 
 // ----------------------------------------------------------------------

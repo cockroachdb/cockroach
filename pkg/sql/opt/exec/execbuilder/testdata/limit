@@ -6,11 +6,10 @@ INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 12
 exec-explain
 SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-limit      0  limit  ·      ·          (k, v)  ·
- │         0  ·      count  5          ·       ·
- └── scan  1  scan   ·      ·          (k, v)  ·
-·          1  ·      table  t@primary  ·       ·
-·          1  ·      spans  ALL        ·       ·
+scan  0  scan  ·      ·          (k, v)  ·
+·     0  ·     table  t@primary  ·       ·
+·     0  ·     spans  ALL        ·       ·
+·     0  ·     limit  5          ·       ·
 
 exec
 SELECT k, v FROM t ORDER BY k LIMIT 5
@@ -114,13 +113,12 @@ column4:decimal
 exec-explain
 SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
-render          0  render  ·         ·          (k)     ·
- │              0  ·       render 0  k          ·       ·
- └── limit      1  limit   ·         ·          (k, v)  ·
-      │         1  ·       count     4          ·       ·
-      └── scan  2  scan    ·         ·          (k, v)  ·
-·               2  ·       table     t@t_v_idx  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render     0  render  ·         ·          (k)     ·
+ │         0  ·       render 0  k          ·       ·
+ └── scan  1  scan    ·         ·          (k, v)  ·
+·          1  ·       table     t@t_v_idx  ·       ·
+·          1  ·       spans     ALL        ·       ·
+·          1  ·       limit     4          ·       ·
 
 exec
 SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
@@ -134,13 +132,12 @@ k:int
 exec-explain
 SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
-render          0  render  ·         ·          (k)     ·
- │              0  ·       render 0  k          ·       ·
- └── limit      1  limit   ·         ·          (k, v)  ·
-      │         1  ·       count     4          ·       ·
-      └── scan  2  scan    ·         ·          (k, v)  ·
-·               2  ·       table     t@t_v_idx  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render     0  render  ·         ·          (k)     ·
+ │         0  ·       render 0  k          ·       ·
+ └── scan  1  scan    ·         ·          (k, v)  ·
+·          1  ·       table     t@t_v_idx  ·       ·
+·          1  ·       spans     ALL        ·       ·
+·          1  ·       limit     4          ·       ·
 
 exec
 SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
