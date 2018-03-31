@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/petermattis/goid"
 )
 
 var (
@@ -57,8 +58,9 @@ type testSpec struct {
 }
 
 type registry struct {
-	m   map[string]*test
-	out io.Writer
+	m              map[string]*test
+	out            io.Writer
+	statusInterval time.Duration
 }
 
 func (r *registry) Add(spec testSpec) {
@@ -135,7 +137,6 @@ func (r *registry) Run(filter []string) int {
 			t := tests[i]
 			sem <- struct{}{}
 			fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
-			t.Status("starting")
 			status.Lock()
 			status.running[t] = struct{}{}
 			status.Unlock()
@@ -161,7 +162,10 @@ func (r *registry) Run(filter []string) int {
 	}()
 
 	// Periodically output test status to give an indication of progress.
-	ticker := time.NewTicker(time.Minute)
+	if r.statusInterval == 0 {
+		r.statusInterval = time.Minute
+	}
+	ticker := time.NewTicker(r.statusInterval)
 	defer ticker.Stop()
 
 	// Shut down test clusters when interrupted (for example CTRL+C).
@@ -194,18 +198,56 @@ func (r *registry) Run(filter []string) int {
 			for _, t := range runningTests {
 				t.mu.Lock()
 				done := t.mu.done
-				status := t.mu.status
-				statusTime := t.mu.statusTime
-				statusProgress := t.mu.statusProgress
+				var status map[int64]testStatus
+				if !done {
+					status = make(map[int64]testStatus, len(t.mu.status))
+					for k, v := range t.mu.status {
+						status[k] = v
+					}
+					if len(status) == 0 {
+						// If we have no other status messages display this unknown state.
+						status[0] = testStatus{
+							msg:  "???",
+							time: timeutil.Now(),
+						}
+					}
+				}
 				t.mu.Unlock()
 				if !done {
-					duration := timeutil.Now().Sub(statusTime)
-					progStr := ""
-					if statusProgress > 0 {
-						progStr = fmt.Sprintf("%.1f%%|", 100*statusProgress)
+					ids := make([]int64, 0, len(status))
+					for id := range status {
+						ids = append(ids, id)
 					}
-					fmt.Fprintf(&buf, "[%4d] %s: %s (%s%s)\n", i, t.Name(), status,
-						progStr, time.Duration(duration.Seconds()+0.5)*time.Second)
+					sort.Slice(ids, func(i, j int) bool {
+						// Force the goroutine ID for the main test goroutine to sort to
+						// the front. NB: goroutine IDs are not monotonically increasing
+						// because each thread has a small cache of IDs for allocation.
+						if ids[j] == t.runnerID {
+							return false
+						}
+						if ids[i] == t.runnerID {
+							return true
+						}
+						return ids[i] < ids[j]
+					})
+
+					fmt.Fprintf(&buf, "[%4d] %s: ", i, t.Name())
+
+					for j := range ids {
+						s := status[ids[j]]
+						duration := timeutil.Now().Sub(s.time)
+						progStr := ""
+						if s.progress > 0 {
+							progStr = fmt.Sprintf("%.1f%%|", 100*s.progress)
+						}
+						if j > 0 {
+							buf.WriteString(", ")
+						}
+						fmt.Fprintf(&buf, "%s (%s%s)", s.msg, progStr,
+							time.Duration(duration.Seconds()+0.5)*time.Second)
+					}
+
+					fmt.Fprintf(&buf, "\n")
 				}
 			}
 			fmt.Fprint(r.out, buf.String())
@@ -217,19 +259,24 @@ func (r *registry) Run(filter []string) int {
 	}
 }
 
+type testStatus struct {
+	msg      string
+	time     time.Time
+	progress float64
+}
+
 type test struct {
-	spec   *testSpec
-	runner string
-	start  time.Time
-	end    time.Time
-	mu     struct {
+	spec     *testSpec
+	runner   string
+	runnerID int64
+	start    time.Time
+	end      time.Time
+	mu       struct {
 		syncutil.RWMutex
-		done           bool
-		failed         bool
-		status         string
-		statusTime     time.Time
-		statusProgress float64
-		output         []byte
+		done   bool
+		failed bool
+		status map[int64]testStatus
+		output []byte
 	}
 }
 
@@ -237,18 +284,62 @@ func (t *test) Name() string {
 	return t.spec.Name
 }
 
-func (t *test) Status(args ...interface{}) {
+func (t *test) status(id int64, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.status = strings.SplitN(fmt.Sprint(args...), "\n", 2)[0]
-	t.mu.statusTime = timeutil.Now()
-	t.mu.statusProgress = 0
+
+	if t.mu.status == nil {
+		t.mu.status = make(map[int64]testStatus)
+	}
+	if len(args) == 0 {
+		delete(t.mu.status, id)
+		return
+	}
+	t.mu.status[id] = testStatus{
+		msg:  fmt.Sprint(args...),
+		time: timeutil.Now(),
+	}
 }
 
-func (t *test) Progress(frac float64) {
+// Status sets the main status message for the test. When called from the main
+// test goroutine (i.e. the goroutine on which testSpec.Run is invoked), this
+// is equivalent to calling WorkerStatus. If no arguments are specified, the
+// status message is erased.
+func (t *test) Status(args ...interface{}) {
+	t.status(t.runnerID, args...)
+}
+
+// WorkerStatus sets the status message for a worker goroutine associated with
+// the test. The status message should be cleared before the goroutine exits by
+// calling WorkerStatus with no arguments.
+func (t *test) WorkerStatus(args ...interface{}) {
+	t.status(goid.Get(), args...)
+}
+
+func (t *test) progress(id int64, frac float64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.statusProgress = frac
+
+	if t.mu.status == nil {
+		t.mu.status = make(map[int64]testStatus)
+	}
+	status := t.mu.status[id]
+	status.progress = frac
+	t.mu.status[id] = status
+}
+
+// Progress sets the progress (a fraction in the range [0,1]) associated with
+// the main test status messasge. When called from the main test goroutine
+// (i.e. the goroutine on which testSpec.Run is invoked), this is equivalent to
+// calling WorkerProgress.
+func (t *test) Progress(frac float64) {
+	t.progress(t.runnerID, frac)
+}
+
+// WorkerProgress sets the progress (a fraction in the range [0,1]) associated
+// with the a worker status messasge.
+func (t *test) WorkerProgress(frac float64) {
+	t.progress(goid.Get(), frac)
 }
 
 func (t *test) Fatal(args ...interface{}) {
@@ -336,6 +427,7 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 
 	go func() {
 		t.runner = callerName()
+		t.runnerID = goid.Get()
 
 		defer func() {
 			t.end = timeutil.Now()
