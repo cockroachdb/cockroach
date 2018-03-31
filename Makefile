@@ -202,9 +202,8 @@ SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
 GOPATH := $(realpath $(shell $(GO) env GOPATH))
-# GOPATH need not be explicitly set if it is the default $HOME/go
 ifeq ($(strip $(GOPATH)),)
-GOPATH := $(realpath $(shell echo $$HOME/go))
+$(error GOPATH is not set and could not be automatically determined, build cannot continue)
 endif
 
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
