@@ -68,7 +68,7 @@ func init() {
 				if _, err := conn.Exec(`create database csv`); err != nil {
 					t.Fatal(err)
 				}
-				c.status(`running import`)
+				t.Status(`running import`)
 				if _, err := conn.Exec(`
 				IMPORT TABLE csv.lineitem
 				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
