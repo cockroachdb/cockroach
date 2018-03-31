@@ -201,7 +201,10 @@ UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-GOPATH := $(shell $(GO) env GOPATH)
+GOPATH := $(realpath $(shell $(GO) env GOPATH))
+ifeq ($(strip $(GOPATH)),)
+$(error GOPATH is not set and could not be automatically determined, build cannot continue)
+endif
 
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
 $(error GOPATHs with multiple entries are not supported)
