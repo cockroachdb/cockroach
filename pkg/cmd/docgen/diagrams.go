@@ -45,10 +45,10 @@ func init() {
 
 	write := func(name string, data []byte) {
 		if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 		if err := ioutil.WriteFile(name, data, 0644); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 
@@ -65,7 +65,7 @@ func init() {
 			bnfDir := args[0]
 			bnf, err := runBNF(addr)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 			br := func() io.Reader {
 				return bytes.NewReader(bnf)
@@ -150,10 +150,11 @@ func init() {
 			}
 
 			filterRE := regexp.MustCompile(filter)
+			stripRE := regexp.MustCompile("\n(\n| )+")
 
 			matches, err := filepath.Glob(filepath.Join(bnfDir, "*.bnf"))
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 
 			specMap := make(map[string]stmtSpec)
@@ -161,7 +162,7 @@ func init() {
 				specMap[s.name] = s
 			}
 			if len(specs) != len(specMap) {
-				panic("duplicate spec name")
+				log.Fatal("duplicate spec name")
 			}
 
 			var wg sync.WaitGroup
@@ -183,7 +184,7 @@ func init() {
 
 					f, err := os.Open(m)
 					if err != nil {
-						panic(err)
+						log.Fatal(err)
 					}
 					defer f.Close()
 
@@ -208,7 +209,7 @@ func init() {
 						}
 						body, err = extract.Tag(bytes.NewReader(rr), "svg")
 						if err != nil {
-							panic(err)
+							log.Fatal(err)
 						}
 						body = strings.Replace(body, `<a xlink:href="#`, `<a xlink:href="sql-grammar.html#`, -1)
 						for _, u := range s.unlink {
@@ -225,6 +226,8 @@ func init() {
 						// doesn't attempt to parse the inside of the contained
 						// <svg> as Markdown.
 						body = fmt.Sprintf(`<div>%s</div>`, body)
+						// Remove blank lines and strip spaces.
+						body = stripRE.ReplaceAllString(body, "\n") + "\n"
 					}
 					name = strings.Replace(name, "_stmt", "", 1)
 					write(filepath.Join(svgDir, name+".html"), []byte(body))
@@ -484,10 +487,20 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "column_name", "column_type", "default_value", "table_constraints"},
 	},
 	{
-		name:    "delete_stmt",
-		inline:  []string{"relation_expr_opt_alias", "where_clause", "returning_clause", "target_list", "target_elem", "opt_sort_clause", "sort_clause", "opt_limit_clause", "limit_clause", "first_or_next", "row_or_rows"},
-		replace: map[string]string{"opt_with_clause": "", "select_limit_value": "count", "opt_select_fetch_first_value": "count"},
+		name:   "delete_stmt",
+		inline: []string{"opt_with_clause", "with_clause", "cte_list", "relation_expr_opt_alias", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
 		unlink:  []string{"count"},
+		nosplit: true,
+	},
+	{
+		name:   "with_clause",
+		inline: []string{"cte_list", "common_table_expr", "name_list", "opt_column_list"},
+		replace: map[string]string{
+			"preparable_stmt ')' ) ) )* )": "preparable_stmt ')' ) ) )* ) ( insert_stmt | update_stmt | delete_stmt | upsert_stmt | select_stmt )",
+		},
 		nosplit: true,
 	},
 	{
@@ -657,8 +670,17 @@ var specs = []stmtSpec{
 	},
 	{name: "import_table", stmt: "import_stmt"},
 	{
-		name:   "insert_stmt",
-		inline: []string{"insert_target", "insert_rest", "returning_clause"},
+		name:    "insert_stmt",
+		inline:  []string{"insert_target", "insert_rest", "returning_clause", "insert_column_list", "insert_column_item", "target_list", "opt_with_clause", "with_clause", "cte_list"},
+		nosplit: true,
+	},
+	{
+		name:   "on_conflict",
+		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list", "insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list"},
+		replace: map[string]string{
+			"select_with_parens": "'(' select_stmt ')'",
+		},
+		nosplit: true,
 	},
 	{name: "iso_level"},
 	{
@@ -771,18 +793,82 @@ var specs = []stmtSpec{
 		replace: map[string]string{"'TRANSACTION'": "", "'TO'": "'TO' 'SAVEPOINT'", "savepoint_name": "cockroach_restart"},
 		unlink:  []string{"cockroach_restart"},
 	},
+	{
+		name:   "limit_clause",
+		inline: []string{"row_or_rows", "first_or_next"},
+		replace: map[string]string{
+			"select_limit_value":           "count",
+			"opt_select_fetch_first_value": "count",
+		},
+	},
+	{
+		name:   "offset_clause",
+		inline: []string{"row_or_rows"},
+	},
 	{name: "savepoint_stmt", inline: []string{"savepoint_name"}},
 	{
-		name:   "select_stmt",
-		inline: []string{"select_no_parens", "simple_select", "opt_sort_clause", "select_limit", "opt_all_clause", "distinct_clause", "target_list", "from_clause", "where_clause", "group_clause", "having_clause"},
-		replace: map[string]string{"'SELECT' ( 'ALL' |  ) ( target_elem ( ',' target_elem )* ) ( 'FROM' from_list opt_as_of_clause |  ) ( 'WHERE' a_expr |  ) ( 'GROUP' 'BY' expr_list |  ) ( 'HAVING' a_expr |  ) window_clause | 'SELECT' ( 'DISTINCT' ) ( target_elem ( ',' target_elem )* ) ( 'FROM' from_list opt_as_of_clause |  ) ( 'WHERE' a_expr |  ) ( 'GROUP' 'BY' expr_list |  ) ( 'HAVING' a_expr |  ) window_clause | values_clause | 'TABLE' relation_expr | ": "",
-			"select_clause 'UNION' all_or_distinct select_clause | select_clause 'INTERSECT' all_or_distinct select_clause | select_clause 'EXCEPT' all_or_distinct select_clause": "select_clause ( | ( ( 'UNION' | 'INTERSECT' | 'EXCEPT' ) all_or_distinct select_clause ) )",
-			"select_clause sort_clause | select_clause ( sort_clause |  ) ( limit_clause offset_clause | offset_clause limit_clause | limit_clause | offset_clause )":              "select_clause ( 'ORDER BY' sortby_list | ) ( 'LIMIT' limit_val | ) ( 'OFFSET' offset_val | )",
-			"all_or_distinct select_clause": "all_or_distinct 'SELECT ...'",
-			"| select_with_parens":          "",
-			"all_or_distinct":               "( 'ALL' | )",
-			"select_clause":                 "'SELECT' ( 'DISTINCT' | ) ( target_elem ('AS' col_label | ) ( ',' target_elem ('AS' col_label | ) )* ) 'FROM' ( table_ref ( '@' index_name | ) ( ',' table_ref ( '@' index_name | ) )* ) ('AS OF SYSTEM TIME' timestamp | ) ( 'WHERE' a_expr |  ) ( 'GROUP BY' expr_list ( 'HAVING' a_expr |  ) |  ) "},
+		name: "select_stmt",
+		inline: []string{
+			"with_clause",
+			"cte_list",
+			"select_no_parens",
+			"opt_sort_clause",
+			"select_limit",
+		},
+		replace: map[string]string{
+			"( simple_select |":    "(",
+			"| select_with_parens": "",
+			"select_clause sort_clause | select_clause ( sort_clause |  ) ( limit_clause offset_clause | offset_clause limit_clause | limit_clause | offset_clause )":                                                                                                                                           "select_clause ( sort_clause | ) ( limit_clause | ) ( offset_clause | )",
+			"| ( 'WITH' ( ( common_table_expr ) ( ( ',' common_table_expr ) )* ) ) select_clause sort_clause | ( 'WITH' ( ( common_table_expr ) ( ( ',' common_table_expr ) )* ) ) select_clause ( sort_clause |  ) ( limit_clause offset_clause | offset_clause limit_clause | limit_clause | offset_clause )": "( sort_clause | ) ( limit_clause | ) ( offset_clause | )",
+		},
 		unlink:  []string{"index_name"},
+		nosplit: true,
+	},
+	{
+		name:   "select_clause",
+		inline: []string{"simple_select"},
+		replace: map[string]string{
+			"| select_with_parens": "| '(' ( simple_select_clause | values_clause | table_clause | set_operation ) ')'",
+		},
+		nosplit: true,
+	},
+	{name: "table_clause"},
+	{
+		name:    "set_operation",
+		inline:  []string{"all_or_distinct"},
+		nosplit: true,
+	},
+	{
+		name:   "values_clause",
+		inline: []string{"expr_list"},
+	},
+	{
+		name:    "simple_select_clause",
+		inline:  []string{"opt_all_clause", "distinct_clause", "distinct_on_clause", "opt_as_of_clause", "as_of_clause", "expr_list", "target_list", "from_clause", "where_clause", "group_clause", "having_clause", "window_clause", "from_list"},
+		unlink:  []string{"index_name"},
+		nosplit: true,
+	},
+	{
+		name:    "joined_table",
+		inline:  []string{"join_qual", "name_list", "join_type", "join_outer"},
+		nosplit: true,
+	},
+	{
+		name:   "table_ref",
+		inline: []string{"opt_ordinality", "opt_alias_clause", "opt_expr_list", "opt_column_list", "name_list", "alias_clause"},
+		replace: map[string]string{
+			"select_with_parens":                 "'(' select_stmt ')'",
+			"opt_index_hints":                    "( '@' scan_parameters | )",
+			"relation_expr":                      "table_name",
+			"func_name '(' ( expr_list |  ) ')'": "func_application",
+			//			"| func_name '(' ( expr_list |  ) ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
+			"| special_function ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
+			"| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) )":    "| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )",
+		},
+		unlink: []string{"index_name"},
+		relink: map[string]string{
+			"scan_parameters": "opt_index_hints",
+		},
 		nosplit: true,
 	},
 	{
@@ -969,16 +1055,41 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{
-		name:    "update_stmt",
-		inline:  []string{"relation_expr_opt_alias", "set_clause_list", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list", "where_clause", "opt_sort_clause", "sort_clause", "returning_clause"},
-		replace: map[string]string{"relation_expr": "table_name", "insert_column_list": "column_name_list", "opt_limit_clause": ""},
-		relink:  map[string]string{"table_name": "relation_expr", "column_name_list": "insert_column_list"},
+		name: "update_stmt",
+		inline: []string{
+			"opt_with_clause",
+			"with_clause",
+			"cte_list",
+			"relation_expr_opt_alias",
+			"set_clause_list",
+			"set_clause",
+			"single_set_clause",
+			"multiple_set_clause",
+			"in_expr",
+			"expr_list",
+			"where_clause",
+			"opt_sort_clause",
+			"returning_clause",
+			"insert_column_list",
+			"insert_column_item",
+			"opt_limit_clause",
+		},
+		replace: map[string]string{
+			"relation_expr":      "table_name",
+			"select_with_parens": "'(' select_stmt ')'",
+		},
+		relink: map[string]string{
+			"table_name":       "relation_expr",
+			"column_name_list": "insert_column_list",
+		},
 		nosplit: true,
 	},
 	{
-		name:   "upsert_stmt",
-		stmt:   "upsert_stmt",
-		inline: []string{"insert_target", "insert_rest", "returning_clause"},
+		name:    "upsert_stmt",
+		stmt:    "upsert_stmt",
+		inline:  []string{"insert_target", "insert_rest", "returning_clause", "opt_with_clause", "with_clause", "cte_list", "insert_column_list", "insert_column_item"},
+		unlink:  []string{"select_stmt"},
+		nosplit: true,
 	},
 	{
 		name:    "validate_constraint",
