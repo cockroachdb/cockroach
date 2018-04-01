@@ -1,2 +1,0 @@
-show_roles_stmt ::=
-	'SHOW' 'ROLES'
