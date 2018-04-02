@@ -26,11 +26,9 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildUnion(
-	clause *tree.UnionClause, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	left, leftScope := b.buildSelect(clause.Left, inScope)
-	right, rightScope := b.buildSelect(clause.Right, inScope)
+func (b *Builder) buildUnion(clause *tree.UnionClause, inScope *scope) (outScope *scope) {
+	leftScope := b.buildSelect(clause.Left, inScope)
+	rightScope := b.buildSelect(clause.Right, inScope)
 	outScope = leftScope
 
 	// Check that the number of columns matches.
@@ -57,7 +55,7 @@ func (b *Builder) buildUnion(
 	if newColsNeeded {
 		// Create a new scope to hold the new synthesized columns.
 		outScope = leftScope.push()
-		outScope.cols = make([]columnProps, 0, len(leftScope.cols))
+		outScope.cols = make([]scopeColumn, 0, len(leftScope.cols))
 	}
 
 	// Build map from left columns to right columns.
@@ -82,7 +80,7 @@ func (b *Builder) buildUnion(
 				typ = r.typ
 			}
 
-			b.synthesizeColumn(outScope, string(l.name), typ, nil)
+			b.synthesizeColumn(outScope, string(l.name), typ, nil, 0 /* group */)
 		}
 	}
 
@@ -102,22 +100,22 @@ func (b *Builder) buildUnion(
 	if clause.All {
 		switch clause.Type {
 		case tree.UnionOp:
-			out = b.factory.ConstructUnionAll(left, right, private)
+			outScope.group = b.factory.ConstructUnionAll(leftScope.group, rightScope.group, private)
 		case tree.IntersectOp:
-			out = b.factory.ConstructIntersectAll(left, right, private)
+			outScope.group = b.factory.ConstructIntersectAll(leftScope.group, rightScope.group, private)
 		case tree.ExceptOp:
-			out = b.factory.ConstructExceptAll(left, right, private)
+			outScope.group = b.factory.ConstructExceptAll(leftScope.group, rightScope.group, private)
 		}
 	} else {
 		switch clause.Type {
 		case tree.UnionOp:
-			out = b.factory.ConstructUnion(left, right, private)
+			outScope.group = b.factory.ConstructUnion(leftScope.group, rightScope.group, private)
 		case tree.IntersectOp:
-			out = b.factory.ConstructIntersect(left, right, private)
+			outScope.group = b.factory.ConstructIntersect(leftScope.group, rightScope.group, private)
 		case tree.ExceptOp:
-			out = b.factory.ConstructExcept(left, right, private)
+			outScope.group = b.factory.ConstructExcept(leftScope.group, rightScope.group, private)
 		}
 	}
 
-	return out, outScope
+	return outScope
 }
