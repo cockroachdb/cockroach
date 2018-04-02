@@ -187,6 +187,9 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 			v.err = newQueryNotSupportedErrorf("function %s cannot be executed with distsql", t)
 			return false, expr
 		}
+	case *tree.DOid:
+		v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
+		return false, expr
 	case *tree.CastExpr:
 		switch t.Type.(type) {
 		case *coltypes.TOid:
