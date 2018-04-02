@@ -752,7 +752,10 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss buildshort go-install:
-	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	$(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+ifeq "$(BUILD_TYPE)" "release"
+	build/strip.sh $(COCKROACH) $(TARGET_TRIPLE)
+endif
 
 .PHONY: install
 install: ## Install the CockroachDB binary.

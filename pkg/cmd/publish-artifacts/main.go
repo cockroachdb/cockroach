@@ -336,9 +336,12 @@ func buildOneCockroach(svc s3putter, o opts) {
 	{
 		var err error
 		o.Binary, err = os.Open(o.AbsolutePath)
-
 		if err != nil {
 			log.Fatalf("os.Open(%s): %s", o.AbsolutePath, err)
+		}
+		o.BinaryDbg, err = os.Open(o.AbsolutePath + ".dbg")
+		if err != nil {
+			log.Fatalf("os.Open(%s): %s", o.AbsolutePath+".dbg", err)
 		}
 	}
 
@@ -348,6 +351,9 @@ func buildOneCockroach(svc s3putter, o opts) {
 		putRelease(svc, o)
 	}
 	if err := o.Binary.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := o.BinaryDbg.Close(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -402,6 +408,7 @@ type opts struct {
 	Base         string
 	BucketName   string
 	Binary       *os.File
+	BinaryDbg    *os.File
 	AbsolutePath string
 	PkgDir       string
 }
@@ -440,6 +447,14 @@ func putNonRelease(svc s3putter, o opts) {
 	}); err != nil {
 		log.Fatalf("s3 upload %s: %s", o.AbsolutePath, err)
 	}
+	if _, err := svc.PutObject(&s3.PutObjectInput{
+		Bucket: &o.BucketName,
+		Key:    aws.String(versionKey + ".dbg"),
+		Body:   o.BinaryDbg,
+	}); err != nil {
+		log.Fatalf("s3 upload %s: %s", o.AbsolutePath+".dbg", err)
+	}
+
 	latestSuffix := o.Branch
 	if latestSuffix == "master" {
 		latestSuffix = "LATEST"
@@ -534,6 +549,15 @@ func putRelease(svc s3putter, o opts) {
 		}
 		if _, err := svc.PutObject(&putObjectInput); err != nil {
 			log.Fatalf("s3 upload %s: %s", targetArchive, err)
+		}
+
+		dbgKey := archiveBase + targetSuffix + ".dbg"
+		if _, err := svc.PutObject(&s3.PutObjectInput{
+			Bucket: &o.BucketName,
+			Key:    &dbgKey,
+			Body:   o.BinaryDbg,
+		}); err != nil {
+			log.Fatalf("s3 upload %s: %s", dbgKey, err)
 		}
 	}
 }
