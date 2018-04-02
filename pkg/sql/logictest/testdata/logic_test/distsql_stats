@@ -50,7 +50,7 @@ query TTIII colnames
 SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 name  columns  row_count  distinct_count  null_count
-s1    a        10000      10              0
+s1    {"a"}    10000      10              0
 
 let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE name = 's1'
@@ -77,5 +77,5 @@ query TTIII colnames
 SELECT name, columns, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
 ----
 name  columns  row_count  distinct_count  null_count
-s1    a        10000      10              0
-NULL  b        10000      10              0
+s1    {"a"}    10000      10              0
+NULL  {"b"}    10000      10              0

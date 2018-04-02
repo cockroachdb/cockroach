@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -26,7 +25,7 @@ import (
 
 var showTableStatsColumns = sqlbase.ResultColumns{
 	{Name: "name", Typ: types.String},
-	{Name: "columns", Typ: types.String},
+	{Name: "columns", Typ: types.TArray{Typ: types.String}},
 	{Name: "created_at", Typ: types.Timestamp},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
@@ -64,7 +63,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 		columns: showTableStatsColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			// We need to query the table_statistics and then do some post-processing:
-			//  - convert column IDs to a list of column names
+			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			rows, _ /* cols */, err := p.queryRows(
@@ -104,21 +103,19 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					return nil, errors.Errorf("incorrect columns from internal query")
 				}
 
-				// List columns by name.
-				var buf bytes.Buffer
-				for i, d := range r[columnIDsIdx].(*tree.DArray).Array {
-					if i > 0 {
-						buf.WriteString(",")
-					}
+				colIDs := r[columnIDsIdx].(*tree.DArray).Array
+				colNames := tree.NewDArray(types.String)
+				colNames.Array = make(tree.Datums, len(colIDs))
+				for i, d := range colIDs {
 					id := sqlbase.ColumnID(*d.(*tree.DInt))
 					colDesc, err := desc.FindColumnByID(id)
 					if err != nil {
-						buf.WriteString("<unknown>") // This can happen if a column was removed.
+						// This can happen if a column was removed.
+						colNames.Array[i] = tree.NewDString("<unknown>")
 					} else {
-						buf.WriteString(colDesc.Name)
+						colNames.Array[i] = tree.NewDString(colDesc.Name)
 					}
 				}
-				colNames := tree.NewDString(buf.String())
 
 				histogramID := tree.DNull
 				if r[hasHistogramIdx] == tree.DBoolTrue {
