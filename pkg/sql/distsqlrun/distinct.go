@@ -158,7 +158,7 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 	for {
 		row, meta := d.input.Next()
-		if d.closed || meta != nil {
+		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
