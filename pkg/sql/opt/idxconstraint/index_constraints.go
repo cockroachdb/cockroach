@@ -149,7 +149,7 @@ func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
 func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	offset int, op opt.Operator, val memo.ExprView, out *constraint.Constraint,
 ) (tight bool) {
-	if op == opt.InOp && norm.MatchesTupleOfConstants(val) {
+	if op == opt.InOp && memo.MatchesTupleOfConstants(val) {
 		keyCtx := &c.keyCtx[offset]
 		var spans constraint.Spans
 		spans.Alloc(val.ChildCount())
