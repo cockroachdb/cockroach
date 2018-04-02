@@ -313,6 +313,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		if len(spans) != joinReaderBatchSize {
 			// This was the last batch.
 			sendTraceData(ctx, jr.out.output)
+			sendTxnCoordMetaMaybe(jr.flowCtx.txn, jr.out.output)
 			jr.out.Close()
 			return nil
 		}

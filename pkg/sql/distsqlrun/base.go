@@ -22,12 +22,14 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const rowChannelBufSize = 16
@@ -200,9 +202,34 @@ func getTraceData(ctx context.Context) []tracing.RecordedSpan {
 	return nil
 }
 
+// sendTraceData collects the tracing information from the ctx and pushes it to
+// dst. The ConsumerStatus returned by dst is ignored.
+//
+// Note that the tracing data is distinct between different processors, since
+// each one gets its own trace "recording group".
 func sendTraceData(ctx context.Context, dst RowReceiver) {
 	if rec := getTraceData(ctx); rec != nil {
 		dst.Push(nil /* row */, &ProducerMetadata{TraceData: rec})
+	}
+}
+
+// sendTxnCoordMetaMaybe reads the txn metadata from a leaf transactions and
+// sends it to dst, so that it eventually makes it to the root txn. The
+// ConsumerStatus returned by dst is ignored.
+//
+// If the txn is a root txn, this is a no-op.
+//
+// NOTE(andrei): As of 04/2018, the txn is shared by all processors scheduled on
+// a node, and so it's possible for multiple processors to send the same
+// TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
+// thing multiple times.
+func sendTxnCoordMetaMaybe(txn *client.Txn, dst RowReceiver) {
+	if txn.Type() == client.RootTxn {
+		return
+	}
+	txnMeta := txn.GetTxnCoordMeta()
+	if txnMeta.Txn.ID != (uuid.UUID{}) {
+		dst.Push(nil /* row */, &ProducerMetadata{TxnMeta: &txnMeta})
 	}
 }
 

@@ -1238,3 +1238,8 @@ func (txn *Txn) IsSerializablePushAndRefreshNotPossible() bool {
 	return txn.Proto().Isolation == enginepb.SERIALIZABLE &&
 		isTxnPushed && txn.mu.Proto.OrigTimestampWasObserved
 }
+
+// Type return's the transaction's type.
+func (txn *Txn) Type() TxnType {
+	return txn.typ
+}
