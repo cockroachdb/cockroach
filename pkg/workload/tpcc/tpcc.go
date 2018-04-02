@@ -89,7 +89,7 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
-	Version: `2.0.0`,
+	Version: `2.0.1`,
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
@@ -234,58 +234,76 @@ func (w *tpcc) Tables() []workload.Table {
 	}
 
 	warehouse := workload.Table{
-		Name:            `warehouse`,
-		Schema:          tpccWarehouseSchema,
-		InitialRowCount: w.warehouses,
-		InitialRowFn:    w.tpccWarehouseInitialRow,
+		Name:   `warehouse`,
+		Schema: tpccWarehouseSchema,
+		InitialRows: workload.Tuples(
+			w.warehouses,
+			w.tpccWarehouseInitialRow,
+		),
 	}
 	district := workload.Table{
-		Name:            `district`,
-		Schema:          tpccDistrictSchema,
-		InitialRowCount: numDistrictsPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccDistrictInitialRow,
+		Name:   `district`,
+		Schema: tpccDistrictSchema,
+		InitialRows: workload.Tuples(
+			numDistrictsPerWarehouse*w.warehouses,
+			w.tpccDistrictInitialRow,
+		),
 	}
 	customer := workload.Table{
-		Name:            `customer`,
-		Schema:          tpccCustomerSchema,
-		InitialRowCount: numCustomersPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccCustomerInitialRow,
+		Name:   `customer`,
+		Schema: tpccCustomerSchema,
+		InitialRows: workload.Tuples(
+			numCustomersPerWarehouse*w.warehouses,
+			w.tpccCustomerInitialRow,
+		),
 	}
 	history := workload.Table{
-		Name:            `history`,
-		Schema:          tpccHistorySchema,
-		InitialRowCount: numCustomersPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccHistoryInitialRow,
+		Name:   `history`,
+		Schema: tpccHistorySchema,
+		InitialRows: workload.Tuples(
+			numCustomersPerWarehouse*w.warehouses,
+			w.tpccHistoryInitialRow,
+		),
 	}
 	order := workload.Table{
-		Name:            `order`,
-		Schema:          tpccOrderSchema,
-		InitialRowCount: numOrdersPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccOrderInitialRow,
+		Name:   `order`,
+		Schema: tpccOrderSchema,
+		InitialRows: workload.Tuples(
+			numOrdersPerWarehouse*w.warehouses,
+			w.tpccOrderInitialRow,
+		),
 	}
 	newOrder := workload.Table{
-		Name:            `new_order`,
-		Schema:          tpccNewOrderSchema,
-		InitialRowCount: numNewOrdersPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccNewOrderInitialRow,
+		Name:   `new_order`,
+		Schema: tpccNewOrderSchema,
+		InitialRows: workload.Tuples(
+			numNewOrdersPerWarehouse*w.warehouses,
+			w.tpccNewOrderInitialRow,
+		),
 	}
 	item := workload.Table{
-		Name:            `item`,
-		Schema:          tpccItemSchema,
-		InitialRowCount: numItems,
-		InitialRowFn:    w.tpccItemInitialRow,
+		Name:   `item`,
+		Schema: tpccItemSchema,
+		InitialRows: workload.Tuples(
+			numItems,
+			w.tpccItemInitialRow,
+		),
 	}
 	stock := workload.Table{
-		Name:            `stock`,
-		Schema:          tpccStockSchema,
-		InitialRowCount: numStockPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccStockInitialRow,
+		Name:   `stock`,
+		Schema: tpccStockSchema,
+		InitialRows: workload.Tuples(
+			numStockPerWarehouse*w.warehouses,
+			w.tpccStockInitialRow,
+		),
 	}
 	orderLine := workload.Table{
-		Name:            `order_line`,
-		Schema:          tpccOrderLineSchema,
-		InitialRowCount: hackOrderLinesPerWarehouse * w.warehouses,
-		InitialRowFn:    w.tpccOrderLineInitialRow,
+		Name:   `order_line`,
+		Schema: tpccOrderLineSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numOrdersPerWarehouse * w.warehouses,
+			Batch:      w.tpccOrderLineInitialRowBatch,
+		},
 	}
 	if w.interleaved {
 		district.Schema += tpccDistrictSchemaInterleave

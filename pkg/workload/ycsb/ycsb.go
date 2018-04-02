@@ -140,22 +140,26 @@ func (g *ycsb) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (g *ycsb) Tables() []workload.Table {
 	usertable := workload.Table{
-		Name:            `usertable`,
-		InitialRowCount: g.initialRows,
-		InitialRowFn: func(rowIdx int) []interface{} {
-			w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-			return []interface{}{
-				w.hashKey(uint64(rowIdx)),
-				nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-			}
-		},
-		SplitCount: g.splits,
-		SplitFn: func(splitIdx int) []interface{} {
-			w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-			return []interface{}{
-				w.hashKey(uint64(splitIdx)),
-			}
-		},
+		Name: `usertable`,
+		InitialRows: workload.Tuples(
+			g.initialRows,
+			func(rowIdx int) []interface{} {
+				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
+				return []interface{}{
+					w.hashKey(uint64(rowIdx)),
+					nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				}
+			},
+		),
+		Splits: workload.Tuples(
+			g.splits,
+			func(splitIdx int) []interface{} {
+				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
+				return []interface{}{
+					w.hashKey(uint64(splitIdx)),
+				}
+			},
+		),
 	}
 	if g.json {
 		usertable.Schema = usertableSchemaJSON

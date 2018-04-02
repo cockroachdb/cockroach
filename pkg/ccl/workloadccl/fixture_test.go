@@ -50,12 +50,14 @@ func (fixtureTestGen) Meta() workload.Meta     { return workload.Meta{Name: `fix
 func (g fixtureTestGen) Flags() workload.Flags { return g.flags }
 func (g fixtureTestGen) Tables() []workload.Table {
 	return []workload.Table{{
-		Name:            `fx`,
-		Schema:          `(key INT PRIMARY KEY, value INT)`,
-		InitialRowCount: fixtureTestGenRows,
-		InitialRowFn: func(rowIdx int) []interface{} {
-			return []interface{}{rowIdx, g.val}
-		},
+		Name:   `fx`,
+		Schema: `(key INT PRIMARY KEY, value INT)`,
+		InitialRows: workload.Tuples(
+			fixtureTestGenRows,
+			func(rowIdx int) []interface{} {
+				return []interface{}{rowIdx, g.val}
+			},
+		),
 	}}
 }
 

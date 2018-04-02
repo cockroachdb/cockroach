@@ -55,13 +55,13 @@ func check3322(db *gosql.DB) error {
 		return err
 	}
 	newOrderRows, err := db.Query(`
-SELECT MAX(no_o_id) FROM tpcc.new_order GROUP BY no_d_id, no_w_id ORDER BY no_w_id, no_d_id
+SELECT MAX(no_o_id) FROM new_order GROUP BY no_d_id, no_w_id ORDER BY no_w_id, no_d_id
 `)
 	if err != nil {
 		return err
 	}
 	orderRows, err := db.Query(`
-SELECT MAX(o_id) FROM tpcc.order GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
+SELECT MAX(o_id) FROM "order" GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
 `)
 	if err != nil {
 		return err
@@ -130,13 +130,13 @@ func check3324(db *gosql.DB) error {
 	// SUM(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 
 	leftRows, err := db.Query(`
-SELECT SUM(o_ol_cnt) FROM tpcc.order GROUP BY o_w_id, o_d_id ORDER BY o_w_id, o_d_id
+SELECT SUM(o_ol_cnt) FROM "order" GROUP BY o_w_id, o_d_id ORDER BY o_w_id, o_d_id
 `)
 	if err != nil {
 		return err
 	}
 	rightRows, err := db.Query(`
-SELECT COUNT(*) FROM tpcc.order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d_id
+SELECT COUNT(*) FROM order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d_id
 `)
 	if err != nil {
 		return err
@@ -169,21 +169,21 @@ SELECT COUNT(*) FROM tpcc.order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id,
 
 func check3325(db *gosql.DB) error {
 	// We want the symmetric difference between the sets:
-	// (SELECT no_w_id, no_d_id, no_o_id FROM tpcc.new_order)
-	// (SELECT o_w_id, o_d_id, o_id FROM tpcc.order@primary WHERE o_carrier_id IS NULL)
+	// (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+	// (SELECT o_w_id, o_d_id, o_id FROM order@primary WHERE o_carrier_id IS NULL)
 	// We achieve this by two EXCEPT ALL queries.
 
 	firstQuery, err := db.Query(`
-(SELECT no_w_id, no_d_id, no_o_id FROM tpcc.new_order)
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
-(SELECT o_w_id, o_d_id, o_id FROM tpcc.order@primary WHERE o_carrier_id IS NULL)`)
+(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)`)
 	if err != nil {
 		return err
 	}
 	secondQuery, err := db.Query(`
-(SELECT o_w_id, o_d_id, o_id FROM tpcc.order@primary WHERE o_carrier_id IS NULL)
+(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
 EXCEPT ALL
-(SELECT no_w_id, no_d_id, no_o_id FROM tpcc.new_order)`)
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)`)
 	if err != nil {
 		return err
 	}
@@ -208,20 +208,20 @@ func check3326(db *gosql.DB) error {
 	// (O_W_ID, O_D_ID, O_ID) = (OL_W_ID, OL_D_ID, OL_O_ID).
 
 	firstQuery, err := db.Query(`
-(SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM tpcc.order
+(SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
   ORDER BY o_w_id, o_d_id, o_id DESC)
 EXCEPT ALL
-(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM tpcc.order_line
+(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM order_line
   GROUP BY (ol_w_id, ol_d_id, ol_o_id)
   ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)`)
 	if err != nil {
 		return err
 	}
 	secondQuery, err := db.Query(`
-(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM tpcc.order_line
+(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM order_line
   GROUP BY (ol_w_id, ol_d_id, ol_o_id) ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)
 EXCEPT ALL
-(SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM tpcc.order
+(SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
   ORDER BY o_w_id, o_d_id, o_id DESC)`)
 	if err != nil {
 		return err

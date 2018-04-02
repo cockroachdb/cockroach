@@ -42,6 +42,17 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, meta := range workload.Registered() {
+		gen := meta.New()
+
+		var checkConsistencyFn func(context.Context, *gosql.DB) error
+		if h, ok := gen.(workload.Hookser); ok {
+			checkConsistencyFn = h.Hooks().CheckConsistency
+		}
+		if checkConsistencyFn == nil {
+			// Not all workloads have CheckConsistency defined.
+			continue
+		}
+
 		t.Run(meta.Name, func(t *testing.T) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -50,7 +61,6 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
-			gen := meta.New()
 			if meta.Name == `tpcc` {
 				// Special case-tpcc because Setup using the batched inserts
 				// takes so long. Unfortunately, we can't do this for all
@@ -66,7 +76,7 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 				}
 			}
 
-			if err := workload.ValidateInitialData(ctx, db, gen.Tables()); err != nil {
+			if err := checkConsistencyFn(ctx, db); err != nil {
 				t.Errorf(`%+v`, err)
 			}
 		})
