@@ -150,7 +150,7 @@ func MakeRangeIDPrefix(rangeID roachpb.RangeID) roachpb.Key {
 // MakeRangeIDReplicatedPrefix creates a range-local key prefix from
 // rangeID for all Raft replicated data.
 func MakeRangeIDReplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, localRangeIDReplicatedInfix)
+	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, LocalRangeIDReplicatedInfix)
 }
 
 // makeRangeIDReplicatedKey creates a range-local key based on the range's
@@ -841,7 +841,7 @@ func MakeRangeIDPrefixBuf(rangeID roachpb.RangeID) RangeIDPrefixBuf {
 }
 
 func (b RangeIDPrefixBuf) replicatedPrefix() roachpb.Key {
-	return append(roachpb.Key(b), localRangeIDReplicatedInfix...)
+	return append(roachpb.Key(b), LocalRangeIDReplicatedInfix...)
 }
 
 func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
