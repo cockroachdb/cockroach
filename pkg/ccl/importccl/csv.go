@@ -16,7 +16,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"runtime"
 	"sort"
 	"strconv"
@@ -28,11 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -50,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -58,7 +54,6 @@ import (
 const (
 	importOptionDelimiter = "delimiter"
 	importOptionComment   = "comment"
-	importOptionLocal     = "local"
 	importOptionNullIf    = "nullif"
 	importOptionTransform = "transform"
 	importOptionSkip      = "skip"
@@ -68,219 +63,10 @@ const (
 var importOptionExpectValues = map[string]bool{
 	importOptionDelimiter: true,
 	importOptionComment:   true,
-	importOptionLocal:     false,
 	importOptionNullIf:    true,
 	importOptionTransform: true,
 	importOptionSkip:      true,
 	importOptionSSTSize:   true,
-}
-
-// LoadCSV converts CSV files into enterprise backup format.
-func LoadCSV(
-	ctx context.Context,
-	table string,
-	dataFiles []string,
-	dest string,
-	comma, comment rune,
-	skip uint32,
-	nullif *string,
-	sstMaxSize int64,
-	tempDir string,
-) (csvCount, kvCount, sstCount int64, err error) {
-	if table == "" {
-		return 0, 0, 0, errors.New("no table specified")
-	}
-	table, err = storageccl.MakeLocalStorageURI(table)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	if dest == "" {
-		return 0, 0, 0, errors.New("no destination specified")
-	}
-	if len(dataFiles) == 0 {
-		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
-	}
-	createTable, err := readCreateTableFromStore(ctx, table, cluster.NoSettings)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	var parentID = defaultCSVParentID
-	walltime := timeutil.Now().UnixNano()
-
-	// Using test cluster settings means that we'll generate a backup using
-	// the latest cluster version available in this binary. This will be safe
-	// once we verify the cluster version during restore.
-	//
-	// TODO(benesch): ensure backups from too-old or too-new nodes are
-	// rejected during restore.
-	st := cluster.MakeTestingClusterSettings()
-
-	tableDesc, err := MakeSimpleTableDescriptor(
-		ctx, st, createTable, parentID, defaultCSVTableID, walltime)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	for i, f := range dataFiles {
-		dataFiles[i], err = storageccl.MakeLocalStorageURI(f)
-		if err != nil {
-			return 0, 0, 0, err
-		}
-	}
-	// TODO(mjibson): allow users to optionally specify a full URI to an export store.
-	dest, err = storageccl.MakeLocalStorageURI(dest)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	rocksdbDir, err := ioutil.TempDir(tempDir, "cockroach-csv-rocksdb")
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	defer func() {
-		if err := os.RemoveAll(rocksdbDir); err != nil {
-			log.Infof(ctx, "could not remove temp directory %s: %s", rocksdbDir, err)
-		}
-	}()
-
-	fileLimit, err := server.SetOpenFileLimitForOneStore()
-	if err != nil {
-		return 0, 0, 0, err
-	}
-
-	cache := engine.NewRocksDBCache(0)
-	defer cache.Release()
-	r, err := engine.NewRocksDB(engine.RocksDBConfig{
-		Settings:     cluster.MakeTestingClusterSettings(),
-		Dir:          rocksdbDir,
-		MaxSizeBytes: 0,
-		MaxOpenFiles: fileLimit,
-	}, cache)
-	if err != nil {
-		return 0, 0, 0, errors.Wrap(err, "create rocksdb instance")
-	}
-	defer r.Close()
-
-	return doLocalCSVTransform(
-		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, skip, sstMaxSize, r, walltime, nil,
-	)
-}
-
-func doLocalCSVTransform(
-	ctx context.Context,
-	job *jobs.Job,
-	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
-	dest string,
-	dataFiles []string,
-	comma, comment rune,
-	nullif *string,
-	skip uint32,
-	sstMaxSize int64,
-	tempEngine engine.Engine,
-	walltime int64,
-	execCfg *sql.ExecutorConfig,
-) (csvCount, kvCount, sstCount int64, err error) {
-	// Some channels are buffered because reads happen in bursts, so having lots
-	// of pre-computed data improves overall performance. If this value is too
-	// high, it will decrease the accuracy of the progress estimation because
-	// of the hidden buffered work to be done.
-	const chanSize = 1000
-
-	recordCh := make(chan csvRecord, chanSize)
-	kvCh := make(chan []roachpb.KeyValue, chanSize)
-	contentCh := make(chan sstContent)
-	var backupDesc *backupccl.BackupDescriptor
-	conf, err := storageccl.ExportStorageConfFromURI(dest)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	var st *cluster.Settings
-	if execCfg != nil {
-		st = execCfg.Settings
-	}
-	es, err := storageccl.MakeExportStorage(ctx, conf, st)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	defer es.Close()
-
-	var readProgressFn, writeProgressFn func(float32) error
-	if job != nil {
-		// These consts determine how much of the total progress the read csv and
-		// write sst groups take overall. 50% each is an approximation but kind of
-		// accurate based on my testing.
-		const (
-			readPct  = 0.5
-			writePct = 1.0 - readPct
-		)
-		// Both read and write progress funcs register their progress as 50% of total progress.
-		readProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, jobs.FractionUpdater(pct*readPct))
-		}
-		writeProgressFn = func(pct float32) error {
-			return job.Progressed(ctx, jobs.FractionUpdater(readPct+pct*writePct))
-		}
-	}
-
-	// The first group reads the CSVs, converts them into KVs, and writes all
-	// KVs into a single RocksDB instance.
-	group, gCtx := errgroup.WithContext(ctx)
-	store := engine.NewRocksDBMultiMap(tempEngine)
-	group.Go(func() error {
-		defer close(recordCh)
-		var err error
-		readFiles := map[int32]string{}
-		for i, f := range dataFiles {
-			readFiles[int32(i)] = f
-		}
-		csvCount, err = readCSV(gCtx, comma, comment, skip, len(tableDesc.VisibleColumns()), readFiles, recordCh, readProgressFn, st)
-		return err
-	})
-	group.Go(func() error {
-		defer close(kvCh)
-		return groupWorkers(gCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, nullif, tableDesc)
-		})
-	})
-	group.Go(func() error {
-		var err error
-		kvCount, err = writeRocksDB(gCtx, kvCh, store.NewBatchWriter())
-		return err
-	})
-	if err := group.Wait(); err != nil {
-		return 0, 0, 0, err
-	}
-
-	// The second group iterates over the KVs in the RocksDB instance in sorted
-	// order, chunks them up into SST files, and writes them to storage.
-	group, gCtx = errgroup.WithContext(ctx)
-	group.Go(func() error {
-		defer close(contentCh)
-		var progFn func(writtenKVs int) error
-		if writeProgressFn != nil {
-			progFn = func(writtenKVs int) error {
-				return writeProgressFn(float32(writtenKVs) / float32(kvCount))
-			}
-		}
-		it := store.NewIterator()
-		it.Rewind()
-		defer it.Close()
-		return makeSSTs(gCtx, it, sstMaxSize, contentCh, walltime, nil, progFn)
-	})
-	group.Go(func() error {
-		var err error
-		backupDesc, err = makeBackup(gCtx, contentCh, walltime, es)
-		return err
-	})
-	if err := group.Wait(); err != nil {
-		return 0, 0, 0, err
-	}
-	err = finalizeCSVBackup(ctx, backupDesc, parentID, tableDesc, es, execCfg)
-	sstCount = int64(len(backupDesc.Files))
-
-	return csvCount, kvCount, sstCount, err
 }
 
 const (
@@ -699,26 +485,6 @@ type sstContent struct {
 
 const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
 
-// writeRocksDB writes kvs to a RocksDB instance that is created at
-// rocksdbDir. It returns the number of KV pairs written.
-func writeRocksDB(
-	ctx context.Context, kvCh <-chan []roachpb.KeyValue, writer engine.SortedDiskMapBatchWriter,
-) (int64, error) {
-	var count int64
-	for kvBatch := range kvCh {
-		count += int64(len(kvBatch))
-		for _, kv := range kvBatch {
-			if err := writer.Put(kv.Key, kv.Value.RawBytes); err != nil {
-				return 0, err
-			}
-		}
-	}
-	if err := writer.Close(ctx); err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
 // makeSSTs creates SST files in memory of size maxSize and sent on
 // contentCh. progressFn, if not nil, is periodically invoked with the number
 // of KVs that have been written to SSTs and sent on contentCh. endKey,
@@ -849,37 +615,6 @@ func makeSSTs(
 		}
 	}
 	return nil
-}
-
-// makeBackup writes SST files from contents to es and creates a backup
-// descriptor populated with the written SST files.
-func makeBackup(
-	ctx context.Context, contentCh <-chan sstContent, walltime int64, es storageccl.ExportStorage,
-) (*backupccl.BackupDescriptor, error) {
-	backupDesc := backupccl.BackupDescriptor{
-		FormatVersion: backupccl.BackupFormatInitialVersion,
-		EndTime:       hlc.Timestamp{WallTime: walltime},
-	}
-	i := 0
-	for sst := range contentCh {
-		backupDesc.EntryCounts.DataSize += sst.size
-		checksum, err := storageccl.SHA512ChecksumData(sst.data)
-		if err != nil {
-			return nil, err
-		}
-		i++
-		name := fmt.Sprintf("%d.sst", i)
-		if err := es.WriteFile(ctx, name, bytes.NewReader(sst.data)); err != nil {
-			return nil, err
-		}
-
-		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
-			Path:   name,
-			Span:   sst.span,
-			Sha512: checksum,
-		})
-	}
-	return &backupDesc, nil
 }
 
 const csvDatabaseName = "csv"
@@ -1141,7 +876,6 @@ func importPlanHook(
 		if nullif != nil {
 			nullifVal = &jobs.ImportDetails_Table_Nullif{Nullif: *nullif}
 		}
-		_, local := opts[importOptionLocal]
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
@@ -1158,7 +892,6 @@ func importPlanHook(
 					Skip:       uint32(skip),
 					SSTSize:    sstSize,
 					Walltime:   walltime,
-					Local:      local,
 				}},
 			},
 		})
@@ -1707,41 +1440,23 @@ func (r *importResumer) Resume(
 	if details.Nullif != nil {
 		nullif = &details.Nullif.Nullif
 	}
-	local := details.Local
 
-	var importErr error
-	if !local {
-		if sstSize == 0 {
-			// The distributed importer will correctly chunk up large ranges into
-			// multiple ssts that can be imported. In order to reduce the number of
-			// ranges and increase the average range size after import, set a target of
-			// some arbitrary multiple larger than the maximum sst size. Without this
-			// the range sizes were somewhere between 1MB and > 64MB. Targeting a much
-			// higher size should cause many ranges to be somewhere around the max range
-			// size. This should also cause the distsql plan and range router to be much
-			// smaller since there are fewer overall ranges.
-			sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
-		}
-		importErr = doDistributedCSVTransform(
-			ctx, job, files, p, parentID, tableDesc, transform,
-			comma, comment, skip, nullif, walltime,
-			sstSize,
-		)
-	} else {
-		if transform == "" {
-			return errors.Errorf("%s option required for local import", importOptionTransform)
-		}
-		if sstSize == 0 {
-			sstSize = config.DefaultZoneConfig().RangeMaxBytes / 2
-		}
-		_, _, _, importErr = doLocalCSVTransform(
-			ctx, job, parentID, tableDesc, transform, files,
-			comma, comment, nullif, skip, sstSize,
-			p.ExecCfg().DistSQLSrv.TempStorage,
-			walltime, p.ExecCfg(),
-		)
+	if sstSize == 0 {
+		// The distributed importer will correctly chunk up large ranges into
+		// multiple ssts that can be imported. In order to reduce the number of
+		// ranges and increase the average range size after import, set a target of
+		// some arbitrary multiple larger than the maximum sst size. Without this
+		// the range sizes were somewhere between 1MB and > 64MB. Targeting a much
+		// higher size should cause many ranges to be somewhere around the max range
+		// size. This should also cause the distsql plan and range router to be much
+		// smaller since there are fewer overall ranges.
+		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
-	return importErr
+	return doDistributedCSVTransform(
+		ctx, job, files, p, parentID, tableDesc, transform,
+		comma, comment, skip, nullif, walltime,
+		sstSize,
+	)
 }
 
 // OnFailOrCancel removes KV data that has been committed from a import that
