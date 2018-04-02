@@ -55,7 +55,7 @@ import (
 )
 
 var debugKeysCmd = &cobra.Command{
-	Use:   "keys [directory]",
+	Use:   "keys <directory>",
 	Short: "dump all the keys in a store",
 	Long: `
 Pretty-prints all keys in a store.
@@ -153,7 +153,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 }
 
 var debugRangeDataCmd = &cobra.Command{
-	Use:   "range-data [directory] [range id]",
+	Use:   "range-data <directory> <range id>",
 	Short: "dump all the data in a range",
 	Long: `
 Pretty-prints all keys and values in a range. By default, includes unreplicated
@@ -202,7 +202,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
-	Use:   "range-descriptors [directory]",
+	Use:   "range-descriptors <directory>",
 	Short: "print all range descriptors in a store",
 	Long: `
 Prints all range descriptors in a store with a history of changes.
@@ -457,7 +457,7 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 }
 
 var debugRaftLogCmd = &cobra.Command{
-	Use:   "raft-log [directory] [range id]",
+	Use:   "raft-log <directory> <range id>",
 	Short: "print the raft log for a range",
 	Long: `
 Prints all log entries in a store for the given range.
@@ -538,7 +538,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc [directory] [range id]",
+	Use:   "estimate-gc <directory> [range id]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -624,7 +624,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 }
 
 var debugCheckStoreCmd = &cobra.Command{
-	Use:   "check-store [directory]",
+	Use:   "check-store <directory>",
 	Short: "consistency check for a single store",
 	Long: `
 Perform local consistency checks of a single store.
@@ -800,7 +800,7 @@ Output environment variables that influence configuration.
 }
 
 var debugCompactCmd = &cobra.Command{
-	Use:   "compact [directory]",
+	Use:   "compact <directory>",
 	Short: "compact the sstables in a store",
 	Long: `
 Compact the sstables in a store.
@@ -841,7 +841,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 }
 
 var debugSSTablesCmd = &cobra.Command{
-	Use:   "sstables [directory]",
+	Use:   "sstables <directory>",
 	Short: "list the sstables in a store",
 	Long: `
 
@@ -882,7 +882,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 }
 
 var debugGossipValuesCmd = &cobra.Command{
-	Use:   "gossip-values [directory]",
+	Use:   "gossip-values <directory>",
 	Short: "dump all the values in a node's gossip instance",
 	Long: `
 Pretty-prints the values in a node's gossip instance.

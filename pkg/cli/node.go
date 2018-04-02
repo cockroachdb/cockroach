@@ -102,7 +102,7 @@ var statusNodesColumnHeadersForDecommission = []string{
 }
 
 var statusNodeCmd = &cobra.Command{
-	Use:   "status <optional node ID>",
+	Use:   "status [<node id>]",
 	Short: "shows the status of a node or all nodes",
 	Long: `
 	If a node ID is specified, this will show the status for the corresponding node. If no node ID
@@ -307,7 +307,7 @@ var decommissionNodesColumnHeaders = []string{
 }
 
 var decommissionNodeCmd = &cobra.Command{
-	Use:   "decommission [<nodeID1> <nodeID2> ...]",
+	Use:   "decommission <node id 1> [<node id 2> ...]",
 	Short: "decommissions the node(s)",
 	Long: `
 Marks the nodes with the supplied IDs as decommissioning.
@@ -429,7 +429,7 @@ func decommissionResponseValueToRows(
 }
 
 var recommissionNodeCmd = &cobra.Command{
-	Use:   "recommission [<nodeID1> <nodeID2> ...]",
+	Use:   "recommission <node id 1> [<node id 2> ...]",
 	Short: "recommissions the node(s)",
 	Long: `
 For the nodes with the supplied IDs, resets the decommissioning states.

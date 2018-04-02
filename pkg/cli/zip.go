@@ -30,7 +30,7 @@ import (
 )
 
 var debugZipCmd = &cobra.Command{
-	Use:   "zip [file]",
+	Use:   "zip <file>",
 	Short: "gather cluster debug data into a zip file",
 	Long: `
 
