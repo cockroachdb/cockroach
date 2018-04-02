@@ -113,7 +113,7 @@ type sortAllProcessor struct {
 
 	useTempStorage  bool
 	diskContainer   *diskRowContainer
-	rows            *memRowContainer
+	rows            memRowContainer
 	rowContainerMon *mon.BytesMonitor
 
 	// The following variables are used by the state machine, and are used by Next()
@@ -134,34 +134,33 @@ func newSortAllProcessor(s *sorterBase) Processor {
 	useTempStorage := settingUseTempStorageSorts.Get(&s.flowCtx.Settings.SV) ||
 		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
 
-	return &sortAllProcessor{
-		sorterBase:     s,
-		rows:           &memRowContainer{},
-		useTempStorage: useTempStorage,
+	rowContainerMon := s.flowCtx.EvalCtx.Mon
+	if useTempStorage {
+		// We will use the sortAllProcessor in this case and potentially fall
+		// back to disk.
+		// Limit the memory use by creating a child monitor with a hard limit.
+		// The processor will overflow to disk if this limit is not enough.
+		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
+		if limit <= 0 {
+			limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
+		}
+		limitedMon := mon.MakeMonitorInheritWithLimit(
+			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
+		)
+		limitedMon.Start(s.flowCtx.Ctx, rowContainerMon, mon.BoundAccount{})
+		rowContainerMon = &limitedMon
 	}
+	proc := &sortAllProcessor{
+		sorterBase:      s,
+		rowContainerMon: rowContainerMon,
+		useTempStorage:  useTempStorage,
+	}
+	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	return proc
 }
 
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
-		s.rowContainerMon = s.flowCtx.EvalCtx.Mon
-		if s.useTempStorage {
-			// We will use the sortAllProcessor in this case and potentially fall
-			// back to disk.
-			// Limit the memory use by creating a child monitor with a hard limit.
-			// The processor will overflow to disk if this limit is not enough.
-			limit := s.flowCtx.testingKnobs.MemoryLimitBytes
-			if limit <= 0 {
-				limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
-			}
-			limitedMon := mon.MakeMonitorInheritWithLimit(
-				"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
-			)
-			limitedMon.Start(s.flowCtx.Ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-
-			s.rowContainerMon = &limitedMon
-		}
-		s.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), s.rowContainerMon)
-
 		if err := s.fill(); err != nil {
 			return nil, s.producerMeta(err)
 		}
@@ -196,7 +195,7 @@ func (s *sortAllProcessor) fill() error {
 	ctx := s.evalCtx.Ctx()
 	// Attempt an in memory implementation of a sort. If this run fails with a
 	// memory error, fall back to use disk.
-	row, err := s.fillWithContainer(ctx, s.rows)
+	row, err := s.fillWithContainer(ctx, &s.rows)
 	if err != nil {
 		// TODO(asubiotto): A memory error could also be returned if a limit other
 		// than the COCKROACH_WORK_MEM was reached. We should distinguish between
@@ -366,7 +365,7 @@ func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
 type sortTopKProcessor struct {
 	sorterBase
 
-	rows            *memRowContainer
+	rows            memRowContainer
 	rowContainerMon *mon.BytesMonitor
 	k               int64
 
@@ -377,15 +376,14 @@ var _ Processor = &sortTopKProcessor{}
 var _ RowSource = &sortTopKProcessor{}
 
 func newSortTopKProcessor(s *sorterBase, k int64) Processor {
-	var rows memRowContainer
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
-	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-	return &sortTopKProcessor{
+	proc := &sortTopKProcessor{
 		sorterBase:      *s,
-		rows:            &rows,
 		rowContainerMon: rowContainerMon,
 		k:               k,
 	}
+	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	return proc
 }
 
 func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -507,7 +505,7 @@ func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
 type sortChunksProcessor struct {
 	sorterBase
 
-	rows            *memRowContainer
+	rows            memRowContainer
 	rowContainerMon *mon.BytesMonitor
 	alloc           sqlbase.DatumAlloc
 
@@ -522,15 +520,13 @@ var _ Processor = &sortChunksProcessor{}
 var _ RowSource = &sortChunksProcessor{}
 
 func newSortChunksProcessor(s *sorterBase) Processor {
-	var rows memRowContainer
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
-	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-
-	return &sortChunksProcessor{
+	proc := &sortChunksProcessor{
 		sorterBase:      *s,
-		rows:            &rows,
 		rowContainerMon: rowContainerMon,
 	}
+	proc.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	return proc
 }
 
 // chunkCompleted is a helper function that determines if the given row shares the same
