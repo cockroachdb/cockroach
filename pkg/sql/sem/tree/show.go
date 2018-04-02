@@ -350,12 +350,17 @@ func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
-	Table NormalizableTableName
+	Table     NormalizableTableName
+	UsingJSON bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTableStats) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW STATISTICS FOR TABLE ")
+	ctx.WriteString("SHOW STATISTICS ")
+	if node.UsingJSON {
+		ctx.WriteString("USING JSON ")
+	}
+	ctx.WriteString("FOR TABLE ")
 	ctx.FormatNode(&node.Table)
 }
 
