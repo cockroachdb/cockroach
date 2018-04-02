@@ -106,6 +106,10 @@ func newSampleAggregator(
 	return s, nil
 }
 
+func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
+	sendTraceData(ctx, s.out.output)
+}
+
 // Run is part of the Processor interface.
 func (s *sampleAggregator) Run(wg *sync.WaitGroup) {
 	if wg != nil {
@@ -116,9 +120,9 @@ func (s *sampleAggregator) Run(wg *sync.WaitGroup) {
 
 	earlyExit, err := s.mainLoop(ctx)
 	if err != nil {
-		DrainAndClose(ctx, s.out.output, err, s.input)
+		DrainAndClose(ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		sendTraceData(ctx, s.out.output)
+		s.pushTrailingMeta(ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
@@ -130,7 +134,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
+			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}

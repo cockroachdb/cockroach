@@ -15,12 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/pkg/errors"
 
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -187,9 +187,11 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		if traceData != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
 		}
-		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
-		if txnMeta.Txn.ID != (uuid.UUID{}) {
-			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
+		if tr.flowCtx.txn.Type() == client.LeafTxn {
+			txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
+			if txnMeta.Txn.ID != (uuid.UUID{}) {
+				tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
+			}
 		}
 		tr.close()
 	}
