@@ -34,6 +34,7 @@ Start an in-memory, standalone, single-node CockroachDB instance, and open an
 interactive SQL prompt to it.
 `,
 	Example: `  cockroach demo`,
+	Args:    cobra.NoArgs,
 	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runDemo)),
 }
 

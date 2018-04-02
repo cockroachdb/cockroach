@@ -2061,17 +2061,19 @@ func TestJunkPositionalArguments(t *testing.T) {
 	defer c.cleanup()
 
 	for i, test := range []string{
-		"start junk",
-		"sql junk",
-		"gen man junk",
-		"gen autocomplete junk",
-		"gen example-data intro junk",
+		"start",
+		"sql",
+		"gen man",
+		"gen autocomplete",
+		"gen example-data intro",
 	} {
-		out, err := c.RunWithCapture(test)
+		const junk = "junk"
+		line := test + " " + junk
+		out, err := c.RunWithCapture(line)
 		if err != nil {
 			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
 		}
-		exp := test + "\ninvalid arguments\n"
+		exp := fmt.Sprintf("%s\nunknown command %q for \"cockroach %s\"\n", line, junk, test)
 		if exp != out {
 			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
 		}

@@ -41,10 +41,8 @@ func init() {
 		genExampleCmd := &cobra.Command{
 			Use:   meta.Name,
 			Short: meta.Description,
+			Args:  cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				if len(args) > 0 {
-					return usageAndError(cmd)
-				}
 				runGenExamplesCmd(gen)
 				return nil
 			},
