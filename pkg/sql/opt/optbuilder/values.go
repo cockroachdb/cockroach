@@ -27,9 +27,7 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildValuesClause(
-	values *tree.ValuesClause, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (outScope *scope) {
 	var numCols int
 	if len(values.Tuples) > 0 {
 		numCols = len(values.Tuples[0].Exprs)
@@ -73,10 +71,12 @@ func (b *Builder) buildValuesClause(
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
 		label := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, label, colTypes[i], nil)
+		b.synthesizeColumn(outScope, label, colTypes[i], nil, 0 /* group */)
 	}
 
 	colList := colsToColList(outScope.cols)
-	out = b.factory.ConstructValues(b.factory.InternList(rows), b.factory.InternColList(colList))
-	return out, outScope
+	outScope.group = b.factory.ConstructValues(
+		b.factory.InternList(rows), b.factory.InternColList(colList),
+	)
+	return outScope
 }

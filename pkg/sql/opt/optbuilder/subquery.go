@@ -27,10 +27,10 @@ import (
 // after it has been type-checked and added to the memo.
 type subquery struct {
 	// cols contains the output columns of the subquery.
-	cols []columnProps
+	cols []scopeColumn
 
-	// out is the top level memo GroupID of the subquery.
-	out memo.GroupID
+	// group is the top level memo GroupID of the subquery.
+	group memo.GroupID
 
 	// Is the subquery in a multi-row or single-row context?
 	multiRow bool
@@ -167,7 +167,7 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 func (b *Builder) buildSubqueryProjection(
 	s *subquery, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
-	out = s.out
+	out = s.group
 	outScope = inScope.replace()
 
 	switch len(s.cols) {
@@ -189,9 +189,9 @@ func (b *Builder) buildSubqueryProjection(
 		}
 
 		texpr := tree.NewTypedTuple(cols)
-		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr)
 		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups))
-		p := b.constructList(opt.ProjectionsOp, []memo.GroupID{tup}, []columnProps{*col})
+		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
+		p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
 		out = b.factory.ConstructProject(out, p)
 	}
 
@@ -208,7 +208,7 @@ func (b *Builder) buildSingleRowSubquery(
 	s *subquery, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
 	if s.exists {
-		return b.factory.ConstructExists(s.out), inScope
+		return b.factory.ConstructExists(s.group), inScope
 	}
 
 	out, outScope = b.buildSubqueryProjection(s, inScope)
@@ -279,8 +279,8 @@ func (b *Builder) buildMultiRowSubquery(
 
 	// Construct the inner boolean projection.
 	comp := b.buildScalar(texpr, outScope)
-	col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr)
-	p := b.constructList(opt.ProjectionsOp, []memo.GroupID{comp}, []columnProps{*col})
+	col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, comp)
+	p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
 	out = b.factory.ConstructProject(out, p)
 
 	// Construct the outer Any(...) operator.
