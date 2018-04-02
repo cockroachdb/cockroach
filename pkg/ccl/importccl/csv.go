@@ -1398,7 +1398,7 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 		return nil
 	})
 	if err := group.Wait(); err != nil {
-		distsqlrun.DrainAndClose(ctx, cp.output, err)
+		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
 		return
 	}
 
@@ -1653,7 +1653,8 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		}
 		return nil
 	}()
-	distsqlrun.DrainAndClose(ctx, sp.output, err, sp.input)
+	distsqlrun.DrainAndClose(
+		ctx, sp.output, err, func(context.Context) {} /* pushTrailingMeta */, sp.input)
 }
 
 type importResumer struct {

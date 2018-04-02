@@ -234,6 +234,11 @@ func (jr *joinReader) generateKey(
 	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, primaryKeyPrefix, alloc)
 }
 
+func (jr *joinReader) pushTrailingMeta(ctx context.Context) {
+	sendTraceData(ctx, jr.out.output)
+	sendTxnCoordMetaMaybe(jr.flowCtx.txn, jr.out.output)
+}
+
 // mainLoop runs the mainLoop and returns any error.
 //
 // If no error is returned, the input has been drained and the output has been
@@ -267,7 +272,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				if meta.Err != nil {
 					return meta.Err
 				}
-				if !emitHelper(ctx, &jr.out, nil /* row */, meta, jr.input) {
+				if !emitHelper(ctx, &jr.out, nil /* row */, meta, jr.pushTrailingMeta, jr.input) {
 					return nil
 				}
 				continue
@@ -312,7 +317,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 
 		if len(spans) != joinReaderBatchSize {
 			// This was the last batch.
-			sendTraceData(ctx, jr.out.output)
+			jr.pushTrailingMeta(ctx)
 			jr.out.Close()
 			return nil
 		}
@@ -325,9 +330,12 @@ func (jr *joinReader) isLookupJoin() bool {
 	return len(jr.lookupCols) > 0
 }
 
-// Index lookup iterates through all matches of the given `spans`. A `row`
-// which corresponds to the given span (of size 1) can be provided and
-// then the lookup will emit the concatenation of the rows from both tables.
+// Index lookup iterates through all matches of the given spans and emits the
+// corresponding row.
+//
+// Returns false if more rows need to be produced, true otherwise. If true is
+// returned, both the inputs and the output have been drained and closed, except
+// if an error is returned.
 func (jr *joinReader) indexLookup(
 	ctx context.Context,
 	txn *client.Txn,
@@ -372,7 +380,7 @@ func (jr *joinReader) indexLookup(
 
 		if !jr.isLookupJoin() {
 			// Emit the row; stop if no more rows are needed.
-			if !emitHelper(ctx, &jr.out, indexRow, nil /* meta */, jr.input) {
+			if !emitHelper(ctx, &jr.out, indexRow, nil /* meta */, jr.pushTrailingMeta, jr.input) {
 				return true, nil
 			}
 		} else {
@@ -386,7 +394,9 @@ func (jr *joinReader) indexLookup(
 				}
 
 				// Emit the row; stop if no more rows are needed.
-				if !emitHelper(ctx, &jr.out, jr.renderedRow, nil /* meta */, jr.input) {
+				if !emitHelper(
+					ctx, &jr.out, jr.renderedRow, nil /* meta */, jr.pushTrailingMeta, jr.input,
+				) {
 					return true, nil
 				}
 			}
@@ -409,6 +419,6 @@ func (jr *joinReader) Run(wg *sync.WaitGroup) {
 
 	err := jr.mainLoop(ctx)
 	if err != nil {
-		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.input)
+		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.pushTrailingMeta, jr.input)
 	}
 }
