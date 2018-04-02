@@ -1099,6 +1099,16 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	// transaction record at all, we have to assume it's been aborted as well.
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
+
+		// If the heartbeat request arrived to find a missing transaction record
+		// then we ignore the error and continue the heartbeat loop. This is
+		// possible if the heartbeat loop was started before a BeginTxn request
+		// succeeds because of ambiguity in the first write request's response.
+		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
+			return true
+		}
+
 		if errTxn := pErr.GetTxn(); errTxn != nil {
 			tc.mu.Lock()
 			tc.mu.meta.Txn.Update(errTxn)
