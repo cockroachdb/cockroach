@@ -91,3 +91,46 @@ message MVCCStatsDelta {
   sint64 sys_bytes = 12;
   sint64 sys_count = 13;
 }
+
+// MVCCPersistentStats is convertible to MVCCStats, but uses unsigned variable
+// width encodings for most fields which make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+message MVCCPersistentStats {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  bool contains_estimates = 14;
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  int64 live_bytes = 4;
+  int64 live_count = 5;
+  int64 key_bytes = 6;
+  int64 key_count = 7;
+  int64 val_bytes = 8;
+  int64 val_count = 9;
+  int64 intent_bytes = 10;
+  int64 intent_count = 11;
+  int64 sys_bytes = 12;
+  int64 sys_count = 13;
+}
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+message RangeAppliedState {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // raft_applied_index is the highest (and last) index applied to the Raft
+  // state machine.
+  uint64 raft_applied_index = 1;
+  // lease_applied_index is the highest (and last) lease index applied to the
+  // Raft state machine.
+  uint64 lease_applied_index = 2;
+  // range_stats is the set of mvcc stats that accounts for the current value
+  // of the Raft state machine.
+  MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
+}

@@ -67,6 +67,17 @@ func writeInitialReplicaState(
 	s.GCThreshold = &gcThreshold
 	s.TxnSpanGCThreshold = &txnSpanGCThreshold
 
+	// If the MinSupported cluster version is high enough to guarantee that all
+	// nodes will understand the AppliedStateKey then we can just straight to
+	// using it without ever writing the legacy stats and index keys.
+	if st.Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+		s.UsingAppliedStateKey = true
+	} else {
+		if err := engine.AccountForLegacyMVCCStats(s.Stats, desc.RangeID); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	}
+
 	if existingLease, err := rsl.LoadLease(ctx, eng); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {

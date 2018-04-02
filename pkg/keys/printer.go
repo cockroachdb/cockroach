@@ -145,6 +145,7 @@ var (
 		{name: "AbortSpan", suffix: LocalAbortSpanSuffix, ppFunc: abortSpanKeyPrint, psFunc: abortSpanKeyParse},
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
+		{name: "RangeAppliedState", suffix: LocalRangeAppliedStateSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexLegacySuffix},
 		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexLegacySuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
