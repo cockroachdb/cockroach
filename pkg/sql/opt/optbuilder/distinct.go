@@ -16,23 +16,17 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
 // buildDistinct builds a set of memo groups that represent a DISTINCT
-// expression.
-//
-// in        contains the memo group ID of the input expression.
-// distinct  is true if this is a DISTINCT expression. If distinct is false,
-//           we just return `in, inScope`.
+// expression if distinct is true. If distinct is false, we just return
+// `inScope`.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildDistinct(
-	in memo.GroupID, distinct bool, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+func (b *Builder) buildDistinct(distinct bool, inScope *scope) (outScope *scope) {
 	if !distinct {
-		return in, inScope
+		return inScope
 	}
 
 	outScope = inScope.replace()
@@ -58,6 +52,9 @@ func (b *Builder) buildDistinct(
 		}
 	}
 
-	aggList := b.constructList(opt.AggregationsOp, nil, nil)
-	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternColSet(groupCols)), outScope
+	aggList := b.constructList(opt.AggregationsOp, nil)
+	outScope.group = b.factory.ConstructGroupBy(
+		inScope.group, aggList, b.factory.InternColSet(groupCols),
+	)
+	return outScope
 }

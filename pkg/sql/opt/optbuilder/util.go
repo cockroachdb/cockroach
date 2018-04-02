@@ -104,23 +104,26 @@ func (b *Builder) expandStarAndResolveType(
 //        the AS keyword).
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
+// group  The memo group ID of this column/expression (if any). This parameter
+//        is optional and can be set later in the returned scopeColumn.
 //
 // The new column is returned as a columnProps object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr,
-) *columnProps {
+	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
+) *scopeColumn {
 	if label == "" {
 		label = fmt.Sprintf("column%d", len(b.colMap))
 	}
 
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
-	col := columnProps{
+	col := scopeColumn{
 		origName: name,
 		name:     name,
 		typ:      typ,
 		id:       colID,
 		expr:     expr,
+		group:    group,
 	}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
@@ -129,9 +132,7 @@ func (b *Builder) synthesizeColumn(
 
 // constructList invokes the factory to create one of the operators that contain
 // a list of groups: ProjectionsOp and AggregationsOp.
-func (b *Builder) constructList(
-	op opt.Operator, items []memo.GroupID, cols []columnProps,
-) memo.GroupID {
+func (b *Builder) constructList(op opt.Operator, cols []scopeColumn) memo.GroupID {
 	colList := make(opt.ColList, 0, len(cols))
 	itemList := make([]memo.GroupID, 0, len(cols))
 
@@ -141,7 +142,7 @@ func (b *Builder) constructList(
 		id := cols[i].id
 		if !colSet.Contains(int(id)) {
 			colList = append(colList, id)
-			itemList = append(itemList, items[i])
+			itemList = append(itemList, cols[i].group)
 			colSet.Add(int(id))
 		}
 	}
@@ -287,7 +288,7 @@ func symbolicExprStr(expr tree.Expr) string {
 	return tree.AsStringWithFlags(expr, tree.FmtCheckEquivalence)
 }
 
-func colsToColList(cols []columnProps) opt.ColList {
+func colsToColList(cols []scopeColumn) opt.ColList {
 	colList := make(opt.ColList, len(cols))
 	for i := range cols {
 		colList[i] = cols[i].id
@@ -295,7 +296,7 @@ func colsToColList(cols []columnProps) opt.ColList {
 	return colList
 }
 
-func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
+func findColByIndex(cols []scopeColumn, id opt.ColumnID) *scopeColumn {
 	for i := range cols {
 		col := &cols[i]
 		if col.id == id {
@@ -306,7 +307,7 @@ func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
 	return nil
 }
 
-func makePresentation(cols []columnProps) memo.Presentation {
+func makePresentation(cols []scopeColumn) memo.Presentation {
 	presentation := make(memo.Presentation, 0, len(cols))
 	for i := range cols {
 		col := &cols[i]

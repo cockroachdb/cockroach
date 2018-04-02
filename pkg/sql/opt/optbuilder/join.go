@@ -29,11 +29,9 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildJoin(
-	join *tree.JoinTableExpr, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	left, leftScope := b.buildTable(join.Left, inScope)
-	right, rightScope := b.buildTable(join.Right, inScope)
+func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope *scope) {
+	leftScope := b.buildTable(join.Left, inScope)
+	rightScope := b.buildTable(join.Right, inScope)
 
 	// Check that the same table name is not used on both sides.
 	leftTables := make(map[tree.TableName]struct{})
@@ -68,7 +66,7 @@ func (b *Builder) buildJoin(
 			usingColNames = t.Cols
 		}
 
-		return b.buildUsingJoin(joinType, usingColNames, left, right, leftScope, rightScope, inScope)
+		return b.buildUsingJoin(joinType, usingColNames, leftScope, rightScope, inScope)
 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
@@ -83,7 +81,8 @@ func (b *Builder) buildJoin(
 			filter = b.factory.ConstructTrue()
 		}
 
-		return b.constructJoin(joinType, left, right, filter), outScope
+		outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
+		return outScope
 
 	default:
 		panic(fmt.Sprintf("unsupported join condition %#v", cond))
@@ -118,43 +117,37 @@ func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
 //
 // joinType    The join type (inner, left, right or outer)
 // names       The list of `USING` column names
-// left        The memo group ID of the left table
-// right       The memo group ID of the right table
 // leftScope   The outScope from the left table
 // rightScope  The outScope from the right table
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildUsingJoin(
-	joinType sqlbase.JoinType,
-	names tree.NameList,
-	left, right memo.GroupID,
-	leftScope, rightScope, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+	joinType sqlbase.JoinType, names tree.NameList, leftScope, rightScope, inScope *scope,
+) (outScope *scope) {
 	// Build the join predicate.
 	mergedCols, filter, outScope := b.buildUsingJoinPredicate(
 		joinType, leftScope.cols, rightScope.cols, names, inScope,
 	)
 
-	out = b.constructJoin(joinType, left, right, filter)
+	outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
 
 	if len(mergedCols) > 0 {
 		// Wrap in a projection to include the merged columns.
-		projections := make([]memo.GroupID, 0, len(outScope.cols))
-		for _, col := range outScope.cols {
+		for i, col := range outScope.cols {
 			if mergedCol, ok := mergedCols[col.id]; ok {
-				projections = append(projections, mergedCol)
+				outScope.cols[i].group = mergedCol
 			} else {
 				v := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
-				projections = append(projections, v)
+				outScope.cols[i].group = v
 			}
 		}
 
-		p := b.constructList(opt.ProjectionsOp, projections, outScope.cols)
-		out = b.factory.ConstructProject(out, p)
+		p := b.constructList(opt.ProjectionsOp, outScope.cols)
+		outScope.group = b.factory.ConstructProject(outScope.group, p)
 	}
 
-	return out, outScope
+	return outScope
 }
 
 // buildUsingJoinPredicate builds a set of memo groups that represent the join
@@ -220,18 +213,19 @@ func (b *Builder) buildUsingJoin(
 //
 // If new merged columns are created (as in the FULL OUTER JOIN example above),
 // the return value mergedCols contains a mapping from the column id to the
-// memo group ID of the IFNULL expression.
+// memo group ID of the IFNULL expression. out contains the top-level memo
+// group ID of the join predicate.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildUsingJoinPredicate(
 	joinType sqlbase.JoinType,
-	leftCols []columnProps,
-	rightCols []columnProps,
+	leftCols []scopeColumn,
+	rightCols []scopeColumn,
 	names tree.NameList,
 	inScope *scope,
 ) (mergedCols map[opt.ColumnID]memo.GroupID, out memo.GroupID, outScope *scope) {
-	joined := make(map[tree.Name]*columnProps, len(names))
+	joined := make(map[tree.Name]*scopeColumn, len(names))
 	conditions := make([]memo.GroupID, 0, len(names))
 	mergedCols = make(map[opt.ColumnID]memo.GroupID)
 	outScope = inScope.push()
@@ -280,8 +274,8 @@ func (b *Builder) buildUsingJoinPredicate(
 				typ = rightCol.typ
 			}
 			texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
-			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr)
 			merged := b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{leftVar, rightVar}))
+			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr, merged)
 			mergedCols[col.id] = merged
 		}
 
@@ -302,7 +296,7 @@ func (b *Builder) buildUsingJoinPredicate(
 // (2) If the column has the same name as one of the columns in `joined` but is
 //     not equal, it is marked as hidden and added to the scope.
 // (3) All other columns are added to the scope without modification.
-func hideMatchingColumns(cols []columnProps, joined map[tree.Name]*columnProps, scope *scope) {
+func hideMatchingColumns(cols []scopeColumn, joined map[tree.Name]*scopeColumn, scope *scope) {
 	for _, col := range cols {
 		if foundCol, ok := joined[col.name]; ok {
 			// Hide other columns with the same name.
@@ -351,7 +345,7 @@ func (b *Builder) constructJoin(
 //
 // context is a string ("left" or "right") used to indicate in the error
 // message whether the name is missing from the left or right side of the join.
-func findUsingColumn(cols []columnProps, name tree.Name, context string) *columnProps {
+func findUsingColumn(cols []scopeColumn, name tree.Name, context string) *scopeColumn {
 	for i := range cols {
 		col := &cols[i]
 		if !col.hidden && col.name == name {

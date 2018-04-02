@@ -89,7 +89,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg
 	varsUsedIn := len(inScope.groupby.varsUsed)
 	switch t := scalar.(type) {
-	case *columnProps:
+	case *scopeColumn:
 		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.id) {
 			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.id)
 		}
@@ -309,7 +309,7 @@ func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 // return values.
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, label string, inScope *scope,
-) (out memo.GroupID, col *columnProps) {
+) (out memo.GroupID, col *scopeColumn) {
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
 		panic(builderError{err})
@@ -318,7 +318,8 @@ func (b *Builder) buildFunction(
 	funcDef := memo.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
 
 	if isAggregate(def) {
-		return b.buildAggregateFunction(f, funcDef, label, inScope)
+		col := b.buildAggregateFunction(f, funcDef, label, inScope)
+		return col.group, col
 	}
 
 	argList := make([]memo.GroupID, len(f.Exprs))
@@ -393,7 +394,7 @@ func NewScalar(
 	sb := &ScalarBuilder{
 		Builder: Builder{
 			factory: factory,
-			colMap:  make([]columnProps, 1, 1+md.NumColumns()),
+			colMap:  make([]scopeColumn, 1, 1+md.NumColumns()),
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
@@ -402,10 +403,10 @@ func NewScalar(
 	sb.scope.builder = &sb.Builder
 
 	// Put all the columns in the current scope.
-	sb.scope.cols = make([]columnProps, 0, md.NumColumns())
+	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
 	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
 		name := tree.Name(md.ColumnLabel(colID))
-		col := columnProps{
+		col := scopeColumn{
 			origName: name,
 			name:     name,
 			typ:      md.ColumnType(colID),

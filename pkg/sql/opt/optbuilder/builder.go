@@ -63,7 +63,7 @@ type Builder struct {
 	catalog opt.Catalog
 
 	// Skip index 0 in order to reserve it to indicate the "unknown" column.
-	colMap []columnProps
+	colMap []scopeColumn
 }
 
 // New creates a new Builder structure initialized with the given
@@ -79,7 +79,7 @@ func New(
 	return &Builder{
 		factory: factory,
 		stmt:    stmt,
-		colMap:  make([]columnProps, 1),
+		colMap:  make([]scopeColumn, 1),
 		ctx:     ctx,
 		semaCtx: semaCtx,
 		evalCtx: evalCtx,
@@ -111,8 +111,8 @@ func (b *Builder) Build() (root memo.GroupID, required *memo.PhysicalProps, err 
 		}
 	}()
 
-	out, outScope := b.buildStmt(b.stmt, &scope{builder: b})
-	root = out
+	outScope := b.buildStmt(b.stmt, &scope{builder: b})
+	root = outScope.group
 	required = b.buildPhysicalProps(outScope)
 	return root, required, nil
 }
@@ -143,21 +143,20 @@ func (b *Builder) buildPhysicalProps(scope *scope) *memo.PhysicalProps {
 // buildStmt builds a set of memo groups that represent the given SQL
 // statement.
 //
-// NOTE: The following description of the inScope parameter and return values
-//       applies for all buildXXX() functions in this directory.
+// NOTE: The following descriptions of the inScope parameter and outScope
+//       return value apply for all buildXXX() functions in this directory.
+//       Note that some buildXXX() functions pass outScope as a parameter
+//       rather than a return value so its scopeColumns can be built up
+//       incrementally across several function calls.
 //
 // inScope   This parameter contains the name bindings that are visible for this
 //           statement/expression (e.g., passed in from an enclosing statement).
 //
-// out       This return value corresponds to the top-level memo group ID for
-//           this statement/expression.
-//
 // outScope  This return value contains the newly bound variables that will be
 //           visible to enclosing statements, as well as a pointer to any
-//           "parent" scope that is still visible.
-func (b *Builder) buildStmt(
-	stmt tree.Statement, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+//           "parent" scope that is still visible. The top-level memo group ID
+//           for the built statement/expression is returned in outScope.group.
+func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
