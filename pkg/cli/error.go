@@ -111,10 +111,3 @@ func MaybeShoutError(
 		return err
 	}
 }
-
-func usageAndError(cmd *cobra.Command) error {
-	if err := cmd.Usage(); err != nil {
-		return err
-	}
-	return errors.New("invalid arguments")
-}
