@@ -136,10 +136,8 @@ func (ps *privateStorage) internOrdering(ordering Ordering) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	var arr [10]byte
 	for _, col := range ordering {
-		cnt := binary.PutVarint(arr[:], int64(col))
-		ps.keyBuf.Write(arr[:cnt])
+		ps.keyBuf.writeVarint(int64(col))
 	}
 	typ := (*Ordering)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
@@ -173,11 +171,14 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeUvarint(uint64(def.Table))
 	ps.keyBuf.writeUvarint(uint64(def.Index))
+
 	// TODO(radu): consider encoding the constraint rather than the pointer.
 	// It's unclear if we have cases where we expect the same constraints to be
 	// generated multiple times.
 	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.Constraint))))
+	ps.keyBuf.writeVarint(def.HardLimit)
 	ps.keyBuf.writeColSet(def.Cols)
+
 	typ := (*ScanOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -270,6 +271,12 @@ type keyBuffer struct {
 func (kb *keyBuffer) writeUvarint(val uint64) {
 	var arr [10]byte
 	cnt := binary.PutUvarint(arr[:], val)
+	kb.Write(arr[:cnt])
+}
+
+func (kb *keyBuffer) writeVarint(val int64) {
+	var arr [10]byte
+	cnt := binary.PutVarint(arr[:], val)
 	kb.Write(arr[:cnt])
 }
 
