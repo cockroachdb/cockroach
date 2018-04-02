@@ -39,7 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,6 +51,10 @@ import (
 
 const baseUpdatesURL = `https://register.cockroachdb.com/api/clusters/updates`
 const baseReportingURL = `https://register.cockroachdb.com/api/clusters/report`
+
+var (
+	errReportingDisabled = errors.New("diagnostic reporting disabled")
+)
 
 var updatesURL, reportingURL *url.URL
 
@@ -99,9 +105,31 @@ type versionInfo struct {
 
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
-func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
-		startup := timeutil.Now()
+func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
+	startup := timeutil.Now()
+
+	builtins.Add("crdb_internal.force_diagnostic_report", []tree.Builtin{
+		{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Impure:     true,
+			Privileged: true,
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				now := timeutil.Now()
+				res := "OK"
+				_, err := s.maybeReportDiagnostics(ctx.Ctx(), now, now.Add(-1*time.Second), now.Sub(startup))
+				if err != nil {
+					res = err.Error()
+				}
+				return tree.NewDString(res), nil
+			},
+			Category: builtins.CategoryTesting,
+			Info:     builtins.TestingHelperDesc,
+		},
+	})
+	builtins.EnsureHelpInfo()
+
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		nextUpdateCheck := startup
 		nextDiagnosticReport := startup
 
@@ -111,8 +139,9 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 			now := timeutil.Now()
 			runningTime := now.Sub(startup)
 
-			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
-			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
+			nextUpdateCheck = s.maybeCheckForUpdates(ctx, now, nextUpdateCheck, runningTime)
+			// maybeReportDiagnostics logs its err internally so it can be ignored.
+			nextDiagnosticReport, _ = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
 
 			sooner := nextUpdateCheck
 			if nextDiagnosticReport.Before(sooner) {
@@ -133,7 +162,7 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 // maybeCheckForUpdates determines if it is time to check for updates and does
 // so if it is, before returning the time at which the next check be done.
 func (s *Server) maybeCheckForUpdates(
-	now, scheduled time.Time, runningTime time.Duration,
+	ctx context.Context, now, scheduled time.Time, runningTime time.Duration,
 ) time.Time {
 	if scheduled.After(now) {
 		return scheduled
@@ -147,7 +176,7 @@ func (s *Server) maybeCheckForUpdates(
 
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
-	if succeeded := s.checkForUpdates(runningTime); !succeeded {
+	if succeeded := s.checkForUpdates(ctx, runningTime); !succeeded {
 		return now.Add(updateCheckRetryFrequency)
 	}
 
@@ -188,11 +217,11 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
-func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration) bool {
 	if updatesURL == nil {
 		return true // don't bother with asking for retry -- we'll never succeed.
 	}
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "checkForUpdates")
 	defer span.Finish()
 
 	addInfoToURL(ctx, updatesURL, s, runningTime)
@@ -235,18 +264,31 @@ func (s *Server) checkForUpdates(runningTime time.Duration) bool {
 	return true
 }
 
+// maybeReportDiagnostics checks if it is time to report and does so if enabled
+// (flushing stats either way to avoid unbounded growth). Returns a time after
+// which it would like to be called again when used in the background reporting
+// loop, as well as an already logged error for use by manual callers.
 func (s *Server) maybeReportDiagnostics(
 	ctx context.Context, now, scheduled time.Time, running time.Duration,
-) time.Time {
+) (time.Time, error) {
 	if scheduled.After(now) {
-		return scheduled
+		return scheduled, errReportingDisabled
 	}
 
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
+	var result error
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
-		s.reportDiagnostics(running)
+		result = s.reportDiagnostics(ctx, running)
+		// The report generation helper logs internal errors as warnings on its own,
+		// so here we mostly only expect network errors -- which may be common in
+		// firewalled production environments so avoid spamming logs about them.
+		if result != nil && log.V(2) {
+			log.Warning(ctx, result)
+		}
+	} else {
+		result = errReportingDisabled
 	}
 	if !s.cfg.UseLegacyConnHandling {
 		s.pgServer.SQLServer.ResetStatementStats(ctx)
@@ -256,7 +298,7 @@ func (s *Server) maybeReportDiagnostics(
 		s.sqlExecutor.ResetErrorCounts()
 	}
 
-	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
+	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV)), result
 }
 
 func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
@@ -382,36 +424,33 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 	}
 }
 
-func (s *Server) reportDiagnostics(runningTime time.Duration) {
+func (s *Server) reportDiagnostics(ctx context.Context, runningTime time.Duration) error {
 	if reportingURL == nil {
-		return
+		return errReportingDisabled
 	}
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
 	b, err := protoutil.Marshal(s.getReportingInfo(ctx))
 	if err != nil {
-		log.Warning(ctx, err)
-		return
+		return errors.Wrap(err, "gathering report info")
 	}
 
 	addInfoToURL(ctx, reportingURL, s, runningTime)
+	log.Eventf(ctx, "sending anonymized diagnostics report to %s", updatesURL.String())
 	res, err := http.Post(reportingURL.String(), "application/x-protobuf", bytes.NewReader(b))
 	if err != nil {
-		if log.V(2) {
-			// This is probably going to be relatively common in production
-			// environments where network access is usually curtailed.
-			log.Warning(ctx, "failed to report node usage metrics: ", err)
-		}
-		return
+		return errors.Wrap(err, "reporting node usage metrics")
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		b, err := ioutil.ReadAll(res.Body)
-		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
-			"error: %v", res.Status, b, err)
+		return errors.Errorf(
+			"reporting node usage metrics: status: %s, body: %s, error: %v", res.Status, b, err,
+		)
 	}
+	return nil
 }
 
 func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {

@@ -35,10 +35,13 @@ func init() {
 	AllBuiltinNames = make([]string, 0, len(Builtins))
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	for name, def := range Builtins {
-		tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
-		AllBuiltinNames = append(AllBuiltinNames, name)
+		Add(name, def)
 	}
+	EnsureHelpInfo()
+}
 
+// EnsureHelpInfo ensures all builtins are categorized and sorted.
+func EnsureHelpInfo() {
 	// Generate missing categories.
 	for _, name := range AllBuiltinNames {
 		def := Builtins[name]
@@ -48,8 +51,14 @@ func init() {
 			}
 		}
 	}
-
 	sort.Strings(AllBuiltinNames)
+}
+
+// Add installs a builtin and updates the list. EnsureHelpInfo should usually be
+// called after one or more more calls to Add.
+func Add(name string, def []tree.Builtin) {
+	tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
+	AllBuiltinNames = append(AllBuiltinNames, name)
 }
 
 func getCategory(b *tree.Builtin) string {
