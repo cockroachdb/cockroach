@@ -817,6 +817,15 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr></tbody>
 </table>
 
+### Testing and Debugging Functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>crdb_internal.force_diagnostic_report() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Compatibility Functions
 
 <table>
