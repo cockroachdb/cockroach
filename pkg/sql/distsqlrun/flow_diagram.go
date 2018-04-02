@@ -96,6 +96,9 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	if len(a.GroupCols) > 0 {
 		details = append(details, colListStr(a.GroupCols))
 	}
+	if len(a.OrderedGroupCols) > 0 {
+		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(a.OrderedGroupCols)))
+	}
 	for _, agg := range a.Aggregations {
 		var buf bytes.Buffer
 		buf.WriteString(agg.Func.String())
@@ -259,7 +262,7 @@ func (d *DistinctSpec) summary() (string, []string) {
 		colListStr(d.DistinctColumns),
 	}
 	if len(d.OrderedColumns) > 0 {
-		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(d.DistinctColumns)))
+		details = append(details, fmt.Sprintf("Ordered: %s", colListStr(d.OrderedColumns)))
 	}
 	return "Distinct", details
 }

@@ -130,7 +130,7 @@ distinct             0  distinct  ·            ·                  (x, y, z)   
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUGPokAQhe_7K0xdtw82oKucOOzFy7px5jbhwNAVQ6I06W4SHeN_nwDJOBKpmkmH4Ujje1_V6xe8QKkV_suOaCF-AQkCAhAQgoAIBCwgFVAZnaO12jQ_6QQbdYJ4LqAoq9o1x6mAXBuE-AKucAeEGJ6z1wPuMFNoQIBClxWHFlKZ4piZc3I6v4GAbe3iWRKIJBRJBOlVgK7dzdW6bI8Qy6v4OvlJG9eHJvL3oHnwHfO_hXVFmbu-vWh3aBYyCg2qePZxNsQNB7k3nO7cHi0z7nDR3XBysrtmyH53zZiPdtfBZHEyZL84GfPR4gwni5Mh-8XJmI8WZzRZnAzZL07G_Ec-7A-4O7SVLi3ecYec581XH9Ueu38Jq2uT43-j8xbTPW5bXXug0LrureweNmX3qhnws1iS4oAWB6Q4vBPLvjikx17S6IhUL2jxghQz5KXP0n9I8Yomr0jxmhavfcaWTMe4ktEtk0zNpFfPJFO0iIHTTZNM1STdtf7s6fXXewAAAP__2QzB0Q==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUFvukAQxe__T2Hm-t-DC2iVE4devNTG9tZwoOzEkChLdpdEa_zuDXCwEplpsyEcAd_7zbx9WS9QaoUv2REtxB8gQUAAAkIQEIGABaQCKqNztFab5iedYKNOEM8FFGVVu-Z1KiDXBiG-gCvcASGG9-zzgDvMFBoQoNBlxaGFVKY4ZuacnM5fIGBbu3iWBCIJRRJBehWga3dztS7bI8TyKn5PftPG9aGJ_D9oHvzF_Lmwrihz17cX7Q7NQkahQRXPEjlIDAeJN5DufB6tMdZY0d1YcrLzZch-58uYj3C-wWRBMmS_IBnzEYIMJwuSIfsFyZiPEGQ0WZAM2S9Ixnzkq_sBcYe20qXFO-KQ87y511HtsfsfsLo2Ob4anbeY7nHb6toXCq3rvsruYVN2n5oBf4olKQ5ocUCKwzux7ItDeuwljY5I9YIWL0gxQ176LP1Eilc0eUWK17R47TO2ZDrGlYxumWRqJr16JpmiRQycbppkqibprvVnT6__vgMAAP__NNy6Yw==
 
 query III
 SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x

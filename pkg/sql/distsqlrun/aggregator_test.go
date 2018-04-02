@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strings"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -167,6 +169,36 @@ func TestAggregator(t *testing.T) {
 			},
 		},
 		{
+			// SELECT @2, COUNT(@1), GROUP BY @2 (ordering: @2+).
+			spec: AggregatorSpec{
+				GroupCols:        []uint32{1},
+				OrderedGroupCols: []uint32{1},
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   AggregatorSpec_IDENT,
+						ColIdx: []uint32{1},
+					},
+					{
+						Func:   AggregatorSpec_COUNT,
+						ColIdx: []uint32{0},
+					},
+				},
+			},
+			inputTypes: twoIntCols,
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2]},
+				{v[6], v[2]},
+				{v[7], v[2]},
+				{v[3], v[4]},
+				{v[8], v[4]},
+			},
+			outputTypes: twoIntCols,
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[3]},
+				{v[4], v[2]},
+			},
+		},
+		{
 			// SELECT @2, SUM(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				GroupCols: []uint32{1},
@@ -188,6 +220,39 @@ func TestAggregator(t *testing.T) {
 				{v[6], v[2]},
 				{v[7], v[2]},
 				{v[8], v[4]},
+			},
+			outputTypes: []sqlbase.ColumnType{
+				intType, // IDENT
+				decType, // SUM
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[2], v[14]},
+				{v[4], v[11]},
+			},
+		},
+		{
+			// SELECT @2, SUM(@1), GROUP BY @2 (ordering: @2+).
+			spec: AggregatorSpec{
+				GroupCols:        []uint32{1},
+				OrderedGroupCols: []uint32{1},
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   AggregatorSpec_IDENT,
+						ColIdx: []uint32{1},
+					},
+					{
+						Func:   AggregatorSpec_SUM,
+						ColIdx: []uint32{0},
+					},
+				},
+			},
+			inputTypes: twoIntCols,
+			input: sqlbase.EncDatumRows{
+				{v[1], v[2]},
+				{v[6], v[2]},
+				{v[7], v[2]},
+				{v[8], v[4]},
+				{v[3], v[4]},
 			},
 			outputTypes: []sqlbase.ColumnType{
 				intType, // IDENT
@@ -478,4 +543,130 @@ func BenchmarkGrouping(b *testing.B) {
 		input.Reset()
 	}
 	b.StopTimer()
+}
+
+func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
+	const numCols = 3
+	const groupSize = 10
+	var groupedCols = [2]int{0, 1}
+	var allOrderedGroupCols = [2]uint32{0, 1}
+
+	aggFuncs := []AggregatorSpec_Func{
+		AggregatorSpec_IDENT,
+		AggregatorSpec_AVG,
+		AggregatorSpec_COUNT,
+		AggregatorSpec_MAX,
+		AggregatorSpec_MIN,
+		AggregatorSpec_STDDEV,
+		AggregatorSpec_SUM,
+		AggregatorSpec_SUM_INT,
+		AggregatorSpec_VARIANCE,
+		AggregatorSpec_XOR_AGG,
+	}
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  evalCtx,
+	}
+
+	for _, aggFunc := range aggFuncs {
+		b.Run(aggFunc.String(), func(b *testing.B) {
+			spec := &AggregatorSpec{
+				GroupCols: []uint32{0, 1},
+				Aggregations: []AggregatorSpec_Aggregation{
+					{
+						Func:   aggFunc,
+						ColIdx: []uint32{2},
+					},
+				},
+			}
+			spec.OrderedGroupCols = allOrderedGroupCols[:numOrderedCols]
+			post := &PostProcessSpec{}
+			disposer := &RowDisposer{}
+			input := NewRepeatableRowSource(threeIntCols, makeGroupedIntRows(groupSize, numCols, groupedCols[:]))
+
+			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newAggregator(flowCtx, spec, input, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(context.Background(), nil /* wg */)
+				input.Reset()
+			}
+			b.StopTimer()
+		})
+	}
+}
+
+func BenchmarkOrderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 2 /* numOrderedCols */)
+}
+
+func BenchmarkPartiallyOrderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 1 /* numOrderedCols */)
+}
+
+func BenchmarkUnorderedAggregation(b *testing.B) {
+	benchmarkAggregationWithGrouping(b, 0 /* numOrderedCols */)
+}
+
+func intPow(a, b int) int {
+	return int(math.Pow(float64(a), float64(b)))
+}
+
+// makeGroupedIntRows constructs a (groupSize**(len(groupedCols)+1)) x numCols
+// table, where columns in groupedCols are sorted in ascending order with column
+// priority defined by their position in groupedCols. If used in an aggregation
+// where groupedCols are the GROUP BY columns, each group will have a size of
+// groupSize. To make the input more interesting for aggregation, group columns
+// are repeated.
+//
+// Examples:
+// makeGroupedIntRows(2, 2, []int{1, 0}) ->
+// [0 0]
+// [0 0]
+// [1 0]
+// [1 0]
+// [0 1]
+// [0 1]
+// [1 1]
+// [1 1]
+func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) sqlbase.EncDatumRows {
+	numRows := intPow(groupSize, len(groupedCols)+1)
+	rows := make(sqlbase.EncDatumRows, numRows)
+
+	groupColSet := util.MakeFastIntSet(groupedCols...)
+	getGroupedColVal := func(rowIdx, colIdx int) int {
+		rank := -1
+		for i, c := range groupedCols {
+			if colIdx == c {
+				rank = len(groupedCols) - i
+				break
+			}
+		}
+		if rank == -1 {
+			panic("provided colIdx is not a group column")
+		}
+		return (rowIdx % intPow(groupSize, rank+1)) / intPow(groupSize, rank)
+	}
+
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			if groupColSet.Contains(j) {
+				rows[i][j] = sqlbase.DatumToEncDatum(
+					intType, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
+			} else {
+				rows[i][j] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i+j)))
+			}
+		}
+	}
+	return rows
 }
