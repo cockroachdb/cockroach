@@ -51,3 +51,6 @@
     - The txn field in the SetupFlowRequest is made nullable. Backfiller flows
       no longer pass in a txn (it was passed by the gateway, but unused by the
       remote processors before).
+- Version: 12 (MinAcceptedVersion: 6)
+    - The AggregatorSpec has a new OrderedGroupCols field, which older versions
+      will not recognize.

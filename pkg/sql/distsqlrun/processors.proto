@@ -438,6 +438,11 @@ message AggregatorSpec {
   repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
+
+  // If some of the group columns have an ordering, we can perform a streaming
+  // aggregation, so this field can be specified if additional optimizations are
+  // possible.
+  repeated uint32 ordered_group_cols = 4 [packed = true];
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".
