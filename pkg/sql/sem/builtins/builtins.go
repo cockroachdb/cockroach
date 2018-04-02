@@ -76,6 +76,11 @@ const (
 	categoryString        = "String and Byte"
 	categoryArray         = "Array"
 	categorySystemInfo    = "System Info"
+
+	// CategoryTesting is used for our internal testing functions.
+	CategoryTesting = "Testing and Debugging"
+	// TestingHelperDesc describes internally used testing helpers.
+	TestingHelperDesc = "This function is used only by CockroachDB's developers for testing purposes."
 )
 
 func categorizeType(t types.T) string {
@@ -1313,7 +1318,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
-			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: TestingHelperDesc,
 		},
 	},
 
@@ -2329,8 +2334,8 @@ CockroachDB supports the following flags:
 				}
 				return nil, pgerror.NewError(errCode, msg)
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Category: CategoryTesting,
+			Info:     TestingHelperDesc,
 		},
 	},
 
@@ -2344,8 +2349,8 @@ CockroachDB supports the following flags:
 				msg := string(*args[0].(*tree.DString))
 				panic(msg)
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Category: CategoryTesting,
+			Info:     TestingHelperDesc,
 		},
 	},
 
@@ -2360,8 +2365,8 @@ CockroachDB supports the following flags:
 				log.Fatal(ctx.Ctx(), msg)
 				return nil, nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Category: CategoryTesting,
+			Info:     TestingHelperDesc,
 		},
 	},
 
@@ -2386,8 +2391,8 @@ CockroachDB supports the following flags:
 				}
 				return tree.DZero, nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Category: CategoryTesting,
+			Info:     TestingHelperDesc,
 		},
 	},
 
@@ -2400,8 +2405,8 @@ CockroachDB supports the following flags:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
+			Category: CategoryTesting,
+			Info:     TestingHelperDesc,
 		},
 	},
 
@@ -2414,7 +2419,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
 			},
-			Category: categorySystemInfo,
+			Category: CategoryTesting,
 			Info: "This function is used for internal debugging purposes. " +
 				"Incorrect use can severely impact performance.",
 		},
