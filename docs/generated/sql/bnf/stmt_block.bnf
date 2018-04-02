@@ -477,6 +477,7 @@ show_sessions_stmt ::=
 
 show_stats_stmt ::=
 	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name
+	| 'SHOW' 'STATISTICS' 'AS' 'JSON' 'FOR' 'TABLE' table_name
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name
