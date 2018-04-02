@@ -2039,18 +2039,43 @@ func TestGenAutocomplete(t *testing.T) {
 		}
 	}()
 
-	const minsize = 25000
-	acpath := filepath.Join(acdir, "cockroach.bash")
+	for _, tc := range []struct {
+		shell  string
+		expErr string
+	}{
+		{shell: ""},
+		{shell: "bash"},
+		{shell: "zsh"},
+		{shell: "bad", expErr: `invalid argument "bad" for "cockroach gen autocomplete"`},
+	} {
+		t.Run("shell="+tc.shell, func(t *testing.T) {
+			const minsize = 1000
+			acpath := filepath.Join(acdir, "output-"+tc.shell)
 
-	if err := Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(acpath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if size := info.Size(); size < minsize {
-		t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
+			args := []string{"gen", "autocomplete", "--out=" + acpath}
+			if len(tc.shell) > 0 {
+				args = append(args, tc.shell)
+			}
+			err := Run(args)
+			if tc.expErr == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("expected error %s, found %v", tc.expErr, err)
+				}
+				return
+			}
+
+			info, err := os.Stat(acpath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if size := info.Size(); size < minsize {
+				t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
+			}
+		})
 	}
 }
 
@@ -2064,7 +2089,6 @@ func TestJunkPositionalArguments(t *testing.T) {
 		"start",
 		"sql",
 		"gen man",
-		"gen autocomplete",
 		"gen example-data intro",
 	} {
 		const junk = "junk"
