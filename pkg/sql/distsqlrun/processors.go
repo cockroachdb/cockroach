@@ -194,6 +194,10 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 //
 // inputs are optional.
 //
+// pushTrailingMeta is called after draining the sources and before calling
+// dst.ProducerDone(). It gives the caller the opportunity to push some trailing
+// metadata (e.g. tracing information and txn updates, if applicable).
+//
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
 func emitHelper(
@@ -201,6 +205,7 @@ func emitHelper(
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
 	meta *ProducerMetadata,
+	pushTrailingMeta func(context.Context),
 	inputs ...RowSource,
 ) bool {
 	if output.output == nil {
@@ -230,7 +235,7 @@ func emitHelper(
 		return true
 	case DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		DrainAndClose(ctx, output.output, nil /* cause */, inputs...)
+		DrainAndClose(ctx, output.output, nil /* cause */, pushTrailingMeta, inputs...)
 		return false
 	case ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestJoinReader(t *testing.T) {
@@ -252,11 +253,20 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
+
+	// Run the flow in a snowball trace so that we can test for tracing info.
+	tracer := tracing.NewTracer()
+	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test flow ctx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sp.Finish()
+
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
+		Ctx:      ctx,
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+		txn:      client.NewTxn(s.DB(), s.NodeID(), client.LeafTxn),
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
@@ -299,6 +309,30 @@ func TestJoinReaderDrain(t *testing.T) {
 		}
 		if meta.Err != expectedMetaErr {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)
+		}
+
+		// Check for trailing metadata.
+		var traceSeen, txnMetaSeen bool
+		for {
+			row, meta = out.Next()
+			if row != nil {
+				t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
+			}
+			if meta == nil {
+				break
+			}
+			if meta.TraceData != nil {
+				traceSeen = true
+			}
+			if meta.TxnMeta != nil {
+				txnMetaSeen = true
+			}
+		}
+		if !traceSeen {
+			t.Fatal("missing tracing trailing metadata")
+		}
+		if !txnMetaSeen {
+			t.Fatal("missing txn trailing metadata")
 		}
 	})
 }
