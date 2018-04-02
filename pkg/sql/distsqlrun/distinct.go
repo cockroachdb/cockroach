@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
+	"github.com/pkg/errors"
 )
 
 type distinct struct {
@@ -40,25 +41,55 @@ type distinct struct {
 	scratch      []byte
 }
 
+// sortedDistinct is a specialized distinct that can be used when all of the
+// distinct columns are also ordered.
+type sortedDistinct struct {
+	distinct
+}
+
 var _ Processor = &distinct{}
 var _ RowSource = &distinct{}
 
+var _ Processor = &sortedDistinct{}
+var _ RowSource = &sortedDistinct{}
+
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
-) (*distinct, error) {
-	d := &distinct{
-		input:       input,
-		orderedCols: spec.OrderedColumns,
-		memAcc:      flowCtx.EvalCtx.Mon.MakeBoundAccount(),
+) (Processor, error) {
+	if len(spec.DistinctColumns) == 0 {
+		return nil, errors.New("programming error: 0 distinct columns specified for distinct processor")
 	}
 
+	var distinctCols, orderedCols util.FastIntSet
+	allSorted := true
+
+	for _, col := range spec.OrderedColumns {
+		orderedCols.Add(int(col))
+	}
 	for _, col := range spec.DistinctColumns {
-		d.distinctCols.Add(int(col))
+		if !orderedCols.Contains(int(col)) {
+			allSorted = false
+		}
+		distinctCols.Add(int(col))
 	}
 
-	d.types = input.OutputTypes()
+	d := &distinct{
+		input:        input,
+		orderedCols:  spec.OrderedColumns,
+		distinctCols: distinctCols,
+		memAcc:       flowCtx.EvalCtx.Mon.MakeBoundAccount(),
+		types:        input.OutputTypes(),
+	}
+
 	if err := d.init(post, d.types, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err
+	}
+
+	if allSorted {
+		// We can use the faster sortedDistinct processor.
+		return &sortedDistinct{
+			distinct: *d,
+		}, nil
 	}
 
 	return d, nil
@@ -66,6 +97,17 @@ func newDistinct(
 
 // Run is part of the processor interface.
 func (d *distinct) Run(wg *sync.WaitGroup) {
+	if d.out.output == nil {
+		panic("distinct output not initialized for emitting rows")
+	}
+	Run(d.flowCtx.Ctx, d, d.out.output)
+	if wg != nil {
+		wg.Done()
+	}
+}
+
+// Run is part of the processor interface.
+func (d *sortedDistinct) Run(wg *sync.WaitGroup) {
 	if d.out.output == nil {
 		panic("distinct output not initialized for emitting rows")
 	}
@@ -204,6 +246,53 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			}
 			d.seen[s] = struct{}{}
 		}
+
+		outRow, status, err := d.out.ProcessRow(d.ctx, row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		switch status {
+		case NeedMoreRows:
+			if outRow == nil && err == nil {
+				continue
+			}
+		case DrainRequested:
+			d.input.ConsumerDone()
+			continue
+		}
+
+		return outRow, nil
+	}
+}
+
+// Next is part of the RowSource interface.
+func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if d.maybeStart("sortedDistinct", "SortedDistinct") {
+		d.evalCtx = d.flowCtx.NewEvalCtx()
+	}
+
+	if d.closed {
+		return nil, d.producerMeta(nil /* err */)
+	}
+	for {
+		// sortedDistinct is simpler than distinct. All it has to do is keep track
+		// of the last row it saw, emitting if the new row is different.
+		row, meta := d.input.Next()
+		if d.closed || meta != nil {
+			return nil, meta
+		}
+		if row == nil {
+			return nil, d.producerMeta(nil /* err */)
+		}
+		matched, err := d.matchLastGroupKey(row)
+		if err != nil {
+			return nil, d.producerMeta(err)
+		}
+		if matched {
+			continue
+		}
+
+		d.lastGroupKey = row
 
 		outRow, status, err := d.out.ProcessRow(d.ctx, row)
 		if err != nil {
