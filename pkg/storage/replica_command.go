@@ -1201,11 +1201,6 @@ func splitTrigger(
 	{
 		preRightMS := rightMS // for bothDeltaMS
 
-		// Account for MVCCStats' own contribution to the RHS range's statistics.
-		if err := engine.AccountForSelf(&rightMS, split.RightDesc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
-		}
-
 		// Various pieces of code rely on a replica's lease never being unitialized,
 		// but it's more than that - it ensures that we properly initialize the
 		// timestamp cache, which is only populated on the lease holder, from that

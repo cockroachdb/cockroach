@@ -567,6 +567,19 @@ func (r *Replica) handleReplicatedEvalResult(
 			rResult.State.Stats = nil
 		}
 
+		if rResult.State.UsingAppliedStateKey {
+			r.mu.Lock()
+			// If we're already using the AppliedStateKey then there's nothing
+			// to do. This flag is idempotent so it's ok that we see this flag
+			// multiple times, but we want to make sure it doesn't cause us to
+			// perform repeated state assertions, so clear it before the
+			// shouldAssert determination.
+			if r.mu.state.UsingAppliedStateKey {
+				rResult.State.UsingAppliedStateKey = false
+			}
+			r.mu.Unlock()
+		}
+
 		if (*rResult.State == storagebase.ReplicaState{}) {
 			rResult.State = nil
 		}
@@ -655,9 +668,8 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 
 		if newLease := rResult.State.Lease; newLease != nil {
-			rResult.State.Lease = nil // for assertion
-
 			r.leasePostApply(ctx, *newLease)
+			rResult.State.Lease = nil
 		}
 
 		if newThresh := rResult.State.GCThreshold; newThresh != nil {
@@ -676,6 +688,13 @@ func (r *Replica) handleReplicatedEvalResult(
 				r.mu.Unlock()
 			}
 			rResult.State.TxnSpanGCThreshold = nil
+		}
+
+		if rResult.State.UsingAppliedStateKey {
+			r.mu.Lock()
+			r.mu.state.UsingAppliedStateKey = true
+			r.mu.Unlock()
+			rResult.State.UsingAppliedStateKey = false
 		}
 
 		if (*rResult.State == storagebase.ReplicaState{}) {

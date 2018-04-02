@@ -301,6 +301,9 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
 		msg = &roachpb.Lease{}
 
+	case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
+		msg = &enginepb.RangeAppliedState{}
+
 	case bytes.Equal(suffix, keys.LocalRangeStatsLegacySuffix):
 		msg = &enginepb.MVCCStats{}
 

@@ -127,6 +127,9 @@ var (
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
+	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
+	// key.
+	LocalRangeAppliedStateSuffix = []byte("rask")
 	// LocalRaftAppliedIndexLegacySuffix is the suffix for the raft applied index.
 	LocalRaftAppliedIndexLegacySuffix = []byte("rfta")
 	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.

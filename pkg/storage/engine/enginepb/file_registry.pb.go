@@ -17,6 +17,8 @@
 		MVCCStats
 		TxnMeta
 		MVCCStatsDelta
+		MVCCPersistentStats
+		RangeAppliedState
 		SSTUserProperties
 		SSTUserPropertiesCollection
 */

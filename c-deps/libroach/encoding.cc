@@ -15,6 +15,7 @@
 #include "encoding.h"
 #include <rocksdb/slice.h>
 #include "db.h"
+#include "keys.h"
 
 namespace cockroach {
 
@@ -240,6 +241,30 @@ WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64
     }
   }
   return timestamp.empty();
+}
+
+WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
+                                         rocksdb::Slice* infix, rocksdb::Slice* suffix,
+                                         rocksdb::Slice* detail) {
+  if (!buf.starts_with(kLocalRangeIDPrefix)) {
+    return false;
+  }
+  // Cut the prefix, the Range ID, and the infix specifier.
+  buf.remove_prefix(kLocalRangeIDPrefix.size());
+  uint64_t range_id_uint;
+  if (!DecodeUvarint64(&buf, &range_id_uint)) {
+    return false;
+  }
+  *range_id = int64_t(range_id_uint);
+  if (buf.size() < kLocalSuffixLength + 1) {
+    return false;
+  }
+  *infix = rocksdb::Slice(buf.data(), 1);
+  buf.remove_prefix(1);
+  *suffix = rocksdb::Slice(buf.data(), kLocalSuffixLength);
+  buf.remove_prefix(kLocalSuffixLength);
+  *detail = buf;
+  return true;
 }
 
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {

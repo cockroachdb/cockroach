@@ -50,6 +50,10 @@ func declareKeysClearRange(
 	// We may look up the current range stats in order to efficiently
 	// negate them in the case of being able to clear the entire user-
 	// space span of keys in the range.
+	//
+	// NB: Even though the RangeStatsLegacyKey is no longer written to
+	// after the RangeAppliedStateKey migration, we still declare it to
+	// indicate that a command may read the MVCCStats.
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeStatsLegacyKey(header.RangeID)})
 }
 
