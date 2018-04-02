@@ -14,6 +14,7 @@
 
 #include "mvcc.h"
 #include "comparator.h"
+#include "encoding.h"
 #include "keys.h"
 
 using namespace cockroach;
@@ -96,6 +97,25 @@ MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DB
     if (!DecodeKey(key, &decoded_key, &wall_time, &logical)) {
       stats.status = FmtStatus("unable to decode key");
       return stats;
+    }
+
+    // Check for ignored keys.
+    if (decoded_key.starts_with(kLocalRangeIDPrefix)) {
+      // RangeID-local key.
+      int64_t range_id = 0;
+      rocksdb::Slice infix, suffix, detail;
+      if (!DecodeRangeIDKey(decoded_key, &range_id, &infix, &suffix, &detail)) {
+        stats.status = FmtStatus("unable to decode rangeID key");
+        return stats;
+      }
+
+      if (infix.compare(kLocalRangeIDReplicatedInfix) == 0) {
+        // Replicated RangeID-local key.
+        if (suffix.compare(kLocalRangeAppliedStateSuffix) == 0) {
+          // RangeAppliedState key. Ignore.
+          continue;
+        }
+      }
     }
 
     const bool isSys = (rocksdb::Slice(decoded_key).compare(kLocalMax) < 0);

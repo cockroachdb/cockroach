@@ -89,6 +89,14 @@ WARN_UNUSED_RESULT inline bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key
   return DecodeKey(buf, key, &ts->wall_time, &ts->logical);
 }
 
+const int kLocalSuffixLength = 4;
+
+// DecodeRangeIDKey parses a local range ID key into range ID, infix,
+// suffix, and detail.
+WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
+                                         rocksdb::Slice* infix, rocksdb::Slice* suffix,
+                                         rocksdb::Slice* detail);
+
 // KeyPrefix strips the timestamp from an MVCC encoded key, returning
 // a slice that is still MVCC encoded. This is used by the prefix
 // extractor used to build bloom filters on the prefix.
