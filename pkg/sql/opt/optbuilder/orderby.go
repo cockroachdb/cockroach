@@ -33,46 +33,35 @@ import (
 // The `c` column must be retained in the projection (and the presentation
 // property then omits it).
 //
-// buildOrderBy returns a list of memo groups that combines projected columns
-// from the SELECT list (the projections parameter) and any ORDER BY columns
-// that are not already present in the SELECT list. buildOrderBy adds any new
-// ORDER BY columns to the projectionsScope and sets the ordering and
-// presentation properties on the projectionsScope. These properties later
-// become part of the required physical properties returned by Build.
-func (b *Builder) buildOrderBy(
-	orderBy tree.OrderBy,
-	in memo.GroupID,
-	projections []memo.GroupID,
-	inScope, projectionsScope *scope,
-) []memo.GroupID {
+// buildOrderBy builds a set of memo groups for any ORDER BY columns that are
+// not already present in the SELECT list (as represented by the initial set
+// of columns in projectionsScope). buildOrderBy adds these new ORDER BY
+// columns to the projectionsScope and sets the ordering and presentation
+// properties on the projectionsScope. These properties later become part of
+// the required physical properties returned by Build.
+func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *scope) {
 	if orderBy == nil {
-		return projections
+		return
 	}
 
 	orderByScope := inScope.push()
 	orderByScope.physicalProps.Ordering = make(memo.Ordering, 0, len(orderBy))
-	orderByProjections := make([]memo.GroupID, 0, len(orderBy))
 
 	// TODO(rytaft): rewrite ORDER BY if it uses ORDER BY INDEX tbl@idx or
 	// ORDER BY PRIMARY KEY syntax.
 
 	for i := range orderBy {
-		orderByProjections = b.buildOrdering(
-			orderBy[i], orderByProjections, inScope, projectionsScope, orderByScope,
-		)
+		b.buildOrdering(orderBy[i], inScope, projectionsScope, orderByScope)
 	}
 
-	return b.buildOrderByProject(projections, orderByProjections, projectionsScope, orderByScope)
+	b.buildOrderByProject(projectionsScope, orderByScope)
 }
 
 // buildOrdering sets up the projection(s) of a single ORDER BY argument.
 // Typically this is a single column, with the exception of *.
 //
-// The projections are appended to the projections slice (and the resulting
-// slice is returned). Corresponding columns are added to the orderByScope.
-func (b *Builder) buildOrdering(
-	order *tree.Order, projections []memo.GroupID, inScope, projectionsScope, orderByScope *scope,
-) []memo.GroupID {
+// The projection columns are added to the orderByScope.
+func (b *Builder) buildOrdering(order *tree.Order, inScope, projectionsScope, orderByScope *scope) {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr := tree.StripParens(order.Expr)
 
@@ -136,18 +125,14 @@ func (b *Builder) buildOrdering(
 	for _, e := range exprs {
 		// Ensure we can order on the given column.
 		ensureColumnOrderable(e)
-		scalar := b.buildScalarProjection(e, "", inScope, orderByScope)
 
-		// Use an existing projection if possible.
-		// TODO(rytaft): If we store the memo.GroupID in the column, we can avoid
-		// rebuilding the expression.
+		// Use an existing projection if possible. Otherwise, build a new
+		// projection.
 		if col := projectionsScope.findExistingCol(e); col != nil {
-			// buildScalarProjection added a new column to the end of
-			// orderByScope.cols. Replace it with the already existing column.
-			orderByScope.cols[len(orderByScope.cols)-1] = *col
+			orderByScope.cols = append(orderByScope.cols, *col)
+		} else {
+			b.buildScalarProjection(e, "", inScope, orderByScope)
 		}
-
-		projections = append(projections, scalar)
 	}
 
 	// Add the new columns to the ordering.
@@ -158,19 +143,14 @@ func (b *Builder) buildOrdering(
 		)
 		orderByScope.physicalProps.Ordering = append(orderByScope.physicalProps.Ordering, col)
 	}
-
-	return projections
 }
 
-// buildOrderByProject returns a list of memo groups that combines projections
-// and any items from orderByProjections that are not already present in
-// projections. buildOrderByProject adds any new ORDER BY columns to the
-// projectionsScope and sets the ordering and presentation properties on the
-// projectionsScope. These properties later become part of the required
-// physical properties returned by Build.
-func (b *Builder) buildOrderByProject(
-	projections, orderByProjections []memo.GroupID, projectionsScope, orderByScope *scope,
-) []memo.GroupID {
+// buildOrderByProject adds any columns from orderByScope to projectionsScope
+// that are not already present in projectionsScope. buildOrderByProject also
+// sets the ordering and presentation properties on the projectionsScope.
+// These properties later become part of the required physical properties
+// returned by Build.
+func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
 	for i := range orderByScope.cols {
 		col := &orderByScope.cols[i]
 
@@ -178,13 +158,11 @@ func (b *Builder) buildOrderByProject(
 		if findColByIndex(projectionsScope.cols, col.id) == nil {
 			projectionsScope.cols = append(projectionsScope.cols, *col)
 			projectionsScope.cols[len(projectionsScope.cols)-1].hidden = true
-			projections = append(projections, orderByProjections[i])
 		}
 	}
 
 	projectionsScope.physicalProps.Ordering = orderByScope.physicalProps.Ordering
 	projectionsScope.physicalProps.Presentation = makePresentation(projectionsScope.cols)
-	return projections
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {
