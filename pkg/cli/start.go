@@ -78,6 +78,7 @@ uninitialized, specify the --join flag to point to any healthy node
 (or list of nodes) already part of the cluster.
 `,
 	Example: `  cockroach start --insecure --store=attrs=ssd,path=/mnt/ssd1 [--join=host:port,[host:port]]`,
+	Args:    cobra.NoArgs,
 	RunE:    MaybeShoutError(MaybeDecorateGRPCError(runStart)),
 }
 
@@ -371,10 +372,6 @@ func initTempStorageConfig(
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 func runStart(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
-
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -999,6 +996,7 @@ Shutdown the server. The first stage is drain, where any new requests
 will be ignored by the server. When all extant requests have been
 completed, the server exits.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runQuit),
 }
 
@@ -1071,10 +1069,6 @@ type errTryHardShutdown struct{ error }
 
 // runQuit accesses the quit shutdown path.
 func runQuit(cmd *cobra.Command, args []string) (err error) {
-	if len(args) != 0 {
-		return usageAndError(cmd)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

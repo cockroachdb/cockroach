@@ -59,6 +59,7 @@ var sqlShellCmd = &cobra.Command{
 	Long: `
 Open a sql shell running against a cockroach database.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runTerm),
 }
 
@@ -1140,10 +1141,6 @@ func runStatements(conn *sqlConn, stmts []string) error {
 }
 
 func runTerm(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
-
 	// We don't consider sessions interactives unless we have a
 	// serious hunch they are. For now, only `cockroach sql` *without*
 	// `-e` has the ability to input from a (presumably) human user,

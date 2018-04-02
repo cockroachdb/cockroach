@@ -185,10 +185,6 @@ func CreateNodePair(
 		return errors.New("the path to the certs directory is required")
 	}
 
-	if len(hosts) == 0 {
-		return errors.Errorf("no hosts specified. Need at least one")
-	}
-
 	// The certificate manager expands the env for the certs directory.
 	// For consistency, we need to do this for the key as well.
 	caKeyPath = os.ExpandEnv(caKeyPath)
