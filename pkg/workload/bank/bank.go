@@ -103,27 +103,31 @@ func (b *bank) Flags() workload.Flags { return b.flags }
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	table := workload.Table{
-		Name:            `bank`,
-		Schema:          bankSchema,
-		InitialRowCount: b.rows,
-		InitialRowFn: func(rowIdx int) []interface{} {
-			rng := rand.New(rand.NewSource(b.seed + int64(rowIdx)))
-			const initialPrefix = `initial-`
-			bytes := hex.EncodeToString(randutil.RandBytes(rng, b.payloadBytes/2))
-			// Minus 2 for the single quotes
-			bytes = bytes[:b.payloadBytes-len(initialPrefix)-2]
-			return []interface{}{
-				rowIdx, // id
-				0,      // balance
-				initialPrefix + bytes, // payload
-			}
-		},
-		SplitCount: b.ranges - 1,
-		SplitFn: func(splitIdx int) []interface{} {
-			return []interface{}{
-				(splitIdx + 1) * (b.rows / b.ranges),
-			}
-		},
+		Name:   `bank`,
+		Schema: bankSchema,
+		InitialRows: workload.Tuples(
+			b.rows,
+			func(rowIdx int) []interface{} {
+				rng := rand.New(rand.NewSource(b.seed + int64(rowIdx)))
+				const initialPrefix = `initial-`
+				bytes := hex.EncodeToString(randutil.RandBytes(rng, b.payloadBytes/2))
+				// Minus 2 for the single quotes
+				bytes = bytes[:b.payloadBytes-len(initialPrefix)-2]
+				return []interface{}{
+					rowIdx, // id
+					0,      // balance
+					initialPrefix + bytes, // payload
+				}
+			},
+		),
+		Splits: workload.Tuples(
+			b.ranges-1,
+			func(splitIdx int) []interface{} {
+				return []interface{}{
+					(splitIdx + 1) * (b.rows / b.ranges),
+				}
+			},
+		),
 	}
 	return []workload.Table{table}
 }

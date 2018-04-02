@@ -132,18 +132,37 @@ type Table struct {
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
 	// <name>` prefix omitted.
 	Schema string
-	// InitialRowCount is the initial number of rows that will be present in the
-	// table after setup is completed.
-	InitialRowCount int
-	// InitialRowFn is a function to deterministically compute the datums in a
-	// row of the table's initial data given its index.
-	InitialRowFn func(int) []interface{}
-	// SplitCount is the initial number of splits that will be present in the
-	// table after setup is completed.
-	SplitCount int
-	// SplitFn is a function to deterministically compute the datums in a tuple
-	// of the table's initial splits given its index.
-	SplitFn func(int) []interface{}
+	// InitialRows is the initial rows that will be present in the table after
+	// setup is completed.
+	InitialRows BatchedTuples
+	// Splits is the initial splits that will be present in the table after
+	// setup is completed.
+	Splits BatchedTuples
+}
+
+// BatchedTuples is a generic generator of tuples (SQL rows, PKs to split at,
+// etc). Tuples are generated in batches of arbitrary size. Each batch has an
+// index in `[0,NumBatches)` and a batch can be generated given only its index.
+type BatchedTuples struct {
+	// NumBatches is the number of batches of tuples.
+	NumBatches int
+	// NumTotal is the total number of tuples in all batches. Not all generators
+	// will know this, it's set to 0 when unknown.
+	NumTotal int
+	// Batch is a function to deterministically compute a batch of tuples given
+	// its index.
+	Batch func(int) [][]interface{}
+}
+
+// Tuples returns a BatchedTuples where each batch has size 1.
+func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
+	return BatchedTuples{
+		NumBatches: count,
+		NumTotal:   count,
+		Batch: func(batchIdx int) [][]interface{} {
+			return [][]interface{}{fn(batchIdx)}
+		},
+	}
 }
 
 // QueryLoad represents some SQL query workload performable on a database
@@ -263,32 +282,44 @@ func Setup(
 
 	var size int64
 	for _, table := range tables {
-		if table.InitialRowFn == nil {
+		if table.InitialRows.Batch == nil {
 			// Some workloads don't support initial table data.
 			continue
 		}
-		rowsPerWorker := table.InitialRowCount / concurrency
+		batchesPerWorker := table.InitialRows.NumBatches / concurrency
 		g, gCtx := errgroup.WithContext(ctx)
 		for i := 0; i < concurrency; i++ {
-			startIdx := i * rowsPerWorker
-			endIdx := startIdx + rowsPerWorker
+			startIdx := i * batchesPerWorker
+			endIdx := startIdx + batchesPerWorker
 			if i == concurrency-1 {
-				// Account for any rounding error in rowsPerWorker.
-				endIdx = table.InitialRowCount
+				// Account for any rounding error in batchesPerWorker.
+				endIdx = table.InitialRows.NumBatches
 			}
 			g.Go(func() error {
 				var insertStmtBuf bytes.Buffer
-				for rowIdx := startIdx; rowIdx < endIdx; {
+				var params []interface{}
+				var numRows int
+				flush := func() error {
+					if len(params) > 0 {
+						insertStmt := insertStmtBuf.String()
+						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
+							return errors.Wrapf(err, "failed insert into %s", table.Name)
+						}
+					}
 					insertStmtBuf.Reset()
 					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+					params = params[:0]
+					numRows = 0
+					return nil
+				}
+				_ = flush()
 
-					var params []interface{}
-					for batchIdx := 0; batchIdx < batchSize && rowIdx < endIdx; batchIdx++ {
-						if batchIdx != 0 {
+				for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
+					for _, row := range table.InitialRows.Batch(rowBatchIdx) {
+						if len(params) != 0 {
 							insertStmtBuf.WriteString(`,`)
 						}
 						insertStmtBuf.WriteString(`(`)
-						row := table.InitialRowFn(rowIdx)
 						for i, datum := range row {
 							atomic.AddInt64(&size, ApproxDatumSize(datum))
 							if i != 0 {
@@ -298,16 +329,14 @@ func Setup(
 						}
 						params = append(params, row...)
 						insertStmtBuf.WriteString(`)`)
-						rowIdx++
-					}
-					if len(params) > 0 {
-						insertStmt := insertStmtBuf.String()
-						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
+						if numRows++; numRows >= batchSize {
+							if err := flush(); err != nil {
+								return err
+							}
 						}
 					}
 				}
-				return nil
+				return flush()
 			})
 		}
 		if err := g.Wait(); err != nil {
@@ -326,12 +355,12 @@ func Setup(
 
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
-	if table.SplitCount <= 0 {
+	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
-	splitPoints := make([][]interface{}, table.SplitCount)
-	for splitIdx := 0; splitIdx < table.SplitCount; splitIdx++ {
-		splitPoints[splitIdx] = table.SplitFn(splitIdx)
+	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
+	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
+		splitPoints = append(splitPoints, table.Splits.Batch(splitIdx)...)
 	}
 	sort.Sort(sliceSliceInterface(splitPoints))
 
