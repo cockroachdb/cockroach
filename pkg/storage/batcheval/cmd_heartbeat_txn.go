@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -66,7 +65,7 @@ func HeartbeatTxn(
 		// This could mean the heartbeat is a delayed relic or it could
 		// mean that the BeginTransaction call was delayed. In either
 		// case, there's no reason to persist a new transaction record.
-		return result.Result{}, errors.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
+		return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
 	}
 
 	if txn.Status == roachpb.PENDING {
