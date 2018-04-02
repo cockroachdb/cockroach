@@ -1933,7 +1933,10 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 	threshold := r.mu.state.GCThreshold
 	r.mu.Unlock()
 	if !threshold.Less(ts) {
-		return errors.Errorf("batch timestamp %v must be after GC threshold %v", ts, threshold)
+		return &roachpb.BatchTimestampBeforeGCError{
+			Timestamp: ts,
+			Threshold: *threshold,
+		}
 	}
 
 	if rspan.Key == nil && rspan.EndKey == nil {
