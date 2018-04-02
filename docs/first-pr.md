@@ -573,21 +573,16 @@ in doubt, ask!
 
 Once you've gotten an LGTM from who you think is the right person, don't be
 afraid to merge. The git revert command exists for a reason. You can expect to
-revert at least PR that you land in your first three months.
+revert at least one PR that you land in your first three months.
 
-You should always use the big green "Merge pull request" button in GitHub to
-merge  your code or its equivalent in the Reviewable interface. This limits your
-exposure by ensuring you don't accidentally merge a commit with obviously an
-obviously broken build. Once your commit lands on master, TeamCity will do
-another test run; this can occasionally fail for legitimate reasons due to merge
-skew.
-
-Make sure to use the default "Create a merge commit" mode when you hit the merge
-button. If you instead use "Squash and merge," you'll end up with one commit
-that "squashes" together the nicely-curated logical changes and messages from
-the PR's constituent commits. If your PR has fixup commits to address review
-feedback, or generally sloppy commits, you should rebase those into a more
-logical commit series locally and force-push.
+When your PR is ready to go, request a merge from our build bot Craig. Craig is
+a [Bors merge bot], whose only job is to be gatekeeper to the repository. Add a
+comment on the PR of the form `bors r=<reviewer>`, replacing `<reviewer>` with
+the GitHub username of the person who gave you the LGTM. Once approved, your PR
+will be batched up with other PRs approved around the same time. Craig will try
+to build them as though they were merged to the target branch, and if
+successful, will merge them. This limits your exposure by ensuring you don't
+accidentally merge a commit with an obviously broken build or merge skew.
 
 We call merging locally and pushing to master the "nuclear option" or "god
 merging." It's not disabled, but you shouldn't do it unless the repo is on fire.
@@ -613,7 +608,7 @@ Here's a checklist of action items to keep you sane:
     + [ ] Amend the appropriate commits and force-push
     + [ ] Respond to all feedback with "Done" or a counterargument
 + [ ] Merging
-    + [ ] Use the big green button in the GitHub UI to land your change
+    + [ ] Comment `bors r=reviewer` to ask Craig to merge
 
 ["Building on Linux"]: #building-on-linux
 ["Internal documentation"]: #internal-documentation
@@ -641,3 +636,4 @@ Here's a checklist of action items to keep you sane:
 [this repository's wiki]: https://github.com/cockroachdb/cockroach/wiki/Jargon
 [by humans for humans]: https://mtlynch.io/human-code-reviews-1/
 [minimally nice maintainer]: https://brson.github.io/2017/04/05/minimally-nice-maintainer
+[Bors merge bot]: https://github.com/cockroachdb/cockroach/wiki/Bors-merge-bot
