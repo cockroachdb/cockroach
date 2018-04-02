@@ -31,13 +31,11 @@ var getUserCmd = &cobra.Command{
 	Long: `
 Fetches and displays the user for <username>.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runGetUser),
 }
 
 func runGetUser(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -60,13 +58,11 @@ var lsUsersCmd = &cobra.Command{
 	Long: `
 List all users.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runLsUsers),
 }
 
 func runLsUsers(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -83,13 +79,11 @@ var rmUserCmd = &cobra.Command{
 	Long: `
 Remove an existing user by username.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runRmUser),
 }
 
 func runRmUser(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
 	conn, err := getPasswordAndMakeSQLClient("cockroach user")
 	if err != nil {
 		return err
@@ -117,6 +111,7 @@ Valid usernames contain 1 to 63 alphanumeric characters. They must
 begin with either a letter or an underscore. Subsequent characters
 may be letters, numbers, or underscores.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runSetUser),
 }
 
@@ -125,9 +120,6 @@ may be letters, numbers, or underscores.
 // TODO(marc): once we have more fields in the user, we will need
 // to allow changing just some of them (eg: change email, but leave password).
 func runSetUser(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
 	pwdString := ""
 	if password {
 		var err error
