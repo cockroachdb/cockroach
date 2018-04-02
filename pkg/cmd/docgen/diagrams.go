@@ -660,11 +660,12 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:  "grant_roles",
-		stmt:  "grant_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'GRANT' privileges 'ON' targets 'TO' name_list")},
+		name: "grant_roles",
+		stmt: "grant_stmt",
 		replace: map[string]string{
-			"'GRANT' privileges 'ON' targets 'TO' name_list": "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*",
+			"'GRANT' privileges 'ON' targets 'TO' name_list":                "",
+			"'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'": "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )* 'WITH' 'ADMIN' 'OPTION'",
+			"| 'GRANT' privilege_list 'TO' name_list":                       "'GRANT' ( role_name ) ( ( ',' role_name ) )* 'TO' ( user_name ) ( ( ',' user_name ) )*",
 		},
 		unlink: []string{"role_name", "user_name"},
 	},
@@ -793,11 +794,12 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:  "revoke_roles",
-		stmt:  "revoke_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'REVOKE' privileges 'ON' targets 'FROM' name_list")},
+		name: "revoke_roles",
+		stmt: "revoke_stmt",
 		replace: map[string]string{
-			"'REVOKE' privileges 'ON' targets 'FROM' name_list": "'REVOKE' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
+			"'REVOKE' privileges 'ON' targets 'FROM' name_list":               "",
+			"'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list": "'REVOKE' 'ADMIN' 'OPTION' 'FOR' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
+			"| 'REVOKE' privilege_list 'FROM' name_list":                      "'REVOKE' ( role_name ) ( ( ',' role_name ) )* 'FROM' ( user_name ) ( ( ',' user_name ) )*",
 		},
 		unlink: []string{"role_name", "user_name"},
 	},
