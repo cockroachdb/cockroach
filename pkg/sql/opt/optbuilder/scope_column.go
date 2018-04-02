@@ -18,15 +18,16 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// columnProps holds per-column information that is scoped to a particular
-// relational expression. Note that columnProps implements the tree.TypedExpr
+// scopeColumn holds per-column information that is scoped to a particular
+// relational expression. Note that scopeColumn implements the tree.TypedExpr
 // interface. During name resolution, unresolved column names in the AST are
-// replaced with a columnProps.
-type columnProps struct {
+// replaced with a scopeColumn.
+type scopeColumn struct {
 	// origName is the original name of this column, either in its origin table,
 	// or when it was first synthesized.
 	origName tree.Name
@@ -42,6 +43,10 @@ type columnProps struct {
 	id     opt.ColumnID
 	hidden bool
 
+	// group is the memo.GroupID of the column, which is updated after the
+	// column is built in the memo.
+	group memo.GroupID
+
 	// expr is the expression that this column refers to, if any. expr is nil if
 	// the column does not refer to an expression.
 	expr tree.TypedExpr
@@ -54,7 +59,7 @@ type columnProps struct {
 // getExprStr gets a stringified representation of the expression that this
 // column refers to, or the original column name if the column does not refer
 // to an expression. It caches the result in exprStr.
-func (c *columnProps) getExprStr() string {
+func (c *scopeColumn) getExprStr() string {
 	if c.exprStr == "" {
 		if c.expr == nil {
 			if tableStr := c.table.String(); tableStr != "" {
@@ -69,16 +74,16 @@ func (c *columnProps) getExprStr() string {
 	return c.exprStr
 }
 
-var _ tree.Expr = &columnProps{}
-var _ tree.TypedExpr = &columnProps{}
-var _ tree.VariableExpr = &columnProps{}
+var _ tree.Expr = &scopeColumn{}
+var _ tree.TypedExpr = &scopeColumn{}
+var _ tree.VariableExpr = &scopeColumn{}
 
-func (c *columnProps) String() string {
+func (c *scopeColumn) String() string {
 	return tree.AsString(c)
 }
 
 // Format implements the NodeFormatter interface.
-func (c *columnProps) Format(ctx *tree.FmtCtx) {
+func (c *scopeColumn) Format(ctx *tree.FmtCtx) {
 	if c.table.TableName != "" {
 		if c.table.ExplicitSchema && c.table.SchemaName != "" {
 			if c.table.ExplicitCatalog && c.table.CatalogName != "" {
@@ -96,25 +101,25 @@ func (c *columnProps) Format(ctx *tree.FmtCtx) {
 }
 
 // Walk is part of the tree.Expr interface.
-func (c *columnProps) Walk(v tree.Visitor) tree.Expr {
+func (c *scopeColumn) Walk(v tree.Visitor) tree.Expr {
 	return c
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (c *columnProps) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (c *scopeColumn) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	return c, nil
 }
 
 // ResolvedType is part of the tree.TypedExpr interface.
-func (c *columnProps) ResolvedType() types.T {
+func (c *scopeColumn) ResolvedType() types.T {
 	return c.typ
 }
 
 // Eval is part of the tree.TypedExpr interface.
-func (*columnProps) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(fmt.Errorf("columnProps must be replaced before evaluation"))
+func (*scopeColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic(fmt.Errorf("scopeColumn must be replaced before evaluation"))
 }
 
 // Variable is part of the tree.VariableExpr interface. This prevents the
 // column from being evaluated during normalization.
-func (*columnProps) Variable() {}
+func (*scopeColumn) Variable() {}

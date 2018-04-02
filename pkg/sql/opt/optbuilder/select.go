@@ -31,17 +31,15 @@ import (
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildTable(
-	texpr tree.TableExpr, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
-		out, outScope = b.buildTable(source.Expr, inScope)
+		outScope = b.buildTable(source.Expr, inScope)
 
 		// Overwrite output properties with any alias information.
 		b.renameSource(source.As, outScope)
-		return out, outScope
+		return outScope
 
 	case *tree.JoinTableExpr:
 		return b.buildJoin(source, inScope)
@@ -62,9 +60,9 @@ func (b *Builder) buildTable(
 		return b.buildTable(source.Expr, inScope)
 
 	case *tree.Subquery:
-		out, outScope = b.buildStmt(source.Select, inScope)
+		outScope = b.buildStmt(source.Select, inScope)
 		outScope.removeHiddenCols()
-		return out, outScope
+		return outScope
 
 	default:
 		panic(errorf("not yet implemented: table expr: %T", texpr))
@@ -109,9 +107,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildScan(
-	tab opt.Table, tn *tree.TableName, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (outScope *scope) {
 	tabID := b.factory.Metadata().AddTable(tab)
 	scanOpDef := memo.ScanOpDef{Table: tabID}
 
@@ -120,7 +116,7 @@ func (b *Builder) buildScan(
 		col := tab.Column(i)
 		colID := b.factory.Metadata().TableColumn(tabID, i)
 		name := tree.Name(col.ColName())
-		colProps := columnProps{
+		colProps := scopeColumn{
 			id:       colID,
 			origName: name,
 			name:     name,
@@ -134,7 +130,8 @@ func (b *Builder) buildScan(
 		outScope.cols = append(outScope.cols, colProps)
 	}
 
-	return b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef)), outScope
+	outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef))
+	return outScope
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -142,9 +139,7 @@ func (b *Builder) buildScan(
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildSelect(
-	stmt *tree.Select, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
+func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
@@ -169,13 +164,13 @@ func (b *Builder) buildSelect(
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.SelectClause:
-		out, outScope = b.buildSelectClause(t, orderBy, inScope)
+		outScope = b.buildSelectClause(t, orderBy, inScope)
 
 	case *tree.UnionClause:
-		out, outScope = b.buildUnion(t, inScope)
+		outScope = b.buildUnion(t, inScope)
 
 	case *tree.ValuesClause:
-		out, outScope = b.buildValuesClause(t, inScope)
+		outScope = b.buildValuesClause(t, inScope)
 
 	default:
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
@@ -183,22 +178,21 @@ func (b *Builder) buildSelect(
 
 	if outScope.physicalProps.Ordering == nil && orderBy != nil {
 		projectionsScope := outScope.replace()
-		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
-		projections := make([]memo.GroupID, 0, len(outScope.cols))
+		projectionsScope.cols = make([]scopeColumn, 0, len(outScope.cols))
 		for i := range outScope.cols {
-			p := b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
-			projections = append(projections, p)
+			b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
 		}
-		projections = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
-		out, outScope = b.constructProject(projections, out, projectionsScope, outScope)
+		b.buildOrderBy(orderBy, outScope, projectionsScope)
+		b.constructProject(outScope, projectionsScope)
+		outScope = projectionsScope
 	}
 
 	if limit != nil {
-		out, outScope = b.buildLimit(limit, inScope, out, outScope)
+		b.buildLimit(limit, inScope, outScope)
 	}
 
 	// TODO(rytaft): Support FILTER expression.
-	return out, outScope
+	return outScope
 }
 
 // buildSelectClause builds a set of memo groups that represent the given
@@ -211,27 +205,26 @@ func (b *Builder) buildSelect(
 // return values.
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	var fromScope *scope
-	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
+) (outScope *scope) {
+	fromScope := b.buildFrom(sel.From, sel.Where, inScope)
 	outScope = fromScope
 
-	var projections []memo.GroupID
 	var projectionsScope *scope
 	if b.needsAggregation(sel) {
-		out, outScope, projections, projectionsScope = b.buildAggregation(sel, orderBy, out, fromScope)
+		outScope, projectionsScope = b.buildAggregation(sel, orderBy, fromScope)
 	} else {
 		projectionsScope = fromScope.replace()
-		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
-		projections = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
+		b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
+		b.buildOrderBy(orderBy, outScope, projectionsScope)
 	}
 
 	// Construct the projection.
-	out, outScope = b.constructProject(projections, out, projectionsScope, outScope)
+	b.constructProject(outScope, projectionsScope)
+	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.
-	out, outScope = b.buildDistinct(out, sel.Distinct, outScope)
-	return out, outScope
+	outScope = b.buildDistinct(sel.Distinct, outScope)
+	return outScope
 }
 
 // buildFrom builds a set of memo groups that represent the given FROM statement
@@ -239,37 +232,30 @@ func (b *Builder) buildSelectClause(
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildFrom(
-	from *tree.From, where *tree.Where, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	var left, right memo.GroupID
-
+func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) (outScope *scope) {
 	for _, table := range from.Tables {
-		var rightScope *scope
-		right, rightScope = b.buildTable(table, inScope)
+		tableScope := b.buildTable(table, inScope)
 
-		if left == 0 {
-			left = right
-			outScope = rightScope
+		if outScope == nil {
+			outScope = tableScope
 			continue
 		}
 
-		outScope.appendColumns(rightScope)
-
-		left = b.factory.ConstructInnerJoin(left, right, b.factory.ConstructTrue())
+		outScope.appendColumns(tableScope)
+		outScope.group = b.factory.ConstructInnerJoin(
+			outScope.group, tableScope.group, b.factory.ConstructTrue(),
+		)
 	}
 
-	if left == 0 {
+	if outScope == nil {
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
 		rows := []memo.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
-		out = b.factory.ConstructValues(
+		outScope = inScope.push()
+		outScope.group = b.factory.ConstructValues(
 			b.factory.InternList(rows),
 			b.factory.InternColList(opt.ColList{}),
 		)
-		outScope = inScope.push()
-	} else {
-		out = left
 	}
 
 	if where != nil {
@@ -281,8 +267,8 @@ func (b *Builder) buildFrom(
 		b.assertNoAggregationOrWindowing(texpr, "WHERE")
 
 		filter := b.buildScalar(texpr, outScope)
-		out = b.factory.ConstructSelect(out, filter)
+		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
 	}
 
-	return out, outScope
+	return outScope
 }
