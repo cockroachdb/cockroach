@@ -93,13 +93,21 @@ type aggregator struct {
 	processorBase
 	rowSourceBase
 
-	accumulating bool
-	draining     bool
-	input        RowSource
-	inputTypes   []sqlbase.ColumnType
-	funcs        []*aggregateFuncHolder
-	outputTypes  []sqlbase.ColumnType
-	datumAlloc   sqlbase.DatumAlloc
+	// These are the possible states of the aggregator (see the definition of
+	// aggregatorState for an explanation of its representation). Whichever one of
+	// these is assigned to curState represents the aggregator's current state.
+	// The states are pre-allocated as members to avoid repeated closure
+	// allocations. They do not change after the aggregator is constructed.
+	accumulating aggregatorState
+	emitting     aggregatorState
+	draining     aggregatorState
+
+	curState    aggregatorState
+	input       RowSource
+	inputTypes  []sqlbase.ColumnType
+	funcs       []*aggregateFuncHolder
+	outputTypes []sqlbase.ColumnType
+	datumAlloc  sqlbase.DatumAlloc
 
 	bucketsAcc mon.BoundAccount
 
@@ -121,6 +129,21 @@ type aggregator struct {
 var _ Processor = &aggregator{}
 var _ RowSource = &aggregator{}
 
+// aggregatorState represents the state of the processor. By using function
+// pointers, the representation of the state is tied to its execution logic.
+//
+// The first return value of an aggregatorState represents the next state of the
+// processor. The last two return values of an aggregatorState can be forwarded
+// to be returned by Next(). If both of those are nil, and the processor has not
+// transitioned to a "done" state, the last state execution has only produced a
+// state transition, and the next state needs to be executed to produce return
+// values.
+//
+// The "done" state is represented by nil; after this state is reached, the
+// processor has completed execution, and must return nil, nil on subsequent
+// calls to Next().
+type aggregatorState func() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata)
+
 func newAggregator(
 	flowCtx *FlowCtx,
 	spec *AggregatorSpec,
@@ -138,6 +161,12 @@ func newAggregator(
 		bucketsAcc:   flowCtx.EvalCtx.Mon.MakeBoundAccount(),
 	}
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
+
+	// Initialize all state closures now, so we can reuse them later during state
+	// transitions.
+	ag.accumulating = ag.accumulateRows
+	ag.emitting = ag.emitRow
+	ag.draining = ag.drainInput
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
@@ -204,8 +233,6 @@ func (ag *aggregator) close() {
 				aggFunc.Close(ag.ctx)
 			}
 		}
-		ag.accumulating = false
-		ag.draining = true
 	}
 	ag.internalClose()
 }
@@ -229,73 +256,80 @@ func (ag *aggregator) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
-// Next is part of the RowSource interface.
-func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if ag.maybeStart("aggregator", "Agg") {
-		log.VEventf(ag.ctx, 2, "starting aggregation process")
-		ag.cancelChecker = sqlbase.NewCancelChecker(ag.ctx)
-		ag.accumulating = true
-	}
-
-	if ag.accumulating {
-		for {
-			row, meta := ag.input.Next()
-			if meta != nil {
-				if meta.Err != nil {
-					return nil, ag.producerMeta(meta.Err)
-				}
-				return nil, meta
+// accumulateRows is an aggregatorState that continually reads rows from the
+// input and accumulates them into intermediary aggregate results. If it
+// encounters metadata, the metadata is immediately returned. Subsequent calls
+// of this function will resume row accumulation.
+func (ag *aggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	for {
+		row, meta := ag.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return ag.draining, nil, ag.producerMeta(meta.Err)
 			}
-			if row == nil {
-				break
-			}
-			if ag.closed || ag.consumerStatus != NeedMoreRows {
-				continue
-			}
-			if err := ag.accumulateRow(row); err != nil {
-				return nil, ag.producerMeta(err)
-			}
+			return ag.accumulating, nil, meta
 		}
-
-		// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
-		// aggregated.
-		if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
-			ag.buckets[""] = struct{}{}
-		}
-
-		ag.bucketsIter = make([]string, 0, len(ag.buckets))
-		for bucket := range ag.buckets {
-			ag.bucketsIter = append(ag.bucketsIter, bucket)
-		}
-		ag.buckets = nil
-
-		ag.accumulating = false
-		log.VEvent(ag.ctx, 1, "accumulation complete")
-
-		ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
-	}
-
-	if ag.draining {
-		for {
-			row, meta := ag.input.Next()
-			if row != nil {
-				continue
-			}
-			if meta != nil {
-				return nil, meta
-			}
+		if row == nil {
 			break
 		}
-		ag.draining = false
+		if ag.closed || ag.consumerStatus != NeedMoreRows {
+			continue
+		}
+
+		if err := ag.accumulateRow(row); err != nil {
+			return ag.draining, nil, ag.producerMeta(err)
+		}
 	}
 
-	if ag.closed || ag.consumerStatus != NeedMoreRows {
-		return nil, ag.producerMeta(nil /* err */)
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
+	// aggregated.
+	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+		ag.buckets[""] = struct{}{}
 	}
 
+	ag.bucketsIter = make([]string, 0, len(ag.buckets))
+	for bucket := range ag.buckets {
+		ag.bucketsIter = append(ag.bucketsIter, bucket)
+	}
+	ag.buckets = nil
+
+	log.VEvent(ag.ctx, 1, "accumulation complete")
+
+	ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
+
+	// Transition to the emitting state, and let it generate the next row/meta.
+	return ag.emitting, nil, nil
+}
+
+// drainInput is an aggregatorState that reads the input until it finds
+// metadata, then returns it. Once it has no more metadata to send, the
+// aggregator is done.
+func (ag *aggregator) drainInput() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	for {
+		row, meta := ag.input.Next()
+		if row != nil {
+			continue
+		}
+		if meta != nil {
+			return ag.draining, nil, meta
+		}
+		break
+	}
+
+	if meta := ag.producerMeta(nil /* err */); meta != nil {
+		return ag.draining, nil, meta
+	}
+	// No more work left.
+	return nil, nil, nil
+}
+
+// emitRow is an aggregatorState that constructs an output row from an
+// accumulated bucket and returns it. Once there are no more buckets, the
+// aggregator will drain.
+func (ag *aggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
 		if len(ag.bucketsIter) == 0 {
-			return nil, ag.producerMeta(nil /* err */)
+			return ag.draining, nil, ag.producerMeta(nil /* err */)
 		}
 
 		bucket := ag.bucketsIter[0]
@@ -304,7 +338,7 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		for i, f := range ag.funcs {
 			result, err := f.get(bucket)
 			if err != nil {
-				return nil, ag.producerMeta(err)
+				return ag.draining, nil, ag.producerMeta(err)
 			}
 			if result == nil {
 				// Special case useful when this is a local stage of a distributed
@@ -316,13 +350,34 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		outRow, status, err := ag.out.ProcessRow(ag.ctx, ag.row)
 		if outRow != nil {
-			return outRow, nil
+			return ag.emitting, outRow, nil
 		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		return nil, ag.producerMeta(err)
+		return ag.draining, nil, ag.producerMeta(err)
 	}
+}
+
+// Next is part of the RowSource interface.
+func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	if ag.maybeStart("aggregator", "Agg") {
+		log.VEventf(ag.ctx, 2, "starting aggregation process")
+		ag.cancelChecker = sqlbase.NewCancelChecker(ag.ctx)
+		ag.curState = ag.accumulating
+	}
+
+	for ag.curState != nil {
+		var row sqlbase.EncDatumRow
+		var meta *ProducerMetadata
+		ag.curState, row, meta = ag.curState()
+
+		if !(row == nil && meta == nil) {
+			return row, meta
+		}
+	}
+
+	return nil, nil
 }
 
 // ConsumerDone is part of the RowSource interface.
