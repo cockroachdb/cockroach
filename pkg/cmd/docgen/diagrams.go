@@ -357,9 +357,9 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name"},
 	},
 	{
-		name:    "alter_user_stmt",
-		inline:  []string{"alter_user_password_stmt"},
-		replace: map[string]string{"'USER' string_or_placeholder": "name", "'PASSWORD' string_or_placeholder": "password"},
+		name:    "alter_user_password_stmt",
+		replace: map[string]string{"string_or_placeholder 'WITH'": "name 'WITH'", "'PASSWORD' string_or_placeholder": "'PASSWORD' password"},
+		unlink:  []string{"name", "password"},
 	},
 	{
 		name:    "alter_sequence_options_stmt",
