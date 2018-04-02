@@ -25,6 +25,7 @@ import (
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
 
+	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
 
@@ -121,11 +122,15 @@ func NewServer(st *cluster.Settings) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0))
+	mux.Handle("/debug/pprof/ui/", http.StripPrefix("/debug/pprof/ui", ps))
+
 	return &Server{
 		st:  st,
 		mux: mux,
 		spy: spy,
 	}
+
 }
 
 // ServeHTTP serves various tools under the /debug endpoint. It restricts access

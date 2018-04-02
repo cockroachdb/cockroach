@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -97,7 +96,7 @@ func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) tree.Type
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	if norm.MatchesTupleOfConstants(ev) {
+	if memo.MatchesTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := range datums {
 			datums[i] = memo.ExtractConstDatum(ev.Child(i))

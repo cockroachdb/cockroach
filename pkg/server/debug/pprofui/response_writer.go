@@ -12,27 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package norm
-
-// This file contains various helper functions that can be used to
-// check properties of an ExprView.
+package pprofui
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"io"
+	"net/http"
 )
 
-// MatchesTupleOfConstants returns true if the expression is a TupleOp with
-// ConstValue children.
-func MatchesTupleOfConstants(ev memo.ExprView) bool {
-	if ev.Operator() != opt.TupleOp {
-		return false
-	}
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		if !child.IsConstValue() {
-			return false
-		}
-	}
-	return true
+// responseBridge is a helper for fetching from the pprof profile handlers.
+// Their interface wants a http.ResponseWriter, so we give it one. The writes
+// are passed through to an `io.Writer` of our choosing.
+type responseBridge struct {
+	target     io.Writer
+	statusCode int
+}
+
+var _ http.ResponseWriter = &responseBridge{}
+
+func (r *responseBridge) Header() http.Header {
+	return http.Header{}
+}
+
+func (r *responseBridge) Write(b []byte) (int, error) {
+	return r.target.Write(b)
+}
+
+func (r *responseBridge) WriteHeader(statusCode int) {
+	r.statusCode = statusCode
 }
