@@ -51,6 +51,7 @@ The certs directory is created if it does not exist.
 If the CA key exists and --allow-ca-key-reuse is true, the key is used.
 If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runCreateCACert),
 }
 
@@ -84,6 +85,12 @@ Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return errors.Errorf("create-node requires at least one host name or address, none was specified")
+		}
+		return nil
+	},
 	RunE: MaybeDecorateGRPCError(runCreateNodeCert),
 }
 
@@ -119,6 +126,7 @@ Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
 If "ca.crt" contains more than one certificate, the first is used.
 Creation fails if the CA expiration time is before the desired certificate expiration.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runCreateClientCert),
 }
 
@@ -127,10 +135,6 @@ Creation fails if the CA expiration time is before the desired certificate expir
 // TODO(marc): there is currently no way to specify which CA cert to use if more
 // than one if present.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
-
 	var err error
 	var username string
 	if username, err = sql.NormalizeAndValidateUsername(args[0]); err != nil {
@@ -156,15 +160,12 @@ var listCertsCmd = &cobra.Command{
 	Long: `
 List certificates and keys found in the certificate directory.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runListCerts),
 }
 
 // runListCerts loads and lists all certs.
 func runListCerts(cmd *cobra.Command, args []string) error {
-	if len(args) != 0 {
-		return usageAndError(cmd)
-	}
-
 	cm, err := baseCfg.GetCertificateManager()
 	if err != nil {
 		return errors.Wrap(err, "could not get certificate manager")

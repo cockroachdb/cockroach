@@ -72,16 +72,13 @@ var getZoneCmd = &cobra.Command{
 Fetches and displays the zone configuration for the specified database or
 table.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runGetZone),
 }
 
 // runGetZone retrieves the zone config for a given object id,
 // and if present, outputs its YAML representation.
 func runGetZone(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
-
 	zs, err := config.ParseCLIZoneSpecifier(args[0])
 	if err != nil {
 		return err
@@ -128,13 +125,11 @@ var lsZonesCmd = &cobra.Command{
 	Long: `
 List zone configs.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runLsZones),
 }
 
 func runLsZones(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
 	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
@@ -169,14 +164,11 @@ var rmZoneCmd = &cobra.Command{
 	Long: `
 Remove an existing zone config for the specified database or table.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runRmZone),
 }
 
 func runRmZone(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
-
 	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
@@ -225,6 +217,7 @@ EOF
 Note that the specified zone config is merged with the existing zone config for
 the database or table.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runSetZone),
 }
 
@@ -250,10 +243,6 @@ func readZoneConfig() (conf []byte, err error) {
 // runSetZone parses the yaml input file, converts it to proto, and inserts it
 // in the system.zones table.
 func runSetZone(cmd *cobra.Command, args []string) error {
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
-
 	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err

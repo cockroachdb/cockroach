@@ -41,14 +41,11 @@ var dumpCmd = &cobra.Command{
 Dump SQL tables of a cockroach database. If the table name
 is omitted, dump all tables in the database.
 `,
+	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runDump),
 }
 
 func runDump(cmd *cobra.Command, args []string) error {
-	if len(args) < 1 {
-		return usageAndError(cmd)
-	}
-
 	conn, err := getPasswordAndMakeSQLClient("cockroach dump")
 	if err != nil {
 		return err
