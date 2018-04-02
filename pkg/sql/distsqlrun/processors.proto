@@ -438,6 +438,9 @@ message AggregatorSpec {
   repeated uint32 group_cols = 2 [packed = true];
 
   repeated Aggregation aggregations = 3 [(gogoproto.nullable) = false];
+
+  // A subset of the GROUP BY columns which are ordered in the input.
+  repeated uint32 ordered_group_cols = 4 [packed = true];
 }
 
 // BackfillerSpec is the specification for a "schema change backfiller".
