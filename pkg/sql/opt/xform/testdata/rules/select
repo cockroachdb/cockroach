@@ -4,8 +4,8 @@ CREATE TABLE a
     k INT PRIMARY KEY,
     u INT,
     v INT,
-    INDEX u(u),
-    UNIQUE INDEX v(v)
+    INDEX u(u) STORING (v),
+    UNIQUE INDEX v(v) STORING (u)
 )
 ----
 TABLE a
@@ -16,10 +16,12 @@ TABLE a
  │    └── k int not null
  ├── INDEX u
  │    ├── u int
- │    └── k int not null
+ │    ├── k int not null
+ │    └── v int (storing)
  └── INDEX v
       ├── v int
-      └── k int not null (storing)
+      ├── k int not null (storing)
+      └── u int (storing)
 
 # --------------------------------------------------
 # ConstrainScan
@@ -75,7 +77,7 @@ memo
  ├── 10: (select 9 5) (scan a@v,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@v,constrained)
- ├── 9: (scan a) (scan a@v)
+ ├── 9: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
  ├── 8: (projections 7)
@@ -114,7 +116,7 @@ memo
  ├── 13: (select 12 9) (select 17 16) (scan a@u,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@u,constrained)
- ├── 12: (scan a) (scan a@u)
+ ├── 12: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
  ├── 11: (projections 5)
@@ -129,6 +131,108 @@ memo
  ├── 2: (variable a.u)
  └── 1: (scan a)
 
+# Constraint + remaining filter.
+opt
+SELECT k FROM a WHERE u = 1 AND k+u = 1
+----
+project
+ ├── columns: k:1(int!null)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.u:2(int)
+ │    ├── scan a@u
+ │    │    ├── columns: a.k:1(int!null) a.u:2(int)
+ │    │    └── constraint: /2/1: [/1 - /1]
+ │    └── filters [type=bool, outer=(1,2)]
+ │         └── eq [type=bool, outer=(1,2)]
+ │              ├── plus [type=int, outer=(1,2)]
+ │              │    ├── variable: a.k [type=int, outer=(1)]
+ │              │    └── variable: a.u [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.k [type=int, outer=(1)]
+
+memo
+SELECT k FROM a WHERE u = 1 AND k+u = 1
+----
+[14: "p:k:1"]
+memo
+ ├── 17: (scan a@u,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@u,constrained)
+ ├── 16: (filters 7)
+ ├── 15: (true)
+ ├── 14: (project 13 11)
+ │    └── "p:k:1" [cost=110.00]
+ │         └── best: (project 13 11)
+ ├── 13: (select 12 9) (select 17 16)
+ │    └── "" [cost=110.00]
+ │         └── best: (select 17 16)
+ ├── 12: (scan a) (scan a@u) (scan a@v)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── 11: (projections 5)
+ ├── 10: (select 1 9)
+ ├── 9: (filters 4 7)
+ ├── 8: (and 4 7)
+ ├── 7: (eq 6 3)
+ ├── 6: (plus 5 2)
+ ├── 5: (variable a.k)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 1)
+ ├── 2: (variable a.u)
+ └── 1: (scan a)
+
+opt
+SELECT k FROM a WHERE u = 1 AND v = 5
+----
+project
+ ├── columns: k:1(int!null)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    ├── scan a@u
+ │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    │    └── constraint: /2/1: [/1 - /1]
+ │    └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+ │              ├── variable: a.v [type=int, outer=(3)]
+ │              └── const: 5 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.k [type=int, outer=(1)]
+
+memo
+SELECT k FROM a WHERE u = 1 AND v = 5
+----
+[13: "p:k:1"]
+memo
+ ├── 18: (scan a@v,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@v,constrained)
+ ├── 17: (filters 4)
+ ├── 16: (scan a@u,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@u,constrained)
+ ├── 15: (filters 7)
+ ├── 14: (true)
+ ├── 13: (project 10 12)
+ │    └── "p:k:1" [cost=110.00]
+ │         └── best: (project 10 12)
+ ├── 12: (projections 11)
+ ├── 11: (variable a.k)
+ ├── 10: (select 1 9) (select 16 15) (select 18 17)
+ │    └── "" [cost=110.00]
+ │         └── best: (select 16 15)
+ ├── 9: (filters 4 7)
+ ├── 8: (and 4 7)
+ ├── 7: (eq 5 6)
+ ├── 6: (const 5)
+ ├── 5: (variable a.v)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 1)
+ ├── 2: (variable a.u)
+ └── 1: (scan a) (scan a@u) (scan a@v)
+      └── "" [cost=1000.00]
+           └── best: (scan a)
+
 # No constraint can be derived from filter (nothing should be pushed down).
 opt
 SELECT k FROM a WHERE u=v
@@ -137,8 +241,9 @@ project
  ├── columns: k:1(int!null)
  ├── select
  │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
- │    ├── scan a
- │    │    └── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    ├── scan a@u
+ │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    │    └── constraint: /2/1: (/NULL - ]
  │    └── filters [type=bool, outer=(2,3)]
  │         └── eq [type=bool, outer=(2,3)]
  │              ├── variable: a.u [type=int, outer=(2)]
