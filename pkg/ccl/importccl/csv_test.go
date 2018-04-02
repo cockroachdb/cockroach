@@ -46,334 +46,77 @@ import (
 	"github.com/pkg/errors"
 )
 
-const testSSTMaxSize = 1024 * 1024 * 50
-const localFoo = "nodelocal:///foo" // matches the sqlccl_test symbol.
-
 func TestLoadCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: tmp})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
-				i int,
-				s string,
-				f float,
-				d decimal,
-				primary key (d, s),
-				index idx_f (f)
-			)
-		`
-		tableCSV = `1,1,1,1
-2,two,2.0,2.00
-1234,a string,12.34e56,123456.78e90
-0,0,,0
-`
-	)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	// Make tablePath and dataPath relative to ensure relative directories work.
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	tablePath, err = filepath.Rel(cwd, tablePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dataPath, err = filepath.Rel(cwd, dataPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	null := ""
-	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, filepath.Join(tmp, "foo"), 0 /* comma */, 0 /* comment */, 0 /* skip */, &null, testSSTMaxSize, tmp); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := db.Exec("CREATE DATABASE csv"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`RESTORE csv.* FROM $1`, localFoo); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test the primary key.
-	var i int
-	if err := db.QueryRow("SELECT count(*) FROM csv. " + tableName + "@primary WHERE f = 2").Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != 1 {
-		t.Fatalf("expected 1 row, got %v", i)
-	}
-	// Test the secondary index.
-	if err := db.QueryRow("SELECT count(*) FROM csv. " + tableName + "@idx_f WHERE f = 2").Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != 1 {
-		t.Fatalf("expected 1 row, got %v", i)
-	}
-	// Test the NULL was created correctly in row 4.
-	if err := db.QueryRow("SELECT count(f) FROM csv. " + tableName).Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != 3 {
-		t.Fatalf("expected 3, got %v", i)
-	}
-}
-
-func TestLoadCSVUniqueDuplicate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
+	tests := []struct {
+		name   string
+		create string
+		with   string
+		csv    string
+		err    string
+		query  map[string][][]string
+	}{
+		{
+			name: "duplicate unique index key",
+			create: `
 				a int primary key,
 				i int,
 				unique index idx_f (i)
-			)
-		`
-		tableCSV = `1,1
+			`,
+			csv: `1,1
 2,2
 3,3
 4,3
-5,4
-`
-	)
-
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
-	if !testutils.IsError(err, "duplicate key") {
-		t.Fatalf("unexpected error: %+v", err)
-	}
-}
-
-func TestLoadCSVPrimaryDuplicate(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
+5,4`,
+			err: "duplicate key",
+		},
+		{
+			name: "duplicate PK",
+			create: `
 				i int primary key
-			)
-		`
-		tableCSV = `1
+			`,
+			csv: `1
 2
 3
 3
-4
-`
-	)
-
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
-	if !testutils.IsError(err, "duplicate key") {
-		t.Fatalf("unexpected error: %+v", err)
-	}
-}
-
-func TestLoadCSVDuplicateCollatedString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
+4`,
+			err: "duplicate key",
+		},
+		{
+			name: "duplicate collated string key",
+			create: `
 				s string collate en_u_ks_level1 primary key
-			)
-		`
-		tableCSV = `a
+			`,
+			csv: `a
 B
 c
 D
 d
-`
-	)
-
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
-	if !testutils.IsError(err, "duplicate key") {
-		t.Fatalf("unexpected error: %+v", err)
-	}
-}
-
-// TestLoadCSVPrimaryDuplicateSSTBoundary tests that duplicate keys at
-// SST boundaries are detected.
-func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
+`,
+			err: "duplicate key",
+		},
+		{
+			name: "duplicate PK at sst boundary",
+			create: `
 				i int primary key,
 				s string
-			)
-		`
-	)
-
-	const sstMaxSize = 10
-
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	s := strings.Repeat("0", sstMaxSize)
-	tableCSV := fmt.Sprintf("1,%s\n1,%s\n", s, s)
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, sstMaxSize, tmp)
-	if !testutils.IsError(err, "duplicate key") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestLoadCSVOptions tests LoadCSV with the delimiter, comment, and nullif
-// options set.
-func TestLoadCSVOptions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
-				a int primary key,
-				i int,
-				s string,
-				index (s)
-			)
-		`
-		tableCSV = `1|1|2
-# second value should be null
-2|2|N
-# delimiter at EOL is allowed
-3|3|blah|
-4|4|"quoted "" line"
-5|5|"quoted "" line
-"
-6|6|"quoted "" line
-"|
-7|7|"quoted "" line
-# with comment
-"
-8|8|lazy " quotes|
-9|9|"lazy "quotes"|
-10|N|N
-11|10|"|"|
-`
-	)
-
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
-
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-	null := "N"
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, 0 /* skip */, &null /* nullif */, 400, tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if csv != 11 {
-		t.Fatalf("read %d rows, expected %d", csv, 11)
-	}
-	if kv != 22 {
-		t.Fatalf("created %d KVs, expected %d", kv, 22)
-	}
-	if sst != 2 {
-		t.Fatalf("created %d SSTs, expected %d", sst, 2)
-	}
-}
-
-// TestLoadCSVSplit ensures that a split cannot happen in the middle of a row.
-func TestLoadCSVSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tmp, tmpCleanup := testutils.TempDir(t)
-	defer tmpCleanup()
-	ctx := context.Background()
-
-	const (
-		tableName   = "t"
-		csvName     = tableName + ".dat"
-		tableCreate = `
-			CREATE TABLE ` + tableName + ` (
+			`,
+			with: `WITH sstsize = '10B'`,
+			csv: `1,0000000000
+1,0000000000`,
+			err: "duplicate key",
+		},
+		{
+			name: "verify no splits mid row",
+			create: `
 				i int primary key,
 				s string,
 				b int,
@@ -382,37 +125,37 @@ func TestLoadCSVSplit(t *testing.T) {
 				index (i, s),
 				family (i, b),
 				family (s, c)
-			)
-		`
-		tableCSV = `5,STRING,7,9`
-	)
+			`,
+			with: `WITH sstsize = '1B'`,
+			csv:  `5,STRING,7,9`,
+			query: map[string][][]string{
+				`SELECT count(*) from d.t`: {{"1"}},
+			},
+		},
+	}
 
-	tablePath := filepath.Join(tmp, tableName)
-	dataPath := filepath.Join(tmp, csvName)
+	var csvString string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			fmt.Fprint(w, csvString)
+		}
+	}))
+	defer srv.Close()
 
-	if err := ioutil.WriteFile(tablePath, []byte(tableCreate), 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(dataPath, []byte(tableCSV), 0666); err != nil {
-		t.Fatal(err)
-	}
-	// sstMaxSize = 1 should put each index (could be more than one KV due to
-	// column families) in its own SST.
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, 1 /* sstMaxSize */, tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Only a single input row.
-	if csv != 1 {
-		t.Fatalf("read %d rows, expected %d", csv, 1)
-	}
-	// Should produce 4 kvs: 2 families on PK + 2 indexes.
-	if kv != 4 {
-		t.Fatalf("created %d KVs, expected %d", kv, 4)
-	}
-	// But only 3 SSTs because the first 2 KVs should be in same SST.
-	if sst != 3 {
-		t.Fatalf("created %d SSTs, expected %d", sst, 3)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
+			q := fmt.Sprintf(`IMPORT TABLE d.t (%s) CSV DATA ($1) %s`, tc.create, tc.with)
+			t.Log(q)
+			csvString = tc.csv
+			_, err := db.Exec(q, srv.URL)
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("unexpected: %v", err)
+			}
+			for query, res := range tc.query {
+				sqlDB.CheckQueryResults(t, query, res)
+			}
+		})
 	}
 }
 
@@ -568,14 +311,6 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
-			"schema-in-file-local",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
-			schema,
-			files,
-			`WITH local, transform = 'nodelocal:///4'`,
-			"",
-		},
-		{
 			// Force some SST splits.
 			"schema-in-file-sstsize",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
@@ -585,27 +320,11 @@ func TestImportStmt(t *testing.T) {
 			"",
 		},
 		{
-			"schema-in-query-local",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, transform = $1`,
-			nil,
-			files,
-			`WITH local, transform = 'nodelocal:///6'`,
-			"",
-		},
-		{
-			"schema-in-query-local-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
-			nil,
-			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', local, "nullif" = '', skip = '2', transform = 'nodelocal:///7'`,
-			"",
-		},
-		{
 			"schema-in-query-transform-only",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///8'`,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///5'`,
 			"",
 		},
 		{
@@ -624,31 +343,7 @@ func TestImportStmt(t *testing.T) {
 			``,
 			"",
 		},
-		{
-			"empty-file-local",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
-			schema,
-			empty,
-			`WITH local, transform = 'nodelocal:///11'`,
-			"",
-		},
-		{
-			"empty-with-files-local",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
-			schema,
-			append(empty, files...),
-			`WITH local, transform = 'nodelocal:///12'`,
-			"",
-		},
 		// NB: successes above, failures below, because we check the i-th job.
-		{
-			"missing-transform",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local`,
-			nil,
-			files,
-			``,
-			"transform option required for local import",
-		},
 		{
 			"bad-opt-name",
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH foo = 'bar'`,
@@ -676,14 +371,6 @@ func TestImportStmt(t *testing.T) {
 		{
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2`,
-			schema,
-			dups,
-			``,
-			"primary or unique index has duplicate keys",
-		},
-		{
-			"primary-key-dup-local",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH local, transform = $2`,
 			schema,
 			dups,
 			``,
