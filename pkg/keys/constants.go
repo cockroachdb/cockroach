@@ -112,12 +112,12 @@ var (
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 
-	// localRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
+	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
 	// keys will be sorted directly before the local unreplicated keys for the
 	// same Range ID, so they can be manipulated either together or individually
 	// in a single scan.
-	localRangeIDReplicatedInfix = []byte("r")
+	LocalRangeIDReplicatedInfix = []byte("r")
 	// LocalAbortSpanSuffix is the suffix for AbortSpan entries. The
 	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
