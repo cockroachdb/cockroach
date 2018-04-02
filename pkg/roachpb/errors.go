@@ -647,3 +647,13 @@ func (e *MixedSuccessError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &MixedSuccessError{}
+
+func (e *BatchTimestampBeforeGCError) Error() string {
+	return e.message(nil)
+}
+
+func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
+	return fmt.Sprintf("batch timestamp %v must be after GC threshold %v", e.Timestamp, e.Threshold)
+}
+
+var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
