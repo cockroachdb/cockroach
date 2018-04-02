@@ -78,7 +78,7 @@ scan a
 opt
 SELECT * FROM a WHERE False
 ----
-scan a,constrained
+scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  └── constraint: /1: contradiction
 
@@ -97,21 +97,21 @@ scan a
 opt
 SELECT * FROM (SELECT * FROM a WHERE False) WHERE s='foo'
 ----
-scan a,constrained
+scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  └── constraint: /1: contradiction
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
-scan a,constrained
+scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  └── constraint: /1: contradiction
 
 opt
 SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
 ----
-scan a,constrained
+scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  └── constraint: /1: contradiction
 

@@ -71,7 +71,10 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	case opt.GroupByOp:
 		return f.constructGroupByProps(ev)
 
-	case opt.LimitOp, opt.OffsetOp, opt.Max1RowOp:
+	case opt.LimitOp:
+		return f.constructLimitProps(ev)
+
+	case opt.OffsetOp, opt.Max1RowOp:
 		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
 	}
 
@@ -104,6 +107,12 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	} else {
 		props.Relational.Stats.RowCount = 1000
 	}
+
+	// Cap number of rows at limit, if it exists.
+	if def.HardLimit > 0 && uint64(def.HardLimit) < props.Relational.Stats.RowCount {
+		props.Relational.Stats.RowCount = uint64(def.HardLimit)
+	}
+
 	return props
 }
 
@@ -256,6 +265,26 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
 	props.Relational.Stats.RowCount = uint64(ev.ChildCount())
+
+	return props
+}
+
+func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	limit := ev.Child(1)
+
+	// Start with pass-through props from input.
+	*props.Relational = *inputProps
+
+	// Update row count if limit is a constant.
+	if limit.Operator() == opt.ConstOp {
+		hardLimit := *limit.Private().(*tree.DInt)
+		if hardLimit > 0 {
+			props.Relational.Stats.RowCount = uint64(hardLimit)
+		}
+	}
 
 	return props
 }

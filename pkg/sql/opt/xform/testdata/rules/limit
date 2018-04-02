@@ -1,0 +1,127 @@
+exec-ddl
+CREATE TABLE a
+(
+    k INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    j JSON,
+    INDEX s_idx (s) STORING (i, f),
+    INDEX si_idx (s DESC, i) STORING (j)
+)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX s_idx
+ │    ├── s string
+ │    ├── k int not null
+ │    ├── i int (storing)
+ │    └── f float (storing)
+ └── INDEX si_idx
+      ├── s string desc
+      ├── i int
+      ├── k int not null
+      └── j jsonb (storing)
+
+# --------------------------------------------------
+# PushLimitIntoScan
+# --------------------------------------------------
+
+opt
+SELECT * FROM a LIMIT 1
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ └── limit: 1
+
+# Combine limit with needed columns.
+opt
+SELECT s FROM a LIMIT 1
+----
+scan a
+ ├── columns: s:4(string)
+ └── limit: 1
+
+# Combine limit with constraint.
+opt
+SELECT s FROM a WHERE s='foo' LIMIT 1
+----
+scan a@s_idx
+ ├── columns: s:4(string)
+ ├── constraint: /4/1: [/'foo' - /'foo']
+ └── limit: 1
+
+# Limit of a limit.
+opt
+SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
+----
+limit
+ ├── columns: s:4(string)
+ ├── ordering: +4,+2
+ ├── sort
+ │    ├── columns: a.i:2(int) a.s:4(string)
+ │    ├── ordering: +4,+2
+ │    └── scan a@s_idx
+ │         ├── columns: a.i:2(int) a.s:4(string)
+ │         └── limit: 10
+ └── const: 1 [type=int]
+
+# Don't push when scan doesn't satisfy limit's ordering.
+opt
+SELECT s FROM a ORDER BY f LIMIT 1
+----
+limit
+ ├── columns: s:4(string)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: a.f:3(float) a.s:4(string)
+ │    ├── ordering: +3
+ │    └── scan a
+ │         └── columns: a.f:3(float) a.s:4(string)
+ └── const: 1 [type=int]
+
+# Don't push when limit is not a constant.
+opt
+SELECT s FROM a LIMIT (SELECT k FROM a LIMIT 1)
+----
+limit
+ ├── columns: s:4(string)
+ ├── scan a
+ │    └── columns: a.s:4(string)
+ └── subquery [type=int, outer=(6)]
+      ├── max1-row
+      │    ├── columns: a.k:6(int!null)
+      │    └── scan a
+      │         ├── columns: a.k:6(int!null)
+      │         └── limit: 1
+      └── variable: a.k [type=int, outer=(6)]
+
+memo
+SELECT s FROM a WHERE s='foo' LIMIT 1
+----
+[11: "p:s:4"]
+memo
+ ├── 12: (true)
+ ├── 11: (limit 9 10 ) (scan a@s_idx,constrained,lim=1) (scan a@si_idx,constrained,lim=1)
+ │    └── "p:s:4" [cost=1.00]
+ │         └── best: (scan a@s_idx,constrained,lim=1)
+ ├── 10: (const 1)
+ ├── 9: (select 8 5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@s_idx,constrained)
+ ├── 8: (scan a) (scan a@s_idx) (scan a@si_idx)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── 7: (projections 2)
+ ├── 6: (select 1 5)
+ ├── 5: (filters 4)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 'foo')
+ ├── 2: (variable a.s)
+ └── 1: (scan a)

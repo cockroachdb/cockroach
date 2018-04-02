@@ -63,7 +63,7 @@ opt
 ----
 limit
  ├── columns: column1:3(int)
- ├── stats: [rows=8]
+ ├── stats: [rows=2]
  ├── cost: 10.00
  ├── ordering: -3
  ├── sort

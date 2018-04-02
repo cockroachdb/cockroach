@@ -102,29 +102,7 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 	case opt.ScanOp:
 		// Scan naturally orders according to the order of the scanned index.
 		def := mexpr.Private(f.mem).(*memo.ScanOpDef)
-		index := f.mem.Metadata().Table(def.Table).Index(def.Index)
-
-		// The index can provide the required ordering in either of these cases:
-		// 1. The ordering columns are a prefix of the index columns.
-		// 2. The index columns are a prefix of the ordering columns (this
-		//    works because the columns are always a key, so any additional
-		//    columns are unnecessary).
-		// TODO(andyk): Use UniqueColumnCount when issues with nulls are solved,
-		//              since unique index can still have duplicate nulls.
-		cnt := index.ColumnCount()
-		if len(required) < cnt {
-			cnt = len(required)
-		}
-
-		for i := 0; i < cnt; i++ {
-			indexCol := index.Column(i)
-			colID := f.mem.Metadata().TableColumn(def.Table, indexCol.Ordinal)
-			orderingCol := opt.MakeOrderingColumn(colID, indexCol.Descending)
-			if orderingCol != required[i] {
-				return false
-			}
-		}
-		return true
+		return def.CanProvideOrdering(f.mem.Metadata(), required)
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.

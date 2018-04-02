@@ -1,0 +1,53 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT * FROM a LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=1]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── const: 1 [type=int]
+
+build
+SELECT * FROM a LIMIT (SELECT 1)
+----
+limit
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=1000]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── subquery [type=int, outer=(3)]
+      ├── max1-row
+      │    ├── columns: column3:3(int)
+      │    ├── stats: [rows=1]
+      │    └── project
+      │         ├── columns: column3:3(int)
+      │         ├── stats: [rows=1]
+      │         ├── values
+      │         │    ├── stats: [rows=1]
+      │         │    └── tuple [type=tuple{}]
+      │         └── projections
+      │              └── const: 1 [type=int]
+      └── variable: column3 [type=int, outer=(3)]
+
+build
+SELECT * FROM a LIMIT 0
+----
+limit
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=1000]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── const: 0 [type=int]

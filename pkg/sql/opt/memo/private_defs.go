@@ -57,6 +57,13 @@ type ScanOpDef struct {
 	// If set, the scan is a constrained scan; the constraint contains the spans
 	// that need to be scanned.
 	Constraint *constraint.Constraint
+
+	// HardLimit specifies the maximum number of rows that the scan can return
+	// (after applying any constraint). This is a "hard" limit, meaning that
+	// the scan operator must never return more than this number of rows, even
+	// if more are available. If its value is zero, then the limit is
+	// unknown, and the scan should return all available rows.
+	HardLimit int64
 }
 
 // AltIndexHasCols returns true if the given alternate index on the table
@@ -70,6 +77,35 @@ func (s *ScanOpDef) AltIndexHasCols(md *opt.Metadata, altIndex int) bool {
 		indexCols.Add(int(md.TableColumn(s.Table, ord)))
 	}
 	return s.Cols.SubsetOf(indexCols)
+}
+
+// CanProvideOrdering returns true if the scan operator returns rows that
+// satisfy the given required ordering.
+func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool {
+	// Scan naturally orders according to the order of the scanned index.
+	index := md.Table(s.Table).Index(s.Index)
+
+	// The index can provide the required ordering in either of these cases:
+	// 1. The ordering columns are a prefix of the index columns.
+	// 2. The index columns are a prefix of the ordering columns (this
+	//    works because the columns are always a key, so any additional
+	//    columns are unnecessary).
+	// TODO(andyk): Use UniqueColumnCount when issues with nulls are solved,
+	//              since unique index can still have duplicate nulls.
+	cnt := index.ColumnCount()
+	if len(required) < cnt {
+		cnt = len(required)
+	}
+
+	for i := 0; i < cnt; i++ {
+		indexCol := index.Column(i)
+		colID := md.TableColumn(s.Table, indexCol.Ordinal)
+		orderingCol := opt.MakeOrderingColumn(colID, indexCol.Descending)
+		if orderingCol != required[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // SetOpColMap defines the value of the ColMap private field of the set

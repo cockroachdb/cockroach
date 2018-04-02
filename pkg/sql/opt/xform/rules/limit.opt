@@ -1,0 +1,19 @@
+# =============================================================================
+# limit.opt contains exploration rules for the Limit and Offset operators.
+# =============================================================================
+
+
+# PushLimitIntoScan constructs a new Scan operator that limits the number of
+# returned rows. This can substantially reduce the cost of execution, as rows
+# are never fetched to begin with, rather than fetched only to be discarded by
+# a Limit operator.
+[PushLimitIntoScan, Explore]
+(Limit
+    (Scan $def:*)
+    (Const $limit:*)
+    $ordering:* & (CanLimitScan $def $ordering)
+)
+=>
+(Scan
+    (LimitScanDef $def $limit)
+)
