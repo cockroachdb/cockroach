@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -173,7 +175,6 @@ func TestDistinct(t *testing.T) {
 
 func benchmarkDistinct(b *testing.B, useOrdering bool) {
 	const numCols = 1
-	const numRows = 1000
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -192,19 +193,22 @@ func benchmarkDistinct(b *testing.B, useOrdering bool) {
 		spec.OrderedColumns = []uint32{0}
 	}
 	post := &PostProcessSpec{}
-	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
 
-	b.SetBytes(8 * numRows * numCols)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
-		if err != nil {
-			b.Fatal(err)
-		}
-		d.Run(nil)
-		input.Reset()
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(nil)
+				input.Reset()
+			}
+		})
 	}
-	b.StopTimer()
 }
 
 func BenchmarkOrderedDistinct(b *testing.B) {
