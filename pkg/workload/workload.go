@@ -475,9 +475,16 @@ func (s sliceSliceInterface) Less(i, j int) bool {
 		var cmp int
 		switch x := s[i][offset].(type) {
 		case int:
-			if x < s[j][offset].(int) {
+			if y := s[j][offset].(int); x < y {
 				return true
-			} else if x > s[j][offset].(int) {
+			} else if x > y {
+				return false
+			}
+			continue
+		case uint64:
+			if y := s[j][offset].(uint64); x < y {
+				return true
+			} else if x > y {
 				return false
 			}
 			continue
