@@ -1069,10 +1069,9 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	// hackery below treats the pointer as an array and then constructs a slice
 	// from it.
 
-	tablesPtr := uintptr(unsafe.Pointer(tables))
 	tableSize := unsafe.Sizeof(C.DBSSTable{})
 	tableVal := func(i int) C.DBSSTable {
-		return *(*C.DBSSTable)(unsafe.Pointer(tablesPtr + uintptr(i)*tableSize))
+		return *(*C.DBSSTable)(unsafe.Pointer(uintptr(unsafe.Pointer(tables)) + uintptr(i)*tableSize))
 	}
 
 	res := make(SSTableInfos, n)
