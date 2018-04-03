@@ -5,6 +5,14 @@ set -euo pipefail
 image=cockroachdb/builder
 version=20180330-210116
 
+arch=$(uname -m)
+if [ "${arch}" == "aarch64" ]; then
+  # Suffix image name with "arm64v8" to be consistent with
+  # https://hub.docker.com/u/arm64v8/.
+  image=cockroachdb/builder-arm64v8
+  version=20180403-041732
+fi
+
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
 }
@@ -155,8 +163,8 @@ if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
 fi
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach${cached_volume_mode}"
 
-mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
-vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
+mkdir -p "${cockroach_toplevel}"/bin.docker_"${arch}"
+vols="${vols} --volume=${cockroach_toplevel}/bin.docker_${arch}:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
 
 mkdir -p "${gocache}"/docker/bin
 vols="${vols} --volume=${gocache}/docker/bin:/go/bin${delegated_volume_mode}"

@@ -168,6 +168,7 @@ func main() {
 		// TODO(tamird): consider shifting this information into the builder
 		// image; it's conceivable that we'll want to target multiple versions
 		// of a given triple.
+		// {buildType: "release-aarch64-linux", baseSuffix: "linux-3.7.10-gnu-aarch64"},
 		{buildType: "release-darwin", baseSuffix: "darwin-10.9-amd64"},
 		{buildType: "release-linux-gnu", baseSuffix: "linux-2.6.32-gnu-amd64"},
 		{buildType: "release-linux-musl", baseSuffix: "linux-2.6.32-musl-amd64"},
