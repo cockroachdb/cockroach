@@ -1256,17 +1256,11 @@ INSERT INTO ab VALUES
 exec-explain
 SELECT 1 FROM kv GROUP BY kv.*;
 ----
-render          0  render  ·            ·           (column5)     ·
- │              0  ·       render 0     1           ·             ·
- └── group      1  group   ·            ·           (k, v, w, s)  ·
-      │         1  ·       aggregate 0  k           ·             ·
-      │         1  ·       aggregate 1  v           ·             ·
-      │         1  ·       aggregate 2  w           ·             ·
-      │         1  ·       aggregate 3  s           ·             ·
-      │         1  ·       group by     @1-@4       ·             ·
-      └── scan  2  scan    ·            ·           (k, v, w, s)  ·
-·               2  ·       table        kv@primary  ·             ·
-·               2  ·       spans        ALL         ·             ·
+render     0  render  ·         ·           (column5)  ·
+ │         0  ·       render 0  1           ·          ·
+ └── scan  1  scan    ·         ·           ()         ·
+·          1  ·       table     kv@primary  ·          ·
+·          1  ·       spans     ALL         ·          ·
 
 exec
 SELECT 1 FROM kv GROUP BY kv.*;
@@ -1456,15 +1450,11 @@ column3:tuple{int, int}
 exec-explain
 SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
-render          0  render  ·            ·           (column3)  ·
- │              0  ·       render 0     (b, a)      ·          ·
- └── group      1  group   ·            ·           (a, b)     ·
-      │         1  ·       aggregate 0  a           ·          ·
-      │         1  ·       aggregate 1  b           ·          ·
-      │         1  ·       group by     @1-@2       ·          ·
-      └── scan  2  scan    ·            ·           (a, b)     ·
-·               2  ·       table        ab@primary  ·          ·
-·               2  ·       spans        ALL         ·          ·
+render     0  render  ·         ·           (column3)  ·
+ │         0  ·       render 0  (b, a)      ·          ·
+ └── scan  1  scan    ·         ·           (a, b)     ·
+·          1  ·       table     ab@primary  ·          ·
+·          1  ·       spans     ALL         ·          ·
 
 exec rowsort
 SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))

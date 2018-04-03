@@ -194,6 +194,9 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 		props.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
+	// TODO(andyk): Need to derive weak keys for joins, for example when weak
+	//              keys on both sides are equivalent cols.
+
 	// TODO: Need better estimate based on actual on conditions.
 	props.Relational.Stats.RowCount = leftProps.Stats.RowCount * rightProps.Stats.RowCount
 	if ev.Child(2).Operator() != opt.TrueOp {

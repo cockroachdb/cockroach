@@ -350,6 +350,11 @@ func (f *Factory) onlyConstants(group memo.GroupID) bool {
 	return f.lookupScalar(group).OuterCols.Empty()
 }
 
+// hasNoCols returns true if the group has zero output columns.
+func (f *Factory) hasNoCols(group memo.GroupID) bool {
+	return f.outputCols(group).Empty()
+}
+
 // hasSameCols returns true if the two groups have an identical set of output
 // columns.
 func (f *Factory) hasSameCols(left, right memo.GroupID) bool {
@@ -681,6 +686,27 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 		conditions = append(conditions, right)
 	}
 	return f.ConstructFilters(f.InternList(conditions))
+}
+
+// ----------------------------------------------------------------------
+//
+// GroupBy Rules
+//   Custom match and replace functions used with groupby.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// colsAreKey returns true if the given columns form a strong key for the output
+// rows of the given group. A strong key means that the set of given column
+// values are unique and not null.
+func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
+	colSet := f.mem.LookupPrivate(cols).(opt.ColSet)
+	props := f.lookupLogical(group).Relational
+	for _, weakKey := range props.WeakKeys {
+		if weakKey.SubsetOf(colSet) && weakKey.SubsetOf(props.NotNullCols) {
+			return true
+		}
+	}
+	return false
 }
 
 // ----------------------------------------------------------------------
