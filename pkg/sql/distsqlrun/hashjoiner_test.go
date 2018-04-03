@@ -919,7 +919,6 @@ func TestHashJoiner(t *testing.T) {
 				rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
-					Ctx:         ctx,
 					Settings:    st,
 					EvalCtx:     evalCtx,
 					TempStorage: tempEngine,
@@ -933,7 +932,7 @@ func TestHashJoiner(t *testing.T) {
 				outTypes := h.OutputTypes()
 				setup(h)
 				h.forcedStoredSide = &side
-				h.Run(nil)
+				h.Run(context.Background(), nil /* wg */)
 
 				if !out.ProducerClosed {
 					return errors.New("output RowReceiver not closed")
@@ -1089,7 +1088,6 @@ func TestHashJoinerError(t *testing.T) {
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
-				Ctx:         ctx,
 				Settings:    st,
 				EvalCtx:     evalCtx,
 				TempStorage: tempEngine,
@@ -1103,7 +1101,7 @@ func TestHashJoinerError(t *testing.T) {
 			}
 			outTypes := h.OutputTypes()
 			setup(h)
-			h.Run(nil)
+			h.Run(context.Background(), nil /* wg */)
 
 			if !out.ProducerClosed {
 				return errors.New("output RowReceiver not closed")
@@ -1224,7 +1222,6 @@ func TestHashJoinerDrain(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		Settings: settings,
 		EvalCtx:  evalCtx,
 	}
@@ -1240,7 +1237,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(nil)
+	h.Run(context.Background(), nil /* wg */)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -1348,7 +1345,6 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -1361,7 +1357,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// Disable initial buffering. We always store the right stream in this case.
 	h.initialBufferSize = 0
 
-	h.Run(nil)
+	h.Run(context.Background(), nil /* wg */)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -1397,7 +1393,6 @@ func BenchmarkHashJoiner(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -1425,7 +1420,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				h.Run(nil)
+				h.Run(context.Background(), nil /* wg */)
 				leftInput.Reset()
 				rightInput.Reset()
 			}

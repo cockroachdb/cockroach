@@ -112,6 +112,8 @@ type hashJoiner struct {
 
 var _ Processor = &hashJoiner{}
 
+const hashJoinerProcName = "hash joiner"
+
 func newHashJoiner(
 	flowCtx *FlowCtx,
 	spec *HashJoinerSpec,
@@ -147,8 +149,8 @@ func newHashJoiner(
 	return h, nil
 }
 
-// Run is part of the processor interface.
-func (h *hashJoiner) Run(wg *sync.WaitGroup) {
+// Run is part of the Processor interface.
+func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -157,9 +159,11 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		sendTraceData(ctx, h.out.output)
 	}
 
-	ctx := log.WithLogTag(h.flowCtx.Ctx, "HashJoiner", nil)
-	ctx, span := processorSpan(ctx, "hash joiner")
-	defer tracing.FinishSpan(span)
+	h.leftSource.Start(ctx)
+	h.rightSource.Start(ctx)
+	h.startInternal(ctx, hashJoinerProcName)
+	defer tracing.FinishSpan(h.span)
+	ctx = h.ctx // h.ctx was set by the startInternal() call above.
 
 	h.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
@@ -172,7 +176,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	useTempStorage := settingUseTempStorageJoins.Get(&st.SV) ||
 		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != unset
-	rowContainerMon := h.flowCtx.EvalCtx.Mon
+	rowContainerMon := h.evalCtx.Mon
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
@@ -192,11 +196,10 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		rowContainerMon = &limitedMon
 	}
 
-	evalCtx := h.flowCtx.NewEvalCtx()
 	h.rows[leftSide].initWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), evalCtx, rowContainerMon)
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, rowContainerMon)
 	h.rows[rightSide].initWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), evalCtx, rowContainerMon)
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rowContainerMon)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 

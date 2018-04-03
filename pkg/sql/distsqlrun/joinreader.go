@@ -69,6 +69,8 @@ type joinReader struct {
 
 var _ Processor = &joinReader{}
 
+const joinReaderProcName = "join reader"
+
 func newJoinReader(
 	flowCtx *FlowCtx,
 	spec *JoinReaderSpec,
@@ -402,17 +404,17 @@ func (jr *joinReader) indexLookup(
 }
 
 // Run is part of the processor interface.
-func (jr *joinReader) Run(wg *sync.WaitGroup) {
+func (jr *joinReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
 
-	ctx := log.WithLogTagInt(jr.flowCtx.Ctx, "JoinReader", int(jr.desc.ID))
-	ctx, span := processorSpan(ctx, "join reader")
-	defer tracing.FinishSpan(span)
+	jr.input.Start(ctx)
+	jr.startInternal(ctx, joinReaderProcName)
+	defer tracing.FinishSpan(jr.span)
 
-	err := jr.mainLoop(ctx)
+	err := jr.mainLoop(jr.ctx)
 	if err != nil {
-		DrainAndClose(ctx, jr.out.output, err /* cause */, jr.pushTrailingMeta, jr.input)
+		DrainAndClose(jr.ctx, jr.out.output, err /* cause */, jr.pushTrailingMeta, jr.input)
 	}
 }

@@ -43,7 +43,6 @@ func TestSampleAggregator(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
 		Settings: st,
 		EvalCtx:  evalCtx,
 		clientDB: kvDB,
@@ -111,7 +110,7 @@ func TestSampleAggregator(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(nil /* wg */)
+		p.Run(context.Background(), nil /* wg */)
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
@@ -138,7 +137,7 @@ func TestSampleAggregator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agg.Run(nil /* wg */)
+	agg.Run(context.Background(), nil /* wg */)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
 	r := sqlutils.MakeSQLRunner(sqlDB)

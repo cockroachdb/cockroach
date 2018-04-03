@@ -15,6 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -43,6 +45,10 @@ func makeStreamGroupAccumulator(
 		types:    src.OutputTypes(),
 		ordering: ordering,
 	}
+}
+
+func (s *streamGroupAccumulator) start(ctx context.Context) {
+	s.src.Start(ctx)
 }
 
 func (s *streamGroupAccumulator) nextGroup(

@@ -375,7 +375,6 @@ func TestFlowRegistryDrain(t *testing.T) {
 	reg := makeFlowRegistry(roachpb.NodeID(0))
 
 	flow := &Flow{}
-	flow.Ctx = ctx
 	id := FlowID{uuid.MakeV4()}
 	registerFlow := func(t *testing.T, id FlowID) {
 		t.Helper()
