@@ -682,67 +682,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestVet", func(t *testing.T) {
-		t.Parallel()
-		// `go tool vet` is a special snowflake that emits all its output on
-		// `stderr.
-		cmd := exec.Command("go", "tool", "vet", "-source", "-all", "-shadow", "-printfuncs",
-			strings.Join([]string{
-				"Info:1",
-				"Infof:1",
-				"InfofDepth:2",
-				"Warning:1",
-				"Warningf:1",
-				"WarningfDepth:2",
-				"Error:1",
-				"Errorf:1",
-				"ErrorfDepth:2",
-				"Fatal:1",
-				"Fatalf:1",
-				"FatalfDepth:2",
-				"Event:1",
-				"Eventf:1",
-				"ErrEvent:1",
-				"ErrEventf:1",
-				"NewError:1",
-				"NewErrorf:1",
-				"VEvent:2",
-				"VEventf:2",
-				"UnimplementedWithIssueErrorf:1",
-				"Wrapf:1",
-			}, ","),
-			".",
-		)
-		cmd.Dir = pkgDir
-		var b bytes.Buffer
-		cmd.Stdout = &b
-		cmd.Stderr = &b
-		switch err := cmd.Run(); err.(type) {
-		case nil:
-		case *exec.ExitError:
-			// Non-zero exit is expected.
-		default:
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			stream.FilterFunc(func(arg stream.Arg) error {
-				scanner := bufio.NewScanner(&b)
-				for scanner.Scan() {
-					arg.Out <- scanner.Text()
-				}
-				return scanner.Err()
-			}),
-			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
-			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
-			stream.GrepNot(`\.og\.go:[0-9]+: declaration of ".*" shadows`),
-		), func(s string) {
-			t.Error(s)
-		}); err != nil {
-			t.Error(err)
-		}
-	})
-
 	t.Run("TestAuthorTags", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-lE", "^// Author:")
@@ -757,203 +696,6 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- please remove the Author comment within`, s)
 		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	// Things that are packaged scoped are below here.
-	pkgScope, ok := os.LookupEnv("PKG")
-	if !ok {
-		pkgScope = "./pkg/..."
-	}
-
-	t.Run("TestForbiddenImports", func(t *testing.T) {
-		t.Parallel()
-
-		// forbiddenImportPkg -> permittedReplacementPkg
-		forbiddenImports := map[string]string{
-			"golang.org/x/net/context": "context",
-			"log":  "util/log",
-			"path": "path/filepath",
-			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
-			"github.com/satori/go.uuid":        "util/uuid",
-			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
-		}
-
-		// grepBuf creates a grep string that matches any forbidden import pkgs.
-		var grepBuf bytes.Buffer
-		grepBuf.WriteByte('(')
-		for forbiddenPkg := range forbiddenImports {
-			grepBuf.WriteByte('|')
-			grepBuf.WriteString(regexp.QuoteMeta(forbiddenPkg))
-		}
-		grepBuf.WriteString(")$")
-
-		filter := stream.FilterFunc(func(arg stream.Arg) error {
-			for _, useAllFiles := range []bool{false, true} {
-				buildContext := build.Default
-				buildContext.CgoEnabled = true
-				buildContext.UseAllFiles = useAllFiles
-			outer:
-				for path := range buildutil.ExpandPatterns(&buildContext, []string{filepath.Join(cockroachDB, pkgScope)}) {
-					importPkg, err := buildContext.Import(path, crdb.Dir, 0)
-					switch err.(type) {
-					case nil:
-						for _, s := range importPkg.Imports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.TestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-						for _, s := range importPkg.XTestImports {
-							arg.Out <- importPkg.ImportPath + ": " + s
-						}
-					case *build.NoGoError:
-					case *build.MultiplePackageError:
-						if useAllFiles {
-							continue outer
-						}
-					default:
-						return errors.Wrapf(err, "error loading package %s", path)
-					}
-				}
-			}
-			return nil
-		})
-		settingsPkgPrefix := `github.com/cockroachdb/cockroach/pkg/settings`
-		if err := stream.ForEach(stream.Sequence(
-			filter,
-			stream.Sort(),
-			stream.Uniq(),
-			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
-			stream.GrepNot(`cockroach/pkg/cmd/`),
-			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
-			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
-			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
-			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
-			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
-			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
-			stream.GrepNot(`cockroach/pkg/ccl/storageccl: path$`),
-			stream.GrepNot(`cockroach/pkg/ccl/workloadccl: path$`),
-			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
-		), func(s string) {
-			pkgStr := strings.Split(s, ": ")
-			importingPkg, importedPkg := pkgStr[0], pkgStr[1]
-
-			// Test that a disallowed package is not imported.
-			if replPkg, ok := forbiddenImports[importedPkg]; ok {
-				t.Errorf(`%s <- please use %q instead of %q`, s, replPkg, importedPkg)
-			}
-
-			// Test that the settings package does not import CRDB dependencies.
-			if importingPkg == settingsPkgPrefix && strings.HasPrefix(importedPkg, cockroachDB) {
-				switch {
-				case strings.HasSuffix(s, "humanizeutil"):
-				case strings.HasSuffix(s, "protoutil"):
-				case strings.HasSuffix(s, "testutils"):
-				case strings.HasSuffix(s, "syncutil"):
-				case strings.HasSuffix(s, settingsPkgPrefix):
-				default:
-					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
-				}
-			}
-		}); err != nil {
-			t.Error(err)
-		}
-	})
-
-	// TODO(tamird): replace this with errcheck.NewChecker() when
-	// https://github.com/dominikh/go-tools/issues/57 is fixed.
-	t.Run("TestErrCheck", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
-		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(
-			crdb.Dir,
-			"errcheck",
-			"-exclude",
-			excludesPath,
-			pkgScope,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- unchecked error`, s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	t.Run("TestReturnCheck", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("short flag")
-		}
-		// returncheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf(`%s <- unchecked error`, s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	t.Run("TestGolint", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				// _fsm.go files are allowed to dot-import the util/fsm package.
-				stream.GrepNot("_fsm.go.*should not use dot imports"),
-				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
-			), func(s string) {
-				t.Error(s)
-			}); err != nil {
 			t.Error(err)
 		}
 
@@ -1147,6 +889,264 @@ func TestLint(t *testing.T) {
 		cmd.Stdin = &buf
 		if err := urlcheck.CheckURLsFromGrepOutput(cmd); err != nil {
 			t.Fatal(err)
+		}
+	})
+
+	// Things that are packaged scoped are below here.
+	pkgScope, ok := os.LookupEnv("PKG")
+	if !ok {
+		pkgScope = "./pkg/..."
+	}
+
+	t.Run("TestForbiddenImports", func(t *testing.T) {
+		t.Parallel()
+
+		// forbiddenImportPkg -> permittedReplacementPkg
+		forbiddenImports := map[string]string{
+			"golang.org/x/net/context": "context",
+			"log":  "util/log",
+			"path": "path/filepath",
+			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
+			"github.com/satori/go.uuid":        "util/uuid",
+			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
+		}
+
+		// grepBuf creates a grep string that matches any forbidden import pkgs.
+		var grepBuf bytes.Buffer
+		grepBuf.WriteByte('(')
+		for forbiddenPkg := range forbiddenImports {
+			grepBuf.WriteByte('|')
+			grepBuf.WriteString(regexp.QuoteMeta(forbiddenPkg))
+		}
+		grepBuf.WriteString(")$")
+
+		filter := stream.FilterFunc(func(arg stream.Arg) error {
+			for _, useAllFiles := range []bool{false, true} {
+				buildContext := build.Default
+				buildContext.CgoEnabled = true
+				buildContext.UseAllFiles = useAllFiles
+			outer:
+				for path := range buildutil.ExpandPatterns(&buildContext, []string{filepath.Join(cockroachDB, pkgScope)}) {
+					importPkg, err := buildContext.Import(path, crdb.Dir, 0)
+					switch err.(type) {
+					case nil:
+						for _, s := range importPkg.Imports {
+							arg.Out <- importPkg.ImportPath + ": " + s
+						}
+						for _, s := range importPkg.TestImports {
+							arg.Out <- importPkg.ImportPath + ": " + s
+						}
+						for _, s := range importPkg.XTestImports {
+							arg.Out <- importPkg.ImportPath + ": " + s
+						}
+					case *build.NoGoError:
+					case *build.MultiplePackageError:
+						if useAllFiles {
+							continue outer
+						}
+					default:
+						return errors.Wrapf(err, "error loading package %s", path)
+					}
+				}
+			}
+			return nil
+		})
+		settingsPkgPrefix := `github.com/cockroachdb/cockroach/pkg/settings`
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.Sort(),
+			stream.Uniq(),
+			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
+			stream.GrepNot(`cockroach/pkg/cmd/`),
+			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
+			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
+			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
+			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
+			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
+			stream.GrepNot(`cockroach/pkg/util/caller: path$`),
+			stream.GrepNot(`cockroach/pkg/ccl/storageccl: path$`),
+			stream.GrepNot(`cockroach/pkg/ccl/workloadccl: path$`),
+			stream.GrepNot(`cockroach/pkg/util/uuid: github\.com/satori/go\.uuid$`),
+		), func(s string) {
+			pkgStr := strings.Split(s, ": ")
+			importingPkg, importedPkg := pkgStr[0], pkgStr[1]
+
+			// Test that a disallowed package is not imported.
+			if replPkg, ok := forbiddenImports[importedPkg]; ok {
+				t.Errorf(`%s <- please use %q instead of %q`, s, replPkg, importedPkg)
+			}
+
+			// Test that the settings package does not import CRDB dependencies.
+			if importingPkg == settingsPkgPrefix && strings.HasPrefix(importedPkg, cockroachDB) {
+				switch {
+				case strings.HasSuffix(s, "humanizeutil"):
+				case strings.HasSuffix(s, "protoutil"):
+				case strings.HasSuffix(s, "testutils"):
+				case strings.HasSuffix(s, "syncutil"):
+				case strings.HasSuffix(s, settingsPkgPrefix):
+				default:
+					t.Errorf("%s <- please don't add CRDB dependencies to settings pkg", s)
+				}
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("TestVet", func(t *testing.T) {
+		t.Parallel()
+		// `go tool vet` is a special snowflake that emits all its output on
+		// `stderr.
+		cmd := exec.Command("go", "tool", "vet", "-source", "-all", "-shadow", "-printfuncs",
+			strings.Join([]string{
+				"Info:1",
+				"Infof:1",
+				"InfofDepth:2",
+				"Warning:1",
+				"Warningf:1",
+				"WarningfDepth:2",
+				"Error:1",
+				"Errorf:1",
+				"ErrorfDepth:2",
+				"Fatal:1",
+				"Fatalf:1",
+				"FatalfDepth:2",
+				"Event:1",
+				"Eventf:1",
+				"ErrEvent:1",
+				"ErrEventf:1",
+				"NewError:1",
+				"NewErrorf:1",
+				"VEvent:2",
+				"VEventf:2",
+				"UnimplementedWithIssueErrorf:1",
+				"Wrapf:1",
+			}, ","),
+			".",
+		)
+		cmd.Dir = pkgDir
+		var b bytes.Buffer
+		cmd.Stdout = &b
+		cmd.Stderr = &b
+		switch err := cmd.Run(); err.(type) {
+		case nil:
+		case *exec.ExitError:
+			// Non-zero exit is expected.
+		default:
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			stream.FilterFunc(func(arg stream.Arg) error {
+				scanner := bufio.NewScanner(&b)
+				for scanner.Scan() {
+					arg.Out <- scanner.Text()
+				}
+				return scanner.Err()
+			}),
+			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
+			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
+			stream.GrepNot(`\.og\.go:[0-9]+: declaration of ".*" shadows`),
+		), func(s string) {
+			t.Error(s)
+		}); err != nil {
+			t.Error(err)
+		}
+	})
+
+	// TODO(tamird): replace this with errcheck.NewChecker() when
+	// https://github.com/dominikh/go-tools/issues/57 is fixed.
+	t.Run("TestErrCheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
+		cmd, stderr, filter, err := dirCmd(
+			crdb.Dir,
+			"errcheck",
+			"-exclude",
+			excludesPath,
+			pkgScope,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf(`%s <- unchecked error`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestReturnCheck", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+		// returncheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
+		cmd, stderr, filter, err := dirCmd(crdb.Dir, "returncheck", pkgScope)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf(`%s <- unchecked error`, s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
+	t.Run("TestGolint", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(
+			stream.Sequence(
+				filter,
+				// _fsm.go files are allowed to dot-import the util/fsm package.
+				stream.GrepNot("_fsm.go.*should not use dot imports"),
+				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
+			), func(s string) {
+				t.Error(s)
+			}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
 		}
 	})
 }
