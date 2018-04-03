@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 )
 
 // Cockroach error extensions:
@@ -122,22 +123,57 @@ func IsCCLRequiredError(err error) bool {
 }
 
 // IsPermanentSchemaChangeError returns true if the error results in
-// a permanent failure of a schema change.
+// a permanent failure of a schema change. This function is a whitelist
+// instead of a blacklist: only known safe errors are confirmed to not be
+// permanent errors. Anything unknown is assumed to be permanent.
 func IsPermanentSchemaChangeError(err error) bool {
-	if errHasCode(err,
-		pgerror.CodeNotNullViolationError,
-		pgerror.CodeUniqueViolationError,
-		pgerror.CodeInvalidSchemaDefinitionError,
-		CodeCCLRequired,
-	) {
-		return true
-	}
-	switch err.(type) {
-	case *roachpb.BatchTimestampBeforeGCError:
-		return true
-	default:
+	if err == nil {
 		return false
 	}
+	err = errors.Cause(err)
+	if errHasCode(err, pgerror.CodeSerializationFailureError) {
+		return false
+	}
+	if err == context.DeadlineExceeded {
+		return false
+	}
+	if !ShouldLogSchemaChangeError(err) {
+		return false
+	}
+	switch err.(type) {
+	case errTableVersionMismatch:
+		return false
+	}
+	return true
+}
+
+var (
+	ErrExistingSchemaChangeLease  = errors.New("an outstanding schema change lease exists")
+	ErrSchemaChangeNotFirstInLine = errors.New("schema change not first in line")
+	ErrNotHitGCTTLDeadline        = errors.New("not hit gc ttl deadline")
+)
+
+func ShouldLogSchemaChangeError(err error) bool {
+	return err != ErrExistingSchemaChangeLease &&
+		err != ErrSchemaChangeNotFirstInLine &&
+		err != ErrNotHitGCTTLDeadline
+}
+
+type errTableVersionMismatch struct {
+	version  DescriptorVersion
+	expected DescriptorVersion
+}
+
+// ErrTableVersionMismatch creates a table version mismatch error.
+func ErrTableVersionMismatch(version, expected DescriptorVersion) error {
+	return errTableVersionMismatch{
+		version:  version,
+		expected: expected,
+	}
+}
+
+func (e errTableVersionMismatch) Error() string {
+	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.

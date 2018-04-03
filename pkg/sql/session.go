@@ -1387,7 +1387,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now())
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
-				if shouldLogSchemaChangeError(err) {
+				if sqlbase.ShouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
 				if err == sqlbase.ErrDescriptorNotFound {

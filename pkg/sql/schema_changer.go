@@ -125,19 +125,6 @@ func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_Schem
 		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(SchemaChangeLeaseDuration).UnixNano()}
 }
 
-var errExistingSchemaChangeLease = errors.New(
-	"an outstanding schema change lease exists")
-var errSchemaChangeNotFirstInLine = errors.New(
-	"schema change not first in line")
-var errNotHitGCTTLDeadline = errors.New(
-	"not hit gc ttl deadline")
-
-func shouldLogSchemaChangeError(err error) bool {
-	return err != errExistingSchemaChangeLease &&
-		err != errSchemaChangeNotFirstInLine &&
-		err != errNotHitGCTTLDeadline
-}
-
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease(
@@ -162,7 +149,7 @@ func (sc *SchemaChanger) AcquireLease(
 
 		if tableDesc.Lease != nil {
 			if timeutil.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
-				return errExistingSchemaChangeLease
+				return sqlbase.ErrExistingSchemaChangeLease
 			}
 			log.Infof(ctx, "Overriding existing expired lease %v", tableDesc.Lease)
 		}
@@ -317,7 +304,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 				return false, err
 			}
 			if timeRemaining < 0 {
-				return false, errNotHitGCTTLDeadline
+				return false, sqlbase.ErrNotHitGCTTLDeadline
 			}
 		}
 		// Do all the hard work of deleting the table data and the table ID.
@@ -431,7 +418,7 @@ func (sc *SchemaChanger) exec(
 		return err
 	}
 	if notFirst {
-		return errSchemaChangeNotFirstInLine
+		return sqlbase.ErrSchemaChangeNotFirstInLine
 	}
 
 	// Increment the version and unset tableDescriptor.UpVersion.
@@ -1148,7 +1135,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						s.schemaChangers[tableID] = sc
 
 						if err != nil {
-							if shouldLogSchemaChangeError(err) {
+							if sqlbase.ShouldLogSchemaChangeError(err) {
 								log.Warningf(ctx, "Error executing schema change: %s", err)
 							}
 							if err == sqlbase.ErrDescriptorNotFound {
