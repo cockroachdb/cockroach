@@ -144,7 +144,7 @@ func (sc *SchemaChanger) runBackfill(
 			switch t := m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
 				desc := m.GetColumn()
-				if desc.DefaultExpr != nil || !desc.Nullable {
+				if desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed() {
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
