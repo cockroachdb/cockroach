@@ -120,7 +120,7 @@ func (p *planner) Update(
 
 	// We update the set of columns being updated into with any computed columns.
 	updateCols, computedCols, computeExprs, err :=
-		ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
