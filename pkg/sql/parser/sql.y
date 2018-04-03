@@ -466,8 +466,9 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   DEALLOCATE DEFERRABLE DELETE DESC
 %token <str>   DISCARD DISTINCT DO DOUBLE DROP
 
-%token <str>   ELSE ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXECUTE EXPERIMENTAL EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
+%token <str>   ELSE EMIT ENCODING END ESCAPE EXCEPT
+%token <str>   EXISTS EXPERIMENTAL_CHANGEFEED EXECUTE EXPERIMENTAL
+%token <str>   EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str>   EXPERIMENTAL_AUDIT
 %token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
@@ -629,6 +630,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
+%type <tree.Statement> create_changefeed_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_stats_stmt
 %type <tree.Statement> delete_stmt
@@ -1760,6 +1762,7 @@ create_ddl_stmt:
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
+| create_changefeed_stmt
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -1777,6 +1780,21 @@ create_stats_stmt:
     }
   }
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
+
+create_changefeed_stmt:
+  CREATE EXPERIMENTAL_CHANGEFEED EMIT targets TO IDENT opt_as_of_clause opt_with_options
+  {
+    /* SKIP DOC */
+    // TODO(dan): This reuses the `AS OF SYSTEM TIME` syntax for convenience,
+    // but it means something different here than SELECT and BACKUP. On the
+    // other hand, RESTORE already stretches the definition a bit. Revisit.
+    $$.val = &tree.CreateChangefeed{
+      Targets: $4.targetList(),
+      SinkType: $6,
+      AsOf: $7.asOfClause(),
+      Options: $8.kvOptions(),
+    }
+  }
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
@@ -7499,10 +7517,12 @@ unreserved_keyword:
 | DISCARD
 | DOUBLE
 | DROP
+| EMIT
 | ENCODING
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
+| EXPERIMENTAL_CHANGEFEED
 | EXPERIMENTAL_FINGERPRINTS
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
