@@ -178,7 +178,6 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	// Determine if we need to run the sampling plan or not.
-
 	details := job.Record.Details.(jobs.ImportDetails)
 	samples := details.Tables[0].Samples
 	if samples == nil {
@@ -196,22 +195,36 @@ func (l *DistLoader) LoadCSV(
 	splits = append(splits, samples...)
 	splits = append(splits, tableSpan.EndKey)
 
-	// jobSpans is a slite of split points, including table start and end keys
+	// If we're restarting an import job, some of the sstables may have
+	// already been imported.  Load them into a SpanGroup so we can
+	// avoid creating unnecessary routing instructions for keys that
+	// we need not re-import.
+	var completedSpans roachpb.SpanGroup
+	completedSpans.Add(details.Tables[0].SpanProgress...)
+
+	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
-	// of adjacent keys.
-	spans := make([]distsqlrun.OutputRouterSpec_RangeRouterSpec_Span, len(splits)-1)
+	// of adjacent keys.  Any span that corresponds to already-imported
+	// data will be ignored.
+	spans := make([]distsqlrun.OutputRouterSpec_RangeRouterSpec_Span, 0, len(splits)-1)
 	encFn := func(b []byte) []byte {
 		return encoding.EncodeBytesAscending(nil, b)
 	}
 	for i := 1; i < len(splits); i++ {
 		start := splits[i-1]
 		end := splits[i]
-		stream := int32((i - 1) % len(nodes))
-		spans[i-1] = distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
+
+		// Don't need to route already-imported spans.
+		if completedSpans.Encloses(roachpb.Span{Key: start, EndKey: end}) {
+			continue
+		}
+
+		stream := int32(len(spans) % len(nodes))
+		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
 			Start:  encFn(start),
 			End:    encFn(end),
 			Stream: stream,
-		}
+		})
 		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanName{
 			Name: fmt.Sprintf("%d.sst", i),
 			End:  end,
@@ -227,6 +240,7 @@ func (l *DistLoader) LoadCSV(
 	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(csvSpecs))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
+	defaultStream := int32(0)
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
 		Encodings: []distsqlrun.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -235,6 +249,12 @@ func (l *DistLoader) LoadCSV(
 				Encoding: sqlbase.DatumEncoding_ASCENDING_KEY,
 			},
 		},
+		// Configure a default stream to handle cross-version case where
+		// a newer planner is operating with older ReadCSV workers that
+		// don't filter their output based on completed spans.  This will
+		// prevent the RangeRouter from erroring out, at the cost of an
+		// imbalanced data flow.
+		DefaultDest: &defaultStream,
 	}
 
 	stageID := p.NewStageID()
