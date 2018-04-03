@@ -340,7 +340,11 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 			newVals[u.tw.ru.FetchColIDtoRowIndex[col.ID]] = updateValues[i]
 		}
 
-		iv := &rowIndexedVarContainer{newVals, u.tableDesc.Columns, u.tw.ru.FetchColIDtoRowIndex}
+		iv := &sqlbase.RowIndexedVarContainer{
+			CurSourceRow: newVals,
+			Cols:         u.tableDesc.Columns,
+			Mapping:      u.tw.ru.FetchColIDtoRowIndex,
+		}
 		params.EvalContext().IVarContainer = iv
 
 		for i := range u.computedCols {

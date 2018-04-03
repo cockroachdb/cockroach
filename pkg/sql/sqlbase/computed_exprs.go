@@ -24,6 +24,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// RowIndexedVarContainer is used to evaluate expressions over various rows.
+type RowIndexedVarContainer struct {
+	CurSourceRow tree.Datums
+
+	// Because the rows we have might not be permuted in the same way as the
+	// original table, we need to store a mapping between them.
+
+	Cols    []ColumnDescriptor
+	Mapping map[ColumnID]int
+}
+
+var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
+
+// IndexedVarEval implements tree.IndexedVarContainer.
+func (r *RowIndexedVarContainer) IndexedVarEval(
+	idx int, ctx *tree.EvalContext,
+) (tree.Datum, error) {
+	return r.CurSourceRow[r.Mapping[r.Cols[idx].ID]], nil
+}
+
+// IndexedVarResolvedType implements tree.IndexedVarContainer.
+func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+	panic("unsupported")
+}
+
+// IndexedVarNodeFormatter implements tree.IndexedVarContainer.
+func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
+
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
 // is used to type check computed columns and does not support evaluation.
 type descContainer struct {
