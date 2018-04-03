@@ -139,7 +139,6 @@ func init() {
 		dumpCmd,
 
 		// Miscellaneous commands.
-		// TODO(pmattis): stats
 		genCmd,
 		versionCmd,
 		debugCmd,
