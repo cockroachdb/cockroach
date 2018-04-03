@@ -115,10 +115,16 @@ func evalExport(
 	}
 	defer cArgs.EvalCtx.GetLimiters().ConcurrentExports.Finish()
 
-	log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
+	makeExportStorage := !args.ReturnSST || (args.Storage != roachpb.ExportStorage{})
+	if makeExportStorage || log.V(1) {
+		log.Infof(ctx, "export [%s,%s)", args.Key, args.EndKey)
+	} else {
+		// Requests that don't write to export storage are expected to be small.
+		log.Eventf(ctx, "export [%s,%s)", args.Key, args.EndKey)
+	}
 
 	var exportStore ExportStorage
-	if !args.ReturnSST || (args.Storage != roachpb.ExportStorage{}) {
+	if makeExportStorage {
 		var err error
 		exportStore, err = MakeExportStorage(ctx, args.Storage, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
