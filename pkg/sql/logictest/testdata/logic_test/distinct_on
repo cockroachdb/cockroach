@@ -507,7 +507,7 @@ render                    0  render    ·            ·                  (min)  
  │                        0  ·         render 0     min                ·                                               ·
  └── distinct             1  distinct  ·            ·                  (min, y)                                        weak-key(y)
       │                   1  ·         distinct on  y                  ·                                               ·
-      └── group           2  group     ·            ·                  (min, y)                                        ·
+      └── group           2  group     ·            ·                  (min, y)                                        weak-key(y)
            │              2  ·         aggregate 0  min(x)             ·                                               ·
            │              2  ·         aggregate 1  y                  ·                                               ·
            │              2  ·         group by     @1                 ·                                               ·
