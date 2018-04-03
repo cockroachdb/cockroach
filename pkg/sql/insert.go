@@ -118,7 +118,7 @@ func (p *planner) Insert(
 
 	// We update the set of columns being inserted into with any computed columns.
 	cols, computedCols, computeExprs, err :=
-		ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (p *planner) Insert(
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
-					return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+					return nil, sqlbase.CannotWriteToComputedColError(cols[maxInsertIdx])
 				}
 			}
 			src, err = fillDefaults(defaultExprs, cols, values)
@@ -183,7 +183,7 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
-			return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+			return nil, sqlbase.CannotWriteToComputedColError(cols[maxInsertIdx])
 		}
 	}
 
