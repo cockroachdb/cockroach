@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"math"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -37,11 +36,10 @@ import (
 const (
 	numTableFields = 10
 	fieldLength    = 100 // In characters
-	zipfS          = 0.99
 	zipfIMin       = 1
 
 	usertableSchemaRelational = `(
-		ycsb_key BIGINT PRIMARY KEY NOT NULL,
+		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
 		FIELD0 TEXT,
 		FIELD1 TEXT,
 		FIELD2 TEXT,
@@ -54,7 +52,7 @@ const (
 		FIELD9 TEXT
 	)`
 	usertableSchemaJSON = `(
-		ycsb_key BIGINT PRIMARY KEY NOT NULL,
+		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
 		FIELD JSONB
 	)`
 )
@@ -146,7 +144,7 @@ func (g *ycsb) Tables() []workload.Table {
 			g.initialRows,
 			func(rowIdx int) []interface{} {
 				w := ycsbWorker{config: g, hashFunc: fnv.New64()}
-				key := w.hashKey(uint64(rowIdx))
+				key := w.buildKeyName(uint64(rowIdx))
 				if g.json {
 					return []interface{}{key, "{}"}
 				}
@@ -233,7 +231,7 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
 	zipfR, err := NewZipfGenerator(
-		zipfRng, zipfIMin, uint64(g.initialRows), zipfS, false /* verbose */)
+		zipfRng, zipfIMin, defaultIMax, defaultTheta, false /* verbose */)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
@@ -315,25 +313,33 @@ func (yw *ycsbWorker) hashKey(key uint64) uint64 {
 	if _, err := yw.hashFunc.Write(yw.hashBuf[:]); err != nil {
 		panic(err)
 	}
-	// The Go sql driver interface does not support having the high-bit set in
-	// uint64 values!
-	return yw.hashFunc.Sum64() & math.MaxInt64
+	return yw.hashFunc.Sum64()
 }
 
-// Keys are chosen by first drawing from a Zipf distribution and hashing the
-// drawn value, so that not all hot keys are close together.
+func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
+	hashedKey := yw.hashKey(keynum)
+	return fmt.Sprintf("user%d", hashedKey)
+}
+
+// Keys are chosen by first drawing from a Zipf distribution, hashing the drawn
+// value, and modding by the total number of rows, so that not all hot keys are
+// close together.
 // See YCSB paper section 5.3 for a complete description of how keys are chosen.
-func (yw *ycsbWorker) nextReadKey() uint64 {
-	var hashedKey uint64
-	key := yw.zipfR.Uint64()
-	hashedKey = yw.hashKey(key)
-	return hashedKey
+func (yw *ycsbWorker) nextReadKey() string {
+	// TODO: In order to support workloads with INSERT, this would need to account
+	// for the number of rows growing over time. See the YCSB paper/code for how
+	// this should work. (Basically repeatedly drawing from the distribution until
+	// a sufficiently low value is chosen, but with some complications.)
+	rownum := yw.hashKey(yw.zipfR.Uint64()) % uint64(yw.config.initialRows)
+	return yw.buildKeyName(rownum)
 }
 
-func (yw *ycsbWorker) nextInsertKey() uint64 {
-	key := yw.zipfR.IMaxHead()
-	hashedKey := yw.hashKey(key)
-	return hashedKey
+func (yw *ycsbWorker) nextInsertKey() string {
+	// TODO: This logic is no longer valid now that we are using a large YCSB
+	// distribution and modding the samples. To properly support INSERTS, we need
+	// to maintain a separate rownum counter.
+	rownum := yw.zipfR.IMaxHead()
+	return yw.buildKeyName(rownum)
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -347,7 +353,7 @@ func (yw *ycsbWorker) randString(length int) string {
 	return string(str)
 }
 
-func (yw *ycsbWorker) insertRow(key uint64, increment bool) error {
+func (yw *ycsbWorker) insertRow(key string, increment bool) error {
 	args := make([]interface{}, numTableFields+1)
 	args[0] = key
 	for i := 1; i <= numTableFields; i++ {
