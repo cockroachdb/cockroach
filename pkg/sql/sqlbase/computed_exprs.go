@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/pkg/errors"
 )
 
 // RowIndexedVarContainer is used to evaluate expressions over various rows.
@@ -123,15 +124,32 @@ func ProcessComputedColumns(
 
 	computedCols := cols[endOfNonComputed:]
 
+	computedExprs, err := MakeComputedColumns(tableDesc, computedCols, tn, txCtx, evalCtx)
+
+	return cols, computedCols, computedExprs, err
+}
+
+// MakeComputedColumns returns expressions for the specified list of computed
+// columns.
+func MakeComputedColumns(
+	tableDesc *TableDescriptor,
+	computedCols []ColumnDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
 	// TODO(justin): it's unfortunate that this parses and typechecks the
 	// ComputeExprs on every query.
-	exprStrings := make([]string, 0, len(cols))
+	exprStrings := make([]string, 0, len(computedCols))
 	for _, col := range computedCols {
+		if !col.IsComputed() {
+			return nil, errors.Errorf("column %q is not a computed column", col.Name)
+		}
 		exprStrings = append(exprStrings, *col.ComputeExpr)
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
@@ -148,24 +166,23 @@ func ProcessComputedColumns(
 	semaCtx := tree.MakeSemaContext(false)
 	semaCtx.IVarContainer = iv
 
-	computedExprs := make([]tree.TypedExpr, 0, len(cols))
+	computedExprs := make([]tree.TypedExpr, 0, len(computedCols))
 	for i, col := range computedCols {
 		expr, _, _, err := ResolveNames(exprs[i],
 			MakeMultiSourceInfo(sourceInfo),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
 		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type.ToDatumType())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		computedExprs = append(computedExprs, typedExpr)
 	}
-
-	return cols, computedCols, computedExprs, nil
+	return computedExprs, nil
 }

@@ -76,15 +76,19 @@ func (cb *columnBackfiller) init() error {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	var colIdxMap map[sqlbase.ColumnID]int
 
+	hasComputed := false
 	if len(desc.Mutations) > 0 {
 		for _, m := range desc.Mutations {
 			if ColumnMutationFilter(m) {
+				desc := *m.GetColumn()
 				switch m.Direction {
 				case sqlbase.DescriptorMutation_ADD:
-					desc := *m.GetColumn()
+					if desc.IsComputed() {
+						hasComputed = true
+					}
 					cb.added = append(cb.added, desc)
 				case sqlbase.DescriptorMutation_DROP:
-					cb.dropped = append(cb.dropped, *m.GetColumn())
+					cb.dropped = append(cb.dropped, desc)
 				}
 			}
 		}
@@ -96,12 +100,21 @@ func (cb *columnBackfiller) init() error {
 		return err
 	}
 
+	var txCtx transform.ExprTransformContext
+
 	cb.updateCols = append(cb.added, cb.dropped...)
-	if len(cb.dropped) > 0 || len(defaultExprs) > 0 {
+	if len(cb.dropped) > 0 || len(defaultExprs) > 0 || hasComputed {
 		// Populate default values.
 		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
-		for j := range cb.added {
-			if defaultExprs == nil || defaultExprs[j] == nil {
+		for j, col := range cb.added {
+			if col.IsComputed() {
+				computeExprs, err :=
+					sqlbase.MakeComputedColumns(&desc, cb.added[j:j+1], tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, cb.flowCtx.NewEvalCtx())
+				if err != nil {
+					return err
+				}
+				cb.updateExprs[j] = computeExprs[0]
+			} else if defaultExprs == nil || defaultExprs[j] == nil {
 				cb.updateExprs[j] = tree.DNull
 			} else {
 				cb.updateExprs[j] = defaultExprs[j]
@@ -220,6 +233,12 @@ func (cb *columnBackfiller) runChunk(
 		updateValues := make(tree.Datums, len(cb.updateExprs))
 		b := txn.NewBatch()
 		rowLength := 0
+		evalCtx := cb.flowCtx.NewEvalCtx()
+		iv := &sqlbase.RowIndexedVarContainer{
+			Cols:    tableDesc.Columns,
+			Mapping: ru.FetchColIDtoRowIndex,
+		}
+		evalCtx.IVarContainer = iv
 		for i := int64(0); i < chunkSize; i++ {
 			datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
 			if err != nil {
@@ -228,10 +247,12 @@ func (cb *columnBackfiller) runChunk(
 			if datums == nil {
 				break
 			}
+			iv.CurSourceRow = datums
+
 			// Evaluate the new values. This must be done separately for
 			// each row so as to handle impure functions correctly.
 			for j, e := range cb.updateExprs {
-				val, err := e.Eval(cb.flowCtx.NewEvalCtx())
+				val, err := e.Eval(evalCtx)
 				if err != nil {
 					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}

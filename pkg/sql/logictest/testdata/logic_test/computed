@@ -623,9 +623,32 @@ WHERE table_name = 'x' and generation_expression = ''
 ----
 1
 
+statement ok
+INSERT INTO x VALUES (3)
+
 # TODO(justin): #22652
-statement error adding a computed column via ALTER not supported
-ALTER TABLE x ADD COLUMN c INT AS (4) STORED
+# statement error adding a computed column via ALTER not supported
+statement ok
+ALTER TABLE x ADD COLUMN c INT AS (a + 4) STORED
+
+query TT
+SHOW CREATE TABLE x
+----
+x  CREATE TABLE x (
+    a INT NULL,
+    b INT NULL AS (a * 2) STORED,
+    c INT NULL AS (a + 4) STORED,
+    FAMILY "primary" (a, b, rowid, c)
+)
+
+statement ok
+INSERT INTO x VALUES (6)
+
+query III
+SELECT * FROM x ORDER BY a
+----
+3 6 7
+6 12 10
 
 statement ok
 DROP TABLE x
