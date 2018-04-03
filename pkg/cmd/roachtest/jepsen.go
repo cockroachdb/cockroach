@@ -19,10 +19,12 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func runJepsen(ctx context.Context, t *test, c *cluster) {
@@ -99,15 +101,20 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
 	}
 
+	var failures []string
 	// TODO(bdarnell): add the rest of the tests and nemeses.
-	for _, testName := range []string{"bank"} {
-		for _, nemesis := range []string{"start-kill-2"} {
-			// TODO(bdarnell): the old jepsen scripts would abort the test
-			// if it went 60s with no output. Either reintroduce that or
-			// don't tee everything to stderr.
-			c.Run(ctx, controller, "bash", "-e", "-c", fmt.Sprintf(`"\
+	for _, testName := range []string{"bank", "g2"} {
+		for _, nemesis := range []string{"start-kill-2", "strobe-skews"} {
+			testCfg := fmt.Sprintf("%s/%s", testName, nemesis)
+			c.l.printf("%s: running\n", testCfg)
+
+			// Reset the "latest" alias for the next run.
+			c.Run(ctx, controller, "rm -f jepsen/cockroachdb/store/latest")
+
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- c.RunE(ctx, controller, "bash", "-e", "-c", fmt.Sprintf(`"\
 cd jepsen/cockroachdb && set -eo pipefail && \
- stdbuf -oL -eL \
  ~/lein run test \
    --tarball file://${PWD}/cockroach.tgz \
    --username ${USER} \
@@ -119,11 +126,67 @@ cd jepsen/cockroachdb && set -eo pipefail && \
    --test-count 1 \
    %s \
    --test %s %s \
-2>&1 | stdbuf -oL tee invoke.log \
+> invoke.log 2>&1 \
 "`, nodesStr, testName, nemesis))
-			// TODO(bdarnell): Collect logs and publish to artifact
-			// directory. Allow each test+nemesis to fail independently.
+			}()
+
+			select {
+			case testErr := <-errCh:
+				outputDir := filepath.Join(artifacts, c.t.Name(), testCfg, "results")
+				if err := os.MkdirAll(outputDir, 0777); err != nil {
+					t.Fatal(err)
+				}
+				if testErr == nil {
+					c.l.printf("%s: passed, grabbing minimal logs\n", testCfg)
+
+					collectFiles := []string{
+						"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
+					}
+					for _, file := range collectFiles {
+						cmd = exec.CommandContext(ctx, "roachprod", "get", c.makeNodes(controller),
+							"jepsen/cockroachdb/store/latest/"+file,
+							filepath.Join(outputDir, file))
+						if err := cmd.Run(); err != nil {
+							t.Fatal(err)
+						}
+					}
+				} else {
+					c.l.printf("%s: failed: %s\n", testCfg, testErr)
+					failures = append(failures, testCfg)
+					c.l.printf("%s: grabbing artifacts from controller. Tail of controller log:\n", testCfg)
+					c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
+					cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
+						// -h causes tar to follow symlinks; needed by the "latest" symlink.
+						// -f- sends the output to stdout, we read it and save it to a local file.
+						"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
+					output, err := cmd.Output()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+			case <-time.After(20 * time.Minute):
+				// Although we run tests of 6 minutes each, we use a timeout
+				// much larger than that. This is because Jepsen for some
+				// tests (e.g. register) runs a potentially long analysis
+				// after the test itself has completed, before determining
+				// whether the test has succeeded or not.
+				//
+				// Try to get any running jvm to log its stack traces for
+				// extra debugging help.
+				c.Run(ctx, controller, "pkill -QUIT java")
+				time.Sleep(10 * time.Second)
+				c.Run(ctx, controller, "pkill java")
+				c.l.printf("%s: timed out", testCfg)
+				failures = append(failures, testCfg)
+			}
 		}
+	}
+	if len(failures) > 0 {
+		t.Fatalf("jepsen tests failed: %v", failures)
 	}
 }
 
