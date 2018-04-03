@@ -145,7 +145,7 @@ func MakeSimpleTableDescriptor(
 		}
 	}
 	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{CtxProvider: ctxProvider{ctx}}
+	evalCtx := tree.EvalContext{CtxProvider: tree.SimpleCtxProvider(ctx)}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -165,14 +165,6 @@ func MakeSimpleTableDescriptor(
 	}
 
 	return &tableDesc, nil
-}
-
-type ctxProvider struct {
-	context.Context
-}
-
-func (c ctxProvider) Ctx() context.Context {
-	return c
 }
 
 // groupWorkers creates num worker go routines in an error group.

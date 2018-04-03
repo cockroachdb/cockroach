@@ -57,7 +57,7 @@ type DistSQLVersion uint32
 // A server only accepts requests with versions in the range MinAcceptedVersion
 // to Version.
 //
-// Is is possible used to provide a "window" of compatibility when new features are
+// It is possible used to provide a "window" of compatibility when new features are
 // added. Example:
 //  - we start with Version=1; distsqlrun servers with version 1 only accept
 //    requests with version 1.
@@ -74,11 +74,11 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 11
+const Version DistSQLVersion = 12
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion DistSQLVersion = 6
+const MinAcceptedVersion DistSQLVersion = 12
 
 // minFlowDrainWait is the minimum amount of time a draining server allows for
 // any incoming flows to be registered. It acts as a grace period in which the
@@ -251,15 +251,6 @@ func FlowVerIsCompatible(flowVer, minAcceptedVersion, serverVersion DistSQLVersi
 	return flowVer >= minAcceptedVersion && flowVer <= serverVersion
 }
 
-// simpleCtxProvider always returns the context that it holds.
-type simpleCtxProvider struct {
-	ctx context.Context
-}
-
-func (s simpleCtxProvider) Ctx() context.Context {
-	return s.ctx
-}
-
 // Note: unless an error is returned, the returned context contains a span that
 // must be finished through Flow.Cleanup.
 func (ds *ServerImpl) setupFlow(
@@ -331,7 +322,7 @@ func (ds *ServerImpl) setupFlow(
 		ActiveMemAcc: &acc,
 		// TODO(andrei): This is wrong. Each processor should override Ctx with its
 		// own context.
-		CtxProvider: simpleCtxProvider{ctx: ctx},
+		CtxProvider: tree.SimpleCtxProvider{Context: ctx},
 		Txn:         txn,
 		Planner:     &dummyEvalPlanner{},
 		Sequence:    &dummySequenceOperators{},

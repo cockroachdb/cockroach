@@ -1132,7 +1132,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 				for tableID, sc := range s.schemaChangers {
 					if timeutil.Since(sc.execAfter) > 0 {
-						evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
+						evalCtx := createSchemaChangeEvalCtx(ctx, s.execCfg.Clock.Now())
 
 						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
 						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
@@ -1179,7 +1179,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
+func createSchemaChangeEvalCtx(ctx context.Context, ts hlc.Timestamp) extendedEvalContext {
 	dummyLocation := time.UTC
 	evalCtx := extendedEvalContext{
 		EvalContext: tree.EvalContext{
@@ -1197,6 +1197,7 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 				Database:      "",
 				SequenceState: sessiondata.NewSequenceState(),
 			},
+			CtxProvider: tree.SimpleCtxProvider{Context: ctx},
 		},
 	}
 	// The backfill is going to use the current timestamp for the various

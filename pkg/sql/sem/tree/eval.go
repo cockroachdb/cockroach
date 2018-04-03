@@ -2253,6 +2253,18 @@ func (s backgroundCtxProvider) Ctx() context.Context {
 
 var _ CtxProvider = backgroundCtxProvider{}
 
+// SimpleCtxProvider always returns the context that it holds.
+type SimpleCtxProvider struct {
+	context.Context
+}
+
+// Ctx implements CtxProvider
+func (s SimpleCtxProvider) Ctx() context.Context {
+	return s.Context
+}
+
+var _ CtxProvider = SimpleCtxProvider{}
+
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations

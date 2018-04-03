@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -33,6 +35,7 @@ func initBackfillerSpec(
 	chunkSize int64,
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
+	evalCtx *tree.EvalContext,
 ) (distsqlrun.BackfillerSpec, error) {
 	ret := distsqlrun.BackfillerSpec{
 		Table:       desc,
@@ -46,6 +49,44 @@ func initBackfillerSpec(
 		ret.Type = distsqlrun.BackfillerSpec_Index
 	case columnBackfill:
 		ret.Type = distsqlrun.BackfillerSpec_Column
+
+		// Get update expressions for changed columns. This includes doing name
+		// resolution for computed columns so that it doesn't have to be done in
+		// the backfiller.
+		added, dropped := distsqlrun.GetColumnMutations(&desc)
+		updateCols := append(added, dropped...)
+		defaultExprs, err := sqlbase.MakeDefaultExprs(
+			added, &transform.ExprTransformContext{}, evalCtx,
+		)
+		if err != nil {
+			return distsqlrun.BackfillerSpec{}, err
+		}
+		var txCtx transform.ExprTransformContext
+		computedExprs, err := sqlbase.MakeComputedExprs(added, &desc, tree.NewUnqualifiedTableName(tree.Name(desc.Name)), &txCtx, evalCtx)
+		if err != nil {
+			return distsqlrun.BackfillerSpec{}, err
+		}
+
+		if len(dropped) > 0 || len(defaultExprs) > 0 || len(computedExprs) > 0 {
+			// Populate default or computed values.
+			updateExprs := make([]tree.TypedExpr, len(updateCols))
+			for j, col := range added {
+				if col.IsComputed() {
+					updateExprs[j] = computedExprs[j]
+				} else if defaultExprs == nil || defaultExprs[j] == nil {
+					updateExprs[j] = tree.DNull
+				} else {
+					updateExprs[j] = defaultExprs[j]
+				}
+			}
+			for j := range dropped {
+				updateExprs[j+len(added)] = tree.DNull
+			}
+			ret.UpdateExprs = make([]distsqlrun.Expression, len(updateExprs))
+			for i, e := range updateExprs {
+				ret.UpdateExprs[i] = distsqlplan.MakeExpression(e, evalCtx, nil)
+			}
+		}
 	default:
 		return distsqlrun.BackfillerSpec{}, errors.Errorf("bad backfill type %d", backfillType)
 	}
@@ -65,7 +106,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (physicalPlan, error) {
-	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
+	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf, planCtx.EvalContext())
 	if err != nil {
 		return physicalPlan{}, err
 	}

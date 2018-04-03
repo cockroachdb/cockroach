@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,6 +40,7 @@ type columnBackfiller struct {
 	updateExprs []tree.TypedExpr
 
 	evalCtx *tree.EvalContext
+	iv      *sqlbase.RowIndexedVarContainer
 }
 
 var _ Processor = &columnBackfiller{}
@@ -49,6 +50,23 @@ var _ chunkBackfiller = &columnBackfiller{}
 // columns.
 func ColumnMutationFilter(m sqlbase.DescriptorMutation) bool {
 	return m.GetColumn() != nil && (m.Direction == sqlbase.DescriptorMutation_ADD || m.Direction == sqlbase.DescriptorMutation_DROP)
+}
+
+// GetColumnMutations returns the columns being added on dropped in any
+// schema mutation.
+func GetColumnMutations(desc *sqlbase.TableDescriptor) (added, dropped []sqlbase.ColumnDescriptor) {
+	for _, m := range desc.Mutations {
+		if ColumnMutationFilter(m) {
+			desc := *m.GetColumn()
+			switch m.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				added = append(added, desc)
+			case sqlbase.DescriptorMutation_DROP:
+				dropped = append(dropped, desc)
+			}
+		}
+	}
+	return added, dropped
 }
 
 func newColumnBackfiller(
@@ -62,7 +80,6 @@ func newColumnBackfiller(
 			output:  output,
 			spec:    spec,
 		},
-		evalCtx: flowCtx.NewEvalCtx(),
 	}
 	cb.backfiller.chunkBackfiller = cb
 
@@ -76,42 +93,30 @@ func newColumnBackfiller(
 func (cb *columnBackfiller) init() error {
 	desc := cb.spec.Table
 
+	cb.evalCtx = cb.flowCtx.NewEvalCtx()
+	cb.iv = &sqlbase.RowIndexedVarContainer{
+		Cols:    desc.Columns,
+		Mapping: sqlbase.ColIDtoRowIndexFromCols(desc.Columns),
+	}
+	cb.evalCtx.IVarContainer = cb.iv
+
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	var colIdxMap map[sqlbase.ColumnID]int
 
-	if len(desc.Mutations) > 0 {
-		for _, m := range desc.Mutations {
-			if ColumnMutationFilter(m) {
-				switch m.Direction {
-				case sqlbase.DescriptorMutation_ADD:
-					desc := *m.GetColumn()
-					cb.added = append(cb.added, desc)
-				case sqlbase.DescriptorMutation_DROP:
-					cb.dropped = append(cb.dropped, *m.GetColumn())
-				}
-			}
-		}
-	}
-	defaultExprs, err := sqlbase.MakeDefaultExprs(
-		cb.added, &transform.ExprTransformContext{}, cb.evalCtx,
-	)
-	if err != nil {
-		return err
-	}
-
+	cb.added, cb.dropped = GetColumnMutations(&desc)
 	cb.updateCols = append(cb.added, cb.dropped...)
-	if len(cb.dropped) > 0 || len(defaultExprs) > 0 {
-		// Populate default values.
-		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
-		for j := range cb.added {
-			if defaultExprs == nil || defaultExprs[j] == nil {
-				cb.updateExprs[j] = tree.DNull
-			} else {
-				cb.updateExprs[j] = defaultExprs[j]
-			}
+
+	cb.updateExprs = make([]tree.TypedExpr, len(cb.spec.UpdateExprs))
+	semaCtx := &tree.SemaContext{IVarContainer: cb.iv}
+	for i, exprSpec := range cb.spec.UpdateExprs {
+		expr, err := parser.ParseExpr(exprSpec.Expr)
+		if err != nil {
+			return err
 		}
-		for j := range cb.dropped {
-			cb.updateExprs[j+len(cb.added)] = tree.DNull
+
+		cb.updateExprs[i], err = tree.TypeCheck(expr, semaCtx, cb.updateCols[i].Type.ToDatumType())
+		if err != nil {
+			return err
 		}
 	}
 
@@ -231,6 +236,8 @@ func (cb *columnBackfiller) runChunk(
 			if datums == nil {
 				break
 			}
+			cb.iv.CurSourceRow = datums
+
 			// Evaluate the new values. This must be done separately for
 			// each row so as to handle impure functions correctly.
 			for j, e := range cb.updateExprs {

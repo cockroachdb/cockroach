@@ -1385,7 +1385,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.testingKnobs = cfg.SchemaChangerTestingKnobs
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now())
+			evalCtx := createSchemaChangeEvalCtx(ctx, cfg.Clock.Now())
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)

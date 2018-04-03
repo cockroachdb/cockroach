@@ -477,6 +477,8 @@ message BackfillerSpec {
 
   // The timestamp to perform index backfill historical scans at.
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
+
+  repeated Expression update_exprs = 8 [(gogoproto.nullable) = false];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

@@ -45,8 +45,8 @@ func (r *RowIndexedVarContainer) IndexedVarEval(
 }
 
 // IndexedVarResolvedType implements tree.IndexedVarContainer.
-func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
-	panic("unsupported")
+func (r *RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+	return r.Cols[idx].Type.ToDatumType()
 }
 
 // IndexedVarNodeFormatter implements tree.IndexedVarContainer.
@@ -101,37 +101,55 @@ func ProcessComputedColumns(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
-	// TODO(justin): the DEFAULT version of this code also had code to handle
-	// mutations. We don't support adding computed columns yet, but we will need
-	// to add that back in.
-
-	// TODO(justin): is there a way we can somehow cache this property on the
-	// table descriptor so we don't have to iterate through all of these?
-	haveComputed := false
-	endOfNonComputed := len(cols)
-	for _, col := range tableDesc.Columns {
-		if col.IsComputed() {
-			cols = append(cols, col)
-			haveComputed = true
-		}
-	}
-
-	// If this table has no computed columns, don't bother.
-	if !haveComputed {
-		return cols, nil, nil, nil
-	}
-
-	computedCols := cols[endOfNonComputed:]
+	computedCols := processColumnSet(nil, tableDesc, func(col ColumnDescriptor) bool {
+		return col.IsComputed()
+	})
+	cols = append(cols, computedCols...)
 
 	// TODO(justin): it's unfortunate that this parses and typechecks the
 	// ComputeExprs on every query.
+	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx)
+	return cols, computedCols, computedExprs, err
+}
+
+// MakeComputedExprs returns a slice of the computed expressions for the
+// slice of input column descriptors, or nil if none of the input column
+// descriptors have computed expressions.
+// The length of the result slice matches the length of the input column
+// descriptors. For every column that has no computed expression, a NULL
+// expression is reported.
+func MakeComputedExprs(
+	cols []ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
+	// Check to see if any of the columns have computed expressions. If there
+	// are none, we don't bother with constructing the map as the expressions
+	// are all NULL.
+	haveComputed := false
+	for _, col := range cols {
+		if col.IsComputed() {
+			haveComputed = true
+			break
+		}
+	}
+	if !haveComputed {
+		return nil, nil
+	}
+
+	// Build the computed expressions map from the parsed statement.
+	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
-	for _, col := range computedCols {
-		exprStrings = append(exprStrings, *col.ComputeExpr)
+	for _, col := range cols {
+		if col.IsComputed() {
+			exprStrings = append(exprStrings, *col.ComputeExpr)
+		}
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
@@ -148,24 +166,28 @@ func ProcessComputedColumns(
 	semaCtx := tree.MakeSemaContext(false)
 	semaCtx.IVarContainer = iv
 
-	computedExprs := make([]tree.TypedExpr, 0, len(cols))
-	for i, col := range computedCols {
-		expr, _, _, err := ResolveNames(exprs[i],
+	compExprIdx := 0
+	for _, col := range cols {
+		if !col.IsComputed() {
+			computedExprs = append(computedExprs, tree.DNull)
+			continue
+		}
+		expr, _, _, err := ResolveNames(exprs[compExprIdx],
 			MakeMultiSourceInfo(sourceInfo),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
 		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type.ToDatumType())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		computedExprs = append(computedExprs, typedExpr)
+		compExprIdx++
 	}
-
-	return cols, computedCols, computedExprs, nil
+	return computedExprs, nil
 }
