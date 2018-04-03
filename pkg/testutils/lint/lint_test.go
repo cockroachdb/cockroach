@@ -995,9 +995,9 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestVet", func(t *testing.T) {
 		t.Parallel()
-		// `go tool vet` is a special snowflake that emits all its output on
+		// `go vet` is a special snowflake that emits all its output on
 		// `stderr.
-		cmd := exec.Command("go", "tool", "vet", "-source", "-all", "-shadow", "-printfuncs",
+		cmd := exec.Command("go", "vet", "-all", "-shadow", "-printfuncs",
 			strings.Join([]string{
 				"Info:1",
 				"Infof:1",
@@ -1022,9 +1022,9 @@ func TestLint(t *testing.T) {
 				"UnimplementedWithIssueErrorf:1",
 				"Wrapf:1",
 			}, ","),
-			".",
+			pkgScope,
 		)
-		cmd.Dir = pkgDir
+		cmd.Dir = crdb.Dir
 		var b bytes.Buffer
 		cmd.Stdout = &b
 		cmd.Stderr = &b
@@ -1040,13 +1040,19 @@ func TestLint(t *testing.T) {
 			stream.FilterFunc(func(arg stream.Arg) error {
 				scanner := bufio.NewScanner(&b)
 				for scanner.Scan() {
-					arg.Out <- scanner.Text()
+					if s := scanner.Text(); strings.TrimSpace(s) != "" {
+						arg.Out <- s
+					}
 				}
 				return scanner.Err()
 			}),
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
 			stream.GrepNot(`\.og\.go:[0-9]+: declaration of ".*" shadows`),
+			stream.GrepNot(`^#`), // comment line
+			// Upstream compiler error. See: https://github.com/golang/go/issues/23701
+			stream.GrepNot(`pkg/sql/pgwire/pgwire_test\.go.*internal compiler error`),
+			stream.GrepNot(`^Please file a bug report|^https://golang.org/issue/new`),
 		), func(s string) {
 			t.Error(s)
 		}); err != nil {
