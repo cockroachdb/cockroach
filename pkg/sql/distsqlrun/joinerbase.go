@@ -109,11 +109,10 @@ func (jb *joinerBase) init(
 	}
 	outputTypes := condTypes[:outputSize]
 
-	evalCtx := flowCtx.NewEvalCtx()
-	if err := jb.onCond.init(onExpr, condTypes, evalCtx); err != nil {
+	if err := jb.processorBase.init(post, outputTypes, flowCtx, output); err != nil {
 		return err
 	}
-	return jb.processorBase.init(post, outputTypes, flowCtx, evalCtx, output)
+	return jb.onCond.init(onExpr, condTypes, jb.evalCtx)
 }
 
 type joinSide uint8

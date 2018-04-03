@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -45,6 +46,8 @@ type rowNumCounter struct {
 var _ Processor = &metadataTestReceiver{}
 var _ RowSource = &metadataTestReceiver{}
 
+const metadataTestReceiverProcName = "meta receiver"
+
 func newMetadataTestReceiver(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver, senders []string,
 ) (*metadataTestReceiver, error) {
@@ -53,18 +56,20 @@ func newMetadataTestReceiver(
 		senders:   senders,
 		rowCounts: make(map[string]rowNumCounter),
 	}
-	if err := mtr.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := mtr.init(post, input.OutputTypes(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return mtr, nil
 }
 
 // Run is part of the Processor interface.
-func (mtr *metadataTestReceiver) Run(wg *sync.WaitGroup) {
+func (mtr *metadataTestReceiver) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if mtr.out.output == nil {
 		panic("metadataTestReceiver output not initialized for emitting rows")
 	}
-	Run(mtr.flowCtx.Ctx, mtr, mtr.out.output)
+
+	ctx = mtr.Start(ctx)
+	Run(ctx, mtr, mtr.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -154,10 +159,14 @@ func (mtr *metadataTestReceiver) producerMeta() *ProducerMetadata {
 	return nil
 }
 
+// Start is part of the RowSource interface.
+func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
+	mtr.input.Start(ctx)
+	return mtr.startInternal(ctx, metadataTestReceiverProcName)
+}
+
 // Next is part of the RowSource interface.
 func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	mtr.maybeStart("metadataTestReceiver", "" /* logTag */)
-
 	for {
 		row, meta := mtr.input.Next()
 

@@ -119,7 +119,6 @@ func TestDistinct(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				Settings: st,
 				EvalCtx:  evalCtx,
 			}
@@ -129,7 +128,7 @@ func TestDistinct(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d.Run(nil)
+			d.Run(context.Background(), nil /* wg */)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -158,7 +157,6 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -179,7 +177,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(nil)
+				d.Run(context.Background(), nil /* wg */)
 				input.Reset()
 			}
 		})

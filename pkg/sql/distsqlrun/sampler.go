@@ -57,6 +57,8 @@ type samplerProcessor struct {
 
 var _ Processor = &samplerProcessor{}
 
+const samplerProcName = "sampler"
+
 var supportedSketchTypes = map[SketchType]struct{}{
 	// The code currently hardcodes the use of this single type of sketch
 	// (which avoids the extra complexity until we actually have multiple types).
@@ -119,7 +121,7 @@ func newSamplerProcessor(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 	s.outTypes = outTypes
 
-	if err := s.init(post, outTypes, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := s.init(post, outTypes, flowCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -130,18 +132,20 @@ func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
 }
 
 // Run is part of the Processor interface.
-func (s *samplerProcessor) Run(wg *sync.WaitGroup) {
+func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(s.flowCtx.Ctx, "sampler")
-	defer tracing.FinishSpan(span)
 
-	earlyExit, err := s.mainLoop(ctx)
+	s.input.Start(ctx)
+	s.startInternal(ctx, samplerProcName)
+	defer tracing.FinishSpan(s.span)
+
+	earlyExit, err := s.mainLoop(s.ctx)
 	if err != nil {
-		DrainAndClose(ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		DrainAndClose(s.ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		s.pushTrailingMeta(ctx)
+		s.pushTrailingMeta(s.ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}

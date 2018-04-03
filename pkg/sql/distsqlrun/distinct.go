@@ -15,9 +15,9 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -28,7 +28,6 @@ import (
 type distinct struct {
 	processorBase
 
-	evalCtx      *tree.EvalContext
 	input        RowSource
 	types        []sqlbase.ColumnType
 	lastGroupKey sqlbase.EncDatumRow
@@ -50,8 +49,12 @@ type sortedDistinct struct {
 var _ Processor = &distinct{}
 var _ RowSource = &distinct{}
 
+const distinctProcName = "distinct"
+
 var _ Processor = &sortedDistinct{}
 var _ RowSource = &sortedDistinct{}
+
+const sortedDistinctProcName = "sorted distinct"
 
 func newDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
@@ -81,7 +84,7 @@ func newDistinct(
 		types:        input.OutputTypes(),
 	}
 
-	if err := d.init(post, d.types, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := d.init(post, d.types, flowCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -95,23 +98,37 @@ func newDistinct(
 	return d, nil
 }
 
+// Start is part of the RowSource interface.
+func (d *distinct) Start(ctx context.Context) context.Context {
+	d.input.Start(ctx)
+	return d.startInternal(ctx, distinctProcName)
+}
+
 // Run is part of the processor interface.
-func (d *distinct) Run(wg *sync.WaitGroup) {
+func (d *distinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if d.out.output == nil {
 		panic("distinct output not initialized for emitting rows")
 	}
-	Run(d.flowCtx.Ctx, d, d.out.output)
+	ctx = d.Start(ctx)
+	Run(ctx, d, d.out.output)
 	if wg != nil {
 		wg.Done()
 	}
 }
 
+// Start is part of the RowSource interface.
+func (d *sortedDistinct) Start(ctx context.Context) context.Context {
+	d.input.Start(ctx)
+	return d.startInternal(ctx, sortedDistinctProcName)
+}
+
 // Run is part of the processor interface.
-func (d *sortedDistinct) Run(wg *sync.WaitGroup) {
+func (d *sortedDistinct) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if d.out.output == nil {
 		panic("distinct output not initialized for emitting rows")
 	}
-	Run(d.flowCtx.Ctx, d, d.out.output)
+	ctx = d.Start(ctx)
+	Run(ctx, d, d.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -190,10 +207,6 @@ func (d *distinct) producerMeta(err error) *ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if d.maybeStart("distinct", "Distinct") {
-		d.evalCtx = d.flowCtx.NewEvalCtx()
-	}
-
 	if d.closed {
 		return nil, d.producerMeta(nil /* err */)
 	}
@@ -267,10 +280,6 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // Next is part of the RowSource interface.
 func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if d.maybeStart("sortedDistinct", "SortedDistinct") {
-		d.evalCtx = d.flowCtx.NewEvalCtx()
-	}
-
 	if d.closed {
 		return nil, d.producerMeta(nil /* err */)
 	}

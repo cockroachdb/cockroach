@@ -15,10 +15,10 @@
 package distsqlrun
 
 import (
+	"context"
 	"errors"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +31,6 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
-	evalCtx       *tree.EvalContext
 	cancelChecker *sqlbase.CancelChecker
 
 	leftSource, rightSource RowSource
@@ -46,6 +45,8 @@ type mergeJoiner struct {
 
 var _ Processor = &mergeJoiner{}
 var _ RowSource = &mergeJoiner{}
+
+const mergeJoinerProcName = "merge joiner"
 
 func newMergeJoiner(
 	flowCtx *FlowCtx,
@@ -70,13 +71,14 @@ func newMergeJoiner(
 		rightSource: rightSource,
 	}
 
-	err := m.joinerBase.init(flowCtx,
-		leftSource.OutputTypes(), rightSource.OutputTypes(),
-		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output)
-	if err != nil {
+	if err := m.joinerBase.init(
+		flowCtx, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
+	); err != nil {
 		return nil, err
 	}
 
+	var err error
 	m.streamMerger, err = makeStreamMerger(
 		leftSource,
 		convertToColumnOrdering(spec.LeftOrdering),
@@ -91,12 +93,13 @@ func newMergeJoiner(
 	return m, nil
 }
 
-// Run is part of the processor interface.
-func (m *mergeJoiner) Run(wg *sync.WaitGroup) {
+// Run is part of the Processor interface.
+func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if m.out.output == nil {
 		panic("mergeJoiner output not initialized for emitting rows")
 	}
-	Run(m.flowCtx.Ctx, m, m.out.output)
+	ctx = m.Start(ctx)
+	Run(ctx, m, m.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -131,13 +134,16 @@ func (m *mergeJoiner) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
-func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if m.maybeStart("merge joiner", "MergeJoiner") {
-		m.evalCtx = m.flowCtx.NewEvalCtx()
-		m.cancelChecker = sqlbase.NewCancelChecker(m.ctx)
-		log.VEventf(m.ctx, 2, "starting merge joiner run")
-	}
+// Start is part of the RowSource interface.
+func (m *mergeJoiner) Start(ctx context.Context) context.Context {
+	m.streamMerger.start(ctx)
+	ctx = m.startInternal(ctx, mergeJoinerProcName)
+	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	return ctx
+}
 
+// Next is part of the Processor interface.
+func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if m.closed {
 		return nil, m.producerMeta(nil /* err */)
 	}
