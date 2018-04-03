@@ -526,7 +526,9 @@ func loadAllDescs(
 	return allDescs, nil
 }
 
-func resolveTargetsToDescriptors(
+// ResolveTargetsToDescriptors performs name resolution on a set of targets and
+// returns the resulting descriptors.
+func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
 	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
@@ -868,7 +870,7 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+		targetDescs, completeDBs, err := ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
 		}

@@ -2713,7 +2713,7 @@ var jsonBuildObjectImpl = tree.Builtin{
 				return nil, err
 			}
 
-			val, err := asJSON(args[i+1])
+			val, err := AsJSON(args[i+1])
 			if err != nil {
 				return nil, err
 			}
@@ -2730,7 +2730,7 @@ var toJSONImpl = tree.Builtin{
 	Types:      tree.ArgTypes{{"val", types.Any}},
 	ReturnType: tree.FixedReturnType(types.JSON),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		j, err := asJSON(args[0])
+		j, err := AsJSON(args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -2746,7 +2746,7 @@ var jsonBuildArrayImpl = tree.Builtin{
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
-			j, err := asJSON(arg)
+			j, err := AsJSON(arg)
 			if err != nil {
 				return nil, err
 			}
@@ -2775,7 +2775,7 @@ var jsonObjectImpls = []tree.Builtin{
 				if err != nil {
 					return nil, err
 				}
-				val, err := asJSON(arr.Array[i+1])
+				val, err := AsJSON(arr.Array[i+1])
 				if err != nil {
 					return nil, err
 				}
@@ -2806,7 +2806,7 @@ var jsonObjectImpls = []tree.Builtin{
 				if err != nil {
 					return nil, err
 				}
-				val, err := asJSON(values.Array[i])
+				val, err := AsJSON(values.Array[i])
 				if err != nil {
 					return nil, err
 				}
@@ -3643,7 +3643,8 @@ func truncateTimestamp(
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
 }
 
-func asJSON(d tree.Datum) (json.JSON, error) {
+// AsJSON converts a datum into our standard json representation.
+func AsJSON(d tree.Datum) (json.JSON, error) {
 	switch t := d.(type) {
 	case *tree.DBool:
 		return json.FromBool(bool(*t)), nil
@@ -3662,7 +3663,7 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 	case *tree.DArray:
 		builder := json.NewArrayBuilder(t.Len())
 		for _, e := range t.Array {
-			j, err := asJSON(e)
+			j, err := AsJSON(e)
 			if err != nil {
 				return nil, err
 			}
@@ -3672,7 +3673,7 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 	case *tree.DTuple:
 		builder := json.NewObjectBuilder(len(t.D))
 		for i, e := range t.D {
-			j, err := asJSON(e)
+			j, err := AsJSON(e)
 			if err != nil {
 				return nil, err
 			}
@@ -3686,7 +3687,7 @@ func asJSON(d tree.Datum) (json.JSON, error) {
 			return json.NullJSONValue, nil
 		}
 
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSON", d)
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for AsJSON", d)
 	}
 }
 
