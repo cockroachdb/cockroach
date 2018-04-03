@@ -468,9 +468,13 @@ select
            ├── variable: a.s [type=string, outer=(4)]
            └── const: 'foo' [type=string]
 
-# Contains comparison (should not be negated).
+# JSON comparisons (should not be negated).
 opt
-SELECT * FROM a WHERE NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]')
+SELECT * FROM a WHERE
+  NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
+  NOT(j ? 'foo') AND
+  NOT(j ?| ARRAY['foo']) AND
+  NOT(j ?& ARRAY['foo'])
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -481,10 +485,24 @@ select
       │    └── contains [type=bool, outer=(5)]
       │         ├── const: '[1, 2]' [type=jsonb]
       │         └── variable: a.j [type=jsonb, outer=(5)]
+      ├── not [type=bool, outer=(5)]
+      │    └── contains [type=bool, outer=(5)]
+      │         ├── const: '[3, 4]' [type=jsonb]
+      │         └── variable: a.j [type=jsonb, outer=(5)]
+      ├── not [type=bool, outer=(5)]
+      │    └── json-exists [type=bool, outer=(5)]
+      │         ├── variable: a.j [type=jsonb, outer=(5)]
+      │         └── const: 'foo' [type=string]
+      ├── not [type=bool, outer=(5)]
+      │    └── json-some-exists [type=bool, outer=(5)]
+      │         ├── variable: a.j [type=jsonb, outer=(5)]
+      │         └── array: string[] [type=string[]]
+      │              └── const: 'foo' [type=string]
       └── not [type=bool, outer=(5)]
-           └── contains [type=bool, outer=(5)]
-                ├── const: '[3, 4]' [type=jsonb]
-                └── variable: a.j [type=jsonb, outer=(5)]
+           └── json-all-exists [type=bool, outer=(5)]
+                ├── variable: a.j [type=jsonb, outer=(5)]
+                └── array: string[] [type=string[]]
+                     └── const: 'foo' [type=string]
 
 # --------------------------------------------------
 # EliminateNot
