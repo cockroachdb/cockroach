@@ -121,6 +121,8 @@ type aggregator struct {
 var _ Processor = &aggregator{}
 var _ RowSource = &aggregator{}
 
+const aggregatorProcName = "aggregator"
+
 func newAggregator(
 	flowCtx *FlowCtx,
 	spec *AggregatorSpec,
@@ -177,19 +179,30 @@ func newAggregator(
 
 		ag.outputTypes[i] = retType
 	}
-	if err := ag.init(post, ag.outputTypes, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := ag.init(post, ag.outputTypes, flowCtx, output); err != nil {
 		return nil, err
 	}
 
 	return ag, nil
 }
 
-// Run is part of the processor interface.
-func (ag *aggregator) Run(wg *sync.WaitGroup) {
+// Start is part of the RowSource interface.
+func (ag *aggregator) Start(ctx context.Context) context.Context {
+	ag.input.Start(ctx)
+	ctx = ag.startInternal(ctx, aggregatorProcName)
+	ag.cancelChecker = sqlbase.NewCancelChecker(ctx)
+	ag.accumulating = true
+	return ctx
+}
+
+// Run is part of the Processor interface.
+func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if ag.out.output == nil {
 		panic("aggregator output not initialized for emitting rows")
 	}
-	Run(ag.flowCtx.Ctx, ag, ag.out.output)
+
+	ctx = ag.Start(ctx)
+	Run(ctx, ag, ag.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -231,12 +244,6 @@ func (ag *aggregator) producerMeta(err error) *ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if ag.maybeStart("aggregator", "Agg") {
-		log.VEventf(ag.ctx, 2, "starting aggregation process")
-		ag.cancelChecker = sqlbase.NewCancelChecker(ag.ctx)
-		ag.accumulating = true
-	}
-
 	if ag.accumulating {
 		for {
 			row, meta := ag.input.Next()

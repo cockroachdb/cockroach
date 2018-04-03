@@ -84,11 +84,29 @@ type RowReceiver interface {
 	ProducerDone()
 }
 
-// RowSource is any component of a flow that produces rows that cam be consumed
+// RowSource is any component of a flow that produces rows that can be consumed
 // by another component.
+//
+// Communication components generally (e.g. RowBuffer, RowChannel) implement
+// this interface. Some processors also implement it (in addition to
+// implementing the Processor interface) - in which case those
+// processors can be "fused" with their consumer (i.e. run in the consumer's
+// goroutine).
 type RowSource interface {
 	// OutputTypes returns the schema for the rows in this source.
 	OutputTypes() []sqlbase.ColumnType
+
+	// Start prepares the RowSource for future Next() calls and takes in the
+	// context in which these future calls should operate. Start needs to be
+	// called before Next/ConsumerDone/ConsumerClosed.
+	//
+	// RowSources that consume other RowSources are expected to Start() their
+	// inputs.
+	//
+	// Implementations are expected to hold on to the provided context. They may
+	// chose to derive and annotate it (Processors generally do). For convenience,
+	// the possibly updated context is returned.
+	Start(context.Context) context.Context
 
 	// Next returns the next record from the source. At most one of the return
 	// values will be non-empty. Both of them can be empty when the RowSource has
@@ -132,6 +150,8 @@ type RowSource interface {
 
 // Run reads records from the source and outputs them to the receiver, properly
 // draining the source of metadata and closing both the source and receiver.
+//
+// src needs to have been Start()ed before calling this.
 func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 	for {
 		row, meta := src.Next()
@@ -401,6 +421,9 @@ func (rc *RowChannel) OutputTypes() []sqlbase.ColumnType {
 	return rc.types
 }
 
+// Start is part of the RowSource interface.
+func (rc *RowChannel) Start(ctx context.Context) context.Context { return ctx }
+
 // Next is part of the RowSource interface.
 func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	d, ok := <-rc.C
@@ -468,6 +491,12 @@ func (mrc *MultiplexedRowChannel) ProducerDone() {
 // OutputTypes is part of the RowSource interface.
 func (mrc *MultiplexedRowChannel) OutputTypes() []sqlbase.ColumnType {
 	return mrc.rowChan.types
+}
+
+// Start is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) Start(ctx context.Context) context.Context {
+	mrc.rowChan.Start(ctx)
+	return ctx
 }
 
 // Next is part of the RowSource interface.
@@ -615,6 +644,9 @@ func (rb *RowBuffer) OutputTypes() []sqlbase.ColumnType {
 	}
 	return rb.types
 }
+
+// Start is part of the RowSource interface.
+func (rb *RowBuffer) Start(ctx context.Context) context.Context { return ctx }
 
 // Next is part of the RowSource interface.
 //

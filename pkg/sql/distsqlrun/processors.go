@@ -38,7 +38,7 @@ type Processor interface {
 
 	// Run is the main loop of the processor.
 	// If wg is non-nil, wg.Done is called before exiting.
-	Run(wg *sync.WaitGroup)
+	Run(_ context.Context, wg *sync.WaitGroup)
 }
 
 // ProcOutputHelper is a helper type that performs filtering and projection on
@@ -363,16 +363,20 @@ type processorBase struct {
 	out     ProcOutputHelper
 	flowCtx *FlowCtx
 
+	// evalCtx is used for expression evaluation. It overrides the one in flowCtx.
+	evalCtx *tree.EvalContext
+
 	// ctx and span contain the tracing state while the processor is active
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
 	ctx  context.Context
 	span opentracing.Span
+	// origCtx is the context from which ctx was derived. internalClose() resets
+	// ctx to this.
+	origCtx context.Context
 
-	// started and closed are used for initializing and closing a processor when
-	// used as a RowSource.
-	started bool
-	closed  bool
+	// closed is used for closing a processor when used as a RowSource.
+	closed bool
 }
 
 // OutputTypes is part of the processor interface.
@@ -380,39 +384,47 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 	return pb.out.outputTypes
 }
 
-func (pb *processorBase) init(
-	post *PostProcessSpec,
-	types []sqlbase.ColumnType,
-	flowCtx *FlowCtx,
-	evalCtx *tree.EvalContext,
-	output RowReceiver,
-) error {
-	pb.flowCtx = flowCtx
-	pb.ctx = pb.flowCtx.Ctx
-	if evalCtx == nil {
-		evalCtx = flowCtx.NewEvalCtx()
-	}
-	return pb.out.Init(post, types, evalCtx, output)
+var procNameToLogTag = map[string]string{
+	aggregatorProcName:              "agg",
+	distinctProcName:                "distinct",
+	hashJoinerProcName:              "hashJoiner",
+	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
+	joinReaderProcName:              "joinReader",
+	mergeJoinerProcName:             "mergeJoiner",
+	metadataTestReceiverProcName:    "metaReceiver",
+	metadataTestSenderProcName:      "metaSender",
+	noopProcName:                    "noop",
+	samplerProcName:                 "sampler",
+	scrubTableReaderProcName:        "scrub",
+	sortAllProcName:                 "sortAll",
+	sortTopKProcName:                "sortTopK",
+	sortedDistinctProcName:          "sortedDistinct",
+	sortChunksProcName:              "sortChunks",
+	tableReaderProcName:             "tableReader",
+	valuesProcName:                  "values",
 }
 
-// maybeStart helps processors implement the RowSource interface, performing
-// common initialization when starting. Returns true iff the processor is being
-// started.
-//
-//   if pb.maybeStart("my processor") {
-//     // Perform processor specific initialization.
-//   }
-func (pb *processorBase) maybeStart(name, logTag string) bool {
-	if pb.started {
-		return false
-	}
-	pb.started = true
-	pb.ctx = pb.flowCtx.Ctx
+func (pb *processorBase) init(
+	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+) error {
+	pb.flowCtx = flowCtx
+	pb.evalCtx = flowCtx.NewEvalCtx()
+	return pb.out.Init(post, types, pb.evalCtx, output)
+}
+
+// startInternal prepares the processorBase for execution. It returns the
+// annotated context that's also stored in pb.ctx.
+func (pb *processorBase) startInternal(ctx context.Context, name string) context.Context {
+	pb.origCtx = ctx
+	logTag := procNameToLogTag[name]
 	if logTag != "" {
-		pb.ctx = log.WithLogTag(pb.ctx, logTag, nil)
+		pb.ctx = log.WithLogTag(ctx, logTag, nil)
+	} else {
+		pb.ctx = ctx
 	}
 	pb.ctx, pb.span = processorSpan(pb.ctx, name)
-	return true
+	pb.evalCtx.CtxProvider = tree.FixedCtxProvider{Context: pb.ctx}
+	return pb.ctx
 }
 
 // internalClose helps processors implement the RowSource interface, performing
@@ -426,12 +438,11 @@ func (pb *processorBase) internalClose() bool {
 	closing := !pb.closed
 	if closing {
 		pb.closed = true
-		pb.started = true // a closed processor has definitely started
 		tracing.FinishSpan(pb.span)
 		pb.span = nil
 		// Reset the context so that any incidental uses after this point do not
 		// access the finished span.
-		pb.ctx = pb.flowCtx.Ctx
+		pb.ctx = pb.origCtx
 	}
 	// This prevents Next() from returning more rows.
 	pb.out.consumerClosed()
@@ -475,6 +486,7 @@ func processorSpan(ctx context.Context, name string) (context.Context, opentraci
 }
 
 func newProcessor(
+	ctx context.Context,
 	flowCtx *FlowCtx,
 	core *ProcessorCoreUnion,
 	post *PostProcessSpec,
@@ -512,7 +524,7 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSorter(flowCtx, core.Sorter, inputs[0], post, outputs[0])
+		return newSorter(ctx, flowCtx, core.Sorter, inputs[0], post, outputs[0])
 	}
 	if core.Distinct != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {

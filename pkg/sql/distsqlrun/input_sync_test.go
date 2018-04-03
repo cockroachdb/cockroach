@@ -119,6 +119,7 @@ func TestOrderedSync(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		src.Start(context.Background())
 		var retRows sqlbase.EncDatumRows
 		for {
 			row, meta := src.Next()

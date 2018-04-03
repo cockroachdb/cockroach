@@ -702,7 +702,6 @@ func TestMergeJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				Settings: st,
 				EvalCtx:  evalCtx,
 			}
@@ -713,7 +712,7 @@ func TestMergeJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(nil /* wg */)
+			m.Run(context.Background(), nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -810,7 +809,6 @@ func TestConsumerClosed(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				Settings: st,
 				EvalCtx:  evalCtx,
 			}
@@ -820,7 +818,7 @@ func TestConsumerClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(nil /* wg */)
+			m.Run(context.Background(), nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -835,7 +833,6 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -868,7 +865,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				m.Run(nil)
+				m.Run(context.Background(), nil /* wg */)
 				leftInput.Reset()
 				rightInput.Reset()
 			}

@@ -354,7 +354,6 @@ func TestAggregator(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				Settings: st,
 				EvalCtx:  evalCtx,
 			}
@@ -364,7 +363,7 @@ func TestAggregator(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			ag.Run(nil)
+			ag.Run(context.Background(), nil /* wg */)
 
 			var expected []string
 			for _, row := range c.expected {
@@ -415,7 +414,6 @@ func BenchmarkAggregation(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -441,7 +439,7 @@ func BenchmarkAggregation(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(nil)
+				d.Run(context.TODO(), nil)
 				input.Reset()
 			}
 			b.StopTimer()
@@ -459,7 +457,6 @@ func BenchmarkGrouping(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -477,7 +474,7 @@ func BenchmarkGrouping(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		d.Run(nil)
+		d.Run(context.Background(), nil /* wg */)
 		input.Reset()
 	}
 	b.StopTimer()
