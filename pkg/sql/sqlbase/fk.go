@@ -266,24 +266,24 @@ func TablesNeededForFKs(
 	}
 }
 
-// spanKVFetcher is an kvFetcher that returns a set slice of kvs.
-type spanKVFetcher struct {
-	kvs []roachpb.KeyValue
+// SpanKVFetcher is an kvFetcher that returns a set slice of kvs.
+type SpanKVFetcher struct {
+	KVs []roachpb.KeyValue
 }
 
 // nextBatch implements the kvFetcher interface.
-func (f *spanKVFetcher) nextBatch(_ context.Context) (bool, []roachpb.KeyValue, error) {
-	if len(f.kvs) == 0 {
+func (f *SpanKVFetcher) nextBatch(_ context.Context) (bool, []roachpb.KeyValue, error) {
+	if len(f.KVs) == 0 {
 		return false, nil, nil
 	}
-	res := f.kvs
-	f.kvs = nil
+	res := f.KVs
+	f.KVs = nil
 	return true, res, nil
 }
 
 // getRangesInfo implements the kvFetcher interface.
-func (f *spanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic("getRangesInfo() called on spanKVFetcher")
+func (f *SpanKVFetcher) getRangesInfo() []roachpb.RangeInfo {
+	panic("getRangesInfo() called on SpanKVFetcher")
 }
 
 // fkBatchChecker accumulates foreign key checks and sends them out as a single
@@ -335,10 +335,10 @@ func (f *fkBatchChecker) runCheck(
 		return err.GoError()
 	}
 
-	fetcher := spanKVFetcher{}
+	fetcher := SpanKVFetcher{}
 	for i, resp := range br.Responses {
 		fk := f.batchIdxToFk[i]
-		fetcher.kvs = resp.GetInner().(*roachpb.ScanResponse).Rows
+		fetcher.KVs = resp.GetInner().(*roachpb.ScanResponse).Rows
 		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
 		}
