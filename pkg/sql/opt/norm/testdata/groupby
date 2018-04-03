@@ -1,0 +1,104 @@
+exec-ddl
+CREATE TABLE a
+(
+    k INT PRIMARY KEY,
+    i INT NOT NULL,
+    f FLOAT,
+    s STRING NOT NULL,
+    j JSON,
+    UNIQUE INDEX si_idx (s DESC, i) STORING (j),
+    UNIQUE INDEX fi_idx (f, i)
+)
+----
+TABLE a
+ ├── k int not null
+ ├── i int not null
+ ├── f float
+ ├── s string not null
+ ├── j jsonb
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX si_idx
+ │    ├── s string not null desc
+ │    ├── i int not null
+ │    ├── k int not null (storing)
+ │    └── j jsonb (storing)
+ └── INDEX fi_idx
+      ├── f float
+      ├── i int not null
+      └── k int not null (storing)
+
+exec-ddl
+CREATE TABLE sort (k INT PRIMARY KEY, v INT, w INT)
+----
+TABLE sort
+ ├── k int not null
+ ├── v int
+ ├── w int
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# EliminateDistinct
+# --------------------------------------------------
+opt
+SELECT DISTINCT k FROM a
+----
+scan a
+ ├── columns: k:1(int!null)
+ └── keys: (1)
+
+opt
+SELECT DISTINCT s, i FROM a
+----
+scan a
+ ├── columns: s:4(string!null) i:2(int!null)
+ └── keys: (2,4)
+
+# Strict superset of key.
+opt
+SELECT DISTINCT s, i, f FROM a
+----
+scan a
+ ├── columns: s:4(string!null) i:2(int!null) f:3(float)
+ └── keys: (2,4) weak(2,3)
+
+# Distinct not eliminated because columns aren't superset of any weak key.
+opt
+SELECT DISTINCT i FROM a
+----
+group-by
+ ├── columns: i:2(int!null)
+ ├── grouping columns: a.i:2(int!null)
+ ├── keys: (2)
+ ├── scan a
+ │    └── columns: a.i:2(int!null)
+ └── aggregations
+
+# Distinct not eliminated because one column is nullable.
+opt
+SELECT DISTINCT f, i FROM a
+----
+group-by
+ ├── columns: f:3(float) i:2(int!null)
+ ├── grouping columns: a.i:2(int!null) a.f:3(float)
+ ├── keys: weak(2,3)
+ ├── scan a
+ │    ├── columns: a.i:2(int!null) a.f:3(float)
+ │    └── keys: weak(2,3)
+ └── aggregations
+
+# Group by not eliminated because it has aggregation.
+opt
+SELECT s, i, SUM(i) FROM a GROUP BY s, i
+----
+group-by
+ ├── columns: s:4(string!null) i:2(int!null) column6:6(decimal)
+ ├── grouping columns: a.i:2(int!null) a.s:4(string!null)
+ ├── keys: (2,4)
+ ├── scan a
+ │    ├── columns: a.i:2(int!null) a.s:4(string!null)
+ │    └── keys: (2,4)
+ └── aggregations [outer=(2)]
+      └── function: sum [type=decimal, outer=(2)]
+           └── variable: a.i [type=int, outer=(2)]
