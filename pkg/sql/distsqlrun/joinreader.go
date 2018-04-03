@@ -91,9 +91,6 @@ func newJoinReader(
 
 	types := jr.getOutputTypes()
 
-	if err := jr.processorBase.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
-		return nil, err
-	}
 	var err error
 	jr.index, _, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
@@ -103,22 +100,19 @@ func newJoinReader(
 	for i := 0; i < len(jr.index.ColumnIDs); i++ {
 		indexCols[i] = uint32(jr.index.ColumnIDs[i])
 	}
-	if len(jr.lookupCols) > 0 {
-		err = jr.joinerBase.init(
-			flowCtx,
-			input.OutputTypes(),
-			jr.desc.ColumnTypes(),
-			sqlbase.InnerJoin,
-			spec.OnExpr,
-			jr.lookupCols,
-			indexCols,
-			0, /* numMergedColumns */
-			post,
-			output,
-		)
-		if err != nil {
-			return nil, err
-		}
+	if err := jr.joinerBase.init(
+		flowCtx,
+		input.OutputTypes(),
+		jr.desc.ColumnTypes(),
+		sqlbase.InnerJoin,
+		spec.OnExpr,
+		jr.lookupCols,
+		indexCols,
+		0, /* numMergedColumns */
+		post,
+		output,
+	); err != nil {
+		return nil, err
 	}
 
 	_, _, err = initRowFetcher(
