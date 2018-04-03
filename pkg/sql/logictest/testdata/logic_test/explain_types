@@ -105,12 +105,12 @@ render                    0  render  ·            ·                           
 query TITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-render                    0  render  ·            ·                                                                          (z int, v int)        ·
+render                    0  render  ·            ·                                                                          (z int, v int)        v!=NULL; key(v)
  │                        0  ·       render 0     ((2)[int] * (agg1)[int])[int]                                              ·                     ·
  │                        0  ·       render 1     (agg0)[int]                                                                ·                     ·
- └── filter               1  filter  ·            ·                                                                          (agg0 int, agg1 int)  agg1!=NULL
+ └── filter               1  filter  ·            ·                                                                          (agg0 int, agg1 int)  agg0!=NULL; agg1!=NULL; key(agg0)
       │                   1  ·       filter       ((agg1)[int] > (1)[int])[bool]                                             ·                     ·
-      └── group           2  group   ·            ·                                                                          (agg0 int, agg1 int)  ·
+      └── group           2  group   ·            ·                                                                          (agg0 int, agg1 int)  agg0!=NULL; key(agg0)
            │              2  ·       aggregate 0  v                                                                          ·                     ·
            │              2  ·       aggregate 1  count(k)                                                                   ·                     ·
            │              2  ·       group by     @1                                                                         ·                     ·

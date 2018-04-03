@@ -56,6 +56,8 @@ type groupNode struct {
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
 
+	props physicalProps
+
 	run groupRun
 }
 

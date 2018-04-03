@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // expandPlan finalizes type checking of placeholders and expands
@@ -240,6 +241,37 @@ func doExpandPlan(
 				// See desiredAggregateOrdering.
 				n.needOnlyOneRow = true
 			}
+		}
+
+		// Project the props of the GROUP BY columns, as they're retained as-is.
+		groupColProjMap := make([]int, len(n.funcs))
+		for i, f := range n.funcs {
+			if f.isIdentAggregate() {
+				groupColProjMap[i] = f.argRenderIdx
+			} else {
+				groupColProjMap[i] = -1
+			}
+		}
+		childProps := planPhysicalProps(n.plan)
+		n.props = childProps.project(groupColProjMap)
+
+		// The GROUP BY columns form a weak key.
+		var groupColSet util.FastIntSet
+		for i, c := range groupColProjMap {
+			if c == -1 {
+				continue
+			}
+			groupColSet.Add(i)
+		}
+		if !groupColSet.Empty() {
+			n.props.addWeakKey(groupColSet)
+		}
+
+		groupColProps := planPhysicalProps(n.plan)
+		groupColProps = groupColProps.project(n.groupCols)
+		n.orderedGroupCols = make([]int, len(groupColProps.ordering))
+		for i, o := range groupColProps.ordering {
+			n.orderedGroupCols[i] = o.ColIdx
 		}
 
 	case *windowNode:
@@ -535,6 +567,26 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 	return desiredUp
 }
 
+func translateGroupOrdering(
+	desiredDown sqlbase.ColumnOrdering, g *groupNode,
+) sqlbase.ColumnOrdering {
+	var desiredUp sqlbase.ColumnOrdering
+
+	for _, colOrder := range desiredDown {
+		f := g.funcs[colOrder.ColIdx]
+		if !f.isIdentAggregate() {
+			// We cannot maintain the rest of the ordering since it uses a
+			// non-identity aggregate function.
+			break
+		}
+		// For identity (i.e., GROUP BY) columns, we can propagate the ordering.
+		desiredUp = append(desiredUp, sqlbase.ColumnOrderInfo{
+			ColIdx: f.argRenderIdx, Direction: colOrder.Direction})
+	}
+
+	return desiredUp
+}
+
 // simplifyOrderings reduces the Ordering() guarantee of each node in the plan
 // to that which is actually used by the parent(s). It also performs sortNode
 // elision when possible.
@@ -626,8 +678,10 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		if n.needOnlyOneRow {
 			n.plan = p.simplifyOrderings(n.plan, n.desiredOrdering)
 		} else {
-			n.plan = p.simplifyOrderings(n.plan, nil)
+			// Keep only the ordering required by the groupNode.
+			n.plan = p.simplifyOrderings(n.plan, translateGroupOrdering(n.props.ordering, n))
 		}
+		n.props.trim(usefulOrdering)
 
 	case *windowNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
