@@ -36,6 +36,9 @@ func EquiDepthHistogram(
 	evalCtx *tree.EvalContext, samples tree.Datums, numRows int64, maxBuckets int,
 ) (HistogramData, error) {
 	numSamples := len(samples)
+	if numSamples == 0 {
+		return HistogramData{}, errors.Errorf("no samples")
+	}
 	if numRows < int64(numSamples) {
 		return HistogramData{}, errors.Errorf("more samples than rows")
 	}
@@ -53,6 +56,11 @@ func EquiDepthHistogram(
 	}
 	h := HistogramData{
 		Buckets: make([]HistogramData_Bucket, 0, numBuckets),
+	}
+	var err error
+	h.ColumnType, err = sqlbase.DatumTypeToColumnType(samples[0].ResolvedType())
+	if err != nil {
+		return HistogramData{}, err
 	}
 	// i keeps track of the current sample and advances as we form buckets.
 	for i, b := 0, 0; b < numBuckets && i < numSamples; b++ {
