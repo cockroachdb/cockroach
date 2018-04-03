@@ -27,13 +27,15 @@ union
  ├── stats: [rows=2000]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null)
       ├── stats: [rows=1000]
       ├── scan b
       │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    └── stats: [rows=1000]
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
       └── projections [outer=(3,4)]
            ├── variable: b.x [type=int, outer=(3)]
            └── variable: b.z [type=int, outer=(4)]
@@ -49,21 +51,26 @@ intersect
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]
+ │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
       ├── stats: [rows=100]
+      ├── keys: (5)
       ├── select
       │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       │    ├── stats: [rows=100]
+      │    ├── keys: (5)
       │    ├── scan b
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    └── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000]
+      │    │    └── keys: (5)
       │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │         ├── variable: b.x [type=int, outer=(3)]
       │         └── const: 1 [type=int]
@@ -83,9 +90,11 @@ except
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]
+ │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
@@ -98,9 +107,11 @@ except
       │    ├── select
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       │    │    ├── stats: [rows=100]
+      │    │    ├── keys: (5)
       │    │    ├── scan b
       │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    │    └── stats: [rows=1000]
+      │    │    │    ├── stats: [rows=1000]
+      │    │    │    └── keys: (5)
       │    │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │    │         ├── variable: b.x [type=int, outer=(3)]
       │    │         └── const: 1 [type=int]

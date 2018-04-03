@@ -208,6 +208,9 @@ const (
 	// ExprFmtHideConstraints does not show inferred constraints in the output.
 	ExprFmtHideConstraints
 
+	// ExprFmtHideKeys does not show keys in the output.
+	ExprFmtHideKeys
+
 	// ExprFmtHideAll shows only the most basic properties of the expression.
 	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )
@@ -256,7 +259,6 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	logProps := ev.Logical()
 
 	tp = tp.Child(buf.String())
-	buf.Reset()
 
 	// If a particular column presentation is required of the expression, then
 	// print columns using that information.
@@ -318,6 +320,11 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
 		tp.Childf("cost: %.2f", ev.lookupBestExpr().cost)
+	}
+
+	// Format weak keys.
+	if !flags.HasFlags(ExprFmtHideKeys) {
+		ev.formatWeakKeys(tp)
 	}
 
 	if physProps.Ordering.Defined() {
@@ -414,6 +421,23 @@ func (ev ExprView) formatPresentation(tp treeprinter.Node, presentation Presenta
 		logProps.FormatCol(&buf, ev.Metadata(), col.Label, col.ID)
 	}
 	tp.Child(buf.String())
+}
+
+func (ev ExprView) formatWeakKeys(tp treeprinter.Node) {
+	var buf bytes.Buffer
+	rel := ev.Logical().Relational
+	for i, key := range rel.WeakKeys {
+		if i != 0 {
+			buf.WriteRune(' ')
+		}
+		if !key.SubsetOf(rel.NotNullCols) {
+			buf.WriteString("weak")
+		}
+		buf.WriteString(key.String())
+	}
+	if buf.Len() != 0 {
+		tp.Childf("keys: %s", buf.String())
+	}
 }
 
 // MatchesTupleOfConstants returns true if the expression is a TupleOp with

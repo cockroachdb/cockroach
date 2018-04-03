@@ -82,3 +82,33 @@ func ColListToSet(colList ColList) ColSet {
 	}
 	return r
 }
+
+// WeakKeys are combinations of columns that form a weak key. No two non-null
+// rows are equal if it contains columns from a weak key. For more details, see
+// LogicalProps.WeakKeys.
+type WeakKeys []ColSet
+
+// Add appends a new weak key to the list of weak keys. It also ensures that no
+// weak key is a superset of another, since that is a redundant weak key.
+func (wk *WeakKeys) Add(new ColSet) {
+	// If one weak key is a subset of another, then use that, since the
+	// longer key is redundant.
+	insert := 0
+	for i, existing := range *wk {
+		// If new key is redundant, don't add it.
+		if existing.SubsetOf(new) {
+			return
+		}
+
+		// If existing key is redundant, then remove it from the list. Since
+		// there may be multiple redundant keys, wait until after looping to
+		// remove all at once.
+		if !new.SubsetOf(existing) {
+			if insert != i {
+				(*wk)[insert] = existing
+			}
+			insert++
+		}
+	}
+	*wk = append((*wk)[:insert], new)
+}

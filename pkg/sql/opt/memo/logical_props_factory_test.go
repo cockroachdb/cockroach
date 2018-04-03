@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func TestLogicalPropsFactory(t *testing.T) {
@@ -61,14 +60,29 @@ func TestLogicalJoinProps(t *testing.T) {
 		testLogicalProps(t, f.Metadata(), ev, expected)
 	}
 
-	joinFunc(opt.InnerJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.LeftJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.RightJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.FullJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.SemiJoinOp, "a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.SemiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinOp, "a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.InnerJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)")
+	joinFunc(opt.InnerJoinApplyOp, "keys: (1) (3)\n")
+
+	joinFunc(opt.LeftJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)")
+	joinFunc(opt.LeftJoinApplyOp, "keys: (1) weak(3)\n")
+
+	joinFunc(opt.RightJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)")
+	joinFunc(opt.RightJoinApplyOp, "keys: weak(1) (3)\n")
+
+	joinFunc(opt.FullJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)")
+	joinFunc(opt.FullJoinApplyOp, "keys: weak(1) weak(3)\n")
+
+	joinFunc(opt.SemiJoinOp, "a.x:1(int!null) a.y:2(int)")
+	joinFunc(opt.SemiJoinOp, "keys: (1)\n")
+
+	joinFunc(opt.SemiJoinApplyOp, "a.x:1(int!null) a.y:2(int)")
+	joinFunc(opt.SemiJoinOp, "keys: (1)\n")
+
+	joinFunc(opt.AntiJoinOp, "a.x:1(int!null) a.y:2(int)")
+	joinFunc(opt.AntiJoinOp, "keys: (1)\n")
+
+	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)")
+	joinFunc(opt.AntiJoinOp, "keys: (1)\n")
 }
 
 func constructScanOpDef(md *opt.Metadata, tabID opt.TableID) *memo.ScanOpDef {
@@ -81,18 +95,10 @@ func constructScanOpDef(md *opt.Metadata, tabID opt.TableID) *memo.ScanOpDef {
 
 func testLogicalProps(t *testing.T, md *opt.Metadata, ev memo.ExprView, expected string) {
 	t.Helper()
+	actual := ev.String()
 
-	logical := ev.Logical()
-	if logical.Relational == nil {
-		panic("only relational properties are supported")
-	}
-
-	tp := treeprinter.New()
-	logical.FormatColSet(tp, md, "", logical.Relational.OutputCols)
-	actual := strings.Trim(tp.String(), " ")
-
-	if actual != expected {
-		t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
+	if !strings.Contains(actual, expected) {
+		t.Fatalf("\nexpected to contain: %s\nactual:\n%s", expected, actual)
 	}
 }
 

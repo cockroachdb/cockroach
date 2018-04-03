@@ -101,6 +101,10 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	// Initialize weak keys from the table schema.
+	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
+	filterWeakKeys(props.Relational, opt.ColSet{})
+
 	// TODO: Need actual number of rows.
 	if def.Constraint != nil {
 		props.Relational.Stats.RowCount = 100
@@ -121,11 +125,8 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 
 	inputProps := ev.lookupChildGroup(0).logical.Relational
 
-	// Inherit output columns from input.
-	props.Relational.OutputCols = inputProps.OutputCols
-
-	// Inherit not null columns from input.
-	props.Relational.NotNullCols = inputProps.NotNullCols
+	// Inherit input properties as starting point.
+	*props.Relational = *inputProps
 
 	// TODO: Need better estimate based on actual filter conditions.
 	props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
@@ -141,9 +142,17 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	// Use output columns from projection list.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Child(1).Private().(opt.ColList))
 
-	// Inherit not null columns from input.
+	// Inherit not null columns from input, but only use those that are also
+	// output columns.
 	props.Relational.NotNullCols = inputProps.NotNullCols
 	filterNullCols(props.Relational)
+
+	// Inherit outer columns from input.
+	props.Relational.OuterCols = inputProps.OuterCols
+
+	// Inherit weak keys that are composed entirely of output columns.
+	props.Relational.WeakKeys = inputProps.WeakKeys
+	filterWeakKeys(props.Relational, opt.ColSet{})
 
 	props.Relational.Stats.RowCount = inputProps.Stats.RowCount
 
@@ -185,6 +194,18 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 		props.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
+	// Set weak keys.
+	switch ev.Operator() {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Inherit weak keys from left side of join.
+		props.Relational.WeakKeys = leftProps.WeakKeys
+
+	default:
+		// Union weak keys from both sides of join.
+		wk := len(leftProps.WeakKeys)
+		props.Relational.WeakKeys = append(leftProps.WeakKeys[:wk:wk], rightProps.WeakKeys...)
+	}
+
 	// TODO: Need better estimate based on actual on conditions.
 	props.Relational.Stats.RowCount = leftProps.Stats.RowCount * rightProps.Stats.RowCount
 	if ev.Child(2).Operator() != opt.TrueOp {
@@ -210,10 +231,17 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props.Relational.NotNullCols = inputProps.NotNullCols.Copy()
 	props.Relational.NotNullCols.IntersectionWith(groupingColSet)
 
+	// Scalar group by has no grouping columns and always a single row.
 	if groupingColSet.Empty() {
-		// Scalar group by.
+		// Any combination of columns is a weak key when there is one row.
+		props.Relational.WeakKeys = opt.WeakKeys{groupingColSet}
 		props.Relational.Stats.RowCount = 1
 	} else {
+		// Inherit weak keys that are composed entirely of output columns. Also
+		// add new weak key that consists of all the grouping columns.
+		props.Relational.WeakKeys = inputProps.WeakKeys
+		filterWeakKeys(props.Relational, groupingColSet)
+
 		// TODO: Need better estimate.
 		props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
 	}
@@ -324,11 +352,44 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	return props
 }
 
-// filterNullCols will ensure that the set of null columns is a subset of the
-// output columns. It respects immutability by making a copy of the null
-// columns if they need to be updated.
+// filterNullCols ensures that the set of null columns is a subset of the output
+// columns. It respects immutability by making a copy of the null columns if
+// they need to be updated.
 func filterNullCols(props *RelationalProps) {
 	if !props.NotNullCols.SubsetOf(props.OutputCols) {
 		props.NotNullCols = props.NotNullCols.Intersection(props.OutputCols)
+	}
+}
+
+// filterWeakKeys ensures that each weak key is a subset of the output columns.
+// It respects immutability by making a coy of the weak keys if they need to be
+// updated. If the additional weak key is non-empty, then it will also be added
+// to the final list of weak keys.
+func filterWeakKeys(props *RelationalProps, additional opt.ColSet) {
+	var filtered opt.WeakKeys
+	if !additional.Empty() {
+		filtered = make(opt.WeakKeys, 0, len(props.WeakKeys))
+	}
+
+	for i, weakKey := range props.WeakKeys {
+		// Discard weak keys that have columns that are not part of the output
+		// column set.
+		if !weakKey.SubsetOf(props.OutputCols) {
+			if filtered == nil {
+				filtered = make(opt.WeakKeys, i, len(props.WeakKeys)-1)
+				copy(filtered, props.WeakKeys[:i])
+			}
+		} else {
+			if filtered != nil {
+				filtered = append(filtered, weakKey)
+			}
+		}
+	}
+
+	if !additional.Empty() {
+		filtered.Add(additional)
+	}
+	if filtered != nil {
+		props.WeakKeys = filtered
 	}
 }
