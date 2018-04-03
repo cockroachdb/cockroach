@@ -32,7 +32,8 @@ SELECT k FROM a WHERE k = 1
 ----
 scan a
  ├── columns: k:1(int!null)
- └── constraint: /1: [/1 - /1]
+ ├── constraint: /1: [/1 - /1]
+ └── keys: (1)
 
 memo
 SELECT k FROM a WHERE k = 1
@@ -59,9 +60,11 @@ SELECT k FROM a WHERE v > 1
 ----
 project
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── scan a@v
  │    ├── columns: a.k:1(int!null) a.v:3(int)
- │    └── constraint: /3: [/2 - ]
+ │    ├── constraint: /3: [/2 - ]
+ │    └── keys: (1) weak(3)
  └── projections [outer=(1)]
       └── variable: a.k [type=int, outer=(1)]
 
@@ -94,9 +97,11 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── scan a@u
  │    ├── columns: a.k:1(int!null) a.u:2(int)
- │    └── constraint: /2/1: [/1/5 - /1/5]
+ │    ├── constraint: /2/1: [/1/5 - /1/5]
+ │    └── keys: (1)
  └── projections [outer=(1)]
       └── variable: a.k [type=int, outer=(1)]
 
@@ -137,11 +142,14 @@ SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
 project
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── select
  │    ├── columns: a.k:1(int!null) a.u:2(int)
+ │    ├── keys: (1)
  │    ├── scan a@u
  │    │    ├── columns: a.k:1(int!null) a.u:2(int)
- │    │    └── constraint: /2/1: [/1 - /1]
+ │    │    ├── constraint: /2/1: [/1 - /1]
+ │    │    └── keys: (1)
  │    └── filters [type=bool, outer=(1,2)]
  │         └── eq [type=bool, outer=(1,2)]
  │              ├── plus [type=int, outer=(1,2)]
@@ -187,11 +195,14 @@ SELECT k FROM a WHERE u = 1 AND v = 5
 ----
 project
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── select
  │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    ├── keys: (1) weak(3)
  │    ├── scan a@u
  │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
- │    │    └── constraint: /2/1: [/1 - /1]
+ │    │    ├── constraint: /2/1: [/1 - /1]
+ │    │    └── keys: (1) weak(3)
  │    └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
  │         └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
  │              ├── variable: a.v [type=int, outer=(3)]
@@ -239,11 +250,14 @@ SELECT k FROM a WHERE u=v
 ----
 project
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── select
  │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+ │    ├── keys: (1) weak(3)
  │    ├── scan a@u
  │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
- │    │    └── constraint: /2/1: (/NULL - ]
+ │    │    ├── constraint: /2/1: (/NULL - ]
+ │    │    └── keys: (1) weak(3)
  │    └── filters [type=bool, outer=(2,3)]
  │         └── eq [type=bool, outer=(2,3)]
  │              ├── variable: a.u [type=int, outer=(2)]
@@ -257,9 +271,11 @@ SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
 ----
 select
  ├── columns: k:1(int!null)
+ ├── keys: (1)
  ├── scan a@u
  │    ├── columns: a.k:1(int!null) a.u:2(int)
- │    └── limit: 1
+ │    ├── limit: 1
+ │    └── keys: (1)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: a.k [type=int, outer=(1)]

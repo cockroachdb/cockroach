@@ -55,6 +55,28 @@ type RelationalProps struct {
 	// derived from filters that are NULL-intolerant.
 	NotNullCols opt.ColSet
 
+	// WeakKeys are the column sets which form weak keys and are subsets of the
+	// expression's output columns. A weak key set cannot contain any other weak
+	// key set (it would be redundant).
+	//
+	// A column set is a key if no two rows are equal after projection onto that
+	// set. This definition treats NULL as if were equal to NULL, so two rows
+	// having duplicate NULL values would *not* qualify as key rows. Therefore,
+	// in the usual case, the key columns are also not nullable. The simplest
+	// example of a key is the primary key for a table (recall that all of the
+	// columns of the primary key are defined to be NOT NULL).
+	//
+	// A weak key is similar to a key, with the difference that NULL values are
+	// treated as *not equal* to other NULL values. Therefore, two rows having
+	// duplicate NULL values could still qualify as weak key rows. A UNIQUE index
+	// on a table is a weak key and possibly a key if all of the columns are NOT
+	// NULL. A weak key is a key if "(WeakKeys[i] & NotNullCols) == WeakKeys[i]".
+	//
+	// An empty key is valid (an empty key implies there is at most one row). Note
+	// that an empty key is always the only key in the set, since it's a subset of
+	// every other key (i.e. every other key would be redundant).
+	WeakKeys opt.WeakKeys
+
 	// OuterCols is the set of columns that are referenced by variables within
 	// this relational sub-expression, but are not bound within the scope of
 	// the expression. For example:

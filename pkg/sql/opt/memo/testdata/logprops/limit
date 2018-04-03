@@ -1,53 +1,65 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
 ----
 TABLE a
  ├── x int not null
  ├── y int
- └── INDEX primary
-      └── x int not null
+ ├── z float not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
 
 build
 SELECT * FROM a LIMIT 1
 ----
 limit
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1]
+ ├── keys: (1) weak(3,4)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
  └── const: 1 [type=int]
 
 build
 SELECT * FROM a LIMIT (SELECT 1)
 ----
 limit
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
+ ├── keys: (1) weak(3,4)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
- └── subquery [type=int, outer=(3)]
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
+ └── subquery [type=int, outer=(5)]
       ├── max1-row
-      │    ├── columns: column3:3(int)
+      │    ├── columns: column5:5(int)
       │    ├── stats: [rows=1]
       │    └── project
-      │         ├── columns: column3:3(int)
+      │         ├── columns: column5:5(int)
       │         ├── stats: [rows=1]
       │         ├── values
       │         │    ├── stats: [rows=1]
       │         │    └── tuple [type=tuple{}]
       │         └── projections
       │              └── const: 1 [type=int]
-      └── variable: column3 [type=int, outer=(3)]
+      └── variable: column5 [type=int, outer=(5)]
 
 build
 SELECT * FROM a LIMIT 0
 ----
 limit
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
+ ├── keys: (1) weak(3,4)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
  └── const: 0 [type=int]

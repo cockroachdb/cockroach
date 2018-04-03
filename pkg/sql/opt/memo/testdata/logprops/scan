@@ -1,13 +1,17 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
 TABLE a
  ├── x int not null
  ├── y int
  ├── s string
  ├── d decimal not null
- └── INDEX primary
-      └── x int not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL)
@@ -24,7 +28,8 @@ SELECT * FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- └── stats: [rows=1000]
+ ├── stats: [rows=1000]
+ └── keys: (1) weak(3,4)
 
 build
 SELECT * FROM b
@@ -34,7 +39,8 @@ project
  ├── stats: [rows=1000]
  ├── scan b
  │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── keys: (3)
  └── projections [outer=(1,2)]
       ├── variable: b.x [type=int, outer=(1)]
       └── variable: b.z [type=int, outer=(2)]
@@ -45,18 +51,20 @@ SELECT s, x FROM a
 ----
 scan a
  ├── columns: s:3(string) x:1(int!null)
- └── stats: [rows=1000]
+ ├── stats: [rows=1000]
+ └── keys: (1)
 
-# Test constrained span.
+# Test constrained scan.
 opt
 SELECT s, x FROM a WHERE x=1
 ----
 scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/1 - /1]
- └── stats: [rows=100]
+ ├── stats: [rows=100]
+ └── keys: (1)
 
-# Test limited span.
+# Test limited scan.
 opt
 SELECT s, x FROM a WHERE x=1 LIMIT 2
 ----
@@ -64,4 +72,13 @@ scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/1 - /1]
  ├── limit: 2
- └── stats: [rows=2]
+ ├── stats: [rows=2]
+ └── keys: (1)
+
+# Test case where there are no weak keys available.
+opt
+SELECT d FROM a
+----
+scan a
+ ├── columns: d:4(decimal!null)
+ └── stats: [rows=1000]
