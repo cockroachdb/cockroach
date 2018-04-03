@@ -23,9 +23,11 @@ SELECT * FROM a WHERE x < 5
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=100]
+ ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
  └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 5 [type=int]
@@ -41,10 +43,12 @@ project
  │    ├── stats: [rows=1000000]
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1)
  │    ├── scan b
  │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (5)
  │    └── true [type=bool]
  └── projections [outer=(1,2,5)]
       ├── eq [type=bool, outer=(1,2)]
