@@ -822,7 +822,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Add(1)
 	go func() {
 		// Start schema change that eventually runs a partial backfill.
-		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
+		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil && !testutils.IsError(err, "table is being dropped") {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2940,4 +2940,42 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); !testutils.IsError(err, `batch timestamp .* must be after GC threshold`) {
 		t.Fatalf("unexpected: %v", err)
 	}
+}
+
+// TestAddComputedColumn verifies that while a column backfill is happening
+// for a computed column, INSERTs and UPDATEs for that column are correct.
+func TestAddComputedColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var db *gosql.DB
+	done := false
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if db == nil || done {
+					return nil
+				}
+				done = true
+				if _, err := db.Exec(`INSERT INTO t.test VALUES (10)`); err != nil {
+					panic(err)
+				}
+				if _, err := db.Exec(`UPDATE t.test SET a = a + 1 WHERE a < 10`); err != nil {
+					panic(err)
+				}
+				return nil
+			},
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	defer tc.Stopper().Stop(context.TODO())
+	db = tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE t`)
+	sqlDB.Exec(t, `CREATE TABLE t.test (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1)`)
+	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN b INT AS (a + 5) STORED`)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t.test ORDER BY a`, [][]string{{"2", "7"}, {"10", "15"}})
 }
