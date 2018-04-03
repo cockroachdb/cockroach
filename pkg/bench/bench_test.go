@@ -31,6 +31,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -1083,6 +1084,63 @@ func BenchmarkIndexJoin(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			if _, err := db.Exec("select * from bench.tidx where v < 1000"); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+func BenchmarkSortJoinAggregation(b *testing.B) {
+	s := log.Scope(b)
+	defer s.Close(b)
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		tables := []struct {
+			create   string
+			populate string
+		}{
+			{
+				create: `
+				 CREATE TABLE abc (
+					 a INT PRIMARY KEY,
+					 b INT,
+					 c FLOAT
+				 )`,
+				populate: `
+				 INSERT INTO abc SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
+			},
+			{
+				create: `
+				 CREATE TABLE xyz (
+					 x INT PRIMARY KEY,
+					 y INT,
+					 z FLOAT
+				 )`,
+				populate: `
+				 INSERT INTO xyz SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
+			},
+		}
+
+		for _, table := range tables {
+			if _, err := db.Exec(table.create); err != nil {
+				b.Fatal(err)
+			}
+			if _, err := db.Exec(table.populate); err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		query := `
+			SELECT b, count(*) FROM
+				(SELECT b, avg(c) FROM (SELECT b, c FROM abc ORDER BY b) GROUP BY b)
+				JOIN
+				(SELECT y, sum(z) FROM (SELECT y, z FROM xyz ORDER BY y) GROUP BY y)
+				ON b = y
+			GROUP BY b
+			ORDER BY b`
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec(query); err != nil {
 				b.Fatal(err)
 			}
 		}
