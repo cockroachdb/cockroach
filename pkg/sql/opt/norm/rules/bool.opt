@@ -97,9 +97,9 @@ $item
 
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
-# comparisons can be negated except for Contains.
+# comparisons can be negated except for the JSON comparisons.
 [NegateComparison, Normalize]
-(Not $input:(Comparison $left:* $right:*) & ^(Contains))
+(Not $input:(Comparison $left:* $right:*) & ^(Contains|JsonExists|JsonSomeExists|JsonAllExists))
 =>
 (NegateComparison (OpName $input) $left $right)
 
