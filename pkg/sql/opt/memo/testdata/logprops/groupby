@@ -1,32 +1,48 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
 ----
 TABLE a
  ├── x int not null
  ├── y int
  ├── z float not null
- └── INDEX primary
-      └── x int not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
 
 build
 SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
 ----
 project
- ├── columns: y:2(int) column4:4(float) x:1(int!null) column5:5(bool)
+ ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool)
  ├── stats: [rows=100]
+ ├── keys: (1)
  ├── group-by
- │    ├── columns: a.x:1(int!null) a.y:2(int) column4:4(float)
+ │    ├── columns: a.x:1(int!null) a.y:2(int) column5:5(float)
  │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=100]
- │    ├── scan a
+ │    ├── keys: (1)
+ │    ├── project
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
- │    │    └── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── keys: (1)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (1) weak(3,4)
+ │    │    └── projections [outer=(1-3)]
+ │    │         ├── variable: a.x [type=int, outer=(1)]
+ │    │         ├── variable: a.y [type=int, outer=(2)]
+ │    │         └── variable: a.z [type=float, outer=(3)]
  │    └── aggregations [outer=(3)]
  │         └── function: sum [type=float, outer=(3)]
  │              └── variable: a.z [type=float, outer=(3)]
- └── projections [outer=(1,2,4)]
+ └── projections [outer=(1,2,5)]
       ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: column4 [type=float, outer=(4)]
+      ├── variable: column5 [type=float, outer=(5)]
       ├── variable: a.x [type=int, outer=(1)]
       └── false [type=bool]
 
@@ -35,14 +51,17 @@ build
 SELECT SUM(a.x), MAX(a.y) FROM a
 ----
 group-by
- ├── columns: column4:4(decimal) column5:5(int)
+ ├── columns: column5:5(decimal) column6:6(int)
  ├── stats: [rows=1]
+ ├── keys: ()
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]
+ │    ├── keys: (1)
  │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
- │    │    └── stats: [rows=1000]
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1) weak(3,4)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
@@ -51,3 +70,103 @@ group-by
       │    └── variable: a.x [type=int, outer=(1)]
       └── function: max [type=int, outer=(2)]
            └── variable: a.y [type=int, outer=(2)]
+
+# Group by unique index columns.
+build
+SELECT s FROM a GROUP BY z, s
+----
+project
+ ├── columns: s:4(string)
+ ├── stats: [rows=100]
+ ├── group-by
+ │    ├── columns: a.z:3(float!null) a.s:4(string)
+ │    ├── grouping columns: a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=100]
+ │    ├── keys: weak(3,4)
+ │    ├── project
+ │    │    ├── columns: a.z:3(float!null) a.s:4(string)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── keys: weak(3,4)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (1) weak(3,4)
+ │    │    └── projections [outer=(3,4)]
+ │    │         ├── variable: a.z [type=float, outer=(3)]
+ │    │         └── variable: a.s [type=string, outer=(4)]
+ │    └── aggregations
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# Group by columns that otherwise wouldn't be weak key.
+build
+SELECT y, SUM(z) FROM a GROUP BY z, y
+----
+project
+ ├── columns: y:2(int) column5:5(float)
+ ├── stats: [rows=100]
+ ├── group-by
+ │    ├── columns: a.y:2(int) a.z:3(float!null) column5:5(float)
+ │    ├── grouping columns: a.y:2(int) a.z:3(float!null)
+ │    ├── stats: [rows=100]
+ │    ├── keys: weak(2,3)
+ │    ├── project
+ │    │    ├── columns: a.z:3(float!null) a.y:2(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (1) weak(3,4)
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: a.z [type=float, outer=(3)]
+ │    │         └── variable: a.y [type=int, outer=(2)]
+ │    └── aggregations [outer=(3)]
+ │         └── function: sum [type=float, outer=(3)]
+ │              └── variable: a.z [type=float, outer=(3)]
+ └── projections [outer=(2,5)]
+      ├── variable: a.y [type=int, outer=(2)]
+      └── variable: column5 [type=float, outer=(5)]
+
+# Group by column that is subset of unique index.
+build
+SELECT z, MAX(s) FROM a GROUP BY z
+----
+group-by
+ ├── columns: z:3(float!null) column5:5(string)
+ ├── grouping columns: a.z:3(float!null)
+ ├── stats: [rows=100]
+ ├── keys: (3)
+ ├── project
+ │    ├── columns: a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    ├── keys: weak(3,4)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1) weak(3,4)
+ │    └── projections [outer=(3,4)]
+ │         ├── variable: a.z [type=float, outer=(3)]
+ │         └── variable: a.s [type=string, outer=(4)]
+ └── aggregations [outer=(4)]
+      └── function: max [type=string, outer=(4)]
+           └── variable: a.s [type=string, outer=(4)]
+
+# Group by all columns.
+build
+SELECT s FROM a GROUP BY a.*
+----
+project
+ ├── columns: s:4(string)
+ ├── stats: [rows=100]
+ ├── group-by
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── grouping columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── stats: [rows=100]
+ │    ├── keys: (1) weak(3,4)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1) weak(3,4)
+ │    └── aggregations
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]

@@ -213,9 +213,11 @@ SELECT * FROM kuv WHERE u > 1::INT
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string)
  ├── stats: [rows=100]
+ ├── keys: (1)
  ├── scan kuv
  │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
  └── filters [type=bool, outer=(2)]
       └── gt [type=bool, outer=(2)]
            ├── variable: kuv.u [type=float, outer=(2)]
@@ -227,9 +229,11 @@ SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string)
  ├── stats: [rows=100]
+ ├── keys: (1)
  ├── scan kuv
  │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
- │    └── stats: [rows=1000]
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
  └── filters [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo']; tight)]
       ├── le [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo']; tight)]
       │    ├── variable: kuv.v [type=string, outer=(3)]
