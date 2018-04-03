@@ -316,7 +316,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.warehouses / len(urls)
+	nConns := w.workers / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
 		dbs[i], err = gosql.Open(`postgres`, url)
@@ -367,7 +367,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		// partitionTables().
 		p := (warehouse * w.partitions) / w.warehouses
 		dbs := partitionDBs[p]
-		db := dbs[warehouse%len(dbs)]
+		db := dbs[workerIdx%len(dbs)]
 		worker := &worker{
 			config:    w,
 			hists:     reg.GetHandle(),
