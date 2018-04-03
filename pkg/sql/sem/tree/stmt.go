@@ -233,6 +233,12 @@ func (*CopyFrom) StatementType() StatementType { return CopyIn }
 func (*CopyFrom) StatementTag() string { return "COPY" }
 
 // StatementType implements the Statement interface.
+func (*CreateChangefeed) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateChangefeed) StatementTag() string { return "CREATE CHANGEFEED" }
+
+// StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -870,6 +876,7 @@ func (n *CancelJob) String() string                 { return AsString(n) }
 func (n *CancelQuery) String() string               { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
+func (n *CreateChangefeed) String() string          { return AsString(n) }
 func (n *CreateDatabase) String() string            { return AsString(n) }
 func (n *CreateIndex) String() string               { return AsString(n) }
 func (n *CreateRole) String() string                { return AsString(n) }
