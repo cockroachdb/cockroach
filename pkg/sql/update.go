@@ -120,7 +120,7 @@ func (p *planner) Update(
 
 	// We update the set of columns being updated into with any computed columns.
 	updateCols, computedCols, computeExprs, err :=
-		ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -599,4 +599,13 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 		return defaultExprs[index]
 	}
 	return expr
+}
+
+func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
+	for i := range cols {
+		if cols[i].IsComputed() {
+			return sqlbase.CannotWriteToComputedColError(cols[i])
+		}
+	}
+	return nil
 }
