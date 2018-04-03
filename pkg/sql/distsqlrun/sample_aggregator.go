@@ -200,8 +200,10 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
-			var histogram []byte
-			if si.spec.GenerateHistogram {
+			// histogram will be passed to the INSERT statement; we want it to be a
+			// nil interface{} if we don't generate a histogram.
+			var histogram interface{}
+			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
 				typ := s.inTypes[colIdx]
 
