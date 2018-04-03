@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package sqlbase
 
 import (
 	"context"
@@ -22,13 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
 // is used to type check computed columns and does not support evaluation.
 type descContainer struct {
-	cols []sqlbase.ColumnDescriptor
+	cols []ColumnDescriptor
 }
 
 func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
@@ -43,20 +42,12 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return nil
 }
 
-func cannotWriteToComputedColError(col sqlbase.ColumnDescriptor) error {
+// CannotWriteToComputedColError constructs a write error for a computed column.
+func CannotWriteToComputedColError(col ColumnDescriptor) error {
 	return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError, "cannot write directly to computed column %q",
 		tree.ErrString(&tree.ColumnItem{
 			ColumnName: tree.Name(col.Name),
 		}))
-}
-
-func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
-	for i := range cols {
-		if cols[i].IsComputed() {
-			return cannotWriteToComputedColError(cols[i])
-		}
-	}
-	return nil
 }
 
 // ProcessComputedColumns adds columns which are computed to the set of columns
@@ -74,12 +65,12 @@ func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 // https://github.com/cockroachdb/cockroach/issues/23523.
 func ProcessComputedColumns(
 	ctx context.Context,
-	cols []sqlbase.ColumnDescriptor,
+	cols []ColumnDescriptor,
 	tn *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *TableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
-) ([]sqlbase.ColumnDescriptor, []sqlbase.ColumnDescriptor, []tree.TypedExpr, error) {
+) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
 	// TODO(justin): the DEFAULT version of this code also had code to handle
 	// mutations. We don't support adding computed columns yet, but we will need
 	// to add that back in.
@@ -120,8 +111,8 @@ func ProcessComputedColumns(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
+	sourceInfo := NewSourceInfoForSingleTable(
+		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
 	semaCtx := tree.MakeSemaContext(false)
@@ -129,8 +120,8 @@ func ProcessComputedColumns(
 
 	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	for i, col := range computedCols {
-		expr, _, _, err := resolveNames(exprs[i],
-			sqlbase.MakeMultiSourceInfo(sourceInfo),
+		expr, _, _, err := ResolveNames(exprs[i],
+			MakeMultiSourceInfo(sourceInfo),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, nil, nil, err
