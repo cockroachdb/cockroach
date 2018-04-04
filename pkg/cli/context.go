@@ -158,6 +158,13 @@ func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
 	return context.WithCancel(ctx)
 }
 
+func zipTimeoutContext(ctx context.Context, timeout time.Duration) (context.Context, func()) {
+	if cliCtx.cmdTimeout != 0 {
+		return context.WithTimeout(ctx, cliCtx.cmdTimeout)
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
 // sqlCtx captures the command-line parameters of the `sql` command.
 // Defaults set by InitCLIDefaults() above.
 var sqlCtx = struct {
