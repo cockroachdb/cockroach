@@ -33,12 +33,14 @@ import (
 //
 // See builder.go for more details.
 type scope struct {
-	builder      *Builder
-	parent       *scope
-	cols         []columnProps
-	groupby      groupby
-	ordering     memo.Ordering
-	presentation memo.Presentation
+	builder       *Builder
+	parent        *scope
+	cols          []scopeColumn
+	groupby       groupby
+	physicalProps memo.PhysicalProps
+
+	// group is the memo.GroupID of the relational operator built with this scope.
+	group memo.GroupID
 
 	// Desired number of columns for subqueries found during name resolution and
 	// type checking. This only applies to the top-level subqueries that are
@@ -77,10 +79,21 @@ func (s *scope) appendColumns(src *scope) {
 	s.cols = append(s.cols, src.cols...)
 }
 
-// resolveType converts the given expr to a tree.TypedExpr. As part of the
-// conversion, it performs name resolution and replaces unresolved column names
-// with columnProps.
-func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+// appendColumn adds a new column to the scope with an optional new label.
+// It returns a pointer to the new column.
+func (s *scope) appendColumn(col *scopeColumn, label string) *scopeColumn {
+	s.cols = append(s.cols, *col)
+	newCol := &s.cols[len(s.cols)-1]
+	if label != "" {
+		newCol.name = tree.Name(label)
+	}
+	return newCol
+}
+
+// walkExprTree walks the given expression and performs name resolution,
+// replaces unresolved column names with columnProps, and replaces subqueries
+// with typed subquery structs.
+func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 	// TODO(peter): The caller should specify the desired number of columns. This
 	// is needed when a subquery is used by an UPDATE statement.
 	// TODO(andy): shouldn't this be part of the desired type rather than yet
@@ -89,7 +102,43 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
+	return expr
+}
+
+// resolveType converts the given expr to a tree.TypedExpr. As part of the
+// conversion, it performs name resolution, replaces unresolved column names
+// with columnProps, and replaces subqueries with typed subquery structs.
+//
+// The desired type is a suggestion, but resolveType does not throw an error if
+// the resolved type turns out to be different from desired (in contrast to
+// resolveAndRequireType, which panics with a builderError).
+func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
+	if err != nil {
+		panic(builderError{err})
+	}
+
+	return texpr
+}
+
+// resolveAndRequireType converts the given expr to a tree.TypedExpr. As part
+// of the conversion, it performs name resolution, replaces unresolved
+// column names with columnProps, and replaces subqueries with typed subquery
+// structs.
+//
+// If the resolved type does not match the desired type, resolveAndRequireType
+// panics with a builderError (in contrast to resolveType, which returns the
+// typed expression with no error).
+//
+// typingContext is a string used for error reporting in case the resolved
+// type and desired type do not match. It shows the context in which
+// this function was called (e.g., "LIMIT", "OFFSET").
+func (s *scope) resolveAndRequireType(
+	expr tree.Expr, desired types.T, typingContext string,
+) tree.TypedExpr {
+	expr = s.walkExprTree(expr)
+	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, typingContext)
 	if err != nil {
 		panic(builderError{err})
 	}
@@ -99,10 +148,14 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 
 // hasColumn returns true if the given column id is found within this scope.
 func (s *scope) hasColumn(id opt.ColumnID) bool {
-	for curr := s; curr != nil; curr = curr.parent {
+	// We only allow hidden columns in the current scope. Hidden columns
+	// in parent scopes are not accessible.
+	allowHidden := true
+
+	for curr := s; curr != nil; curr, allowHidden = curr.parent, false {
 		for i := range curr.cols {
 			col := &curr.cols[i]
-			if col.id == id {
+			if col.id == id && (allowHidden || !col.hidden) {
 				return true
 			}
 		}
@@ -139,9 +192,23 @@ func (s *scope) removeHiddenCols() {
 	s.cols = s.cols[:n]
 }
 
+// findExistingCol finds the given expression among the bound variables
+// in this scope. Returns nil if the expression is not found.
+func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
+	exprStr := symbolicExprStr(expr)
+	for i := range s.cols {
+		col := &s.cols[i]
+		if exprStr == col.getExprStr() {
+			return col
+		}
+	}
+
+	return nil
+}
+
 // getAggregateCols returns the columns in this scope corresponding
 // to aggregate functions.
-func (s *scope) getAggregateCols() []columnProps {
+func (s *scope) getAggregateCols() []scopeColumn {
 	// Aggregates are always clustered at the end of the column list, in the
 	// same order as s.groupby.aggs.
 	return s.cols[len(s.cols)-len(s.groupby.aggs):]
@@ -149,7 +216,7 @@ func (s *scope) getAggregateCols() []columnProps {
 
 // findAggregate finds the given aggregate among the bound variables
 // in this scope. Returns nil if the aggregate is not found.
-func (s *scope) findAggregate(agg aggregateInfo) *columnProps {
+func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 	for i, a := range s.groupby.aggs {
 		// Find an existing aggregate that has the same function and the same
 		// arguments.
@@ -174,7 +241,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *columnProps {
 
 // findGrouping finds the given grouping expression among the bound variables
 // in the groupingsScope. Returns nil if the grouping is not found.
-func (s *scope) findGrouping(grouping memo.GroupID) *columnProps {
+func (s *scope) findGrouping(grouping memo.GroupID) *scopeColumn {
 	for i, g := range s.groupby.groupings {
 		if g == grouping {
 			// Grouping already exists, so return information about the
@@ -220,7 +287,7 @@ func (s *scope) endAggFunc() {
 
 // scope implements the tree.Visitor interface so that it can walk through
 // a tree.Expr tree, perform name resolution, and replace unresolved column
-// names with a columnProps. The info stored in columnProps is necessary for
+// names with a scopeColumn. The info stored in scopeColumn is necessary for
 // Builder.buildScalar to construct a "variable" memo expression.
 var _ tree.Visitor = &scope{}
 
@@ -228,18 +295,18 @@ var _ tree.Visitor = &scope{}
 func (*scope) ColumnSourceMeta() {}
 
 // ColumnSourceMeta implements the tree.ColumnSourceMeta interface.
-func (*columnProps) ColumnSourceMeta() {}
+func (*scopeColumn) ColumnSourceMeta() {}
 
 // ColumnResolutionResult implements the tree.ColumnResolutionResult interface.
-func (*columnProps) ColumnResolutionResult() {}
+func (*scopeColumn) ColumnResolutionResult() {}
 
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (s *scope) FindSourceProvidingColumn(
 	_ context.Context, colName tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	var candidateFromAnonSource *columnProps
-	var candidateWithPrefix *columnProps
-	var hiddenCandidate *columnProps
+	var candidateFromAnonSource *scopeColumn
+	var candidateWithPrefix *scopeColumn
+	var hiddenCandidate *scopeColumn
 	var moreThanOneCandidateFromAnonSource bool
 	var moreThanOneCandidateWithPrefix bool
 	var moreThanOneHiddenCandidate bool
@@ -378,7 +445,7 @@ func (s *scope) Resolve(
 ) (tree.ColumnResolutionResult, error) {
 	if colHint >= 0 {
 		// Column was found by FindSourceProvidingColumn above.
-		return srcMeta.(*columnProps), nil
+		return srcMeta.(*scopeColumn), nil
 	}
 
 	// Otherwise, a table is known but not the column yet.
@@ -435,7 +502,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if err != nil {
 			panic(builderError{err})
 		}
-		return false, colI.(*columnProps)
+		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
@@ -510,8 +577,8 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.Subquery:
 		if s.builder.AllowUnsupportedExpr {
-			// TODO(rytaft): Temporary fix for #24171 and #24170.
-			break
+			// TODO(rytaft): Temporary fix for #24171, #24170 and #24225.
+			return false, expr
 		}
 
 		if t.Exists {
@@ -534,7 +601,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // number of columns and is used when the normal type checking machinery will
 // verify that the correct number of columns is returned.
 func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
-	out, outScope := s.builder.buildStmt(sub.Select, s)
+	outScope := s.builder.buildStmt(sub.Select, s)
 	if desiredColumns > 0 && len(outScope.cols) != desiredColumns {
 		n := len(outScope.cols)
 		switch desiredColumns {
@@ -547,7 +614,7 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 
 	return &subquery{
 		cols:     outScope.cols,
-		out:      out,
+		group:    outScope.group,
 		multiRow: multiRow,
 		exists:   sub.Exists,
 	}

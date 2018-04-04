@@ -4,6 +4,8 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 var opLayoutTable = [...]opLayout{
@@ -34,6 +36,7 @@ var opLayoutTable = [...]opLayout{
 	opt.ExceptAllOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
+	opt.Max1RowOp:         makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.SubqueryOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.AnyOp:             makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.VariableOp:        makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
@@ -71,6 +74,9 @@ var opLayoutTable = [...]opLayout{
 	opt.IsOp:              makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.IsNotOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.ContainsOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.JsonExistsOp:      makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.JsonAllExistsOp:   makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.JsonSomeExistsOp:  makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.BitandOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.BitorOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.BitxorOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
@@ -93,6 +99,7 @@ var opLayoutTable = [...]opLayout{
 	opt.CastOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 2 /*priv*/),
 	opt.CaseOp:            makeOpLayout(1 /*base*/, 2 /*list*/, 0 /*priv*/),
 	opt.WhenOp:            makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.ArrayOp:           makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/),
 	opt.FunctionOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/),
 	opt.CoalesceOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/),
 	opt.UnsupportedExprOp: makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
@@ -127,6 +134,7 @@ var isEnforcerLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -164,6 +172,9 @@ var isEnforcerLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -186,6 +197,7 @@ var isEnforcerLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -220,6 +232,7 @@ var isRelationalLookup = [...]bool{
 	opt.ExceptAllOp:       true,
 	opt.LimitOp:           true,
 	opt.OffsetOp:          true,
+	opt.Max1RowOp:         true,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -257,6 +270,9 @@ var isRelationalLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -279,6 +295,7 @@ var isRelationalLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -313,6 +330,7 @@ var isJoinLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -350,6 +368,9 @@ var isJoinLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -372,6 +393,7 @@ var isJoinLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -406,6 +428,7 @@ var isJoinApplyLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -443,6 +466,9 @@ var isJoinApplyLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -465,6 +491,7 @@ var isJoinApplyLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -499,6 +526,7 @@ var isScalarLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        true,
 	opt.AnyOp:             true,
 	opt.VariableOp:        true,
@@ -536,6 +564,9 @@ var isScalarLookup = [...]bool{
 	opt.IsOp:              true,
 	opt.IsNotOp:           true,
 	opt.ContainsOp:        true,
+	opt.JsonExistsOp:      true,
+	opt.JsonAllExistsOp:   true,
+	opt.JsonSomeExistsOp:  true,
 	opt.BitandOp:          true,
 	opt.BitorOp:           true,
 	opt.BitxorOp:          true,
@@ -558,6 +589,7 @@ var isScalarLookup = [...]bool{
 	opt.CastOp:            true,
 	opt.CaseOp:            true,
 	opt.WhenOp:            true,
+	opt.ArrayOp:           true,
 	opt.FunctionOp:        true,
 	opt.CoalesceOp:        true,
 	opt.UnsupportedExprOp: true,
@@ -592,6 +624,7 @@ var isConstValueLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -629,6 +662,9 @@ var isConstValueLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -651,6 +687,7 @@ var isConstValueLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -685,6 +722,7 @@ var isBooleanLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -722,6 +760,9 @@ var isBooleanLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -744,6 +785,7 @@ var isBooleanLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -778,6 +820,7 @@ var isComparisonLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -815,6 +858,9 @@ var isComparisonLookup = [...]bool{
 	opt.IsOp:              true,
 	opt.IsNotOp:           true,
 	opt.ContainsOp:        true,
+	opt.JsonExistsOp:      true,
+	opt.JsonAllExistsOp:   true,
+	opt.JsonSomeExistsOp:  true,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -837,6 +883,7 @@ var isComparisonLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -871,6 +918,7 @@ var isBinaryLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -908,6 +956,9 @@ var isBinaryLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          true,
 	opt.BitorOp:           true,
 	opt.BitxorOp:          true,
@@ -930,6 +981,7 @@ var isBinaryLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -964,6 +1016,7 @@ var isUnaryLookup = [...]bool{
 	opt.ExceptAllOp:       false,
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
+	opt.Max1RowOp:         false,
 	opt.SubqueryOp:        false,
 	opt.AnyOp:             false,
 	opt.VariableOp:        false,
@@ -1001,6 +1054,9 @@ var isUnaryLookup = [...]bool{
 	opt.IsOp:              false,
 	opt.IsNotOp:           false,
 	opt.ContainsOp:        false,
+	opt.JsonExistsOp:      false,
+	opt.JsonAllExistsOp:   false,
+	opt.JsonSomeExistsOp:  false,
 	opt.BitandOp:          false,
 	opt.BitorOp:           false,
 	opt.BitxorOp:          false,
@@ -1023,6 +1079,7 @@ var isUnaryLookup = [...]bool{
 	opt.CastOp:            false,
 	opt.CaseOp:            false,
 	opt.WhenOp:            false,
+	opt.ArrayOp:           false,
 	opt.FunctionOp:        false,
 	opt.CoalesceOp:        false,
 	opt.UnsupportedExprOp: false,
@@ -1141,7 +1198,7 @@ func (e *Expr) AsScan() *ScanExpr {
 // the same length (same with that of Cols).
 //
 // The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
+// as an opt.ColList. It is legal for Cols to be empty.
 type ValuesExpr Expr
 
 func MakeValuesExpr(rows ListID, cols PrivateID) ValuesExpr {
@@ -1863,7 +1920,7 @@ func (e *Expr) AsExceptAll() *ExceptAllExpr {
 
 // LimitExpr returns a limited subset of the results in the input relation.
 // The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
+// rows. The private field is an opt.Ordering which indicates the desired
 // row ordering (the first rows with respect to this ordering are returned).
 type LimitExpr Expr
 
@@ -1925,6 +1982,30 @@ func (e *Expr) AsOffset() *OffsetExpr {
 	return (*OffsetExpr)(e)
 }
 
+// Max1RowExpr is an operator which enforces that its input must return at most one
+// row. It is used as input to the Subquery operator. See the comment above
+// Subquery for more details.
+type Max1RowExpr Expr
+
+func MakeMax1RowExpr(input GroupID) Max1RowExpr {
+	return Max1RowExpr{op: opt.Max1RowOp, state: exprState{uint32(input)}}
+}
+
+func (e *Max1RowExpr) Input() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *Max1RowExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsMax1Row() *Max1RowExpr {
+	if e.op != opt.Max1RowOp {
+		return nil
+	}
+	return (*Max1RowExpr)(e)
+}
+
 // SubqueryExpr is a subquery in a single-row context such as
 // `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
 // In a single-row context, the outer query is only valid if the subquery
@@ -1951,12 +2032,17 @@ func (e *Expr) AsOffset() *OffsetExpr {
 //    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //
-// The Input field contains the subquery itself, and the Projection field
+// The Input field contains the subquery itself, which should be wrapped in a
+// Max1Row operator to enforce that the subquery can return at most one row
+// (Max1Row may be removed by the optimizer later if it can determine statically
+// that the subquery will always return at most one row). The Projection field
 // contains a single column representing the output of the subquery. For
 // example, `(SELECT 1, 'a')` would be represented by the following structure:
 //
 // (Subquery
-//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   (Max1Row
+//     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   )
 //   (Variable 3)
 // )
 //
@@ -2184,7 +2270,7 @@ func (e *Expr) AsTuple() *TupleExpr {
 
 // ProjectionsExpr is a set of typed scalar expressions that will become output
 // columns for a containing Project operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *opt.ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is not legal for Cols to be empty.
 type ProjectionsExpr Expr
 
@@ -2213,7 +2299,7 @@ func (e *Expr) AsProjections() *ProjectionsExpr {
 
 // AggregationsExpr is a set of aggregate expressions that will become output
 // columns for a containing GroupBy operator. The private Cols field contains
-// the list of column indexes returned by the expression, as a *ColList. It
+// the list of column indexes returned by the expression, as an opt.ColList. It
 // is legal for Cols to be empty.
 type AggregationsExpr Expr
 
@@ -2889,6 +2975,81 @@ func (e *Expr) AsContains() *ContainsExpr {
 	return (*ContainsExpr)(e)
 }
 
+type JsonExistsExpr Expr
+
+func MakeJsonExistsExpr(left GroupID, right GroupID) JsonExistsExpr {
+	return JsonExistsExpr{op: opt.JsonExistsOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *JsonExistsExpr) Left() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *JsonExistsExpr) Right() GroupID {
+	return GroupID(e.state[1])
+}
+
+func (e *JsonExistsExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsJsonExists() *JsonExistsExpr {
+	if e.op != opt.JsonExistsOp {
+		return nil
+	}
+	return (*JsonExistsExpr)(e)
+}
+
+type JsonAllExistsExpr Expr
+
+func MakeJsonAllExistsExpr(left GroupID, right GroupID) JsonAllExistsExpr {
+	return JsonAllExistsExpr{op: opt.JsonAllExistsOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *JsonAllExistsExpr) Left() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *JsonAllExistsExpr) Right() GroupID {
+	return GroupID(e.state[1])
+}
+
+func (e *JsonAllExistsExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsJsonAllExists() *JsonAllExistsExpr {
+	if e.op != opt.JsonAllExistsOp {
+		return nil
+	}
+	return (*JsonAllExistsExpr)(e)
+}
+
+type JsonSomeExistsExpr Expr
+
+func MakeJsonSomeExistsExpr(left GroupID, right GroupID) JsonSomeExistsExpr {
+	return JsonSomeExistsExpr{op: opt.JsonSomeExistsOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *JsonSomeExistsExpr) Left() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *JsonSomeExistsExpr) Right() GroupID {
+	return GroupID(e.state[1])
+}
+
+func (e *JsonSomeExistsExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsJsonSomeExists() *JsonSomeExistsExpr {
+	if e.op != opt.JsonSomeExistsOp {
+		return nil
+	}
+	return (*JsonSomeExistsExpr)(e)
+}
+
 type BitandExpr Expr
 
 func MakeBitandExpr(left GroupID, right GroupID) BitandExpr {
@@ -3450,8 +3611,34 @@ func (e *Expr) AsWhen() *WhenExpr {
 	return (*WhenExpr)(e)
 }
 
+// ArrayExpr is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+type ArrayExpr Expr
+
+func MakeArrayExpr(elems ListID, typ PrivateID) ArrayExpr {
+	return ArrayExpr{op: opt.ArrayOp, state: exprState{elems.Offset, elems.Length, uint32(typ)}}
+}
+
+func (e *ArrayExpr) Elems() ListID {
+	return ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *ArrayExpr) Typ() PrivateID {
+	return PrivateID(e.state[2])
+}
+
+func (e *ArrayExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsArray() *ArrayExpr {
+	if e.op != opt.ArrayOp {
+		return nil
+	}
+	return (*ArrayExpr)(e)
+}
+
 // FunctionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncOpDef struct that provides the
+// arguments. The private field is a *opt.FuncOpDef struct that provides the
 // name of the function as well as a pointer to the builtin overload definition.
 type FunctionExpr Expr
 
@@ -3520,4 +3707,74 @@ func (e *Expr) AsUnsupportedExpr() *UnsupportedExprExpr {
 		return nil
 	}
 	return (*UnsupportedExprExpr)(e)
+}
+
+// InternScanOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternScanOpDef(val *ScanOpDef) PrivateID {
+	return m.privateStorage.internScanOpDef(val)
+}
+
+// InternColList adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColList(val opt.ColList) PrivateID {
+	return m.privateStorage.internColList(val)
+}
+
+// InternColSet adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColSet(val opt.ColSet) PrivateID {
+	return m.privateStorage.internColSet(val)
+}
+
+// InternSetOpColMap adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternSetOpColMap(val *SetOpColMap) PrivateID {
+	return m.privateStorage.internSetOpColMap(val)
+}
+
+// InternOrdering adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternOrdering(val Ordering) PrivateID {
+	return m.privateStorage.internOrdering(val)
+}
+
+// InternColumnID adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternColumnID(val opt.ColumnID) PrivateID {
+	return m.privateStorage.internColumnID(val)
+}
+
+// InternDatum adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternDatum(val tree.Datum) PrivateID {
+	return m.privateStorage.internDatum(val)
+}
+
+// InternType adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternType(val types.T) PrivateID {
+	return m.privateStorage.internType(val)
+}
+
+// InternTypedExpr adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternTypedExpr(val tree.TypedExpr) PrivateID {
+	return m.privateStorage.internTypedExpr(val)
+}
+
+// InternFuncOpDef adds the given value to the memo and returns an ID that
+// can be used for later lookup. If the same value was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *Memo) InternFuncOpDef(val *FuncOpDef) PrivateID {
+	return m.privateStorage.internFuncOpDef(val)
 }

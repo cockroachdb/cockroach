@@ -33,12 +33,17 @@
 #    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-# The Input field contains the subquery itself, and the Projection field
+# The Input field contains the subquery itself, which should be wrapped in a
+# Max1Row operator to enforce that the subquery can return at most one row
+# (Max1Row may be removed by the optimizer later if it can determine statically
+# that the subquery will always return at most one row). The Projection field
 # contains a single column representing the output of the subquery. For
 # example, `(SELECT 1, 'a')` would be represented by the following structure:
 #
 # (Subquery
-#   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#   (Max1Row
+#     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#   )
 #   (Variable 3)
 # )
 #
@@ -115,7 +120,7 @@ define False {
 
 [Scalar]
 define Placeholder {
-    Value Interface
+    Value TypedExpr
 }
 
 [Scalar]
@@ -125,7 +130,7 @@ define Tuple {
 
 # Projections is a set of typed scalar expressions that will become output
 # columns for a containing Project operator. The private Cols field contains
-# the list of column indexes returned by the expression, as a *opt.ColList. It
+# the list of column indexes returned by the expression, as an opt.ColList. It
 # is not legal for Cols to be empty.
 [Scalar]
 define Projections {
@@ -135,7 +140,7 @@ define Projections {
 
 # Aggregations is a set of aggregate expressions that will become output
 # columns for a containing GroupBy operator. The private Cols field contains
-# the list of column indexes returned by the expression, as a *ColList. It
+# the list of column indexes returned by the expression, as an opt.ColList. It
 # is legal for Cols to be empty.
 [Scalar]
 define Aggregations {
@@ -313,6 +318,24 @@ define Contains {
    Right Expr
 }
 
+[Scalar, Comparison]
+define JsonExists {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar, Comparison]
+define JsonAllExists {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar, Comparison]
+define JsonSomeExists {
+   Left  Expr
+   Right Expr
+}
+
 [Scalar, Binary]
 define Bitand {
    Left  Expr
@@ -462,8 +485,15 @@ define When {
     Value     Expr
 }
 
+# Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
+[Scalar]
+define Array {
+    Elems ExprList
+    Typ   Type
+}
+
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-# arguments. The private field is an opt.FuncOpDef struct that provides the
+# arguments. The private field is a *opt.FuncOpDef struct that provides the
 # name of the function as well as a pointer to the builtin overload definition.
 [Scalar]
 define Function {

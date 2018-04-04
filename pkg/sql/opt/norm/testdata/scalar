@@ -1,0 +1,424 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ ├── arr int[]
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# CommuteVar
+# --------------------------------------------------
+
+# Put variables on both sides of comparison operator to avoid matching constant
+# patterns.
+opt
+SELECT
+    (1+i) = k,
+    (2-k) <> i,
+    (i+1) IS NOT DISTINCT FROM k,
+    (i-1) IS DISTINCT FROM k,
+
+    (i*2) + k,
+    (i+2) * k,
+    (i^2) & k,
+    (i^2) | k,
+    (i*i) # k
+FROM a
+----
+project
+ ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(int) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int)
+ └── projections [outer=(1,2)]
+      ├── eq [type=bool, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 1 [type=int]
+      ├── ne [type=bool, outer=(1,2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int, outer=(1)]
+      │         ├── const: 2 [type=int]
+      │         └── variable: a.k [type=int, outer=(1)]
+      ├── is [type=bool, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 1 [type=int]
+      ├── is-not [type=bool, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── minus [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 1 [type=int]
+      ├── plus [type=int, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── mult [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 2 [type=int]
+      ├── mult [type=int, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 2 [type=int]
+      ├── bitand [type=int, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── pow [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 2 [type=int]
+      ├── bitor [type=int, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── pow [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 2 [type=int]
+      └── bitxor [type=int, outer=(1,2)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── mult [type=int, outer=(2)]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── variable: a.i [type=int, outer=(2)]
+
+# --------------------------------------------------
+# CommuteConst
+# --------------------------------------------------
+opt
+SELECT
+    (length('foo')+1) = (i+k),
+    length('bar') <> (i*2),
+    5 IS NOT DISTINCT FROM (1-k),
+    (10::decimal+1::int) IS DISTINCT FROM k,
+
+    1 + f,
+    (5*length('foo')) * (i*i),
+    (100 ^ 2) & (i+i),
+    length('foo')+1 | (i+i),
+    1-length('foo') # (k^2)
+FROM a
+----
+project
+ ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(float) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
+ └── projections [outer=(1-3)]
+      ├── eq [type=bool, outer=(1,2)]
+      │    ├── plus [type=int, outer=(1,2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=int]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── const: 1 [type=int]
+      ├── ne [type=bool, outer=(2)]
+      │    ├── mult [type=int, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── const: 2 [type=int]
+      │    └── function: length [type=int]
+      │         └── const: 'bar' [type=string]
+      ├── is [type=bool, outer=(1)]
+      │    ├── minus [type=int, outer=(1)]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── variable: a.k [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      ├── is-not [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=decimal]
+      │         ├── const: 10 [type=decimal]
+      │         └── const: 1 [type=int]
+      ├── plus [type=float, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── const: 1.0 [type=float]
+      ├── mult [type=int, outer=(2)]
+      │    ├── mult [type=int, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── variable: a.i [type=int, outer=(2)]
+      │    └── mult [type=int]
+      │         ├── const: 5 [type=int]
+      │         └── function: length [type=int]
+      │              └── const: 'foo' [type=string]
+      ├── bitand [type=int, outer=(2)]
+      │    ├── plus [type=int, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── variable: a.i [type=int, outer=(2)]
+      │    └── pow [type=int]
+      │         ├── const: 100 [type=int]
+      │         └── const: 2 [type=int]
+      ├── bitor [type=int, outer=(2)]
+      │    ├── plus [type=int, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── variable: a.i [type=int, outer=(2)]
+      │    └── plus [type=int]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── const: 1 [type=int]
+      └── bitxor [type=int, outer=(1)]
+           ├── pow [type=int, outer=(1)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── const: 2 [type=int]
+           └── minus [type=int]
+                ├── const: 1 [type=int]
+                └── function: length [type=int]
+                     └── const: 'foo' [type=string]
+
+# --------------------------------------------------
+# EliminateCoalesce
+# --------------------------------------------------
+opt
+SELECT COALESCE(i) FROM a
+----
+project
+ ├── columns: column7:7(int)
+ ├── scan a
+ │    └── columns: a.i:2(int)
+ └── projections [outer=(2)]
+      └── variable: a.i [type=int, outer=(2)]
+
+# --------------------------------------------------
+# SimplifyCoalesce
+# --------------------------------------------------
+opt
+SELECT COALESCE(NULL) FROM a
+----
+project
+ ├── columns: column7:7(unknown)
+ ├── scan a
+ └── projections
+      └── null [type=unknown]
+
+opt
+SELECT COALESCE(NULL, 'foo', s) FROM a
+----
+project
+ ├── columns: column7:7(string)
+ ├── scan a
+ └── projections
+      └── const: 'foo' [type=string]
+
+opt
+SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
+----
+project
+ ├── columns: column7:7(string)
+ ├── scan a
+ │    └── columns: a.s:4(string)
+ └── projections [outer=(4)]
+      └── coalesce [type=string, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── concat [type=string, outer=(4)]
+                ├── variable: a.s [type=string, outer=(4)]
+                └── const: 'foo' [type=string]
+
+# Trailing null can't be removed.
+opt
+SELECT COALESCE(i, NULL, NULL) FROM a
+----
+project
+ ├── columns: column7:7(int)
+ ├── scan a
+ │    └── columns: a.i:2(int)
+ └── projections [outer=(2)]
+      └── coalesce [type=int, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
+           ├── null [type=unknown]
+           └── null [type=unknown]
+
+# --------------------------------------------------
+# EliminateCast
+# --------------------------------------------------
+opt
+SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
+----
+project
+ ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb) column10:10(int)
+ ├── scan a
+ │    └── columns: a.i:2(int) a.arr:6(int[])
+ └── projections [outer=(2,6)]
+      ├── variable: a.i [type=int, outer=(2)]
+      ├── variable: a.arr [type=int[], outer=(6)]
+      ├── const: '[1, 2]' [type=jsonb]
+      └── null [type=int]
+
+# Shouldn't eliminate these cases.
+opt
+SELECT i::float, arr::decimal[], s::json::json FROM a
+----
+project
+ ├── columns: column7:7(float) column8:8(decimal[]) column9:9(jsonb)
+ ├── scan a
+ │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
+ └── projections [outer=(2,4,6)]
+      ├── cast: float [type=float, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── cast: decimal[] [type=decimal[], outer=(6)]
+      │    └── variable: a.arr [type=int[], outer=(6)]
+      └── cast: jsonb [type=jsonb, outer=(4)]
+           └── variable: a.s [type=string, outer=(4)]
+
+# --------------------------------------------------
+# FoldNullCast
+# --------------------------------------------------
+opt
+SELECT null::int, null::timestamptz
+----
+project
+ ├── columns: column1:1(int) column2:2(timestamptz)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── null [type=int]
+      └── null [type=timestamptz]
+
+# --------------------------------------------------
+# FoldNullUnary
+# --------------------------------------------------
+opt
+SELECT +null::int, -null::int, ~null::int FROM a
+----
+project
+ ├── columns: column7:7(int) column8:8(int) column9:9(int)
+ ├── scan a
+ └── projections
+      ├── null [type=int]
+      ├── null [type=int]
+      └── null [type=int]
+
+# --------------------------------------------------
+# FoldNullBinaryLeft, FoldNullBinaryRight
+# --------------------------------------------------
+opt
+SELECT
+    null::int & 1, 1 & null::int,
+    null::decimal + 1, 1 + null::decimal,
+    null::float % 1, 1 % null::float,
+    null::int << 4, 4 << null::int,
+
+    -- These shouldn't be folded because AllowNullArgs is true for concat with arrays.
+    arr::decimal[] || null, null || arr::string[],
+
+    -- Scalars concatenated with nulls match array overloads, and shouldn't be folded.
+    -- In other words, the only overload for decimal concatenation is an array overload.
+    i::decimal || null, null || i::float
+FROM a
+----
+project
+ ├── columns: column7:7(int) column8:8(int) column9:9(decimal) column10:10(decimal) column11:11(float) column12:12(float) column13:13(int) column14:14(int) column15:15(decimal[]) column16:16(string[]) column17:17(decimal[]) column18:18(float[])
+ ├── scan a
+ │    └── columns: a.i:2(int) a.arr:6(int[])
+ └── projections [outer=(2,6)]
+      ├── null [type=int]
+      ├── null [type=int]
+      ├── null [type=decimal]
+      ├── null [type=decimal]
+      ├── null [type=float]
+      ├── null [type=float]
+      ├── null [type=int]
+      ├── null [type=int]
+      ├── concat [type=decimal[], outer=(6)]
+      │    ├── cast: decimal[] [type=decimal[], outer=(6)]
+      │    │    └── variable: a.arr [type=int[], outer=(6)]
+      │    └── null [type=unknown]
+      ├── concat [type=string[], outer=(6)]
+      │    ├── null [type=unknown]
+      │    └── cast: string[] [type=string[], outer=(6)]
+      │         └── variable: a.arr [type=int[], outer=(6)]
+      ├── concat [type=decimal[], outer=(2)]
+      │    ├── cast: decimal [type=decimal, outer=(2)]
+      │    │    └── variable: a.i [type=int, outer=(2)]
+      │    └── null [type=unknown]
+      └── concat [type=float[], outer=(2)]
+           ├── null [type=unknown]
+           └── cast: float [type=float, outer=(2)]
+                └── variable: a.i [type=int, outer=(2)]
+
+opt
+SELECT
+    null::json || '[1, 2]', '[1, 2]' || null::json,
+    null::json->'foo', '{}'::jsonb->null::string,
+    null::json->>'foo', '{}'::jsonb->>null::string,
+    null::json->>'foo', '{}'::jsonb->>null::string,
+    null::json#>ARRAY['foo'], '{}'::jsonb#>NULL,
+    null::json#>>ARRAY['foo'], '{}'::jsonb#>>NULL
+FROM a
+----
+project
+ ├── columns: column7:7(jsonb) column8:8(jsonb) column9:9(jsonb) column10:10(jsonb) column11:11(string) column12:12(string) column11:11(string) column12:12(string) column13:13(jsonb) column14:14(unknown) column15:15(string) column14:14(unknown)
+ ├── scan a
+ └── projections
+      ├── null [type=jsonb]
+      ├── null [type=jsonb]
+      ├── null [type=jsonb]
+      ├── null [type=jsonb]
+      ├── null [type=string]
+      ├── null [type=string]
+      ├── null [type=jsonb]
+      ├── null [type=unknown]
+      └── null [type=string]
+
+# --------------------------------------------------
+# FoldNullInNonEmpty
+# --------------------------------------------------
+opt
+SELECT null IN (i), null NOT IN (s) FROM a
+----
+project
+ ├── columns: column7:7(bool) column8:8(bool)
+ ├── scan a
+ └── projections
+      ├── null [type=bool]
+      └── null [type=bool]
+
+# --------------------------------------------------
+# FoldInNull
+# --------------------------------------------------
+opt
+SELECT i IN (null, null), k NOT IN (1 * null, null::int, 1 < null) FROM a
+----
+project
+ ├── columns: column7:7(bool) column8:8(bool)
+ ├── scan a
+ └── projections
+      ├── null [type=bool]
+      └── null [type=bool]
+
+# --------------------------------------------------
+# NormalizeInConst
+# --------------------------------------------------
+opt
+SELECT i IN (2, 1, 1, null, 3, null, 2, 3.0) FROM a
+----
+project
+ ├── columns: column7:7(bool)
+ ├── scan a
+ │    └── columns: a.i:2(int)
+ └── projections [outer=(2)]
+      └── in [type=bool, outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── tuple [type=tuple{unknown, int, int, int}]
+                ├── null [type=unknown]
+                ├── const: 1 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
+
+opt
+SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) FROM a
+----
+project
+ ├── columns: column7:7(bool)
+ ├── scan a
+ │    └── columns: a.s:4(string)
+ └── projections [outer=(4)]
+      └── not-in [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── tuple [type=tuple{unknown, string, string, string, string}, outer=(4)]
+                ├── null [type=unknown]
+                ├── const: 'bar' [type=string]
+                ├── const: 'foo' [type=string]
+                ├── concat [type=string, outer=(4)]
+                │    ├── variable: a.s [type=string, outer=(4)]
+                │    └── const: 'foo' [type=string]
+                └── cast: string [type=string, outer=(4)]
+                     └── function: length [type=int, outer=(4)]
+                          └── variable: a.s [type=string, outer=(4)]

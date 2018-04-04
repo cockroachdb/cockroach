@@ -155,7 +155,7 @@ System keys come in several subtypes:
 - **Replicated Range ID local** keys store range metadata that is
     present on all of the replicas for a range. These keys are updated
     via Raft operations. Examples include the range lease state and
-    abort cache entries.
+    abort span entries.
 - **Unreplicated Range ID local** keys store range metadata that is
     local to a replica. The primary examples of such keys are the Raft
     state and Raft log.
@@ -349,9 +349,7 @@ There are several scenarios in which transactions interact:
   to proceed; after all, it will be reading an older version of the
   value and so does not conflict. Recall that the write intent may
   be committed with a later timestamp than its candidate; it will
-  never commit with an earlier one. **Side note**: if a SI transaction
-  reader finds an intent with a newer timestamp which the reader’s own
-  transaction has written, the reader always returns that intent's value.
+  never commit with an earlier one. 
 
 - **Reader encounters write intent or value with newer timestamp in the
   near future:** In this case, we have to be careful. The newer

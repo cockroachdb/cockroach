@@ -39,6 +39,12 @@ type ExprID struct {
 	Expr  ExprOrdinal
 }
 
+// MakeNormExprID returns the id of the normalized expression for the given
+// group.
+func MakeNormExprID(group GroupID) ExprID {
+	return ExprID{Group: group, Expr: normExprOrdinal}
+}
+
 // exprState is opaque storage used to store operator-specific fields in the
 // memo expression.
 type exprState [opt.MaxOperands]uint32

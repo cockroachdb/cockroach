@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -103,23 +104,26 @@ func (b *Builder) expandStarAndResolveType(
 //        the AS keyword).
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
+// group  The memo group ID of this column/expression (if any). This parameter
+//        is optional and can be set later in the returned scopeColumn.
 //
 // The new column is returned as a columnProps object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr,
-) *columnProps {
+	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
+) *scopeColumn {
 	if label == "" {
 		label = fmt.Sprintf("column%d", len(b.colMap))
 	}
 
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
-	col := columnProps{
+	col := scopeColumn{
 		origName: name,
 		name:     name,
 		typ:      typ,
 		id:       colID,
 		expr:     expr,
+		group:    group,
 	}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
@@ -128,16 +132,23 @@ func (b *Builder) synthesizeColumn(
 
 // constructList invokes the factory to create one of the operators that contain
 // a list of groups: ProjectionsOp and AggregationsOp.
-func (b *Builder) constructList(
-	op opt.Operator, items []memo.GroupID, cols []columnProps,
-) memo.GroupID {
-	colList := make(opt.ColList, len(cols))
+func (b *Builder) constructList(op opt.Operator, cols []scopeColumn) memo.GroupID {
+	colList := make(opt.ColList, 0, len(cols))
+	itemList := make([]memo.GroupID, 0, len(cols))
+
+	// Deduplicate the lists. We only need to project each column once.
+	colSet := opt.ColSet{}
 	for i := range cols {
-		colList[i] = cols[i].id
+		id := cols[i].id
+		if !colSet.Contains(int(id)) {
+			colList = append(colList, id)
+			itemList = append(itemList, cols[i].group)
+			colSet.Add(int(id))
+		}
 	}
 
-	list := b.factory.InternList(items)
-	private := b.factory.InternPrivate(&colList)
+	list := b.factory.InternList(itemList)
+	private := b.factory.InternColList(colList)
 
 	switch op {
 	case opt.ProjectionsOp:
@@ -277,7 +288,7 @@ func symbolicExprStr(expr tree.Expr) string {
 	return tree.AsStringWithFlags(expr, tree.FmtCheckEquivalence)
 }
 
-func colsToColList(cols []columnProps) opt.ColList {
+func colsToColList(cols []scopeColumn) opt.ColList {
 	colList := make(opt.ColList, len(cols))
 	for i := range cols {
 		colList[i] = cols[i].id
@@ -285,7 +296,7 @@ func colsToColList(cols []columnProps) opt.ColList {
 	return colList
 }
 
-func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
+func findColByIndex(cols []scopeColumn, id opt.ColumnID) *scopeColumn {
 	for i := range cols {
 		col := &cols[i]
 		if col.id == id {
@@ -296,11 +307,27 @@ func findColByIndex(cols []columnProps, id opt.ColumnID) *columnProps {
 	return nil
 }
 
-func makePresentation(cols []columnProps) memo.Presentation {
-	presentation := make(memo.Presentation, len(cols))
+func makePresentation(cols []scopeColumn) memo.Presentation {
+	presentation := make(memo.Presentation, 0, len(cols))
 	for i := range cols {
 		col := &cols[i]
-		presentation[i] = opt.LabeledColumn{Label: string(col.name), ID: col.id}
+		if !col.hidden {
+			presentation = append(presentation, opt.LabeledColumn{Label: string(col.name), ID: col.id})
+		}
 	}
 	return presentation
+}
+
+func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
+	exprTransformCtx := transform.ExprTransformContext{}
+	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
+		panic(builderError{
+			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
+		})
+	}
+	if exprTransformCtx.WindowFuncInExpr(expr) {
+		panic(builderError{
+			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
+		})
+	}
 }

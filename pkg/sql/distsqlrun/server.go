@@ -338,6 +338,15 @@ func (ds *ServerImpl) setupFlow(
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+	evalCtx.SessionData.SequenceState = sessiondata.NewSequenceState()
+	var haveSequences bool
+	for _, seq := range req.EvalContext.SeqState.Seqs {
+		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
+	}
+	if haveSequences {
+		evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
+			*req.EvalContext.SeqState.LastSeqIncremented)
+	}
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
@@ -504,7 +513,26 @@ type TestingKnobs struct {
 	// running flows to complete or give a grace period of minFlowDrainWait
 	// to incoming flows to register.
 	DrainFast bool
+
+	// MetadataTestLevel controls whether or not additional metadata test
+	// processors are planned, which send additional "RowNum" metadata that is
+	// checked by a test receiver on the gateway.
+	MetadataTestLevel MetadataTestLevel
 }
+
+// MetadataTestLevel represents the types of queries where metadata test
+// processors are planned.
+type MetadataTestLevel int
+
+const (
+	// Off represents that no metadata test processors are planned.
+	Off MetadataTestLevel = iota
+	// NoExplain represents that metadata test processors are planned for all
+	// queries except EXPLAIN (DISTSQL) statements.
+	NoExplain
+	// On represents that metadata test processors are planned for all queries.
+	On
+)
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}

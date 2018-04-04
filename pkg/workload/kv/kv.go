@@ -109,15 +109,16 @@ func (w *kv) Tables() []workload.Table {
 		Name:   `kv`,
 		Schema: kvSchema,
 		// TODO(dan): Support initializing kv with data.
-		InitialRowCount: 0,
-		SplitCount:      w.splits,
-		SplitFn: func(splitIdx int) []interface{} {
-			rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
-			g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
-			return []interface{}{
-				int(g.hash(rng.Int63())),
-			}
-		},
+		Splits: workload.Tuples(
+			w.splits,
+			func(splitIdx int) []interface{} {
+				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
+				return []interface{}{
+					int(g.hash(rng.Int63())),
+				}
+			},
+		),
 	}
 	return []workload.Table{table}
 }
@@ -167,6 +168,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	seq := &sequence{config: w, val: w.writeSeq}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := kvOp{
 			config:    w,
@@ -175,7 +177,6 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
 		}
-		seq := &sequence{config: w, val: w.writeSeq}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
 		} else {
@@ -258,7 +259,7 @@ type hashGenerator struct {
 func newHashGenerator(seq *sequence) *hashGenerator {
 	return &hashGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		hasher: sha1.New(),
 	}
 }
@@ -296,7 +297,7 @@ type sequentialGenerator struct {
 func newSequentialGenerator(seq *sequence) *sequentialGenerator {
 	return &sequentialGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 	}
 }
 

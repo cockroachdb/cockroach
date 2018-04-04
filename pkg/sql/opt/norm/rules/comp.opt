@@ -1,0 +1,140 @@
+# =============================================================================
+# comp.opt contains normalization rules for comparison operators.
+# =============================================================================
+
+
+# CommuteVarInequality is similar to CommuteVar (in scalar.opt), except it
+# handles inequality comparison operators that need special handling to commute
+# operands.
+[CommuteVarInequality, Normalize]
+(Le | Lt | Ge | Gt
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+(CommuteInequality (OpName) $left $right)
+
+# CommuteConstInequality is similar to CommuteConst (in scalar.opt), except
+# that it handles inequality comparison operators that need special handling to
+# commute operands.
+[CommuteConstInequality, Normalize]
+(Le | Lt | Ge | Gt
+    $left:* & (OnlyConstants $left)
+    $right:* & ^(OnlyConstants $right)
+)
+=>
+(CommuteInequality (OpName) $left $right)
+
+# NormalizeCmpPlusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#       cmp          cmp
+#      /   \        /   \
+#    [+]    2  ->  a   [-]
+#   /   \             /   \
+#  a     1           2     1
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Also, the NormalizePlusMult pattern ensures that constant expression
+# trees are on the right side of the expression, so no "flipped" pattern is
+# necessary. Other patterns will fold new constant expressions further.
+#
+# NOTE: Ne is not part of the operator choices because it wasn't handled in
+#       normalize.go either. We can add once we've proved it's OK to do so.
+[NormalizeCmpPlusConst, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Plus
+        $leftLeft:* & ^(OnlyConstants $leftLeft)
+        $leftRight:* & (OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $right $leftRight)
+)
+=>
+((OpName)
+    $leftLeft
+    (Minus $right $leftRight)
+)
+
+# NormalizeCmpMinusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp         cmp
+#      /  \        /  \
+#    [-]   2  ->  a  [+]
+#   /   \           /   \
+#  a     1         2     1
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Other patterns will fold new constant expressions further.
+[NormalizeCmpMinusConst, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Minus
+        $leftLeft:* & ^(OnlyConstants $leftLeft)
+        $leftRight:* & (OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Plus $right $leftRight)
+)
+=>
+((OpName)
+    $leftLeft
+    (Plus $right $leftRight)
+)
+
+# NormalizeCmpConstMinus builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp          cmp
+#      /  \         /  \
+#    [-]   2  ->  [-]   a
+#   /   \        /   \
+#  1     a      1     2
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Other patterns will switch the constant to the right side and fold the
+# constant expression if possible.
+[NormalizeCmpConstMinus, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Minus
+        $leftLeft:* & (OnlyConstants $leftLeft)
+        $leftRight:* & ^(OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $leftLeft $right)
+)
+=>
+((OpName)
+    (Minus $leftLeft $right)
+    $leftRight
+)
+
+# NormalizeTupleEquality breaks up expressions like:
+#   (a, b, c) = (x, y, z)
+# into
+#   (a = x) AND (b = y) AND (c = z)
+#
+# This rule makes it easier to extract constraints from boolean expressions,
+# so that recognition code doesn't have to handle the tuple case separately.
+[NormalizeTupleEquality, Normalize]
+(Eq (Tuple $left:*) (Tuple $right:*))
+=>
+(NormalizeTupleEquality $left $right)
+
+# FoldNullComparisonLeft replaces the comparison operator with null if its
+# left input is null.
+[FoldNullComparisonLeft, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
+    Contains | JsonExists | JsonSomeExists | JsonAllExists
+    $left:(Null)
+    *
+)
+=>
+(Null (BoolType))
+
+# FoldNullComparisonRight replaces the comparison operator with null if its
+# right input is null.
+[FoldNullComparisonRight, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch |
+    Contains | JsonExists | JsonSomeExists | JsonAllExists
+    *
+    $right:(Null)
+)
+=>
+(Null (BoolType))

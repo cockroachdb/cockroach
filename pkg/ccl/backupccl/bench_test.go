@@ -27,9 +27,11 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	bankData := bank.FromRows(numAccounts).Tables()[0]
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
-	for rowIdx := 0; rowIdx < bankData.InitialRowCount; rowIdx++ {
-		row := workload.StringTuple(bankData.InitialRowFn(rowIdx))
-		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row, `,`))
+	for rowIdx := 0; rowIdx < bankData.InitialRows.NumBatches; rowIdx++ {
+		for _, row := range bankData.InitialRows.Batch(rowIdx) {
+			rowBatch := strings.Join(workload.StringTuple(row), `,`)
+			fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, rowBatch)
+		}
 	}
 	return &buf
 }

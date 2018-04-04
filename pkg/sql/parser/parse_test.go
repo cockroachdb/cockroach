@@ -311,6 +311,9 @@ func TestParse(t *testing.T) {
 
 		{`CANCEL JOB a`},
 		{`CANCEL QUERY a`},
+		{`CANCEL SESSION a`},
+		{`CANCEL QUERY IF EXISTS a`},
+		{`CANCEL SESSION IF EXISTS a`},
 		{`RESUME JOB a`},
 		{`PAUSE JOB a`},
 
@@ -413,6 +416,12 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (STRING) AS RESTORE DATABASE a FROM $1`},
 		{`PREPARE a AS CANCEL QUERY 1`},
 		{`PREPARE a (STRING) AS CANCEL QUERY $1`},
+		{`PREPARE a AS CANCEL QUERY IF EXISTS 1`},
+		{`PREPARE a (STRING) AS CANCEL QUERY IF EXISTS $1`},
+		{`PREPARE a AS CANCEL SESSION 1`},
+		{`PREPARE a (STRING) AS CANCEL SESSION $1`},
+		{`PREPARE a AS CANCEL SESSION IF EXISTS 1`},
+		{`PREPARE a (STRING) AS CANCEL SESSION IF EXISTS $1`},
 		{`PREPARE a AS CANCEL JOB 1`},
 		{`PREPARE a (INT) AS CANCEL JOB $1`},
 		{`PREPARE a AS PAUSE JOB 1`},
@@ -981,6 +990,9 @@ func TestParse2(t *testing.T) {
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
 		{`SELECT CAST(1 AS "char")`, `SELECT CAST(1 AS CHAR)`},
+		{`SELECT CAST(1 AS "timestamp")`, `SELECT CAST(1 AS TIMESTAMP)`},
+		{`SELECT CAST(1 AS _int8)`, `SELECT CAST(1 AS INT[])`},
+		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT[])`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN,FORCE_INDEX=bar}`,
@@ -1575,7 +1587,7 @@ SELECT 1e-
        ^
 HINT: try \h SELECT`},
 		{"SELECT foo''",
-			`syntax error at or near ""
+			`type does not exist at or near ""
 SELECT foo''
           ^
 `},
@@ -1665,14 +1677,14 @@ HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`syntax error at or near "notatype"
+			`type does not exist at or near "notatype"
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
 `,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
-			`syntax error at or near "notatype"
+			`type does not exist at or near "notatype"
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
 `,
@@ -1756,7 +1768,7 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 		},
 		{
 			`SELECT 'f'::"blah"`,
-			`syntax error at or near "blah"
+			`type does not exist at or near "blah"
 SELECT 'f'::"blah"
             ^
 `,

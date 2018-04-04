@@ -107,10 +107,11 @@ help: ## Print help for targets with comments.
 
 # Possible values:
 # <empty>: use the default toolchain
-# release-linux-gnu:  target Linux 2.6.32, dynamically link GLIBC 2.12.2
-# release-linux-musl: target Linux 2.6.32, statically link musl 1.1.16
-# release-darwin:     target OS X 10.9
-# release-windows:    target Windows 8, statically link all non-Windows libraries
+# release-linux-gnu:     target Linux 2.6.32, dynamically link GLIBC 2.12.2
+# release-linux-musl:    target Linux 2.6.32, statically link musl 1.1.16
+# release-aarch64-linux: target aarch64 Linux 3.7.10, dynamically link GLIBC 2.12.2
+# release-darwin:        target OS X 10.9
+# release-windows:       target Windows 8, statically link all non-Windows libraries
 #
 # All non-empty variants only work in the cockroachdb/builder docker image, as
 # they depend on cross-compilation toolchains available there.
@@ -142,39 +143,50 @@ export CGO_LDFLAGS
 override CFLAGS += $(MSAN_CPPFLAGS)
 override CXXFLAGS += $(MSAN_CPPFLAGS)
 override LDFLAGS += $(MSAN_LDFLAGS)
-export CFLAGS
-export CXXFLAGS
-export LDFLAGS
 else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
 # linked to avoid depending on the target's available libstdc++.
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
+override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
-BUILD_TYPE := release
 XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -s -w -extldflags "-static"
+override LINKFLAGS += -extldflags "-static"
 override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
+BUILD_TYPE := release
+else ifeq ($(TYPE),release-aarch64-linux)
+XGOARCH := arm64
+export CGO_ENABLED := 1
+XHOST_TRIPLE := aarch64-unknown-linux-gnueabi
+override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+override SUFFIX := $(SUFFIX)-linux-3.7.10-gnu-aarch64
+BUILD_TYPE := release
 else ifeq ($(TYPE),release-darwin)
 XGOOS := darwin
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-apple-darwin13
 override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
-override LINKFLAGS += -s -w
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-windows)
 XGOOS := windows
 export CGO_ENABLED := 1
 XHOST_TRIPLE := x86_64-w64-mingw32
 override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -s -w -extldflags "-static"
+override LINKFLAGS += -extldflags "-static"
 BUILD_TYPE := release
 else
 $(error unknown build type $(TYPE))
 endif
+
+# Build C/C++ with basic debugging information.
+CFLAGS += -g1
+CXXFLAGS += -g1
+
+export CFLAGS
+export CXXFLAGS
+export LDFLAGS
 
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
 
@@ -189,11 +201,22 @@ UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-export GOPATH := $(realpath ../../../..)
-#                           ^  ^  ^  ^~ GOPATH
-#                           |  |  |~ GOPATH/src
-#                           |  |~ GOPATH/src/github.com
-#                           |~ GOPATH/src/github.com/cockroachdb
+GOPATH := $(realpath $(shell $(GO) env GOPATH))
+ifeq ($(strip $(GOPATH)),)
+$(error GOPATH is not set and could not be automatically determined, build cannot continue)
+endif
+
+ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
+$(error GOPATHs with multiple entries are not supported)
+endif
+
+ifeq "$(filter $(GOPATH)%,$(CURDIR))" ""
+$(error Current directory "$(CURDIR)" is not within GOPATH "$(GOPATH)")
+endif
+
+ifeq "$(GOPATH)" "/"
+$(error GOPATH=/ is not supported)
+endif
 
 # Avoid printing twice if Make restarts (because a Makefile was changed) or is
 # called recursively from another Makefile.
@@ -548,7 +571,8 @@ $(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(CRYPTOPP_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
-	cd $(CRYPTOPP_DIR) && cmake $(XCMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
+	cd $(CRYPTOPP_DIR) && cmake $(XCMAKE_FLAGS) $(CRYPTOPP_SRC_DIR) \
+	  -DCMAKE_BUILD_TYPE=Release
 
 $(JEMALLOC_SRC_DIR)/configure.ac: | $(SUBMODULES_TARGET)
 
@@ -570,7 +594,8 @@ $(PROTOBUF_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(PROTOBUF_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOBUF_DIR) && cmake $(XCMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+	cd $(PROTOBUF_DIR) && cmake $(XCMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
+	  -DCMAKE_BUILD_TYPE=Release
 
 ifneq ($(PROTOC_DIR),$(PROTOBUF_DIR))
 $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
@@ -578,28 +603,29 @@ $(PROTOC_DIR)/Makefile: $(C_DEPS_DIR)/protobuf-rebuild | $(SUBMODULES_TARGET)
 	mkdir -p $(PROTOC_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/protobuf-rebuild. See above for rationale.
-	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake
+	cd $(PROTOC_DIR) && cmake $(CMAKE_FLAGS) -Dprotobuf_BUILD_TESTS=OFF $(PROTOBUF_SRC_DIR)/cmake \
+	  -DCMAKE_BUILD_TYPE=Release
 endif
 
+$(ROCKSDB_DIR)/Makefile: sse := $(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3)
 $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) libsnappy $(if $(USE_STDMALLOC),,libjemalloc)
 	rm -rf $(ROCKSDB_DIR)
 	mkdir -p $(ROCKSDB_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
-	cd $(ROCKSDB_DIR) && cmake $(XCMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
+	cd $(ROCKSDB_DIR) && CFLAGS+=" $(sse)" && CXXFLAGS+=" $(sse)" && cmake $(XCMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
 	  $(if $(findstring release,$(BUILD_TYPE)),-DPORTABLE=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
-	  -DCMAKE_CXX_FLAGS="$(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3) $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DNDEBUG)"
-	@# TODO(benesch): Tweak how we pass -DNDEBUG above when we upgrade to a
-	@# RocksDB release that includes https://github.com/facebook/rocksdb/pull/2300.
+	  -DCMAKE_BUILD_TYPE=$(if $(ENABLE_ROCKSDB_ASSERTIONS),Debug,Release)
 
 $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | $(SUBMODULES_TARGET)
 	rm -rf $(SNAPPY_DIR)
 	mkdir -p $(SNAPPY_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
-	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR)
+	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR) \
+	  -DCMAKE_BUILD_TYPE=Release
 
 # TODO(benesch): make it possible to build libroach without CCL code. Because
 # libroach and libroachccl are defined in the same CMake project, CMake requires
@@ -852,6 +878,10 @@ lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
 lint: | bin/returncheck
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
+	@# Run 'go install' to ensure we have compiled object files available for all
+	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
+	@# https://groups.google.com/forum/#!msg/golang-dev/qfa3mHN4ZPA/X2UzjNV1BAAJ.
+	$(XGO) install -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 	$(XGO) test $(PKG_ROOT)/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestLint/$(TESTS)'
 
 .PHONY: lintshort

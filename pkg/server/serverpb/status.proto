@@ -396,6 +396,8 @@ message Session {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
+  // ID of the session (uint128 represented as raw bytes).
+  bytes id = 9 [(gogoproto.customname) = "ID"];
 }
 
 // An error wrapper object for ListSessionsResponse.
@@ -436,6 +438,22 @@ message CancelQueryResponse {
   // Whether the cancellation request succeeded and the query was canceled.
   bool canceled = 1;
   // Error message (accompanied with canceled = false).
+  string error = 2;
+}
+
+message CancelSessionRequest {
+  // TODO(abhimadan): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  bytes session_id = 2 [(gogoproto.customname) = "SessionID"];
+  string username = 3;
+}
+
+message CancelSessionResponse {
+  bool canceled = 1;
   string error = 2;
 }
 
@@ -592,6 +610,11 @@ service Status {
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {
     option (google.api.http) = {
       get: "/_status/cancel_query/{node_id}"
+    };
+  }
+  rpc CancelSession(CancelSessionRequest) returns (CancelSessionResponse) {
+    option (google.api.http) = {
+      get: "/_status/cancel_session/{node_id}"
     };
   }
 

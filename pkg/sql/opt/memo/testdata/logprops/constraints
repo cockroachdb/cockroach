@@ -1,0 +1,441 @@
+exec-ddl
+CREATE TABLE a (x INT, y INT)
+----
+TABLE a
+ ├── x int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+opt
+SELECT * FROM a WHERE x > 1
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x >= 1
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+      └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x < 1
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x <= 1
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
+      └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x = 1
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM a WHERE x > 1 AND x < 5
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE x = 1 AND y = 5
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
+      ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      ├── ge [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 7 [type=int]
+      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 9 [type=int]
+
+# Verify the resulting constraints are not tight.
+opt
+SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4])]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      └── eq [type=bool, outer=(1,2)]
+           ├── plus [type=int, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - ])]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── ge [type=bool, outer=(1,2)]
+      │    ├── plus [type=int, outer=(1,2)]
+      │    │    ├── variable: a.x [type=int, outer=(1)]
+      │    │    └── variable: a.y [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── le [type=bool, outer=(1,2)]
+           ├── plus [type=int, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── const: 7 [type=int]
+
+# Verify that we ignore mixed-type comparisons.
+opt
+SELECT * FROM a WHERE x > 1.5
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1)]
+      └── gt [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1.5 [type=decimal]
+
+opt
+SELECT * FROM kuv WHERE u > 1::INT
+----
+select
+ ├── columns: k:1(int!null) u:2(float) v:3(string)
+ ├── stats: [rows=100]
+ ├── scan kuv
+ │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(2)]
+      └── gt [type=bool, outer=(2)]
+           ├── variable: kuv.u [type=float, outer=(2)]
+           └── const: 1 [type=int]
+
+opt
+SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
+----
+select
+ ├── columns: k:1(int!null) u:2(float) v:3(string)
+ ├── stats: [rows=100]
+ ├── scan kuv
+ │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo']; tight)]
+      ├── le [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo']; tight)]
+      │    ├── variable: kuv.v [type=string, outer=(3)]
+      │    └── const: 'foo' [type=string]
+      └── ge [type=bool, outer=(3), constraints=(/3: [/'bar' - ]; tight)]
+           ├── variable: kuv.v [type=string, outer=(3)]
+           └── const: 'bar' [type=string]
+
+# Test IN.
+opt
+SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── tuple [type=tuple{unknown, int, int, int}]
+                ├── null [type=unknown]
+                ├── const: 1 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
+
+opt
+SELECT * FROM a WHERE x IN (NULL)
+----
+scan a
+ ├── columns: x:1(int) y:2(int)
+ ├── constraint: /3: contradiction
+ └── stats: [rows=100]
+
+# Test IN in combination with another condition on the same column (which rules
+# out some of the entries in the IN condition).
+opt
+SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
+      ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── tuple [type=tuple{int, int, int, int, int}]
+      │         ├── const: 1 [type=int]
+      │         ├── const: 3 [type=int]
+      │         ├── const: 5 [type=int]
+      │         ├── const: 7 [type=int]
+      │         └── const: 9 [type=int]
+      └── gt [type=bool, outer=(1), constraints=(/1: [/7 - ]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 6 [type=int]
+
+# Test IN in combination with a condition on another column.
+opt
+SELECT * FROM a WHERE x IN (1, 3) AND y > 4
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1] [/3 - /3]; /2: [/5 - ]; tight)]
+      ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 1 [type=int]
+      │         └── const: 3 [type=int]
+      └── gt [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 4 [type=int]
+
+# Test tuple inequality.
+opt
+SELECT * FROM a WHERE (x, y) > (1, 2)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
+      └── gt [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+opt
+SELECT * FROM a WHERE (x, y) >= (1, 2)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
+      └── ge [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+opt
+SELECT * FROM a WHERE (x, y) < (1, 2)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
+      └── lt [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+opt
+SELECT * FROM a WHERE (x, y) <= (1, 2)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
+      └── le [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+# Test that we ignore tuple inequalities when the types don't match up.
+opt
+SELECT * FROM a WHERE (x, y) >= (1, 2.5)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2)]
+      └── ge [type=bool, outer=(1,2)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, decimal}]
+                ├── const: 1 [type=int]
+                └── const: 2.5 [type=decimal]
+
+# Test that we ignore tuple inequalities when they contain NULLs.
+opt
+SELECT * FROM a WHERE (x, y) >= (1, NULL)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2)]
+      └── ge [type=bool, outer=(1,2)]
+           ├── tuple [type=tuple{int, int}, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── tuple [type=tuple{int, unknown}]
+                ├── const: 1 [type=int]
+                └── null [type=unknown]
+
+# Test that we ignore tuple inequalities when we have something other than
+# simple variables in the left tuple.
+opt
+SELECT * FROM a WHERE (x, 1) >= (1, 2)
+----
+select
+ ├── columns: x:1(int) y:2(int)
+ ├── stats: [rows=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int) a.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1)]
+      └── ge [type=bool, outer=(1)]
+           ├── tuple [type=tuple{int, int}, outer=(1)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]

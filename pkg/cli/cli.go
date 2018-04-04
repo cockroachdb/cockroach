@@ -81,6 +81,7 @@ var versionCmd = &cobra.Command{
 	Long: `
 Output build version information.
 `,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		info := build.GetInfo()
 		tw := tabwriter.NewWriter(os.Stdout, 2, 1, 2, ' ', 0)
@@ -140,6 +141,7 @@ func init() {
 
 		// Miscellaneous commands.
 		// TODO(pmattis): stats
+		demoCmd,
 		genCmd,
 		versionCmd,
 		debugCmd,

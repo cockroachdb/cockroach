@@ -115,3 +115,9 @@ index-constraints vars=(int, int) index=(@1, @2)
 ----
 (/1/NULL - /5]
 Remaining filter: @2 != 2
+
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND (@3 > 0 OR @3 < 10)
+----
+[/1 - /1]
+Remaining filter: (@3 > 0) OR (@3 < 10)

@@ -1,0 +1,226 @@
+# =============================================================================
+# project.opt contains normalization rules for the Project operator.
+# =============================================================================
+
+
+# EliminateProject discards a Project operator which is not adding or removing
+# columns, but instead is just reordering existing columns.
+[EliminateProject, Normalize]
+(Project
+    $input:*
+    $projections:* & (HasSameCols $input $projections)
+)
+=>
+$input
+
+# EliminateProjectProject discards a nested Project operator that is only
+# removing columns from its input (and not synthesizing new ones). That's
+# something the outer Project operator can do on its own.
+[EliminateProjectProject, Normalize]
+(Project
+    $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
+    $projections:*
+)
+=>
+(Project
+    $innerInput
+    $projections
+)
+
+# FilterUnusedProjectCols discards nested project columns that are never used.
+[FilterUnusedProjectCols, Normalize]
+(Project
+    (Project
+        $innerInput:*
+        $innerProjections:*
+    )
+    $projections:* & (HasUnusedColumns $innerProjections (NeededCols $projections))
+)
+=>
+(Project
+    (Project
+        $innerInput
+        (FilterUnusedColumns $innerProjections (NeededCols $projections))
+    )
+    $projections
+)
+
+# FilterUnusedScanCols discards Scan operator columns that are never used. The
+# needed columns are pushed down into the Scan's opt.ScanOpDef private.
+[FilterUnusedScanCols, Normalize]
+(Project
+    $input:(Scan)
+    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+)
+=>
+(Project
+    (FilterUnusedColumns $input (NeededCols $projections))
+    $projections
+)
+
+# FilterUnusedSelectCols discards Select input columns that are never used.
+#
+# This rule triggers a cycle with the PushSelectIntoProject rule. Because this
+# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
+# gives the PushSelectIntoProject rule one last chance to push Select below
+# Project, and therefore causes the normal form to be (Project (Select)) rather
+# than (Select (Project)) when the choice is ambiguous. This and other rules
+# will try to push Project down as far as possible, but if it gets stopped along
+# the way, it will be ordered above Select.
+[FilterUnusedSelectCols, Normalize, DetectCycle]
+(Project
+    (Select
+        $input:*
+        $filter:*
+    )
+    $projections:* & (HasUnusedColumns $input (NeededCols2 $projections $filter))
+)
+=>
+(Project
+    (Select
+        (FilterUnusedColumns $input (NeededCols2 $projections $filter))
+        $filter
+    )
+    $projections
+)
+
+# FilterUnusedLimitCols discards Limit input columns that are never used.
+#
+# This rule triggers a cycle with the PushLimitIntoProject rule. That rule
+# has the DetectCycle tag to break the cycle. In addition, this rule uses
+# LimitNoCycle to minimize the overhead of detecting the cycle by creating a
+# Limit which will not match the PushLimitIntoProject rule (or any other rule
+# which has the DetectCycle tag).
+[FilterUnusedLimitCols, Normalize]
+(Project
+    (Limit
+        $input:*
+        $limit:*
+        $ordering:*
+    )
+    $projections:* & (HasUnusedColumns $input (NeededColsLimit $projections $ordering))
+)
+=>
+(Project
+    (LimitNoCycle
+        (FilterUnusedColumns $input (NeededColsLimit $projections $ordering))
+        $limit
+        $ordering
+    )
+    $projections
+)
+
+# FilterUnusedOffsetCols discards Offset input columns that are never used.
+#
+# This rule triggers a cycle with the PushOffsertIntoProject rule. That rule
+# has the DetectCycle tag to break the cycle. In addition, this rule uses
+# OffsetNoCycle to minimize the overhead of detecting the cycle by creating an
+# Offset which will not match the PushOffsetIntoProject rule (or any other rule
+# which has the DetectCycle tag).
+[FilterUnusedOffsetCols, Normalize]
+(Project
+    (Offset
+        $input:*
+        $offset:*
+        $ordering:*
+    )
+    $projections:* & (HasUnusedColumns $input (NeededColsLimit $projections $ordering))
+)
+=>
+(Project
+    (OffsetNoCycle
+        (FilterUnusedColumns $input (NeededColsLimit $projections $ordering))
+        $offset
+        $ordering
+    )
+    $projections
+)
+
+# FilterUnusedJoinLeftCols discards columns on the left side of a join that are
+# never used.
+[FilterUnusedJoinLeftCols, Normalize]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (HasUnusedColumns $left (NeededCols3 $projections $right $on))
+)
+=>
+(Project
+    ((OpName $input)
+        (FilterUnusedColumns $left (NeededCols3 $projections $right $on))
+        $right
+        $on
+    )
+    $projections
+)
+
+# FilterUnusedJoinRightCols discards columns on the right side of a join that
+# are never used.
+[FilterUnusedJoinRightCols, Normalize]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (HasUnusedColumns $right (NeededCols2 $projections $on))
+)
+=>
+(Project
+    ((OpName $input)
+        $left
+        (FilterUnusedColumns $right (NeededCols2 $projections $on))
+        $on
+    )
+    $projections
+)
+
+# FilterUnusedAggCols discards aggregation columns in a GroupBy that are never
+# used.
+[FilterUnusedAggCols, Normalize]
+(Project
+    (GroupBy
+        $innerInput:*
+        $aggregations:*
+        $groupingCols:*
+    )
+    $projections:* & (HasUnusedColumns $aggregations (NeededCols $projections))
+)
+=>
+(Project
+    (GroupBy
+        $innerInput
+        (FilterUnusedColumns $aggregations (NeededCols $projections))
+        $groupingCols
+    )
+    $projections
+)
+
+# FilterUnusedGroupByCols discards GroupBy input columns that are never used.
+[FilterUnusedGroupByCols, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:*
+    $groupingCols:* & (HasUnusedColumns $input (NeededColsGroupBy $aggregations $groupingCols))
+)
+=>
+(GroupBy
+    (FilterUnusedColumns $input (NeededColsGroupBy $aggregations $groupingCols))
+    $aggregations
+    $groupingCols
+)
+
+# FilterUnusedValueCols discards Values columns that are never used.
+[FilterUnusedValueCols, Normalize]
+(Project
+    $input:(Values)
+    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+)
+=>
+(Project
+    (FilterUnusedColumns $input (NeededCols $projections))
+    $projections
+)

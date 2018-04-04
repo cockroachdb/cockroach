@@ -35,13 +35,13 @@ func parseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 	}
 	var c Constraint
 	c.Columns.Init(cols)
-	c.Spans = parseSpans(&KeyContext{Columns: c.Columns, EvalCtx: evalCtx}, s[1])
+	c.Spans = parseSpans(s[1])
 	return c
 }
 
 // parseSpans parses a list of spans with integer values like:
 //   "[/1 - /2] [/5 - /6]".
-func parseSpans(keyCtx *KeyContext, str string) Spans {
+func parseSpans(str string) Spans {
 	if str == "" {
 		return Spans{}
 	}
@@ -52,7 +52,7 @@ func parseSpans(keyCtx *KeyContext, str string) Spans {
 	}
 	var result Spans
 	for i := 0; i < len(s)/3; i++ {
-		sp := parseSpan(keyCtx, strings.Join(s[i*3:i*3+3], " "))
+		sp := parseSpan(strings.Join(s[i*3:i*3+3], " "))
 		result.Append(&sp)
 	}
 	return result
@@ -60,7 +60,7 @@ func parseSpans(keyCtx *KeyContext, str string) Spans {
 
 // parses a span with integer column values in the format of Span.String,
 // e.g: [/1 - /2].
-func parseSpan(keyCtx *KeyContext, str string) Span {
+func parseSpan(str string) Span {
 	if len(str) < len("[ - ]") {
 		panic(str)
 	}
@@ -81,8 +81,7 @@ func parseSpan(keyCtx *KeyContext, str string) Span {
 	var sp Span
 	startVals := intsToDatums(parsePath(keys[0]))
 	endVals := intsToDatums(parsePath(keys[1]))
-	sp.Set(
-		keyCtx,
+	sp.Init(
 		MakeCompositeKey(startVals...), boundary[s],
 		MakeCompositeKey(endVals...), boundary[e],
 	)

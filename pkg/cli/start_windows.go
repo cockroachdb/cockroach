@@ -14,6 +14,20 @@
 
 package cli
 
+import (
+	"os"
+)
+
+// drainSignals are the signals that will cause the server to drain and exit.
+var drainSignals = []os.Signal{os.Interrupt}
+
+func handleSignalDuringShutdown(os.Signal) {
+	// Windows doesn't indicate whether a process exited due to a signal in the
+	// exit code, so we don't need to do anything but exit with a failing code.
+	// The error message has already been printed.
+	os.Exit(1)
+}
+
 func maybeRerunBackground() (bool, error) {
 	return false, nil
 }

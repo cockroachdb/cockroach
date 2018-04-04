@@ -125,6 +125,10 @@ func newSamplerProcessor(
 	return s, nil
 }
 
+func (s *samplerProcessor) pushTrailingMeta(ctx context.Context) {
+	sendTraceData(ctx, s.out.output)
+}
+
 // Run is part of the Processor interface.
 func (s *samplerProcessor) Run(wg *sync.WaitGroup) {
 	if wg != nil {
@@ -135,9 +139,9 @@ func (s *samplerProcessor) Run(wg *sync.WaitGroup) {
 
 	earlyExit, err := s.mainLoop(ctx)
 	if err != nil {
-		DrainAndClose(ctx, s.out.output, err, s.input)
+		DrainAndClose(ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		sendTraceData(ctx, s.out.output)
+		s.pushTrailingMeta(ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
@@ -150,7 +154,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.input) {
+			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				// No cleanup required; emitHelper() took care of it.
 				return true, nil
 			}
@@ -193,7 +197,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
 		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}
@@ -214,7 +218,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			return false, err
 		}
 		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
-		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.input) {
+		if !emitHelper(ctx, &s.out, outRow, nil /* meta */, s.pushTrailingMeta, s.input) {
 			return true, nil
 		}
 	}

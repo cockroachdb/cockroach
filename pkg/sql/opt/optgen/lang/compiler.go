@@ -28,7 +28,7 @@ type CompiledExpr struct {
 	Rules       RuleSetExpr
 	DefineTags  []string
 	defineIndex map[string]*DefineExpr
-	matchIndex  map[string][]*RuleExpr
+	matchIndex  map[string]RuleSetExpr
 }
 
 // LookupDefine returns the DefineExpr with the given name.
@@ -41,7 +41,7 @@ func (c *CompiledExpr) LookupDefine(name string) *DefineExpr {
 // rule:
 //   [CommuteJoin]
 //   (InnerJoin $r:* $s:*) => (InnerJoin $s $r)
-func (c *CompiledExpr) LookupMatchingRules(name string) []*RuleExpr {
+func (c *CompiledExpr) LookupMatchingRules(name string) RuleSetExpr {
 	return c.matchIndex[name]
 }
 
@@ -90,7 +90,7 @@ type Compiler struct {
 func NewCompiler(files ...string) *Compiler {
 	compiled := &CompiledExpr{
 		defineIndex: make(map[string]*DefineExpr),
-		matchIndex:  make(map[string][]*RuleExpr),
+		matchIndex:  make(map[string]RuleSetExpr),
 	}
 	return &Compiler{parser: NewParser(files...), compiled: compiled}
 }

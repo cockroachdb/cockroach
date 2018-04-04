@@ -95,6 +95,10 @@ func (se *StreamEncoder) AddMetadata(meta ProducerMetadata) {
 		enc.Value = &RemoteProducerMetadata_TxnMeta{
 			TxnMeta: meta.TxnMeta,
 		}
+	} else if meta.RowNum != nil {
+		enc.Value = &RemoteProducerMetadata_RowNum_{
+			RowNum: meta.RowNum,
+		}
 	} else {
 		enc.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(meta.Err),

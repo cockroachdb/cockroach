@@ -110,10 +110,6 @@ type Memo struct {
 	// expression to indicate that it did not originate from the memo.
 	groups []group
 
-	// logPropsFactory is used to derive logical properties for an expression,
-	// based on the logical properties of its children.
-	logPropsFactory logicalPropsFactory
-
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
 	physPropsMap map[string]PhysicalPropsID
@@ -126,10 +122,8 @@ type Memo struct {
 	listStorage listStorage
 
 	// Intern the set of unique privates used by expressions in the memo, since
-	// there are so many duplicates. Note that PrivateID 0 is invalid in order
-	// to indicate an unknown private.
-	privatesMap map[interface{}]PrivateID
-	privates    []interface{}
+	// there are so many duplicates.
+	privateStorage privateStorage
 }
 
 // New constructs a new empty memo instance.
@@ -144,8 +138,6 @@ func New() *Memo {
 		groups:       make([]group, 1),
 		physPropsMap: make(map[string]PhysicalPropsID),
 		physProps:    make([]PhysicalProps, 1, 2),
-		privatesMap:  make(map[interface{}]PrivateID),
-		privates:     make([]interface{}, 1),
 	}
 
 	// Intern physical properties that require nothing of operator.
@@ -154,6 +146,7 @@ func New() *Memo {
 	m.physPropsMap[physProps.Fingerprint()] = MinPhysPropsID
 
 	m.listStorage.init()
+	m.privateStorage.init()
 	return m
 }
 
@@ -230,14 +223,15 @@ func (m *Memo) NormExpr(group GroupID) *Expr {
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
-func (m *Memo) MemoizeNormExpr(norm Expr) GroupID {
+func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	if m.exprMap[norm.Fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
 
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	mgrp.logical = m.logPropsFactory.constructProps(ev)
+	logPropsFactory := logicalPropsFactory{evalCtx: evalCtx}
+	mgrp.logical = logPropsFactory.constructProps(ev)
 
 	m.exprMap[norm.Fingerprint()] = mgrp.id
 	return mgrp.id
@@ -283,6 +277,11 @@ func (m *Memo) RatchetBestExpr(best BestExprID, candidate *BestExpr) {
 // BestExprCost returns the estimated cost of the given best expression.
 func (m *Memo) BestExprCost(best BestExprID) Cost {
 	return m.bestExpr(best).cost
+}
+
+// BestExprLogical returns the logical properties of the given best expression.
+func (m *Memo) BestExprLogical(best BestExprID) *LogicalProps {
+	return m.GroupProperties(best.group)
 }
 
 // bestExpr returns the best expression with the given id.
@@ -331,35 +330,10 @@ func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *PhysicalProps {
 	return &m.physProps[id]
 }
 
-// InternPrivate adds the given private value to the memo and returns an ID
-// that can be used for later lookup. If the same value was added previously,
-// this method is a no-op and returns the ID of the previous value.
-// NOTE: Because the internment uses the private value as a map key, only data
-//       types which can be map types can be used here.
-func (m *Memo) InternPrivate(private interface{}) PrivateID {
-	// Intern the value of certain Datum types rather than a pointer to their
-	// value in order to support fast value comparison by private id. This is
-	// only possible for Datum types that can be used as map types.
-	key := private
-	switch t := private.(type) {
-	case *tree.DString:
-		// Key as a string, so that it compares equal to interned string.
-		key = string(*t)
-	}
-
-	id, ok := m.privatesMap[key]
-	if !ok {
-		id = PrivateID(len(m.privates))
-		m.privates = append(m.privates, private)
-		m.privatesMap[key] = id
-	}
-	return id
-}
-
 // LookupPrivate returns a private value that was earlier interned in the memo
 // by a call to InternPrivate.
 func (m *Memo) LookupPrivate(id PrivateID) interface{} {
-	return m.privates[id]
+	return m.privateStorage.lookup(id)
 }
 
 // --------------------------------------------------------------------
@@ -459,22 +433,36 @@ func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		case nil:
 
 		case *ScanOpDef:
-			// Don't output name of index if it's the primary index.
-			tab := m.metadata.Table(t.Table)
-			if t.Index == opt.PrimaryIndex {
-				fmt.Fprintf(buf, " %s", tab.TabName())
-			} else {
-				fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(t.Index).IdxName())
-			}
+			m.formatScanPrivate(buf, t, false /* short */)
 
 		case opt.ColumnID:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
 
-		case *opt.ColSet, *opt.ColMap, *opt.ColList:
+		case opt.ColSet, opt.ColList:
 			// Don't show anything, because it's mostly redundant.
 
 		default:
 			fmt.Fprintf(buf, " %s", private)
+		}
+	}
+}
+
+func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) {
+	// Don't output name of index if it's the primary index.
+	tab := m.metadata.Table(def.Table)
+	if def.Index == opt.PrimaryIndex {
+		fmt.Fprintf(buf, " %s", tab.TabName())
+	} else {
+		fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
+	}
+
+	// Add additional fields when short=false.
+	if !short {
+		if def.Constraint != nil {
+			fmt.Fprintf(buf, ",constrained")
+		}
+		if def.HardLimit > 0 {
+			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
 		}
 	}
 }

@@ -49,14 +49,11 @@ var lsNodesCmd = &cobra.Command{
 Display the node IDs for all active (that is, running and not decommissioned) members of the cluster.
 To retrieve the IDs for inactive members, see 'node status --decommission'.
 	`,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runLsNodes),
 }
 
 func runLsNodes(cmd *cobra.Command, args []string) error {
-	if len(args) != 0 {
-		return usageAndError(cmd)
-	}
-
 	const showDecommissioned = false
 	nodeStatuses, _, err := runStatusNodeInner(showDecommissioned, nil)
 	if err != nil {
@@ -105,12 +102,13 @@ var statusNodesColumnHeadersForDecommission = []string{
 }
 
 var statusNodeCmd = &cobra.Command{
-	Use:   "status <optional node ID>",
+	Use:   "status [<node id>]",
 	Short: "shows the status of a node or all nodes",
 	Long: `
 	If a node ID is specified, this will show the status for the corresponding node. If no node ID
 	is specified, this will display the status for all nodes in the cluster.
 	`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runStatusNode),
 }
 
@@ -309,11 +307,12 @@ var decommissionNodesColumnHeaders = []string{
 }
 
 var decommissionNodeCmd = &cobra.Command{
-	Use:   "decommission [<nodeID1> <nodeID2> ...]",
+	Use:   "decommission <node id 1> [<node id 2> ...]",
 	Short: "decommissions the node(s)",
 	Long: `
 Marks the nodes with the supplied IDs as decommissioning.
 This will cause leases and replicas to be removed from these nodes.`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runDecommissionNode),
 }
 
@@ -330,10 +329,6 @@ func parseNodeIDs(strNodeIDs []string) ([]roachpb.NodeID, error) {
 }
 
 func runDecommissionNode(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return usageAndError(cmd)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -434,13 +429,14 @@ func decommissionResponseValueToRows(
 }
 
 var recommissionNodeCmd = &cobra.Command{
-	Use:   "recommission [<node ID>]+",
+	Use:   "recommission <node id 1> [<node id 2> ...]",
 	Short: "recommissions the node(s)",
 	Long: `
 For the nodes with the supplied IDs, resets the decommissioning states.
 The target nodes must be restarted, at which point the change will take
 effect and the nodes will participate in the cluster as regular nodes.
 	`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
 }
 
@@ -450,10 +446,6 @@ func printDecommissionStatus(resp serverpb.DecommissionStatusResponse) error {
 }
 
 func runRecommissionNode(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return usageAndError(cmd)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

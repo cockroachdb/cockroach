@@ -10,11 +10,9 @@ INSERT INTO t.a VALUES (1, 10), (2, 20), (3, 30)
 exec-explain
 SELECT * FROM t.a WHERE x > 1
 ----
-filter     0  filter  ·       ·          (x, y)  ·
- │         0  ·       filter  x > 1      ·       ·
- └── scan  1  scan    ·       ·          (x, y)  ·
-·          1  ·       table   a@primary  ·       ·
-·          1  ·       spans   ALL        ·       ·
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  /2-        ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1
@@ -42,11 +40,9 @@ x:int  y:int
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
-filter     0  filter  ·       ·                    (x, y)  ·
- │         0  ·       filter  (x > 1) AND (x < 3)  ·       ·
- └── scan  1  scan    ·       ·                    (x, y)  ·
-·          1  ·       table   a@primary            ·       ·
-·          1  ·       spans   ALL                  ·       ·
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  /2-/2/#    ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
@@ -57,11 +53,11 @@ x:int  y:int
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND y < 30
 ----
-filter     0  filter  ·       ·                     (x, y)  ·
- │         0  ·       filter  (x > 1) AND (y < 30)  ·       ·
- └── scan  1  scan    ·       ·                     (x, y)  ·
-·          1  ·       table   a@primary             ·       ·
-·          1  ·       spans   ALL                   ·       ·
+filter     0  filter  ·       ·          (x, y)  ·
+ │         0  ·       filter  y < 30     ·       ·
+ └── scan  1  scan    ·       ·          (x, y)  ·
+·          1  ·       table   a@primary  ·       ·
+·          1  ·       spans   /2-        ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1 AND y < 30
@@ -77,8 +73,30 @@ INSERT INTO t.b VALUES (1, 10), (2, 20), (3, 30)
 exec-explain
 SELECT x, y, rowid FROM t.b WHERE rowid > 0
 ----
-filter     0  filter  ·       ·          (x, y, rowid[hidden])  ·
- │         0  ·       filter  rowid > 0  ·                      ·
- └── scan  1  scan    ·       ·          (x, y, rowid[hidden])  ·
-·          1  ·       table   b@primary  ·                      ·
-·          1  ·       spans   ALL        ·                      ·
+scan  0  scan  ·      ·          (x, y, rowid[hidden])  ·
+·     0  ·     table  b@primary  ·                      ·
+·     0  ·     spans  /1-        ·                      ·
+
+exec-raw
+CREATE TABLE t.c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
+INSERT INTO t.c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
+----
+
+exec-explain
+SELECT * FROM t.c WHERE str >= 'moo'
+----
+scan  0  scan  ·      ·                  (n, str)  ·
+·     0  ·     table  c@str              ·         ·
+·     0  ·     spans  -/"moo"/PrefixEnd  ·         ·
+
+exec rowsort
+SELECT * FROM t.c WHERE str >= 'moo'
+----
+n:int  str:string
+1      one
+2      two
+3      three
+6      six
+7      seven
+9      nine
+10     one-zero

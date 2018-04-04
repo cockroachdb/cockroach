@@ -36,7 +36,14 @@ SELECT * FROM kv
 7 8
 
 statement ok
+SET sql_safe_updates = TRUE;
+
+statement error RENAME DATABASE on current database
 ALTER DATABASE test RENAME TO u
+
+statement ok
+SET sql_safe_updates = FALSE;
+ ALTER DATABASE test RENAME TO u
 
 statement error pgcode 42P01 relation "kv" does not exist
 SELECT * FROM kv

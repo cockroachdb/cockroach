@@ -144,7 +144,7 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 	for {
 		row, meta := m.nextRow()
-		if m.closed || meta != nil {
+		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {

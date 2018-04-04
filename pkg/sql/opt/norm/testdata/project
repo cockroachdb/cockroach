@@ -1,0 +1,1201 @@
+exec-ddl
+CREATE TABLE t.a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── f float
+ ├── s string
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
+----
+TABLE b
+ ├── x int not null
+ ├── z int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# EliminateProject
+# --------------------------------------------------
+
+# Same order, same names.
+opt
+SELECT x, y FROM t.a
+----
+scan a
+ └── columns: x:1(int!null) y:2(int)
+
+# Different order, aliased names.
+opt
+SELECT a.y AS aliasy, a.x FROM t.a
+----
+scan a
+ └── columns: aliasy:2(int) x:1(int!null)
+
+# Reordered, duplicate, aliased columns.
+opt
+SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM t.a
+----
+scan a
+ └── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
+
+# Added column (projection should not be eliminated).
+opt
+SELECT *, 1 FROM t.a
+----
+project
+ ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) column5:5(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int) a.f:3(float) a.s:4(string)
+ └── projections [outer=(1-4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: a.f [type=float, outer=(3)]
+      ├── variable: a.s [type=string, outer=(4)]
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# EliminateProjectProject
+# --------------------------------------------------
+
+opt
+SELECT y+1 FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
+----
+project
+ ├── columns: column7:7(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(2)]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# --------------------------------------------------
+# FilterUnusedProjectCols
+# --------------------------------------------------
+
+# Discard some of columns.
+opt
+SELECT x FROM (SELECT x, y+1 FROM t.a) a
+----
+scan a
+ └── columns: x:1(int!null)
+
+# Discard all columns.
+opt
+SELECT 1 FROM (SELECT y+1, x FROM t.a) a
+----
+project
+ ├── columns: column6:6(int)
+ ├── scan a
+ └── projections
+      └── const: 1 [type=int]
+
+# Use column values within computed column.
+opt
+SELECT x+y FROM (SELECT y, x, s || 'foo' FROM t.a) a
+----
+project
+ ├── columns: column6:6(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── projections [outer=(1,2)]
+      └── plus [type=int, outer=(1,2)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: a.y [type=int, outer=(2)]
+
+# Discard non-computed columns and keep computed column.
+opt
+SELECT l, x FROM (SELECT length(s) l, * FROM a) a
+----
+project
+ ├── columns: l:5(int) x:1(int!null)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.s:4(string)
+ └── projections [outer=(1,4)]
+      ├── function: length [type=int, outer=(4)]
+      │    └── variable: a.s [type=string, outer=(4)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# Compute column based on another computed column.
+opt
+SELECT l*l, x FROM (SELECT x, length(s) l, y FROM a) a
+----
+project
+ ├── columns: column6:6(int) x:1(int!null)
+ ├── project
+ │    ├── columns: a.x:1(int!null) l:5(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.s:4(string)
+ │    └── projections [outer=(1,4)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── function: length [type=int, outer=(4)]
+ │              └── variable: a.s [type=string, outer=(4)]
+ └── projections [outer=(1,5)]
+      ├── mult [type=int, outer=(5)]
+      │    ├── variable: l [type=int, outer=(5)]
+      │    └── variable: l [type=int, outer=(5)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# --------------------------------------------------
+# FilterUnusedScanCols
+# --------------------------------------------------
+
+# Project subset of columns.
+opt
+SELECT x FROM t.a
+----
+scan a
+ └── columns: x:1(int!null)
+
+# Project subset of columns, some used in computed columns.
+opt
+SELECT x, x+1, y+1 FROM t.a
+----
+project
+ ├── columns: x:1(int!null) column5:5(int) column6:6(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# Use columns only in computed columns.
+opt
+SELECT x+y FROM t.a
+----
+project
+ ├── columns: column5:5(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── projections [outer=(1,2)]
+      └── plus [type=int, outer=(1,2)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: a.y [type=int, outer=(2)]
+
+# Use no scan columns.
+opt
+SELECT 1 FROM t.a
+----
+project
+ ├── columns: column5:5(int)
+ ├── scan a
+ └── projections
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# FilterUnusedSelectCols
+# --------------------------------------------------
+
+# Columns used only by projection or filter, but not both.
+opt
+SELECT x FROM t.a WHERE y<5
+----
+project
+ ├── columns: x:1(int!null)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │              ├── variable: a.y [type=int, outer=(2)]
+ │              └── const: 5 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# Columns used by both projection and filter.
+opt
+SELECT x, y FROM t.a WHERE x=1 AND y<5
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── constraint: /1: [/1 - /1]
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+# No needed select columns.
+opt
+SELECT 1 FROM t.a WHERE now()<'2000-01-01T02:00:00'::timestamp
+----
+project
+ ├── columns: column5:5(int)
+ ├── select
+ │    ├── scan a
+ │    └── filters [type=bool]
+ │         └── lt [type=bool]
+ │              ├── function: now [type=timestamptz]
+ │              └── const: '2000-01-01 02:00:00+00:00' [type=timestamp]
+ └── projections
+      └── const: 1 [type=int]
+
+# Select columns used in computed columns.
+opt
+SELECT y-1, x*x FROM t.a WHERE x+1<5 AND s||'o'='foo'
+----
+project
+ ├── columns: column5:5(int) column6:6(int)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── filters [type=bool, outer=(1,4)]
+ │         ├── lt [type=bool, outer=(1)]
+ │         │    ├── variable: a.x [type=int, outer=(1)]
+ │         │    └── minus [type=int]
+ │         │         ├── const: 5 [type=int]
+ │         │         └── const: 1 [type=int]
+ │         └── eq [type=bool, outer=(4)]
+ │              ├── concat [type=string, outer=(4)]
+ │              │    ├── variable: a.s [type=string, outer=(4)]
+ │              │    └── const: 'o' [type=string]
+ │              └── const: 'foo' [type=string]
+ └── projections [outer=(1,2)]
+      ├── minus [type=int, outer=(2)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
+      └── mult [type=int, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: a.x [type=int, outer=(1)]
+
+# Select nested in select.
+opt
+SELECT y FROM (SELECT x, y, s, f+1.0 f FROM a WHERE x = 5) a2 WHERE y::float = f
+----
+project
+ ├── columns: y:2(int)
+ ├── select
+ │    ├── columns: a.y:2(int) f:5(float)
+ │    ├── project
+ │    │    ├── columns: a.y:2(int) f:5(float)
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float)
+ │    │    │    └── constraint: /1: [/5 - /5]
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: a.y [type=int, outer=(2)]
+ │    │         └── plus [type=float, outer=(3)]
+ │    │              ├── variable: a.f [type=float, outer=(3)]
+ │    │              └── const: 1.0 [type=float]
+ │    └── filters [type=bool, outer=(2,5)]
+ │         └── eq [type=bool, outer=(2,5)]
+ │              ├── variable: f [type=float, outer=(5)]
+ │              └── cast: float [type=float, outer=(2)]
+ │                   └── variable: a.y [type=int, outer=(2)]
+ └── projections [outer=(2)]
+      └── variable: a.y [type=int, outer=(2)]
+
+# Detect FilterUnusedSelectCols and PushSelectIntoProject dependency cycle.
+opt
+SELECT f, f+1.1 FROM (SELECT f, x FROM a GROUP BY f, x HAVING SUM(x)=100) a
+----
+project
+ ├── columns: f:3(float) column6:6(float)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.f:3(float) column5:5(decimal)
+ │    ├── group-by
+ │    │    ├── columns: a.x:1(int!null) a.f:3(float) column5:5(decimal)
+ │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    └── aggregations [outer=(1)]
+ │    │         └── function: sum [type=decimal, outer=(1)]
+ │    │              └── variable: a.x [type=int, outer=(1)]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
+ │         └── eq [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
+ │              ├── variable: column5 [type=decimal, outer=(5)]
+ │              └── const: 100 [type=decimal]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]
+
+# --------------------------------------------------
+# FilterUnusedLimitCols
+# --------------------------------------------------
+
+# The projection on top of Limit should trickle down and we shouldn't scan f.
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── limit: 10
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── limit: 10
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# Project filter limit columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x LIMIT 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── project
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    └── aggregations
+ │    │    └── projections [outer=(3)]
+ │    │         └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+# --------------------------------------------------
+# FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
+ │    └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# Project filter offset columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x OFFSET 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── offset
+ │    ├── columns: a.f:3(float)
+ │    ├── project
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── group-by
+ │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    └── aggregations
+ │    │    └── projections [outer=(3)]
+ │    │         └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+# --------------------------------------------------
+# FilterUnusedLimitCols + FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    ├── ordering: +2
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── ordering: +1,+2
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── ordering: +1,+2
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# Project filter offset/limit columns, but can't push all the way down to scan.
+opt
+SELECT f, f*2.0 FROM (SELECT f, x FROM a GROUP BY f, x OFFSET 5 LIMIT 5) a
+----
+project
+ ├── columns: f:3(float) column5:5(float)
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── offset
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── project
+ │    │    │    ├── columns: a.f:3(float)
+ │    │    │    ├── group-by
+ │    │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    ├── grouping columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    ├── scan a
+ │    │    │    │    │    └── columns: a.x:1(int!null) a.f:3(float)
+ │    │    │    │    └── aggregations
+ │    │    │    └── projections [outer=(3)]
+ │    │    │         └── variable: a.f [type=float, outer=(3)]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+# --------------------------------------------------
+# FilterUnusedJoinLeftCols
+# --------------------------------------------------
+
+# Columns used only by projection or on condition, but not both.
+opt
+SELECT a.y, b.* FROM t.a INNER JOIN t.b ON a.x=b.x
+----
+project
+ ├── columns: y:2(int) x:5(int!null) z:6(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null) b.z:6(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(2,5,6)]
+      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: b.x [type=int, outer=(5)]
+      └── variable: b.z [type=int, outer=(6)]
+
+# Columns used by both projection and on condition, left join.
+opt
+SELECT a.x, a.y, b.* FROM t.a LEFT JOIN t.b ON a.x=b.x AND a.y<5
+----
+left-join
+ ├── columns: x:1(int!null) y:2(int) x:5(int) z:6(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ ├── scan b
+ │    └── columns: b.x:5(int!null) b.z:6(int)
+ └── filters [type=bool, outer=(1,2,5), constraints=(/2: (/NULL - /4])]
+      ├── eq [type=bool, outer=(1,5)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── variable: b.x [type=int, outer=(5)]
+      └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+# Columns only used by on condition, right join
+opt
+SELECT b.* FROM t.a RIGHT JOIN t.b ON a.x=b.x
+----
+project
+ ├── columns: x:5(int!null) z:6(int)
+ ├── right-join
+ │    ├── columns: a.x:1(int) b.x:5(int!null) b.z:6(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(5,6)]
+      ├── variable: b.x [type=int, outer=(5)]
+      └── variable: b.z [type=int, outer=(6)]
+
+# Columns needed only by projection, full join.
+opt
+SELECT a.x+1, b.* FROM t.a FULL JOIN t.b ON True
+----
+project
+ ├── columns: column7:7(int) x:5(int) z:6(int)
+ ├── full-join
+ │    ├── columns: a.x:1(int) b.x:5(int) b.z:6(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── true [type=bool]
+ └── projections [outer=(1,5,6)]
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── variable: b.x [type=int, outer=(5)]
+      └── variable: b.z [type=int, outer=(6)]
+
+# No columns needed from left side of join.
+opt
+SELECT b.* FROM t.a, t.b
+----
+inner-join
+ ├── columns: x:5(int!null) z:6(int)
+ ├── scan a
+ ├── scan b
+ │    └── columns: b.x:5(int!null) b.z:6(int)
+ └── true [type=bool]
+
+# Computed columns.
+opt
+SELECT a.x+1, a.y/2, b.* FROM t.a INNER JOIN t.b ON a.x*a.x=b.x AND a.s||'o'='foo'
+----
+project
+ ├── columns: column7:7(int) column8:8(decimal) x:5(int!null) z:6(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null) b.z:6(int)
+ │    ├── project
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── filters [type=bool, outer=(4)]
+ │    │    │         └── eq [type=bool, outer=(4)]
+ │    │    │              ├── concat [type=string, outer=(4)]
+ │    │    │              │    ├── variable: a.s [type=string, outer=(4)]
+ │    │    │              │    └── const: 'o' [type=string]
+ │    │    │              └── const: 'foo' [type=string]
+ │    │    └── projections [outer=(1,2)]
+ │    │         ├── variable: a.x [type=int, outer=(1)]
+ │    │         └── variable: a.y [type=int, outer=(2)]
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: b.x [type=int, outer=(5)]
+ │              └── mult [type=int, outer=(1)]
+ │                   ├── variable: a.x [type=int, outer=(1)]
+ │                   └── variable: a.x [type=int, outer=(1)]
+ └── projections [outer=(1,2,5,6)]
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── div [type=decimal, outer=(2)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 2 [type=int]
+      ├── variable: b.x [type=int, outer=(5)]
+      └── variable: b.z [type=int, outer=(6)]
+
+# Join that is nested in another join.
+opt
+SELECT a.x, b.*
+FROM
+(
+    SELECT * FROM a NATURAL JOIN b
+) a
+INNER JOIN b
+ON a.y < b.z
+----
+project
+ ├── columns: x:1(int!null) x:7(int!null) z:8(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:7(int!null) b.z:8(int)
+ │    ├── project
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    ├── scan b
+ │    │    │    │    └── columns: b.x:5(int!null)
+ │    │    │    └── filters [type=bool, outer=(1,5)]
+ │    │    │         └── eq [type=bool, outer=(1,5)]
+ │    │    │              ├── variable: a.x [type=int, outer=(1)]
+ │    │    │              └── variable: b.x [type=int, outer=(5)]
+ │    │    └── projections [outer=(1,2)]
+ │    │         ├── variable: a.x [type=int, outer=(1)]
+ │    │         └── variable: a.y [type=int, outer=(2)]
+ │    ├── scan b
+ │    │    └── columns: b.x:7(int!null) b.z:8(int)
+ │    └── filters [type=bool, outer=(2,8)]
+ │         └── lt [type=bool, outer=(2,8)]
+ │              ├── variable: a.y [type=int, outer=(2)]
+ │              └── variable: b.z [type=int, outer=(8)]
+ └── projections [outer=(1,7,8)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: b.x [type=int, outer=(7)]
+      └── variable: b.z [type=int, outer=(8)]
+
+# --------------------------------------------------
+# FilterUnusedJoinRightCols
+# --------------------------------------------------
+
+# Columns used only by projection or on condition, but not both.
+opt
+SELECT b.*, a.y FROM t.b INNER JOIN t.a ON b.x=a.x
+----
+project
+ ├── columns: x:1(int!null) z:2(int) y:4(int)
+ ├── inner-join
+ │    ├── columns: b.x:1(int!null) b.z:2(int) a.x:3(int!null) a.y:4(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.z:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:3(int!null) a.y:4(int)
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: b.x [type=int, outer=(1)]
+ │              └── variable: a.x [type=int, outer=(3)]
+ └── projections [outer=(1,2,4)]
+      ├── variable: b.x [type=int, outer=(1)]
+      ├── variable: b.z [type=int, outer=(2)]
+      └── variable: a.y [type=int, outer=(4)]
+
+# Columns used by both projection and on condition, left join.
+opt
+SELECT b.*, a.x, a.y FROM t.b LEFT JOIN t.a ON b.x=a.x AND a.y<b.x
+----
+left-join
+ ├── columns: x:1(int!null) z:2(int) x:3(int) y:4(int)
+ ├── scan b
+ │    └── columns: b.x:1(int!null) b.z:2(int)
+ ├── scan a
+ │    └── columns: a.x:3(int!null) a.y:4(int)
+ └── filters [type=bool, outer=(1,3,4)]
+      ├── eq [type=bool, outer=(1,3)]
+      │    ├── variable: b.x [type=int, outer=(1)]
+      │    └── variable: a.x [type=int, outer=(3)]
+      └── lt [type=bool, outer=(1,4)]
+           ├── variable: a.y [type=int, outer=(4)]
+           └── variable: b.x [type=int, outer=(1)]
+
+# Columns only used by on condition, right join
+opt
+SELECT b.* FROM t.b RIGHT JOIN t.a ON b.x=a.x
+----
+project
+ ├── columns: x:1(int) z:2(int)
+ ├── right-join
+ │    ├── columns: b.x:1(int) b.z:2(int) a.x:3(int!null)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.z:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:3(int!null)
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: b.x [type=int, outer=(1)]
+ │              └── variable: a.x [type=int, outer=(3)]
+ └── projections [outer=(1,2)]
+      ├── variable: b.x [type=int, outer=(1)]
+      └── variable: b.z [type=int, outer=(2)]
+
+# Columns needed only by projection, full join.
+opt
+SELECT b.*, a.x+1 FROM t.b FULL JOIN t.a ON True
+----
+project
+ ├── columns: x:1(int) z:2(int) column7:7(int)
+ ├── full-join
+ │    ├── columns: b.x:1(int) b.z:2(int) a.x:3(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.z:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:3(int!null)
+ │    └── true [type=bool]
+ └── projections [outer=(1-3)]
+      ├── variable: b.x [type=int, outer=(1)]
+      ├── variable: b.z [type=int, outer=(2)]
+      └── plus [type=int, outer=(3)]
+           ├── variable: a.x [type=int, outer=(3)]
+           └── const: 1 [type=int]
+
+# No columns needed from right side of join.
+opt
+SELECT b.* FROM t.b, t.a
+----
+inner-join
+ ├── columns: x:1(int!null) z:2(int)
+ ├── scan b
+ │    └── columns: b.x:1(int!null) b.z:2(int)
+ ├── scan a
+ └── true [type=bool]
+
+# Computed columns.
+opt
+SELECT b.*, a.x+1, a.y/2 FROM t.b INNER JOIN t.a ON b.x=a.x*a.x AND a.s||'o'='foo'
+----
+project
+ ├── columns: x:1(int!null) z:2(int) column7:7(int) column8:8(decimal)
+ ├── inner-join
+ │    ├── columns: b.x:1(int!null) b.z:2(int) a.x:3(int!null) a.y:4(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.z:2(int)
+ │    ├── project
+ │    │    ├── columns: a.x:3(int!null) a.y:4(int)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:3(int!null) a.y:4(int) a.s:6(string)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:3(int!null) a.y:4(int) a.s:6(string)
+ │    │    │    └── filters [type=bool, outer=(6)]
+ │    │    │         └── eq [type=bool, outer=(6)]
+ │    │    │              ├── concat [type=string, outer=(6)]
+ │    │    │              │    ├── variable: a.s [type=string, outer=(6)]
+ │    │    │              │    └── const: 'o' [type=string]
+ │    │    │              └── const: 'foo' [type=string]
+ │    │    └── projections [outer=(3,4)]
+ │    │         ├── variable: a.x [type=int, outer=(3)]
+ │    │         └── variable: a.y [type=int, outer=(4)]
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: b.x [type=int, outer=(1)]
+ │              └── mult [type=int, outer=(3)]
+ │                   ├── variable: a.x [type=int, outer=(3)]
+ │                   └── variable: a.x [type=int, outer=(3)]
+ └── projections [outer=(1-4)]
+      ├── variable: b.x [type=int, outer=(1)]
+      ├── variable: b.z [type=int, outer=(2)]
+      ├── plus [type=int, outer=(3)]
+      │    ├── variable: a.x [type=int, outer=(3)]
+      │    └── const: 1 [type=int]
+      └── div [type=decimal, outer=(4)]
+           ├── variable: a.y [type=int, outer=(4)]
+           └── const: 2 [type=int]
+
+# Join that is nested in another join.
+opt
+SELECT a.x, b.*
+FROM b
+INNER JOIN
+(
+    SELECT * FROM a NATURAL JOIN b
+) a
+ON a.y < b.z
+----
+project
+ ├── columns: x:3(int!null) x:1(int!null) z:2(int)
+ ├── inner-join
+ │    ├── columns: b.x:1(int!null) b.z:2(int) a.x:3(int!null) a.y:4(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.z:2(int)
+ │    ├── project
+ │    │    ├── columns: a.x:3(int!null) a.y:4(int)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: a.x:3(int!null) a.y:4(int) b.x:7(int!null)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:3(int!null) a.y:4(int)
+ │    │    │    ├── scan b
+ │    │    │    │    └── columns: b.x:7(int!null)
+ │    │    │    └── filters [type=bool, outer=(3,7)]
+ │    │    │         └── eq [type=bool, outer=(3,7)]
+ │    │    │              ├── variable: a.x [type=int, outer=(3)]
+ │    │    │              └── variable: b.x [type=int, outer=(7)]
+ │    │    └── projections [outer=(3,4)]
+ │    │         ├── variable: a.x [type=int, outer=(3)]
+ │    │         └── variable: a.y [type=int, outer=(4)]
+ │    └── filters [type=bool, outer=(2,4)]
+ │         └── lt [type=bool, outer=(2,4)]
+ │              ├── variable: a.y [type=int, outer=(4)]
+ │              └── variable: b.z [type=int, outer=(2)]
+ └── projections [outer=(1-3)]
+      ├── variable: a.x [type=int, outer=(3)]
+      ├── variable: b.x [type=int, outer=(1)]
+      └── variable: b.z [type=int, outer=(2)]
+
+# --------------------------------------------------
+# FilterUnusedJoinLeftCols + FilterUnusedJoinRightCols
+# --------------------------------------------------
+
+# Columns not needed by either side of join.
+opt
+SELECT 1 FROM a,b
+----
+project
+ ├── columns: column7:7(int)
+ ├── inner-join
+ │    ├── scan a
+ │    ├── scan b
+ │    └── true [type=bool]
+ └── projections
+      └── const: 1 [type=int]
+
+# Subset of columns needed by each side of join.
+opt
+SELECT a.x, b.x, a.x+b.x FROM a LEFT JOIN b ON a.x=b.x
+----
+project
+ ├── columns: x:1(int!null) x:5(int) column7:7(int)
+ ├── left-join
+ │    ├── columns: a.x:1(int!null) b.x:5(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null)
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(1,5)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: b.x [type=int, outer=(5)]
+      └── plus [type=int, outer=(1,5)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]
+
+# --------------------------------------------------
+# FilterUnusedAggCols
+# --------------------------------------------------
+
+# Discard all aggregates.
+opt
+SELECT x FROM (SELECT x, SUM(y), MIN(s||'foo') FROM a GROUP BY x) a
+----
+group-by
+ ├── columns: x:1(int!null)
+ ├── grouping columns: a.x:1(int!null)
+ ├── scan a
+ │    └── columns: a.x:1(int!null)
+ └── aggregations
+
+# Discard subset of aggregates.
+opt
+SELECT x, sumy FROM (SELECT SUM(y) sumy, x, MIN(s||'foo') FROM a GROUP BY x) a
+----
+group-by
+ ├── columns: x:1(int!null) sumy:5(decimal)
+ ├── grouping columns: a.x:1(int!null)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── aggregations [outer=(2)]
+      └── function: sum [type=decimal, outer=(2)]
+           └── variable: a.y [type=int, outer=(2)]
+
+# No aggregates to discard.
+opt
+SELECT 1 FROM (SELECT x FROM a GROUP BY x) a
+----
+project
+ ├── columns: column5:5(int)
+ ├── group-by
+ │    ├── columns: a.x:1(int!null)
+ │    ├── grouping columns: a.x:1(int!null)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null)
+ │    └── aggregations
+ └── projections
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# FilterUnusedGroupByCols
+# --------------------------------------------------
+
+# Columns used by grouping or aggregation, but not both.
+opt
+SELECT x, SUM(y) FROM a GROUP BY x
+----
+group-by
+ ├── columns: x:1(int!null) column5:5(decimal)
+ ├── grouping columns: a.x:1(int!null)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── aggregations [outer=(2)]
+      └── function: sum [type=decimal, outer=(2)]
+           └── variable: a.y [type=int, outer=(2)]
+
+# Columns used by both grouping and aggregation.
+opt
+SELECT AVG(x+y), x, y FROM a GROUP BY x, y
+----
+group-by
+ ├── columns: column6:6(decimal) x:1(int!null) y:2(int)
+ ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int) column5:5(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         ├── variable: a.y [type=int, outer=(2)]
+ │         └── plus [type=int, outer=(1,2)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: a.y [type=int, outer=(2)]
+ └── aggregations [outer=(5)]
+      └── function: avg [type=decimal, outer=(5)]
+           └── variable: column5 [type=int, outer=(5)]
+
+# Columns used only by aggregation, no grouping columns.
+opt
+SELECT MIN(y), MAX(x), MAX(x) FROM a
+----
+group-by
+ ├── columns: column5:5(int) column6:6(int) column6:6(int)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── aggregations [outer=(1,2)]
+      ├── function: min [type=int, outer=(2)]
+      │    └── variable: a.y [type=int, outer=(2)]
+      └── function: max [type=int, outer=(1)]
+           └── variable: a.x [type=int, outer=(1)]
+
+# Columns used only by groupings, no aggregation columns.
+opt
+SELECT x, y+1 FROM a GROUP BY y, x
+----
+project
+ ├── columns: x:1(int!null) column5:5(int)
+ ├── group-by
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── aggregations
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+# Groupby a groupby.
+opt
+SELECT MIN(sm), y FROM (SELECT s, y, SUM(x) sm, AVG(x) av FROM a GROUP BY y, s) a GROUP BY y
+----
+group-by
+ ├── columns: column7:7(decimal) y:2(int)
+ ├── grouping columns: a.y:2(int)
+ ├── project
+ │    ├── columns: a.y:2(int) sm:5(decimal)
+ │    ├── group-by
+ │    │    ├── columns: a.y:2(int) a.s:4(string) sm:5(decimal)
+ │    │    ├── grouping columns: a.y:2(int) a.s:4(string)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── aggregations [outer=(1)]
+ │    │         └── function: sum [type=decimal, outer=(1)]
+ │    │              └── variable: a.x [type=int, outer=(1)]
+ │    └── projections [outer=(2,5)]
+ │         ├── variable: a.y [type=int, outer=(2)]
+ │         └── variable: sm [type=decimal, outer=(5)]
+ └── aggregations [outer=(5)]
+      └── function: min [type=decimal, outer=(5)]
+           └── variable: sm [type=decimal, outer=(5)]
+
+# --------------------------------------------------
+# FilterUnusedValueCols
+# --------------------------------------------------
+
+# Discard all but first Values column.
+opt
+SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
+----
+values
+ ├── columns: column1:1(int)
+ ├── tuple [type=tuple{int}]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int}]
+      └── const: 3 [type=int]
+
+# Discard all but middle Values column.
+opt
+SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
+----
+values
+ ├── columns: column2:2(int)
+ ├── tuple [type=tuple{int}]
+ │    └── const: 2 [type=int]
+ └── tuple [type=tuple{int}]
+      └── const: 5 [type=int]
+
+# Discard all but last Values column.
+opt
+SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
+----
+values
+ ├── columns: column3:3(string)
+ ├── tuple [type=tuple{string}]
+ │    └── const: 'baz' [type=string]
+ └── tuple [type=tuple{string}]
+      └── const: 'cherry' [type=string]
+
+# Discard all Values columns.
+opt
+SELECT 1 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
+----
+project
+ ├── columns: column4:4(int)
+ ├── values
+ │    ├── tuple [type=tuple{}]
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# FilterUnused - multiple combined operators
+# --------------------------------------------------
+
+opt
+SELECT a.x, b.z FROM a INNER JOIN b ON a.x=b.x WHERE a.y < 5
+----
+project
+ ├── columns: x:1(int!null) z:6(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) b.x:5(int!null) b.z:6(int)
+ │    ├── project
+ │    │    ├── columns: a.x:1(int!null)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │    │    │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │    │    │              ├── variable: a.y [type=int, outer=(2)]
+ │    │    │              └── const: 5 [type=int]
+ │    │    └── projections [outer=(1)]
+ │    │         └── variable: a.x [type=int, outer=(1)]
+ │    ├── scan b
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(1,6)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: b.z [type=int, outer=(6)]
+
+opt
+SELECT x FROM (SELECT x, MIN(s) FROM a GROUP BY x HAVING SUM(y) > 5)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── select
+ │    ├── columns: a.x:1(int!null) column5:5(decimal)
+ │    ├── group-by
+ │    │    ├── columns: a.x:1(int!null) column5:5(decimal)
+ │    │    ├── grouping columns: a.x:1(int!null)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── aggregations [outer=(2)]
+ │    │         └── function: sum [type=decimal, outer=(2)]
+ │    │              └── variable: a.y [type=int, outer=(2)]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+ │         └── gt [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+ │              ├── variable: column5 [type=decimal, outer=(5)]
+ │              └── const: 5 [type=decimal]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]

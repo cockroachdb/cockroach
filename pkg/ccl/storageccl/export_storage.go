@@ -104,6 +104,14 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			return conf, errors.Errorf("s3 uri missing %q parameter", S3SecretParam)
 		}
 		conf.S3Config.Prefix = strings.TrimLeft(conf.S3Config.Prefix, "/")
+		// AWS secrets often contain + characters, which must be escaped when
+		// included in a query string; otherwise, they represent a space character.
+		// More than a few users have been bitten by this.
+		//
+		// Luckily, AWS secrets are base64-encoded data and thus will never actually
+		// contain spaces. We can convert any space characters we see to +
+		// characters to recover the original secret.
+		conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
 	case "gs":
 		conf.Provider = roachpb.ExportStorageProvider_GoogleCloud
 		conf.GoogleCloudConfig = &roachpb.ExportStorage_GCS{

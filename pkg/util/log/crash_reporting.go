@@ -22,7 +22,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"syscall"
 	"time"
 
 	raven "github.com/getsentry/raven-go"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -307,7 +307,7 @@ func Redact(r interface{}) string {
 		switch t := r.(error).(type) {
 		case runtime.Error:
 			return typAnd(t, t.Error())
-		case syscall.Errno:
+		case sysutil.Errno:
 			return typAnd(t, t.Error())
 		case *os.SyscallError:
 			s := Redact(t.Err)

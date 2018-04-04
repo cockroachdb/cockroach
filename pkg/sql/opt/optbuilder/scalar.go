@@ -17,67 +17,74 @@ package optbuilder
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type unaryFactoryFunc func(f *xform.Factory, input memo.GroupID) memo.GroupID
-type binaryFactoryFunc func(f *xform.Factory, left, right memo.GroupID) memo.GroupID
+type unaryFactoryFunc func(f *norm.Factory, input memo.GroupID) memo.GroupID
+type binaryFactoryFunc func(f *norm.Factory, left, right memo.GroupID) memo.GroupID
 
 // Map from tree.ComparisonOperator to Factory constructor function.
 var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
-	tree.EQ:                (*xform.Factory).ConstructEq,
-	tree.LT:                (*xform.Factory).ConstructLt,
-	tree.GT:                (*xform.Factory).ConstructGt,
-	tree.LE:                (*xform.Factory).ConstructLe,
-	tree.GE:                (*xform.Factory).ConstructGe,
-	tree.NE:                (*xform.Factory).ConstructNe,
-	tree.In:                (*xform.Factory).ConstructIn,
-	tree.NotIn:             (*xform.Factory).ConstructNotIn,
-	tree.Like:              (*xform.Factory).ConstructLike,
-	tree.NotLike:           (*xform.Factory).ConstructNotLike,
-	tree.ILike:             (*xform.Factory).ConstructILike,
-	tree.NotILike:          (*xform.Factory).ConstructNotILike,
-	tree.SimilarTo:         (*xform.Factory).ConstructSimilarTo,
-	tree.NotSimilarTo:      (*xform.Factory).ConstructNotSimilarTo,
-	tree.RegMatch:          (*xform.Factory).ConstructRegMatch,
-	tree.NotRegMatch:       (*xform.Factory).ConstructNotRegMatch,
-	tree.RegIMatch:         (*xform.Factory).ConstructRegIMatch,
-	tree.NotRegIMatch:      (*xform.Factory).ConstructNotRegIMatch,
-	tree.IsDistinctFrom:    (*xform.Factory).ConstructIsNot,
-	tree.IsNotDistinctFrom: (*xform.Factory).ConstructIs,
-	tree.Contains:          (*xform.Factory).ConstructContains,
-	tree.ContainedBy: func(f *xform.Factory, left, right memo.GroupID) memo.GroupID {
+	tree.EQ:                (*norm.Factory).ConstructEq,
+	tree.LT:                (*norm.Factory).ConstructLt,
+	tree.GT:                (*norm.Factory).ConstructGt,
+	tree.LE:                (*norm.Factory).ConstructLe,
+	tree.GE:                (*norm.Factory).ConstructGe,
+	tree.NE:                (*norm.Factory).ConstructNe,
+	tree.In:                (*norm.Factory).ConstructIn,
+	tree.NotIn:             (*norm.Factory).ConstructNotIn,
+	tree.Like:              (*norm.Factory).ConstructLike,
+	tree.NotLike:           (*norm.Factory).ConstructNotLike,
+	tree.ILike:             (*norm.Factory).ConstructILike,
+	tree.NotILike:          (*norm.Factory).ConstructNotILike,
+	tree.SimilarTo:         (*norm.Factory).ConstructSimilarTo,
+	tree.NotSimilarTo:      (*norm.Factory).ConstructNotSimilarTo,
+	tree.RegMatch:          (*norm.Factory).ConstructRegMatch,
+	tree.NotRegMatch:       (*norm.Factory).ConstructNotRegMatch,
+	tree.RegIMatch:         (*norm.Factory).ConstructRegIMatch,
+	tree.NotRegIMatch:      (*norm.Factory).ConstructNotRegIMatch,
+	tree.IsDistinctFrom:    (*norm.Factory).ConstructIsNot,
+	tree.IsNotDistinctFrom: (*norm.Factory).ConstructIs,
+	tree.Contains:          (*norm.Factory).ConstructContains,
+	tree.ContainedBy: func(f *norm.Factory, left, right memo.GroupID) memo.GroupID {
 		// This is just syntatic sugar that reverses the operands.
 		return f.ConstructContains(right, left)
 	},
+	tree.JSONExists:     (*norm.Factory).ConstructJsonExists,
+	tree.JSONAllExists:  (*norm.Factory).ConstructJsonAllExists,
+	tree.JSONSomeExists: (*norm.Factory).ConstructJsonSomeExists,
 }
 
 // Map from tree.BinaryOperator to Factory constructor function.
 var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
-	tree.Bitand:   (*xform.Factory).ConstructBitand,
-	tree.Bitor:    (*xform.Factory).ConstructBitor,
-	tree.Bitxor:   (*xform.Factory).ConstructBitxor,
-	tree.Plus:     (*xform.Factory).ConstructPlus,
-	tree.Minus:    (*xform.Factory).ConstructMinus,
-	tree.Mult:     (*xform.Factory).ConstructMult,
-	tree.Div:      (*xform.Factory).ConstructDiv,
-	tree.FloorDiv: (*xform.Factory).ConstructFloorDiv,
-	tree.Mod:      (*xform.Factory).ConstructMod,
-	tree.Pow:      (*xform.Factory).ConstructPow,
-	tree.Concat:   (*xform.Factory).ConstructConcat,
-	tree.LShift:   (*xform.Factory).ConstructLShift,
-	tree.RShift:   (*xform.Factory).ConstructRShift,
+	tree.Bitand:            (*norm.Factory).ConstructBitand,
+	tree.Bitor:             (*norm.Factory).ConstructBitor,
+	tree.Bitxor:            (*norm.Factory).ConstructBitxor,
+	tree.Plus:              (*norm.Factory).ConstructPlus,
+	tree.Minus:             (*norm.Factory).ConstructMinus,
+	tree.Mult:              (*norm.Factory).ConstructMult,
+	tree.Div:               (*norm.Factory).ConstructDiv,
+	tree.FloorDiv:          (*norm.Factory).ConstructFloorDiv,
+	tree.Mod:               (*norm.Factory).ConstructMod,
+	tree.Pow:               (*norm.Factory).ConstructPow,
+	tree.Concat:            (*norm.Factory).ConstructConcat,
+	tree.LShift:            (*norm.Factory).ConstructLShift,
+	tree.RShift:            (*norm.Factory).ConstructRShift,
+	tree.JSONFetchText:     (*norm.Factory).ConstructFetchText,
+	tree.JSONFetchVal:      (*norm.Factory).ConstructFetchVal,
+	tree.JSONFetchValPath:  (*norm.Factory).ConstructFetchValPath,
+	tree.JSONFetchTextPath: (*norm.Factory).ConstructFetchTextPath,
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
 var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
-	tree.UnaryMinus:      (*xform.Factory).ConstructUnaryMinus,
-	tree.UnaryComplement: (*xform.Factory).ConstructUnaryComplement,
+	tree.UnaryMinus:      (*norm.Factory).ConstructUnaryMinus,
+	tree.UnaryComplement: (*norm.Factory).ConstructUnaryComplement,
 }
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -89,17 +96,27 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg
 	varsUsedIn := len(inScope.groupby.varsUsed)
 	switch t := scalar.(type) {
-	case *columnProps:
+	case *scopeColumn:
 		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.id) {
 			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.id)
 		}
-		return b.factory.ConstructVariable(b.factory.InternPrivate(t.id))
+		return b.factory.ConstructVariable(b.factory.InternColumnID(t.id))
 
 	case *tree.AndExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)
 		right := b.buildScalar(t.TypedRight(), inScope)
 		conditions := b.factory.InternList([]memo.GroupID{left, right})
 		out = b.factory.ConstructAnd(conditions)
+
+	case *tree.Array:
+		els := make([]memo.GroupID, len(t.Exprs))
+		arrayType := t.ResolvedType()
+		elementType := arrayType.(types.TArray).Typ
+		for i := range t.Exprs {
+			els[i] = b.buildScalar(inScope.resolveType(t.Exprs[i], elementType), inScope)
+		}
+		elements := b.factory.InternList(els)
+		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.BinaryExpr:
 		fn := binaryOpMap[t.Operator]
@@ -109,7 +126,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 				b.buildScalar(t.TypedRight(), inScope),
 			)
 		} else if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
 			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
 		}
@@ -143,7 +160,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 	case *tree.CastExpr:
 		arg := b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
 		typ := coltypes.CastTargetToDatumType(t.Type)
-		out = b.factory.ConstructCast(arg, b.factory.InternPrivate(typ))
+		out = b.factory.ConstructCast(arg, b.factory.InternType(typ))
 
 	case *tree.CoalesceExpr:
 		args := make([]memo.GroupID, len(t.Exprs))
@@ -169,7 +186,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 				// Most comparison ops map directly to a factory method.
 				out = fn(b.factory, left, right)
 			} else if b.AllowUnsupportedExpr {
-				out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+				out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 			} else {
 				// TODO(rytaft): remove this check when we are confident that
 				// all operators are included in comparisonOpMap.
@@ -189,9 +206,9 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(errorf("invalid column ordinal @%d", t.Idx))
+			panic(errorf("invalid column ordinal @%d", t.Idx+1))
 		}
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(inScope.cols[t.Idx].id))
+		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
 		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:
@@ -215,7 +232,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 			}
 			out = b.buildDatum(d)
 		} else {
-			out = b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
+			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
 			// TODO(rytaft): Do we need to update varsUsed here?
 		}
 
@@ -251,7 +268,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 
 	default:
 		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
 		} else {
 			panic(errorf("not yet implemented: scalar expr: %T", scalar))
 		}
@@ -274,7 +291,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 // buildDatum maps certain datums to separate operators, for easier matching.
 func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 	if d == tree.DNull {
-		return b.factory.ConstructNull(b.factory.InternPrivate(types.Unknown))
+		return b.factory.ConstructNull(b.factory.InternType(types.Unknown))
 	}
 	if boolVal, ok := d.(*tree.DBool); ok {
 		// Map True/False datums to True/False operator.
@@ -283,7 +300,7 @@ func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 		}
 		return b.factory.ConstructFalse()
 	}
-	return b.factory.ConstructConst(b.factory.InternPrivate(d))
+	return b.factory.ConstructConst(b.factory.InternDatum(d))
 }
 
 // buildFunction builds a set of memo groups that represent a function
@@ -299,7 +316,7 @@ func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
 // return values.
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, label string, inScope *scope,
-) (out memo.GroupID, col *columnProps) {
+) (out memo.GroupID, col *scopeColumn) {
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
 		panic(builderError{err})
@@ -308,7 +325,8 @@ func (b *Builder) buildFunction(
 	funcDef := memo.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
 
 	if isAggregate(def) {
-		return b.buildAggregateFunction(f, funcDef, label, inScope)
+		col := b.buildAggregateFunction(f, funcDef, label, inScope)
+		return col.group, col
 	}
 
 	argList := make([]memo.GroupID, len(f.Exprs))
@@ -318,7 +336,7 @@ func (b *Builder) buildFunction(
 
 	// Construct a private FuncOpDef that refers to a resolved function overload.
 	return b.factory.ConstructFunction(
-		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
+		b.factory.InternList(argList), b.factory.InternFuncOpDef(&funcDef),
 	), nil
 }
 
@@ -374,30 +392,37 @@ type ScalarBuilder struct {
 	scope scope
 }
 
-// NewScalar creates a new ScalarBuilder. The provided columns are accessible
+// NewScalar creates a new ScalarBuilder. The columns in the metadata are accessible
 // from scalar expressions via IndexedVars.
-// columnNames and columnTypes must have the same length.
 func NewScalar(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *tree.EvalContext,
-	factory *xform.Factory,
-	columnNames []string,
-	columnTypes []types.T,
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, factory *norm.Factory,
 ) *ScalarBuilder {
+	md := factory.Metadata()
 	sb := &ScalarBuilder{
 		Builder: Builder{
 			factory: factory,
-			colMap:  make([]columnProps, 1),
+			colMap:  make([]scopeColumn, 1, 1+md.NumColumns()),
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
 		},
 	}
 	sb.scope.builder = &sb.Builder
-	for i := range columnNames {
-		sb.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i], nil)
+
+	// Put all the columns in the current scope.
+	sb.scope.cols = make([]scopeColumn, 0, md.NumColumns())
+	for colID := opt.ColumnID(1); int(colID) <= md.NumColumns(); colID++ {
+		name := tree.Name(md.ColumnLabel(colID))
+		col := scopeColumn{
+			origName: name,
+			name:     name,
+			typ:      md.ColumnType(colID),
+			id:       colID,
+		}
+		sb.colMap = append(sb.colMap, col)
+		sb.scope.cols = append(sb.scope.cols, col)
 	}
+
 	return sb
 }
 

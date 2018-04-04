@@ -55,11 +55,12 @@ import (
 )
 
 var debugKeysCmd = &cobra.Command{
-	Use:   "keys [directory]",
+	Use:   "keys <directory>",
 	Short: "dump all the keys in a store",
 	Long: `
 Pretty-prints all keys in a store.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugKeys),
 }
 
@@ -138,10 +139,6 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	if len(args) != 1 {
-		return errors.New("one argument required: dir")
-	}
-
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
@@ -156,23 +153,20 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 }
 
 var debugRangeDataCmd = &cobra.Command{
-	Use:   "range-data [directory] range-id",
+	Use:   "range-data <directory> <range id>",
 	Short: "dump all the data in a range",
 	Long: `
 Pretty-prints all keys and values in a range. By default, includes unreplicated
 state like the raft HardState. With --replicated, only includes data covered by
  the consistency checker.
 `,
+	Args: cobra.ExactArgs(2),
 	RunE: MaybeDecorateGRPCError(runDebugRangeData),
 }
 
 func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-
-	if len(args) != 2 {
-		return errors.New("two arguments required: dir range_id")
-	}
 
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
@@ -208,11 +202,12 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 }
 
 var debugRangeDescriptorsCmd = &cobra.Command{
-	Use:   "range-descriptors [directory]",
+	Use:   "range-descriptors <directory>",
 	Short: "print all range descriptors in a store",
 	Long: `
 Prints all range descriptors in a store with a history of changes.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugRangeDescriptors),
 }
 
@@ -424,10 +419,6 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	if len(args) != 1 {
-		return errors.New("one argument required: dir")
-	}
-
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
@@ -448,6 +439,7 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 	$ decode-key BB89F902ADB43000151C2D1ED07DE6C009
 	/Table/51/1/44938288/1521140384.514565824,0
 `,
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, arg := range args {
 			b, err := hex.DecodeString(arg)
@@ -465,11 +457,12 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 }
 
 var debugRaftLogCmd = &cobra.Command{
-	Use:   "raft-log [directory] [range id]",
+	Use:   "raft-log <directory> <range id>",
 	Short: "print the raft log for a range",
 	Long: `
 Prints all log entries in a store for the given range.
 `,
+	Args: cobra.ExactArgs(2),
 	RunE: MaybeDecorateGRPCError(runDebugRaftLog),
 }
 
@@ -528,10 +521,6 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	if len(args) != 2 {
-		return errors.New("two arguments required: dir range_id")
-	}
-
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
 		return err
@@ -549,7 +538,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc [directory] [range id]",
+	Use:   "estimate-gc <directory> [range id]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -560,6 +549,7 @@ ranges individually.
 
 Uses a hard-coded GC policy with a 24 hour TTL for old versions.
 `,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
 }
 
@@ -568,18 +558,11 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	var rangeID roachpb.RangeID
-	switch len(args) {
-
-	}
-	switch len(args) {
-	case 2:
+	if len(args) == 2 {
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
 		}
-	case 1:
-	default:
-		return errors.New("arguments: dir [range_id]")
 	}
 
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
@@ -641,7 +624,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 }
 
 var debugCheckStoreCmd = &cobra.Command{
-	Use:   "check-store [directory]",
+	Use:   "check-store <directory>",
 	Short: "consistency check for a single store",
 	Long: `
 Perform local consistency checks of a single store.
@@ -650,6 +633,7 @@ Capable of detecting the following errors:
 * Raft logs that are inconsistent with their metadata
 * MVCC stats that are inconsistent with the data within the range
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugCheckStoreCmd),
 }
 
@@ -665,10 +649,6 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	ctx := context.Background()
-
-	if len(args) != 1 {
-		return errors.New("one required argument: dir")
-	}
 
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
@@ -812,6 +792,7 @@ var debugEnvCmd = &cobra.Command{
 	Long: `
 Output environment variables that influence configuration.
 `,
+	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		env := envutil.GetEnvReport()
 		fmt.Print(env)
@@ -819,21 +800,18 @@ Output environment variables that influence configuration.
 }
 
 var debugCompactCmd = &cobra.Command{
-	Use:   "compact [directory]",
+	Use:   "compact <directory>",
 	Short: "compact the sstables in a store",
 	Long: `
 Compact the sstables in a store.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugCompact),
 }
 
 func runDebugCompact(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-
-	if len(args) != 1 {
-		return errors.New("one argument is required")
-	}
 
 	db, err := openExistingStore(args[0], stopper, false /* readOnly */)
 	if err != nil {
@@ -863,7 +841,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 }
 
 var debugSSTablesCmd = &cobra.Command{
-	Use:   "sstables [directory]",
+	Use:   "sstables <directory>",
 	Short: "list the sstables in a store",
 	Long: `
 
@@ -886,16 +864,13 @@ total files and 14 files that are 129 MiB in size.
 The suffixes K, M, G and T are used for terseness to represent KiB, MiB, GiB
 and TiB.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugSSTables),
 }
 
 func runDebugSSTables(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-
-	if len(args) != 1 {
-		return errors.New("one argument is required")
-	}
 
 	db, err := openExistingStore(args[0], stopper, true /* readOnly */)
 	if err != nil {
@@ -907,7 +882,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 }
 
 var debugGossipValuesCmd = &cobra.Command{
-	Use:   "gossip-values [directory]",
+	Use:   "gossip-values <directory>",
 	Short: "dump all the values in a node's gossip instance",
 	Long: `
 Pretty-prints the values in a node's gossip instance.
@@ -915,6 +890,7 @@ Pretty-prints the values in a node's gossip instance.
 Can connect to a running server to get the values or can be provided with
 a JSON file captured from a node's /_status/gossip/ debug endpoint.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugGossipValues),
 }
 
@@ -1020,6 +996,7 @@ var debugSyncTestCmd = &cobra.Command{
 	Short: "Run a performance test for WAL sync speed",
 	Long: `
 `,
+	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
 	RunE:   MaybeDecorateGRPCError(runDebugSyncTest),
 }
@@ -1032,9 +1009,6 @@ var syncTestOpts = synctest.Options{
 
 func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	syncTestOpts.Dir = "./testdb"
-	if len(args) > 1 {
-		return fmt.Errorf("too many arguments")
-	}
 	if len(args) == 1 {
 		syncTestOpts.Dir = args[0]
 	}

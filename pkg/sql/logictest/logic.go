@@ -329,6 +329,10 @@ var (
 		"flex-types", false,
 		"do not fail when a test expects a column of a numeric type but the query provides another type",
 	)
+	metadataTestOff = flag.Bool(
+		"metadata-test-off", false,
+		"disable DistSQL metadata propagation tests",
+	)
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
@@ -857,11 +861,17 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
-	if cfg.distSQLUseDisk {
-		params.ServerArgs.Knobs.DistSQL = &distsqlrun.TestingKnobs{
-			MemoryLimitBytes: 1,
-		}
+
+	distSQLKnobs := &distsqlrun.TestingKnobs{
+		MetadataTestLevel: distsqlrun.NoExplain,
 	}
+	if cfg.distSQLUseDisk {
+		distSQLKnobs.MemoryLimitBytes = 1
+	}
+	if *metadataTestOff {
+		distSQLKnobs.MetadataTestLevel = distsqlrun.Off
+	}
+	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
 	if cfg.serverVersion != nil {
 		// If we want to run a specific server version, we assume that it

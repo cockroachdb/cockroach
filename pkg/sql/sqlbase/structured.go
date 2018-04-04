@@ -1161,6 +1161,11 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 	}
 
+	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
+	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
+	// run again and mixed-version clusters always write "good" descriptors.
+	desc.Privileges.MaybeFixPrivileges(desc.GetID())
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }
@@ -2277,7 +2282,10 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
 		}
-		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s", ptyp)
+		if wrapper, ok := ptyp.(types.TOidWrapper); ok {
+			return DatumTypeToColumnSemanticType(wrapper.T)
+		}
+		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s, %T, %+v", ptyp, ptyp, ptyp)
 	}
 }
 
@@ -2404,6 +2412,12 @@ func (desc *DatabaseDescriptor) Validate() error {
 	if desc.ID == 0 {
 		return fmt.Errorf("invalid database ID %d", desc.ID)
 	}
+
+	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
+	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
+	// run again and mixed-version clusters always write "good" descriptors.
+	desc.Privileges.MaybeFixPrivileges(desc.GetID())
+
 	// Validate the privilege descriptor.
 	return desc.Privileges.Validate(desc.GetID())
 }

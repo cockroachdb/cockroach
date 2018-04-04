@@ -1,2 +1,3 @@
 cancel_query_stmt ::=
 	'CANCEL' 'QUERY' query_id
+	| 'CANCEL' 'QUERY' 'IF' 'EXISTS' query_id

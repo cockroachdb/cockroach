@@ -26,44 +26,4 @@ Valid fields:
 * rotation-period: amount of time after which data keys should be rotated
 `,
 	}
-
-	CSVTable = cliflags.FlagInfo{
-		Name:        "table",
-		Description: `location of a file containing a single CREATE TABLE statement`,
-	}
-
-	CSVDataNames = cliflags.FlagInfo{
-		Name:        "data",
-		Description: `filenames of CSV data; uses <table>.dat if empty`,
-	}
-
-	CSVDest = cliflags.FlagInfo{
-		Name:        "dest",
-		Description: `destination directory for backup files`,
-	}
-
-	CSVNullIf = cliflags.FlagInfo{
-		Name:        "nullif",
-		Description: `if specified, the value of NULL; can specify the empty string`,
-	}
-
-	CSVComma = cliflags.FlagInfo{
-		Name:        "delimited",
-		Description: `if specified, the CSV delimiter instead of a comma`,
-	}
-
-	CSVComment = cliflags.FlagInfo{
-		Name:        "comment",
-		Description: `if specified, allows comment lines starting with this character`,
-	}
-
-	CSVSkip = cliflags.FlagInfo{
-		Name:        "skip",
-		Description: `if specified, skips the first N lines of the input file (e.g. to ignore column headers)`,
-	}
-
-	CSVTempDir = cliflags.FlagInfo{
-		Name:        "tempdir",
-		Description: `directory to store intermediate temp files`,
-	}
 )

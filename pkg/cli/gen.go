@@ -31,18 +31,16 @@ var genManCmd = &cobra.Command{
 	Short: "generate man pages for CockroachDB",
 	Long: `This command generates man pages for CockroachDB.
 
-By default, this places man pages into the "man/man1" directory under the current directory.
-Use "--path=PATH" to override the output directory. For example, to install man pages globally on
-many Unix-like systems, use "--path=/usr/local/share/man/man1".
+By default, this places man pages into the "man/man1" directory under the
+current directory. Use "--path=PATH" to override the output directory. For
+example, to install man pages globally on many Unix-like systems,
+use "--path=/usr/local/share/man/man1".
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runGenManCmd),
 }
 
 func runGenManCmd(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
-
 	info := build.GetInfo()
 	header := &doc.GenManHeader{
 		Section: "1",
@@ -79,28 +77,49 @@ func runGenManCmd(cmd *cobra.Command, args []string) error {
 var autoCompletePath string
 
 var genAutocompleteCmd = &cobra.Command{
-	Use:   "autocomplete",
-	Short: "generate bash autocompletion script for CockroachDB",
-	Long: `Generate bash autocompletion script for CockroachDB. This takes an optional parameter
-to specify the path for the completion file.
+	Use:   "autocomplete [shell]",
+	Short: "generate autocompletion script for CockroachDB",
+	Long: `Generate autocompletion script for CockroachDB.
 
-By default, completion file is written to ./cockroach.bash. Use "--out=/path/to/file" to
-override the file location.
+If no arguments are passed, or if 'bash' is passed, a bash completion file is
+written to ./cockroach.bash. If 'zsh' is passed, a zsh completion file is written
+to ./_cockroach. Use "--out=/path/to/file" to override the output file location.
 
-Note that for the generated file to work on OS X, you'll need to install Homebrew's bash-completion
-package (or an equivalent) and follow the post-install instructions.
+Note that for the generated file to work on OS X with bash, you'll need to install
+Homebrew's bash-completion package (or an equivalent) and follow the post-install
+instructions.
 `,
-	RunE: MaybeDecorateGRPCError(runGenAutocompleteCmd),
+	Args:      cobra.OnlyValidArgs,
+	ValidArgs: []string{"bash", "zsh"},
+	RunE:      MaybeDecorateGRPCError(runGenAutocompleteCmd),
 }
 
 func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
+	var shell string
 	if len(args) > 0 {
-		return usageAndError(cmd)
+		shell = args[0]
+	} else {
+		shell = "bash"
 	}
-	if err := cmd.Root().GenBashCompletionFile(autoCompletePath); err != nil {
-		return err
+
+	var err error
+	switch shell {
+	case "bash":
+		if autoCompletePath == "" {
+			autoCompletePath = "cockroach.bash"
+		}
+		err = cmd.Root().GenBashCompletionFile(autoCompletePath)
+	case "zsh":
+		if autoCompletePath == "" {
+			autoCompletePath = "_cockroach"
+		}
+		err = cmd.Root().GenZshCompletionFile(autoCompletePath)
 	}
-	fmt.Println("Generated bash completion file", autoCompletePath)
+	if err != nil {
+		return nil
+	}
+
+	fmt.Printf("Generated %s completion file: %s\n", shell, autoCompletePath)
 	return nil
 }
 
@@ -123,7 +142,7 @@ var genCmds = []*cobra.Command{
 func init() {
 	genManCmd.PersistentFlags().StringVar(&manPath, "path", "man/man1",
 		"path where man pages will be outputted")
-	genAutocompleteCmd.PersistentFlags().StringVar(&autoCompletePath, "out", "cockroach.bash",
+	genAutocompleteCmd.PersistentFlags().StringVar(&autoCompletePath, "out", "",
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")

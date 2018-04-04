@@ -76,12 +76,14 @@ func TestHandleCSV(t *testing.T) {
 func BenchmarkWriteCSVRows(b *testing.B) {
 	ctx := context.Background()
 
-	var rows [][]interface{}
+	var rows [][][]interface{}
 	for _, table := range tpcc.FromWarehouses(1).Tables() {
-		rows = append(rows, table.InitialRowFn(0))
+		rows = append(rows, table.InitialRows.Batch(0))
 	}
 	table := workload.Table{
-		InitialRowFn: func(rowIdx int) []interface{} { return rows[rowIdx] },
+		InitialRows: workload.BatchedTuples{
+			Batch: func(rowIdx int) [][]interface{} { return rows[rowIdx] },
+		},
 	}
 
 	var buf bytes.Buffer

@@ -267,7 +267,7 @@ func evalEndTransaction(
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
-		return result.Result{}, roachpb.NewTransactionStatusError("does not exist")
+		return result.Result{}, roachpb.NewTransactionNotFoundStatusError()
 	}
 	// We're using existingTxn on the reply, although it can be stale
 	// compared to the Transaction in the request (e.g. the Sequence,

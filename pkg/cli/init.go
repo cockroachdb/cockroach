@@ -38,6 +38,7 @@ must appear in the --join flags of other nodes.
 A node started without the --join flag initializes itself as a
 single-node cluster, so the init command is not used in that case.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeShoutError(MaybeDecorateGRPCError(runInit)),
 }
 

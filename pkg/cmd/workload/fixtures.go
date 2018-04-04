@@ -75,7 +75,7 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 	`Only load the tables with the given comma-separated names`)
 
 var fixturesLoadRunChecks = fixturesLoadCmd.PersistentFlags().Bool(
-	`checks`, false, `Run validity checks on the loaded fixture`)
+	`checks`, true, `Run validity checks on the loaded fixture`)
 
 // gcs-bucket-override and gcs-prefix-override are exposed for testing.
 var gcsBucketOverride, gcsPrefixOverride *string
@@ -236,15 +236,9 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 		return errors.Wrap(err, `restoring fixture`)
 	}
 
-	if !*fixturesLoadRunChecks {
-		return nil
-	}
-	log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
-	if err := workload.ValidateInitialData(ctx, sqlDB, gen.Tables()); err != nil {
-		return err
-	}
-	if hooks, ok := gen.(workload.Hookser); ok {
+	if hooks, ok := gen.(workload.Hookser); *fixturesLoadRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
+			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}

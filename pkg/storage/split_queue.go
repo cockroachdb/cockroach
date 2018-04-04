@@ -91,6 +91,25 @@ func (sq *splitQueue) shouldQueue(
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
+	err := sq.processAttempt(ctx, r, sysCfg)
+	switch errors.Cause(err).(type) {
+	case nil:
+	case *roachpb.ConditionFailedError:
+		// ConditionFailedErrors are an expected outcome for range split
+		// attempts because splits can race with other descriptor modifications.
+		// On seeing a ConditionFailedError, don't return an error and enqueue
+		// this replica again in case it still needs to be split.
+		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
+		sq.MaybeAdd(r, sq.store.Clock().Now())
+	default:
+		return err
+	}
+	return nil
+}
+
+func (sq *splitQueue) processAttempt(
+	ctx context.Context, r *Replica, sysCfg config.SystemConfig,
+) error {
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {

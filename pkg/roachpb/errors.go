@@ -396,7 +396,7 @@ func (e *TransactionRetryError) Error() string {
 }
 
 func (e *TransactionRetryError) message(pErr *Error) string {
-	return fmt.Sprintf("TransactionRetryError: retry txn (%s): %s", e.Reason, pErr.GetTxn())
+	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
 }
 
 var _ ErrorDetailInterface = &TransactionRetryError{}
@@ -424,15 +424,27 @@ var _ ErrorDetailInterface = &TransactionReplayError{}
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given message.
 func NewTransactionStatusError(msg string) *TransactionStatusError {
-	return &TransactionStatusError{Msg: msg}
+	return &TransactionStatusError{
+		Msg:    msg,
+		Reason: TransactionStatusError_REASON_UNKNOWN,
+	}
+}
+
+// NewTransactionNotFoundStatusError initializes a new TransactionStatusError with
+// a REASON_TXN_NOT_FOUND reason.
+func NewTransactionNotFoundStatusError() *TransactionStatusError {
+	return &TransactionStatusError{
+		Msg:    "txn record not found",
+		Reason: TransactionStatusError_REASON_TXN_NOT_FOUND,
+	}
 }
 
 func (e *TransactionStatusError) Error() string {
-	return "TransactionStatusError: " + e.Msg
+	return fmt.Sprintf("TransactionStatusError: %s (%s)", e.Msg, e.Reason)
 }
 
 func (e *TransactionStatusError) message(pErr *Error) string {
-	return fmt.Sprintf("txn %s: %s", pErr.GetTxn(), e.Msg)
+	return fmt.Sprintf("%s: %s", e.Error(), pErr.GetTxn())
 }
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
@@ -647,3 +659,13 @@ func (e *MixedSuccessError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &MixedSuccessError{}
+
+func (e *BatchTimestampBeforeGCError) Error() string {
+	return e.message(nil)
+}
+
+func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
+	return fmt.Sprintf("batch timestamp %v must be after GC threshold %v", e.Timestamp, e.Threshold)
+}
+
+var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
