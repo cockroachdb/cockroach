@@ -375,6 +375,9 @@ type processorBase struct {
 	// ctx to this.
 	origCtx context.Context
 
+	// stats are the stats collected for a processor.
+	stats []StatSummarizer
+
 	// closed is used for closing a processor when used as a RowSource.
 	closed bool
 }
