@@ -136,7 +136,6 @@ func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 	return row, nil
 }
-
 func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
 func (w rowFetcherWrapper) ConsumerDone()                     {}
 func (w rowFetcherWrapper) ConsumerClosed()                   {}

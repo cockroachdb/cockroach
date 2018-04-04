@@ -40,6 +40,8 @@ type streamGroupAccumulator struct {
 	// accumulator after the current group is returned, so the accumulator can
 	// resume later.
 	leftoverRow sqlbase.EncDatumRow
+
+	rowAlloc sqlbase.EncDatumRowAlloc
 }
 
 func makeStreamGroupAccumulator(
@@ -81,6 +83,8 @@ func (s *streamGroupAccumulator) nextGroup(
 			s.srcConsumed = true
 			return s.curGroup, nil
 		}
+
+		row = s.rowAlloc.CopyRow(row)
 
 		if len(s.curGroup) == 0 {
 			if s.curGroup == nil {

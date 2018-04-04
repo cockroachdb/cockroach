@@ -215,6 +215,7 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	bufferPhaseOom := false
 	if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeOutOfMemoryError {
+		log.VEvent(ctx, 1, "buffer phase ran out of memory")
 		bufferPhaseOom = true
 	}
 
@@ -359,6 +360,7 @@ func (h *hashJoiner) bufferPhase(
 	// choose the right stream and consume it.
 	h.storedSide = rightSide
 
+	log.VEvent(ctx, 1, "buffer phase found no short stream")
 	for {
 		if err := h.cancelChecker.Check(); err != nil {
 			return nil, false, err
@@ -702,6 +704,7 @@ func (h *hashJoiner) receiveRow(
 		}
 		if !hasNull {
 			// Normal path.
+			row = h.out.rowAlloc.CopyRow(row)
 			return row, false, nil
 		}
 
