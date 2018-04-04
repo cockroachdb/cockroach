@@ -449,6 +449,8 @@ func StringTuple(datums []interface{}) []string {
 		switch x := datum.(type) {
 		case int:
 			s[i] = strconv.Itoa(x)
+		case uint64:
+			s[i] = strconv.FormatUint(x, 10)
 		case string:
 			s[i] = lex.EscapeSQLString(x)
 		case float64:
