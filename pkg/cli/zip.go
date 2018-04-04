@@ -23,10 +23,12 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var debugZipCmd = &cobra.Command{
@@ -98,6 +100,8 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
 		base         = "debug"
 		eventsName   = base + "/events"
+		gossipLName  = base + "/gossip/liveness"
+		gossipNName  = base + "/gossip/nodes"
 		livenessName = base + "/liveness"
 		nodesPrefix  = base + "/nodes"
 		schemaPrefix = base + "/schema"
@@ -108,10 +112,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, _, finish, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(baseCtx)
 	if err != nil {
 		return err
 	}
@@ -119,6 +123,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)
+
+	sqlConn, err := getPasswordAndMakeSQLClient("cockroach sql")
+	if err != nil {
+		log.Warningf(baseCtx, "unable to open a SQL session. Debug information will be incomplete: %s", err)
+	}
+	defer sqlConn.Close()
 
 	name := args[0]
 	out, err := os.Create(name)
@@ -130,115 +140,217 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	z := newZipper(out)
 	defer z.close()
 
-	if events, err := admin.Events(ctx, &serverpb.EventsRequest{}); err != nil {
-		if err := z.createError(eventsName, err); err != nil {
+	timeoutCtx := func(baseCtx context.Context) (context.Context, func()) {
+		timeout := 10 * time.Second
+		if cliCtx.cmdTimeout != 0 {
+			timeout = cliCtx.cmdTimeout
+		}
+		return context.WithTimeout(baseCtx, timeout)
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if events, err := admin.Events(ctx, &serverpb.EventsRequest{}); err != nil {
+			if err := z.createError(eventsName, err); err != nil {
+				return err
+			}
+		} else {
+			if err := z.createJSON(eventsName, events); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if liveness, err := admin.Liveness(ctx, &serverpb.LivenessRequest{}); err != nil {
+			if err := z.createError(livenessName, err); err != nil {
+				return err
+			}
+		} else {
+			if err := z.createJSON(livenessName, liveness); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if settings, err := admin.Settings(ctx, &serverpb.SettingsRequest{}); err != nil {
+			if err := z.createError(settingsName, err); err != nil {
+				return err
+			}
+		} else {
+			if err := z.createJSON(settingsName, settings); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		queryLiveness := "SELECT * FROM crdb_internal.gossip_liveness;"
+		queryNodes := "SELECT * FROM crdb_internal.gossip_nodes;"
+
+		if err := dumpGossipData(z, sqlConn, queryLiveness, gossipLName); err != nil {
 			return err
 		}
-	} else {
-		if err := z.createJSON(eventsName, events); err != nil {
+		if err := dumpGossipData(z, sqlConn, queryNodes, gossipNName); err != nil {
 			return err
 		}
 	}
 
-	if liveness, err := admin.Liveness(ctx, &serverpb.LivenessRequest{}); err != nil {
-		if err := z.createError(livenessName, err); err != nil {
-			return err
-		}
-	} else {
-		if err := z.createJSON(livenessName, liveness); err != nil {
-			return err
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if nodes, err := status.Nodes(ctx, &serverpb.NodesRequest{}); err != nil {
+			if err := z.createError(nodesPrefix, err); err != nil {
+				return err
+			}
+		} else {
+			for _, node := range nodes.Nodes {
+				id := fmt.Sprintf("%d", node.Desc.NodeID)
+				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+				if err := z.createJSON(prefix+"/status", node); err != nil {
+					return err
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if gossip, err := status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id}); err != nil {
+						if err := z.createError(prefix+"/gossip", err); err != nil {
+							return err
+						}
+					} else if err := z.createJSON(prefix+"/gossip", gossip); err != nil {
+						return err
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id}); err != nil {
+						if err := z.createError(prefix+"/stacks", err); err != nil {
+							return err
+						}
+					} else if err := z.createRaw(prefix+"/stacks", stacks.Data); err != nil {
+						return err
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
+						NodeId: id,
+						Type:   serverpb.ProfileRequest_HEAP,
+					}); err != nil {
+						if err := z.createError(prefix+"/heap", err); err != nil {
+							return err
+						}
+					} else if err := z.createRaw(prefix+"/heap", heap.Data); err != nil {
+						return err
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if logs, err := status.LogFilesList(
+						ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
+						if err := z.createError(prefix+"/logs", err); err != nil {
+							return err
+						}
+					} else {
+						for _, file := range logs.Files {
+							name := prefix + "/logs/" + file.Name
+							ctx, cancel := timeoutCtx(baseCtx)
+							defer cancel()
+							entries, err := status.LogFile(
+								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+							if err != nil {
+								if err := z.createError(name, err); err != nil {
+									return err
+								}
+								continue
+							}
+							logOut, err := z.create(name)
+							if err != nil {
+								return err
+							}
+							for _, e := range entries.Entries {
+								if err := e.Format(logOut); err != nil {
+									return err
+								}
+							}
+						}
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					if ranges, err := status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id}); err != nil {
+						if err := z.createError(prefix+"/ranges", err); err != nil {
+							return err
+						}
+					} else {
+						sort.Slice(ranges.Ranges, func(i, j int) bool {
+							return ranges.Ranges[i].State.Desc.RangeID <
+								ranges.Ranges[j].State.Desc.RangeID
+						})
+						for _, r := range ranges.Ranges {
+							name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
+							if err := z.createJSON(name, r); err != nil {
+								return err
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
-	if settings, err := admin.Settings(ctx, &serverpb.SettingsRequest{}); err != nil {
-		if err := z.createError(settingsName, err); err != nil {
-			return err
-		}
-	} else {
-		if err := z.createJSON(settingsName, settings); err != nil {
-			return err
-		}
-	}
-
-	if nodes, err := status.Nodes(ctx, &serverpb.NodesRequest{}); err != nil {
-		if err := z.createError(nodesPrefix, err); err != nil {
-			return err
-		}
-	} else {
-		for _, node := range nodes.Nodes {
-			id := fmt.Sprintf("%d", node.Desc.NodeID)
-			prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
-			if err := z.createJSON(prefix+"/status", node); err != nil {
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if databases, err := admin.Databases(ctx, &serverpb.DatabasesRequest{}); err != nil {
+			if err := z.createError(schemaPrefix, err); err != nil {
 				return err
 			}
-
-			if gossip, err := status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id}); err != nil {
-				if err := z.createError(prefix+"/gossip", err); err != nil {
+		} else {
+			for _, dbName := range databases.Databases {
+				prefix := schemaPrefix + "/" + dbName
+				ctx, cancel := timeoutCtx(baseCtx)
+				defer cancel()
+				database, err := admin.DatabaseDetails(
+					ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
+				if err != nil {
+					if err := z.createError(prefix, err); err != nil {
+						return err
+					}
+					continue
+				}
+				if err := z.createJSON(prefix+"@details", database); err != nil {
 					return err
 				}
-			} else if err := z.createJSON(prefix+"/gossip", gossip); err != nil {
-				return err
-			}
 
-			if stacks, err := status.Stacks(ctx, &serverpb.StacksRequest{NodeId: id}); err != nil {
-				if err := z.createError(prefix+"/stacks", err); err != nil {
-					return err
-				}
-			} else if err := z.createRaw(prefix+"/stacks", stacks.Data); err != nil {
-				return err
-			}
-
-			if heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
-				NodeId: id,
-				Type:   serverpb.ProfileRequest_HEAP,
-			}); err != nil {
-				if err := z.createError(prefix+"/heap", err); err != nil {
-					return err
-				}
-			} else if err := z.createRaw(prefix+"/heap", heap.Data); err != nil {
-				return err
-			}
-
-			if logs, err := status.LogFilesList(
-				ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
-				if err := z.createError(prefix+"/logs", err); err != nil {
-					return err
-				}
-			} else {
-				for _, file := range logs.Files {
-					name := prefix + "/logs/" + file.Name
-					entries, err := status.LogFile(
-						ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+				for _, tableName := range database.TableNames {
+					name := prefix + "/" + tableName
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
+					table, err := admin.TableDetails(
+						ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
 					if err != nil {
 						if err := z.createError(name, err); err != nil {
 							return err
 						}
 						continue
 					}
-					logOut, err := z.create(name)
-					if err != nil {
-						return err
-					}
-					for _, e := range entries.Entries {
-						if err := e.Format(logOut); err != nil {
-							return err
-						}
-					}
-				}
-			}
-
-			if ranges, err := status.Ranges(ctx, &serverpb.RangesRequest{NodeId: id}); err != nil {
-				if err := z.createError(prefix+"/ranges", err); err != nil {
-					return err
-				}
-			} else {
-				sort.Slice(ranges.Ranges, func(i, j int) bool {
-					return ranges.Ranges[i].State.Desc.RangeID <
-						ranges.Ranges[j].State.Desc.RangeID
-				})
-				for _, r := range ranges.Ranges {
-					name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-					if err := z.createJSON(name, r); err != nil {
+					if err := z.createJSON(name, table); err != nil {
 						return err
 					}
 				}
@@ -246,39 +358,18 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if databases, err := admin.Databases(ctx, &serverpb.DatabasesRequest{}); err != nil {
-		if err := z.createError(schemaPrefix, err); err != nil {
-			return err
-		}
-	} else {
-		for _, dbName := range databases.Databases {
-			prefix := schemaPrefix + "/" + dbName
-			database, err := admin.DatabaseDetails(
-				ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
-			if err != nil {
-				if err := z.createError(prefix, err); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := z.createJSON(prefix+"@details", database); err != nil {
-				return err
-			}
+	return nil
+}
 
-			for _, tableName := range database.TableNames {
-				name := prefix + "/" + tableName
-				table, err := admin.TableDetails(
-					ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
-				if err != nil {
-					if err := z.createError(name, err); err != nil {
-						return err
-					}
-					continue
-				}
-				if err := z.createJSON(name, table); err != nil {
-					return err
-				}
-			}
+func dumpGossipData(z *zipper, conn *sqlConn, query string, name string) error {
+	w, err := z.create(name)
+	if err != nil {
+		return err
+	}
+
+	if err = runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
+		if err := z.createError(name, err); err != nil {
+			return err
 		}
 	}
 
