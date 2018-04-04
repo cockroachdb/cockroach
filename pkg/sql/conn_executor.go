@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -379,6 +378,7 @@ func (s *Server) ServeConn(
 	clientComm ClientComm,
 	reserved mon.BoundAccount,
 	memMetrics *MemoryMetrics,
+	cancel context.CancelFunc,
 ) error {
 	// Create the various monitors. They are Start()ed later.
 	//
@@ -457,7 +457,7 @@ func (s *Server) ServeConn(
 	}
 	ex.extraTxnState.txnRewindPos = -1
 
-	ex.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
+	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.dataMutator = sessionDataMutator{
@@ -488,7 +488,7 @@ func (s *Server) ServeConn(
 		r := recover()
 		ex.closeWrapper(ctx, r)
 	}()
-	return ex.run(ctx)
+	return ex.run(ctx, cancel)
 }
 
 type closeType bool
@@ -707,7 +707,7 @@ type connExecutor struct {
 		syncutil.RWMutex
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[uint128.Uint128]*queryMeta
+		ActiveQueries map[ClusterWideID]*queryMeta
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
@@ -717,6 +717,8 @@ type connExecutor struct {
 	// curStmt is the statement that's currently being prepared or executed, if
 	// any. This is printed by high-level panic recovery.
 	curStmt tree.Statement
+
+	sessionID ClusterWideID
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -726,6 +728,7 @@ type connExecutor struct {
 type ctxHolder struct {
 	connCtx           context.Context
 	sessionTracingCtx context.Context
+	cancel            context.CancelFunc
 }
 
 func (ch *ctxHolder) ctx() context.Context {
@@ -864,11 +867,14 @@ func (ex *connExecutor) Ctx() context.Context {
 // also have an error from the reading side), or some other unexpected failure.
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
-func (ex *connExecutor) run(ctx context.Context) error {
-	ex.server.cfg.SessionRegistry.register(ex)
-	defer ex.server.cfg.SessionRegistry.deregister(ex)
-
+func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) error {
 	ex.ctxHolder.connCtx = ctx
+	ex.ctxHolder.cancel = cancel
+
+	ex.sessionID = ex.generateID()
+	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
+	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
+
 	var draining bool
 	for {
 		ex.curStmt = nil
@@ -1305,15 +1311,11 @@ func stmtHasNoData(stmt tree.Statement) bool {
 	return stmt == nil || stmt.StatementType() != tree.Rows
 }
 
-// generateQueryID generates a unique ID for a query based on the node's
-// ID and its current HLC timestamp.
-func (ex *connExecutor) generateQueryID() uint128.Uint128 {
-	timestamp := ex.server.cfg.Clock.Now()
-
-	loInt := (uint64)(ex.server.cfg.NodeID.Get())
-	loInt = loInt | ((uint64)(timestamp.Logical) << 32)
-
-	return uint128.FromInts((uint64)(timestamp.WallTime), loInt)
+// generateID generates a unique ID based on the node's ID and its current HLC
+// timestamp. These IDs are either scoped at the query level or at the session
+// level.
+func (ex *connExecutor) generateID() ClusterWideID {
+	return GenerateClusterWideID(ex.server.cfg.Clock.Now(), ex.server.cfg.NodeID.Get())
 }
 
 // commitPrepStmtNamespace deallocates everything in
@@ -1725,7 +1727,7 @@ func (ex *connExecutor) newStatsCollector() sqlStatsCollector {
 }
 
 // cancelQuery is part of the registrySession interface.
-func (ex *connExecutor) cancelQuery(queryID uint128.Uint128) bool {
+func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {
@@ -1733,6 +1735,12 @@ func (ex *connExecutor) cancelQuery(queryID uint128.Uint128) bool {
 		return true
 	}
 	return false
+}
+
+// cancelSession is part of the registrySession interface.
+func (ex *connExecutor) cancelSession() {
+	// TODO(abhimadan): figure out how to send a nice error message to the client.
+	ex.ctxHolder.cancel()
 }
 
 // user is part of the registrySession interface.
@@ -1801,6 +1809,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
+		ID:              ex.sessionID.GetBytes(),
 	}
 }
 

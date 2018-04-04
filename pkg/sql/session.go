@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -229,7 +228,7 @@ type Session struct {
 
 	// ActiveSyncQueries contains query IDs of all synchronous (i.e. non-parallel)
 	// queries in flight. All ActiveSyncQueries must also be in mu.ActiveQueries.
-	ActiveSyncQueries []uint128.Uint128
+	ActiveSyncQueries []ClusterWideID
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
@@ -245,7 +244,7 @@ type Session struct {
 		//
 
 		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[uint128.Uint128]*queryMeta
+		ActiveQueries map[ClusterWideID]*queryMeta
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
@@ -271,6 +270,8 @@ type Session struct {
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
 	noCopy util.NoCopy
+
+	sessionID ClusterWideID
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
@@ -292,30 +293,31 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[registrySession]struct{}
+	store map[ClusterWideID]registrySession
 }
 
 // MakeSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[registrySession]struct{})}
+	return &SessionRegistry{store: make(map[ClusterWideID]registrySession)}
 }
 
-func (r *SessionRegistry) register(s registrySession) {
+func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
 	r.Lock()
-	r.store[s] = struct{}{}
+	r.store[id] = s
 	r.Unlock()
 }
 
-func (r *SessionRegistry) deregister(s registrySession) {
+func (r *SessionRegistry) deregister(id ClusterWideID) {
 	r.Lock()
-	delete(r.store, s)
+	delete(r.store, id)
 	r.Unlock()
 }
 
 type registrySession interface {
 	user() string
-	cancelQuery(queryID uint128.Uint128) bool
+	cancelQuery(queryID ClusterWideID) bool
+	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
 	serialize() serverpb.Session
@@ -323,7 +325,7 @@ type registrySession interface {
 
 // CancelQuery looks up the associated query in the session registry and cancels it.
 func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool, error) {
-	queryID, err := uint128.FromString(queryIDStr)
+	queryID, err := StringToClusterWideID(queryIDStr)
 	if err != nil {
 		return false, fmt.Errorf("query ID %s malformed: %s", queryID, err)
 	}
@@ -331,7 +333,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	r.Lock()
 	defer r.Unlock()
 
-	for session := range r.store {
+	for _, session := range r.store {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -345,6 +347,28 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	return false, fmt.Errorf("query ID %s not found", queryID)
 }
 
+// CancelSession looks up the specified session in the session registry and cancels it.
+func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) (bool, error) {
+	sessionID := BytesToClusterWideID(sessionIDBytes)
+
+	r.Lock()
+	defer r.Unlock()
+
+	for id, session := range r.store {
+		if !(username == security.RootUser || username == session.user()) {
+			// Skip this session.
+			continue
+		}
+
+		if id == sessionID {
+			session.cancelSession()
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("session ID %s not found", sessionID)
+}
+
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
 func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
@@ -352,7 +376,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 
 	response := make([]serverpb.Session, 0, len(r.store))
 
-	for s := range r.store {
+	for _, s := range r.store {
 		response = append(response, s.serialize())
 	}
 
@@ -415,8 +439,8 @@ func NewSession(
 	s.dataMutator.SetApplicationName(args.ApplicationName)
 	s.PreparedStatements = makePreparedStatements(s)
 	s.PreparedPortals = makePreparedPortals(s)
-	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
-	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
+	s.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	s.ActiveSyncQueries = make([]ClusterWideID, 0)
 
 	remoteStr := "<admin>"
 	if args.RemoteAddr != nil {
@@ -429,7 +453,8 @@ func NewSession(
 	}
 	s.context, s.cancel = contextutil.WithCancel(ctx)
 
-	e.cfg.SessionRegistry.register(s)
+	s.sessionID = e.generateID()
+	e.cfg.SessionRegistry.register(s.sessionID, s)
 
 	return s
 }
@@ -500,7 +525,7 @@ func (s *Session) Finish(e *Executor) {
 		}
 	}
 	// Clear this session from the sessions registry.
-	e.cfg.SessionRegistry.deregister(s)
+	e.cfg.SessionRegistry.deregister(s.sessionID)
 
 	// This will stop the heartbeating of the of the txn record.
 	// TODO(andrei): This shouldn't have any effect, since, if there was a
@@ -604,7 +629,7 @@ func (s *Session) FinishPlan() {
 			delete(s.mu.ActiveQueries, queryID)
 		}
 		s.mu.Unlock()
-		s.ActiveSyncQueries = make([]uint128.Uint128, 0)
+		s.ActiveSyncQueries = make([]ClusterWideID, 0)
 	}
 
 	s.planner = planner{execCfg: s.execCfg}
@@ -699,7 +724,7 @@ func (s *Session) resetForBatch(e *Executor) {
 // addActiveQuery adds a running query to the session's internal store of active
 // queries, as well as to the executor's query registry. Called from executor
 // before start of execution.
-func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) {
+func (s *Session) addActiveQuery(queryID ClusterWideID, queryMeta *queryMeta) {
 	s.mu.Lock()
 	s.mu.ActiveQueries[queryID] = queryMeta
 	s.mu.Unlock()
@@ -713,7 +738,7 @@ func (s *Session) addActiveQuery(queryID uint128.Uint128, queryMeta *queryMeta) 
 // removeActiveQuery removes a query from a session's internal store of active
 // queries, as well as from the executor's query registry.
 // Called when a query finishes execution.
-func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
+func (s *Session) removeActiveQuery(queryID ClusterWideID) {
 	s.mu.Lock()
 	queryMeta, ok := s.mu.ActiveQueries[queryID]
 	if ok {
@@ -726,7 +751,7 @@ func (s *Session) removeActiveQuery(queryID uint128.Uint128) {
 // setQueryExecutionMode is called upon start of execution of a query, and sets
 // the query's metadata to indicate whether it's distributed or not.
 func (s *Session) setQueryExecutionMode(
-	queryID uint128.Uint128, isDistributed bool, isParallel bool,
+	queryID ClusterWideID, isDistributed bool, isParallel bool,
 ) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -867,6 +892,7 @@ func (s *Session) serialize() serverpb.Session {
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
+		ID:              s.sessionID.GetBytes(),
 	}
 }
 
@@ -1448,7 +1474,7 @@ func (s *Session) maybeRecover(action, stmts string) {
 }
 
 // cancelQuery is part of the registrySession interface.
-func (s *Session) cancelQuery(queryID uint128.Uint128) bool {
+func (s *Session) cancelQuery(queryID ClusterWideID) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if queryMeta, exists := s.mu.ActiveQueries[queryID]; exists {
@@ -1456,6 +1482,11 @@ func (s *Session) cancelQuery(queryID uint128.Uint128) bool {
 		return true
 	}
 	return false
+}
+
+// cancelSession is part of the registrySession interface.
+func (s *Session) cancelSession() {
+	s.cancel()
 }
 
 // user is part of the registrySession interface.
