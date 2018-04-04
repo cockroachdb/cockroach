@@ -663,6 +663,7 @@ unreserved_keyword ::=
 	| 'INCREMENTAL'
 	| 'INDEXES'
 	| 'INET'
+	| 'INJECT'
 	| 'INSERT'
 	| 'INT2'
 	| 'INT2VECTOR'
@@ -1718,6 +1719,7 @@ alter_table_cmd ::=
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
 	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by
+	| 'INJECT' 'STATISTICS' a_expr
 
 alter_index_cmd ::=
 	partition_by
