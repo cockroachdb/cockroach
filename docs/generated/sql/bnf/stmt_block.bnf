@@ -32,6 +32,7 @@ stmt ::=
 	| reset_stmt
 	| set_stmt
 	| show_stmt
+	| inject_stats_stmt
 	| transaction_stmt
 	| truncate_stmt
 	| update_stmt
@@ -159,6 +160,9 @@ show_stmt ::=
 	| show_tables_stmt
 	| show_trace_stmt
 	| show_users_stmt
+
+inject_stats_stmt ::=
+	'INJECT' 'STATISTICS' 'FOR' 'TABLE' table_name a_expr
 
 transaction_stmt ::=
 	begin_stmt
@@ -663,6 +667,7 @@ unreserved_keyword ::=
 	| 'INCREMENTAL'
 	| 'INDEXES'
 	| 'INET'
+	| 'INJECT'
 	| 'INSERT'
 	| 'INT2'
 	| 'INT2VECTOR'

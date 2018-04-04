@@ -481,7 +481,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
 %token <str>   INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
-%token <str>   INET_CONTAINS_OR_EQUALS INTERLEAVE INDEX INDEXES INITIALLY
+%token <str>   INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
 
@@ -651,6 +651,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> deallocate_stmt
 %type <tree.Statement> grant_stmt
 %type <tree.Statement> insert_stmt
+%type <tree.Statement> inject_stats_stmt
 %type <tree.Statement> import_stmt
 %type <tree.Statement> pause_stmt
 %type <tree.Statement> release_stmt
@@ -1044,14 +1045,15 @@ stmt:
   {
     $$.val = $1.slct()
   }
-| release_stmt     // EXTEND WITH HELP: RELEASE
-| reset_stmt       // help texts in sub-rule
-| set_stmt         // help texts in sub-rule
-| show_stmt        // help texts in sub-rule
-| transaction_stmt // help texts in sub-rule
-| truncate_stmt    // EXTEND WITH HELP: TRUNCATE
-| update_stmt      // EXTEND WITH HELP: UPDATE
-| upsert_stmt      // EXTEND WITH HELP: UPSERT
+| release_stmt      // EXTEND WITH HELP: RELEASE
+| reset_stmt        // help texts in sub-rule
+| set_stmt          // help texts in sub-rule
+| show_stmt         // help texts in sub-rule
+| inject_stats_stmt // help texts in sub-rule
+| transaction_stmt  // help texts in sub-rule
+| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -2567,6 +2569,15 @@ zone_value:
 | LOCAL
   {
     $$.val = tree.NewStrVal($1)
+  }
+
+inject_stats_stmt:
+  INJECT STATISTICS FOR TABLE table_name a_expr
+  {
+    $$.val = &tree.InjectTableStats{
+      Table: $5.normalizableTableNameFromUnresolvedName(),
+      Stats: $6.expr(),
+    }
   }
 
 // %Help: SHOW
@@ -7492,6 +7503,7 @@ unreserved_keyword:
 | INCREMENTAL
 | INDEXES
 | INET
+| INJECT
 | INSERT
 | INT2
 | INT2VECTOR

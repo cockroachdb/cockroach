@@ -396,6 +396,15 @@ func (*GrantRole) StatementTag() string { return "GRANT" }
 func (*GrantRole) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*InjectTableStats) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*InjectTableStats) StatementTag() string { return "INJECT STATISTICS" }
+
+func (*InjectTableStats) hiddenFromStats()                   {}
+func (*InjectTableStats) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -891,6 +900,7 @@ func (n *Execute) String() string                   { return AsString(n) }
 func (n *Explain) String() string                   { return AsString(n) }
 func (n *Grant) String() string                     { return AsString(n) }
 func (n *GrantRole) String() string                 { return AsString(n) }
+func (n *InjectTableStats) String() string          { return AsString(n) }
 func (n *Insert) String() string                    { return AsString(n) }
 func (n *Import) String() string                    { return AsString(n) }
 func (n *ParenSelect) String() string               { return AsString(n) }
