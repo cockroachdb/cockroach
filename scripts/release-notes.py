@@ -28,6 +28,7 @@ import subprocess
 from git import Repo
 from optparse import OptionParser
 from git.repo.fun import name_to_object
+from git.util import Stats
 
 ### Global behavior constants ###
 
@@ -349,6 +350,7 @@ def analyze_pr(merge, tip):
     print(pr, tip.hexsha, note)
 
 def analyze_pr_new(merge, pr):
+    # TODO(couchand): this should be config
     refname = "refs/pull/upstream/{0}".format(pr)
     tip = name_to_object(repo, refname)
 
@@ -361,13 +363,25 @@ def analyze_pr_new(merge, pr):
     else:
         note = m.group('message')
 
-    print(pr, tip.hexsha, note)
+    #print(pr, tip.hexsha, note)
+
+    merge_base_result = repo.merge_base(merge.parents[0], tip)
+    if len(merge_base_result) == 0:
+        print("uh-oh!  can't find merge base!  pr", pr)
+        exit(-1)
+
+    merge_base = merge_base_result[0]
 
     commit = tip
 
     authors = set()
     ncommits = 0
-    while not commit.message.startswith("Merge"):
+    while not merge_numbers.match(commit.message):
+        if commit.message.startswith("Merge branch"):
+            # TODO(couchand): something
+            print("uh-oh!  can't handle branch merges!  pr", pr)
+            break
+
         ncommits += 1
         author = author_aliases.get(commit.author.name, commit.author.name)
         if author != 'GitHub':
@@ -380,7 +394,30 @@ def analyze_pr_new(merge, pr):
             break
         commit = commit.parents[0]
 
-    print(list(authors))
+    #print(ncommits, ", ".join(sorted(authors)))
+
+    text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
+    stats = Stats._list_from_string(repo, text)
+
+    #print(stats.total)
+    #print(stats['insertions'], stats['deletions'], stats['files'], stats['lines'])
+        #    'insertions': stats['insertions'],
+        #    'deletions': stats['deletions'],
+        #    'files': stats['files'],
+        #    'lines': stats['lines'],
+
+    item = {
+        'title': note,
+        'pr': pr,
+        'sha': tip.hexsha[:shamin],
+        'ncommits': ncommits,
+        'authors': ", ".join(sorted(authors)),
+        'insertions': stats.total['insertions'],
+        'deletions': stats.total['deletions'],
+        'files': stats.total['files'],
+        'lines': stats.total['lines'],
+        }
+    print(item)
 
 while commit != firstCommit:
     # TODO(couchand): spin
