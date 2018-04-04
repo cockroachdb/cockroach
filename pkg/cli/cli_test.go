@@ -2120,6 +2120,8 @@ writing ` + os.DevNull + `
   debug/events
   debug/liveness
   debug/settings
+  debug/gossip/liveness
+  debug/gossip/nodes
   debug/nodes/1/status
   debug/nodes/1/gossip
   debug/nodes/1/stacks
