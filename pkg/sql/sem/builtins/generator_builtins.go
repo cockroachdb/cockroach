@@ -100,6 +100,23 @@ var Generators = map[string][]tree.Builtin{
 			"Returns the input array as a set of rows",
 		),
 	},
+	"information_schema._pg_expandarray": {
+		makeGeneratorBuiltinWithReturnType(
+			tree.ArgTypes{{"input", types.AnyArray}},
+			func(args []tree.TypedExpr) types.T {
+				if len(args) == 0 {
+					return tree.UnknownReturnType
+				}
+				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
+				return types.TTable{
+					Cols:   types.TTuple{t, types.Int},
+					Labels: expandArrayValueGeneratorLabels,
+				}
+			},
+			makeExpandArrayGenerator,
+			"Returns the input array as a set of rows with an index",
+		),
+	},
 	"crdb_internal.unary_table": {
 		makeGeneratorBuiltin(
 			tree.ArgTypes{},
@@ -384,6 +401,56 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (s *arrayValueGenerator) Values() tree.Datums {
 	return tree.Datums{s.array.Array[s.nextIndex]}
+}
+
+func makeExpandArrayGenerator(
+	evalCtx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	arr := tree.MustBeDArray(args[0])
+	return &expandArrayValueGenerator{avg: arrayValueGenerator{array: arr}}, nil
+}
+
+// expandArrayValueGenerator is a value generator that returns each element of
+// an array and an index for it.
+type expandArrayValueGenerator struct {
+	avg arrayValueGenerator
+}
+
+var expandArrayValueGeneratorLabels = []string{"x", "n"}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *expandArrayValueGenerator) ResolvedType() types.TTable {
+	return types.TTable{
+		Cols:   types.TTuple{s.avg.array.ParamTyp, types.Int},
+		Labels: expandArrayValueGeneratorLabels,
+	}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *expandArrayValueGenerator) Start() error {
+	s.avg.nextIndex = -1
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *expandArrayValueGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *expandArrayValueGenerator) Next() (bool, error) {
+	s.avg.nextIndex++
+	if s.avg.nextIndex >= s.avg.array.Len() {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *expandArrayValueGenerator) Values() tree.Datums {
+	// Expand array's index is 1 based.
+	return tree.Datums{
+		s.avg.array.Array[s.avg.nextIndex],
+		tree.NewDInt(tree.DInt(s.avg.nextIndex + 1)),
+	}
 }
 
 // EmptyDTable returns a new, empty tree.DTable.
