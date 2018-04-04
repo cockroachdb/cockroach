@@ -823,17 +823,7 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a transaction")
 		}
 
-		// older nodes don't know about many new fields, e.g. MVCCAll and may
-		// incorrectly evaluate either an export RPC, or a resumed backup job.
-		// VersionClearRange was introduced after most of these new fields and the
-		// jobs resume refactorings, though we may still wish to bump this to 2.0
-		// when that is defined.
-		if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionClearRange) {
-			return errors.Errorf(
-				"running BACKUP on a 2.x node requires cluster version >= %s (",
-				cluster.VersionByKey(cluster.VersionClearRange).String(),
-			)
-		}
+		requireVersion2 := false
 
 		to, err := toFn()
 		if err != nil {
@@ -866,6 +856,7 @@ func backupPlanHook(
 		mvccFilter := MVCCFilter_Latest
 		if _, ok := opts[backupOptRevisionHistory]; ok {
 			mvccFilter = MVCCFilter_All
+			requireVersion2 = true
 		}
 
 		targetDescs, completeDBs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
@@ -995,6 +986,22 @@ func backupPlanHook(
 				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
 		}
+
+		// older nodes don't know about many new fields, e.g. MVCCAll and may
+		// incorrectly evaluate either an export RPC, or a resumed backup job.
+		if requireVersion2 && !p.ExecCfg().Settings.Version.IsMinSupported(cluster.Version2_0) {
+			return errors.Errorf(
+				"BACKUP features introduced in 2.0 requires cluster version >= %s (",
+				cluster.VersionByKey(cluster.Version2_0).String(),
+			)
+		}
+
+		// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
+		// means that a 2.0 node will disallow `RESTORE DATABASE foo`, but `RESTORE
+		// foo.table1, foo.table2...` will still work. MVCCFilter would be
+		// mis-handled, but is disallowed above. IntroducedSpans may also be lost by
+		// a 1.x node, meaning that if 1.1 nodes may resume a backup, the limitation
+		// of requiring full backups after schema changes remains.
 
 		backupDesc := BackupDescriptor{
 			StartTime:         startTime,
