@@ -407,3 +407,91 @@ SELECT * FROM information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])
 c 1
 b 2
 a 3
+
+subtest srf_accessor
+
+query error pq: type int is not composite
+SELECT (1).*
+
+query error pq: type int is not composite
+SELECT (1).x
+
+query error pq: type string is not composite
+SELECT ('a').*
+
+query error pq: type string is not composite
+SELECT ('a').x
+
+query error pq: accessing the results of an SRF with a '\*' is not yet implemented
+SELECT (unnest(ARRAY[])).*
+
+query error pq: accessing the results of an SRF with a '\*' is not yet implemented
+SELECT (unnest(ARRAY[]:::INT)).*
+
+
+
+query error pq: accessing the results of an SRF with a '\*' is not yet implemented
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
+
+query T colnames
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
+----
+x
+c
+b
+a
+
+query I colnames
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).n
+----
+n
+1
+2
+3
+
+query error pq: could not identify column 'other' in sub expression
+SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).other
+
+query T colnames
+SELECT temp.x from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x
+c
+b
+a
+
+query I colnames
+SELECT temp.n from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+n
+1
+2
+3
+
+query error pq: column name "temp.other" not found
+SELECT temp.other from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+
+query TI colnames
+SELECT temp.* from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x n
+c 1
+b 2
+a 3
+
+query TI colnames
+SELECT * from information_schema._pg_expandarray(array['c','b','a']) AS temp;
+----
+x n
+c 1
+b 2
+a 3
+
+# This test case should work, but right now it doesn't.
+# query I colnames
+# SELECT (i.keys).n FROM (SELECT information_schema._pg_expandarray(ARRAY[3,2,1]) AS keys) AS i;
+# ----
+# n
+# 3
+# 2
+# 1
