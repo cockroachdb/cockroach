@@ -7677,6 +7677,8 @@ col_name_keyword:
 | TRIM
 | VALUES
 | VARCHAR
+| VIRTUAL
+| WORK
 
 // Type/function identifier --- keywords that can be type or function names.
 //
@@ -7794,11 +7796,9 @@ reserved_keyword:
 | USING
 | VARIADIC
 | VIEW
-| VIRTUAL
 | WHEN
 | WHERE
 | WINDOW
 | WITH
-| WORK
 
 %%
