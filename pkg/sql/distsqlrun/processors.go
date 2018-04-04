@@ -463,28 +463,6 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(ConsumerClosed))
 }
 
-// noopProcessor is a processor that simply passes rows through from the
-// synchronizer to the post-processing stage. It can be useful for its
-// post-processing or in the last stage of a computation, where we may only
-// need the synchronizer to join streams.
-type noopProcessor struct {
-	processorBase
-	input RowSource
-}
-
-var _ Processor = &noopProcessor{}
-var _ RowSource = &noopProcessor{}
-
-func newNoopProcessor(
-	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
-) (*noopProcessor, error) {
-	n := &noopProcessor{input: input}
-	if err := n.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
-		return nil, err
-	}
-	return n, nil
-}
-
 // processorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
@@ -494,87 +472,6 @@ func processorSpan(ctx context.Context, name string) (context.Context, opentraci
 	}
 	newSpan := tracing.StartChildSpan(name, parentSp, true /* separateRecording */)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
-}
-
-// Run is part of the processor interface.
-func (n *noopProcessor) Run(wg *sync.WaitGroup) {
-	if n.out.output == nil {
-		panic("noopProcessor output not initialized for emitting rows")
-	}
-	Run(n.flowCtx.Ctx, n, n.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
-func (n *noopProcessor) close() {
-	if n.internalClose() {
-		n.input.ConsumerClosed()
-	}
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !n.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(n.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		n.close()
-	}
-	return meta
-}
-
-// Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	n.maybeStart("noop", "" /* logTag */)
-
-	if n.closed {
-		return nil, n.producerMeta(nil /* err */)
-	}
-
-	for {
-		row, meta := n.input.Next()
-		if meta != nil {
-			return nil, meta
-		}
-		if row == nil {
-			return nil, n.producerMeta(nil /* err */)
-		}
-
-		outRow, status, err := n.out.ProcessRow(n.ctx, row)
-		if err != nil {
-			return nil, n.producerMeta(err)
-		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			n.input.ConsumerDone()
-			continue
-		}
-		return outRow, nil
-	}
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (n *noopProcessor) ConsumerDone() {
-	n.input.ConsumerDone()
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (n *noopProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	n.close()
 }
 
 func newProcessor(
