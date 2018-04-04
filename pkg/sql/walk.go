@@ -508,6 +508,11 @@ func (v *planVisitor) visit(plan planNode) {
 			v.expr(name, "queryID", -1, n.queryID)
 		}
 
+	case *cancelSessionNode:
+		if v.observer.expr != nil {
+			v.expr(name, "sessionID", -1, n.sessionID)
+		}
+
 	case *controlJobNode:
 		if v.observer.expr != nil {
 			v.expr(name, "jobID", -1, n.jobID)
@@ -562,6 +567,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&cancelQueryNode{}):          "cancel query",
+	reflect.TypeOf(&cancelSessionNode{}):        "cancel session",
 	reflect.TypeOf(&controlJobNode{}):           "control job",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
