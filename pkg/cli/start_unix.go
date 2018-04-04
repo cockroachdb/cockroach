@@ -19,11 +19,39 @@ package cli
 import (
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 )
+
+// drainSignals are the signals that will cause the server to drain and exit.
+//
+// If two drain signals are seen, the second drain signal will be reraised
+// without a signal handler. The default action of any signal listed here thus
+// must terminate the process.
+var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM, unix.SIGQUIT}
+
+func handleSignalDuringShutdown(sig os.Signal) {
+	// On Unix, a signal that was not handled gracefully by the application
+	// should be reraised so it is visible in the exit code.
+
+	// Reset signal to its original disposition.
+	signal.Reset(sig)
+
+	// Reraise the signal. os.Signal is always sysutil.Signal.
+	if err := unix.Kill(unix.Getpid(), sig.(sysutil.Signal)); err != nil {
+		// Sending a valid signal to ourselves should never fail.
+		panic(err)
+	}
+
+	// Block while we wait for the signal to be delivered.
+	select {}
+}
 
 var startBackground bool
 

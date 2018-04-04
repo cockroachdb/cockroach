@@ -777,6 +777,7 @@ func TestLint(t *testing.T) {
 			"github.com/golang/protobuf/proto": "github.com/gogo/protobuf/proto",
 			"github.com/satori/go.uuid":        "util/uuid",
 			"golang.org/x/sync/singleflight":   "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
+			"syscall":                          "sysutil",
 		}
 
 		// grepBuf creates a grep string that matches any forbidden import pkgs.
@@ -827,7 +828,7 @@ func TestLint(t *testing.T) {
 			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
-			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
+			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
