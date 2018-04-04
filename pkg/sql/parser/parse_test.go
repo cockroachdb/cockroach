@@ -803,6 +803,13 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [123 AS t]@[456]`},
 		{`SELECT * FROM [123 AS t]@{FORCE_INDEX=[456],NO_INDEX_JOIN}`},
 
+		{`SELECT (1 + 2).*`},
+		{`SELECT (1 + 2).col`},
+		{`SELECT (abc.def).col`},
+		{`SELECT (i.keys).col`},
+		{`SELECT (i.keys).*`},
+		{`SELECT (ARRAY['a', 'b', 'c']).name`},
+
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
 		{`TABLE [123 AS a]`},
 
@@ -1779,13 +1786,6 @@ ALTER TABLE t RENAME TO t[TRUE]
 `,
 		},
 		{
-			`SELECT (1 + 2).*`,
-			`syntax error at or near "."
-SELECT (1 + 2).*
-              ^
-`,
-		},
-		{
 			`TABLE abc[TRUE]`,
 			`syntax error at or near "["
 TABLE abc[TRUE]
@@ -1798,13 +1798,6 @@ TABLE abc[TRUE]
 UPDATE kv SET k[0] = 9
                ^
 HINT: try \h UPDATE`,
-		},
-		{
-			`SELECT (ARRAY['a', 'b', 'c']).name`,
-			`syntax error at or near "."
-SELECT (ARRAY['a', 'b', 'c']).name
-                             ^
-`,
 		},
 		{
 			`SELECT (0) FROM y[array[]]`,
@@ -1924,7 +1917,7 @@ HINT: try \h RESTORE`,
 	for _, d := range testData {
 		_, err := Parse(d.sql)
 		if err == nil {
-			t.Errorf("expected error, got nil")
+			t.Errorf("expected error, got nil for:\n%s", d.sql)
 			continue
 		}
 		msg := err.Error()
