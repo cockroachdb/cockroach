@@ -307,6 +307,15 @@ func (f *Flow) makeProcessor(
 		f.startables = append(f.startables, r)
 	}
 
+	// No output router or channel is safe to push rows to, unless the row won't
+	// be modified later by the thing that created it. No processor creates safe
+	// rows, either. So, we always wrap our outputs in copyingRowReceivers. These
+	// will be thrown away if two processors are fused together.
+
+	for i := range outputs {
+		outputs[i] = &copyingRowReceiver{wrapped: outputs[i]}
+	}
+
 	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs)
 	if err != nil {
 		return nil, err
@@ -315,7 +324,8 @@ func (f *Flow) makeProcessor(
 	// Initialize any routers (the setupRouter case above) and outboxes.
 	types := proc.OutputTypes()
 	for _, o := range outputs {
-		switch o := o.(type) {
+		copier := o.(*copyingRowReceiver)
+		switch o := copier.wrapped.(type) {
 		case router:
 			o.init(&f.FlowCtx, types)
 		case *outbox:

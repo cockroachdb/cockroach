@@ -64,7 +64,9 @@ type RowReceiver interface {
 	// ProducerDone() needs to be called (after draining is done, if draining was
 	// requested).
 	//
-	// The sender must not modify the row after calling this function.
+	// Unless specifically permitted by the underlying implementation, (see
+	// copyingRowReceiver, for example), the sender must not modify the row
+	// after calling this function.
 	//
 	// After DrainRequested is returned, it is expected that all future calls only
 	// carry metadata (however that is not enforced and implementations should be
@@ -207,7 +209,7 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 			)
 		}
 
-		switch dst.Push(row, meta) {
+		switch dst.Push(nil /* row */, meta) {
 		case ConsumerClosed:
 			src.ConsumerClosed()
 			return
@@ -690,6 +692,22 @@ func (rb *RowBuffer) ConsumerClosed() {
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}
+}
+
+type copyingRowReceiver struct {
+	wrapped RowReceiver
+	alloc   sqlbase.EncDatumRowAlloc
+}
+
+func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	if row != nil {
+		row = r.alloc.CopyRow(row)
+	}
+	return r.wrapped.Push(row, meta)
+}
+
+func (r *copyingRowReceiver) ProducerDone() {
+	r.wrapped.ProducerDone()
 }
 
 // String implements fmt.Stringer.

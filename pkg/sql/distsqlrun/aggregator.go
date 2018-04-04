@@ -112,6 +112,7 @@ type aggregatorBase struct {
 	funcs        []*aggregateFuncHolder
 	outputTypes  []sqlbase.ColumnType
 	datumAlloc   sqlbase.DatumAlloc
+	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	bucketsAcc mon.BoundAccount
 
@@ -408,7 +409,7 @@ func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow
 		}
 
 		if ag.lastOrdGroupCols == nil {
-			ag.lastOrdGroupCols = row
+			ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
 		} else {
 			matched, err := ag.matchLastOrdGroupCols(row)
 			if err != nil {
@@ -416,7 +417,7 @@ func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow
 				return aggStateUnknown, nil, nil
 			}
 			if !matched {
-				ag.lastOrdGroupCols = row
+				ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
 				break
 			}
 		}
@@ -467,7 +468,7 @@ func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatum
 		}
 
 		if ag.lastOrdGroupCols == nil {
-			ag.lastOrdGroupCols = row
+			ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
 		} else {
 			matched, err := ag.matchLastOrdGroupCols(row)
 			if err != nil {
@@ -475,7 +476,7 @@ func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatum
 				return aggStateUnknown, nil, nil
 			}
 			if !matched {
-				ag.lastOrdGroupCols = row
+				ag.lastOrdGroupCols = ag.rowAlloc.CopyRow(row)
 				break
 			}
 		}
