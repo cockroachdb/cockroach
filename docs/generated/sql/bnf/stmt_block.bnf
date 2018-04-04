@@ -845,6 +845,8 @@ col_name_keyword ::=
 	| 'UUID'
 	| 'VALUES'
 	| 'VARCHAR'
+	| 'VIRTUAL'
+	| 'WORK'
 
 with_clause ::=
 	'WITH' cte_list
@@ -1483,12 +1485,10 @@ reserved_keyword ::=
 	| 'USING'
 	| 'VARIADIC'
 	| 'VIEW'
-	| 'VIRTUAL'
 	| 'WHEN'
 	| 'WHERE'
 	| 'WINDOW'
 	| 'WITH'
-	| 'WORK'
 
 opt_equal ::=
 	'='
