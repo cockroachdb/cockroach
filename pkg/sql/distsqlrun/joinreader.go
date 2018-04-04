@@ -339,7 +339,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				EndKey: key.PrefixEnd(),
 			}
 			if jr.isLookupJoin() {
-				rows = append(rows, row)
+				rows = append(rows, jr.out.rowAlloc.CopyRow(row))
 				if spanToRowIndices[key.String()] == nil {
 					spans = append(spans, span)
 				}

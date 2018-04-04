@@ -163,6 +163,7 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
+	var ra sqlbase.EncDatumRowAlloc
 	var buf []byte
 	for {
 		row, meta := s.input.Next()
@@ -199,6 +200,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
+		row = ra.CopyRow(row)
 		s.sr.SampleRow(row, rank)
 	}
 
