@@ -1,26 +1,19 @@
 # =============================================================================
-# limit.opt contains normalization rules for the Limit and Offset operators.
+# limit.opt contains exploration rules for the Limit and Offset operators.
 # =============================================================================
 
-#[PushLimitThroughProject, Normalize]
-#(Limit
-#    (Project $input:* $projections:*)
-#    $limit:*
-#)
-#=>
-#(Project $input:* $projections:*)
-#(Project
-#    (Limit $input $limit)
-#    $projections
-#)
-#
-#[PushLimitThroughSelect, Normalize]
-#(Limit
-#    (Project $input:* $projections:*)
-#    $limit:*
-#)
-#=>
-#(Project
-#    (Limit $input $limit)
-#    $projections
-#)
+
+# PushLimitIntoScan constructs a new Scan operator that limits the number of
+# returned rows. This can substantially reduce the cost of execution, as rows
+# are never fetched to begin with, rather than fetched only to be discarded by
+# a Limit operator.
+[PushLimitIntoScan, Explore]
+(Limit
+    (Scan $def:*)
+    (Const $limit:*)
+    $ordering:* & (CanLimitScan $def $ordering)
+)
+=>
+(Scan
+    (LimitScanDef $def $limit)
+)

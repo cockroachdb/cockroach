@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestTableReader(t *testing.T) {
@@ -150,10 +151,8 @@ func TestTableReader(t *testing.T) {
 					var res sqlbase.EncDatumRows
 					for {
 						row, meta := out.Next()
-						if meta != nil {
-							if meta.TxnMeta == nil {
-								t.Fatalf("unexpected metadata: %+v", meta)
-							}
+						if meta != nil && meta.TxnMeta == nil {
+							t.Fatalf("unexpected metadata: %+v", meta)
 						}
 						if row == nil {
 							break
@@ -281,6 +280,9 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 }
 
 func BenchmarkTableReader(b *testing.B) {
+	logScope := log.Scope(b)
+	defer logScope.Close(b)
+
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -315,7 +317,7 @@ func BenchmarkTableReader(b *testing.B) {
 		}
 		for {
 			row, meta := tr.Next()
-			if meta != nil {
+			if meta != nil && meta.TxnMeta == nil {
 				b.Fatalf("unexpected metadata: %+v", meta)
 			}
 			if row == nil {

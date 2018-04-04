@@ -17,6 +17,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	gosqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 )
@@ -272,6 +274,133 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	}
 	if !isClientsideQueryCanceledErr(err) {
 		t.Fatalf("expected error with specific error code, got: %s", err)
+	}
+}
+
+func testCancelSession(t *testing.T, hasActiveSession bool) {
+	ctx := context.TODO()
+
+	numNodes := 2
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Since we're testing session cancellation, use single connections instead of
+	// connection pools.
+	var err error
+	conn1, err := tc.ServerConn(0).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn2, err := tc.ServerConn(1).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for node 2 to know about both sessions.
+	if err := retry.ForDuration(250*time.Millisecond, func() error {
+		rows, err := conn2.QueryContext(ctx, "SHOW CLUSTER SESSIONS")
+		if err != nil {
+			return err
+		}
+
+		numRows := 0
+		for rows.Next() {
+			numRows++
+		}
+		if numRows != numNodes {
+			return fmt.Errorf("expected %d sessions but found %d", numNodes, numRows)
+		}
+
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get node 1's session ID now, so that we don't need to serialize the session
+	// later and race with the active query's type-checking and name resolution.
+	rows, err := conn1.QueryContext(
+		ctx, "SELECT session_id FROM [SHOW LOCAL SESSIONS]",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var id string
+	if !rows.Next() {
+		t.Fatal("no sessions on node 1")
+	}
+	if err := rows.Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now that we've obtained the session ID, query planning won't race with
+	// session serialization, so we can kick it off now.
+	errChan := make(chan error, 1)
+	if hasActiveSession {
+		go func() {
+			var err error
+			_, err = conn1.ExecContext(ctx, "SELECT pg_sleep(1000000)")
+			errChan <- err
+		}()
+	}
+
+	// Cancel the session on node 1.
+	if _, err = conn2.ExecContext(ctx, fmt.Sprintf("CANCEL SESSION '%s'", id)); err != nil {
+		t.Fatal(err)
+	}
+
+	if hasActiveSession {
+		// Verify that the query was canceled because the session closed.
+		err = <-errChan
+	} else {
+		// Verify that the connection is closed.
+		_, err = conn1.ExecContext(ctx, "SELECT 1")
+	}
+
+	if err != gosqldriver.ErrBadConn {
+		t.Fatalf("session not canceled; actual error: %s", err)
+	}
+}
+
+func TestIdleCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCancelSession(t, false /* hasActiveSession */)
+}
+
+func TestActiveCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCancelSession(t, true /* hasActiveSession */)
+}
+
+func TestCancelIfExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := serverutils.StartTestCluster(t, 1, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn := tc.ServerConn(0)
+
+	var err error
+
+	// Try to cancel a query that doesn't exist.
+	_, err = conn.Exec("CANCEL QUERY IF EXISTS '00000000000000000000000000000001'")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Try to cancel a session that doesn't exist.
+	_, err = conn.Exec("CANCEL SESSION IF EXISTS '00000000000000000000000000000001'")
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

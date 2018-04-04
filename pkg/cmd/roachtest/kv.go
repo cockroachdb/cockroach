@@ -59,7 +59,7 @@ func init() {
 
 func init() {
 	tests.Add(testSpec{
-		Name:  "splits/nodes=3",
+		Name:  "kv/splits/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes - 1

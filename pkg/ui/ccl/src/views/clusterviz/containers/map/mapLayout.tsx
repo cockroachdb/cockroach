@@ -202,7 +202,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
 
     return (
       <g ref={el => this.gEl = el}>
-        <rect width={viewportSize[0]} height={viewportSize[1]} fill="lavender" />
+        <rect width={viewportSize[0]} height={viewportSize[1]} fill="#E2E5EE" />
         <WorldMap projection={projection} />
         { this.renderChildLocalities(projection) }
       </g>

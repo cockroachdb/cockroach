@@ -606,6 +606,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> cancel_stmt
 %type <tree.Statement> cancel_job_stmt
 %type <tree.Statement> cancel_query_stmt
+%type <tree.Statement> cancel_session_stmt
 
 // SCRUB
 %type <tree.Statement> scrub_stmt
@@ -1665,11 +1666,12 @@ copy_from_stmt:
 
 // %Help: CANCEL
 // %Category: Group
-// %Text: CANCEL JOB, CANCEL QUERY
+// %Text: CANCEL JOB, CANCEL QUERY, CANCEL SESSION
 cancel_stmt:
-  cancel_job_stmt   // EXTEND WITH HELP: CANCEL JOB
-| cancel_query_stmt // EXTEND WITH HELP: CANCEL QUERY
-| CANCEL error      // SHOW HELP: CANCEL
+  cancel_job_stmt     // EXTEND WITH HELP: CANCEL JOB
+| cancel_query_stmt   // EXTEND WITH HELP: CANCEL QUERY
+| cancel_session_stmt // EXTEND WITH HELP: CANCEL SESSION
+| CANCEL error        // SHOW HELP: CANCEL
 
 // %Help: CANCEL JOB - cancel a background job
 // %Category: Misc
@@ -1684,14 +1686,33 @@ cancel_job_stmt:
 
 // %Help: CANCEL QUERY - cancel a running query
 // %Category: Misc
-// %Text: CANCEL QUERY <queryid>
+// %Text: CANCEL QUERY [IF EXISTS] <queryid>
 // %SeeAlso: SHOW QUERIES
 cancel_query_stmt:
   CANCEL QUERY a_expr
   {
-    $$.val = &tree.CancelQuery{ID: $3.expr()}
+    $$.val = &tree.CancelQuery{ID: $3.expr(), IfExists: false}
+  }
+| CANCEL QUERY IF EXISTS a_expr
+  {
+    $$.val = &tree.CancelQuery{ID: $5.expr(), IfExists: true}
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
+
+// %Help: CANCEL SESSION - cancel an open session
+// %Category: Misc
+// %Text: CANCEL SESSION [IF EXISTS] <sessionid>
+// %SeeAlso: SHOW SESSIONS
+cancel_session_stmt:
+  CANCEL SESSION a_expr
+  {
+    $$.val = &tree.CancelSession{ID: $3.expr(), IfExists: false}
+  }
+| CANCEL SESSION IF EXISTS a_expr
+  {
+    $$.val = &tree.CancelSession{ID: $5.expr(), IfExists: true}
+  }
+| CANCEL SESSION error // SHOW HELP: CANCEL SESSION
 
 comment_stmt:
   COMMENT ON TABLE table_name IS comment_text
@@ -2843,6 +2864,7 @@ opt_compact:
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
 // %Text: SHOW [CLUSTER | LOCAL] SESSIONS
+// %SeeAlso: CANCEL SESSION
 show_sessions_stmt:
   SHOW SESSIONS
   {
@@ -4580,7 +4602,7 @@ simple_select:
 //        [ ORDER BY <expr> [ ASC | DESC ] [, ...] ]
 //        [ LIMIT { <expr> | ALL } ]
 //        [ OFFSET <expr> [ ROW | ROWS ] ]
-// %SeeAlso: WEBDOCS/select.html
+// %SeeAlso: WEBDOCS/select-clause.html
 simple_select_clause:
   SELECT opt_all_clause target_list
     from_clause where_clause
@@ -5465,8 +5487,12 @@ const_typename:
     if $1 == "char" {
       $$.val = coltypes.Char
     } else {
-      sqllex.Error("syntax error")
-      return 1
+      var err error
+      $$.val, err = coltypes.TypeForNonKeywordTypeName($1)
+      if err != nil {
+        sqllex.Error(err.Error())
+        return 1
+      }
     }
   }
 
@@ -7423,8 +7449,12 @@ unreserved_keyword:
 | AT
 | BACKUP
 | BEGIN
+| BIGSERIAL
 | BLOB
+| BOOL
 | BY
+| BYTEA
+| BYTES
 | CACHE
 | CANCEL
 | CASCADE
@@ -7448,6 +7478,7 @@ unreserved_keyword:
 | DATA
 | DATABASE
 | DATABASES
+| DATE
 | DAY
 | DEALLOCATE
 | DELETE
@@ -7463,6 +7494,8 @@ unreserved_keyword:
 | EXPLAIN
 | FILTER
 | FIRST
+| FLOAT4
+| FLOAT8
 | FOLLOWING
 | FORCE_INDEX
 | GIN
@@ -7474,13 +7507,20 @@ unreserved_keyword:
 | INCREMENT
 | INCREMENTAL
 | INDEXES
+| INET
 | INSERT
+| INT2
 | INT2VECTOR
+| INT4
+| INT8
+| INT64
 | INTERLEAVE
 | INVERTED
 | ISOLATION
 | JOB
 | JOBS
+| JSON
+| JSONB
 | KEY
 | KEYS
 | KV
@@ -7496,6 +7536,7 @@ unreserved_keyword:
 | MONTH
 | NAMES
 | NAN
+| NAME
 | NEXT
 | NO
 | NORMAL
@@ -7553,7 +7594,11 @@ unreserved_keyword:
 | SCRUB
 | SEARCH
 | SECOND
+| SERIAL
 | SERIALIZABLE
+| SERIAL2
+| SERIAL4
+| SERIAL8
 | SEQUENCE
 | SEQUENCES
 | SESSION
@@ -7561,6 +7606,7 @@ unreserved_keyword:
 | SET
 | SHOW
 | SIMPLE
+| SMALLSERIAL
 | SNAPSHOT
 | SQL
 | START
@@ -7569,6 +7615,7 @@ unreserved_keyword:
 | STORE
 | STORING
 | STRICT
+| STRING
 | SPLIT
 | SYNTAX
 | SYSTEM
@@ -7580,6 +7627,7 @@ unreserved_keyword:
 | TESTING_RELOCATE
 | TEXT
 | THAN
+| TIMESTAMPTZ
 | TRACE
 | TRANSACTION
 | TRUNCATE
@@ -7589,6 +7637,7 @@ unreserved_keyword:
 | UNKNOWN
 | UPDATE
 | UPSERT
+| UUID
 | USE
 | USERS
 | VALID
@@ -7614,41 +7663,26 @@ col_name_keyword:
   ANNOTATE_TYPE
 | BETWEEN
 | BIGINT
-| BIGSERIAL
 | BIT
-| BOOL
 | BOOLEAN
-| BYTEA
-| BYTES
 | CHAR
 | CHARACTER
 | CHARACTERISTICS
 | COALESCE
-| DATE
 | DEC
 | DECIMAL
 | EXISTS
 | EXTRACT
 | EXTRACT_DURATION
 | FLOAT
-| FLOAT4
-| FLOAT8
 | GREATEST
 | GROUPING
 | IF
 | IFNULL
-| INET
 | INT
-| INT2
-| INT4
-| INT8
-| INT64
 | INTEGER
 | INTERVAL
-| JSON
-| JSONB
 | LEAST
-| NAME
 | NULLIF
 | NUMERIC
 | OUT
@@ -7657,20 +7691,12 @@ col_name_keyword:
 | PRECISION
 | REAL
 | ROW
-| SERIAL
-| SERIAL2
-| SERIAL4
-| SERIAL8
 | SMALLINT
-| SMALLSERIAL
-| STRING
 | SUBSTRING
 | TIME
 | TIMESTAMP
-| TIMESTAMPTZ
 | TREAT
 | TRIM
-| UUID
 | VALUES
 | VARCHAR
 

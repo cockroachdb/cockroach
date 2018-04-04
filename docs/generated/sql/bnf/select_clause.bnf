@@ -1,0 +1,3 @@
+select_clause ::=
+	( simple_select_clause | values_clause | table_clause | set_operation )
+	| '(' ( simple_select_clause | values_clause | table_clause | set_operation ) ')'

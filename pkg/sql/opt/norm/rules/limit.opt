@@ -1,0 +1,49 @@
+# =============================================================================
+# limit.opt contains normalization rules for the Limit and Offset operators.
+# =============================================================================
+
+# PushLimitIntoProject pushes the Limit operator into its Project input. It is
+# desirable to push the Limit operator as low in the query as possible, in order
+# to minimize the number of rows that other operators need to process.
+#
+# This rule triggers a cycle with the FilterUnusedLimitCols rule. Because this
+# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
+# gives the FilterUnusedLimitCols rule one last chance to push Project below
+# Limit, and therefore causes the normal form to be (Limit (Project)) rather
+# than (Project (Limit)) when the choice is ambiguous. This and other rules
+# will try to push Limit down as far as possible, but if it gets stopped along
+# the way, it will be ordered above Project.
+[PushLimitIntoProject, Normalize, DetectCycle]
+(Limit
+    (Project $input:* $projections:*)
+    $limit:*
+    $ordering:*
+)
+=>
+(Project
+    (Limit $input $limit $ordering)
+    $projections
+)
+
+# PushOffsetIntoProject pushes the Offset operator into its Project input. It is
+# desirable to push the Offset operator as low in the query as possible, in
+# order to minimize the number of rows that other operators need to process.
+#
+# This rule triggers a cycle with the FilterUnusedOffsetCols rule. Because this
+# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
+# gives the FilterUnusedOffsetCols rule one last chance to push Project below
+# Offset, and therefore causes the normal form to be (Offset (Project)) rather
+# than (Project (Offset)) when the choice is ambiguous. This and other rules
+# will try to push Offset down as far as possible, but if it gets stopped along
+# the way, it will be ordered above Project.
+[PushOffsetIntoProject, Normalize, DetectCycle]
+(Offset
+    (Project $input:* $projections:*)
+    $offset:*
+    $ordering:*
+)
+=>
+(Project
+    (Offset $input $offset $ordering)
+    $projections
+)

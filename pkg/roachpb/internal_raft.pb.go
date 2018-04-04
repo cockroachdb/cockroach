@@ -41,7 +41,7 @@ func (*RaftTombstone) ProtoMessage()               {}
 func (*RaftTombstone) Descriptor() ([]byte, []int) { return fileDescriptorInternalRaft, []int{1} }
 
 // RaftSnapshotData is the payload of a raftpb.Snapshot. It contains a raw copy of
-// all of the range's data and metadata, including the raft log, sequence cache, etc.
+// all of the range's data and metadata, including the raft log, abort span, etc.
 type RaftSnapshotData struct {
 	// The latest RangeDescriptor
 	RangeDescriptor RangeDescriptor             `protobuf:"bytes,1,opt,name=range_descriptor,json=rangeDescriptor" json:"range_descriptor"`

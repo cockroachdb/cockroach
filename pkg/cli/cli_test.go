@@ -1634,6 +1634,7 @@ Available Commands:
   node        list, inspect or remove nodes
   dump        dump sql tables
 
+  demo        open a demo sql shell
   gen         generate auxiliary files
   version     output version information
   debug       debugging commands
@@ -2038,18 +2039,43 @@ func TestGenAutocomplete(t *testing.T) {
 		}
 	}()
 
-	const minsize = 25000
-	acpath := filepath.Join(acdir, "cockroach.bash")
+	for _, tc := range []struct {
+		shell  string
+		expErr string
+	}{
+		{shell: ""},
+		{shell: "bash"},
+		{shell: "zsh"},
+		{shell: "bad", expErr: `invalid argument "bad" for "cockroach gen autocomplete"`},
+	} {
+		t.Run("shell="+tc.shell, func(t *testing.T) {
+			const minsize = 1000
+			acpath := filepath.Join(acdir, "output-"+tc.shell)
 
-	if err := Run([]string{"gen", "autocomplete", "--out=" + acpath}); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(acpath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if size := info.Size(); size < minsize {
-		t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
+			args := []string{"gen", "autocomplete", "--out=" + acpath}
+			if len(tc.shell) > 0 {
+				args = append(args, tc.shell)
+			}
+			err := Run(args)
+			if tc.expErr == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if !testutils.IsError(err, tc.expErr) {
+					t.Fatalf("expected error %s, found %v", tc.expErr, err)
+				}
+				return
+			}
+
+			info, err := os.Stat(acpath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if size := info.Size(); size < minsize {
+				t.Fatalf("autocomplete file size (%d) < minimum (%d)", size, minsize)
+			}
+		})
 	}
 }
 
@@ -2060,17 +2086,18 @@ func TestJunkPositionalArguments(t *testing.T) {
 	defer c.cleanup()
 
 	for i, test := range []string{
-		"start junk",
-		"sql junk",
-		"gen man junk",
-		"gen autocomplete junk",
-		"gen example-data intro junk",
+		"start",
+		"sql",
+		"gen man",
+		"gen example-data intro",
 	} {
-		out, err := c.RunWithCapture(test)
+		const junk = "junk"
+		line := test + " " + junk
+		out, err := c.RunWithCapture(line)
 		if err != nil {
 			t.Fatal(errors.Wrap(err, strconv.Itoa(i)))
 		}
-		exp := test + "\ninvalid arguments\n"
+		exp := fmt.Sprintf("%s\nunknown command %q for \"cockroach %s\"\n", line, junk, test)
 		if exp != out {
 			t.Errorf("expected:\n%s\ngot:\n%s", exp, out)
 		}

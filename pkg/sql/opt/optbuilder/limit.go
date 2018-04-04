@@ -15,7 +15,6 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -26,23 +25,22 @@ import (
 // same as inScope, because statements like:
 //   SELECT k FROM kv LIMIT k
 // are not valid.
-func (b *Builder) buildLimit(
-	limit *tree.Limit, parentScope *scope, in memo.GroupID, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	out, outScope = in, inScope
-
-	ordering := inScope.ordering
-	orderingPrivID := b.factory.InternPrivate(&ordering)
+func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
+	ordering := inScope.physicalProps.Ordering
+	orderingPrivID := b.factory.InternOrdering(ordering)
 
 	if limit.Offset != nil {
-		texpr := parentScope.resolveType(limit.Offset, types.Int)
+		op := "OFFSET"
+		b.assertNoAggregationOrWindowing(limit.Offset, op)
+		texpr := parentScope.resolveAndRequireType(limit.Offset, types.Int, op)
 		offset := b.buildScalar(texpr, parentScope)
-		out = b.factory.ConstructOffset(out, offset, orderingPrivID)
+		inScope.group = b.factory.ConstructOffset(inScope.group, offset, orderingPrivID)
 	}
 	if limit.Count != nil {
-		texpr := parentScope.resolveType(limit.Count, types.Int)
+		op := "LIMIT"
+		b.assertNoAggregationOrWindowing(limit.Count, op)
+		texpr := parentScope.resolveAndRequireType(limit.Count, types.Int, op)
 		limit := b.buildScalar(texpr, parentScope)
-		out = b.factory.ConstructLimit(out, limit, orderingPrivID)
+		inScope.group = b.factory.ConstructLimit(inScope.group, limit, orderingPrivID)
 	}
-	return out, outScope
 }

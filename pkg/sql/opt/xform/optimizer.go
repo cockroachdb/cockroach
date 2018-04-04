@@ -19,30 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"golang.org/x/tools/container/intsets"
-)
-
-//go:generate optgen -out rule_name.og.go rulenames ../ops/*.opt rules/*.opt
-
-// OptimizeSteps is passed to NewOptimizer, and specifies the maximum number
-// of normalization and exploration transformations that will be applied by the
-// optimizer. This can be used to effectively disable the optimizer (if set to
-// zero), to debug the optimizer (by disabling optimizations past a certain
-// point), or to limit the running time of the optimizer.
-type OptimizeSteps int
-
-const (
-	// OptimizeNone instructs the optimizer to suppress all transformations.
-	// The unaltered input expression tree will become the output expression
-	// tree. This effectively disables the optimizer.
-	OptimizeNone = OptimizeSteps(0)
-
-	// OptimizeAll instructs the optimizer to continue applying transformations
-	// until the best plan has been found. There is no limit to the number of
-	// steps that the optimizer will take to get there.
-	OptimizeAll = OptimizeSteps(intsets.MaxInt)
 )
 
 // Optimizer transforms an input expression tree into the logically equivalent
@@ -57,8 +36,8 @@ const (
 // output expression tree with the lowest cost.
 type Optimizer struct {
 	evalCtx  *tree.EvalContext
+	f        *norm.Factory
 	mem      *memo.Memo
-	f        *Factory
 	coster   coster
 	explorer explorer
 
@@ -67,30 +46,21 @@ type Optimizer struct {
 	stateMap   map[optStateKey]*optState
 	stateAlloc optStateAlloc
 
-	// lastRule stores the name of the last rule that was triggered, for
-	// debugging purposes.
-	lastRuleName RuleName
-
-	// MaxSteps can limit the number of normalization and exploration
-	// transformations that will be applied by the optimizer. If MaxSteps is
-	// set to OptimizeNone, then the unaltered input expression tree becomes
-	// the output expression tree (because no transforms are applied). By
-	// default, MaxSteps is set to OptimizeAll, which means the optimizer will
-	// exhaustively search for the best estimated plan.
-	MaxSteps OptimizeSteps
+	// onRuleMatch is the callback function that is invoked each time a normalize
+	// rule has been matched by the factory. It can be set via a call to the
+	// SetOnRuleMatch method.
+	onRuleMatch func(ruleName opt.RuleName) bool
 }
 
 // NewOptimizer constructs an instance of the optimizer.
 func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
+	f := norm.NewFactory(evalCtx)
 	o := &Optimizer{
 		evalCtx:  evalCtx,
-		mem:      memo.New(),
+		f:        f,
+		mem:      f.Memo(),
 		stateMap: make(map[optStateKey]*optState),
-
-		// By default, search exhaustively for best plan.
-		MaxSteps: OptimizeAll,
 	}
-	o.f = newFactory(o)
 	o.coster.init(o.mem)
 	o.explorer.init(o)
 	return o
@@ -99,14 +69,29 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 // Factory returns a factory interface that the caller uses to construct an
 // input expression tree. The root of the resulting tree can be passed to the
 // Optimize method in order to find the lowest cost plan.
-func (o *Optimizer) Factory() *Factory {
+func (o *Optimizer) Factory() *norm.Factory {
 	return o.f
 }
 
-// LastRuleName returns the last rule that was triggered by the optimizer. This
-// is useful for single-stepping through optimizer rule applications.
-func (o *Optimizer) LastRuleName() RuleName {
-	return o.lastRuleName
+// DisableOptimizations disables all transformation rules, including normalize
+// and explore rules. The unaltered input expression tree becomes the output
+// expression tree (because no transforms are applied).
+func (o *Optimizer) DisableOptimizations() {
+	o.SetOnRuleMatch(func(opt.RuleName) bool { return false })
+}
+
+// SetOnRuleMatch sets a callback function which is invoked each time an
+// optimization rule (Normalize or Explore rule) has been matched by the
+// optimizer. If the function returns false, then the rule is not applied. By
+// default, all rules are applied, but callers can set the callback function to
+// override the default behavior. In addition, callers can invoke the
+// DisableOptimizations convenience method to disable all rules.
+func (o *Optimizer) SetOnRuleMatch(onRuleMatch func(ruleName opt.RuleName) bool) {
+	o.onRuleMatch = onRuleMatch
+
+	// Also pass through the call to the factory so that normalization rules
+	// make same callback.
+	o.f.SetOnRuleMatch(onRuleMatch)
 }
 
 // Memo returns the memo structure that the optimizer is using to optimize.
@@ -300,10 +285,8 @@ func (o *Optimizer) optimizeGroup(group memo.GroupID, required memo.PhysicalProp
 
 		// Now generate new expressions that are logically equivalent to other
 		// expressions in this group.
-		if o.allowOptimizations() {
-			if !o.explorer.exploreGroup(group).fullyExplored {
-				fullyOptimized = false
-			}
+		if !o.explorer.exploreGroup(group).fullyExplored {
+			fullyOptimized = false
 		}
 
 		if fullyOptimized {
@@ -446,23 +429,6 @@ func (o *Optimizer) ratchetCost(candidate *memo.BestExpr) {
 		state.best = o.mem.EnsureBestExpr(group, candidate.Required())
 	}
 	o.mem.RatchetBestExpr(state.best, candidate)
-}
-
-// allowOptimizations returns true if optimizations are currently enabled. Each
-// individual optimization decrements the maxSteps counter. Once it reaches
-// zero (or if it was zero to begin with), no further optimizations will be
-// performed.
-func (o *Optimizer) allowOptimizations() bool {
-	return o.MaxSteps > 0
-}
-
-// reportOptimization is called when an optimization has been performed on the
-// tree. It decrements the maxSteps counter. Once that reaches zero, no further
-// optimizations will be performed. It also stores the name of the rule that
-// was triggered, which is useful for debugging.
-func (o *Optimizer) reportOptimization(name RuleName) {
-	o.lastRuleName = name
-	o.MaxSteps--
 }
 
 // lookupOptState looks up the state associated with the given group and

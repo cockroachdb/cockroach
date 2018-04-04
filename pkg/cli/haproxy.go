@@ -45,6 +45,7 @@ The addresses used are those advertized by the nodes themselves. Make sure hapro
 can resolve the hostnames in the configuration file, either by using full-qualified names, or
 running haproxy in the same network.
 `,
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
 }
 
@@ -84,10 +85,6 @@ func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
 }
 
 func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		return usageAndError(cmd)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -112,7 +109,7 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 	var f *os.File
 	if haProxyPath == "-" {
 		w = os.Stdout
-	} else if f, err = os.OpenFile(haProxyPath, os.O_RDWR|os.O_CREATE, 0755); err != nil {
+	} else if f, err = os.OpenFile(haProxyPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755); err != nil {
 		return err
 	} else {
 		w = f

@@ -45,42 +45,18 @@ func TestDockerCSharp(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	const csharp = `
-	set -euxo pipefail
-
-	cd /mnt/data/csharp
-
-	# In dotnet, to get a cert with a private key, we have to use a pfx file.
-	# See:
-	# http://www.sparxeng.com/blog/software/x-509-self-signed-certificate-for-cryptography-in-net
-	# https://stackoverflow.com/questions/808669/convert-a-cert-pem-certificate-to-a-pfx-certificate
-	openssl pkcs12 -inkey ${PGSSLKEY} -in ${PGSSLCERT} -export -out node.pfx -passout pass:
-
-	dotnet %v
-	`
-
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "csharp", []string{"/bin/bash", "-c", strings.Replace(csharp, "%v", "run", 1)})
-	testDockerFail(ctx, t, "csharp", []string{"/bin/bash", "-c", strings.Replace(csharp, "%v", "notacommand", 1)})
+	testDockerSuccess(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet run"})
+	testDockerFail(ctx, t, "csharp", []string{"sh", "-c", "cd /mnt/data/csharp && dotnet notacommand"})
 }
 
 func TestDockerJava(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	const java = `
-	set -e
-	cd /mnt/data/java
-	# See: https://basildoncoder.com/blog/postgresql-jdbc-client-certificates.html
-	openssl pkcs8 -topk8 -inform PEM -outform DER -in /certs/node.key -out key.pk8 -nocrypt
-
-	mvn %v -o
-	rm -rf target
-	`
-
 	ctx := context.Background()
-	testDockerSuccess(ctx, t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "test", 2)})
-	testDockerFail(ctx, t, "java", []string{"/bin/sh", "-c", strings.Replace(java, "%v", "foobar", 2)})
+	testDockerSuccess(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o test"})
+	testDockerFail(ctx, t, "java", []string{"sh", "-c", "cd /mnt/data/java && mvn -o foobar"})
 }
 
 func TestDockerNodeJS(t *testing.T) {

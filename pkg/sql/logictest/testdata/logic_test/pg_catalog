@@ -759,9 +759,9 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2202  regprocedure  3572887043    NULL      8       true      b
 2205  regclass      3572887043    NULL      8       true      b
 2206  regtype       3572887043    NULL      8       true      b
-2249  record        3572887043    NULL      0       true      b
-2277  anyarray      3572887043    NULL      -1      false     b
-2283  anyelement    3572887043    NULL      -1      false     b
+2249  record        3572887043    NULL      0       true      p
+2277  anyarray      3572887043    NULL      -1      false     p
+2283  anyelement    3572887043    NULL      -1      false     p
 2950  uuid          3572887043    NULL      16      true      b
 2951  _uuid         3572887043    NULL      -1      false     b
 3802  jsonb         3572887043    NULL      -1      false     b
@@ -816,7 +816,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2205  regclass      N            false           true          ,         0         0        0
 2206  regtype       N            false           true          ,         0         0        0
 2249  record        P            false           true          ,         0         0        0
-2277  anyarray      A            false           true          ,         0         2283     0
+2277  anyarray      P            false           true          ,         0         0        0
 2283  anyelement    P            false           true          ,         0         0        2277
 2950  uuid          U            false           true          ,         0         0        2951
 2951  _uuid         A            false           true          ,         0         2950     0
@@ -872,7 +872,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
 2206  regtype       regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
 2249  record        record_in       record_out       record_recv       record_send       0         0          0
-2277  anyarray      array_in        array_out        array_recv        array_send        0         0          0
+2277  anyarray      anyarray_in     anyarray_out     anyarray_recv     anyarray_send     0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 2951  _uuid         array_in        array_out        array_recv        array_send        0         0          0

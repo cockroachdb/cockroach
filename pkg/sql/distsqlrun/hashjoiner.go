@@ -153,6 +153,10 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
+	pushTrailingMeta := func(ctx context.Context) {
+		sendTraceData(ctx, h.out.output)
+	}
+
 	ctx := log.WithLogTag(h.flowCtx.Ctx, "HashJoiner", nil)
 	ctx, span := processorSpan(ctx, "hash joiner")
 	defer tracing.FinishSpan(span)
@@ -212,7 +216,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 			// the consumer.
 			log.Infof(ctx, "buffer phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
 		return
 	}
 
@@ -229,7 +233,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 			// the consumer.
 			log.Infof(ctx, "build phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
 		return
 	}
 	defer storedRows.Close(ctx)
@@ -241,7 +245,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	if row != nil {
 		if err := storedRows.AddRow(ctx, row); err != nil {
 			log.Infof(ctx, "unable to add row to disk %s", err)
-			DrainAndClose(ctx, h.out.output, err /* cause */, h.leftSource, h.rightSource)
+			DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, h.leftSource, h.rightSource)
 			return
 		}
 	}
@@ -262,7 +266,7 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 			// point.
 			log.Infof(ctx, "probe phase error %s", err)
 		}
-		DrainAndClose(ctx, h.out.output, err /* cause */, srcToClose)
+		DrainAndClose(ctx, h.out.output, err /* cause */, pushTrailingMeta, srcToClose)
 	}
 }
 

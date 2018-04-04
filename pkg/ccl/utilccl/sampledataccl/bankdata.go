@@ -54,9 +54,11 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 
 	var stmts bytes.Buffer
 	fmt.Fprintf(&stmts, "CREATE TABLE %s %s;\n", data.Name, data.Schema)
-	for rowIdx := 0; rowIdx < data.InitialRowCount; rowIdx++ {
-		row := workload.StringTuple(data.InitialRowFn(rowIdx))
-		fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, strings.Join(row, `,`))
+	for rowIdx := 0; rowIdx < data.InitialRows.NumBatches; rowIdx++ {
+		for _, row := range data.InitialRows.Batch(rowIdx) {
+			rowBatch := strings.Join(workload.StringTuple(row), `,`)
+			fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, rowBatch)
+		}
 	}
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.

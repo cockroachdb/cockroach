@@ -27,16 +27,21 @@ import (
 	"os/signal"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func MainTest(m *testing.M) {
-	RunTests(m)
+	os.Exit(RunTests(m))
 }
 
 // RunTests runs the tests in a package while gracefully handling interrupts.
-func RunTests(m *testing.M) {
+func RunTests(m *testing.M) int {
 	randutil.SeedForTests()
+
+	ctx := context.Background()
+	defer cluster.GenerateCerts(ctx)()
+
 	go func() {
 		// Shut down tests when interrupted (for example CTRL+C).
 		sig := make(chan os.Signal, 1)
@@ -47,8 +52,8 @@ func RunTests(m *testing.M) {
 		default:
 			// There is a very tiny race here: the cluster might be closing
 			// the stopper simultaneously.
-			stopper.Stop(context.TODO())
+			stopper.Stop(ctx)
 		}
 	}()
-	os.Exit(m.Run())
+	return m.Run()
 }

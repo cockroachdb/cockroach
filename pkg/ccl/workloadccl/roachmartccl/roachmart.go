@@ -154,33 +154,37 @@ func (m *roachmart) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (m *roachmart) Tables() []workload.Table {
 	users := workload.Table{
-		Name:            `users`,
-		Schema:          usersSchema,
-		InitialRowCount: m.users,
-		InitialRowFn: func(rowIdx int) []interface{} {
-			rng := rand.New(rand.NewSource(m.seed + int64(rowIdx)))
-			const emailTemplate = `user-%d@roachmart.example`
-			return []interface{}{
-				zones[rowIdx%3],                     // zone
-				fmt.Sprintf(emailTemplate, rowIdx),  // email
-				string(randutil.RandBytes(rng, 64)), // address
-			}
-		},
+		Name:   `users`,
+		Schema: usersSchema,
+		InitialRows: workload.Tuples(
+			m.users,
+			func(rowIdx int) []interface{} {
+				rng := rand.New(rand.NewSource(m.seed + int64(rowIdx)))
+				const emailTemplate = `user-%d@roachmart.example`
+				return []interface{}{
+					zones[rowIdx%3],                     // zone
+					fmt.Sprintf(emailTemplate, rowIdx),  // email
+					string(randutil.RandBytes(rng, 64)), // address
+				}
+			},
+		),
 	}
 	orders := workload.Table{
-		Name:            `orders`,
-		Schema:          ordersSchema,
-		InitialRowCount: m.orders,
-		InitialRowFn: func(rowIdx int) []interface{} {
-			user := users.InitialRowFn(rowIdx % m.users)
-			zone, email := user[0], user[1]
-			return []interface{}{
-				zone,   // user_zone
-				email,  // user_email
-				rowIdx, // id
-				[]string{`f`, `t`}[rowIdx%2], // fulfilled
-			}
-		},
+		Name:   `orders`,
+		Schema: ordersSchema,
+		InitialRows: workload.Tuples(
+			m.orders,
+			func(rowIdx int) []interface{} {
+				user := users.InitialRows.Batch(rowIdx % m.users)[0]
+				zone, email := user[0], user[1]
+				return []interface{}{
+					zone,   // user_zone
+					email,  // user_email
+					rowIdx, // id
+					[]string{`f`, `t`}[rowIdx%2], // fulfilled
+				}
+			},
+		),
 	}
 	return []workload.Table{users, orders}
 }
@@ -215,7 +219,7 @@ func (m *roachmart) Ops(
 			// our locality requirements.
 			var zone, email interface{}
 			for i := rng.Int(); ; i++ {
-				user := usersTable.InitialRowFn(i % m.users)
+				user := usersTable.InitialRows.Batch(i % m.users)[0]
 				zone, email = user[0], user[1]
 				userLocal := zone == m.localZone
 				if userLocal == wantLocal {

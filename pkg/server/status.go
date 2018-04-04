@@ -1372,6 +1372,37 @@ func (s *statusServer) ListSessions(
 	return &resp, nil
 }
 
+// CancelSession responds to a session cancellation request by canceling the
+// target session's associated context.
+func (s *statusServer) CancelSession(
+	ctx context.Context, req *serverpb.CancelSessionRequest,
+) (*serverpb.CancelSessionResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.CancelSession(ctx, req)
+	}
+
+	output := &serverpb.CancelSessionResponse{}
+	canceled, err := s.sessionRegistry.CancelSession(req.SessionID, req.Username)
+
+	if err != nil {
+		output.Error = err.Error()
+	}
+
+	output.Canceled = canceled
+	return output, nil
+}
+
 // CancelQuery responds to a query cancellation request, and cancels
 // the target query's associated context and sets a cancellation flag.
 func (s *statusServer) CancelQuery(

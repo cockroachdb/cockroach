@@ -94,3 +94,5 @@ func GetTestFiles(tb testing.TB, testdataGlob string) []string {
 	}
 	return paths
 }
+
+var _ = GetTestFiles

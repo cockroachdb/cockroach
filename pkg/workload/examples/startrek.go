@@ -46,16 +46,20 @@ func (startrek) Meta() workload.Meta { return startrekMeta }
 func (startrek) Tables() []workload.Table {
 	return []workload.Table{
 		{
-			Name:            `episodes`,
-			Schema:          episodesSchema,
-			InitialRowCount: len(startrekEpisodes),
-			InitialRowFn:    func(rowIdx int) []interface{} { return startrekEpisodes[rowIdx] },
+			Name:   `episodes`,
+			Schema: episodesSchema,
+			InitialRows: workload.Tuples(
+				len(startrekEpisodes),
+				func(rowIdx int) []interface{} { return startrekEpisodes[rowIdx] },
+			),
 		},
 		{
-			Name:            `quotes`,
-			Schema:          quotesSchema,
-			InitialRowCount: len(startrekQuotes),
-			InitialRowFn:    func(rowIdx int) []interface{} { return startrekQuotes[rowIdx] },
+			Name:   `quotes`,
+			Schema: quotesSchema,
+			InitialRows: workload.Tuples(
+				len(startrekQuotes),
+				func(rowIdx int) []interface{} { return startrekQuotes[rowIdx] },
+			),
 		},
 	}
 }

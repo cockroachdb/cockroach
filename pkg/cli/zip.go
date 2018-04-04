@@ -32,7 +32,7 @@ import (
 )
 
 var debugZipCmd = &cobra.Command{
-	Use:   "zip [file]",
+	Use:   "zip <file>",
 	Short: "gather cluster debug data into a zip file",
 	Long: `
 
@@ -44,6 +44,7 @@ Retrieval of per-node details (status, stack traces, range status) requires the
 node to be live and operating properly. Retrieval of SQL data requires the
 cluster to be live.
 `,
+	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugZip),
 }
 
@@ -107,10 +108,6 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		schemaPrefix = base + "/schema"
 		settingsName = base + "/settings"
 	)
-
-	if len(args) != 1 {
-		return usageAndError(cmd)
-	}
 
 	baseCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()

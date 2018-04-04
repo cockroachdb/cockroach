@@ -17,7 +17,6 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
@@ -25,7 +24,7 @@ type Statement struct {
 	AST           tree.Statement
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
-	queryID       uint128.Uint128
+	queryID       ClusterWideID
 }
 
 func (s Statement) String() string {

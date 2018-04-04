@@ -1,0 +1,171 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+----
+TABLE b
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# PushLimitIntoProject
+# --------------------------------------------------
+opt
+SELECT k, f*2.0 FROM a LIMIT 5
+----
+project
+ ├── columns: k:1(int!null) column6:6(float)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.f:3(float)
+ │    └── limit: 5
+ └── projections [outer=(1,3)]
+      ├── variable: a.k [type=int, outer=(1)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+# Detect PushLimitIntoProject and FilterUnusedLimitCols dependency cycle.
+opt
+SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
+----
+project
+ ├── columns: f:3(float) column6:6(float)
+ ├── ordering: +3
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── ordering: +3
+ │    ├── sort
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── ordering: +3
+ │    │    └── project
+ │    │         ├── columns: a.f:3(float)
+ │    │         ├── group-by
+ │    │         │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │         │    ├── scan a
+ │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    │         │    └── aggregations
+ │    │         └── projections [outer=(3)]
+ │    │              └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]
+
+# --------------------------------------------------
+# PushOffsetIntoProject
+# --------------------------------------------------
+opt
+SELECT k, f*2.0 FROM a OFFSET 5
+----
+project
+ ├── columns: k:1(int!null) column6:6(float)
+ ├── offset
+ │    ├── columns: a.k:1(int!null) a.f:3(float)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.f:3(float)
+ │    └── const: 5 [type=int]
+ └── projections [outer=(1,3)]
+      ├── variable: a.k [type=int, outer=(1)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+# Detect PushOffsetIntoProject and FilterUnusedOffsetCols dependency cycle.
+opt
+SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5
+----
+project
+ ├── columns: f:3(float) column6:6(float)
+ ├── ordering: +3
+ ├── offset
+ │    ├── columns: a.f:3(float)
+ │    ├── ordering: +3
+ │    ├── sort
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── ordering: +3
+ │    │    └── project
+ │    │         ├── columns: a.f:3(float)
+ │    │         ├── group-by
+ │    │         │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │         │    ├── scan a
+ │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    │         │    └── aggregations
+ │    │         └── projections [outer=(3)]
+ │    │              └── variable: a.f [type=float, outer=(3)]
+ │    └── const: 5 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]
+
+# --------------------------------------------------
+# PushLimitIntoProject + PushOffsetIntoProject
+# --------------------------------------------------
+opt
+SELECT k, f*2.0 FROM a OFFSET 5 LIMIT 10
+----
+project
+ ├── columns: k:1(int!null) column6:6(float)
+ ├── limit
+ │    ├── columns: a.k:1(int!null) a.f:3(float)
+ │    ├── offset
+ │    │    ├── columns: a.k:1(int!null) a.f:3(float)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.k:1(int!null) a.f:3(float)
+ │    │    └── const: 5 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,3)]
+      ├── variable: a.k [type=int, outer=(1)]
+      └── mult [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 2.0 [type=float]
+
+opt
+SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
+----
+project
+ ├── columns: f:3(float) column6:6(float)
+ ├── ordering: +3
+ ├── limit
+ │    ├── columns: a.f:3(float)
+ │    ├── ordering: +3
+ │    ├── offset
+ │    │    ├── columns: a.f:3(float)
+ │    │    ├── ordering: +3
+ │    │    ├── sort
+ │    │    │    ├── columns: a.f:3(float)
+ │    │    │    ├── ordering: +3
+ │    │    │    └── project
+ │    │    │         ├── columns: a.f:3(float)
+ │    │    │         ├── group-by
+ │    │    │         │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │    │         │    ├── scan a
+ │    │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    │    │         │    └── aggregations
+ │    │    │         └── projections [outer=(3)]
+ │    │    │              └── variable: a.f [type=float, outer=(3)]
+ │    │    └── const: 5 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]

@@ -1,0 +1,209 @@
+# =============================================================================
+# select.opt contains normalization rules for the Select operator.
+# =============================================================================
+
+
+# EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
+# Filters operator. This allows other rules to rely upon the presence of the
+# Filters when matching. See comment at top of bool.opt for more details. This
+# rule is a special-case of the EnsureSelectFilters rule, for performance
+# reasons (no need to construct a new conditions list) in a common case.
+[EnsureSelectFiltersAnd, Normalize]
+(Select
+    $input:*
+    (And $conditions:*)
+)
+=>
+(Select
+    $input
+    (Filters $conditions)
+)
+
+# EnsureSelectFilters adds a Filters operator to a Select's filter condition
+# if it does not already exist. This allows other rules to rely upon the
+# presence of the Filters when matching. See comment at top of bool.opt for
+# more details.
+[EnsureSelectFilters, Normalize]
+(Select
+    $input:*
+    $filter:^(Filters | And | True | False)
+)
+=>
+(Select
+    $input
+    (Filters [ $filter ])
+)
+
+# EliminateSelect discards an unnecessary Select operator in the case where its
+# filter is always true.
+[EliminateSelect, Normalize]
+(Select $input:* (True)) => $input
+
+# MergeSelects combines two nested Select operators into a single Select that
+# ANDs the filter conditions of the two Selects.
+[MergeSelects, Normalize]
+(Select
+    (Select
+        $input:*
+        $innerFilter:*
+    )
+    $filter:*
+)
+=>
+(Select
+    $input
+    (ConcatFilters $innerFilter $filter)
+)
+
+# PushSelectIntoProject pushes the Select operator into its Project input. This
+# is typically preferable because it minimizes the number of rows which Project
+# needs to process. This is especially important if Project is adding expensive
+# computed columns.
+#
+# This rule triggers a cycle with the FilterUnusedSelectCols rule. That rule
+# has the DetectCycle tag to break the cycle. In addition, this rule uses
+# ProjectNoCycle to minimize the overhead of detecting the cycle by creating a
+# Project which will not match the FilterUnusedSelectCols rule (or any other
+# rule which has the DetectCycle tag).
+[PushSelectIntoProject, Normalize]
+(Select
+    $project:(Project
+        $input:*
+        $projections:*
+    )
+    (Filters
+        $list:[ ... $condition:* & ^(IsCorrelatedCols $condition (SynthesizedCols $project)) ... ]
+    )
+)
+=>
+(Select
+    (ProjectNoCycle
+        (Select
+            $input
+            (Filters (ExtractUncorrelatedConditions $list (SynthesizedCols $project)))
+        )
+        $projections
+    )
+    (Filters (ExtractCorrelatedConditions $list (SynthesizedCols $project)))
+)
+
+# PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
+# an input Join. This is possible in the case of InnerJoin and LeftJoin, as
+# long as the condition has no dependencies on the right side of the join.
+# Right and Full joins are not eligible, since attempting to filter left rows
+# would just result in NULL left rows instead.
+#
+#   -- No row is returned for a.x=1, a.y=2, b.x=1, since the WHERE excludes it.
+#   SELECT * FROM a RIGHT JOIN b ON a.x=b.x WHERE a.y < 0
+#
+#   -- But if the filter is incorrectly pushed down in RIGHT/FULL JOIN case,
+#   -- then a row containing null values on the left side is returned.
+#   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a RIGHT JOIN b ON a.x=b.x
+#
+# Citations: [1]
+[PushSelectIntoJoinLeft, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $right) ... ])
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $right)))
+        )
+        $right
+        $on
+    )
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $right)))
+)
+
+# PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
+# Select filter conditions into the right side of an input Join rather than
+# into the left side. See that rule's comments for more details.
+[PushSelectIntoJoinRight, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $left) ... ])
+)
+=>
+(Select
+    ((OpName $input)
+        $left
+        (Select
+            $right
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $left)))
+        )
+        $on
+    )
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
+)
+
+# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
+# AND'ing the filter conditions of each and creating a new InnerJoin with that
+# On condition. This is only safe to do with InnerJoin in the general case
+# where the conditions could filter either left or right rows. The special case
+# where a condition filters only one or the other is already taken care of by
+# the PushSelectIntoJoin rules.
+# NOTE: Keep this rule ordered after the PushSelectIntoJoin rules, for
+#       performance reasons. It's better to push down below the join in a
+#       single step, when possible.
+[MergeSelectInnerJoin, Normalize]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:*
+)
+=>
+((OpName $input)
+    $left
+    $right
+    (ConcatFilters $on $filter)
+)
+
+# PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
+# where it does not reference any of the aggregation columns. This only works
+# if there are grouping columns. Otherwise, this is an instance of the "scalar"
+# GroupBy, which returns only one row, and which exhibits different behavior if
+# the input is empty:
+#   SELECT MAX(y) FROM a
+#
+# If "a" is empty, this returns a single row containing a null value. This is
+# different behavior than a GroupBy with grouping columns, which would return
+# the empty set for a similar query:
+#   SELECT MAX(y) FROM a GROUP BY x
+#
+# Citations: [2]
+[PushSelectIntoGroupBy, Normalize]
+(Select
+    (GroupBy
+        $input:*
+        $aggregations:*
+        $groupingCols:* & ^(EmptyGroupingCols $groupingCols)
+    )
+    (Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $aggregations) ... ])
+)
+=>
+(Select
+    (GroupBy
+        (Select
+            $input
+            (Filters (ExtractUncorrelatedConditions $list (OutputCols $aggregations)))
+        )
+        $aggregations
+        $groupingCols
+    )
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $aggregations)))
+)

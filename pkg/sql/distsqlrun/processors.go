@@ -194,6 +194,10 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 //
 // inputs are optional.
 //
+// pushTrailingMeta is called after draining the sources and before calling
+// dst.ProducerDone(). It gives the caller the opportunity to push some trailing
+// metadata (e.g. tracing information and txn updates, if applicable).
+//
 // Returns true if more rows are needed, false otherwise. If false is returned
 // both the inputs and the output have been properly closed.
 func emitHelper(
@@ -201,6 +205,7 @@ func emitHelper(
 	output *ProcOutputHelper,
 	row sqlbase.EncDatumRow,
 	meta *ProducerMetadata,
+	pushTrailingMeta func(context.Context),
 	inputs ...RowSource,
 ) bool {
 	if output.output == nil {
@@ -230,7 +235,7 @@ func emitHelper(
 		return true
 	case DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
-		DrainAndClose(ctx, output.output, nil /* cause */, inputs...)
+		DrainAndClose(ctx, output.output, nil /* cause */, pushTrailingMeta, inputs...)
 		return false
 	case ConsumerClosed:
 		log.VEventf(ctx, 1, "no more rows required. Consumer shut down.")
@@ -531,9 +536,13 @@ func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	n.maybeStart("noop", "" /* logTag */)
 
+	if n.closed {
+		return nil, n.producerMeta(nil /* err */)
+	}
+
 	for {
 		row, meta := n.input.Next()
-		if n.closed || meta != nil {
+		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
@@ -682,6 +691,20 @@ func newProcessor(
 			return nil, errors.New("SSTWriter processor unimplemented")
 		}
 		return NewSSTWriterProcessor(flowCtx, *core.SSTWriter, inputs[0], outputs[0])
+	}
+	if core.MetadataTestSender != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newMetadataTestSender(flowCtx, inputs[0], post, outputs[0], core.MetadataTestSender.ID)
+	}
+	if core.MetadataTestReceiver != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newMetadataTestReceiver(
+			flowCtx, inputs[0], post, outputs[0], core.MetadataTestReceiver.SenderIDs,
+		)
 	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }

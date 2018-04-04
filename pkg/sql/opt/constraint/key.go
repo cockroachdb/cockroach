@@ -287,6 +287,10 @@ func MakeKeyContext(cols *Columns, evalCtx *tree.EvalContext) KeyContext {
 // Returns 0 if the values are equal, -1 if a is less than b, or 1 if b is less
 // than a.
 func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
+	// Fast path when the datums are the same.
+	if a == b {
+		return 0
+	}
 	cmp := a.Compare(c.EvalCtx, b)
 	if c.Columns.Get(colIdx).Descending() {
 		cmp = -cmp

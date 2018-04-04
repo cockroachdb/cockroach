@@ -12,14 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package idxconstraint
+package idxconstraint_test
 
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,19 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-)
-
-var (
-	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
 // The test files support only one command:
@@ -75,129 +69,116 @@ var (
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*testDataGlob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
-	}
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		ctx := context.Background()
+		semaCtx := tree.MakeSemaContext(false /* privileged */)
+		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	for _, path := range paths {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			var varTypes []types.T
+			var indexCols []opt.OrderingColumn
+			var notNullCols opt.ColSet
+			var iVarHelper tree.IndexedVarHelper
+			var invertedIndex bool
+			var normalizeTypedExpr bool
+			var err error
 
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				var varTypes []types.T
-				var colInfos []IndexColumnInfo
-				var iVarHelper tree.IndexedVarHelper
-				var invertedIndex bool
-				var normalizeTypedExpr bool
-				normalize := true
+			f := norm.NewFactory(&evalCtx)
+			md := f.Metadata()
 
-				for _, arg := range d.CmdArgs {
-					key, vals := arg.Key, arg.Vals
-					switch key {
-					case "vars":
-						varTypes, err = testutils.ParseTypes(vals)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-
-						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-
-					case "index", "inverted-index":
-						if varTypes == nil {
-							d.Fatalf(t, "vars must precede index")
-						}
-						var err error
-						colInfos, err = parseIndexColumns(varTypes, vals)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-						if key == "inverted-index" {
-							if len(colInfos) > 1 {
-								d.Fatalf(t, "inverted index must be on a single column")
-							}
-							invertedIndex = true
-						}
-
-					case "nonormalize":
-						normalize = false
-
-					case "semtree-normalize":
-						normalizeTypedExpr = true
-
-					default:
-						d.Fatalf(t, "unknown argument: %s", key)
-					}
-				}
-
-				switch d.Cmd {
-				case "index-constraints":
-					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+			for _, arg := range d.CmdArgs {
+				key, vals := arg.Key, arg.Vals
+				switch key {
+				case "vars":
+					varTypes, err = testutils.ParseTypes(vals)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 
-					if normalizeTypedExpr {
-						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
+					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+					// Set up the columns in the metadata.
+					for i, typ := range varTypes {
+						md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
+					}
+
+				case "index", "inverted-index":
+					if varTypes == nil {
+						d.Fatalf(t, "vars must precede index")
+					}
+					indexCols, notNullCols = parseIndexColumns(t, md, vals)
+					if key == "inverted-index" {
+						if len(indexCols) > 1 {
+							d.Fatalf(t, "inverted index must be on a single column")
 						}
+						invertedIndex = true
 					}
 
-					varNames := make([]string, len(varTypes))
-					for i := range varNames {
-						varNames[i] = fmt.Sprintf("@%d", i+1)
-					}
-					o := xform.NewOptimizer(&evalCtx)
-					if !normalize {
-						o.MaxSteps = xform.OptimizeNone
-					}
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
-					b.AllowUnsupportedExpr = true
-					group, err := b.Build(typedExpr)
-					if err != nil {
-						return fmt.Sprintf("error: %v\n", err)
-					}
-					ev := o.Optimize(group, &memo.PhysicalProps{})
+				case "nonormalize":
+					f.DisableOptimizations()
 
-					var ic Instance
-					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
-					spans, ok := ic.Spans()
-
-					var buf bytes.Buffer
-					if !ok {
-						spans = LogicalSpans{MakeFullSpan()}
-					}
-					for _, sp := range spans {
-						fmt.Fprintf(&buf, "%s\n", sp)
-					}
-					remainingFilter := ic.RemainingFilter()
-					remEv := o.Optimize(remainingFilter, &memo.PhysicalProps{})
-					if remEv.Operator() != opt.TrueOp {
-						execBld := execbuilder.New(nil /* execFactory */, remEv)
-						expr := execBld.BuildScalar(&iVarHelper)
-						fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
-					}
-					return buf.String()
+				case "semtree-normalize":
+					normalizeTypedExpr = true
 
 				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
+					d.Fatalf(t, "unknown argument: %s", key)
 				}
-			})
+			}
+
+			switch d.Cmd {
+			case "index-constraints":
+				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+				if err != nil {
+					d.Fatalf(t, "%v", err)
+				}
+
+				if normalizeTypedExpr {
+					typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+				}
+
+				varNames := make([]string, len(varTypes))
+				for i := range varNames {
+					varNames[i] = fmt.Sprintf("@%d", i+1)
+				}
+				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, f)
+				b.AllowUnsupportedExpr = true
+				group, err := b.Build(typedExpr)
+				if err != nil {
+					return fmt.Sprintf("error: %v\n", err)
+				}
+				ev := memo.MakeNormExprView(f.Memo(), group)
+
+				var ic idxconstraint.Instance
+				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, f)
+				result := ic.Constraint()
+				var buf bytes.Buffer
+				for i := 0; i < result.Spans.Count(); i++ {
+					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
+				}
+				remainingFilter := ic.RemainingFilter()
+				remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
+				if remEv.Operator() != opt.TrueOp {
+					execBld := execbuilder.New(nil /* execFactory */, remEv)
+					expr := execBld.BuildScalar(&iVarHelper)
+					fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+				}
+				return buf.String()
+
+			default:
+				d.Fatalf(t, "unsupported command: %s", d.Cmd)
+				return ""
+			}
 		})
-	}
+	})
 }
 
 func BenchmarkIndexConstraints(b *testing.B) {
-	testCases := []struct {
+	type testCase struct {
 		name, varTypes, indexInfo, expr string
-	}{
+	}
+	testCases := []testCase{
 		{
 			name:      "point-lookup",
 			varTypes:  "int",
@@ -229,6 +210,23 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			expr:      "@1 = 1 AND @2 >= 2 AND @2 <= 4 AND (@3, @4, @5) IN ((3, 4, 5), (6, 7, 8))",
 		},
 	}
+	// Generate a few testcases with many columns with single value constraint.
+	// This characterizes scaling w.r.t the number of columns.
+	for _, n := range []int{10, 100} {
+		var tc testCase
+		tc.name = fmt.Sprintf("single-jumbo-span-%d", n)
+		for i := 1; i <= n; i++ {
+			if i > 1 {
+				tc.varTypes += ", "
+				tc.indexInfo += ", "
+				tc.expr += " AND "
+			}
+			tc.varTypes += "int"
+			tc.indexInfo += fmt.Sprintf("@%d", i)
+			tc.expr += fmt.Sprintf("@%d=%d", i, i)
+		}
+		testCases = append(testCases, tc)
+	}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -236,10 +234,12 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			colInfos, err := parseIndexColumns(varTypes, strings.Split(tc.indexInfo, ", "))
-			if err != nil {
-				b.Fatal(err)
+			f := norm.NewFactory(nil /* evalCtx */)
+			md := f.Metadata()
+			for i, typ := range varTypes {
+				md.AddColumn(fmt.Sprintf("@%d", i+1), typ)
 			}
+			indexCols, notNullCols := parseIndexColumns(b, md, strings.Split(tc.indexInfo, ", "))
 
 			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 			typedExpr, err := testutils.ParseScalarExpr(tc.expr, iVarHelper.Container())
@@ -247,25 +247,20 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			o := xform.NewOptimizer(nil /* catalog */)
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			varNames := make([]string, len(varTypes))
-			for i := range varNames {
-				varNames[i] = fmt.Sprintf("@%d", i+1)
-			}
-			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
+			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, f)
 
 			group, err := bld.Build(typedExpr)
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := o.Optimize(group, &memo.PhysicalProps{})
+			ev := memo.MakeNormExprView(f.Memo(), group)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				var ic Instance
-				ic.Init(ev, colInfos, false /*isInverted */, &evalCtx, o.Factory())
-				_, _ = ic.Spans()
+				var ic idxconstraint.Instance
+				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, f)
+				_ = ic.Constraint()
 				_ = ic.RemainingFilter()
 			}
 		})
@@ -274,25 +269,21 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 // parseIndexColumns parses descriptions of index columns; each
 // string corresponds to an index column and is of the form:
-//   <type> [ascending|descending]
-func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumnInfo, error) {
-	res := make([]IndexColumnInfo, len(colStrs))
+//   @id [ascending|asc|descending|desc] [not null]
+func parseIndexColumns(
+	tb testing.TB, md *opt.Metadata, colStrs []string,
+) (columns []opt.OrderingColumn, notNullCols opt.ColSet) {
+	columns = make([]opt.OrderingColumn, len(colStrs))
 	for i := range colStrs {
 		fields := strings.Fields(colStrs[i])
 		if fields[0][0] != '@' {
-			return nil, fmt.Errorf("index column must start with @<index>")
+			tb.Fatal("index column must start with @<index>")
 		}
 		id, err := strconv.Atoi(fields[0][1:])
 		if err != nil {
-			return nil, err
+			tb.Fatal(err)
 		}
-		if id < 1 || id > len(indexVarTypes) {
-			return nil, fmt.Errorf("invalid index var @%d", id)
-		}
-		res[i].VarID = opt.ColumnID(id)
-		res[i].Typ = indexVarTypes[res[i].VarID-1]
-		res[i].Direction = encoding.Ascending
-		res[i].Nullable = true
+		columns[i] = opt.MakeOrderingColumn(opt.ColumnID(id), false /* descending */)
 		fields = fields[1:]
 		for len(fields) > 0 {
 			switch strings.ToLower(fields[0]) {
@@ -300,19 +291,19 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 				// ascending is the default.
 				fields = fields[1:]
 			case "descending", "desc":
-				res[i].Direction = encoding.Descending
+				columns[i] = -columns[i]
 				fields = fields[1:]
 
 			case "not":
 				if len(fields) < 2 || strings.ToLower(fields[1]) != "null" {
-					return nil, fmt.Errorf("unknown column attribute %s", fields)
+					tb.Fatalf("unknown column attribute %s", fields)
 				}
-				res[i].Nullable = false
+				notNullCols.Add(id)
 				fields = fields[2:]
 			default:
-				return nil, fmt.Errorf("unknown column attribute %s", fields)
+				tb.Fatalf("unknown column attribute %s", fields)
 			}
 		}
 	}
-	return res, nil
+	return columns, notNullCols
 }

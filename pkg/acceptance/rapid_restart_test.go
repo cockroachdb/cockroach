@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"syscall"
 	"testing"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -60,17 +60,8 @@ func unexpectedExitCode(exitErr *exec.ExitError) error {
 		// itself.
 		return nil
 	}
-	// NB: the docs suggest[1] that there are platform-independent types, but an
-	// inspection shows that at the time of writing, everything seems to return a
-	// syscall.WaitStatus.
-	//
-	// [1]: https://golang.org/pkg/os/#ProcessState.Sys
-	s, ok := exitErr.Sys().(syscall.WaitStatus)
-	if !ok {
-		return errors.Wrapf(exitErr, "unsupported architecture: %T", exitErr.Sys())
-	}
-	status := s.ExitStatus()
-	switch status {
+
+	switch status := sysutil.ExitStatus(exitErr); status {
 	case -1:
 		// Received SIGINT before setting up our own signal handlers.
 	case 1:

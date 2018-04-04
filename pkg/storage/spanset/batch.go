@@ -329,6 +329,10 @@ func (s spanSetBatch) Distinct() engine.ReadWriter {
 	return makeSpanSetReadWriter(s.b.Distinct(), s.spans)
 }
 
+func (s spanSetBatch) Empty() bool {
+	return s.b.Empty()
+}
+
 func (s spanSetBatch) Repr() []byte {
 	return s.b.Repr()
 }

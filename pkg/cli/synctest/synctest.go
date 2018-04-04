@@ -23,7 +23,6 @@ import (
 	"os/signal"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
 	"github.com/pkg/errors"
@@ -164,17 +164,17 @@ func Run(opts Options) error {
 	defer ticker.Stop()
 
 	done := make(chan os.Signal, 3)
-	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(done, os.Interrupt)
 
 	go func() {
 		wg.Wait()
-		done <- syscall.Signal(0)
+		done <- sysutil.Signal(0)
 	}()
 
 	if opts.Duration > 0 {
 		go func() {
 			time.Sleep(opts.Duration)
-			done <- syscall.Signal(0)
+			done <- sysutil.Signal(0)
 		}()
 	}
 

@@ -37,9 +37,7 @@ func NewTestCatalog() *TestCatalog {
 }
 
 // FindTable is part of the opt.Catalog interface.
-func (tc *TestCatalog) FindTable(
-	ctx context.Context, name *tree.TableName,
-) (opt.Table, error) {
+func (tc *TestCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
 	if table, ok := tc.tables[name.Table()]; ok {
 		return table, nil
 	}

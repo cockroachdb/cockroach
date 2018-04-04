@@ -18,6 +18,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // logicalPropsFactory is a helper class that consolidates the code that
@@ -25,7 +27,9 @@ import (
 // children.
 // NOTE: The factory is defined as an empty struct with methods rather than as
 //       functions in order to keep the methods grouped and self-contained.
-type logicalPropsFactory struct{}
+type logicalPropsFactory struct {
+	evalCtx *tree.EvalContext
+}
 
 // constructProps is called by the memo group construction code in order to
 // initialize the new group's logical properties.
@@ -67,7 +71,10 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	case opt.GroupByOp:
 		return f.constructGroupByProps(ev)
 
-	case opt.LimitOp, opt.OffsetOp:
+	case opt.LimitOp:
+		return f.constructLimitProps(ev)
+
+	case opt.OffsetOp, opt.Max1RowOp:
 		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
 	}
 
@@ -95,7 +102,16 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	}
 
 	// TODO: Need actual number of rows.
-	props.Relational.Stats.RowCount = 1000
+	if def.Constraint != nil {
+		props.Relational.Stats.RowCount = 100
+	} else {
+		props.Relational.Stats.RowCount = 1000
+	}
+
+	// Cap number of rows at limit, if it exists.
+	if def.HardLimit > 0 && uint64(def.HardLimit) < props.Relational.Stats.RowCount {
+		props.Relational.Stats.RowCount = uint64(def.HardLimit)
+	}
 
 	return props
 }
@@ -123,7 +139,7 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	inputProps := ev.lookupChildGroup(0).logical.Relational
 
 	// Use output columns from projection list.
-	props.Relational.OutputCols = opt.ColListToSet(*ev.Child(1).Private().(*opt.ColList))
+	props.Relational.OutputCols = opt.ColListToSet(ev.Child(1).Private().(opt.ColList))
 
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.NotNullCols
@@ -185,9 +201,9 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
-	groupingColSet := *ev.Private().(*opt.ColSet)
+	groupingColSet := ev.Private().(opt.ColSet)
 	props.Relational.OutputCols = groupingColSet
-	aggColList := *ev.Child(1).Private().(*opt.ColList)
+	aggColList := ev.Child(1).Private().(opt.ColList)
 	props.Relational.OutputCols.UnionWith(opt.ColListToSet(aggColList))
 
 	// Propagate not null setting from input columns that are being grouped.
@@ -246,9 +262,29 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
-	props.Relational.OutputCols = opt.ColListToSet(*ev.Private().(*opt.ColList))
+	props.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
 	props.Relational.Stats.RowCount = uint64(ev.ChildCount())
+
+	return props
+}
+
+func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	limit := ev.Child(1)
+
+	// Start with pass-through props from input.
+	*props.Relational = *inputProps
+
+	// Update row count if limit is a constant.
+	if limit.Operator() == opt.ConstOp {
+		hardLimit := *limit.Private().(*tree.DInt)
+		if hardLimit > 0 {
+			props.Relational.Stats.RowCount = uint64(hardLimit)
+		}
+	}
 
 	return props
 }
@@ -279,6 +315,11 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 		} else {
 			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
 		}
+	}
+
+	if props.Scalar.Type == types.Bool {
+		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: f.evalCtx}
+		props.Scalar.Constraints, props.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}
 	return props
 }

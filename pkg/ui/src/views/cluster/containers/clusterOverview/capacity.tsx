@@ -2,6 +2,8 @@ import d3 from "d3";
 
 import { ComputeByteScale } from "src/util/format";
 
+const LOW_DISK_SPACE_RATIO = 0.15;
+
 interface CapacityChartProps {
   used: number;
   usable: number;
@@ -78,15 +80,30 @@ function capacityChart() {
     axisGroup.call(axis);
     axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
-    const bg = el.selectAll(".bg")
+    const lowDiskSpaceWidth = size.width * LOW_DISK_SPACE_RATIO;
+    const lowDiskSpacePosition = size.width - lowDiskSpaceWidth;
+
+    const bgNormal = el.selectAll(".bg-normal")
       .data((d: CapacityChartProps) => [d]);
 
-    bg.enter()
+    bgNormal.enter()
       .append("rect")
-      .attr("class", "bg");
+      .attr("class", "bg-normal");
 
-    bg
-      .attr("width", size.width)
+    bgNormal
+      .attr("width", lowDiskSpacePosition)
+      .attr("height", size.height);
+
+    const bgLowDiskSpace = el.selectAll(".bg-low-disk-space")
+      .data((d: CapacityChartProps) => [d]);
+
+    bgLowDiskSpace.enter()
+      .append("rect")
+      .attr("class", "bg-low-disk-space");
+
+    bgLowDiskSpace
+      .attr("x", lowDiskSpacePosition)
+      .attr("width", lowDiskSpaceWidth)
       .attr("height", size.height);
 
     const bar = el.selectAll(".bar")

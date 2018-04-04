@@ -28,6 +28,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// See https://github.com/brianfrankcooper/YCSB/blob/f886c1e7988f8f4965cb88a1fe2f6bad2c61b56d/core/src/main/java/com/yahoo/ycsb/generator/ScrambledZipfianGenerator.java#L33-L35
+	defaultIMax  = 10000000000
+	defaultTheta = 0.99
+	defaultZetaN = 26.46902820178302
+)
+
 // ZipfGenerator is a random number generator that generates draws from a Zipf
 // distribution. Unlike rand.Zipf, this generator supports incrementing the
 // imax parameter without performing an expensive recomputation of the
@@ -111,6 +118,11 @@ func computeZetaIncrementally(oldIMax, iMax uint64, theta float64, sum float64) 
 // The function zeta computes the value
 // zeta(n, theta) = (1/1)^theta + (1/2)^theta + (1/3)^theta + ... + (1/n)^theta
 func computeZetaFromScratch(n uint64, theta float64) (float64, error) {
+	if n == defaultIMax && theta == defaultTheta {
+		// Precomputed value, borrowed from ScrambledZipfianGenerator.java. (This is
+		// quite slow to calculate from scratch due to the large n value.)
+		return defaultZetaN, nil
+	}
 	zeta, err := computeZetaIncrementally(0, n, theta, 0.0)
 	if err != nil {
 		return zeta, errors.Errorf("could not compute zeta: %s", err)

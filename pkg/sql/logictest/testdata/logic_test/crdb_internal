@@ -146,15 +146,15 @@ SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
 query_id  node_id  username  start  query  client_address  application_name  distributed  phase
 
-query ITTTTTTTT colnames
+query ITTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn
+node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn
 
-query ITTTTTTTT colnames
+query ITTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn
+node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn
 
 query TTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
@@ -242,7 +242,7 @@ select crdb_internal.set_vmodule('')
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0-1
+2.0-2
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -324,4 +324,4 @@ select * from crdb_internal.kv_store_status
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0-1
+2.0-2

@@ -1,0 +1,4 @@
+offset_clause ::=
+	'OFFSET' a_expr
+	| 'OFFSET' c_expr 'ROW'
+	| 'OFFSET' c_expr 'ROWS'

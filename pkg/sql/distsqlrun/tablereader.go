@@ -15,10 +15,12 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,6 +41,9 @@ type tableReader struct {
 	spans     roachpb.Spans
 	limitHint int64
 
+	input RowSource
+	// fetcher is the underlying RowFetcher, should only be used for
+	// initialization, call input.Next() to retrieve rows once initialized.
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
@@ -57,6 +62,7 @@ func newTableReader(
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
+
 	tr := &tableReader{
 		tableDesc: spec.Table,
 	}
@@ -87,6 +93,29 @@ func newTableReader(
 
 	return tr, nil
 }
+
+// rowFetcherWrapper is used only by a tableReader to wrap calls to
+// RowFetcher.NextRow() in a RowSource implementation.
+type rowFetcherWrapper struct {
+	ctx context.Context
+	*sqlbase.RowFetcher
+}
+
+var _ RowSource = rowFetcherWrapper{}
+
+// Next() calls NextRow() on the underlying RowFetcher. If the returned
+// ProducerMetadata is not nil, only its Err field will be set.
+func (w rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	row, _, _, err := w.NextRow(w.ctx)
+	if err != nil {
+		return row, &ProducerMetadata{Err: err}
+	}
+	return row, nil
+}
+
+func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
+func (w rowFetcherWrapper) ConsumerDone()                     {}
+func (w rowFetcherWrapper) ConsumerClosed()                   {}
 
 func initRowFetcher(
 	fetcher *sqlbase.RowFetcher,
@@ -158,9 +187,11 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		if traceData != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
 		}
-		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
-		if txnMeta.Txn.ID != (uuid.UUID{}) {
-			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
+		if tr.flowCtx.txn.Type() == client.LeafTxn {
+			txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
+			if txnMeta.Txn.ID != (uuid.UUID{}) {
+				tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
+			}
 		}
 		tr.close()
 	}
@@ -188,6 +219,8 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			log.Eventf(tr.ctx, "scan error: %s", err)
 			return nil, tr.producerMeta(err)
 		}
+
+		tr.input = rowFetcherWrapper{ctx: tr.ctx, RowFetcher: &tr.fetcher}
 	}
 
 	if tr.closed || tr.consumerStatus != NeedMoreRows {
@@ -195,9 +228,11 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
-		var row sqlbase.EncDatumRow
+		row, meta := tr.input.Next()
 		var err error
-		row, _, _, err = tr.fetcher.NextRow(tr.ctx)
+		if meta != nil {
+			err = meta.Err
+		}
 		if row == nil || err != nil {
 			// This was the last-row or an error was encountered, annotate the
 			// metadata with misplanned ranges and trace data.

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -369,10 +370,12 @@ func newBytesOrPercentageValue(
 	}
 }
 
+var fractionRE = regexp.MustCompile(`^0?\.[0-9]+$`)
+
 // Set implements the pflags.Flag interface.
 func (b *bytesOrPercentageValue) Set(s string) error {
 	b.origVal = s
-	if strings.HasSuffix(s, "%") || strings.Contains(s, ".") {
+	if strings.HasSuffix(s, "%") || fractionRE.MatchString(s) {
 		multiplier := 100.0
 		if s[len(s)-1] == '%' {
 			// We have a percentage.

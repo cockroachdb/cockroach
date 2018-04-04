@@ -37,11 +37,11 @@ const (
 // next rowStart is returned (so last row written + 1).
 func WriteCSVRows(
 	ctx context.Context, w io.Writer, table Table, rowStart, rowEnd int, sizeBytesLimit int64,
-) (rowIdx int, err error) {
+) (rowBatchIdx int, err error) {
 	bytesWrittenW := &bytesWrittenWriter{w: w}
 	csvW := csv.NewWriter(bytesWrittenW)
 	var rowStrings []string
-	for rowIdx = rowStart; rowIdx < rowEnd; rowIdx++ {
+	for rowBatchIdx = rowStart; rowBatchIdx < rowEnd; rowBatchIdx++ {
 		if sizeBytesLimit > 0 && bytesWrittenW.written > sizeBytesLimit {
 			break
 		}
@@ -51,21 +51,22 @@ func WriteCSVRows(
 			return 0, ctx.Err()
 		default:
 		}
-		row := table.InitialRowFn(rowIdx)
-		if cap(rowStrings) < len(row) {
-			rowStrings = make([]string, len(row))
-		} else {
-			rowStrings = rowStrings[:len(row)]
-		}
-		for i, datum := range row {
-			rowStrings[i] = datumToCSVString(datum)
-		}
-		if err := csvW.Write(rowStrings); err != nil {
-			return 0, err
+		for _, row := range table.InitialRows.Batch(rowBatchIdx) {
+			if cap(rowStrings) < len(row) {
+				rowStrings = make([]string, len(row))
+			} else {
+				rowStrings = rowStrings[:len(row)]
+			}
+			for i, datum := range row {
+				rowStrings[i] = datumToCSVString(datum)
+			}
+			if err := csvW.Write(rowStrings); err != nil {
+				return 0, err
+			}
 		}
 	}
 	csvW.Flush()
-	return rowIdx, csvW.Error()
+	return rowBatchIdx, csvW.Error()
 }
 
 func datumToCSVString(datum interface{}) string {
@@ -123,7 +124,7 @@ func HandleCSV(w http.ResponseWriter, req *http.Request, prefix string, meta Met
 		return errors.Errorf(`could not find table %s in generator %s`, tableName, meta.Name)
 	}
 
-	rowStart, rowEnd := 0, table.InitialRowCount
+	rowStart, rowEnd := 0, table.InitialRows.NumBatches
 	if vals, ok := req.Form[rowStartParam]; ok && len(vals) > 0 {
 		var err error
 		rowStart, err = strconv.Atoi(vals[len(vals)-1])

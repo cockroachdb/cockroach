@@ -323,11 +323,11 @@ func TestSorter(t *testing.T) {
 							t.Fatal(err)
 						}
 					} else {
-						sb, err := newSorterBase(&flowCtx, &c.spec, in, &c.post, out)
+						var err error
+						s, err = newSortAllProcessor(&flowCtx, &c.spec, in, &c.post, out)
 						if err != nil {
 							t.Fatal(err)
 						}
-						s = newSortAllProcessor(sb)
 					}
 					// Override the default memory limit. This will result in using
 					// a memory row container which will hit this limit and fall

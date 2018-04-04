@@ -148,10 +148,6 @@ func (dsp *DistSQLPlanner) Run(
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx.EvalContext)
-	iter := evalCtx.SessionData.SearchPath.Iter()
-	for s, ok := iter(); ok; s, ok = iter() {
-		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
-	}
 
 	// Start all the flows except the flow on this node (there is always a flow on
 	// this node).

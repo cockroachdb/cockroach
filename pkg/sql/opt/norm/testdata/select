@@ -1,0 +1,723 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+----
+TABLE b
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# EnsureSelectFiltersAnd
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE i=5 AND s<'foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(2,4), constraints=(/2: [/5 - /5]; /4: (/NULL - /'foo'); tight)]
+      ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── lt [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo'); tight)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── const: 'foo' [type=string]
+
+# --------------------------------------------------
+# EnsureSelectFilters
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE i<5
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── const: 5 [type=int]
+
+opt
+SELECT * FROM a WHERE i<5 OR s='foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(2,4)]
+      └── or [type=bool, outer=(2,4)]
+           ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           │    ├── variable: a.i [type=int, outer=(2)]
+           │    └── const: 5 [type=int]
+           └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+                ├── variable: a.s [type=string, outer=(4)]
+                └── const: 'foo' [type=string]
+
+# Don't use Filters for True or False condition.
+opt
+SELECT * FROM a WHERE True
+----
+scan a
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+
+opt
+SELECT * FROM a WHERE False
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ └── constraint: /1: contradiction
+
+# --------------------------------------------------
+# EliminateSelect
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE True
+----
+scan a
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+
+# --------------------------------------------------
+# MergeSelects
+# --------------------------------------------------
+opt
+SELECT * FROM (SELECT * FROM a WHERE False) WHERE s='foo'
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ └── constraint: /1: contradiction
+
+opt
+SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ └── constraint: /1: contradiction
+
+opt
+SELECT * FROM (SELECT * FROM a WHERE i=1) WHERE False
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ └── constraint: /1: contradiction
+
+opt
+SELECT * FROM (SELECT * FROM a WHERE i<5) WHERE s='foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /4]; /4: [/'foo' - /'foo']; tight)]
+      ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── const: 'foo' [type=string]
+
+opt
+SELECT * FROM (SELECT * FROM a WHERE i>1 AND i<10) WHERE s='foo' OR k=5
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(1,2,4), constraints=(/2: [/2 - /9])]
+      ├── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 10 [type=int]
+      └── or [type=bool, outer=(1,4)]
+           ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           │    ├── variable: a.s [type=string, outer=(4)]
+           │    └── const: 'foo' [type=string]
+           └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight)]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── const: 5 [type=int]
+
+
+# --------------------------------------------------
+# PushSelectIntoProject
+# --------------------------------------------------
+opt
+SELECT * FROM (SELECT i, i+1, f FROM a) a WHERE f=10.0
+----
+project
+ ├── columns: i:2(int) column6:6(int) f:3(float)
+ ├── select
+ │    ├── columns: a.i:2(int) a.f:3(float)
+ │    ├── scan a
+ │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    └── filters [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
+ │              ├── variable: a.f [type=float, outer=(3)]
+ │              └── const: 10.0 [type=float]
+ └── projections [outer=(2,3)]
+      ├── variable: a.i [type=int, outer=(2)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
+      └── variable: a.f [type=float, outer=(3)]
+
+# Don't push down select if it depends on computed column.
+opt
+SELECT * FROM (SELECT i, i+1 plus, f FROM a) a WHERE plus=2
+----
+select
+ ├── columns: i:2(int) plus:6(int) f:3(float)
+ ├── project
+ │    ├── columns: a.i:2(int) plus:6(int) a.f:3(float)
+ │    ├── scan a
+ │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    └── projections [outer=(2,3)]
+ │         ├── variable: a.i [type=int, outer=(2)]
+ │         ├── plus [type=int, outer=(2)]
+ │         │    ├── variable: a.i [type=int, outer=(2)]
+ │         │    └── const: 1 [type=int]
+ │         └── variable: a.f [type=float, outer=(3)]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+           ├── variable: plus [type=int, outer=(6)]
+           └── const: 2 [type=int]
+
+# Push down some conjuncts, but not others.
+opt
+SELECT * FROM (SELECT i, i+1 plus, f FROM a) a WHERE 10.0=f AND 2=plus AND i=1
+----
+select
+ ├── columns: i:2(int) plus:6(int) f:3(float)
+ ├── project
+ │    ├── columns: a.i:2(int) plus:6(int) a.f:3(float)
+ │    ├── select
+ │    │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight)]
+ │    │         ├── eq [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
+ │    │         │    ├── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── const: 10.0 [type=float]
+ │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │    │              ├── variable: a.i [type=int, outer=(2)]
+ │    │              └── const: 1 [type=int]
+ │    └── projections [outer=(2,3)]
+ │         ├── variable: a.i [type=int, outer=(2)]
+ │         ├── plus [type=int, outer=(2)]
+ │         │    ├── variable: a.i [type=int, outer=(2)]
+ │         │    └── const: 1 [type=int]
+ │         └── variable: a.f [type=float, outer=(3)]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+           ├── variable: plus [type=int, outer=(6)]
+           └── const: 2 [type=int]
+
+# Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
+opt
+SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i HAVING SUM(f)=10.0) a
+----
+project
+ ├── columns: f:3(float) column7:7(float)
+ ├── select
+ │    ├── columns: a.i:2(int) a.f:3(float) column6:6(float)
+ │    ├── group-by
+ │    │    ├── columns: a.i:2(int) a.f:3(float) column6:6(float)
+ │    │    ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.i:2(int) a.f:3(float)
+ │    │    └── aggregations [outer=(3)]
+ │    │         └── function: sum [type=float, outer=(3)]
+ │    │              └── variable: a.f [type=float, outer=(3)]
+ │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
+ │         └── eq [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
+ │              ├── variable: column6 [type=float, outer=(6)]
+ │              └── const: 10.0 [type=float]
+ └── projections [outer=(3)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── plus [type=float, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
+           └── const: 1.1 [type=float]
+
+
+# --------------------------------------------------
+# PushSelectIntoJoinLeft
+# --------------------------------------------------
+opt
+SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE a.f=1.1
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── filters [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │         └── eq [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │              ├── variable: a.f [type=float, outer=(3)]
+ │              └── const: 1.1 [type=float]
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(6)]
+
+opt
+SELECT * FROM a LEFT JOIN b ON a.k=b.x WHERE a.f=1.1 AND a.i<b.y AND (a.s='foo' OR a.s='bar')
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left-join
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── select
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/1.1 - /1.1])]
+ │    │         ├── eq [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │    │         │    ├── variable: a.f [type=float, outer=(3)]
+ │    │         │    └── const: 1.1 [type=float]
+ │    │         └── or [type=bool, outer=(4)]
+ │    │              ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    │              │    ├── variable: a.s [type=string, outer=(4)]
+ │    │              │    └── const: 'foo' [type=string]
+ │    │              └── eq [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight)]
+ │    │                   ├── variable: a.s [type=string, outer=(4)]
+ │    │                   └── const: 'bar' [type=string]
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── filters [type=bool, outer=(1,6)]
+ │         └── eq [type=bool, outer=(1,6)]
+ │              ├── variable: a.k [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(6)]
+ └── filters [type=bool, outer=(2,7)]
+      └── lt [type=bool, outer=(2,7)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── variable: b.y [type=int, outer=(7)]
+
+# Pushdown constant condition.
+opt
+SELECT * FROM a INNER JOIN b ON True WHERE a.i=100 AND now()>'2000-01-01T1:00:00'
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100])]
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+ │         │    ├── variable: a.i [type=int, outer=(2)]
+ │         │    └── const: 100 [type=int]
+ │         └── gt [type=bool]
+ │              ├── function: now [type=timestamptz]
+ │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── true [type=bool]
+
+# Don't push down conditions in case of RIGHT JOIN.
+opt
+SELECT * FROM a RIGHT JOIN b ON a.k=b.x WHERE a.i=100
+----
+select
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── right-join
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.y:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── filters [type=bool, outer=(1,6)]
+ │         └── eq [type=bool, outer=(1,6)]
+ │              ├── variable: a.k [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(6)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── const: 100 [type=int]
+
+# Don't push down conditions in case of FULL JOIN.
+opt
+SELECT * FROM a FULL JOIN b ON a.k=b.x WHERE a.i=100
+----
+select
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── full-join
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── filters [type=bool, outer=(1,6)]
+ │         └── eq [type=bool, outer=(1,6)]
+ │              ├── variable: a.k [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(6)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── const: 100 [type=int]
+
+# --------------------------------------------------
+# PushSelectIntoJoinRight
+# --------------------------------------------------
+opt
+SELECT * FROM b INNER JOIN a ON b.x=a.k WHERE a.f=1.1
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ ├── scan b
+ │    └── columns: b.x:1(int!null) b.y:2(int)
+ ├── select
+ │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan a
+ │    │    └── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │         └── eq [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │              ├── variable: a.f [type=float, outer=(5)]
+ │              └── const: 1.1 [type=float]
+ └── filters [type=bool, outer=(1,3)]
+      └── eq [type=bool, outer=(1,3)]
+           ├── variable: b.x [type=int, outer=(1)]
+           └── variable: a.k [type=int, outer=(3)]
+
+opt
+SELECT * FROM b RIGHT JOIN a ON b.x=a.k WHERE a.f=1.1 AND a.i<b.y AND (a.s='foo' OR a.s='bar')
+----
+select
+ ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ ├── right-join
+ │    ├── columns: b.x:1(int) b.y:2(int) a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── select
+ │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    │    └── filters [type=bool, outer=(5,6), constraints=(/5: [/1.1 - /1.1])]
+ │    │         ├── eq [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │    │         │    ├── variable: a.f [type=float, outer=(5)]
+ │    │         │    └── const: 1.1 [type=float]
+ │    │         └── or [type=bool, outer=(6)]
+ │    │              ├── eq [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+ │    │              │    ├── variable: a.s [type=string, outer=(6)]
+ │    │              │    └── const: 'foo' [type=string]
+ │    │              └── eq [type=bool, outer=(6), constraints=(/6: [/'bar' - /'bar']; tight)]
+ │    │                   ├── variable: a.s [type=string, outer=(6)]
+ │    │                   └── const: 'bar' [type=string]
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: b.x [type=int, outer=(1)]
+ │              └── variable: a.k [type=int, outer=(3)]
+ └── filters [type=bool, outer=(2,4)]
+      └── lt [type=bool, outer=(2,4)]
+           ├── variable: a.i [type=int, outer=(4)]
+           └── variable: b.y [type=int, outer=(2)]
+
+# Don't push down conditions in case of LEFT JOIN.
+opt
+SELECT * FROM b LEFT JOIN a ON a.k=b.x WHERE a.i=100
+----
+select
+ ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ ├── left-join
+ │    ├── columns: b.x:1(int!null) b.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: a.k [type=int, outer=(3)]
+ │              └── variable: b.x [type=int, outer=(1)]
+ └── filters [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
+      └── eq [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
+           ├── variable: a.i [type=int, outer=(4)]
+           └── const: 100 [type=int]
+
+# Don't push down conditions in case of FULL JOIN.
+opt
+SELECT * FROM b FULL JOIN a ON a.k=b.x WHERE a.i=100
+----
+select
+ ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ ├── full-join
+ │    ├── columns: b.x:1(int) b.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: a.k [type=int, outer=(3)]
+ │              └── variable: b.x [type=int, outer=(1)]
+ └── filters [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
+      └── eq [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
+           ├── variable: a.i [type=int, outer=(4)]
+           └── const: 100 [type=int]
+
+# --------------------------------------------------
+# MergeSelectInnerJoin
+# --------------------------------------------------
+opt
+SELECT * FROM a, b WHERE a.k=b.x AND (a.s='foo' OR b.y<100)
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── filters [type=bool, outer=(1,4,6,7)]
+      ├── eq [type=bool, outer=(1,6)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── variable: b.x [type=int, outer=(6)]
+      └── or [type=bool, outer=(4,7)]
+           ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           │    ├── variable: a.s [type=string, outer=(4)]
+           │    └── const: 'foo' [type=string]
+           └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /99]; tight)]
+                ├── variable: b.y [type=int, outer=(7)]
+                └── const: 100 [type=int]
+
+opt
+SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE (a.s='foo' OR b.y<100)
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── filters [type=bool, outer=(1,4,6,7)]
+      ├── eq [type=bool, outer=(1,6)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── variable: b.x [type=int, outer=(6)]
+      └── or [type=bool, outer=(4,7)]
+           ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           │    ├── variable: a.s [type=string, outer=(4)]
+           │    └── const: 'foo' [type=string]
+           └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /99]; tight)]
+                ├── variable: b.y [type=int, outer=(7)]
+                └── const: 100 [type=int]
+
+opt
+SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE False
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── scan a
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── false [type=bool]
+
+# Don't merge with LEFT JOIN.
+opt
+SELECT * FROM a LEFT JOIN b ON True WHERE a.k=b.x
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left-join
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── true [type=bool]
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(6)]
+
+# Don't merge with RIGHT JOIN.
+opt
+SELECT * FROM a RIGHT JOIN b ON True WHERE a.k=b.x
+----
+select
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── right-join
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.y:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── true [type=bool]
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(6)]
+
+# Don't merge with FULL JOIN.
+opt
+SELECT * FROM a FULL JOIN b ON True WHERE a.k=b.x
+----
+select
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── full-join
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── true [type=bool]
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(6)]
+
+# --------------------------------------------------
+# PushSelectIntoJoinLeft + PushSelectIntoJoinRight + MergeSelectInnerJoin
+# --------------------------------------------------
+opt
+SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE a.f=1.1 AND s='foo' AND b.y=10 AND a.i<b.y
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/1.1 - /1.1]; /4: [/'foo' - /'foo']; tight)]
+ │         ├── eq [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │         │    ├── variable: a.f [type=float, outer=(3)]
+ │         │    └── const: 1.1 [type=float]
+ │         └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │              ├── variable: a.s [type=string, outer=(4)]
+ │              └── const: 'foo' [type=string]
+ ├── select
+ │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.y:7(int)
+ │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │         └── eq [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
+ │              ├── variable: b.y [type=int, outer=(7)]
+ │              └── const: 10 [type=int]
+ └── filters [type=bool, outer=(1,2,6,7)]
+      ├── eq [type=bool, outer=(1,6)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── variable: b.x [type=int, outer=(6)]
+      └── lt [type=bool, outer=(2,7)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── variable: b.y [type=int, outer=(7)]
+
+opt
+SELECT * FROM a, b WHERE a.i=100 AND now()>'2000-01-01T1:00:00' AND b.x=a.k
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan a
+ │    │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100])]
+ │         ├── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+ │         │    ├── variable: a.i [type=int, outer=(2)]
+ │         │    └── const: 100 [type=int]
+ │         └── gt [type=bool]
+ │              ├── function: now [type=timestamptz]
+ │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
+ ├── scan b
+ │    └── columns: b.x:6(int!null) b.y:7(int)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: b.x [type=int, outer=(6)]
+           └── variable: a.k [type=int, outer=(1)]
+
+# --------------------------------------------------
+# PushSelectIntoGroupBy
+# --------------------------------------------------
+
+# Push down into GroupBy with aggregations.
+opt
+SELECT * FROM (SELECT i, COUNT(*) FROM a GROUP BY i) a WHERE i=1
+----
+group-by
+ ├── columns: i:2(int) column6:6(int)
+ ├── grouping columns: a.i:2(int)
+ ├── select
+ │    ├── columns: a.i:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.i:2(int)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ └── aggregations
+      └── function: count_rows [type=int]
+
+# Push down into GroupBy with no aggregations.
+opt
+SELECT * FROM (SELECT i FROM a GROUP BY i) a WHERE i=1
+----
+group-by
+ ├── columns: i:2(int)
+ ├── grouping columns: a.i:2(int)
+ ├── select
+ │    ├── columns: a.i:2(int)
+ │    ├── scan a
+ │    │    └── columns: a.i:2(int)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ └── aggregations
+
+# Push down only conditions that do not depend on aggregations.
+opt
+SELECT * FROM (SELECT k, i, MAX(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
+----
+select
+ ├── columns: k:1(int!null) i:2(int) m:6(string)
+ ├── group-by
+ │    ├── columns: a.k:1(int!null) a.i:2(int) m:6(string)
+ │    ├── grouping columns: a.k:1(int!null) a.i:2(int)
+ │    ├── select
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+ │    │    ├── scan a
+ │    │    │    └── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+ │    │    └── filters [type=bool, outer=(1,2)]
+ │    │         └── eq [type=bool, outer=(1,2)]
+ │    │              ├── variable: a.i [type=int, outer=(2)]
+ │    │              └── variable: a.k [type=int, outer=(1)]
+ │    └── aggregations [outer=(4)]
+ │         └── function: max [type=string, outer=(4)]
+ │              └── variable: a.s [type=string, outer=(4)]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+           ├── variable: m [type=string, outer=(6)]
+           └── const: 'foo' [type=string]
+
+# Do *not* push down into scalar GroupBy.
+opt
+SELECT * FROM (SELECT COUNT(*) c FROM a) a WHERE now()<'2000-01-01T10:00:00' AND c=0
+----
+select
+ ├── columns: c:6(int)
+ ├── group-by
+ │    ├── columns: c:6(int)
+ │    ├── scan a
+ │    └── aggregations
+ │         └── function: count_rows [type=int]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0])]
+      ├── lt [type=bool]
+      │    ├── function: now [type=timestamptz]
+      │    └── const: '2000-01-01 10:00:00+00:00' [type=timestamptz]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+           ├── variable: c [type=int, outer=(6)]
+           └── const: 0 [type=int]

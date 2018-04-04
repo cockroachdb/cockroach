@@ -18,6 +18,7 @@ package tpcc
 import (
 	gosql "database/sql"
 	"math/rand"
+	"sync/atomic"
 
 	"context"
 
@@ -49,6 +50,8 @@ type delivery struct{}
 var _ tpccTx = delivery{}
 
 func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	atomic.AddUint64(&config.auditor.deliveryTransactions, 1)
+
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	oCarrierID := rng.Intn(10) + 1
@@ -73,6 +76,7 @@ func (del delivery) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error
 					wID, dID)).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if err != gosql.ErrNoRows {
+						atomic.AddUint64(&config.auditor.skippedDelivieries, 1)
 						return err
 					}
 					continue

@@ -1,0 +1,38 @@
+# LogicTest: distsql
+
+
+# Test that sequence functions work in DistSQL queries.
+
+statement ok
+CREATE TABLE t (c int PRIMARY KEY)
+
+statement ok
+INSERT INTO t VALUES (1)
+
+statement ok
+CREATE SEQUENCE distsql_test START WITH 10
+
+statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+SELECT lastval()
+
+# TODO(andrei): this error we get sometimes has a prefix of "lastval()" (as above), sometimes doesn't.
+# I couldn't figure out where the difference in prefix comes from. The regex
+# ignores it.
+statement error pgcode 55000 pq: .*lastval is not yet defined in this session
+SELECT c, lastval() from t
+
+query I
+SELECT nextval('distsql_test')
+----
+10
+
+query II
+SELECT c, lastval() FROM t
+----
+1 10
+
+# Restore this query when #24130 is fixed:
+# query II
+# SELECT c, currval('distsql_test') FROM t
+# ----
+# 1, 1

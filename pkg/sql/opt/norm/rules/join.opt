@@ -1,0 +1,86 @@
+# =============================================================================
+# join.opt contains normalization rules for Join operators.
+# =============================================================================
+
+
+# EnsureJoinFiltersAnd replaces an And operator in a Join's On condition with
+# the Filters operator. This allows other rules to rely upon the presence of
+# the Filters when matching. See comment at top of bool.opt for more details.
+# This rule is a special-case of the EnsureJoinFilters rule, for performance
+# reasons (no need to construct a new conditions list) in a common case.
+[EnsureJoinFiltersAnd, Normalize]
+(Join
+    $left:*
+    $right:*
+    (And $conditions:*)
+)
+=>
+((OpName)
+    $left
+    $right
+    (Filters $conditions)
+)
+
+# EnsureJoinFilters adds a Filters operator to a Join's On condition if it does
+# not already exist. This allows other rules to rely upon the presence of the
+# Filters when matching. See comment at top of bool.opt for more details.
+[EnsureJoinFilters, Normalize]
+(Join
+    $left:*
+    $right:*
+    $filter:^(Filters | And | True | False)
+)
+=>
+((OpName)
+    $left
+    $right
+    (Filters [ $filter ])
+)
+
+# PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
+# join. This is possible in the case of InnerJoin and RightJoin, as long as the
+# condition has no dependencies on the right side of the join. Left and Full
+# joins are not eligible, since filtering left rows will change the number of
+# rows in the result for those types of joins:
+#
+#   -- A row with nulls on the right side is returned for a.x=1, a.y=2, b.x=1.
+#   SELECT * FROM a LEFT JOIN b ON a.x=b.x AND a.y < 0
+#
+#   -- But if the filter is incorrectly pushed down, then no row is returned.
+#   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a LEFT JOIN b ON a.x=b.x
+#
+# Citations: [1]
+[PushFilterIntoJoinLeft, Normalize]
+(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+    $left:*
+    $right:*
+    $on:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $right) ... ])
+)
+=>
+((OpName)
+    (Select
+        $left
+        (Filters (ExtractUncorrelatedConditions $list (OutputCols $right)))
+    )
+    $right
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $right)))
+)
+
+# PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
+# Join filter conditions into the right side of the join rather than into the
+# left side. See that rule's comments for more details.
+[PushFilterIntoJoinRight, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $left:*
+    $right:*
+    $on:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $left) ... ])
+)
+=>
+((OpName)
+    $left
+    (Select
+        $right
+        (Filters (ExtractUncorrelatedConditions $list (OutputCols $left)))
+    )
+    (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
+)

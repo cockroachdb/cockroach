@@ -92,6 +92,9 @@ var queries = [...]benchQuery{
 	// Taken from BenchmarkCount in pkg/sql/bench/bench_test.go.
 	{"Count", `SELECT COUNT(*) FROM bench.count`},
 
+	// Taken from BenchmarkScan in pkg/sql/bench/bench_test.go.
+	{"Scan", `SELECT * FROM scan LIMIT 10`},
+
 	// Taken from BenchmarkPlanning in pkg/sql/bench/bench_test.go.
 	{"Planning1", `SELECT * FROM abc`},
 	{"Planning2", `SELECT * FROM abc WHERE a > 5 ORDER BY a`},
@@ -159,6 +162,7 @@ func newBenchmark(b *testing.B) *benchmark {
 	bm.sr = sqlutils.MakeSQLRunner(bm.db)
 	bm.sr.Exec(b, `CREATE DATABASE bench`)
 	bm.sr.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)`)
+	bm.sr.Exec(b, `CREATE TABLE bench.scan (k INT PRIMARY KEY)`)
 	bm.sr.Exec(b, `CREATE TABLE bench.select (k INT PRIMARY KEY, a INT, b INT, c INT, d INT)`)
 	bm.sr.Exec(b, `CREATE TABLE bench.count (k INT PRIMARY KEY, v TEXT)`)
 	bm.sr.Exec(b, `CREATE TABLE scan2 (a INT, b INT, PRIMARY KEY (a, b))`)
@@ -215,7 +219,7 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 
 		opt := xform.NewOptimizer(&evalCtx)
 		if bmType == optbuild {
-			opt.MaxSteps = xform.OptimizeNone
+			opt.DisableOptimizations()
 		}
 		bld := optbuilder.New(ctx, &semaCtx, &evalCtx, eng.Catalog(), opt.Factory(), stmt)
 		root, props, err := bld.Build()

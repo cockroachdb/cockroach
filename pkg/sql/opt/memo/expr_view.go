@@ -205,8 +205,11 @@ const (
 	// ExprFmtHideCost does not show expression cost in the output.
 	ExprFmtHideCost
 
+	// ExprFmtHideConstraints does not show inferred constraints in the output.
+	ExprFmtHideConstraints
+
 	// ExprFmtHideAll shows only the most basic properties of the expression.
-	ExprFmtHideAll = ExprFmtHideStats | ExprFmtHideCost | ExprFmtHideOuterCols
+	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )
 
 // String returns a string representation of this expression for testing and
@@ -240,11 +243,17 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	switch ev.Operator() {
 	case opt.ScanOp:
-		ev.mem.formatPrivate(&buf, ev.Private())
+		ev.mem.formatScanPrivate(&buf, ev.Private().(*ScanOpDef), true /* short */)
+	}
+
+	var physProps *PhysicalProps
+	if ev.best == normBestOrdinal {
+		physProps = &PhysicalProps{}
+	} else {
+		physProps = ev.Physical()
 	}
 
 	logProps := ev.Logical()
-	physProps := ev.Physical()
 
 	tp = tp.Child(buf.String())
 	buf.Reset()
@@ -259,11 +268,11 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		case opt.ProjectOp:
 			// Get the list of columns from the ProjectionsOp, which has the
 			// natural order.
-			colList := *ev.Child(1).Private().(*opt.ColList)
+			colList := ev.Child(1).Private().(opt.ColList)
 			logProps.FormatColList(tp, ev.Metadata(), "columns:", colList)
 
 		case opt.ValuesOp:
-			colList := *ev.Private().(*opt.ColList)
+			colList := ev.Private().(opt.ColList)
 			logProps.FormatColList(tp, ev.Metadata(), "columns:", colList)
 
 		case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
@@ -282,16 +291,25 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	// Special-case handling for GroupBy private; print grouping columns in
 	// addition to full set of columns.
 	case opt.GroupByOp:
-		groupingColSet := *ev.Private().(*opt.ColSet)
+		groupingColSet := ev.Private().(opt.ColSet)
 		logProps.FormatColSet(tp, ev.Metadata(), "grouping columns:", groupingColSet)
 
-		// Special-case handling for set operators to show the left and right
-		// input columns that correspond to the output columns.
+	// Special-case handling for set operators to show the left and right
+	// input columns that correspond to the output columns.
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		colMap := ev.Private().(*SetOpColMap)
 		logProps.FormatColList(tp, ev.Metadata(), "left columns:", colMap.Left)
 		logProps.FormatColList(tp, ev.Metadata(), "right columns:", colMap.Right)
+
+	case opt.ScanOp:
+		def := ev.Private().(*ScanOpDef)
+		if def.Constraint != nil {
+			tp.Childf("constraint: %s", def.Constraint)
+		}
+		if def.HardLimit > 0 {
+			tp.Childf("limit: %d", def.HardLimit)
+		}
 	}
 
 	if !flags.HasFlags(ExprFmtHideStats) {
@@ -331,19 +349,31 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 			// already listed.
 			showType = false
 		}
+		hasOuterCols := !flags.HasFlags(ExprFmtHideOuterCols) && !scalar.OuterCols.Empty()
+		hasConstraints := !flags.HasFlags(ExprFmtHideConstraints) &&
+			scalar.Constraints != nil &&
+			!scalar.Constraints.IsUnconstrained()
 
-		hasOuterCols := !flags.HasFlags(ExprFmtHideOuterCols) && !ev.Logical().Scalar.OuterCols.Empty()
-
-		if showType || hasOuterCols {
+		if showType || hasOuterCols || hasConstraints {
 			buf.WriteString(" [")
 			if showType {
 				fmt.Fprintf(&buf, "type=%s", scalar.Type)
-				if hasOuterCols {
+				if hasOuterCols || hasConstraints {
 					buf.WriteString(", ")
 				}
 			}
 			if hasOuterCols {
 				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
+				if hasConstraints {
+					buf.WriteString(", ")
+				}
+			}
+			if hasConstraints {
+				fmt.Fprintf(&buf, "constraints=(%s", scalar.Constraints)
+				if scalar.TightConstraints {
+					buf.WriteString("; tight")
+				}
+				buf.WriteString(")")
 			}
 			buf.WriteString("]")
 		}
@@ -384,4 +414,19 @@ func (ev ExprView) formatPresentation(tp treeprinter.Node, presentation Presenta
 		logProps.FormatCol(&buf, ev.Metadata(), col.Label, col.ID)
 	}
 	tp.Child(buf.String())
+}
+
+// MatchesTupleOfConstants returns true if the expression is a TupleOp with
+// ConstValue children.
+func MatchesTupleOfConstants(ev ExprView) bool {
+	if ev.Operator() != opt.TupleOp {
+		return false
+	}
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
+		if !child.IsConstValue() {
+			return false
+		}
+	}
+	return true
 }

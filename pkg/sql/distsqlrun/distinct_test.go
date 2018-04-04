@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -104,30 +106,6 @@ func TestDistinct(t *testing.T) {
 				{v[5], v[6]},
 			},
 		},
-		{
-			spec: DistinctSpec{
-				OrderedColumns:  []uint32{1},
-				DistinctColumns: []uint32{},
-			},
-			input: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[6], v[6]},
-			},
-			expected: sqlbase.EncDatumRows{
-				{v[2], v[3]},
-				{v[2], v[3]},
-				{v[2], v[6]},
-				{v[2], v[9]},
-				{v[3], v[5]},
-				{v[5], v[6]},
-				{v[6], v[6]},
-			},
-		},
 	}
 
 	for _, c := range testCases {
@@ -171,9 +149,8 @@ func TestDistinct(t *testing.T) {
 	}
 }
 
-func benchmarkDistinct(b *testing.B, useOrdering bool) {
-	const numCols = 1
-	const numRows = 1000
+func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
+	const numCols = 2
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -186,31 +163,37 @@ func benchmarkDistinct(b *testing.B, useOrdering bool) {
 		EvalCtx:  evalCtx,
 	}
 	spec := &DistinctSpec{
-		DistinctColumns: []uint32{0},
+		DistinctColumns: []uint32{0, 1},
 	}
-	if useOrdering {
-		spec.OrderedColumns = []uint32{0}
-	}
-	post := &PostProcessSpec{}
-	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+	spec.OrderedColumns = orderedColumns
 
-	b.SetBytes(8 * numRows * numCols)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
-		if err != nil {
-			b.Fatal(err)
-		}
-		d.Run(nil)
-		input.Reset()
+	post := &PostProcessSpec{}
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			input := NewRepeatableRowSource(twoIntCols, makeIntRows(numRows, numCols))
+
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				d, err := newDistinct(flowCtx, spec, input, post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
+				d.Run(nil)
+				input.Reset()
+			}
+		})
 	}
-	b.StopTimer()
 }
 
 func BenchmarkOrderedDistinct(b *testing.B) {
-	benchmarkDistinct(b, true /* useOrdering */)
+	benchmarkDistinct(b, []uint32{0, 1})
+}
+
+func BenchmarkPartiallyOrderedDistinct(b *testing.B) {
+	benchmarkDistinct(b, []uint32{0})
 }
 
 func BenchmarkUnorderedDistinct(b *testing.B) {
-	benchmarkDistinct(b, false /* useOrdering */)
+	benchmarkDistinct(b, []uint32{})
 }

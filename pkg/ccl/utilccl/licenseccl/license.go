@@ -72,7 +72,21 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 	// suddenly throwing errors at them.
 	if l.ValidUntilUnixSec > 0 && l.Type != License_Enterprise {
 		if expiration := timeutil.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
-			return errors.Errorf("license expired at %s", expiration.String())
+			licensePrefix := ""
+			switch l.Type {
+			case License_NonCommercial:
+				licensePrefix = "non-commercial "
+			case License_Evaluation:
+				licensePrefix = "evaluation "
+			}
+			return errors.Errorf(
+				"Use of %s requires an enterprise license. Your %slicense expired on %s. If you're "+
+					"interested in getting a new license, please contact subscriptions@cockroachlabs.com "+
+					"and we can help you out.",
+				feature,
+				licensePrefix,
+				expiration.Format("January 2, 2006"),
+			)
 		}
 	}
 
