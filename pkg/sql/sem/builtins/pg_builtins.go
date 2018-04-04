@@ -244,9 +244,9 @@ func makePGPrivilegeInquiryDef(
 	for _, argType := range argTypes {
 		withUser := argType[0].Name == "user"
 
-		infoFmt := "does current user have privilege for %s"
+		infoFmt := "Returns whether or not the current user has privileges for %s."
 		if withUser {
-			infoFmt = "does user have privilege for %s"
+			infoFmt = "Returns whether or not the user has privileges for %s."
 		}
 
 		variants = append(variants, tree.Builtin{
@@ -410,7 +410,7 @@ func evalPrivilegeCheck(
 	}
 	for _, p := range privChecks {
 		query := fmt.Sprintf(`
-			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE 
+			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
 			FROM information_schema.%s WHERE grantee = $1 AND %s`,
 			privilege.ALL, p, infoTable, pred)
 		r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, user)
