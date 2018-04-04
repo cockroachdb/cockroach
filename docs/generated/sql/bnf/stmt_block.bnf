@@ -1284,6 +1284,8 @@ d_expr ::=
 	| a_expr_const
 	| '@' iconst64
 	| 'PLACEHOLDER'
+	| '(' a_expr ')' '.' '*'
+	| '(' a_expr ')' '.' unrestricted_name
 	| '(' a_expr ')'
 	| func_expr
 	| select_with_parens

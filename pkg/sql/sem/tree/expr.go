@@ -1054,6 +1054,10 @@ type FuncExpr struct {
 	// Filter is used for filters on aggregates: SUM(k) FILTER (WHERE k > 0)
 	Filter    Expr
 	WindowDef *WindowDef
+	// EscapeSRF is to be set to true if the FuncExpr
+	// is enclosed in a ColumnAccessExpr. This is a temporary
+	// mechanism until #24866 is solved.
+	EscapeSRF bool
 
 	typeAnnotation
 	fn *Builtin
@@ -1448,6 +1452,28 @@ func (node *CollateExpr) Format(ctx *FmtCtx) {
 	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, node.Locale, lex.EncNoFlags)
 }
 
+// ColumnAccessExpr represents (SRF).x or (SRF).* expression. Specifically, it
+// allows accessing the column(s) from a Set Retruning Function.
+type ColumnAccessExpr struct {
+	Expr    Expr
+	ColName string
+	Star    bool
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Expr)
+	ctx.WriteString(").")
+	if node.Star {
+		ctx.WriteByte('*')
+	} else {
+		ctx.WriteString(node.ColName)
+	}
+}
+
 func (node *AliasedTableExpr) String() string { return AsString(node) }
 func (node *ParenTableExpr) String() string   { return AsString(node) }
 func (node *JoinTableExpr) String() string    { return AsString(node) }
@@ -1457,6 +1483,7 @@ func (node *BinaryExpr) String() string       { return AsString(node) }
 func (node *CaseExpr) String() string         { return AsString(node) }
 func (node *CastExpr) String() string         { return AsString(node) }
 func (node *CoalesceExpr) String() string     { return AsString(node) }
+func (node *ColumnAccessExpr) String() string { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *Datums) String() string           { return AsString(node) }
