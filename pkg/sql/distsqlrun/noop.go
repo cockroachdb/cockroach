@@ -112,6 +112,11 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
+// SafeNext is part of the RowSource interface.
+func (n *noopProcessor) SafeNext() bool {
+	return false
+}
+
 // ConsumerDone is part of the RowSource interface.
 func (n *noopProcessor) ConsumerDone() {
 	n.input.ConsumerDone()

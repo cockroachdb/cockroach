@@ -294,7 +294,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				if spanToRows[key.String()] == nil {
 					spans = append(spans, span)
 				}
-				spanToRows[key.String()] = append(spanToRows[key.String()], row)
+				spanToRows[key.String()] = append(spanToRows[key.String()], jr.out.rowAlloc.CopyRow(row))
 			} else {
 				spans = append(spans, span)
 			}

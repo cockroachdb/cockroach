@@ -60,12 +60,14 @@ type ProcOutputHelper struct {
 	// outputCols can be set.
 	outputCols []uint32
 
+	outputRow sqlbase.EncDatumRow
+
 	// outputTypes is the schema of the rows produced by the processor after
 	// post-processing (i.e. the rows that are pushed through a router).
 	//
 	// If renderExprs is set, these types correspond to the types of those
 	// expressions.
-	// If outpuCols is set, these types correspond to the types of
+	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
 	outputTypes []sqlbase.ColumnType
@@ -131,6 +133,10 @@ func (h *ProcOutputHelper) Init(
 		}
 	} else {
 		h.outputTypes = types
+	}
+	if h.outputCols != nil || h.renderExprs != nil {
+		// We're rendering or projecting, so allocate an output row.
+		h.outputRow = h.rowAlloc.AllocRow(len(h.outputTypes))
 	}
 
 	h.offset = post.Offset
@@ -277,6 +283,9 @@ func (h *ProcOutputHelper) EmitRow(
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
 	}
+	if h.output.SafePush() {
+		outRow = h.rowAlloc.CopyRow(outRow)
+	}
 	if r := h.output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
 			r == DrainRequested)
@@ -290,7 +299,8 @@ func (h *ProcOutputHelper) EmitRow(
 }
 
 // ProcessRow sends the invoked row through the post-processing stage and returns
-// the post-processed row.
+// the post-processed row. Results from ProcessRow aren't safe past the next call
+// to ProcessRow.
 //
 // It returns the ConsumerStatus which is interpreted as if there was a consumer
 // consuming the row.
@@ -323,30 +333,26 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, NeedMoreRows, nil
 	}
 
-	var outRow sqlbase.EncDatumRow
 	if h.renderExprs != nil {
 		// Rendering.
-		outRow = h.rowAlloc.AllocRow(len(h.renderExprs))
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
 			if err != nil {
 				return nil, ConsumerClosed, err
 			}
-			outRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
+			h.outputRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.
-		outRow = h.rowAlloc.AllocRow(len(h.outputCols))
 		for i, col := range h.outputCols {
-			outRow[i] = row[col]
+			h.outputRow[i] = row[col]
 		}
 	} else {
 		// No rendering or projection.
-		outRow = h.rowAlloc.AllocRow(len(row))
-		copy(outRow, row)
+		return row, NeedMoreRows, nil
 	}
 
-	return outRow, NeedMoreRows, nil
+	return h.outputRow, NeedMoreRows, nil
 }
 
 // Close signals to the output that there will be no more rows.
@@ -373,6 +379,11 @@ type processorBase struct {
 	// used as a RowSource.
 	started bool
 	closed  bool
+}
+
+// SafeNext is part of the RowSource interface.
+func (*processorBase) SafeNext() bool {
+	return false
 }
 
 // OutputTypes is part of the processor interface.

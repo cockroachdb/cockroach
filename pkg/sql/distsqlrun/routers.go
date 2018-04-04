@@ -420,6 +420,10 @@ func (mr *mirrorRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Co
 	return aggStatus
 }
 
+func (mr *mirrorRouter) SafePush() bool {
+	return true
+}
+
 var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 
 func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
@@ -469,6 +473,10 @@ func (hr *hashRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 		return ConsumerClosed
 	}
 	return aggStatus
+}
+
+func (hr *hashRouter) SafePush() bool {
+	return true
 }
 
 // computeDestination hashes a row and returns the index of the output stream on
@@ -552,6 +560,10 @@ func (rr *rangeRouter) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Con
 		return ConsumerClosed
 	}
 	return aggStatus
+}
+
+func (rr *rangeRouter) SafePush() bool {
+	return true
 }
 
 func (rr *rangeRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {

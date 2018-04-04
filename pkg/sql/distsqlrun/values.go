@@ -90,7 +90,7 @@ func (v *valuesProcessor) producerMeta(err error) *ProducerMetadata {
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if v.maybeStart("values", "" /* logTag */) {
-		// Add a bogus header to apease the StreamDecoder, which wants to receive a
+		// Add a bogus header to appease the StreamDecoder, which wants to receive a
 		// header before any data.
 		m := &ProducerMessage{
 			Typing: v.columns,

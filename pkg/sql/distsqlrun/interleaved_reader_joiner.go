@@ -308,9 +308,7 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 
 			// A new ancestor row is fetched. We re-assign our reference
 			// to the most recent ancestor row.
-			// This is safe because tableRow is a newly alloc'd
-			// row.
-			irj.ancestorRow = tableRow
+			irj.ancestorRow = tInfo.post.rowAlloc.CopyRow(tableRow)
 			irj.ancestorJoined = false
 			continue
 		}
