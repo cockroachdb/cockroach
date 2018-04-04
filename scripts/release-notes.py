@@ -27,6 +27,7 @@ import datetime, time
 import subprocess
 from git import Repo
 from optparse import OptionParser
+from git.repo.fun import name_to_object
 
 ### Global behavior constants ###
 
@@ -158,6 +159,16 @@ form2 = r': *(?P<cat2>[^ ]*) *:'
 form3 = r':(?P<cat3>)'
 relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + form2 + '|' + form3 + r') *(?P<note>.*)$', flags=re.S)
 
+## Merge commit format ##
+
+# The following merge commits have been seen in the wild:
+#
+# Merge pull request #XXXXX from ...    <- GitHub merges
+# Merge #XXXXX #XXXXX #XXXXX            <- Bors merges
+merge_by_github = re.compile(r'^Merge pull request (?P<pr>#[0-9]+)')
+merge_by_bors = re.compile(r'^Merge (?P<pr>#[0-9]+)')
+merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
+
 ### Initialization / option parsing ###
 
 parser = OptionParser()
@@ -269,7 +280,7 @@ def collect_commits(pr, title, commits, author):
     ncommits = 0
     otherauthors = set()
     for commit in commits:
-        if commit.message.startswith("Merge pull request"):
+        if commit.message.startswith("Merge"):
             continue
         extract_release_notes(pr, title, commit)
 
@@ -304,39 +315,137 @@ def spin():
         print(next(spinner),  end='', file=sys.stderr)
         sys.stderr.flush()
 
+#pr_refs = dict()
+#for ref in list(filter((lambda ref: ref.path.startswith("refs/pull")), repo.references)):
+#    spin()
+#    pr_number = ref.path.split("/")[-1]
+#    tip = name_to_object(repo, ref.path)
+#    pr_refs[tip] = pr_number
+
+#prexpr = re.compile(r'\(refs/pull/.*/(?P<number>[0-9]*)\)$', flags=re.M)
+prexpr = re.compile(r'\(([^,]*, )*refs/pull/.*/(?P<number>[0-9]*)(, [^,]*)*\)$', flags=re.M)
+
+# This function analyzes a PR based off its tip commit.
+def analyze_pr(merge, tip):
+    decorated = repo.git.log(tip, "-1", decorate=True)
+
+    prmatch = prexpr.search(decorated)
+    if prmatch is None:
+        # TODO(couchand): handle this more gracefully
+        print("uh-oh, couldn't find pr number for ", tip.hexsha)
+        exit(-1)
+    pr = prmatch.group("number")
+    #decorated.split('\n')[0].split('/')[-1].split(')')[0]
+    
+    noteexpr = re.compile("^{0}: (?P<message>.*) r=.* a=.*".format(pr), flags=re.M)
+    m = noteexpr.search(merge.message)
+    note = ''
+    if m is None:
+        # non-Bors merge
+        note = '\n'.join(merge.message.split('\n')[2:])
+    else:
+        note = m.group('message')
+
+    print(pr, tip.hexsha, note)
+
+def analyze_pr_new(merge, pr):
+    refname = "refs/pull/upstream/{0}".format(pr)
+    tip = name_to_object(repo, refname)
+
+    noteexpr = re.compile("^{0}: (?P<message>.*) r=.* a=.*".format(pr), flags=re.M)
+    m = noteexpr.search(merge.message)
+    note = ''
+    if m is None:
+        # non-Bors merge
+        note = '\n'.join(merge.message.split('\n')[2:])
+    else:
+        note = m.group('message')
+
+    print(pr, tip.hexsha, note)
+
+    commit = tip
+
+    authors = set()
+    ncommits = 0
+    while not commit.message.startswith("Merge"):
+        ncommits += 1
+        author = author_aliases.get(commit.author.name, commit.author.name)
+        if author != 'GitHub':
+            authors.add(author)
+        committer = author_aliases.get(commit.committer.name, commit.committer.name)
+        if committer != 'GitHub':
+            authors.add(committer)
+
+        if len(commit.parents) == 0:
+            break
+        commit = commit.parents[0]
+
+    print(list(authors))
+
 while commit != firstCommit:
-    spin()
-
+    # TODO(couchand): spin
+    #spin()
+ 
+    #m = mergecommit.search(commit.message)
     # Analyze the commit
-    if commit.message.startswith("Merge pull request"):
-        author = (author_aliases.get(commit.author.name, commit.author.name), commit.author.email)
-        lines = commit.message.split('\n', 3)
-        pr = lines[0].split(' ', 4)[3]
-        allprs.add(pr)
-        title = lines[2]
-        ncommits, otherauthors = collect_commits(pr, title, list(commit.parents), author[0])
-        individual_authors.add(author[0])
-        individual_authors.update(otherauthors)
+    if commit.message.startswith("Merge"):#m is not None:
+        #author = (author_aliases.get(commit.author.name, commit.author.name), commit.author.email)
+        #lines = commit.message.split('\n', 3)
 
-        stats = commit.stats.total
-        item = {
-            'title': title,
-            'pr': pr,
-            'sha': commit.hexsha[:shamin],
-            'ncommits': ncommits,
-            'otherauthors': otherauthors,
-            'insertions': stats['insertions'],
-            'deletions': stats['deletions'],
-            'files': stats['files'],
-            'lines': stats['lines'],
-            }
-        history = per_author_history.get(author, [])
-        history.append(item)
-        per_author_history[author] = history
+        #print("found commit by")
+        #print(author)
+        #print(lines[0])
+
+        numbermatch = merge_numbers.search(commit.message)
+        if numbermatch is None:
+            print("AAAAH!")
+            exit(-1)
+
+        #print("found merge of", numbermatch.group("numbers"))
+
+        #for parent in commit.parents[1:]:
+        #    analyze_pr(commit, parent)
+        for pr in numbermatch.group("numbers").split(" ")[1:]:
+            analyze_pr_new(commit, pr[1:])
+
+        #print(commit.parents[1:])
+
+        #print(name_to_object(repo, commit.parents[1].hexsha[:shamin], return_ref=True))
+
+        #print(list(
+        #    filter((lambda path: path.startswith("refs/pull")),
+        #        map((lambda ref: ref.path), repo.references)
+        #))
+
+        #pr = lines[0].split(' ', 4)[3]#m.group('pr')
+        #allprs.add(pr)
+        #title = lines[2]
+        #ncommits, otherauthors = collect_commits(pr, title, list(commit.parents), author[0])
+        #individual_authors.add(author[0])
+        #individual_authors.update(otherauthors)
+
+        #stats = commit.stats.total
+        #item = {
+        #    'title': title,
+        #    'pr': pr,
+        #    'sha': commit.hexsha[:shamin],
+        #    'ncommits': ncommits,
+        #    'otherauthors': otherauthors,
+        #    'insertions': stats['insertions'],
+        #    'deletions': stats['deletions'],
+        #    'files': stats['files'],
+        #    'lines': stats['lines'],
+        #    }
+        #history = per_author_history.get(author, [])
+        #history.append(item)
+        #per_author_history[author] = history
 
     if len(commit.parents) == 0:
         break
     commit = commit.parents[0]
+
+# TODO(couchand): print the notes!
+exit(-1)
 
 allauthors = list(per_author_history.keys())
 allauthors.sort(key=lambda x:x[0].lower())
