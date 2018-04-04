@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -198,8 +197,6 @@ func (p *planner) SelectClause(
 		}
 	}
 
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.sourceInfo[0].SourceColumns))
-
 	if err := p.initTargets(ctx, r, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
 	}
@@ -369,6 +366,17 @@ func (p *planner) initFrom(
 func (p *planner) initTargets(
 	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
+	// We need to rewrite the SRFs first thing, because the ivarHelper
+	// initialized below needs to know the final shape of the FROM clause,
+	// after SRF rewrites has been processed.
+	var err error
+	targets, err = p.rewriteSRFs(ctx, r, targets)
+	if err != nil {
+		return err
+	}
+
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
+
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
@@ -385,15 +393,7 @@ func (p *planner) initTargets(
 			return err
 		}
 
-		// If the current expression contains a set-returning function, we need to
-		// move it up to the sources list as a cross join and add a render for the
-		// function's column in the join.
-		newTarget, err := p.rewriteSRFs(ctx, r, target)
-		if err != nil {
-			return err
-		}
-
-		cols, exprs, hasStar, err := p.computeRenderAllowingStars(ctx, newTarget, desiredType,
+		cols, exprs, hasStar, err := p.computeRenderAllowingStars(ctx, target, desiredType,
 			r.sourceInfo, r.ivarHelper, outputName)
 		if err != nil {
 			return err
@@ -425,40 +425,12 @@ func (p *planner) insertRender(
 		source:     src,
 		sourceInfo: sqlbase.MultiSourceInfo{src.info},
 	}
-	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.SourceColumns))
 	if err := p.initTargets(ctx, render,
 		tree.SelectExprs{tree.SelectExpr{Expr: tree.StarExpr()}},
 		nil /*desiredTypes*/); err != nil {
 		return nil, err
 	}
 	return render, nil
-}
-
-// makeTupleRender creates a new renderNode which makes a single tuple
-// columns from all the columns in its source. Used by
-// getDataSourceAsOneColumn().
-func (p *planner) makeTupleRender(
-	ctx context.Context, src planDataSource, name string,
-) (*renderNode, error) {
-	// Make a simple renderNode that renders all the columns in its
-	// source.
-	r := &renderNode{
-		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
-	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
-
-	tExpr := &tree.Tuple{
-		Exprs: make(tree.Exprs, len(src.info.SourceColumns)),
-	}
-	for i := range src.info.SourceColumns {
-		tExpr.Exprs[i] = r.ivarHelper.IndexedVar(i)
-	}
-	if err := p.initTargets(ctx, r,
-		tree.SelectExprs{tree.SelectExpr{Expr: tExpr}}, nil); err != nil {
-		return nil, err
-	}
-	return r, nil
 }
 
 // getTimestamp will get the timestamp for an AS OF clause. It will also
@@ -498,46 +470,113 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 	return hlc.MaxTimestamp, false, nil
 }
 
-// srfExtractionVisitor replaces the innermost set-returning function in an
-// expression with an IndexedVar that points at a new index at the end of the
-// ivarHelper. The extracted SRF is retained in the srf field.
+// srfExtractionVisitor replaces the inner set-returning function(s) in an
+// expression with an expression that accesses the relevant
+// columns in the FROM clause.
 //
 // This visitor is intentionally limited to extracting only one SRF, because we
 // don't support lateral correlated subqueries.
 type srfExtractionVisitor struct {
 	err        error
-	srf        *tree.FuncExpr
-	ivarHelper *tree.IndexedVarHelper
+	ctx        context.Context
+	p          *planner
+	r          *renderNode
 	searchPath sessiondata.SearchPath
+	seenSRF    bool
 }
 
 var _ tree.Visitor = &srfExtractionVisitor{}
 
 func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode tree.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	// If a scalar sub-expression is a subquery, this will be handled
+	// separately in the latest step by computeRenderAllowingStar(). We
+	// do not want to recurse and replace SRFs here, because that work
+	// will be done for the subquery later.
 	_, isSubquery := expr.(*tree.Subquery)
-	return !isSubquery, expr
+	if isSubquery {
+		return false, expr
+	}
+
+	switch t := expr.(type) {
+	case *tree.ColumnAccessExpr:
+		// TODO(knz): support arbitrary composite expressions.
+		fe, ok := t.Expr.(*tree.FuncExpr)
+		if !ok {
+			v.err = pgerror.UnimplementedWithIssueErrorf(24866,
+				"access to field in composite expression: %q", tree.ErrString(t.Expr))
+			return false, expr
+		}
+		newFe := *fe
+		newFe.EscapeSRF = true
+		newCAE := *t
+		newCAE.Expr = &newFe
+		expr = &newCAE
+	}
+	return true, expr
 }
 
 func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	if v.err != nil {
+		return expr
+	}
 	switch t := expr.(type) {
-	case *tree.FuncExpr:
-		fd, err := t.Func.Resolve(v.searchPath)
+	case *tree.ColumnAccessExpr:
+		// TODO(knz): support arbitrary composite expressions.
+		fe, ok := t.Expr.(*tree.FuncExpr)
+		if !ok || !fe.EscapeSRF {
+			v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
+				"programmer error: invalid Walk recursion on ColumnAccessExpr")
+			return expr
+		}
+		foundSRF, srfName, err := v.lookupSRF(fe)
 		if err != nil {
 			v.err = err
 			return expr
 		}
-		if _, ok := builtins.Generators[fd.Name]; ok {
-			if v.srf != nil {
-				v.err = errors.New("cannot specify two set-returning functions in the same SELECT expression")
+		if !foundSRF {
+			v.err = pgerror.UnimplementedWithIssueErrorf(24866,
+				"composite-returning scalar functions: %q", tree.ErrString(t.Expr))
+			return expr
+		}
+		newExpr, err := v.transformSRF(srfName, fe, t)
+		if err != nil {
+			v.err = err
+			return expr
+		}
+		return newExpr
+	case *tree.FuncExpr:
+		if t.EscapeSRF {
+			return expr
+		}
+		foundSRF, srfName, err := v.lookupSRF(t)
+		if err != nil {
+			v.err = err
+			return expr
+		}
+		if foundSRF {
+			newExpr, err := v.transformSRF(srfName, t, nil /* columnAccess */)
+			if err != nil {
+				v.err = err
 				return expr
 			}
-			v.srf = t
-			// We'll fill in the type later once the generator function has been
-			// analyzed.
-			return v.ivarHelper.IndexedVarWithType(v.ivarHelper.AppendSlot(), types.TTable{})
+			return newExpr
 		}
 	}
 	return expr
+}
+
+func (v *srfExtractionVisitor) lookupSRF(t *tree.FuncExpr) (bool, string, error) {
+	fd, err := t.Func.Resolve(v.searchPath)
+	if err != nil {
+		return false, "", err
+	}
+	if _, ok := builtins.Generators[fd.Name]; ok {
+		return true, fd.Name, nil
+	}
+	return false, "", nil
 }
 
 // rewriteSRFs creates data sources for any set-returning functions in the
@@ -550,47 +589,121 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 // which are not yet supported. For now, this function returns an error if more
 // than one SRF is present in the render expression.
 func (p *planner) rewriteSRFs(
-	ctx context.Context, r *renderNode, target tree.SelectExpr,
-) (tree.SelectExpr, error) {
+	ctx context.Context, r *renderNode, targets tree.SelectExprs,
+) (tree.SelectExprs, error) {
 	// Walk the render expression looking for SRFs.
 	v := &p.srfExtractionVisitor
+
+	// Ensure that the previous visitor state is preserved during the
+	// analysis below. This is especially important when recursing into
+	// scalar subqueries, which may run this analysis too.
+	defer func(p *planner, prevV srfExtractionVisitor) { p.srfExtractionVisitor = prevV }(p, *v)
 	*v = srfExtractionVisitor{
 		err:        nil,
-		srf:        nil,
-		ivarHelper: &r.ivarHelper,
+		ctx:        ctx,
+		p:          p,
+		r:          r,
+		seenSRF:    false,
 		searchPath: p.SessionData().SearchPath,
 	}
-	expr, _ := tree.WalkExpr(v, target.Expr)
-	if v.err != nil {
-		return target, v.err
-	}
 
-	// Return the original render expression unchanged if the srfExtractionVisitor
-	// didn't find any SRFs.
-	if v.srf == nil {
-		return target, nil
-	}
+	// Rewrite the SRFs, if any. We want to avoid re-allocating a targets
+	// array unless necessary.
+	var newTargets tree.SelectExprs
+	for i, target := range targets {
+		newExpr, changed := tree.WalkExpr(v, target.Expr)
+		if v.err != nil {
+			return targets, v.err
+		}
+		if !changed {
+			if newTargets != nil {
+				newTargets[i] = target
+			}
+			continue
+		}
 
-	// We rewrote exactly one SRF; cross-join it with our sources and return the
-	// new render expression.
-	src, err := p.getDataSourceAsOneColumn(ctx, v.srf)
+		if newTargets == nil {
+			newTargets = make(tree.SelectExprs, len(targets))
+			copy(newTargets, targets[:i])
+		}
+		newTargets[i].Expr = newExpr
+		newTargets[i].As = target.As
+	}
+	if newTargets != nil {
+		return newTargets, nil
+	}
+	return targets, nil
+}
+
+func (v *srfExtractionVisitor) transformSRF(
+	srfName string, srf *tree.FuncExpr, columnAccessExpr *tree.ColumnAccessExpr,
+) (tree.Expr, error) {
+	if v.seenSRF {
+		// TODO(knz/jordan): multiple SRFs in the same scalar expression
+		// should be migrated to a _single_ join operand in the FROM
+		// clause, that zip the values togethers into a single table
+		// (filling with NULLs where some SRFs produce fewer rows than
+		// others).
+		return nil, pgerror.UnimplementedWithIssueErrorf(20511,
+			"cannot use multiple set-returning functions in a single SELECT clause: %q",
+			tree.ErrString(srf))
+	}
+	v.seenSRF = true
+
+	// Transform the SRF. This must be done in any case, whether the SRF
+	// was used as scalar or whether a specific column was requested.
+	tblName := tree.MakeUnqualifiedTableName(tree.Name(srfName))
+	src, err := v.p.getGeneratorPlan(v.ctx, srf, tblName)
 	if err != nil {
-		return target, err
+		return nil, err
 	}
 
-	if !isUnarySource(r.source) {
+	// Save the SRF data source for later.
+	srfSource := src
+
+	// Do we already have something in the FROM clause?
+	if !isUnarySource(v.r.source) {
 		// The FROM clause specifies something. Replace with a cross-join (which is
 		// an inner join without a condition).
-		src, err = p.makeJoin(ctx, sqlbase.InnerJoin, r.source, src, nil)
+		src, err = v.p.makeJoin(v.ctx, sqlbase.InnerJoin, v.r.source, src, nil)
 		if err != nil {
-			return target, err
+			return nil, err
 		}
 	}
+	// Keep the remaining relational expression.
+	v.r.source = src
+	v.r.sourceInfo = sqlbase.MultiSourceInfo{src.info}
 
-	r.source = src
-	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
+	// Now decide what to render.
+	if columnAccessExpr != nil {
+		// Syntax: (tbl).colname or (tbl).*
+		if columnAccessExpr.Star {
+			// (tbl).*
+			// We want all the columns as separate renders. Let the star
+			// expansion that occurs later do the job.
+			return &tree.AllColumnsSelector{TableName: tree.MakeUnresolvedName(srfName)}, nil
+		}
+		// (tbl).colname
+		// We just want one column. Render that.
+		return tree.NewColumnItem(&tblName, tree.Name(columnAccessExpr.ColName)), nil
+	}
 
-	return tree.SelectExpr{Expr: expr}, nil
+	// Just the SRF name. Check whether we have just one column or more.
+	if len(srfSource.info.SourceColumns) == 1 {
+		// Just one column. Render that column exactly.
+		return tree.NewColumnItem(&tblName, tree.Name(srfSource.info.SourceColumns[0].Name)), nil
+	}
+	// More than one column.
+	// We want all the columns as a tuple. Render that.
+	// TODO(knz): This should be returned as a composite expression instead
+	// (tuple with labels). See #24866.
+	tExpr := &tree.Tuple{
+		Exprs: make(tree.Exprs, len(srfSource.info.SourceColumns)),
+	}
+	for i, c := range srfSource.info.SourceColumns {
+		tExpr.Exprs[i] = tree.NewColumnItem(&tblName, tree.Name(c.Name))
+	}
+	return tExpr, nil
 }
 
 // A unary source is the special source used with empty FROM clauses:
@@ -657,6 +770,15 @@ func getRenderColName(
 			return "", err
 		}
 		return fd.Name, nil
+
+	case *tree.ColumnAccessExpr:
+		// Special case for rending a column accessor.
+		if t.Star {
+			// TODO(bram): remove this, this case should never happen once (srf).* is
+			// correctly implemented.
+			return t.Expr.String(), nil
+		}
+		return t.ColName, nil
 	}
 
 	return target.Expr.String(), nil

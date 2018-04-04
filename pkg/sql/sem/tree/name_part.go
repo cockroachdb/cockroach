@@ -189,7 +189,13 @@ func (u *UnresolvedName) String() string { return AsString(u) }
 
 // NewUnresolvedName constructs an UnresolvedName from some strings.
 func NewUnresolvedName(args ...string) *UnresolvedName {
-	n := &UnresolvedName{NumParts: len(args)}
+	n := MakeUnresolvedName(args...)
+	return &n
+}
+
+// MakeUnresolvedName constructs an UnresolvedName from some strings.
+func MakeUnresolvedName(args ...string) UnresolvedName {
+	n := UnresolvedName{NumParts: len(args)}
 	for i := 0; i < len(args); i++ {
 		n.Parts[i] = args[len(args)-1-i]
 	}
