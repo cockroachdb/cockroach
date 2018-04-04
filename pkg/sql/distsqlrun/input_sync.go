@@ -197,7 +197,8 @@ func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadata
 			continue
 		}
 		if mode == stopOnRowOrError {
-			src.row = row
+			// TODO(jordan): alloc
+			src.row = row.Copy()
 			return nil
 		}
 		if row == nil && meta == nil {
@@ -299,6 +300,11 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 	s.needsAdvance = true
 	return s.sources[s.heap[0]].row, nil
+}
+
+// SafeNext is part of the RowSource interface.
+func (*orderedSynchronizer) SafeNext() bool {
+	return false
 }
 
 // ConsumerDone is part of the RowSource interface.

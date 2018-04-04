@@ -64,7 +64,8 @@ type RowReceiver interface {
 	// ProducerDone() needs to be called (after draining is done, if draining was
 	// requested).
 	//
-	// The sender must not modify the row after calling this function.
+	// If SafePush() on this implementation returns true, the sender must not
+	// modify the row after calling this function.
 	//
 	// After DrainRequested is returned, it is expected that all future calls only
 	// carry metadata (however that is not enforced and implementations should be
@@ -75,6 +76,10 @@ type RowReceiver interface {
 	//
 	// Implementations of Push() must be thread-safe.
 	Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus
+
+	// SafePush returns true if this implementation requires that callers of Push
+	// not modify the row passed to Push.
+	SafePush() bool
 
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
@@ -108,6 +113,10 @@ type RowSource interface {
 	// RowSource to drain, and separately discard any future data rows.
 	Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 
+	// SafeNext returns true if it's safe to keep a row returned from Next after
+	// the next call to Next.
+	SafeNext() bool
+
 	// ConsumerDone lets the source know that we will not need any more data
 	// rows. The source is expected to start draining and only send metadata
 	// rows. May be called multiple times on a RowSource, even after
@@ -133,6 +142,7 @@ type RowSource interface {
 // Run reads records from the source and outputs them to the receiver, properly
 // draining the source of metadata and closing both the source and receiver.
 func Run(ctx context.Context, src RowSource, dst RowReceiver) {
+	dst = maybeMakeCopyingRowReceiver(src, dst)
 	for {
 		row, meta := src.Next()
 		// Emit the row; stop if no more rows are needed.
@@ -169,6 +179,7 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 // TODO(andrei): errors seen while draining should be reported to the gateway,
 // but they shouldn't fail a SQL query.
 func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver) {
+	dst = maybeMakeCopyingRowReceiver(src, dst)
 	src.ConsumerDone()
 	for {
 		row, meta := src.Next()
@@ -391,6 +402,11 @@ func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 	return consumerStatus
 }
 
+// SafePush is part of the RowReceiver interface.
+func (rc *RowChannel) SafePush() bool {
+	return true
+}
+
 // ProducerDone is part of the RowReceiver interface.
 func (rc *RowChannel) ProducerDone() {
 	close(rc.dataChan)
@@ -409,6 +425,11 @@ func (rc *RowChannel) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return nil, nil
 	}
 	return d.Row, d.Meta
+}
+
+// SafeNext is part of the RowSource interface.
+func (rc *RowChannel) SafeNext() bool {
+	return true
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -454,6 +475,11 @@ func (mrc *MultiplexedRowChannel) Push(
 	return mrc.rowChan.Push(row, meta)
 }
 
+// SafePush is part of the RowReceiver interface.
+func (mrc *MultiplexedRowChannel) SafePush() bool {
+	return mrc.rowChan.SafePush()
+}
+
 // ProducerDone is part of the RowReceiver interface.
 func (mrc *MultiplexedRowChannel) ProducerDone() {
 	newVal := atomic.AddInt32(&mrc.numSenders, -1)
@@ -473,6 +499,11 @@ func (mrc *MultiplexedRowChannel) OutputTypes() []sqlbase.ColumnType {
 // Next is part of the RowSource interface.
 func (mrc *MultiplexedRowChannel) Next() (row sqlbase.EncDatumRow, meta *ProducerMetadata) {
 	return mrc.rowChan.Next()
+}
+
+// SafeNext is part of the RowSource interface.
+func (mrc *MultiplexedRowChannel) SafeNext() bool {
+	return true
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -600,6 +631,11 @@ func (rb *RowBuffer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Consu
 	return status
 }
 
+// SafePush is part of the RowReceiver interface.
+func (rb *RowBuffer) SafePush() bool {
+	return false
+}
+
 // ProducerDone is part of the RowSource interface.
 func (rb *RowBuffer) ProducerDone() {
 	if rb.ProducerClosed {
@@ -636,6 +672,11 @@ func (rb *RowBuffer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return rec.Row, rec.Meta
 }
 
+// SafeNext is part of the RowSource interface.
+func (*RowBuffer) SafeNext() bool {
+	return false
+}
+
 // ConsumerDone is part of the RowSource interface.
 func (rb *RowBuffer) ConsumerDone() {
 	if atomic.CompareAndSwapUint32((*uint32)(&rb.ConsumerStatus),
@@ -656,6 +697,38 @@ func (rb *RowBuffer) ConsumerClosed() {
 	if rb.args.OnConsumerClosed != nil {
 		rb.args.OnConsumerClosed(rb)
 	}
+}
+
+type copyingRowReceiver struct {
+	wrapped RowReceiver
+	alloc   sqlbase.EncDatumRowAlloc
+}
+
+func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
+	if row != nil {
+		row = r.alloc.CopyRow(row)
+	}
+	return r.wrapped.Push(row, meta)
+}
+
+// SafePush is part of the RowReceiver interface.
+func (r *copyingRowReceiver) SafePush() bool {
+	return false
+}
+
+func (r *copyingRowReceiver) ProducerDone() {
+	r.wrapped.ProducerDone()
+}
+
+func maybeMakeCopyingRowReceiver(src RowSource, dst RowReceiver) RowReceiver {
+	if dst.SafePush() && !src.SafeNext() {
+		// If the destination needs a safe push, but the source doesn't give us a
+		// safe next, wrap the destination in a copier.
+		dst = &copyingRowReceiver{
+			wrapped: dst,
+		}
+	}
+	return dst
 }
 
 // String implements fmt.Stringer.

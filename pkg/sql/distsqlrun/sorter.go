@@ -521,9 +521,8 @@ type sortChunksProcessor struct {
 	alloc           sqlbase.DatumAlloc
 
 	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
-	// encounters a row that is greater. It stores that greater row in nextChunkRow
-	prefix       sqlbase.EncDatumRow
-	nextChunkRow sqlbase.EncDatumRow
+	// encounters a row that is greater.
+	prefix sqlbase.EncDatumRow
 }
 
 var _ Processor = &sortChunksProcessor{}
@@ -549,10 +548,10 @@ func newSortChunksProcessor(
 
 // chunkCompleted is a helper function that determines if the given row shares the same
 // values for the first matchLen ordering columns with the given prefix.
-func (s *sortChunksProcessor) chunkCompleted() (bool, error) {
+func (s *sortChunksProcessor) chunkCompleted(nextChunkRow sqlbase.EncDatumRow) (bool, error) {
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
-		cmp, err := s.nextChunkRow[col].Compare(&s.rows.types[col], &s.alloc, s.rows.evalCtx, &s.prefix[col])
+		cmp, err := nextChunkRow[col].Compare(&s.rows.types[col], &s.alloc, s.rows.evalCtx, &s.prefix[col])
 		if cmp != 0 || err != nil {
 			return true, err
 		}
@@ -566,20 +565,21 @@ func (s *sortChunksProcessor) fill() error {
 
 	var meta *ProducerMetadata
 
-	for s.nextChunkRow == nil {
-		s.nextChunkRow, meta = s.input.Next()
+	var nextChunkRow sqlbase.EncDatumRow
+	for nextChunkRow == nil {
+		nextChunkRow, meta = s.input.Next()
 		if meta != nil {
 			s.meta = append(s.meta, *meta)
 			continue
-		} else if s.nextChunkRow == nil {
+		} else if nextChunkRow == nil {
 			return nil
 		}
 		break
 	}
-	s.prefix = s.nextChunkRow
+	s.prefix = s.out.rowAlloc.CopyRow(nextChunkRow)
 
 	// Add the chunk
-	if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
+	if err := s.rows.AddRow(ctx, nextChunkRow); err != nil {
 		return err
 	}
 
@@ -588,17 +588,17 @@ func (s *sortChunksProcessor) fill() error {
 	// We will accumulate rows to form a chunk such that they all share the same values
 	// as prefix for the first s.matchLen ordering columns.
 	for {
-		s.nextChunkRow, meta = s.input.Next()
+		nextChunkRow, meta = s.input.Next()
 
 		if meta != nil {
 			s.meta = append(s.meta, *meta)
 			continue
 		}
-		if s.nextChunkRow == nil {
+		if nextChunkRow == nil {
 			break
 		}
 
-		chunkCompleted, err := s.chunkCompleted()
+		chunkCompleted, err := s.chunkCompleted(nextChunkRow)
 
 		if err != nil {
 			return err
@@ -607,7 +607,7 @@ func (s *sortChunksProcessor) fill() error {
 			break
 		}
 
-		if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
+		if err := s.rows.AddRow(ctx, nextChunkRow); err != nil {
 			return err
 		}
 	}
