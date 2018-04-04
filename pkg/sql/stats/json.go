@@ -17,6 +17,8 @@ package stats
 import (
 	fmt "fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,14 +36,14 @@ type JSONStatistic struct {
 	RowCount      uint64   `json:"row_count"`
 	DistinctCount uint64   `json:"distinct_count"`
 	NullCount     uint64   `json:"null_count"`
-	// HistogramType is the string representation of the column type for the
+	// HistogramColumnType is the string representation of the column type for the
 	// histogram (or unset if there is no histogram). Parsable with
 	// tree.ParseType.
-	HistogramType    string            `json:"histo_type"`
-	HistogramBuckets []JSONHistoBucket `json:"histo_buckets,omitEmpty"`
+	HistogramColumnType string            `json:"histo_col_type"`
+	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitEmpty"`
 }
 
-// JSONHistoBucket is a struct used for JSON marshalling and unmarshaling of
+// JSONHistoBucket is a struct used for JSON marshaling and unmarshaling of
 // histogram data.
 //
 // See HistogramData for a description of the fields.
@@ -53,10 +55,10 @@ type JSONHistoBucket struct {
 	UpperBound string `json:"upper_bound"`
 }
 
-// SetHistogram fills in the HistogramType and HistogramBuckets fields.
+// SetHistogram fills in the HistogramColumnType and HistogramBuckets fields.
 func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	typ := h.ColumnType.ToDatumType()
-	js.HistogramType = typ.String()
+	js.HistogramColumnType = typ.String()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
 	var a sqlbase.DatumAlloc
 	for i := range h.Buckets {
@@ -78,8 +80,8 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	return nil
 }
 
-// DecodeAndSetHistogram decodes a histogram marshalled as a Bytes datum and
-// fills in the HistogramType and HistogramBuckets fields.
+// DecodeAndSetHistogram decodes a histogram marshaled as a Bytes datum and
+// fills in the HistogramColumnType and HistogramBuckets fields.
 func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
@@ -92,4 +94,37 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 		return err
 	}
 	return js.SetHistogram(h)
+}
+
+// GetHistogram converts the json histogram into HistogramData.
+func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData, error) {
+	if len(js.HistogramBuckets) == 0 {
+		return nil, nil
+	}
+	h := &HistogramData{}
+	colType, err := parser.ParseType(js.HistogramColumnType)
+	if err != nil {
+		return nil, err
+	}
+	datumType := coltypes.CastTargetToDatumType(colType)
+	h.ColumnType, err = sqlbase.DatumTypeToColumnType(datumType)
+	if err != nil {
+		return nil, err
+	}
+	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
+	var collationEnv tree.CollationEnvironment
+	for i := range h.Buckets {
+		hb := &js.HistogramBuckets[i]
+		upperVal, err := parser.ParseStringAs(datumType, hb.UpperBound, evalCtx, &collationEnv)
+		if err != nil {
+			return nil, err
+		}
+		h.Buckets[i].NumEq = hb.NumEq
+		h.Buckets[i].NumRange = hb.NumRange
+		h.Buckets[i].UpperBound, err = sqlbase.EncodeTableKey(nil, upperVal, encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return h, nil
 }

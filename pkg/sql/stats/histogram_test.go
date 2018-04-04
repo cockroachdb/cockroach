@@ -11,9 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-//
-// Data structures and basic infrastructure for distributed SQL APIs. See
-// docs/RFCS/distributed_sql.md.  // All the concepts here are "physical plan" concepts.
 
 package stats
 
