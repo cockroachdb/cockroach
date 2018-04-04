@@ -40,9 +40,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 		{`(MIN(a), AVG(a))`, nil},
 		{`(MIN(a), COUNT(a))`, nil},
 		{`(MIN(a), SUM(a))`, nil},
-		// TODO(pmattis): This could/should return []int{1} (or perhaps []int{2}),
-		// since both aggregations are for the same function and the same column.
-		{`(MIN(a), MIN(a))`, nil},
+		{`(MIN(a), MIN(a))`, sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}},
 		{`(MIN(a+1), MIN(a))`, nil},
 		{`(COUNT(a), MIN(a))`, nil},
 	}
