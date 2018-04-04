@@ -116,3 +116,11 @@ query B
 SELECT "Automatic" FROM [EXPLAIN (DISTSQL) SELECT * FROM abc WHERE b=1 AND a%2=0]
 ----
 true
+
+# OID cast - don't distribute (#22249).
+statement error pq: cast to REGCLASS is not supported by distsql
+EXPLAIN (DISTSQL) SELECT t1.a FROM abc t1 INNER JOIN abc t2 on t1.a::REGCLASS = t2.a::REGCLASS;
+
+# Query with OID expression - don't distribute (#24423).
+statement error pq: OID expressions are not supported by distsql
+EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
