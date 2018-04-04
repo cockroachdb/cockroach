@@ -465,6 +465,10 @@ func (r *distSQLReceiver) Push(
 	return r.status
 }
 
+func (r *distSQLReceiver) SafePush() bool {
+	return false
+}
+
 // ProducerDone is part of the RowReceiver interface.
 func (r *distSQLReceiver) ProducerDone() {
 	if r.txn != nil {

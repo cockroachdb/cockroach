@@ -73,6 +73,11 @@ func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nextRow, nil
 }
 
+// SafeNext is part of the RowSource interface.
+func (r *RepeatableRowSource) SafeNext() bool {
+	return true
+}
+
 // Reset resets the RepeatableRowSource such that a subsequent call to Next()
 // returns the first row.
 func (r *RepeatableRowSource) Reset() {
@@ -93,6 +98,10 @@ var _ RowReceiver = &RowDisposer{}
 // Push is part of the RowReceiver interface.
 func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {
 	return NeedMoreRows
+}
+
+func (r *RowDisposer) SafePush() bool {
+	return false
 }
 
 // ProducerDone is part of the RowReceiver interface.

@@ -112,7 +112,7 @@ func (w rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 	return row, nil
 }
-
+func (w rowFetcherWrapper) SafeNext() bool                    { return false }
 func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
 func (w rowFetcherWrapper) ConsumerDone()                     {}
 func (w rowFetcherWrapper) ConsumerClosed()                   {}
@@ -249,6 +249,9 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return nil, tr.producerMeta(err)
 	}
 }
+
+// SafeNext is part of the RowSource interface.
+func (*tableReader) SafeNext() bool { return false }
 
 // ConsumerDone is part of the RowSource interface.
 func (tr *tableReader) ConsumerDone() {
