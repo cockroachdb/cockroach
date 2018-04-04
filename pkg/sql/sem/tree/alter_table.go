@@ -61,6 +61,7 @@ func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionBy) alterTableCmd()        {}
+func (*AlterTableInjectStats) alterTableCmd()        {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -71,6 +72,7 @@ var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionBy{}
+var _ AlterTableCmd = &AlterTableInjectStats{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -265,4 +267,15 @@ type AlterTableSetAudit struct {
 func (node *AlterTableSetAudit) Format(ctx *FmtCtx) {
 	ctx.WriteString(" EXPERIMENTAL_AUDIT SET ")
 	ctx.WriteString(node.Mode.String())
+}
+
+// AlterTableInjectStats represents an ALTER TABLE INJECT STATISTICS statement.
+type AlterTableInjectStats struct {
+	Stats Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
+	ctx.WriteString(" INJECT STATISTICS ")
+	ctx.FormatNode(node.Stats)
 }
