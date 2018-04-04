@@ -1439,6 +1439,27 @@ func (node *CollateExpr) Format(ctx *FmtCtx) {
 	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, node.Locale, lex.EncNoFlags)
 }
 
+// ColumnAccessExpr *** more here
+type ColumnAccessExpr struct {
+	Expr    Expr
+	ColName string
+	Star    bool
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Expr)
+	ctx.WriteString(").")
+	if node.Star {
+		ctx.WriteByte('*')
+	} else {
+		ctx.WriteString(node.ColName)
+	}
+}
+
 func (node *AliasedTableExpr) String() string { return AsString(node) }
 func (node *ParenTableExpr) String() string   { return AsString(node) }
 func (node *JoinTableExpr) String() string    { return AsString(node) }
@@ -1448,6 +1469,7 @@ func (node *BinaryExpr) String() string       { return AsString(node) }
 func (node *CaseExpr) String() string         { return AsString(node) }
 func (node *CastExpr) String() string         { return AsString(node) }
 func (node *CoalesceExpr) String() string     { return AsString(node) }
+func (node *ColumnAccessExpr) String() string { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *Datums) String() string           { return AsString(node) }

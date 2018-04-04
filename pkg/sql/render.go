@@ -461,6 +461,36 @@ func (p *planner) makeTupleRender(
 	return r, nil
 }
 
+// makeAccessorRender creates a new renderNode which makes a single column
+// based on the column specified in the the columnAccessExpr.
+func (p *planner) makeAccessorRender(
+	ctx context.Context, src planDataSource, name string, columnAccessExpr *tree.ColumnAccessExpr,
+) (*renderNode, error) {
+	r := &renderNode{
+		source:     src,
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+	}
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
+
+	// Try to extract the single column.
+	for i, column := range src.info.SourceColumns {
+		if column.Name == columnAccessExpr.ColName {
+			if err := p.initTargets(
+				ctx,
+				r,
+				tree.SelectExprs{tree.SelectExpr{Expr: r.ivarHelper.IndexedVar(i)}},
+				nil, /* desiredTypes */
+			); err != nil {
+				return nil, err
+			}
+			return r, nil
+		}
+	}
+	return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+		"could not identify column '%s' in sub expression", columnAccessExpr.ColName,
+	)
+}
+
 // getTimestamp will get the timestamp for an AS OF clause. It will also
 // verify the timestamp against the transaction. If AS OF SYSTEM TIME is
 // specified in any part of the query, then it must be consistent with
@@ -505,10 +535,11 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 // This visitor is intentionally limited to extracting only one SRF, because we
 // don't support lateral correlated subqueries.
 type srfExtractionVisitor struct {
-	err        error
-	srf        *tree.FuncExpr
-	ivarHelper *tree.IndexedVarHelper
-	searchPath sessiondata.SearchPath
+	err              error
+	srf              *tree.FuncExpr
+	columnAccessExpr *tree.ColumnAccessExpr
+	ivarHelper       *tree.IndexedVarHelper
+	searchPath       sessiondata.SearchPath
 }
 
 var _ tree.Visitor = &srfExtractionVisitor{}
@@ -520,6 +551,9 @@ func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode t
 
 func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	switch t := expr.(type) {
+	case *tree.ColumnAccessExpr:
+		v.columnAccessExpr = t
+		return expr
 	case *tree.FuncExpr:
 		fd, err := t.Func.Resolve(v.searchPath)
 		if err != nil {
@@ -568,12 +602,31 @@ func (p *planner) rewriteSRFs(
 	// Return the original render expression unchanged if the srfExtractionVisitor
 	// didn't find any SRFs.
 	if v.srf == nil {
+		// Since only SRFs can be accessed via a columnAccessExpr, if there is one
+		// without an SRF, there is an error.
+		if v.columnAccessExpr != nil {
+			// We perform a type check here for a cleaner error message.
+			semaCtx := tree.MakeSemaContext(false)
+			typedCAE, err := v.columnAccessExpr.TypeCheck(&semaCtx, types.Any)
+			if err != nil {
+				return target, err
+			}
+			return target, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				"type %s is not composite", typedCAE.ResolvedType())
+		}
 		return target, nil
+	}
+
+	if v.columnAccessExpr != nil && v.columnAccessExpr.Star {
+		return target, pgerror.Unimplemented(
+			"accessing the results of an SRF with a '(SRF).*'",
+			"accessing the results of an SRF with a '*' is not yet implemented",
+		)
 	}
 
 	// We rewrote exactly one SRF; cross-join it with our sources and return the
 	// new render expression.
-	src, err := p.getDataSourceAsOneColumn(ctx, v.srf)
+	src, err := p.getDataSourceAsOneColumn(ctx, v.srf, v.columnAccessExpr)
 	if err != nil {
 		return target, err
 	}
@@ -589,7 +642,6 @@ func (p *planner) rewriteSRFs(
 
 	r.source = src
 	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
-
 	return tree.SelectExpr{Expr: expr}, nil
 }
 
@@ -657,6 +709,15 @@ func getRenderColName(
 			return "", err
 		}
 		return fd.Name, nil
+
+	case *tree.ColumnAccessExpr:
+		// Special case for rending a column accessor.
+		if t.Star {
+			// TODO(bram): remove this, this case should never happen once (srf).* is
+			// correctly implemented.
+			return t.Expr.String(), nil
+		}
+		return t.ColName, nil
 	}
 
 	return target.Expr.String(), nil

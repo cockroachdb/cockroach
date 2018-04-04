@@ -104,17 +104,18 @@ func (p *planner) getVirtualDataSource(
 // a tuple. This is needed for SRF substitution (e.g. `SELECT
 // pg_get_keywords()`).
 func (p *planner) getDataSourceAsOneColumn(
-	ctx context.Context, src *tree.FuncExpr,
+	ctx context.Context, src *tree.FuncExpr, columnAccessExpr *tree.ColumnAccessExpr,
 ) (planDataSource, error) {
 	ds, err := p.getDataSource(ctx, src, nil, publicColumns)
 	if err != nil {
 		return ds, err
 	}
-	if len(ds.info.SourceColumns) == 1 {
+
+	// If there is no column accessor and only one source column, return a quick
+	// exit.
+	if columnAccessExpr == nil && len(ds.info.SourceColumns) == 1 {
 		return ds, nil
 	}
-
-	// Zero or more than one column: make a tuple.
 
 	// We use the name of the function to determine the name of the
 	// rendered column.
@@ -122,12 +123,26 @@ func (p *planner) getDataSourceAsOneColumn(
 	if err != nil {
 		return planDataSource{}, err
 	}
-	newPlan, err := p.makeTupleRender(ctx, ds, fd.Name)
-	if err != nil {
-		return planDataSource{}, err
+
+	var newPlan *renderNode
+	var tn tree.TableName
+	// Is there an accessor? If so, try to pull out only that column.
+	if columnAccessExpr != nil {
+		var err error
+		newPlan, err = p.makeAccessorRender(ctx, ds, fd.Name, columnAccessExpr)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		tn = tree.MakeUnqualifiedTableName(tree.Name(columnAccessExpr.ColName))
+	} else {
+		var err error
+		newPlan, err = p.makeTupleRender(ctx, ds, fd.Name)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		tn = tree.MakeUnqualifiedTableName(tree.Name(fd.Name))
 	}
 
-	tn := tree.MakeUnqualifiedTableName(tree.Name(fd.Name))
 	return planDataSource{
 		info: sqlbase.NewSourceInfoForSingleTable(tn, planColumns(newPlan)),
 		plan: newPlan,

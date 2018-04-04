@@ -389,6 +389,24 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	return expr.Expr.TypeCheck(ctx, desired)
+	/*subExpr, err := expr.Expr.TypeCheck(ctx, desired)
+	if err != nil {
+		return nil, err
+	}
+	resolvedType := subExpr.ResolvedType()
+
+	if !resolvedType.FamilyEqual(types.FamTable) {
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"type %s is not composite", resolvedType)
+	}
+
+	expr.Expr = subExpr
+	return expr, nil*/
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Exprs...)
 	if err != nil {
@@ -1603,7 +1621,7 @@ type placeholderAnnotationVisitor struct {
 	placeholders map[string]annotationState
 }
 
-// annotationState holds the state of an unreseolved type annotation for a given placeholder.
+// annotationState holds the state of an unresolved type annotation for a given placeholder.
 type annotationState struct {
 	sawAssertion   bool // marks if the placeholder has been subject to at least one type assetion
 	shouldAnnotate bool // marks if the placeholder should be annotated with the type typ
