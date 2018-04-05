@@ -63,23 +63,23 @@ opt
 ----
 limit
  ├── columns: column1:3(int)
- ├── stats: [rows=2]
+ ├── stats: [rows=2, distinct(3)=2]
  ├── cost: 10.00
  ├── ordering: -3
  ├── sort
  │    ├── columns: column1:3(int)
- │    ├── stats: [rows=8]
+ │    ├── stats: [rows=8, distinct(3)=4]
  │    ├── cost: 10.00
  │    ├── ordering: -3
  │    └── union-all
  │         ├── columns: column1:3(int)
  │         ├── left columns: column1:1(int)
  │         ├── right columns: column1:2(int)
- │         ├── stats: [rows=8]
+ │         ├── stats: [rows=8, distinct(3)=4]
  │         ├── cost: 8.00
  │         ├── values
  │         │    ├── columns: column1:1(int)
- │         │    ├── stats: [rows=5]
+ │         │    ├── stats: [rows=5, distinct(1)=2]
  │         │    ├── cost: 5.00
  │         │    ├── tuple [type=tuple{int}]
  │         │    │    └── const: 1 [type=int]
@@ -93,7 +93,7 @@ limit
  │         │         └── const: 2 [type=int]
  │         └── values
  │              ├── columns: column1:2(int)
- │              ├── stats: [rows=3]
+ │              ├── stats: [rows=3, distinct(2)=2]
  │              ├── cost: 3.00
  │              ├── tuple [type=tuple{int}]
  │              │    └── const: 1 [type=int]
