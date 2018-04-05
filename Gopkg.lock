@@ -573,9 +573,12 @@
     "internal/symbolizer",
     "internal/symbolz",
     "profile",
-    "third_party/svg",
+    "third_party/d3",
+    "third_party/d3flamegraph",
+    "third_party/d3tip",
+    "third_party/svgpan",
   ]
-  revision = "2fb0552a69e2f33975f90698a2a1155e8c1a46f8"
+  revision = "0f7d9ba15ff25eed96a62359d1c2b5492844ff9c"
 
 [[projects]]
   name = "github.com/googleapis/gax-go"
@@ -1231,6 +1234,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "73d626cafe2e18e573e6c81baf6e6856b236b88b0a0c6dec558b21cff107d184"
+  inputs-digest = "793eed0fb2d929f9ba2aba348e7c4d0e2a16afd109503ffe0c09a603d060477c"
   solver-name = "gps-cdcl"
   solver-version = 1
