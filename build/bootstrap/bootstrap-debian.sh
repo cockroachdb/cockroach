@@ -17,7 +17,7 @@ sudo apt-get install -y --no-install-recommends \
   autoconf \
   cmake \
   docker.io \
-  libtinfo-dev \
+  libncurses-dev \
   git \
   nodejs \
   yarn
