@@ -46,6 +46,7 @@ func main() {
 			}
 
 			initBinaries()
+			registerTests(tests)
 			os.Exit(tests.Run(args))
 			return nil
 		},
