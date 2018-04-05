@@ -22,11 +22,11 @@ SELECT * FROM a WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=200, distinct(2)=200, distinct(1,2)=326]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    └── keys: (1)
  └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -40,14 +40,14 @@ project
  ├── stats: [rows=1000000]
  ├── inner-join
  │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    ├── stats: [rows=1000000]
+ │    ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    │    └── keys: (1)
  │    ├── scan b
  │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
  │    │    └── keys: (5)
  │    └── true [type=bool]
  └── projections [outer=(1,2,5)]

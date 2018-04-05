@@ -25,34 +25,34 @@ LIMIT 10
 ----
 limit
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
- ├── stats: [rows=10]
- ├── cost: 127000.00
+ ├── stats: [rows=10, distinct(2)=1, distinct(3)=10]
+ ├── cost: 102333.25
  ├── ordering: +2
  ├── sort
  │    ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
- │    ├── stats: [rows=100000]
- │    ├── cost: 127000.00
+ │    ├── stats: [rows=1333, distinct(2)=1, distinct(3)=248]
+ │    ├── cost: 102333.25
  │    ├── ordering: +2
  │    └── project
  │         ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
- │         ├── stats: [rows=100000]
+ │         ├── stats: [rows=1333, distinct(2)=1, distinct(3)=248]
  │         ├── cost: 102000.00
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
- │         │    ├── stats: [rows=100000]
+ │         │    ├── stats: [rows=1333, distinct(1)=248, distinct(2)=1, distinct(1,2)=695, distinct(3)=248, distinct(4)=248, distinct(3,4)=695]
  │         │    ├── cost: 102000.00
  │         │    ├── inner-join
  │         │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
- │         │    │    ├── stats: [rows=1000000]
+ │         │    │    ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900, distinct(3)=250, distinct(4)=250, distinct(3,4)=900]
  │         │    │    ├── cost: 2000.00
  │         │    │    ├── scan a
  │         │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │         │    │    │    ├── stats: [rows=1000]
+ │         │    │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │         │    │    │    ├── cost: 1000.00
  │         │    │    │    └── keys: (1)
  │         │    │    ├── scan b
  │         │    │    │    ├── columns: b.x:3(string!null) b.z:4(decimal!null)
- │         │    │    │    ├── stats: [rows=1000]
+ │         │    │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(3,4)=900]
  │         │    │    │    ├── cost: 1000.00
  │         │    │    │    └── keys: (3)
  │         │    │    └── true [type=bool]
@@ -81,35 +81,35 @@ LIMIT 10
 ----
 project
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
- ├── stats: [rows=10]
- ├── cost: 4600.00
+ ├── stats: [rows=10, distinct(2)=1, distinct(3)=10, distinct(3)=10]
+ ├── cost: 2200.00
  ├── ordering: +2
  ├── limit
  │    ├── columns: a.y:2(int) b.x:3(string!null)
- │    ├── stats: [rows=10]
- │    ├── cost: 4600.00
+ │    ├── stats: [rows=10, distinct(2)=1, distinct(3)=10, distinct(3)=10]
+ │    ├── cost: 2200.00
  │    ├── ordering: +2
  │    ├── sort
  │    │    ├── columns: a.y:2(int) b.x:3(string!null)
- │    │    ├── stats: [rows=10000]
- │    │    ├── cost: 4600.00
+ │    │    ├── stats: [rows=400, distinct(2)=1, distinct(3)=250, distinct(3)=900]
+ │    │    ├── cost: 2200.00
  │    │    ├── ordering: +2
  │    │    └── project
  │    │         ├── columns: a.y:2(int) b.x:3(string!null)
- │    │         ├── stats: [rows=10000]
+ │    │         ├── stats: [rows=400, distinct(2)=1, distinct(3)=250, distinct(3)=900]
  │    │         ├── cost: 2100.00
  │    │         ├── inner-join
  │    │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null)
- │    │         │    ├── stats: [rows=10000]
+ │    │         │    ├── stats: [rows=400, distinct(1)=3, distinct(2)=1, distinct(1,2)=3, distinct(3)=250, distinct(3)=900]
  │    │         │    ├── cost: 2100.00
  │    │         │    ├── select
  │    │         │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │         │    │    ├── stats: [rows=100]
+ │    │         │    │    ├── stats: [rows=4, distinct(1)=3, distinct(2)=1, distinct(1,2)=3]
  │    │         │    │    ├── cost: 1100.00
  │    │         │    │    ├── keys: (1)
  │    │         │    │    ├── scan a
  │    │         │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │         │    │    │    ├── stats: [rows=1000]
+ │    │         │    │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    │         │    │    │    ├── cost: 1000.00
  │    │         │    │    │    └── keys: (1)
  │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
@@ -118,7 +118,7 @@ project
  │    │         │    │              └── const: 1 [type=int]
  │    │         │    ├── scan b
  │    │         │    │    ├── columns: b.x:3(string!null)
- │    │         │    │    ├── stats: [rows=1000]
+ │    │         │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(3)=900]
  │    │         │    │    ├── cost: 1000.00
  │    │         │    │    └── keys: (3)
  │    │         │    └── filters [type=bool, outer=(1,3)]
@@ -147,19 +147,19 @@ LIMIT 10
 [29: "p:y:2,x:3,column5:5 o:+2"]
 memo
  ├── 29: (project 28 20)
- │    ├── "" [cost=4600.00]
+ │    ├── "" [cost=2200.00]
  │    │    └── best: (project 28 20)
- │    └── "p:y:2,x:3,column5:5 o:+2" [cost=4600.00]
+ │    └── "p:y:2,x:3,column5:5 o:+2" [cost=2200.00]
  │         └── best: (project 28="o:+2" 20)
  ├── 28: (limit 27 24 +2)
- │    ├── "" [cost=4600.00]
+ │    ├── "" [cost=2200.00]
  │    │    └── best: (limit 27="o:+2" 24 +2)
- │    └── "o:+2" [cost=4600.00]
+ │    └── "o:+2" [cost=2200.00]
  │         └── best: (limit 27="o:+2" 24 +2)
  ├── 27: (project 22 26)
  │    ├── "" [cost=2100.00]
  │    │    └── best: (project 22 26)
- │    └── "o:+2" [cost=4600.00]
+ │    └── "o:+2" [cost=2200.00]
  │         └── best: (sort 27)
  ├── 26: (projections 5 10)
  ├── 25: (limit 22 24 +2)
@@ -168,7 +168,7 @@ memo
  ├── 22: (inner-join 15 21 17)
  │    ├── "" [cost=2100.00]
  │    │    └── best: (inner-join 15 21 17)
- │    └── "o:+2" [cost=4600.00]
+ │    └── "o:+2" [cost=2200.00]
  │         └── best: (sort 22)
  ├── 21: (scan b)
  │    └── "" [cost=1000.00]
