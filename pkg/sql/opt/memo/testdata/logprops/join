@@ -28,14 +28,14 @@ SELECT *, rowid FROM a INNER JOIN b ON a.x=b.x
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null) rowid:7(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  ├── scan b
  │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -46,14 +46,14 @@ SELECT *, rowid FROM a LEFT JOIN b ON a.x=b.x
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int) rowid:7(int)
- ├── stats: [rows=100000]
+ ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  ├── scan b
  │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -64,14 +64,14 @@ SELECT *, rowid FROM a RIGHT JOIN b ON a.x=b.x
 ----
 right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) z:6(int!null) rowid:7(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  ├── scan b
  │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -82,14 +82,14 @@ SELECT *, rowid FROM a FULL JOIN b ON a.x=b.x
 ----
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) z:6(int) rowid:7(int)
- ├── stats: [rows=100000]
+ ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  ├── scan b
  │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -100,17 +100,17 @@ SELECT * FROM a, b
 ----
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
- ├── stats: [rows=1000000]
+ ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250]
  ├── inner-join
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=1000000]
+ │    ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    │    └── keys: (1) weak(3,4)
  │    ├── scan b
  │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(5-7)=900]
  │    │    └── keys: (7)
  │    └── true [type=bool]
  └── projections [outer=(1-6)]
@@ -126,13 +126,13 @@ SELECT * FROM a, a
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)
- ├── stats: [rows=1000000]
+ ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(8)=250, distinct(5-8)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  ├── scan a
  │    ├── columns: a.x:5(int!null) a.y:6(int) a.s:7(string) a.d:8(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(6)=250, distinct(7)=250, distinct(8)=250, distinct(5-8)=900]
  │    └── keys: (5) weak(7,8)
  └── true [type=bool]

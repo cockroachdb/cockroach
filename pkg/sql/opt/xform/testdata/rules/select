@@ -42,7 +42,7 @@ SELECT k FROM a WHERE k = 1
 memo
  ├── 10: (true)
  ├── 9: (select 8 5) (scan a,constrained)
- │    └── "p:k:1" [cost=100.00]
+ │    └── "p:k:1" [cost=1.00]
  │         └── best: (scan a,constrained)
  ├── 8: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
@@ -75,10 +75,10 @@ SELECT k FROM a WHERE v > 1
 memo
  ├── 12: (true)
  ├── 11: (project 10 8)
- │    └── "p:k:1" [cost=100.00]
+ │    └── "p:k:1" [cost=333.00]
  │         └── best: (project 10 8)
  ├── 10: (select 9 5) (scan a@v,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=333.00]
  │         └── best: (scan a@v,constrained)
  ├── 9: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
@@ -111,15 +111,15 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 [14: "p:k:1"]
 memo
  ├── 17: (scan a,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=4.00]
  │         └── best: (scan a,constrained)
  ├── 16: (filters 4)
  ├── 15: (true)
  ├── 14: (project 13 11)
- │    └── "p:k:1" [cost=100.00]
+ │    └── "p:k:1" [cost=1.00]
  │         └── best: (project 13 11)
  ├── 13: (select 12 9) (select 17 16) (scan a@u,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=1.00]
  │         └── best: (scan a@u,constrained)
  ├── 12: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
@@ -165,15 +165,15 @@ SELECT k FROM a WHERE u = 1 AND k+u = 1
 [14: "p:k:1"]
 memo
  ├── 17: (scan a@u,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=4.00]
  │         └── best: (scan a@u,constrained)
  ├── 16: (filters 7)
  ├── 15: (true)
  ├── 14: (project 13 11)
- │    └── "p:k:1" [cost=110.00]
+ │    └── "p:k:1" [cost=4.40]
  │         └── best: (project 13 11)
  ├── 13: (select 12 9) (select 17 16)
- │    └── "" [cost=110.00]
+ │    └── "" [cost=4.40]
  │         └── best: (select 17 16)
  ├── 12: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
@@ -216,21 +216,21 @@ SELECT k FROM a WHERE u = 1 AND v = 5
 [13: "p:k:1"]
 memo
  ├── 18: (scan a@v,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=4.00]
  │         └── best: (scan a@v,constrained)
  ├── 17: (filters 4)
  ├── 16: (scan a@u,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=4.00]
  │         └── best: (scan a@u,constrained)
  ├── 15: (filters 7)
  ├── 14: (true)
  ├── 13: (project 10 12)
- │    └── "p:k:1" [cost=110.00]
+ │    └── "p:k:1" [cost=4.40]
  │         └── best: (project 10 12)
  ├── 12: (projections 11)
  ├── 11: (variable a.k)
  ├── 10: (select 1 9) (select 16 15) (select 18 17)
- │    └── "" [cost=110.00]
+ │    └── "" [cost=4.40]
  │         └── best: (select 16 15)
  ├── 9: (filters 4 7)
  ├── 8: (and 4 7)

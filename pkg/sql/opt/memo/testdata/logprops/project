@@ -18,11 +18,11 @@ SELECT a.y, a.x+1, 1, a.x FROM a
 ----
 project
  ├── columns: y:2(int) column5:5(int) column6:6(int) x:1(int!null)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
       ├── variable: a.y [type=int, outer=(2)]
@@ -37,10 +37,10 @@ SELECT s FROM a
 ----
 project
  ├── columns: s:3(string)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(3)=250]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(3)]
       └── variable: a.s [type=string, outer=(3)]

@@ -18,11 +18,11 @@ SELECT * FROM a LIMIT 1
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1, distinct(4)=1, distinct(1-4)=1]
  ├── keys: (1) weak(3,4)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  └── const: 1 [type=int]
 
@@ -31,11 +31,11 @@ SELECT * FROM a LIMIT (SELECT 1)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  ├── keys: (1) weak(3,4)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  └── subquery [type=int, outer=(5)]
       ├── max1-row
@@ -56,10 +56,10 @@ SELECT * FROM a LIMIT 0
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  ├── keys: (1) weak(3,4)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(4)=250, distinct(1-4)=900]
  │    └── keys: (1) weak(3,4)
  └── const: 0 [type=int]

@@ -142,10 +142,10 @@ SELECT i, k FROM a WHERE s >= 'foo'
 memo
  ├── 13: (true)
  ├── 12: (project 11 9)
- │    └── "p:i:2,k:1" [cost=100.00]
+ │    └── "p:i:2,k:1" [cost=333.00]
  │         └── best: (project 11 9)
  ├── 11: (select 10 5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
- │    └── "" [cost=100.00]
+ │    └── "" [cost=333.00]
  │         └── best: (scan a@s_idx,constrained)
  ├── 10: (scan a) (scan a@s_idx) (scan a@si_idx)
  │    └── "" [cost=1000.00]

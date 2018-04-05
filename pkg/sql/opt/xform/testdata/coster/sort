@@ -22,10 +22,10 @@ SELECT f FROM a ORDER BY f DESC
 ----
 sort
  ├── columns: f:2(float!null)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(2)=250, distinct(2)=900]
  ├── cost: 1250.00
  ├── ordering: -2
  └── scan a
       ├── columns: a.f:2(float!null)
-      ├── stats: [rows=1000]
+      ├── stats: [rows=1000, distinct(2)=250, distinct(2)=900]
       └── cost: 1000.00

@@ -22,11 +22,11 @@ SELECT * FROM a WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=4, distinct(1)=1, distinct(2)=3, distinct(1,2)=3]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    └── keys: (1)
  └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -37,20 +37,20 @@ SELECT * FROM a,b WHERE a.x=b.x
 ----
 project
  ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900, distinct(3)=250, distinct(4)=250]
  ├── select
  │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    ├── stats: [rows=100000]
+ │    ├── stats: [rows=100000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
  │    ├── inner-join
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    ├── stats: [rows=1000000]
+ │    │    ├── stats: [rows=1000000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
  │    │    ├── scan a
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    │    │    └── keys: (1)
  │    │    ├── scan b
  │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
  │    │    │    └── keys: (5)
  │    │    └── true [type=bool]
  │    └── eq [type=bool, outer=(1,3)]
@@ -61,3 +61,57 @@ project
       ├── variable: a.y [type=int, outer=(2)]
       ├── variable: b.x [type=int, outer=(3)]
       └── variable: b.z [type=int, outer=(4)]
+
+# Distinct values calculation with constraints.
+build
+SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
+----
+project
+ ├── columns: x:1(int) z:2(int!null)
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── select
+ │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=4, distinct(1-3)=4]
+ │    ├── keys: (3)
+ │    ├── scan b
+ │    │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(3)=250, distinct(1-3)=900]
+ │    │    └── keys: (3)
+ │    └── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight)]
+ │         ├── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - ]; tight)]
+ │         │    ├── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight)]
+ │         │    │    ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │         │    │    │    ├── variable: b.x [type=int, outer=(1)]
+ │         │    │    │    └── const: 1 [type=int]
+ │         │    │    └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+ │         │    │         ├── variable: b.z [type=int, outer=(2)]
+ │         │    │         └── const: 2 [type=int]
+ │         │    └── ge [type=bool, outer=(3), constraints=(/3: [/5 - ]; tight)]
+ │         │         ├── variable: b.rowid [type=int, outer=(3)]
+ │         │         └── const: 5 [type=int]
+ │         └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /8]; tight)]
+ │              ├── variable: b.rowid [type=int, outer=(3)]
+ │              └── const: 8 [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: b.x [type=int, outer=(1)]
+      └── variable: b.z [type=int, outer=(2)]
+
+# Contradiction.
+build
+SELECT * FROM a WHERE x > 5 AND x < 0
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=0, distinct(1)=0, distinct(2)=0, distinct(1,2)=0]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    └── keys: (1)
+ └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 0 [type=int]
