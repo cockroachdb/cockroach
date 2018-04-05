@@ -32,6 +32,12 @@ type KeyRange struct {
 // all of the range's data.
 //
 // A ReplicaDataIterator provides a subset of the engine.Iterator interface.
+//
+// TODO(tschottdorf): the API is awkward. By default, ReplicaDataIterator uses
+// a byte allocator which needs to be reset manually using `ResetAllocator`.
+// This is problematic as it requires of every user careful tracking of when
+// to call that method; some just never call it and pull the whole replica
+// into memory. Use of an allocator should be opt-in.
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
