@@ -37,7 +37,7 @@ import (
 //
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
-func init() {
+func registerCancel(r *registry) {
 	runCancel := func(ctx context.Context, t *test, c *cluster,
 		queries []string, warehouses int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -116,7 +116,7 @@ func init() {
 		`SELECT ol_number, sum(s_quantity) FROM tpcc.stock JOIN tpcc.order_line ON s_i_id=ol_i_id WHERE ol_number > 10 GROUP BY ol_number ORDER BY ol_number`,
 	}
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -124,7 +124,7 @@ func init() {
 		},
 	})
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {

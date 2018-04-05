@@ -19,8 +19,8 @@ import (
 	"context"
 )
 
-func init() {
-	tests.Add(testSpec{
+func registerRestore(r *registry) {
+	r.Add(testSpec{
 		Name:  `restore2TB`,
 		Nodes: nodes(10),
 		Run: func(ctx context.Context, t *test, c *cluster) {

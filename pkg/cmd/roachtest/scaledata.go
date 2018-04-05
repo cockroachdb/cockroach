@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
 
-func init() {
+func registerScaleData(r *registry) {
 	// apps is a suite of Sqlapp applications designed to be used to check the
 	// consistency of a database under load. Each Sqlapp application launches a
 	// set of workers who perform database operations while another worker
@@ -46,7 +46,7 @@ func init() {
 		app, flags := app, flags // copy loop iterator vars
 		const duration = 10 * time.Minute
 		for _, n := range []int{3, 6} {
-			tests.Add(testSpec{
+			r.Add(testSpec{
 				Name:  fmt.Sprintf("scaledata/%s/nodes=%d", app, n),
 				Nodes: nodes(n + 1),
 				Run: func(ctx context.Context, t *test, c *cluster) {

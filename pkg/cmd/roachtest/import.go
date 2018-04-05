@@ -24,7 +24,7 @@ const (
 	gcsTestBucket = `cockroach-tmp`
 )
 
-func init() {
+func registerImportTPCC(r *registry) {
 	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
@@ -47,7 +47,7 @@ func init() {
 
 	const warehouses = 1000
 	const numNodes = 4
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -56,9 +56,9 @@ func init() {
 	})
 }
 
-func init() {
+func registerImportTPCH(r *registry) {
 	for _, n := range []int{4, 8} {
-		tests.Add(testSpec{
+		r.Add(testSpec{
 			Name:  fmt.Sprintf(`import/tpch/nodes=%d`, n),
 			Nodes: nodes(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {

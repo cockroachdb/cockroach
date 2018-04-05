@@ -175,11 +175,11 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	}
 }
 
-func init() {
+func registerDecommission(r *registry) {
 	const numNodes = 4
 	duration := time.Hour
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
