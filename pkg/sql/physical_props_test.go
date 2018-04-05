@@ -377,13 +377,6 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 	//   ord.public.trim(desired)
 	//   after := ord.computeMatch(desired)
 
-	genDir := func(rng *rand.Rand) encoding.Direction {
-		if rng.Intn(2) == 0 {
-			return encoding.Descending
-		}
-		return encoding.Ascending
-	}
-
 	for _, numConstCols := range []int{0, 1, 2, 4} {
 		for _, numEquiv := range []int{0, 1, 2, 4, 5} {
 			for _, numOrderCols := range []int{0, 1, 2, 4, 7} {
@@ -419,7 +412,7 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 									if o.eqGroups.Find(x) == x && !used.Contains(x) {
 										used.Add(x)
 										keySet.Add(x)
-										o.addOrderColumn(x, genDir(rng))
+										o.addOrderColumn(x, randDir(rng))
 										break
 									}
 								}
@@ -434,7 +427,7 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 									perm := rng.Perm(10)
 									for i := range desired {
 										desired[i].ColIdx = perm[i]
-										desired[i].Direction = genDir(rng)
+										desired[i].Direction = randDir(rng)
 									}
 									oCopy := o.copy()
 									before := oCopy.computeMatch(desired)
@@ -841,4 +834,46 @@ func TestProjectOrdering(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRandomProps calls mutation functions randomly and verifies the invariants
+// of the structure each time.
+func TestRandomProps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, n := range []int{2, 5, 10} {
+		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
+			t.Parallel()
+			rng, _ := randutil.NewPseudoRand()
+			for it := 0; it < 100; it++ {
+				o := physicalProps{}
+
+				for op := 0; op < 100; op++ {
+					switch rng.Intn(4) {
+					case 0:
+						o.addEquivalency(rng.Intn(n), rng.Intn(n))
+					case 1:
+						o.addConstantColumn(rng.Intn(n))
+					case 2:
+						o.addOrderColumn(rng.Intn(n), randDir(rng))
+					case 3:
+						var key util.FastIntSet
+						num := 1 + rng.Intn(n/2)
+						for i := 0; i < num; i++ {
+							key.Add(rng.Intn(n))
+						}
+						o.addWeakKey(key)
+					}
+					o.check()
+				}
+			}
+		})
+	}
+}
+
+func randDir(rng *rand.Rand) encoding.Direction {
+	if rng.Intn(2) == 0 {
+		return encoding.Descending
+	}
+	return encoding.Ascending
 }

@@ -396,10 +396,20 @@ func (pp *physicalProps) addEquivalency(colA, colB int) {
 		pp.notNullCols.Add(gA)
 	}
 
-	for i := range pp.weakKeys {
-		if pp.weakKeys[i].Contains(gB) {
+	if pp.constantCols.Contains(gA) {
+		// One of the columns became a constant; remove it from all keys (similar to
+		// what addConstantColumn does).
+		for i := range pp.weakKeys {
+			pp.weakKeys[i].Remove(gA)
 			pp.weakKeys[i].Remove(gB)
-			pp.weakKeys[i].Add(gA)
+		}
+	} else {
+		// Replace any occurrences of gB with gA (the new representative).
+		for i := range pp.weakKeys {
+			if pp.weakKeys[i].Contains(gB) {
+				pp.weakKeys[i].Remove(gB)
+				pp.weakKeys[i].Add(gA)
+			}
 		}
 	}
 
