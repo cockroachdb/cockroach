@@ -95,26 +95,8 @@ type RelationalProps struct {
 	OuterCols opt.ColSet
 
 	// Stats is the set of statistics that apply to this relational expression.
-	// See the comment for the Statistics struct for more details.
+	// See statistics.go for more details.
 	Stats Statistics
-}
-
-// Statistics is a collection of measurements and statistics that is used by
-// the coster to estimate the cost of expressions. Statistics are collected
-// for tables and indexes and are exposed to the optimizer via opt.Catalog
-// interfaces. As logical properties are derived bottom-up for each
-// expression, statistics are derived for each relational expression, based
-// on the characteristics of the expression's operator type, as well as the
-// properties of its operands. For example:
-//
-//   SELECT * FROM a WHERE a=1
-//
-// Table and column statistics can be used to estimate the number of rows
-// in table a, and then to determine the selectivity of the a=1 filter, in
-// order to derive the statistics of the Select expression.
-type Statistics struct {
-	// RowCount is the estimated number of rows returned by the expression.
-	RowCount uint64
 }
 
 // ScalarProps are the subset of logical properties that are computed for
