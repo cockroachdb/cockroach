@@ -66,7 +66,7 @@ func (p *planner) SetClusterSetting(
 
 			var requiredType types.T
 			switch setting.(type) {
-			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
+			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting, *settings.VersionSetting:
 				requiredType = types.String
 			case *settings.BoolSetting:
 				requiredType = types.Bool
@@ -160,6 +160,14 @@ func (p *planner) toSettingString(
 			return string(*s), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
+	case *settings.VersionSetting:
+		if s, ok := d.(*tree.DString); ok {
+			if err := setting.Validate(&st.SV, string(*s)); err != nil {
+				return "", err
+			}
+			return string(*s), nil
+		}
+		return "", errors.Errorf("cannot use %s %T value for version setting", d.ResolvedType(), d)
 	case *settings.StateMachineSetting:
 		if s, ok := d.(*tree.DString); ok {
 			datums, err := ie.QueryRowInTransaction(

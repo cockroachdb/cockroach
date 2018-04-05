@@ -107,7 +107,7 @@ func SanitizedValue(name string, values *Values) string {
 			*BoolSetting,
 			*EnumSetting:
 			return setting.String(values)
-		case *StringSetting:
+		case *StringSetting, *VersionSetting:
 			if setting.String(values) == "" {
 				return ""
 			}

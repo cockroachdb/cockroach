@@ -1624,6 +1624,186 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	return nil
 }
 
+// AttemptUpgrade attempts to upgrade cluster version.
+func (s *Server) AttemptUpgrade(ctx context.Context) {
+	go func() {
+		for {
+			sqlExecutor := &sql.InternalExecutor{ExecCfg: s.execCfg}
+			querySystemSettings(ctx, sqlExecutor)
+
+			// Check if upgrade can start or not.
+			if canUpgrade, err := checkCanUpgrade(ctx, s); err != nil {
+				log.Warningf(ctx, "error when upgrading cluster version: %s", err)
+				return
+			} else if !canUpgrade {
+				log.Warningf(ctx, "Failed attempt to upgrade cluster version.")
+				time.Sleep(time.Second)
+				continue
+			}
+
+			// all checks passed, do upgrade.
+			upgradeStmt := "SET CLUSTER SETTING version = crdb_internal.node_executable_version();"
+			if _, _, err := sqlExecutor.QueryRows(ctx, "upgrade-version", upgradeStmt); err != nil {
+				log.Warningf(ctx, "error when upgrading cluster version: %s", err)
+			}
+
+			// reset cluster.preserve_downgrade_option.
+			resetStmt := "RESET CLUSTER SETTING cluster.preserve_downgrade_option;"
+			if _, _, err := sqlExecutor.QueryRows(ctx, "reset-downgrade", resetStmt); err != nil {
+				log.Warningf(ctx, "error when upgrading cluster version: %s", err)
+				return
+			}
+
+			// attempt to print out the new cluster version.
+			if newClusterVersion, err := clusterVersion(ctx, sqlExecutor); err != nil {
+				log.Warningf(ctx, "error when getting new cluster version: %s", err)
+			} else {
+				log.Infof(ctx, "Successfully upgraded cluster version to %s.", newClusterVersion)
+			}
+
+			return
+		}
+	}()
+}
+
+func querySystemSettings(ctx context.Context, sqlExecutor *sql.InternalExecutor) {
+	systemStmt := "SELECT * from system.settings;"
+	if _, _, err := sqlExecutor.QueryRows(ctx, "system-settings", systemStmt); err != nil {
+		log.Warningf(ctx, "Query system.settings failed, err: %s", err)
+	}
+}
+
+// Check if upgrade conditions are met or not.
+// IF following conditions are true, return true:
+// auto upgrade is not disabled at current version,
+// all live nodes are running the new version,
+// all non-decommissioned nodes are alive.
+func checkCanUpgrade(ctx context.Context, s *Server) (bool, error) {
+	sqlExecutor := &sql.InternalExecutor{ExecCfg: s.execCfg}
+
+	// check if auto upgrade is enabled at current version.
+	if upgradeEnabled, err := upgradeIsEnabled(ctx, sqlExecutor); err != nil {
+		return false, err
+	} else if !upgradeEnabled {
+		return false, nil
+	}
+
+	// check if all nodes are running at the newest version.
+	datums, err := gossipNodes(ctx, sqlExecutor)
+	if err != nil {
+		return false, err
+	}
+	live, err := liveNodes(ctx, s)
+	if err != nil {
+		return false, err
+	}
+
+	var newVersion string
+	for _, row := range datums {
+		version := string(tree.MustBeDString(row[5]))
+		id := int32(tree.MustBeDInt(row[0]))
+
+		if live[id] {
+			if newVersion == "" {
+				newVersion = version
+			} else {
+				if version != newVersion {
+					log.Warning(ctx, "Not all nodes are running the newest version yet.")
+					return false, nil
+				}
+			}
+		}
+	}
+
+	// check if we really need to upgrade cluster version.
+	if clusterVersion, err := clusterVersion(ctx, sqlExecutor); err != nil {
+		return false, err
+	} else if newVersion == clusterVersion {
+		log.Info(ctx, "No need to upgrade. Cluster already at the newest version.")
+		return false, nil
+	}
+
+	// check if all non-decommissioned nodes are alive
+	if nodeStatus, err := downAndNondecommissionedNodes(ctx, s); err != nil {
+		return false, err
+	} else if len(nodeStatus) != 0 {
+		for id, status := range nodeStatus {
+			log.Warningf(ctx, "Node %d is not decommissioned but not alive, node status: %s.", id, storage.NodeLivenessStatus_name[status])
+		}
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// Get current cluster version.
+func clusterVersion(ctx context.Context, sqlExecutor *sql.InternalExecutor) (string, error) {
+	clusterVersionStmt := "SHOW cluster setting version;"
+	datums, _, err := sqlExecutor.QueryRows(ctx, "cluster-version", clusterVersionStmt)
+	if err != nil {
+		return "", err
+	}
+	if len(datums) == 0 {
+		return "", errors.New("cluster version is not set")
+	}
+
+	clusterVersion := string(tree.MustBeDString(datums[0][0]))
+	return clusterVersion, nil
+}
+
+// Get current crdb_internal.gossip_nodes;
+func gossipNodes(ctx context.Context, sqlExecutor *sql.InternalExecutor) ([]tree.Datums, error) {
+	gossipStmt := "SELECT * FROM crdb_internal.gossip_nodes;"
+	datums, _, err := sqlExecutor.QueryRows(ctx, "gossip-nodes", gossipStmt)
+	return datums, err
+}
+
+// Check if auto upgrade is enabled at current cluster version.
+func upgradeIsEnabled(ctx context.Context, sqlExecutor *sql.InternalExecutor) (bool, error) {
+	clusterVersion, err := clusterVersion(ctx, sqlExecutor)
+	if err != nil {
+		return false, err
+	}
+
+	if downgradeVersion := sqlExecutor.ExecCfg.PreserveDowngrade(); downgradeVersion == clusterVersion {
+		log.Warningf(ctx, "Auto upgrade is disabled for current version: %s.", downgradeVersion)
+		return false, nil
+	}
+	return true, nil
+}
+
+// Get a list of nodes that are non-decommissioned and not alive.
+func downAndNondecommissionedNodes(ctx context.Context, s *Server) (map[int32]int32, error) {
+	// check if all non-decommissioned nodes are alive
+	nodeStatus := make(map[int32]int32)
+	liveness, err := s.admin.Liveness(ctx, &serverpb.LivenessRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	for id, status := range liveness.Statuses {
+		if status != storage.NodeLivenessStatus_DECOMMISSIONED && status != storage.NodeLivenessStatus_LIVE {
+			nodeStatus[int32(id)] = int32(status)
+		}
+	}
+	return nodeStatus, nil
+}
+
+func liveNodes(ctx context.Context, s *Server) (map[int32]bool, error) {
+	nodes := make(map[int32]bool)
+	liveness, err := s.admin.Liveness(ctx, &serverpb.LivenessRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	for id, status := range liveness.Statuses {
+		if status == storage.NodeLivenessStatus_LIVE {
+			nodes[int32(id)] = true
+		}
+	}
+	return nodes, nil
+}
+
 func (s *Server) doDrain(
 	ctx context.Context, modes []serverpb.DrainMode, setTo bool,
 ) ([]serverpb.DrainMode, error) {

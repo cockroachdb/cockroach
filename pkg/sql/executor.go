@@ -65,6 +65,42 @@ var ClusterOrganization = settings.RegisterStringSetting(
 	"",
 )
 
+var validateDowngradeVersion = func(sv *settings.Values, s string) error {
+	if sv == nil || s == "" {
+		return nil
+	}
+	opaque := sv.Opaque()
+	st := opaque.(*cluster.Settings)
+	serverVersion := st.Version.ServerVersion
+	clusterVersion := st.Version.Version().MinimumVersion
+	downgradeVersion, err := roachpb.ParseVersion(s)
+	if err != nil {
+		return err
+	}
+
+	if serverVersion.Less(downgradeVersion) {
+		return errors.Errorf(
+			"cannot set cluster.preserve_downgrade_option to %s (server version is %s)",
+			s, serverVersion)
+	}
+
+	if downgradeVersion.Less(clusterVersion) {
+		return errors.Errorf(
+			"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
+			s, clusterVersion)
+	}
+
+	return nil
+}
+
+// ClusterDowngrade is the version at which auto upgrade is disabled.
+var ClusterDowngrade = settings.RegisterValidatedVersionSetting(
+	"cluster.preserve_downgrade_option",
+	"the version at which auto-upgrade is disabled",
+	"",
+	validateDowngradeVersion,
+)
+
 // ClusterSecret is a cluster specific secret. This setting is hidden.
 var ClusterSecret = func() *settings.StringSetting {
 	s := settings.RegisterStringSetting(
@@ -290,6 +326,11 @@ type ExecutorConfig struct {
 // Organization returns the value of cluster.organization.
 func (ec *ExecutorConfig) Organization() string {
 	return ClusterOrganization.Get(&ec.Settings.SV)
+}
+
+// PreserveDowngrade returns the value of cluster.preserve_downgrade_option.
+func (ec *ExecutorConfig) PreserveDowngrade() string {
+	return ClusterDowngrade.Get(&ec.Settings.SV)
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}

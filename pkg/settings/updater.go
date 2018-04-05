@@ -94,6 +94,8 @@ func (u updater) Set(key, rawValue string, vt string) error {
 	switch setting := d.(type) {
 	case *StringSetting:
 		return setting.set(u.sv, rawValue)
+	case *VersionSetting:
+		return setting.set(u.sv, rawValue)
 	case *BoolSetting:
 		b, err := strconv.ParseBool(rawValue)
 		if err != nil {

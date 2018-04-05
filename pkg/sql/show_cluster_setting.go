@@ -112,7 +112,7 @@ func (p *planner) ShowClusterSetting(
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting, *settings.VersionSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -134,6 +134,8 @@ func (p *planner) ShowClusterSetting(
 			case *settings.IntSetting:
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.StringSetting:
+				d = tree.NewDString(s.String(&st.SV))
+			case *settings.VersionSetting:
 				d = tree.NewDString(s.String(&st.SV))
 			case *settings.StateMachineSetting:
 				var err error
