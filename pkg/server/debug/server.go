@@ -67,7 +67,7 @@ var DebugRemote = settings.RegisterValidatedStringSetting(
 	"server.remote_debugging.mode",
 	"set to enable remote debugging, localhost-only or disable (any, local, off)",
 	"local",
-	func(s string) error {
+	func(sv *settings.Values, s string) error {
 		switch RemoteMode(strings.ToLower(s)) {
 		case RemoteOff, RemoteLocal, RemoteAny:
 			return nil
