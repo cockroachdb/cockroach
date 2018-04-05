@@ -610,7 +610,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
-			func(_ context.Context, _ [][]roachpb.GCRequest_GCKey, _ *storage.GCInfo) error { return nil },
+			storage.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
 		)
