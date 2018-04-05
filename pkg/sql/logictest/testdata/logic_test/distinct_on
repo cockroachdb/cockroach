@@ -528,22 +528,19 @@ SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
 ----
-distinct                       0  distinct  ·            ·                  (min)                                           weak-key(min)
- │                             0  ·         distinct on  min                ·                                               ·
- └── render                    1  render    ·            ·                  (min)                                           ·
-      │                        1  ·         render 0     agg1               ·                                               ·
-      └── filter               2  filter    ·            ·                  (agg0, agg1)                                    agg0=CONST
-           │                   2  ·         filter       agg0 = 1           ·                                               ·
-           └── group           3  group     ·            ·                  (agg0, agg1)                                    ·
-                │              3  ·         aggregate 0  min(x)             ·                                               ·
-                │              3  ·         aggregate 1  min(x)             ·                                               ·
-                │              3  ·         group by     @1                 ·                                               ·
-                └── render     4  render    ·            ·                  (y, x)                                          ·
-                     │         4  ·         render 0     test.public.xyz.y  ·                                               ·
-                     │         4  ·         render 1     test.public.xyz.x  ·                                               ·
-                     └── scan  5  scan      ·            ·                  (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
-·                              5  ·         table        xyz@primary        ·                                               ·
-·                              5  ·         spans        ALL                ·                                               ·
+distinct                  0  distinct  ·            ·                  (min)                                           min=CONST; key()
+ │                        0  ·         distinct on  min                ·                                               ·
+ └── filter               1  filter    ·            ·                  (min)                                           min=CONST
+      │                   1  ·         filter       agg0 = 1           ·                                               ·
+      └── group           2  group     ·            ·                  (min)                                           ·
+           │              2  ·         aggregate 0  min(x)             ·                                               ·
+           │              2  ·         group by     @1                 ·                                               ·
+           └── render     3  render    ·            ·                  (y, x)                                          ·
+                │         3  ·         render 0     test.public.xyz.y  ·                                               ·
+                │         3  ·         render 1     test.public.xyz.x  ·                                               ·
+                └── scan  4  scan      ·            ·                  (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+·                         4  ·         table        xyz@primary        ·                                               ·
+·                         4  ·         spans        ALL                ·                                               ·
 
 query I
 SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
