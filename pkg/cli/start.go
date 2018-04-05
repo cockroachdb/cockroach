@@ -535,7 +535,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
 			if !envutil.EnvOrDefaultBool("COCKROACH_SKIP_UPDATE_CHECK", false) {
-				s.PeriodicallyCheckForUpdates()
+				s.PeriodicallyCheckForUpdates(ctx)
 			}
 
 			// Now inform the user that the server is running and tell the
