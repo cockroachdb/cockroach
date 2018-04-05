@@ -154,7 +154,7 @@ func (p *planner) toSettingString(
 	switch setting := setting.(type) {
 	case *settings.StringSetting:
 		if s, ok := d.(*tree.DString); ok {
-			if err := setting.Validate(string(*s)); err != nil {
+			if err := setting.Validate(&st.SV, string(*s)); err != nil {
 				return "", err
 			}
 			return string(*s), nil

@@ -137,7 +137,7 @@ func init() {
 }
 
 var strVal = settings.RegisterValidatedStringSetting(
-	"str.val", "", "", func(v string) error {
+	"str.val", "", "", func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
 				return errors.Errorf("not all runes of %s are letters: %c", v, c)
