@@ -161,6 +161,9 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
 		}
 	}
+	if _, err := db.Exec(`INSERT INTO system.zones (id, config) VALUES (10000, null)`); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := db.Exec(
 		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
@@ -490,7 +493,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 15, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 16, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d :\n %v", expected, actual, r.last.SqlStats)
 	}
 
@@ -510,6 +513,7 @@ func TestReportUsage(t *testing.T) {
 			`CREATE TABLE _ (_ INT PRIMARY KEY, _ INT, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING))`,
 			`INSERT INTO _ VALUES (_)`,
+			`INSERT INTO _(_, _) VALUES (_, _)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,
