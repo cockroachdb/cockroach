@@ -27,13 +27,8 @@ import (
 const (
 	numUnderlyingHistograms = 1
 	sigFigs                 = 1
-	// TODO(dan): It seems these constants could due with some tuning. In
-	// #22605, it was suggested to make them 100 microseconds minimum, 60
-	// seconds maximum, and 3 sigfigs. I'm intentionally waiting on this until
-	// after we're quite sure that the workload versions of `kv` and `tpcc` are
-	// producing the same results as the old tools.
-	minLatency = 100 * time.Microsecond
-	maxLatency = 10 * time.Second
+	minLatency              = 100 * time.Microsecond
+	maxLatency              = 100 * time.Second
 )
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
