@@ -2904,6 +2904,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			s = buf.String()
 		case *DOid:
 			s = t.name
+		case *DJSON:
+			s = t.JSON.String()
 		}
 		switch c := t.(type) {
 		case *coltypes.TString:
