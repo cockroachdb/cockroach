@@ -340,59 +340,102 @@ func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 // String representation.
 // --------------------------------------------------------------------
 
+// DisplayOptions specifies how to output a memo to a human-readable
+// format.
+type DisplayOptions struct {
+	ShowUnreachable bool
+	Root            GroupID
+}
+
 func (m *Memo) String() string {
+	return m.Display(DisplayOptions{})
+}
+
+// Display writes a memo to a human-readable format.
+func (m *Memo) Display(options DisplayOptions) string {
 	tp := treeprinter.New()
 	root := tp.Child("memo")
 
+	var ordering []GroupID
+	// unreachableIdx denotes the index of the first group which should be marked
+	// "unreachable".
+	var unreachableIdx int
+
+	// If a root was specified, we topological sort from it.  Otherwise, we
+	// simply print out all the groups in the order and with the names they're
+	// referred to physically. We can do this because the GroupID 0 never refers
+	// to a valid group.
+	if options.Root != 0 {
+		ordering, unreachableIdx = m.sortGroups(options.Root, options.ShowUnreachable)
+	} else {
+		// In this case we renumber with the identity mapping, so the groups have
+		// the same numbers as they're represented internally.
+		ordering = make([]GroupID, len(m.groups)-1)
+		for i := range m.groups[1:] {
+			ordering[i] = GroupID(i + 1)
+		}
+		unreachableIdx = len(ordering)
+	}
+
+	// We renumber the groups so that they're still printed in order from 1..N.
+	presentedNumbering := make([]GroupID, len(m.groups))
+	for i := range ordering {
+		presentedNumbering[ordering[i]] = GroupID(i + 1)
+	}
+
 	var buf bytes.Buffer
-	for i := len(m.groups) - 1; i > 0; i-- {
-		mgrp := &m.groups[i]
+	for i := range ordering {
+		mgrp := &m.groups[ordering[i]]
 
 		buf.Reset()
 		for ord := 0; ord < mgrp.exprCount(); ord++ {
 			if ord != 0 {
 				buf.WriteByte(' ')
 			}
-			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)))
+			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)), presentedNumbering)
 		}
 
-		child := root.Childf("%d: %s", i, buf.String())
-		m.formatBestExprSet(child, mgrp)
+		prefix := ""
+		if i >= unreachableIdx {
+			prefix = "unreachable: "
+		}
+		child := root.Childf("%sG%d: %s", prefix, i+1, buf.String())
+		m.formatBestExprSet(child, mgrp, presentedNumbering)
 	}
 
 	return tp.String()
 }
 
-func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
+func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr, presentedNumbering []GroupID) {
 	fmt.Fprintf(buf, "(%s", e.op)
 	for i := 0; i < e.ChildCount(); i++ {
-		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
+		fmt.Fprintf(buf, " G%d", presentedNumbering[e.ChildGroup(m, i)])
 	}
 	m.formatPrivate(buf, e.Private(m))
 	buf.WriteString(")")
 }
 
 type bestExprSort struct {
-	required    PhysicalPropsID
-	fingerprint string
-	best        *BestExpr
+	required PhysicalPropsID
+	display  string
+	best     *BestExpr
 }
 
-func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
+func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group, numbering []GroupID) {
 	// Sort the bestExprs by required properties.
 	cnt := mgrp.bestExprCount()
 	beSort := make([]bestExprSort, 0, cnt)
 	for i := 0; i < cnt; i++ {
 		best := mgrp.bestExpr(bestOrdinal(i))
 		beSort = append(beSort, bestExprSort{
-			required:    best.required,
-			fingerprint: m.LookupPhysicalProps(best.required).Fingerprint(),
-			best:        best,
+			required: best.required,
+			display:  m.LookupPhysicalProps(best.required).String(),
+			best:     best,
 		})
 	}
 
 	sort.Slice(beSort, func(i, j int) bool {
-		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
+		return strings.Compare(beSort[i].display, beSort[j].display) < 0
 	})
 
 	var buf bytes.Buffer
@@ -402,19 +445,19 @@ func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 		// Don't show best expressions for scalar groups because they're not too
 		// interesting.
 		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
-			m.formatBestExpr(&buf, sort.best)
+			child := tp.Childf("\"%s\" [cost=%.2f]", sort.display, sort.best.cost)
+			m.formatBestExpr(&buf, sort.best, numbering)
 			child.Childf("best: %s", buf.String())
 		}
 	}
 }
 
-func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr) {
+func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr, numbering []GroupID) {
 	fmt.Fprintf(buf, "(%s", be.op)
 
 	for i := 0; i < be.ChildCount(); i++ {
 		bestChild := be.Child(i)
-		fmt.Fprintf(buf, " %d", bestChild.group)
+		fmt.Fprintf(buf, " G%d", numbering[bestChild.group])
 
 		// Print properties required of the child if they are interesting.
 		required := m.bestExpr(bestChild).required
@@ -465,4 +508,95 @@ func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) 
 			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
 		}
 	}
+}
+
+// iterDeps runs f for each child group of g.
+func (m *Memo) iterDeps(g group, f func(GroupID)) {
+	for i := 0; i < g.exprCount(); i++ {
+		dependencies := make(map[GroupID]struct{})
+		e := g.expr(ExprOrdinal(i))
+		deps := make([]GroupID, 0)
+		for c := 0; c < e.ChildCount(); c++ {
+			childID := e.ChildGroup(m, c)
+			if _, ok := dependencies[childID]; !ok {
+				deps = append(deps, childID)
+			}
+			dependencies[childID] = struct{}{}
+		}
+		for _, dep := range deps {
+			f(GroupID(dep))
+		}
+	}
+}
+
+// sortGroups sorts groups reachable from the root by doing a BFS topological
+// sort. If showUnreachable is set, it also displays groups which cannot be
+// reached by traversing from the root. It returns a list of groups in the
+// order they should be displayed, along with the index of the first group not
+// reachable from the root so such groups can be labelled in the output.
+func (m *Memo) sortGroups(root GroupID, showUnreachable bool) (groups []GroupID, unreachableIdx int) {
+	visited := make([]bool, len(m.groups))
+	indegrees := m.computeIndegrees(root, visited, make([]int, len(m.groups)))
+
+	res := make([]GroupID, 0, len(m.groups))
+	queue := []GroupID{root}
+
+	for len(queue) > 0 {
+		var next GroupID
+		next, queue = queue[0], queue[1:]
+		res = append(res, next)
+
+		// When we visit a group, we conceptually remove it from the dependency
+		// graph, so all of its dependencies have their indegree reduced by one.
+		// Any dependencies which have no more dependents can now be visited and
+		// are added to the queue.
+		m.iterDeps(m.groups[next], func(dep GroupID) {
+			indegrees[dep]--
+			if indegrees[dep] == 0 {
+				queue = append(queue, dep)
+			}
+		})
+	}
+
+	// If there remains any group with nonzero indegree, we had a cycle.
+	for i := range indegrees {
+		if indegrees[i] != 0 {
+			// TODO(justin): we should handle this case, but there's no good way to
+			// test it yet. Cross this bridge when we come to it (use no-root to
+			// bypass this sorting procedure if this is causing you trouble).
+			panic("memo had a cycle")
+		}
+	}
+
+	unreachableIdx = len(res)
+
+	if showUnreachable {
+		// The group with ID 0 is invalid, so we skip over it.
+		for i := range visited[1:] {
+			id := i + 1
+			if !visited[id] {
+				res = append(res, GroupID(id))
+			}
+		}
+	}
+
+	return res, unreachableIdx
+}
+
+// computedIndegrees computes the indegree (number of dependents) of each group
+// reachable from id.
+// It also populates visited with true for all visited ids.
+func (m *Memo) computeIndegrees(id GroupID, visited []bool, indegrees []int) []int {
+	if id <= 0 || visited[id] {
+		return indegrees
+	}
+	visited[id] = true
+
+	g := m.groups[id]
+	m.iterDeps(g, func(dep GroupID) {
+		indegrees[dep]++
+		indegrees = m.computeIndegrees(dep, visited, indegrees)
+	})
+
+	return indegrees
 }

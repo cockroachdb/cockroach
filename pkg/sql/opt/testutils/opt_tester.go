@@ -69,6 +69,14 @@ type OptTesterFlags struct {
 	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
 	// the old planning code.
 	AllowUnsupportedExpr bool
+
+	// ShowUnreachable if set: when displaying a memo, will display groups not
+	// referenced transitively by the root.
+	ShowUnreachable bool
+
+	// NoRoot if set: will not print out the memo with respect to any particular
+	// root, and will print out the memo with the numbering it uses internally.
+	NoRoot bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -170,6 +178,8 @@ func (e *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	}
 }
 
+var errNoRootOrShowUnreachable = fmt.Errorf("no-root and show-unreachable cannot be used together")
+
 // Set parses an argument that refers to a flag. See OptTester.Handle for
 // supported flags.
 func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
@@ -197,8 +207,17 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 	case "allow-unsupported":
 		f.AllowUnsupportedExpr = true
 
+	case "show-unreachable":
+		f.ShowUnreachable = true
+
+	case "no-root":
+		f.NoRoot = true
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
+	}
+	if f.NoRoot && f.ShowUnreachable {
+		return errNoRootOrShowUnreachable
 	}
 	return nil
 }
@@ -226,7 +245,17 @@ func (e *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	o.Optimize(root, required)
-	return fmt.Sprintf("[%d: \"%s\"]\n%s", root, required, o.Memo().String()), nil
+	if e.Flags.NoRoot {
+		root = 0
+	}
+	return fmt.Sprintf(
+		"%s\n%s",
+		required,
+		o.Memo().Display(memo.DisplayOptions{
+			Root:            root,
+			ShowUnreachable: e.Flags.ShowUnreachable,
+		}),
+	), nil
 }
 
 // OptSteps returns a string that shows each optimization step using the
