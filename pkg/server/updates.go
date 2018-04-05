@@ -320,11 +320,14 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		info.ZoneConfigs = make(map[int64]config.ZoneConfig)
 		for _, row := range datums {
 			id := int64(tree.MustBeDInt(row[0]))
-			configProto := []byte(*(row[1].(*tree.DBytes)))
 			var zone config.ZoneConfig
-			if err := protoutil.Unmarshal(configProto, &zone); err != nil {
-				log.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
+			if bytes, ok := row[1].(*tree.DBytes); !ok {
 				continue
+			} else {
+				if err := protoutil.Unmarshal([]byte(*bytes), &zone); err != nil {
+					log.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
+					continue
+				}
 			}
 			var anonymizedZone config.ZoneConfig
 			anonymizeZoneConfig(&anonymizedZone, zone, secret)
