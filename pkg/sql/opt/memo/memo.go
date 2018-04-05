@@ -340,13 +340,37 @@ func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 // String representation.
 // --------------------------------------------------------------------
 
+// DisplayOptions specifies how to output a memo to a human-readable
+// format.
+type DisplayOptions struct {
+	ShowUnreachable bool
+	Root            GroupID
+}
+
 func (m *Memo) String() string {
+	return m.Display(DisplayOptions{})
+}
+
+// Display writes a memo to a human-readable format.
+func (m *Memo) Display(options DisplayOptions) string {
 	tp := treeprinter.New()
 	root := tp.Child("memo")
 
+	var groupIds []GroupID
+	// If a root was specified, we topological sort from it.  Otherwise, we
+	// simply print out all the groups in order.
+	if options.Root != 0 {
+		groupIds = m.sortGroups(options.Root, options.ShowUnreachable)
+	} else {
+		groupIds = make([]GroupID, len(m.groups)-1)
+		for i := range m.groups[1:] {
+			groupIds[i] = GroupID(i + 1)
+		}
+	}
+
 	var buf bytes.Buffer
-	for i := len(m.groups) - 1; i > 0; i-- {
-		mgrp := &m.groups[i]
+	for i := range groupIds {
+		mgrp := &m.groups[groupIds[i]]
 
 		buf.Reset()
 		for ord := 0; ord < mgrp.exprCount(); ord++ {
@@ -356,7 +380,7 @@ func (m *Memo) String() string {
 			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)))
 		}
 
-		child := root.Childf("%d: %s", i, buf.String())
+		child := root.Childf("G%d: %s", groupIds[i], buf.String())
 		m.formatBestExprSet(child, mgrp)
 	}
 
@@ -366,16 +390,16 @@ func (m *Memo) String() string {
 func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
 	fmt.Fprintf(buf, "(%s", e.op)
 	for i := 0; i < e.ChildCount(); i++ {
-		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
+		fmt.Fprintf(buf, " G%d", e.ChildGroup(m, i))
 	}
 	m.formatPrivate(buf, e.Private(m))
 	buf.WriteString(")")
 }
 
 type bestExprSort struct {
-	required    PhysicalPropsID
-	fingerprint string
-	best        *BestExpr
+	required PhysicalPropsID
+	display  string
+	best     *BestExpr
 }
 
 func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
@@ -385,14 +409,14 @@ func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 	for i := 0; i < cnt; i++ {
 		best := mgrp.bestExpr(bestOrdinal(i))
 		beSort = append(beSort, bestExprSort{
-			required:    best.required,
-			fingerprint: m.LookupPhysicalProps(best.required).Fingerprint(),
-			best:        best,
+			required: best.required,
+			display:  m.LookupPhysicalProps(best.required).String(),
+			best:     best,
 		})
 	}
 
 	sort.Slice(beSort, func(i, j int) bool {
-		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
+		return strings.Compare(beSort[i].display, beSort[j].display) < 0
 	})
 
 	var buf bytes.Buffer
@@ -402,7 +426,7 @@ func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 		// Don't show best expressions for scalar groups because they're not too
 		// interesting.
 		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
+			child := tp.Childf("\"%s\" [cost=%.2f]", sort.display, sort.best.cost)
 			m.formatBestExpr(&buf, sort.best)
 			child.Childf("best: %s", buf.String())
 		}
@@ -414,7 +438,7 @@ func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr) {
 
 	for i := 0; i < be.ChildCount(); i++ {
 		bestChild := be.Child(i)
-		fmt.Fprintf(buf, " %d", bestChild.group)
+		fmt.Fprintf(buf, " G%d", bestChild.group)
 
 		// Print properties required of the child if they are interesting.
 		required := m.bestExpr(bestChild).required
@@ -465,4 +489,57 @@ func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) 
 			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
 		}
 	}
+}
+
+// sortGroups sorts the memo groups for display in the following way: The root
+// appears first, with all of the children reachable from it following in a
+// topologically sorted order.  If we are showing groups not reachable from the
+// root, they appear below, with parents appearing above children (that is,
+// they're topologically sorted, modulo the fact that they may reference groups
+// reachable from the root, which appeared above).
+func (m *Memo) sortGroups(root GroupID, showUnreachable bool) []GroupID {
+	visited := make([]bool, len(m.groups))
+	res := make([]GroupID, 0, len(m.groups))
+	res = m.dfsVisit(root, visited, res)
+
+	// The depth first search returned the groups from leaf to root. We want the
+	// root first, so reverse the results.
+	for i, j := 0, len(res)-1; i < j; i, j = i+1, j-1 {
+		res[i], res[j] = res[j], res[i]
+	}
+
+	if showUnreachable {
+		var unreachableGroups []GroupID
+		for id := range m.groups[1:] {
+			unreachableGroups = m.dfsVisit(GroupID(id), visited, unreachableGroups)
+		}
+
+		// For the same reason we reversed the results above we append them in
+		// reverse order here: we want to show parents before children.
+		for i := len(unreachableGroups) - 1; i >= 0; i-- {
+			res = append(res, unreachableGroups[i])
+		}
+	}
+
+	return res
+}
+
+// dfsVisit performs a depth-first search starting from the GroupID, avoiding
+// already visited nodes. Returns the visited node in depth-first order.
+func (m *Memo) dfsVisit(id GroupID, visited []bool, res []GroupID) []GroupID {
+	if id <= 0 || visited[id] {
+		return res
+	}
+	visited[id] = true
+
+	g := &m.groups[id]
+	for i := 0; i < g.exprCount(); i++ {
+		e := g.expr(ExprOrdinal(i))
+		for c := e.ChildCount() - 1; c >= 0; c-- {
+			childID := e.ChildGroup(m, c)
+			res = m.dfsVisit(childID, visited, res)
+		}
+	}
+
+	return append(res, id)
 }
