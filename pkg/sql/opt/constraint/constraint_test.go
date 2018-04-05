@@ -190,7 +190,7 @@ func TestConstraintContainsSpan(t *testing.T) {
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			c := parseConstraint(&evalCtx, tc.constraint)
+			c := ParseConstraint(&evalCtx, tc.constraint)
 
 			spans := parseSpans(tc.containedSpans)
 			for i := 0; i < spans.Count(); i++ {
@@ -249,8 +249,8 @@ func TestConstraintCombine(t *testing.T) {
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			a := parseConstraint(&evalCtx, tc.a)
-			b := parseConstraint(&evalCtx, tc.b)
+			a := ParseConstraint(&evalCtx, tc.a)
+			b := ParseConstraint(&evalCtx, tc.b)
 			a.Combine(&evalCtx, &b)
 			if res := a.String(); res != tc.e {
 				t.Errorf("expected\n  %s; got\n  %s", tc.e, res)
