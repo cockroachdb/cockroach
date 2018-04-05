@@ -108,23 +108,19 @@ limit
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-[11: "p:s:4"]
+[presentation: s:4]
 memo
- ├── 12: (true)
- ├── 11: (limit 9 10 ) (scan a@s_idx,constrained,lim=1) (scan a@si_idx,constrained,lim=1)
- │    └── "p:s:4" [cost=1.00]
+ ├── G1: (limit G2 G3 ) (scan a@s_idx,constrained,lim=1) (scan a@si_idx,constrained,lim=1)
+ │    └── "[presentation: s:4]" [cost=1.00]
  │         └── best: (scan a@s_idx,constrained,lim=1)
- ├── 10: (const 1)
- ├── 9: (select 8 5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
+ ├── G2: (select G4 G5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@s_idx,constrained)
- ├── 8: (scan a) (scan a@s_idx) (scan a@si_idx)
+ ├── G3: (const 1)
+ ├── G4: (scan a) (scan a@s_idx) (scan a@si_idx)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 7: (projections 2)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (eq 2 3)
- ├── 3: (const 'foo')
- ├── 2: (variable a.s)
- └── 1: (scan a)
+ ├── G5: (filters G6)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a.s)
+ └── G8: (const 'foo')

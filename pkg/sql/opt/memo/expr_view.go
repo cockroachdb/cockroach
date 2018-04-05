@@ -246,7 +246,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	switch ev.Operator() {
 	case opt.ScanOp:
-		ev.mem.formatScanPrivate(&buf, ev.Private().(*ScanOpDef), true /* short */)
+		formatter := ev.mem.makeExprFormatter(&buf)
+		formatter.formatScanPrivate(ev.Private().(*ScanOpDef), true /* short */)
 	}
 
 	var physProps *PhysicalProps
@@ -408,7 +409,8 @@ func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
 
 	if private != nil {
 		buf.WriteRune(':')
-		ev.mem.formatPrivate(buf, private)
+		formatter := ev.mem.makeExprFormatter(buf)
+		formatter.formatPrivate(private)
 	}
 }
 

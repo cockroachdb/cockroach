@@ -45,19 +45,13 @@ scan a@s_idx
 memo
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
-[7: "p:s:4,i:2,f:3 o:+4,+1,+2"]
+[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]
 memo
- ├── 7: (scan a) (scan a@s_idx)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "p:s:4,i:2,f:3 o:+4,+1,+2" [cost=1000.00]
- │         └── best: (scan a@s_idx)
- ├── 6: (projections 2 3 4 5)
- ├── 5: (variable a.k)
- ├── 4: (variable a.f)
- ├── 3: (variable a.i)
- ├── 2: (variable a.s)
- └── 1: (scan a)
+ └── G1: (scan a) (scan a@s_idx)
+      ├── "" [cost=1000.00]
+      │    └── best: (scan a)
+      └── "[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]" [cost=1000.00]
+           └── best: (scan a@s_idx)
 
 # Scan of primary index is lowest cost.
 opt
@@ -71,19 +65,13 @@ scan a
 memo
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
-[7: "p:s:4,i:2,f:3 o:+1,+2,+4"]
+[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]
 memo
- ├── 7: (scan a) (scan a@s_idx)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "p:s:4,i:2,f:3 o:+1,+2,+4" [cost=1000.00]
- │         └── best: (scan a)
- ├── 6: (projections 2 3 4 5)
- ├── 5: (variable a.k)
- ├── 4: (variable a.f)
- ├── 3: (variable a.i)
- ├── 2: (variable a.s)
- └── 1: (scan a)
+ └── G1: (scan a) (scan a@s_idx)
+      ├── "" [cost=1000.00]
+      │    └── best: (scan a)
+      └── "[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]" [cost=1000.00]
+           └── best: (scan a)
 
 # Secondary index has right order, but is not covering.
 opt
@@ -98,17 +86,13 @@ sort
 memo
 SELECT s, j FROM a ORDER BY s
 ----
-[5: "p:s:4,j:5 o:+4"]
+[presentation: s:4,j:5] [ordering: +4]
 memo
- ├── 5: (scan a) (scan a@si_idx)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "p:s:4,j:5 o:+4" [cost=1250.00]
- │         └── best: (sort 5)
- ├── 4: (projections 2 3)
- ├── 3: (variable a.j)
- ├── 2: (variable a.s)
- └── 1: (scan a)
+ └── G1: (scan a) (scan a@si_idx)
+      ├── "" [cost=1000.00]
+      │    └── best: (scan a)
+      └── "[presentation: s:4,j:5] [ordering: +4]" [cost=1250.00]
+           └── best: (sort G1)
 
 # Consider three different indexes, and pick index with multiple keys.
 opt
@@ -122,40 +106,32 @@ scan a@si_idx
 memo
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
-[6: "p:i:2,k:1 o:-4,+2,+1"]
+[presentation: i:2,k:1] [ordering: -4,+2,+1]
 memo
- ├── 6: (scan a) (scan a@s_idx) (scan a@si_idx)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "p:i:2,k:1 o:-4,+2,+1" [cost=1000.00]
- │         └── best: (scan a@si_idx)
- ├── 5: (projections 2 3 4)
- ├── 4: (variable a.s)
- ├── 3: (variable a.k)
- ├── 2: (variable a.i)
- └── 1: (scan a)
+ └── G1: (scan a) (scan a@s_idx) (scan a@si_idx)
+      ├── "" [cost=1000.00]
+      │    └── best: (scan a)
+      └── "[presentation: i:2,k:1] [ordering: -4,+2,+1]" [cost=1000.00]
+           └── best: (scan a@si_idx)
 
 memo
 SELECT i, k FROM a WHERE s >= 'foo'
 ----
-[12: "p:i:2,k:1"]
+[presentation: i:2,k:1]
 memo
- ├── 13: (true)
- ├── 12: (project 11 9)
- │    └── "p:i:2,k:1" [cost=100.00]
- │         └── best: (project 11 9)
- ├── 11: (select 10 5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: i:2,k:1]" [cost=100.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@s_idx,constrained)
- ├── 10: (scan a) (scan a@s_idx) (scan a@si_idx)
+ ├── G3: (projections G6 G7)
+ ├── G4: (scan a) (scan a@s_idx) (scan a@si_idx)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 9: (projections 7 8)
- ├── 8: (variable a.k)
- ├── 7: (variable a.i)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (ge 2 3)
- ├── 3: (const 'foo')
- ├── 2: (variable a.s)
- └── 1: (scan a)
+ ├── G5: (filters G8)
+ ├── G6: (variable a.i)
+ ├── G7: (variable a.k)
+ ├── G8: (ge G9 G10)
+ ├── G9: (variable a.s)
+ └── G10: (const 'foo')

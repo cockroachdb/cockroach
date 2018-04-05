@@ -144,59 +144,50 @@ WHERE a.y=1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-[29: "p:y:2,x:3,column5:5 o:+2"]
+[presentation: y:2,x:3,column5:5] [ordering: +2]
 memo
- ├── 29: (project 28 20)
+ ├── G1: (project G2 G3)
  │    ├── "" [cost=4600.00]
- │    │    └── best: (project 28 20)
- │    └── "p:y:2,x:3,column5:5 o:+2" [cost=4600.00]
- │         └── best: (project 28="o:+2" 20)
- ├── 28: (limit 27 24 +2)
+ │    │    └── best: (project G2 G3)
+ │    └── "[presentation: y:2,x:3,column5:5] [ordering: +2]" [cost=4600.00]
+ │         └── best: (project G2="o:+2" G3)
+ ├── G2: (limit G4 G5 +2)
  │    ├── "" [cost=4600.00]
- │    │    └── best: (limit 27="o:+2" 24 +2)
- │    └── "o:+2" [cost=4600.00]
- │         └── best: (limit 27="o:+2" 24 +2)
- ├── 27: (project 22 26)
+ │    │    └── best: (limit G4="o:+2" G5 +2)
+ │    └── "[ordering: +2]" [cost=4600.00]
+ │         └── best: (limit G4="o:+2" G5 +2)
+ ├── G3: (projections G18 G16 G6)
+ ├── G4: (project G7 G8)
  │    ├── "" [cost=2100.00]
- │    │    └── best: (project 22 26)
- │    └── "o:+2" [cost=4600.00]
- │         └── best: (sort 27)
- ├── 26: (projections 5 10)
- ├── 25: (limit 22 24 +2)
- ├── 24: (const 10)
- ├── 23: (project 22 20)
- ├── 22: (inner-join 15 21 17)
+ │    │    └── best: (project G7 G8)
+ │    └── "[ordering: +2]" [cost=4600.00]
+ │         └── best: (sort G4)
+ ├── G5: (const 10)
+ ├── G6: (plus G18 G19)
+ ├── G7: (inner-join G9 G10 G11)
  │    ├── "" [cost=2100.00]
- │    │    └── best: (inner-join 15 21 17)
- │    └── "o:+2" [cost=4600.00]
- │         └── best: (sort 22)
- ├── 21: (scan b)
+ │    │    └── best: (inner-join G9 G10 G11)
+ │    └── "[ordering: +2]" [cost=4600.00]
+ │         └── best: (sort G7)
+ ├── G8: (projections G18 G16)
+ ├── G9: (select G12 G13)
+ │    └── "" [cost=1100.00]
+ │         └── best: (select G12 G13)
+ ├── G10: (scan b)
  │    └── "" [cost=1000.00]
  │         └── best: (scan b)
- ├── 20: (projections 5 10 19)
- ├── 19: (plus 5 6)
- ├── 18: (inner-join 15 2 17)
- ├── 17: (filters 11)
- ├── 16: (inner-join 15 2 3)
- ├── 15: (select 1 14)
- │    └── "" [cost=1100.00]
- │         └── best: (select 1 14)
- ├── 14: (filters 7)
- ├── 13: (filters 7 11)
- ├── 12: (and 7 11)
- ├── 11: (eq 10 9)
- ├── 10: (variable b.x)
- ├── 9: (cast 8 string)
- ├── 8: (variable a.x)
- ├── 7: (eq 5 6)
- ├── 6: (const 1)
- ├── 5: (variable a.y)
- ├── 4: (inner-join 1 2 3)
- ├── 3: (true)
- ├── 2: (scan b)
- └── 1: (scan a)
-      └── "" [cost=1000.00]
-           └── best: (scan a)
+ ├── G11: (filters G14)
+ ├── G12: (scan a)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── G13: (filters G15)
+ ├── G14: (eq G16 G17)
+ ├── G15: (eq G18 G19)
+ ├── G16: (variable b.x)
+ ├── G17: (cast G20 string)
+ ├── G18: (variable a.y)
+ ├── G19: (const 1)
+ └── G20: (variable a.x)
 
 # Test interning of expressions.
 memo
@@ -204,28 +195,84 @@ SELECT 1, 1+z, now()::timestamp, now()::timestamptz
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
-[17: "p:column3:3,column4:4,column5:5,column6:6"]
+[presentation: column3:3,column4:4,column5:5,column6:6]
 memo
- ├── 17: (project 11 16)
- │    └── "p:column3:3,column4:4,column5:5,column6:6" [cost=1100.00]
- │         └── best: (project 11 16)
- ├── 16: (projections 12 13 15 14)
- ├── 15: (cast 14 timestamp)
- ├── 14: (function now)
- ├── 13: (plus 2 3)
- ├── 12: (const 1)
- ├── 11: (select 1 10)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: column3:3,column4:4,column5:5,column6:6]" [cost=1100.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5)
  │    └── "" [cost=1100.00]
- │         └── best: (select 1 10)
- ├── 10: (filters 4 8)
- ├── 9: (and 4 8)
- ├── 8: (eq 7 7)
- ├── 7: (function 5 6 5 concat)
- ├── 6: (const 'foo')
- ├── 5: (variable b.x)
- ├── 4: (eq 2 3)
- ├── 3: (const 1)
- ├── 2: (variable b.z)
- └── 1: (scan b)
-      └── "" [cost=1000.00]
-           └── best: (scan b)
+ │         └── best: (select G4 G5)
+ ├── G3: (projections G6 G7 G8 G11)
+ ├── G4: (scan b)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan b)
+ ├── G5: (filters G9 G10)
+ ├── G6: (const 1)
+ ├── G7: (plus G12 G13)
+ ├── G8: (cast G11 timestamp)
+ ├── G9: (eq G12 G13)
+ ├── G10: (eq G14 G14)
+ ├── G11: (function now)
+ ├── G12: (variable b.z)
+ ├── G13: (const 1)
+ ├── G14: (function G16 G15 G16 concat)
+ ├── G15: (const 'foo')
+ └── G16: (variable b.x)
+
+# Test topological sorting
+memo
+SELECT x FROM a WHERE x = 1 AND x+y = 1
+----
+[presentation: x:1]
+memo
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: x:1]" [cost=110.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (select G6 G7)
+ │    └── "" [cost=110.00]
+ │         └── best: (select G6 G7)
+ ├── G3: (projections G12)
+ ├── G4: (scan a)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan a,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a,constrained)
+ ├── G7: (filters G9)
+ ├── G8: (eq G12 G11)
+ ├── G9: (eq G10 G11)
+ ├── G10: (plus G12 G13)
+ ├── G11: (const 1)
+ ├── G12: (variable a.x)
+ └── G13: (variable a.y)
+
+memo raw-memo
+SELECT x FROM a WHERE x = 1 AND x+y = 1
+----
+root: G12, [presentation: x:1]
+memo
+ ├── G1: (scan a)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── G2: (variable a.x)
+ ├── G3: (const 1)
+ ├── G4: (eq G2 G3)
+ ├── G5: (variable a.y)
+ ├── G6: (plus G2 G5)
+ ├── G7: (eq G6 G3)
+ ├── G8: (and G4 G7)
+ ├── G9: (filters G4 G7)
+ ├── G10: (select G1 G9) (select G15 G14)
+ │    └── "" [cost=110.00]
+ │         └── best: (select G15 G14)
+ ├── G11: (projections G2)
+ ├── G12: (project G10 G11)
+ │    └── "[presentation: x:1]" [cost=110.00]
+ │         └── best: (project G10 G11)
+ ├── G13: (true)
+ ├── G14: (filters G7)
+ └── G15: (scan a,constrained)
+      └── "" [cost=100.00]
+           └── best: (scan a,constrained)
