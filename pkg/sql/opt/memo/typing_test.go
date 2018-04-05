@@ -17,51 +17,14 @@ package memo_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestTyping(t *testing.T) {
 	runDataDrivenTest(t, "testdata/typing", memo.ExprFmtHideAll)
-}
-
-func TestTypingJson(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := norm.NewFactory(&evalCtx)
-
-	// (Const <json>)
-	json, _ := tree.ParseDJSON("[1, 2]")
-	jsonGroup := f.ConstructConst(f.InternDatum(json))
-
-	// (Const <int>)
-	intGroup := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
-
-	// (Const <string-array>)
-	arrGroup := f.ConstructConst(f.InternDatum(tree.NewDArray(types.String)))
-
-	// (FetchVal (Const <json>) (Const <int>))
-	fetchValGroup := f.ConstructFetchVal(jsonGroup, intGroup)
-	ev := memo.MakeNormExprView(f.Memo(), fetchValGroup)
-	testTyping(t, ev, types.JSON)
-
-	// (FetchValPath (Const <json>) (Const <string-array>))
-	fetchValPathGroup := f.ConstructFetchValPath(jsonGroup, arrGroup)
-	ev = memo.MakeNormExprView(f.Memo(), fetchValPathGroup)
-	testTyping(t, ev, types.JSON)
-
-	// (FetchText (Const <json>) (Const <int>))
-	fetchTextGroup := f.ConstructFetchText(jsonGroup, intGroup)
-	ev = memo.MakeNormExprView(f.Memo(), fetchTextGroup)
-	testTyping(t, ev, types.String)
-
-	// (FetchTextPath (Const <json>) (Const <string-array>))
-	fetchTextPathGroup := f.ConstructFetchTextPath(jsonGroup, arrGroup)
-	ev = memo.MakeNormExprView(f.Memo(), fetchTextPathGroup)
-	testTyping(t, ev, types.String)
 }
 
 func TestBinaryOverloadExists(t *testing.T) {
@@ -170,15 +133,5 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 				}
 			}
 		}
-	}
-}
-
-func testTyping(t *testing.T, ev memo.ExprView, expected types.T) {
-	t.Helper()
-
-	actual := ev.Logical().Scalar.Type
-
-	if !actual.Equivalent(expected) {
-		t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
 	}
 }
