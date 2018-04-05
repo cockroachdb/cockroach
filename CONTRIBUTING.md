@@ -33,7 +33,7 @@ new engineers.
        work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
      - The standard C/C++ development headers on your system.
      - On GNU/Linux, the terminfo development libraries, which may be
-       part of a ncurses development package (e.g. `libtinfo-dev` on
+       part of a ncurses development package (e.g. `libncurses-dev` on
        Debian/Ubuntu, but `ncurses-devel` on CentOS).
      - A Go environment with a recent 64-bit version of the toolchain. Note that
        the Makefile enforces the specific version required, as it is updated

@@ -18,7 +18,7 @@ sudo apt-get install -y --no-install-recommends \
   cmake \
   ccache \
   docker.io \
-  libtinfo-dev \
+  libncurses-dev \
   git \
   nodejs \
   yarn
