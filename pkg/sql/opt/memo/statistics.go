@@ -93,6 +93,8 @@ func (c ColumnStatistics) Less(i, j int) bool {
 
 		prev = nextI
 	}
+
+	return false
 }
 
 // Swap is part of the Sorter interface.
@@ -201,6 +203,10 @@ func (s *Statistics) updateFromDistinctCounts(distinctCounts map[int]uint64, tig
 	//
 	// If the constraint is not tight, we also multiply by a "fudge factor"
 	// of 1/3.
+	// // For each constrained column where we could not calculate a selectivity
+	// // (e.g., we cannot determine the distinct count from the predicate x < 1),
+	// // we multiply by a "fudge factor" of 1/3. If the constraint is not tight,
+	// // we take the minimum of the calculated selectivity and 1/3.
 	//
 	// This selectivity will be used to update the row count and the distinct
 	// count for the unconstrained columns in applySelectivity.
