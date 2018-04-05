@@ -245,7 +245,7 @@ def extract_release_notes(pr, title, commit):
 
     item = {'author': (commit.author.name, commit.author.email),
             'sha': commit.hexsha[:shamin],
-            'pr': pr,
+            'pr': "#{0}".format(pr),
             'prtitle': title,
             'note': None}
 
@@ -420,7 +420,7 @@ def analyze_pr_new(merge, pr):
 
     item = {
         'title': note,
-        'pr': pr,
+        'pr': "#{0}".format(pr),
         'sha': tip.hexsha[:shamin],
         'ncommits': ncommits,
         'authors': ", ".join(sorted(authors)),
@@ -506,6 +506,9 @@ allauthors.sort(key=lambda x:x[0].lower())
 ext_contributors = individual_authors - crdb_folk
 firsttime_contributors = []
 for a in individual_authors:
+    if a == "Unknown Author":
+        continue
+
     # Find all aliases known for this person
     aliases = [a]
     for alias, name in author_aliases.items():
