@@ -86,6 +86,12 @@ var diagnosticReportFrequency = settings.RegisterNonNegativeDurationSetting(
 	time.Hour,
 )
 
+var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
+	"diagnostics.forced_stat_reset.interval",
+	"interval after which pending diagnostics statistics should be discarded even if not reported",
+	time.Hour*2,
+)
+
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
 func addJitter(d time.Duration, jitterSec int) time.Duration {
 	j := time.Duration(rand.Intn(jitterSec*2)-jitterSec) * time.Second
@@ -95,6 +101,35 @@ func addJitter(d time.Duration, jitterSec int) time.Duration {
 type versionInfo struct {
 	Version string `json:"version"`
 	Details string `json:"details"`
+}
+
+// PeriodicallyClearStmtStats is backstop -- generally the diagnostics reporting
+// run by PeriodicallyCheckForUpdates resets stats after generating a report. It
+// drives that reset so that stats are not inadvertently reset immediately
+// before a report is potentially generated (it still manages resets even when
+// the actual reporting disabled). However, if that loop crashes or is blocked,
+// since we do not crash the whole server, since that crash is ignored, this
+// loop picks up that responsibility in its absence.
+func (s *Server) PeriodicallyClearStmtStats(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		for {
+			last := s.sqlExecutor.LasStatementStatReset()
+			next := last.Add(maxStmtStatReset.Get(&s.st.SV))
+			wait := next.Sub(timeutil.Now())
+			if wait < 0 {
+				s.sqlExecutor.ResetStatementStats(ctx)
+			} else {
+				timer.Reset(wait)
+				select {
+				case <-s.stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					timer.Read = true
+				}
+			}
+		}
+	})
 }
 
 // PeriodicallyCheckForUpdates starts a background worker that periodically
