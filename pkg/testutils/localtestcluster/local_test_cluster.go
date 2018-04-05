@@ -136,6 +136,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, storage.TestTimeUntilStoreDead)

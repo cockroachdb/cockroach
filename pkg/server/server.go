@@ -289,6 +289,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		nlActive,
 		nlRenewal,
+		s.st,
 		s.cfg.HistogramWindowInterval(),
 	)
 	s.registry.AddMetricStruct(s.nodeLiveness.Metrics())
@@ -1541,6 +1542,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
+
+	// Attempt to upgrade cluster version.
+	s.startAttemptUpgrade(ctx)
 
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
