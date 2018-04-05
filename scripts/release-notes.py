@@ -95,6 +95,7 @@ crdb_folk = set([
     "Spencer Kimball",
     "Tamir Duberstein",
     "Tobias Schottdorf",
+    "Unknown Author",
     "Vivek Menezes",
 ])
 
@@ -277,26 +278,26 @@ def extract_release_notes(pr, title, commit):
     release_notes[cat] = catnotes
 
 # This function groups and counts all the commits that belong to a particular PR.
-def collect_commits(pr, title, commits, author):
-    ncommits = 0
-    otherauthors = set()
-    for commit in commits:
-        if commit.message.startswith("Merge"):
-            continue
-        extract_release_notes(pr, title, commit)
-
-        ncommits += 1
-        this_commits_author = author_aliases.get(commit.author.name, commit.author.name)
-        if commit.author.name != 'GitHub' and this_commits_author != author:
-            otherauthors.add(this_commits_author)
-        this_commits_committer = author_aliases.get(commit.committer.name, commit.committer.name)
-        if commit.committer.name != 'GitHub' and this_commits_committer != author:
-            otherauthors.add(this_commits_committer)
-
-        n, a = collect_commits(pr, title, list(commit.parents), author)
-        ncommits += n
-        otherauthors.update(a)
-    return ncommits, otherauthors
+#def collect_commits(pr, title, commits, author):
+#    ncommits = 0
+#    otherauthors = set()
+#    for commit in commits:
+#        if commit.message.startswith("Merge"):
+#            continue
+#        extract_release_notes(pr, title, commit)
+#
+#        ncommits += 1
+#        this_commits_author = author_aliases.get(commit.author.name, commit.author.name)
+#        if commit.author.name != 'GitHub' and this_commits_author != author:
+#            otherauthors.add(this_commits_author)
+#        this_commits_committer = author_aliases.get(commit.committer.name, commit.committer.name)
+#        if commit.committer.name != 'GitHub' and this_commits_committer != author:
+#            otherauthors.add(this_commits_committer)
+#
+#        n, a = collect_commits(pr, title, list(commit.parents), author)
+#        ncommits += n
+#        otherauthors.update(a)
+#    return ncommits, otherauthors
 
 per_author_history = {}
 individual_authors = set()
@@ -324,32 +325,34 @@ def spin():
 #    pr_refs[tip] = pr_number
 
 #prexpr = re.compile(r'\(refs/pull/.*/(?P<number>[0-9]*)\)$', flags=re.M)
-prexpr = re.compile(r'\(([^,]*, )*refs/pull/.*/(?P<number>[0-9]*)(, [^,]*)*\)$', flags=re.M)
+#prexpr = re.compile(r'\(([^,]*, )*refs/pull/.*/(?P<number>[0-9]*)(, [^,]*)*\)$', flags=re.M)
 
 # This function analyzes a PR based off its tip commit.
-def analyze_pr(merge, tip):
-    decorated = repo.git.log(tip, "-1", decorate=True)
-
-    prmatch = prexpr.search(decorated)
-    if prmatch is None:
-        # TODO(couchand): handle this more gracefully
-        print("uh-oh, couldn't find pr number for ", tip.hexsha)
-        exit(-1)
-    pr = prmatch.group("number")
-    #decorated.split('\n')[0].split('/')[-1].split(')')[0]
-    
-    noteexpr = re.compile("^{0}: (?P<message>.*) r=.* a=.*".format(pr), flags=re.M)
-    m = noteexpr.search(merge.message)
-    note = ''
-    if m is None:
-        # non-Bors merge
-        note = '\n'.join(merge.message.split('\n')[2:])
-    else:
-        note = m.group('message')
-
-    print(pr, tip.hexsha, note)
+#def analyze_pr(merge, tip):
+#    decorated = repo.git.log(tip, "-1", decorate=True)
+#
+#    prmatch = prexpr.search(decorated)
+#    if prmatch is None:
+#        # TODO(couchand): handle this more gracefully
+#        print("uh-oh, couldn't find pr number for ", tip.hexsha)
+#        exit(-1)
+#    pr = prmatch.group("number")
+#    #decorated.split('\n')[0].split('/')[-1].split(')')[0]
+#    
+#    noteexpr = re.compile("^{0}: (?P<message>.*) r=.* a=.*".format(pr), flags=re.M)
+#    m = noteexpr.search(merge.message)
+#    note = ''
+#    if m is None:
+#        # non-Bors merge
+#        note = '\n'.join(merge.message.split('\n')[2:])
+#    else:
+#        note = m.group('message')
+#
+#    print(pr, tip.hexsha, note)
 
 def analyze_pr_new(merge, pr):
+    allprs.add(pr)
+
     # TODO(couchand): this should be config
     refname = "refs/pull/upstream/{0}".format(pr)
     tip = name_to_object(repo, refname)
@@ -377,10 +380,14 @@ def analyze_pr_new(merge, pr):
     authors = set()
     ncommits = 0
     while not merge_numbers.match(commit.message):
+        spin()
+
         if commit.message.startswith("Merge branch"):
             # TODO(couchand): something
             print("uh-oh!  can't handle branch merges!  pr", pr)
             break
+
+        extract_release_notes(pr, note, commit)
 
         ncommits += 1
         author = author_aliases.get(commit.author.name, commit.author.name)
@@ -406,6 +413,11 @@ def analyze_pr_new(merge, pr):
         #    'files': stats['files'],
         #    'lines': stats['lines'],
 
+    if len(authors) == 0:
+        authors.add("Unknown Author")
+
+    individual_authors.update(authors)
+
     item = {
         'title': note,
         'pr': pr,
@@ -417,7 +429,11 @@ def analyze_pr_new(merge, pr):
         'files': stats.total['files'],
         'lines': stats.total['lines'],
         }
-    print(item)
+    #print(item)
+
+    history = per_author_history.get(item['authors'], [])
+    history.append(item)
+    per_author_history[item['authors']] = history
 
 while commit != firstCommit:
     # TODO(couchand): spin
@@ -435,7 +451,7 @@ while commit != firstCommit:
 
         numbermatch = merge_numbers.search(commit.message)
         if numbermatch is None:
-            print("AAAAH!")
+            print("unable to find pr numbers on commit", commit.hexsha)
             exit(-1)
 
         #print("found merge of", numbermatch.group("numbers"))
@@ -482,7 +498,7 @@ while commit != firstCommit:
     commit = commit.parents[0]
 
 # TODO(couchand): print the notes!
-exit(-1)
+#exit(-1)
 
 allauthors = list(per_author_history.keys())
 allauthors.sort(key=lambda x:x[0].lower())
@@ -642,7 +658,7 @@ if len(ext_contributors) > 0:
         print()
     for a in ext_contributors:
         print("-", a)
-    print()
+print()
 
 ## Print the per-author contribution list.
 if not hidepercontributor:
@@ -655,7 +671,7 @@ if not hidepercontributor:
 
     for author in allauthors:
         items = per_author_history[author]
-        print("- %s:" % author_aliases.get(author[0], author[0]))
+        print("- %s:" % author)#author_aliases.get(author[0], author[0]))
         items.sort(key=lambda x:x[sortkey],reverse=not revsort)
         for item in items:
             print(fmt % item, end='')
@@ -663,15 +679,20 @@ if not hidepercontributor:
                 seenshas.add(item['sha'])
             seenprs.add(item['pr'])
 
-            ncommits, otherauthors = item['ncommits'], item['otherauthors']
-            if ncommits > 1 or len(otherauthors) > 0:
+            #ncommits, otherauthors = item['ncommits'], item['otherauthors']
+            #if ncommits > 1 or len(otherauthors) > 0:
+            #    print(" (", end='')
+            #    if ncommits > 1:
+            #        print("%d commits" % ncommits, end='')
+            #    if len(otherauthors)> 0:
+            #        if ncommits > 1:
+            #            print(" ", end='')
+            #        print("w/", ', '.join(otherauthors), end='')
+            #    print(")", end='')
+            ncommits = item['ncommits']
+            if ncommits > 1:
                 print(" (", end='')
-                if ncommits > 1:
-                    print("%d commits" % ncommits, end='')
-                if len(otherauthors)> 0:
-                    if ncommits > 1:
-                        print(" ", end='')
-                    print("w/", ', '.join(otherauthors), end='')
+                print("%d commits" % ncommits, end='')
                 print(")", end='')
             print()
         print()
