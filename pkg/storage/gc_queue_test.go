@@ -506,9 +506,7 @@ func TestGCQueueProcess(t *testing.T) {
 		ctx := context.Background()
 		now := tc.Clock().Now()
 		return RunGC(ctx, desc, snap, now, zone.GC,
-			func(ctx context.Context, gcKeys [][]roachpb.GCRequest_GCKey, info *GCInfo) error {
-				return nil
-			},
+			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
 			},

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -105,10 +106,6 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	)
 	return gcq
 }
-
-// A gcFunc sends the chunks of GCRequests in the order in which they
-// appear. It may but does not have to return on the first error.
-type gcFunc func(context.Context, [][]roachpb.GCRequest_GCKey, *GCInfo) error
 
 // A cleanupIntentsFunc synchronously resolves the supplied intents
 // (which may be PENDING, in which case they are first pushed) while
@@ -513,32 +510,65 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 	return gcq.processImpl(ctx, repl, sysCfg, now)
 }
 
-// chunkGCRequest chunks the supplied gcKeys (which are consumed by this method) into
-// multiple batches which must be executed in order by the caller.
-func chunkGCRequest(
-	desc *roachpb.RangeDescriptor, info *GCInfo, gcKeys [][]roachpb.GCRequest_GCKey,
-) []roachpb.GCRequest {
+// NoopGCer implements GCer by doing nothing.
+type NoopGCer struct{}
+
+var _ GCer = NoopGCer{}
+
+// SetGCThreshold implements storage.GCer.
+func (NoopGCer) SetGCThreshold(context.Context, GCThreshold) error { return nil }
+
+// GC implements storage.GCer.
+func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
+
+type replicaGCer struct {
+	repl  *Replica
+	count int32 // update atomically
+}
+
+var _ GCer = &replicaGCer{}
+
+func (r *replicaGCer) template() roachpb.GCRequest {
+	desc := r.repl.Desc()
 	var template roachpb.GCRequest
 	template.Key = desc.StartKey.AsRawKey()
 	template.EndKey = desc.EndKey.AsRawKey()
-	ret := make([]roachpb.GCRequest, 0, len(gcKeys)+1)
 
-	gc1 := template
-	gc1.Threshold = info.Threshold
-	gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
-	// The first request is intentionally kept very small since it
-	// updates the Range-wide GCThresholds, and thus must block all
-	// reads and writes while it is being applied.
+	return template
+}
 
-	ret = append(ret, gc1)
+func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
+	n := atomic.AddInt32(&r.count, 1)
+	log.Eventf(ctx, "sending batch %d (%d keys)", n, len(req.Keys))
 
-	for _, keys := range gcKeys {
-		gc := template
-		gc.Keys = keys
-		ret = append(ret, gc)
+	var ba roachpb.BatchRequest
+
+	// Technically not needed since we're talking directly to the Replica.
+	ba.RangeID = r.repl.Desc().RangeID
+	ba.Timestamp = r.repl.Clock().Now()
+	ba.Add(&req)
+
+	if _, pErr := r.repl.Send(ctx, ba); pErr != nil {
+		log.VErrEvent(ctx, 2, pErr.String())
+		return pErr.GoError()
 	}
+	return nil
+}
 
-	return ret
+func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh GCThreshold) error {
+	req := r.template()
+	req.Threshold = thresh.Key
+	req.TxnSpanGCThreshold = thresh.Txn
+	return r.send(ctx, req)
+}
+
+func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	req := r.template()
+	req.Keys = keys
+	return r.send(ctx, req)
 }
 
 func (gcq *gcQueue) processImpl(
@@ -554,32 +584,7 @@ func (gcq *gcQueue) processImpl(
 		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	info, err := RunGC(ctx, desc, snap, now, zone.GC,
-		func(ctx context.Context, gcKeys [][]roachpb.GCRequest_GCKey, info *GCInfo) error {
-			// Chunk the keys into multiple GC requests to interleave more
-			// gracefully with other Raft traffic.
-			batches := chunkGCRequest(desc, info, gcKeys)
-
-			for i, gcArgs := range batches {
-				var ba roachpb.BatchRequest
-
-				// Technically not needed since we're talking directly to the Range.
-				ba.RangeID = desc.RangeID
-				ba.Timestamp = now
-
-				// TODO(tschottdorf): This is one of these instances in which we want
-				// to be more careful that the request ends up on the correct Replica,
-				// and we might have to worry about mixing range-local and global keys
-				// in a batch which might end up spanning Ranges by the time it executes.
-				ba.Add(&gcArgs)
-				log.Eventf(ctx, "sending batch %d of %d", i+1, len(batches))
-				if _, pErr := repl.Send(ctx, ba); pErr != nil {
-					log.VErrEvent(ctx, 2, pErr.String())
-					return pErr.GoError()
-				}
-			}
-			return nil
-		},
+	info, err := RunGC(ctx, desc, snap, now, zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.cleanupIntents(ctx, intents, now, roachpb.PUSH_ABORT)
 			if err == nil {
@@ -670,6 +675,18 @@ type lockableGCInfo struct {
 	GCInfo
 }
 
+// GCThreshold holds the key and txn span GC thresholds, respectively.
+type GCThreshold struct {
+	Key hlc.Timestamp
+	Txn hlc.Timestamp
+}
+
+// A GCer is an abstraction used by the GC queue to carry out chunked deletions.
+type GCer interface {
+	SetGCThreshold(context.Context, GCThreshold) error
+	GC(context.Context, []roachpb.GCRequest_GCKey) error
+}
+
 // RunGC runs garbage collection for the specified descriptor on the
 // provided Engine (which is not mutated). It uses the provided gcFn
 // to run garbage collection once on all implicated spans,
@@ -682,7 +699,7 @@ func RunGC(
 	snap engine.Reader,
 	now hlc.Timestamp,
 	policy config.GCPolicy,
-	gcFn gcFunc,
+	gcer GCer,
 	cleanupIntentsFn cleanupIntentsFunc,
 	cleanupTxnIntentsAsyncFn cleanupTxnIntentsAsyncFunc,
 ) (GCInfo, error) {
@@ -702,7 +719,13 @@ func RunGC(
 	infoMu.Threshold = gc.Threshold
 	infoMu.TxnSpanGCThreshold = txnExp
 
-	var gcKeys [][]roachpb.GCRequest_GCKey
+	if err := gcer.SetGCThreshold(ctx, GCThreshold{
+		Key: gc.Threshold,
+		Txn: txnExp,
+	}); err != nil {
+		return GCInfo{}, errors.Wrap(err, "failed to set GC thresholds")
+	}
+
 	var batchGCKeys []roachpb.GCRequest_GCKey
 	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
@@ -777,8 +800,17 @@ func RunGC(
 						// chunk and start a new one.
 						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
-							gcKeys = append(gcKeys, batchGCKeys)
-							batchGCKeys = []roachpb.GCRequest_GCKey{}
+							if err := gcer.GC(ctx, batchGCKeys); err != nil {
+								// Even though we are batching the GC process, it's
+								// safe to continue because we bumped the GC
+								// thresholds. We may leave some inconsistent history
+								// behind, but nobody can read it.
+								log.Warning(ctx, err)
+								return
+							}
+							// Allow releasing the memory backing batchGCKeys.
+							iter.ResetAllocator()
+							batchGCKeys = nil
 							batchGCKeysBytes = 0
 						}
 					}
@@ -823,8 +855,12 @@ func RunGC(
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
 	if len(batchGCKeys) > 0 {
-		gcKeys = append(gcKeys, batchGCKeys)
+		if err := gcer.GC(ctx, batchGCKeys); err != nil {
+			return GCInfo{}, err
+		}
 	}
+
+	// From now on, all newly added keys are range-local.
 
 	// Process local range key entries (txn records, queue last processed times).
 	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnExp, &infoMu, cleanupTxnIntentsAsyncFn)
@@ -832,32 +868,20 @@ func RunGC(
 		return GCInfo{}, err
 	}
 
-	// From now on, all newly added keys are range-local.
-	// TODO(tschottdorf): Might need to use two requests at some point since we
-	// hard-coded the full non-local key range in the header, but that does
-	// not take into account the range-local keys. It will be OK as long as
-	// we send directly to the Replica, though.
-	if len(localRangeKeys) > 0 {
-		gcKeys = append(gcKeys, localRangeKeys)
+	if err := gcer.GC(ctx, localRangeKeys); err != nil {
+		return GCInfo{}, err
 	}
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
 	abortSpanKeys := processAbortSpan(ctx, snap, desc.RangeID, txnExp, &infoMu)
-	if len(abortSpanKeys) > 0 {
-		gcKeys = append(gcKeys, abortSpanKeys)
+	if err := gcer.GC(ctx, abortSpanKeys); err != nil {
+		return GCInfo{}, err
 	}
 
 	infoMu.Lock()
-	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats so far %+v", infoMu.GCInfo)
+	log.Eventf(ctx, "GC'ed keys; stats %+v", infoMu.GCInfo)
 	infoMu.Unlock()
-
-	// Process the keys before beginning to push transactions and
-	// resolve intents so that we don't lose all of the work we've done
-	// thus far gathering GC'able keys.
-	if err := gcFn(ctx, gcKeys, &infoMu.GCInfo); err != nil {
-		return GCInfo{}, err
-	}
 
 	// Push transactions (if pending) and resolve intents.
 	var intents []roachpb.Intent
