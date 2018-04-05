@@ -82,8 +82,14 @@ const (
 
 var diagnosticReportFrequency = settings.RegisterNonNegativeDurationSetting(
 	"diagnostics.reporting.interval",
-	"interval at which diagnostics data should be reported",
+	"interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)",
 	time.Hour,
+)
+
+var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
+	"diagnostics.forced_stat_reset.interval",
+	"interval after which pending diagnostics statistics should be discarded even if not reported",
+	time.Hour*2, // 2 x diagnosticReportFrequency
 )
 
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
@@ -97,10 +103,38 @@ type versionInfo struct {
 	Details string `json:"details"`
 }
 
+// PeriodicallyClearStmtStats runs a loop to ensure that sql stats are reset.
+// Usually we expect those stats to be reset by diagnostics reporting, after it
+// generates its reports. However if the diagnostics loop crashes and stops
+// resetting stats, this loop ensures stats do not accumulate beyond a
+// the diagnostics.forced_stat_reset.interval limit.
+func (s *Server) PeriodicallyClearStmtStats(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		for {
+			last := s.sqlExecutor.LasStatementStatReset()
+			next := last.Add(maxStmtStatReset.Get(&s.st.SV))
+			wait := next.Sub(timeutil.Now())
+			if wait < 0 {
+				s.sqlExecutor.ResetStatementStats(ctx)
+			} else {
+				timer.Reset(wait)
+				select {
+				case <-s.stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					timer.Read = true
+				}
+			}
+		}
+	})
+}
+
 // PeriodicallyCheckForUpdates starts a background worker that periodically
 // phones home to check for updates and report usage.
-func (s *Server) PeriodicallyCheckForUpdates() {
-	s.stopper.RunWorker(context.TODO(), func(ctx context.Context) {
+func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		defer log.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
 		startup := timeutil.Now()
 		nextUpdateCheck := startup
 		nextDiagnosticReport := startup
@@ -111,7 +145,7 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 			now := timeutil.Now()
 			runningTime := now.Sub(startup)
 
-			nextUpdateCheck = s.maybeCheckForUpdates(now, nextUpdateCheck, runningTime)
+			nextUpdateCheck = s.maybeCheckForUpdates(ctx, now, nextUpdateCheck, runningTime)
 			nextDiagnosticReport = s.maybeReportDiagnostics(ctx, now, nextDiagnosticReport, runningTime)
 
 			sooner := nextUpdateCheck
@@ -133,7 +167,7 @@ func (s *Server) PeriodicallyCheckForUpdates() {
 // maybeCheckForUpdates determines if it is time to check for updates and does
 // so if it is, before returning the time at which the next check be done.
 func (s *Server) maybeCheckForUpdates(
-	now, scheduled time.Time, runningTime time.Duration,
+	ctx context.Context, now, scheduled time.Time, runningTime time.Duration,
 ) time.Time {
 	if scheduled.After(now) {
 		return scheduled
@@ -147,7 +181,7 @@ func (s *Server) maybeCheckForUpdates(
 
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
-	if succeeded := s.checkForUpdates(runningTime); !succeeded {
+	if succeeded := s.checkForUpdates(ctx, runningTime); !succeeded {
 		return now.Add(updateCheckRetryFrequency)
 	}
 
@@ -188,11 +222,11 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 // and logs messages if it finds them, as well as if it encounters any errors.
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
-func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+func (s *Server) checkForUpdates(ctx context.Context, runningTime time.Duration) bool {
 	if updatesURL == nil {
 		return true // don't bother with asking for retry -- we'll never succeed.
 	}
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "checkForUpdates")
 	defer span.Finish()
 
 	addInfoToURL(ctx, updatesURL, s, runningTime)
@@ -246,7 +280,7 @@ func (s *Server) maybeReportDiagnostics(
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
-		s.reportDiagnostics(running)
+		s.reportDiagnostics(ctx, running)
 	}
 	if !s.cfg.UseLegacyConnHandling {
 		s.pgServer.SQLServer.ResetStatementStats(ctx)
@@ -385,11 +419,11 @@ func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret s
 	}
 }
 
-func (s *Server) reportDiagnostics(runningTime time.Duration) {
+func (s *Server) reportDiagnostics(ctx context.Context, runningTime time.Duration) {
 	if reportingURL == nil {
 		return
 	}
-	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
+	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
 	b, err := protoutil.Marshal(s.getReportingInfo(ctx))

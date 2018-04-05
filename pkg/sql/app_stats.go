@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -171,8 +173,9 @@ type sqlStats struct {
 	st *cluster.Settings
 	syncutil.Mutex
 
-	// apps is the container for all the per-application statistics
-	// objects.
+	// lastReset is the time at which the app containers were reset.
+	lastReset time.Time
+	// apps is the container for all the per-application statistics objects.
 	apps map[string]*appStats
 }
 
@@ -223,6 +226,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 		a.stmts = make(map[stmtKey]*stmtStats, len(a.stmts)/2)
 		a.Unlock()
 	}
+	s.lastReset = timeutil.Now()
 	s.Unlock()
 }
 
@@ -347,6 +351,14 @@ func HashForReporting(secret, appName string) string {
 // ResetStatementStats resets the executor's collected statement statistics.
 func (e *Executor) ResetStatementStats(ctx context.Context) {
 	e.sqlStats.resetStats(ctx)
+}
+
+// LasStatementStatReset returns the time the stmt stats were last rest.
+func (e *Executor) LasStatementStatReset() time.Time {
+	e.sqlStats.Lock()
+	last := e.sqlStats.lastReset
+	e.sqlStats.Unlock()
+	return last
 }
 
 // FillErrorCounts fills the passed map with the executor's current

@@ -63,7 +63,7 @@ func TestCheckVersion(t *testing.T) {
 	defer stubURL(&updatesURL, r.url)()
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	s.(*TestServer).checkForUpdates(time.Minute)
+	s.(*TestServer).checkForUpdates(ctx, time.Minute)
 	r.Close()
 	s.Stopper().Stop(ctx)
 
@@ -96,7 +96,7 @@ func TestCheckVersion(t *testing.T) {
 		// ensure nil, which happens when an empty env override URL is used, does not
 		// cause a crash. We've deferred a cleanup of the original pointer above.
 		updatesURL = nil
-		s.(*TestServer).checkForUpdates(time.Minute)
+		s.(*TestServer).checkForUpdates(ctx, time.Minute)
 	})
 }
 
@@ -268,7 +268,7 @@ func TestReportUsage(t *testing.T) {
 		expectedUsageReports++
 
 		node := ts.node.recorder.GetStatusSummary(ctx)
-		ts.reportDiagnostics(0)
+		ts.reportDiagnostics(ctx, 0)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
 		rangeCounts := make(map[roachpb.StoreID]int64)
