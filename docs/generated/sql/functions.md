@@ -791,19 +791,7 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
 </span></td></tr>
-<tr><td><code>crdb_internal.force_error(errorCode: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.force_log_fatal(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.no_constant_folding(input: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
-</span></td></tr>
 <tr><td><code>crdb_internal.node_executable_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the version of CockroachDB this node is running.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used for internal debugging purposes. Incorrect use can severely impact performance.</p>
 </span></td></tr>
 <tr><td><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td></tr>
@@ -814,6 +802,27 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <tr><td><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
 <tr><td><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
+</span></td></tr></tbody>
+</table>
+
+### Testing and Debugging Functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>crdb_internal.force_diagnostic_report() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.force_error(errorCode: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.force_log_fatal(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.force_panic(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.force_retry(val: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.no_constant_folding(input: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
+<tr><td><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used for internal debugging purposes. Incorrect use can severely impact performance.</p>
 </span></td></tr></tbody>
 </table>
 
