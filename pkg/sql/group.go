@@ -547,9 +547,11 @@ var _ tree.Visitor = &extractAggregatesVisitor{}
 // addAggregation adds an aggregateFuncHolder to the groupNode funcs and returns
 // an IndexedVar that refers to the index of the function.
 func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.IndexedVar {
-	// TODO(radu): we could check for duplicate aggregations here and reuse
-	// them; useful for cases like
-	//   SELECT SUM(x), y FROM t GROUP BY y HAVING SUM(x) > 0
+	for i, g := range v.groupNode.funcs {
+		if aggregateFuncsEqual(f, g) {
+			return v.ivarHelper.IndexedVarWithType(i, f.resultType)
+		}
+	}
 	v.groupNode.funcs = append(v.groupNode.funcs, f)
 
 	renderIdx := v.ivarHelper.AppendSlot()
@@ -770,6 +772,11 @@ func (a *aggregateFuncHolder) setDistinct() {
 // e.g. SUM(DISTINCT x).
 func (a *aggregateFuncHolder) isDistinct() bool {
 	return a.run.seen != nil
+}
+
+func aggregateFuncsEqual(a, b *aggregateFuncHolder) bool {
+	return a.funcName == b.funcName && a.resultType == b.resultType &&
+		a.argRenderIdx == b.argRenderIdx && a.filterRenderIdx == b.filterRenderIdx
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context) {
