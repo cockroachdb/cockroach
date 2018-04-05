@@ -39,7 +39,7 @@ const durationKey = "testing.duration"
 const byteSizeKey = "testing.bytesize"
 const enumKey = "testing.enum"
 
-var strA = settings.RegisterValidatedStringSetting(strKey, "", "<default>", func(v string) error {
+var strA = settings.RegisterValidatedStringSetting(strKey, "", "<default>", func(sv *settings.Values, v string) error {
 	if len(v) > 15 {
 		return errors.Errorf("can't set %s to string longer than 15: %s", strKey, v)
 	}

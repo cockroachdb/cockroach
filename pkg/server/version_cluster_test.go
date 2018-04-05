@@ -23,14 +23,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -133,239 +130,86 @@ func TestClusterVersionUpgrade1_0To2_0(t *testing.T) {
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 
-	// Four nodes that are all compatible with 1.0, but are really 2.0. This is
-	// what the official v2.0 binary will look like.
-	versions := [][2]string{{"1.0", "2.0"}, {"1.0", "2.0"}, {"1.0", "2.0"}, {"1.0", "2.0"}}
+	var newVersion = cluster.VersionByKey(cluster.Version2_0)
 
-	// Start by running 1.0.
+	// The first node will have cluster version (aka. minimum version) set to be
+	// 1.0 and UseVersion set to be 2.0 so that we can test auto upgrade. The
+	// following nodes will have both UseVersion and MinimumVersion set to be 2.0
+	// because nodes with server version lower than current cluster version will
+	// not be able to join the cluster.
+	versions := [][2]string{{"1.0", newVersion.String()}, {"2.0", newVersion.String()}, {"2.0", newVersion.String()}}
+
 	bootstrapVersion := cluster.ClusterVersion{
 		UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 		MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
 	}
 
-	// We will put down fake legacy tombstones (#12154) to jog
-	// `migrateLegacyTombstones`, including one for the existing range, but also
-	// some for non-existing ones.
-	legacyTombstoneKeys := []roachpb.Key{
-		// Range 1 actually exists, at least on some stores.
-		keys.RaftTombstoneIncorrectLegacyKey(1 /* rangeID */),
-		// These ranges don't exist.
-		keys.RaftTombstoneIncorrectLegacyKey(200 /* rangeID */),
-		keys.RaftTombstoneIncorrectLegacyKey(300 /* rangeID */),
-	}
-
-	// Immediately stop the first server. We just wanted the bootstrap to happen
-	// so that we can futz with the directories.
-	tc := setupMixedCluster(t, bootstrapVersion, versions[:1], dir)
-	tc.TestCluster.Stopper().Stop(ctx)
-
-	// Put some legacy tombstones down. We're going to test the migration for
-	// removing those in the negative: the tombstones are to be removed only after
-	// a node at *cluster version* v2.0 boots up. We don't restart nodes in this
-	// test while the versions are bumped, so the only boot is at the initial
-	// version v1.0, and we verify that the tombstones remain. The rewrite
-	// functionality is tested in TestStoreInitAndBootstrap.
-	//
-	// Only put down tombstones on the first node. This is a technical
-	// restriction; we can't just write to the other engines as these nodes aren't
-	// bootstrapped yet and check for a blank slate as they start. We can't run
-	// the whole cluster at this point in the code or we'll run into trouble when
-	// restarting it later, as replicas will have upreplicated and the machinery
-	// here starts the nodes sequentially.
-	//
-	// In practice, the first range on the first node is the most interesting any-
-	// way (as it sees both replica GC and snapshots), and all of this can be
-	// ripped out once v2.0 is out the door (as legacy tombstones are less of a
-	// concern then).
-	for _, args := range tc.args() {
-		func() {
-			// use -1 as NextReplicaID as this makes our fake value easily identified.
-			tombstone := roachpb.RaftTombstone{NextReplicaID: -1}
-
-			eng, err := engine.NewRocksDB(
-				engine.RocksDBConfig{MustExist: true, Dir: args.StoreSpecs[0].Path}, engine.RocksDBCache{},
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer eng.Close()
-
-			for _, legacyTombstoneKey := range legacyTombstoneKeys {
-				if err := engine.MVCCPutProto(
-					ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil /* txn */, &tombstone,
-				); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}()
-	}
-
-	// Start the real cluster, with four nodes.
-	tc = setupMixedCluster(t, bootstrapVersion, versions, dir)
+	tc := setupMixedCluster(t, bootstrapVersion, versions, dir)
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
+	// Check if the cluster version is bumped to newVersion.
+	curVersion := tc.getVersionFromSelect(0)
+	isNoopUpdate := curVersion == newVersion.String()
+
 	for i := 0; i < tc.NumServers(); i++ {
-		if exp, version := bootstrapVersion.MinimumVersion.String(), tc.getVersionFromShow(i); version != exp {
+		v := tc.getVersionFromSetting(i)
+		wantActive := isNoopUpdate
+		if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
+			t.Fatalf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
+		}
+
+		if tableV, curV := tc.getVersionFromSelect(i), v.Version().MinimumVersion.String(); tableV != curV {
+			t.Fatalf("%d: read v%s from table, v%s from setting", i, tableV, curV)
+		}
+	}
+
+	exp := newVersion.String()
+
+	// Read the versions from the table from each node. Note that under the
+	// hood, everything goes to the lease holder and so it's pretty much
+	// guaranteed that they all read the same, but it doesn't hurt to check.
+	for i := 0; i < tc.NumServers(); i++ {
+		if version := tc.getVersionFromSelect(i); version != exp {
+			t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
+		}
+		if version := tc.getVersionFromShow(i); version != exp {
 			t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
 		}
 	}
 
-	tombstoneOp := func(f func(engine.Engine, roachpb.Key) error) error {
-		visitor := func(s *storage.Store) error {
-			for _, legacyTombstoneKey := range legacyTombstoneKeys {
-				if err := f(s.Engine(), legacyTombstoneKey); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-		return tc.Server(0).GetStores().(*storage.Stores).VisitStores(visitor)
-	}
-
-	run := func(t *testing.T, newVersion roachpb.Version) {
-		curVersion := tc.getVersionFromSelect(0)
-		isNoopUpdate := curVersion == newVersion.String()
-
+	// Now check the Settings.Version variable. That is the tricky one for which
+	// we "hold back" a gossip update until we've written to the engines. We may
+	// have to wait a bit until we see the new version here, even though it's
+	// already in the table.
+	testutils.SucceedsSoon(t, func() error {
 		for i := 0; i < tc.NumServers(); i++ {
-			v := tc.getVersionFromSetting(i)
-			wantActive := isNoopUpdate
-			if isActive := v.Version().IsActiveVersion(newVersion); isActive != wantActive {
-				t.Fatalf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
-			}
-
-			if tableV, curV := tc.getVersionFromSelect(i), v.Version().MinimumVersion.String(); tableV != curV {
-				t.Fatalf("%d: read v%s from table, v%s from setting", i, tableV, curV)
-			}
-		}
-
-		exp := newVersion.String()
-		tc.mustSetVersion(tc.NumServers()-1, exp)
-
-		// Read the versions from the table from each node. Note that under the
-		// hood, everything goes to the lease holder and so it's pretty much
-		// guaranteed that they all read the same, but it doesn't hurt to check.
-		for i := 0; i < tc.NumServers(); i++ {
-			if version := tc.getVersionFromSelect(i); version != exp {
-				t.Fatalf("%d: incorrect version %q (wanted %s)", i, version, exp)
-			}
-			if version := tc.getVersionFromShow(i); version != exp {
-				t.Fatalf("%d: incorrect version %s (wanted %s)", i, version, exp)
-			}
-		}
-
-		// Now check the Settings.Version variable. That is the tricky one for which
-		// we "hold back" a gossip update until we've written to the engines. We may
-		// have to wait a bit until we see the new version here, even though it's
-		// already in the table.
-		testutils.SucceedsSoon(t, func() error {
-			for i := 0; i < tc.NumServers(); i++ {
-				vers := tc.getVersionFromSetting(i)
-				if v := vers.Version().MinimumVersion.String(); v == curVersion {
-					if isNoopUpdate {
-						continue
-					}
-					return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
-				} else if v != exp {
-					t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
+			vers := tc.getVersionFromSetting(i)
+			if v := vers.Version().MinimumVersion.String(); v == curVersion {
+				if isNoopUpdate {
+					continue
 				}
+				return errors.Errorf("%d: still waiting for %s (now at %s)", i, exp, v)
+			} else if v != exp {
+				t.Fatalf("%d: should never see version %s (wanted %s)", i, v, exp)
 			}
-			return nil
-		})
-
-		// Everyone is at the version we're waiting for. Check that the tombstones are still there.
-		if err := tombstoneOp(func(eng engine.Engine, legacyTombstoneKey roachpb.Key) error {
-			ok, err := engine.MVCCGetProto(
-				ctx, eng, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-				nil,
-			)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				t.Logf("legacy tombstone not found: %s", legacyTombstoneKey)
-				mightSeeNewTombstone := !newVersion.Less(cluster.VersionByKey(cluster.VersionUnreplicatedTombstoneKey)) &&
-					legacyTombstoneKey.Equal(keys.RaftTombstoneIncorrectLegacyKey(1))
-
-				if mightSeeNewTombstone {
-					actualTombstoneKey := keys.RaftTombstoneKey(1)
-					var err error
-					// Override `ok` from the outer scope if a "new" tombstone exists.
-					// This is a bit silly, but the following can happen:
-					//
-					// 1. cluster version gets bumped past VersionUnreplicatedTombstoneKey
-					// 2. first node has their replica of range one removed
-					// 3. replicaGC destroys the range data, including the old tombstone,
-					//    installing a new one (since the cluster version has been bumped)
-					//
-					// Note also this interesting scenario (which won't end up here but is
-					// related):
-					//
-					// 1. cluster version remains old
-					// 2. same as before
-					// 3. same as before, but installs an old tombstone
-					// 4. replica receives snapshot, which removes the legacy tombstone
-					//    and atomically rewrites it
-					//
-					// (This latter history was long broken and was fixed when this
-					// comment was written. It previously lost the tombstone).
-					var tomb roachpb.RaftTombstone
-					ok, err = engine.MVCCGetProto(
-						ctx, eng, actualTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-						&tomb,
-					)
-					if err != nil {
-						return err
-					}
-					if ok && tomb.NextReplicaID < 1 {
-						// If we're seeing a new-style tombstone, it was created via ReplicaGC
-						// and thus must have a higher NextReplicaID than the fake tombstones
-						// we've been putting down.
-						ok = false
-					}
-					t.Logf("checking for tombstone %s instead, ok=%t, value=%v", legacyTombstoneKey, ok, tomb)
-				}
-			}
-
-			if !ok {
-				t.Fatalf(
-					"legacy tombstone at %s unexpectedly removed", legacyTombstoneKey,
-				)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
 		}
+		return nil
+	})
 
-		// Since the wrapped version setting exposes the new versions, it must
-		// definitely be present on all stores on the first try.
-		if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
-			cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
-			if err != nil {
-				return err
-			}
-			if act := cv.MinimumVersion.String(); act != exp {
-				t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
+	// Since the wrapped version setting exposes the new versions, it must
+	// definitely be present on all stores on the first try.
+	if err := tc.Servers[1].GetStores().(*storage.Stores).VisitStores(func(s *storage.Store) error {
+		cv, err := storage.ReadVersionFromEngineOrDefault(ctx, s.Engine())
+		if err != nil {
+			return err
 		}
+		if act := cv.MinimumVersion.String(); act != exp {
+			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
-
-	for _, newVersion := range []roachpb.Version{
-		bootstrapVersion.MinimumVersion, // v1.0
-		{Major: 1, Unstable: 500},
-		{Major: 1, Minor: 1},
-		{Major: 1, Minor: 2},
-	} {
-		t.Run(newVersion.String(), func(t *testing.T) {
-			run(t, newVersion)
-		})
-		if t.Failed() {
-			t.FailNow()
-		}
-	}
-
 }
 
 func TestClusterVersionBootstrapStrict(t *testing.T) {

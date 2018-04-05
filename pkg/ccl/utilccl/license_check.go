@@ -23,7 +23,7 @@ var enterpriseLicense = settings.RegisterValidatedStringSetting(
 	"enterprise.license",
 	"the encoded cluster license",
 	"",
-	func(s string) error {
+	func(sv *settings.Values, s string) error {
 		_, err := licenseccl.Decode(s)
 		return err
 	},

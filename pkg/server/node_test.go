@@ -105,6 +105,7 @@ func createTestNode(
 		cfg.Gossip,
 		active,
 		renewal,
+		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
