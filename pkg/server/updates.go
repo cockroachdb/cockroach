@@ -101,6 +101,7 @@ type versionInfo struct {
 // phones home to check for updates and report usage.
 func (s *Server) PeriodicallyCheckForUpdates(ctx context.Context) {
 	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		defer log.RecoverAndReportNonfatalPanic(ctx, &s.st.SV)
 		startup := timeutil.Now()
 		nextUpdateCheck := startup
 		nextDiagnosticReport := startup

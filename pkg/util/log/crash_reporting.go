@@ -101,6 +101,23 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	}
 }
 
+// RecoverAndReportNonfatalPanic is an alternative RecoverAndReportPanic that
+// does not re-panic in Release builds.
+func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
+	if r := recover(); r != nil {
+		// The call stack here is usually:
+		// - ReportPanic
+		// - RecoverAndReport
+		// - panic.go
+		// - panic()
+		// so ReportPanic should pop four frames.
+		ReportPanic(ctx, sv, r, 4)
+		if !build.IsRelease() || PanicOnAssertions.Get(sv) {
+			panic(r)
+		}
+	}
+}
+
 // SafeMessager is implemented by objects which have a way of representing
 // themselves suitably redacted for anonymized reporting.
 type SafeMessager interface {
