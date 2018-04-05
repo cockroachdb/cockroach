@@ -33,6 +33,8 @@ type streamGroupAccumulator struct {
 	// curGroup maintains the rows accumulated in the current group.
 	curGroup   []sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
+
+	leftoverRow sqlbase.EncDatumRow
 }
 
 func makeStreamGroupAccumulator(
@@ -52,6 +54,11 @@ func (s *streamGroupAccumulator) nextGroup(
 		// If src has been exhausted, then we also must have advanced away from the
 		// last group.
 		return nil, nil
+	}
+
+	if s.leftoverRow != nil {
+		s.curGroup = append(s.curGroup, s.leftoverRow)
+		s.leftoverRow = nil
 	}
 
 	for {
@@ -87,13 +94,8 @@ func (s *streamGroupAccumulator) nextGroup(
 		} else {
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
-			// The curGroup slice possibly has additional space at the end of it. Use
-			// it if possible to avoid an allocation.
-			s.curGroup = s.curGroup[n:]
-			if cap(s.curGroup) == 0 {
-				s.curGroup = make([]sqlbase.EncDatumRow, 0, 64)
-			}
-			s.curGroup = append(s.curGroup, row)
+			s.curGroup = s.curGroup[:0]
+			s.leftoverRow = row
 			return ret, nil
 		}
 	}
