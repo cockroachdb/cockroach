@@ -18,27 +18,52 @@ TABLE b
       └── rowid int not null (hidden)
 
 build
-SELECT * FROM a UNION SELECT * FROM b
+SELECT *, x FROM a UNION SELECT *, rowid FROM b
 ----
 union
- ├── columns: x:6(int) y:7(int)
- ├── left columns: a.x:1(int) a.y:2(int)
- ├── right columns: b.x:3(int) b.z:4(int)
- ├── stats: [rows=2000]
- ├── scan a
+ ├── columns: x:6(int) y:7(int) x:8(int!null)
+ ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
+ ├── right columns: b.x:3(int) b.z:4(int) b.rowid:5(int)
+ ├── stats: [rows=1800, distinct(7)=500, distinct(6-8)=1800]
+ ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
- └── project
-      ├── columns: b.x:3(int) b.z:4(int!null)
-      ├── stats: [rows=1000]
-      ├── scan b
-      │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
-      └── projections [outer=(3,4)]
-           ├── variable: b.x [type=int, outer=(3)]
-           └── variable: b.z [type=int, outer=(4)]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    │    └── keys: (1)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── scan b
+      ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
+      └── keys: (5)
+
+build
+SELECT *, x FROM a UNION ALL SELECT *, rowid FROM b
+----
+union-all
+ ├── columns: x:6(int) y:7(int) x:8(int!null)
+ ├── left columns: a.x:1(int) a.y:2(int) a.x:1(int)
+ ├── right columns: b.x:3(int) b.z:4(int) b.rowid:5(int)
+ ├── stats: [rows=2000, distinct(7)=500, distinct(6-8)=1800]
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    │    └── keys: (1)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── scan b
+      ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
+      └── keys: (5)
 
 build
 SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -47,29 +72,68 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
  ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
- ├── stats: [rows=550]
+ ├── stats: [rows=3, distinct(2)=1, distinct(1,2)=3]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    │    └── keys: (1)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
       ├── keys: (5)
       ├── select
       │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
       │    ├── keys: (5)
       │    ├── scan b
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    ├── stats: [rows=1000]
+      │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
+      │    │    └── keys: (5)
+      │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+      │         ├── variable: b.x [type=int, outer=(3)]
+      │         └── const: 1 [type=int]
+      └── projections [outer=(3-5)]
+           ├── variable: b.z [type=int, outer=(4)]
+           ├── variable: b.x [type=int, outer=(3)]
+           └── variable: b.rowid [type=int, outer=(5)]
+
+build
+SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
+----
+intersect-all
+ ├── columns: x:1(int!null) y:2(int) x:1(int!null)
+ ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
+ ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
+ ├── stats: [rows=4, distinct(2)=1, distinct(1,2)=3]
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    │    └── keys: (1)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── project
+      ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
+      ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
+      ├── keys: (5)
+      ├── select
+      │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
+      │    ├── keys: (5)
+      │    ├── scan b
+      │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
       │    │    └── keys: (5)
       │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │         ├── variable: b.x [type=int, outer=(3)]
@@ -86,31 +150,74 @@ except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
  ├── right columns: b.x:3(int) b.z:4(int) b.z:4(int)
- ├── stats: [rows=550]
+ ├── stats: [rows=900, distinct(1)=250, distinct(1,2)=900]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  │    │    └── keys: (1)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=4, distinct(3)=1, distinct(4)=3]
       ├── project
       │    ├── columns: b.x:3(int) b.z:4(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3]
       │    ├── select
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    ├── stats: [rows=100]
+      │    │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
       │    │    ├── keys: (5)
       │    │    ├── scan b
       │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    │    ├── stats: [rows=1000]
+      │    │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
+      │    │    │    └── keys: (5)
+      │    │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+      │    │         ├── variable: b.x [type=int, outer=(3)]
+      │    │         └── const: 1 [type=int]
+      │    └── projections [outer=(3,4)]
+      │         ├── variable: b.x [type=int, outer=(3)]
+      │         └── variable: b.z [type=int, outer=(4)]
+      └── projections [outer=(3,4)]
+           ├── variable: b.x [type=int, outer=(3)]
+           └── variable: b.z [type=int, outer=(4)]
+
+build
+SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
+----
+except-all
+ ├── columns: x:1(int!null) x:1(int!null) y:2(int)
+ ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
+ ├── right columns: b.x:3(int) b.z:4(int) b.z:4(int)
+ ├── stats: [rows=1000, distinct(1)=250, distinct(1,2)=900]
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
+ │    │    └── keys: (1)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── project
+      ├── columns: b.x:3(int) b.z:4(int!null)
+      ├── stats: [rows=4, distinct(3)=1, distinct(4)=3]
+      ├── project
+      │    ├── columns: b.x:3(int) b.z:4(int!null)
+      │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3]
+      │    ├── select
+      │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    ├── stats: [rows=4, distinct(3)=1, distinct(4)=3, distinct(5)=3, distinct(3-5)=3]
+      │    │    ├── keys: (5)
+      │    │    ├── scan b
+      │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    │    ├── stats: [rows=1000, distinct(3)=250, distinct(4)=250, distinct(5)=250, distinct(3-5)=900]
       │    │    │    └── keys: (5)
       │    │    └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
       │    │         ├── variable: b.x [type=int, outer=(3)]
