@@ -1542,6 +1542,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
+	// Attempt to upgrade cluster version.
+	s.AttemptUpgrade(ctx)
+
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
 		select {
@@ -1626,6 +1629,138 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	log.Event(ctx, "server ready")
 
 	return nil
+}
+
+// AttemptUpgrade attempts to upgrade cluster version.
+func (s *Server) AttemptUpgrade(ctx context.Context) {
+	s.stopper.RunWorker(s.stopper.WithCancel(ctx), func(ctx context.Context) {
+		retryOpts := retry.Options{
+			InitialBackoff: time.Second,
+			MaxBackoff:     30 * time.Second,
+			Multiplier:     2,
+			Closer:         s.stopper.ShouldQuiesce(),
+		}
+
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Check if we should upgrade cluster version, keep checking upgrade
+			// status, or stop attempting upgrade.
+			if quit, err := upgradeStatus(ctx, s); err != nil {
+				log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
+				continue
+			} else if quit {
+				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
+				return
+			}
+
+			// All checks passed, do upgrade,
+			// then reset cluster.preserve_downgrade_option.
+			args := sql.SessionArgs{User: security.RootUser}
+			session := sql.NewSession(ctx, args, s.sqlExecutor, &sql.MemoryMetrics{}, nil /* conn */)
+			upgradeRetryOpts := retry.Options{
+				InitialBackoff: 5 * time.Second,
+				MaxBackoff:     30 * time.Second,
+				Multiplier:     2,
+				Closer:         s.stopper.ShouldQuiesce(),
+			}
+
+			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
+				if res, err := s.sqlExecutor.ExecuteStatementsBuffered(
+					session,
+					`BEGIN;
+					 SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+					 RESET CLUSTER SETTING cluster.preserve_downgrade_option;
+					 COMMIT;`,
+					nil, 4,
+				); err != nil {
+					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
+				} else {
+					log.Info(ctx, "Successfully upgraded cluster version.")
+					res.Close(ctx)
+					return
+				}
+			}
+		}
+	})
+}
+
+// upgradeStatus lets the main checking loop know if we should do upgrade,
+// keep checking upgrade status, or stop attempting upgrade.
+// Return (true, nil) to indicate we want to stop attempting upgrade.
+// Return (false, nil) to indicate we want to do the upgrade.
+// Return (false, err) to indicate we want to keep checking upgrade status.
+func upgradeStatus(ctx context.Context, s *Server) (bool, error) {
+	sqlExecutor := &sql.InternalExecutor{ExecCfg: s.execCfg}
+
+	// Check if auto upgrade is enabled at current version.
+	clusterVersion, err := clusterVersion(ctx, sqlExecutor)
+	if err != nil {
+		return false, err
+	}
+
+	downgradeStmt := "SELECT value from system.settings WHERE name='cluster.preserve_downgrade_option';"
+	if datums, _, err := sqlExecutor.QueryRows(ctx, "downgrade-version", downgradeStmt); err != nil {
+		return false, err
+	} else if len(datums) != 0 && clusterVersion == string(tree.MustBeDString(datums[0][0])) {
+		return false, errors.Errorf("auto upgrade is disabled for current version: %s", clusterVersion)
+	}
+
+	// Check if all nodes are running at the newest version.
+	gossipStmt := "SELECT * FROM crdb_internal.gossip_nodes;"
+	datums, _, err := sqlExecutor.QueryRows(ctx, "gossip-nodes", gossipStmt)
+	if err != nil {
+		return false, err
+	}
+
+	liveness, err := s.admin.Liveness(ctx, &serverpb.LivenessRequest{})
+	if err != nil {
+		return false, err
+	}
+
+	var newVersion string
+	for _, row := range datums {
+		version := string(tree.MustBeDString(row[5]))
+		id := roachpb.NodeID(int32(tree.MustBeDInt(row[0])))
+
+		if liveness.Statuses[id] == storage.NodeLivenessStatus_LIVE {
+			if newVersion == "" {
+				newVersion = version
+			} else {
+				if version != newVersion {
+					return false, errors.New("not all nodes are running the latest version yet")
+				}
+			}
+		}
+	}
+
+	// Check if we really need to upgrade cluster version.
+	if newVersion == clusterVersion {
+		return true, nil
+	}
+
+	// Check if all non-decommissioned nodes are alive
+	var decommissionErr error
+	for id, status := range liveness.Statuses {
+		if status != storage.NodeLivenessStatus_DECOMMISSIONED && status != storage.NodeLivenessStatus_LIVE {
+			log.Warningf(ctx, "Node %d is not decommissioned but not alive, node status: %s.", id, storage.NodeLivenessStatus_name[int32(status)])
+			decommissionErr = errors.New("some nodes are neither decommissioned nor alive")
+		}
+	}
+	return false, decommissionErr
+}
+
+// clusterVersion returns current cluster version.
+func clusterVersion(ctx context.Context, sqlExecutor *sql.InternalExecutor) (string, error) {
+	const clusterVersionStmt = "SHOW cluster setting version;"
+	datums, _, err := sqlExecutor.QueryRows(ctx, "cluster-version", clusterVersionStmt)
+	if err != nil {
+		return "", err
+	}
+	if len(datums) == 0 {
+		return "", errors.New("cluster version is not set")
+	}
+
+	clusterVersion := string(tree.MustBeDString(datums[0][0]))
+	return clusterVersion, nil
 }
 
 func (s *Server) doDrain(

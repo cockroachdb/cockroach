@@ -3,7 +3,7 @@
 query T
 SHOW CLUSTER SETTING version
 ----
-1.0
+1.1
 
 query T
 SELECT crdb_internal.node_executable_version()
@@ -29,30 +29,30 @@ SET CLUSTER SETTING version = '1.0-0.0'
 statement error cannot upgrade to 2.0: node running 1.1
 SET CLUSTER SETTING version = '2.0'
 
-statement error cannot upgrade directly from 1.0 to 2.1
+statement error cannot upgrade directly from 1.1 to 2.1
 SET CLUSTER SETTING version = '2.1'
 
-statement error cannot downgrade from 1.0 to 0.9
+statement error cannot downgrade from 1.1 to 0.9
 SET CLUSTER SETTING version = '0.9'
 
-statement ok
+statement error cannot downgrade from 1.1 to 1.0
 SET CLUSTER SETTING version = '1.0-0'
 
 query T
 SHOW CLUSTER SETTING version
 ----
-1.0
+1.1
 
 # Can skip versions on unstable patch upgrades.
-statement ok
+statement error cannot downgrade from 1.1 to 1.0-500
 SET CLUSTER SETTING version = '1.0-500'
 
 query T
 SHOW CLUSTER SETTING version
 ----
-1.0-500
+1.1
 
-statement error cannot upgrade directly from 1.0-500 to 1.2
+statement error cannot upgrade to 1.2: node running 1.1
 SET CLUSTER SETTING version = '1.2'
 
 statement ok
