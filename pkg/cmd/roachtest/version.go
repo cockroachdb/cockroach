@@ -155,8 +155,13 @@ func registerVersion(r *registry) {
 				return nil
 			}
 
+			var oldVersion string
+			if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&oldVersion); err != nil {
+				return err
+			}
+
 			// Now perform a rolling restart into the new binary.
-			for i := 1; i <= nodes; i++ {
+			for i := 1; i < nodes; i++ {
 				t.WorkerStatus("upgrading ", i)
 				if err := stop(i); err != nil {
 					return err
@@ -166,6 +171,26 @@ func registerVersion(r *registry) {
 				if err := sleepAndCheck(); err != nil {
 					return err
 				}
+			}
+
+			// Stop the last node.
+			if err := stop(nodes); err != nil {
+				return err
+			}
+
+			// Set cluster.preserve_downgrade_option to be the old cluster version to
+			// prevent upgrade.
+			if _, err := db.ExecContext(ctx,
+				fmt.Sprintf("SET CLUSTER SETTING cluster.preserve_downgrade_option = '%s';", oldVersion),
+			); err != nil {
+				return err
+			}
+
+			// Do upgrade for the last node.
+			c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
+			c.Start(ctx, c.Node(nodes))
+			if err := sleepAndCheck(); err != nil {
+				return err
 			}
 
 			// Changed our mind, let's roll that back.
@@ -194,9 +219,10 @@ func registerVersion(r *registry) {
 				}
 			}
 
-			// Finally, bump the cluster version (completing the upgrade).
-			t.WorkerStatus("bumping cluster version")
-			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING version = crdb_internal.node_executable_version()`); err != nil {
+			// Reset cluster.preserve_downgrade_option to allow auto upgrade.
+			if _, err := db.ExecContext(ctx,
+				"RESET CLUSTER SETTING cluster.preserve_downgrade_option;",
+			); err != nil {
 				return err
 			}
 

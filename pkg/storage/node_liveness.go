@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -157,6 +158,7 @@ type NodeLiveness struct {
 	heartbeatInterval time.Duration
 	pauseHeartbeat    atomic.Value // contains a bool
 	selfSem           chan struct{}
+	st                *cluster.Settings
 	otherSem          chan struct{}
 	triggerHeartbeat  chan struct{} // for testing
 	metrics           LivenessMetrics
@@ -179,6 +181,7 @@ func NewNodeLiveness(
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
+	st *cluster.Settings,
 	histogramWindow time.Duration,
 ) *NodeLiveness {
 	nl := &NodeLiveness{
@@ -190,6 +193,7 @@ func NewNodeLiveness(
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
 		selfSem:           make(chan struct{}, 1),
+		st:                st,
 		otherSem:          make(chan struct{}, 1),
 		triggerHeartbeat:  make(chan struct{}, 1),
 	}
@@ -639,6 +643,22 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (*Liveness, error) {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
 	return nl.getLivenessLocked(nodeID)
+}
+
+// GetLivenessStatusMap generates map from NodeID to LivenessStatus.
+func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]NodeLivenessStatus {
+	now := nl.clock.PhysicalTime()
+	livenesses := nl.GetLivenesses()
+	threshold := TimeUntilStoreDead.Get(&nl.st.SV)
+	maxOffset := nl.clock.MaxOffset()
+
+	statusMap := make(map[roachpb.NodeID]NodeLivenessStatus, len(livenesses))
+	for _, liveness := range livenesses {
+		statusMap[liveness.NodeID] = liveness.LivenessStatus(
+			now, threshold, maxOffset,
+		)
+	}
+	return statusMap
 }
 
 func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (*Liveness, error) {
