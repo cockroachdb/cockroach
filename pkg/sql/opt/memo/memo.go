@@ -341,58 +341,85 @@ func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 // --------------------------------------------------------------------
 
 func (m *Memo) String() string {
+	return m.Display(GroupID(0))
+}
+
+// Display writes a memo to a human-readable format.
+func (m *Memo) Display(rootGroup GroupID) string {
 	tp := treeprinter.New()
 	root := tp.Child("memo")
 
+	var ordering []GroupID
+
+	// If a root was specified, we topological sort from it.  Otherwise, we
+	// simply print out all the groups in the order and with the names they're
+	// referred to physically. We can do this because the GroupID 0 never refers
+	// to a valid group.
+	if rootGroup != 0 {
+		ordering = m.sortGroups(rootGroup)
+	} else {
+		// In this case we renumber with the identity mapping, so the groups have
+		// the same numbers as they're represented with internally.
+		ordering = make([]GroupID, len(m.groups)-1)
+		for i := range m.groups[1:] {
+			ordering[i] = GroupID(i + 1)
+		}
+	}
+
+	// We renumber the groups so that they're still printed in order from 1..N.
+	numbering := make([]GroupID, len(m.groups))
+	for i := range ordering {
+		numbering[ordering[i]] = GroupID(i + 1)
+	}
+
 	var buf bytes.Buffer
-	for i := len(m.groups) - 1; i > 0; i-- {
-		mgrp := &m.groups[i]
+	for i := range ordering {
+		mgrp := &m.groups[ordering[i]]
 
 		buf.Reset()
 		for ord := 0; ord < mgrp.exprCount(); ord++ {
 			if ord != 0 {
 				buf.WriteByte(' ')
 			}
-			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)))
+			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)), numbering)
 		}
-
-		child := root.Childf("%d: %s", i, buf.String())
-		m.formatBestExprSet(child, mgrp)
+		child := root.Childf("G%d: %s", i+1, buf.String())
+		m.formatBestExprSet(child, mgrp, numbering)
 	}
 
 	return tp.String()
 }
 
-func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
+func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr, numbering []GroupID) {
 	fmt.Fprintf(buf, "(%s", e.op)
 	for i := 0; i < e.ChildCount(); i++ {
-		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
+		fmt.Fprintf(buf, " G%d", numbering[e.ChildGroup(m, i)])
 	}
 	m.formatPrivate(buf, e.Private(m))
 	buf.WriteString(")")
 }
 
 type bestExprSort struct {
-	required    PhysicalPropsID
-	fingerprint string
-	best        *BestExpr
+	required PhysicalPropsID
+	display  string
+	best     *BestExpr
 }
 
-func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
+func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group, numbering []GroupID) {
 	// Sort the bestExprs by required properties.
 	cnt := mgrp.bestExprCount()
 	beSort := make([]bestExprSort, 0, cnt)
 	for i := 0; i < cnt; i++ {
 		best := mgrp.bestExpr(bestOrdinal(i))
 		beSort = append(beSort, bestExprSort{
-			required:    best.required,
-			fingerprint: m.LookupPhysicalProps(best.required).Fingerprint(),
-			best:        best,
+			required: best.required,
+			display:  m.LookupPhysicalProps(best.required).String(),
+			best:     best,
 		})
 	}
 
 	sort.Slice(beSort, func(i, j int) bool {
-		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
+		return strings.Compare(beSort[i].display, beSort[j].display) < 0
 	})
 
 	var buf bytes.Buffer
@@ -402,19 +429,19 @@ func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 		// Don't show best expressions for scalar groups because they're not too
 		// interesting.
 		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
-			m.formatBestExpr(&buf, sort.best)
+			child := tp.Childf("\"%s\" [cost=%.2f]", sort.display, sort.best.cost)
+			m.formatBestExpr(&buf, sort.best, numbering)
 			child.Childf("best: %s", buf.String())
 		}
 	}
 }
 
-func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr) {
+func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr, numbering []GroupID) {
 	fmt.Fprintf(buf, "(%s", be.op)
 
 	for i := 0; i < be.ChildCount(); i++ {
 		bestChild := be.Child(i)
-		fmt.Fprintf(buf, " %d", bestChild.group)
+		fmt.Fprintf(buf, " G%d", numbering[bestChild.group])
 
 		// Print properties required of the child if they are interesting.
 		required := m.bestExpr(bestChild).required
@@ -465,4 +492,75 @@ func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) 
 			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
 		}
 	}
+}
+
+// iterDeps runs f for each child group of g.
+func (m *Memo) iterDeps(g group, f func(GroupID)) {
+	for i := 0; i < g.exprCount(); i++ {
+		e := g.expr(ExprOrdinal(i))
+		for c := 0; c < e.ChildCount(); c++ {
+			f(e.ChildGroup(m, c))
+		}
+	}
+}
+
+// sortGroups sorts groups reachable from the root by doing a BFS topological
+// sort.
+func (m *Memo) sortGroups(root GroupID) (groups []GroupID) {
+	indegrees := m.getIndegrees(root)
+
+	res := make([]GroupID, 0, len(m.groups))
+	queue := []GroupID{root}
+
+	for len(queue) > 0 {
+		var next GroupID
+		next, queue = queue[0], queue[1:]
+		res = append(res, next)
+
+		// When we visit a group, we conceptually remove it from the dependency
+		// graph, so all of its dependencies have their indegree reduced by one.
+		// Any dependencies which have no more dependents can now be visited and
+		// are added to the queue.
+		m.iterDeps(m.groups[next], func(dep GroupID) {
+			indegrees[dep]--
+			if indegrees[dep] == 0 {
+				queue = append(queue, dep)
+			}
+		})
+	}
+
+	// If there remains any group with nonzero indegree, we had a cycle.
+	for i := range indegrees {
+		if indegrees[i] != 0 {
+			// TODO(justin): we should handle this case, but there's no good way to
+			// test it yet. Cross this bridge when we come to it (use raw-memo to
+			// bypass this sorting procedure if this is causing you trouble).
+			panic("memo had a cycle, use raw-memo")
+		}
+	}
+
+	return res
+}
+
+// getIndegrees returns the indegree of each group reachable from the root.
+func (m *Memo) getIndegrees(root GroupID) (indegrees []int) {
+	indegrees = make([]int, len(m.groups))
+	m.computeIndegrees(root, make([]bool, len(m.groups)), indegrees)
+	return indegrees
+}
+
+// computedIndegrees computes the indegree (number of dependents) of each group
+// reachable from id.  It also populates reachable with true for all reachable
+// ids.
+func (m *Memo) computeIndegrees(id GroupID, reachable []bool, indegrees []int) {
+	if id <= 0 || reachable[id] {
+		return
+	}
+	reachable[id] = true
+
+	g := m.groups[id]
+	m.iterDeps(g, func(dep GroupID) {
+		indegrees[dep]++
+		m.computeIndegrees(dep, reachable, indegrees)
+	})
 }
