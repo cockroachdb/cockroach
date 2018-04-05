@@ -16,10 +16,13 @@ package sql
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +34,10 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
 	{Name: "histogram_id", Typ: types.Int},
+}
+
+var showTableStatsJSONColumns = sqlbase.ResultColumns{
+	{Name: "statistics", Typ: types.JSON},
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
@@ -57,10 +64,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
+	columns := showTableStatsColumns
+	if n.UsingJSON {
+		columns = showTableStatsJSONColumns
+	}
 
 	return &delayedNode{
-		name:    "SHOW STATISTICS FOR TABLE " + n.Table.String(),
-		columns: showTableStatsColumns,
+		name:    n.String(),
+		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to column names
@@ -75,7 +86,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					      "rowCount",
 					      "distinctCount",
 					      "nullCount",
-					      histogram IS NOT NULL
+					      histogram
 				 FROM system.table_statistics
 				 WHERE "tableID" = $1
 				 ORDER BY "createdAt"`,
@@ -93,10 +104,48 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				rowCountIdx
 				distinctCountIdx
 				nullCountIdx
-				hasHistogramIdx
+				histogramIdx
 				numCols
 			)
-			v := p.newContainerValuesNode(showTableStatsColumns, 0)
+
+			v := p.newContainerValuesNode(columns, 0)
+			if n.UsingJSON {
+				result := make([]stats.JSONStatistic, len(rows))
+				for i, r := range rows {
+					result[i].CreatedAt = tree.AsStringWithFlags(r[createdAtIdx], tree.FmtBareStrings)
+					result[i].RowCount = (uint64)(*r[rowCountIdx].(*tree.DInt))
+					result[i].DistinctCount = (uint64)(*r[distinctCountIdx].(*tree.DInt))
+					result[i].NullCount = (uint64)(*r[nullCountIdx].(*tree.DInt))
+					if r[nameIdx] != tree.DNull {
+						result[i].Name = string(*r[nameIdx].(*tree.DString))
+					}
+					colIDs := r[columnIDsIdx].(*tree.DArray).Array
+					result[i].Columns = make([]string, len(colIDs))
+					for j, d := range colIDs {
+						result[i].Columns[j] = statColumnString(desc, d)
+					}
+					if err := result[i].DecodeAndSetHistogram(r[histogramIdx]); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+				encoded, err := encjson.Marshal(result)
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				jsonResult, err := json.ParseJSON(string(encoded))
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				if _, err := v.rows.AddRow(ctx, tree.Datums{tree.NewDJSON(jsonResult)}); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				return v, nil
+			}
+
 			for _, r := range rows {
 				if len(r) != numCols {
 					v.Close(ctx)
@@ -107,18 +156,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				colNames := tree.NewDArray(types.String)
 				colNames.Array = make(tree.Datums, len(colIDs))
 				for i, d := range colIDs {
-					id := sqlbase.ColumnID(*d.(*tree.DInt))
-					colDesc, err := desc.FindColumnByID(id)
-					if err != nil {
-						// This can happen if a column was removed.
-						colNames.Array[i] = tree.NewDString("<unknown>")
-					} else {
-						colNames.Array[i] = tree.NewDString(colDesc.Name)
-					}
+					colNames.Array[i] = tree.NewDString(statColumnString(desc, d))
 				}
 
 				histogramID := tree.DNull
-				if r[hasHistogramIdx] == tree.DBoolTrue {
+				if r[histogramIdx] != tree.DNull {
 					histogramID = r[statIDIdx]
 				}
 
@@ -139,4 +181,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			return v, nil
 		},
 	}, nil
+}
+
+func statColumnString(desc *TableDescriptor, colID tree.Datum) string {
+	id := sqlbase.ColumnID(*colID.(*tree.DInt))
+	colDesc, err := desc.FindColumnByID(id)
+	if err != nil {
+		// This can happen if a column was removed.
+		return "<unknown>"
+	}
+	return colDesc.Name
 }

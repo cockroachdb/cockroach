@@ -481,7 +481,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
 %token <str>   INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
-%token <str>   INET_CONTAINS_OR_EQUALS INTERLEAVE INDEX INDEXES INITIALLY
+%token <str>   INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
 
@@ -1045,14 +1045,14 @@ stmt:
   {
     $$.val = $1.slct()
   }
-| release_stmt     // EXTEND WITH HELP: RELEASE
-| reset_stmt       // help texts in sub-rule
-| set_stmt         // help texts in sub-rule
-| show_stmt        // help texts in sub-rule
-| transaction_stmt // help texts in sub-rule
-| truncate_stmt    // EXTEND WITH HELP: TRUNCATE
-| update_stmt      // EXTEND WITH HELP: UPDATE
-| upsert_stmt      // EXTEND WITH HELP: UPSERT
+| release_stmt      // EXTEND WITH HELP: RELEASE
+| reset_stmt        // help texts in sub-rule
+| set_stmt          // help texts in sub-rule
+| show_stmt         // help texts in sub-rule
+| transaction_stmt  // help texts in sub-rule
+| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -1414,15 +1414,23 @@ alter_table_cmd:
       DropBehavior: $4.dropBehavior(),
     }
   }
-// ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode>
+  // ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode>
 | EXPERIMENTAL_AUDIT SET audit_mode
   {
     $$.val = &tree.AlterTableSetAudit{Mode: $3.auditMode()}
   }
+  // ALTER TABLE <name> PARTITION BY ...
 | partition_by
   {
     $$.val = &tree.AlterTablePartitionBy{
       PartitionBy: $1.partitionBy(),
+    }
+  }
+  // ALTER TABLE <name> INJECT STATISTICS <json>
+| INJECT STATISTICS a_expr
+  {
+    $$.val = &tree.AlterTableInjectStats{
+      Stats: $3.expr(),
     }
   }
 
@@ -2651,16 +2659,22 @@ session_var:
 
 // %Help: SHOW STATISTICS - display table statistics
 // %Category: Misc
-// %Text: SHOW STATISTICS FOR TABLE <table_name>
+// %Text: SHOW STATISTICS [USING JSON] FOR TABLE <table_name>
 //
 // Returns the available statistics for a table.
 // The statistics can include a histogram ID, which can
 // be used with SHOW HISTOGRAM.
+// If USING JSON is specified, the statistics and histograms
+// are encoded in JSON format.
 // %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
     $$.val = &tree.ShowTableStats{Table: $5.normalizableTableNameFromUnresolvedName() }
+  }
+| SHOW STATISTICS USING JSON FOR TABLE table_name
+  {
+    $$.val = &tree.ShowTableStats{Table: $7.normalizableTableNameFromUnresolvedName(), UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
@@ -7508,6 +7522,7 @@ unreserved_keyword:
 | INCREMENTAL
 | INDEXES
 | INET
+| INJECT
 | INSERT
 | INT2
 | INT2VECTOR

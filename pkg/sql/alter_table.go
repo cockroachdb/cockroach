@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
@@ -25,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 type alterTableNode struct {
@@ -540,6 +544,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTableInjectStats:
+			if err := params.p.injectTableStats(params.ctx, n.tableDesc, t.Stats); err != nil {
+				return err
+			}
+
 		default:
 			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
@@ -688,4 +697,102 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 		s.WriteString(values[i].String())
 	}
 	return s.String()
+}
+
+// injectTableStats implements the INJECT STATISTICS command, which deletes any
+// existing statistics on the table and replaces them with the statistics in the
+// given json object (in the same format as the result of SHOW STATISTICS USING
+// JSON). This is useful for reproducing planning issues without importing the
+// data.
+func (p *planner) injectTableStats(
+	ctx context.Context, desc *sqlbase.TableDescriptor, statsExpr tree.Expr,
+) error {
+	typedExpr, err := tree.TypeCheckAndRequire(
+		statsExpr, &p.semaCtx, types.JSON, "INJECT STATISTICS",
+	)
+	if err != nil {
+		return err
+	}
+	val, err := typedExpr.Eval(p.EvalContext())
+	if err != nil {
+		return err
+	}
+	if val == tree.DNull {
+		return fmt.Errorf("statistics cannot be NULL")
+	}
+	jsonStr := val.(*tree.DJSON).JSON.String()
+	var stats []stats.JSONStatistic
+	if err := gojson.Unmarshal([]byte(jsonStr), &stats); err != nil {
+		return err
+	}
+
+	// We will be doing multiple p.exec() calls; turn off auto-commit.
+	if p.autoCommit {
+		defer func() { p.autoCommit = true }()
+		p.autoCommit = false
+	}
+
+	// First, delete all statistics for the table.
+	_, err = p.exec(ctx, `DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.ID)
+	if err != nil {
+		return err
+	}
+
+	// Insert each statistic.
+	for i := range stats {
+		s := &stats[i]
+		h, err := s.GetHistogram(p.EvalContext())
+		if err != nil {
+			return err
+		}
+		// histogram will be passed to the INSERT statement; we want it to be a
+		// nil interface{} if we don't generate a histogram.
+		var histogram interface{}
+		if h != nil {
+			histogram, err = protoutil.Marshal(h)
+			if err != nil {
+				return err
+			}
+		}
+
+		columnIDs := tree.NewDArray(types.Int)
+		for _, colName := range s.Columns {
+			colDesc, _, err := desc.FindColumnByName(tree.Name(colName))
+			if err != nil {
+				return err
+			}
+			if err := columnIDs.Append(tree.NewDInt(tree.DInt(colDesc.ID))); err != nil {
+				return err
+			}
+		}
+		var name interface{}
+		if s.Name != "" {
+			name = s.Name
+		}
+		_, err = p.exec(
+			ctx,
+			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			desc.ID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			histogram,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
