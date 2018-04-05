@@ -186,32 +186,30 @@ project
 memo
 SELECT y, x-1 FROM a WHERE x>y ORDER BY x, y DESC
 ----
-[12: "p:y:2,column5:5 o:+1,-2"]
+[presentation: y:2,column5:5] [ordering: +1,-2]
 memo
- ├── 12: (project 11 9)
+ ├── G1: (project G2 G3)
  │    ├── "" [cost=1100.00]
- │    │    └── best: (project 11 9)
- │    └── "p:y:2,column5:5 o:+1,-2" [cost=1100.00]
- │         └── best: (project 11="o:+1,-2" 9)
- ├── 11: (select 10 5)
+ │    │    └── best: (project G2 G3)
+ │    └── "[presentation: y:2,column5:5] [ordering: +1,-2]" [cost=1100.00]
+ │         └── best: (project G2="o:+1,-2" G3)
+ ├── G2: (select G4 G5)
  │    ├── "" [cost=1100.00]
- │    │    └── best: (select 10 5)
- │    └── "o:+1,-2" [cost=1100.00]
- │         └── best: (select 10="o:+1,-2" 5)
- ├── 10: (scan a)
+ │    │    └── best: (select G4 G5)
+ │    └── "[ordering: +1,-2]" [cost=1100.00]
+ │         └── best: (select G4="o:+1,-2" G5)
+ ├── G3: (projections G10 G6 G9)
+ ├── G4: (scan a)
  │    ├── "" [cost=1000.00]
  │    │    └── best: (scan a)
- │    └── "o:+1,-2" [cost=1000.00]
+ │    └── "[ordering: +1,-2]" [cost=1000.00]
  │         └── best: (scan a)
- ├── 9: (projections 3 8 2)
- ├── 8: (minus 2 7)
- ├── 7: (const 1)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (gt 2 3)
- ├── 3: (variable a.y)
- ├── 2: (variable a.x)
- └── 1: (scan a)
+ ├── G5: (filters G7)
+ ├── G6: (minus G9 G8)
+ ├── G7: (gt G9 G10)
+ ├── G8: (const 1)
+ ├── G9: (variable a.x)
+ └── G10: (variable a.y)
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -237,28 +235,26 @@ sort
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-[11: "p:y:2,z:3 o:+2"]
+[presentation: y:2,z:3] [ordering: +2]
 memo
- ├── 11: (project 10 8)
+ ├── G1: (project G2 G3)
  │    ├── "" [cost=1100.00]
- │    │    └── best: (project 10 8)
- │    └── "p:y:2,z:3 o:+2" [cost=1125.00]
- │         └── best: (sort 11)
- ├── 10: (select 9 5)
+ │    │    └── best: (project G2 G3)
+ │    └── "[presentation: y:2,z:3] [ordering: +2]" [cost=1125.00]
+ │         └── best: (sort G1)
+ ├── G2: (select G4 G5)
  │    ├── "" [cost=1100.00]
- │    │    └── best: (select 9 5)
- │    └── "o:+2" [cost=1125.00]
- │         └── best: (sort 10)
- ├── 9: (scan a)
+ │    │    └── best: (select G4 G5)
+ │    └── "[ordering: +2]" [cost=1125.00]
+ │         └── best: (sort G2)
+ ├── G3: (projections G9 G6)
+ ├── G4: (scan a)
  │    ├── "" [cost=1000.00]
  │    │    └── best: (scan a)
- │    └── "o:+2" [cost=1250.00]
- │         └── best: (sort 9)
- ├── 8: (projections 3 7)
- ├── 7: (variable a.z)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (gt 2 3)
- ├── 3: (variable a.y)
- ├── 2: (variable a.x)
- └── 1: (scan a)
+ │    └── "[ordering: +2]" [cost=1250.00]
+ │         └── best: (sort G4)
+ ├── G5: (filters G7)
+ ├── G6: (variable a.z)
+ ├── G7: (gt G8 G9)
+ ├── G8: (variable a.x)
+ └── G9: (variable a.y)

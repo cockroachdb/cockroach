@@ -15,14 +15,8 @@
 package memo
 
 import (
-	"bytes"
-	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -335,133 +329,11 @@ func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 	return m.privateStorage.lookup(id)
 }
 
-// --------------------------------------------------------------------
-// String representation.
-// --------------------------------------------------------------------
+// FormatString writes a memo to a human-readable format.
+func (m *Memo) FormatString(rootGroup GroupID) string {
+	return m.makeMemoFormatter(rootGroup).Format()
+}
 
 func (m *Memo) String() string {
-	tp := treeprinter.New()
-	root := tp.Child("memo")
-
-	var buf bytes.Buffer
-	for i := len(m.groups) - 1; i > 0; i-- {
-		mgrp := &m.groups[i]
-
-		buf.Reset()
-		for ord := 0; ord < mgrp.exprCount(); ord++ {
-			if ord != 0 {
-				buf.WriteByte(' ')
-			}
-			m.formatExpr(&buf, mgrp.expr(ExprOrdinal(ord)))
-		}
-
-		child := root.Childf("%d: %s", i, buf.String())
-		m.formatBestExprSet(child, mgrp)
-	}
-
-	return tp.String()
-}
-
-func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
-	fmt.Fprintf(buf, "(%s", e.op)
-	for i := 0; i < e.ChildCount(); i++ {
-		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
-	}
-	m.formatPrivate(buf, e.Private(m))
-	buf.WriteString(")")
-}
-
-type bestExprSort struct {
-	required    PhysicalPropsID
-	fingerprint string
-	best        *BestExpr
-}
-
-func (m *Memo) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
-	// Sort the bestExprs by required properties.
-	cnt := mgrp.bestExprCount()
-	beSort := make([]bestExprSort, 0, cnt)
-	for i := 0; i < cnt; i++ {
-		best := mgrp.bestExpr(bestOrdinal(i))
-		beSort = append(beSort, bestExprSort{
-			required:    best.required,
-			fingerprint: m.LookupPhysicalProps(best.required).Fingerprint(),
-			best:        best,
-		})
-	}
-
-	sort.Slice(beSort, func(i, j int) bool {
-		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
-	})
-
-	var buf bytes.Buffer
-	for _, sort := range beSort {
-		buf.Reset()
-
-		// Don't show best expressions for scalar groups because they're not too
-		// interesting.
-		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
-			m.formatBestExpr(&buf, sort.best)
-			child.Childf("best: %s", buf.String())
-		}
-	}
-}
-
-func (m *Memo) formatBestExpr(buf *bytes.Buffer, be *BestExpr) {
-	fmt.Fprintf(buf, "(%s", be.op)
-
-	for i := 0; i < be.ChildCount(); i++ {
-		bestChild := be.Child(i)
-		fmt.Fprintf(buf, " %d", bestChild.group)
-
-		// Print properties required of the child if they are interesting.
-		required := m.bestExpr(bestChild).required
-		if required != MinPhysPropsID {
-			fmt.Fprintf(buf, "=\"%s\"", m.LookupPhysicalProps(required).Fingerprint())
-		}
-	}
-
-	m.formatPrivate(buf, be.Private(m))
-	buf.WriteString(")")
-}
-
-func (m *Memo) formatPrivate(buf *bytes.Buffer, private interface{}) {
-	if private != nil {
-		switch t := private.(type) {
-		case nil:
-
-		case *ScanOpDef:
-			m.formatScanPrivate(buf, t, false /* short */)
-
-		case opt.ColumnID:
-			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
-
-		case opt.ColSet, opt.ColList:
-			// Don't show anything, because it's mostly redundant.
-
-		default:
-			fmt.Fprintf(buf, " %s", private)
-		}
-	}
-}
-
-func (m *Memo) formatScanPrivate(buf *bytes.Buffer, def *ScanOpDef, short bool) {
-	// Don't output name of index if it's the primary index.
-	tab := m.metadata.Table(def.Table)
-	if def.Index == opt.PrimaryIndex {
-		fmt.Fprintf(buf, " %s", tab.TabName())
-	} else {
-		fmt.Fprintf(buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
-	}
-
-	// Add additional fields when short=false.
-	if !short {
-		if def.Constraint != nil {
-			fmt.Fprintf(buf, ",constrained")
-		}
-		if def.HardLimit > 0 {
-			fmt.Fprintf(buf, ",lim=%d", def.HardLimit)
-		}
-	}
+	return m.FormatString(GroupID(0))
 }
