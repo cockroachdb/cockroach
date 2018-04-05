@@ -74,8 +74,11 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	case opt.LimitOp:
 		return f.constructLimitProps(ev)
 
-	case opt.OffsetOp, opt.Max1RowOp:
+	case opt.OffsetOp:
 		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
+
+	case opt.Max1RowOp:
+		return f.constructMax1RowProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -101,17 +104,7 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	// TODO: Need actual number of rows.
-	if def.Constraint != nil {
-		props.Relational.Stats.RowCount = 100
-	} else {
-		props.Relational.Stats.RowCount = 1000
-	}
-
-	// Cap number of rows at limit, if it exists.
-	if def.HardLimit > 0 && uint64(def.HardLimit) < props.Relational.Stats.RowCount {
-		props.Relational.Stats.RowCount = uint64(def.HardLimit)
-	}
+	props.Relational.Stats.updateScanStats(def, f.evalCtx)
 
 	return props
 }
@@ -127,8 +120,7 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.NotNullCols
 
-	// TODO: Need better estimate based on actual filter conditions.
-	props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
+	props.Relational.Stats.updateSelectStats(ev.Child(1), &inputProps.Stats, f.evalCtx)
 
 	return props
 }
@@ -145,7 +137,7 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.NotNullCols = inputProps.NotNullCols
 	filterNullCols(props.Relational)
 
-	props.Relational.Stats.RowCount = inputProps.Stats.RowCount
+	props.Relational.Stats.updateProjectStats(&inputProps.Stats, &props.Relational.OutputCols)
 
 	return props
 }
@@ -185,11 +177,9 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 		props.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
-	// TODO: Need better estimate based on actual on conditions.
-	props.Relational.Stats.RowCount = leftProps.Stats.RowCount * rightProps.Stats.RowCount
-	if ev.Child(2).Operator() != opt.TrueOp {
-		props.Relational.Stats.RowCount /= 10
-	}
+	props.Relational.Stats.updateJoinStats(
+		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
+	)
 
 	return props
 }
@@ -210,13 +200,9 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props.Relational.NotNullCols = inputProps.NotNullCols.Copy()
 	props.Relational.NotNullCols.IntersectionWith(groupingColSet)
 
-	if groupingColSet.Empty() {
-		// Scalar group by.
-		props.Relational.Stats.RowCount = 1
-	} else {
-		// TODO: Need better estimate.
-		props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
-	}
+	props.Relational.Stats.updateGroupByStats(
+		&inputProps.Stats, &groupingColSet, &props.Relational.OutputCols,
+	)
 
 	return props
 }
@@ -246,14 +232,9 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	// TODO: Need better estimate.
-	switch ev.Operator() {
-	case opt.UnionOp, opt.UnionAllOp:
-		props.Relational.Stats.RowCount = leftProps.Stats.RowCount + rightProps.Stats.RowCount
-
-	default:
-		props.Relational.Stats.RowCount = (leftProps.Stats.RowCount + rightProps.Stats.RowCount) / 2
-	}
+	props.Relational.Stats.updateSetOpStats(
+		ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap, &props.Relational.OutputCols,
+	)
 
 	return props
 }
@@ -264,7 +245,7 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
-	props.Relational.Stats.RowCount = uint64(ev.ChildCount())
+	props.Relational.Stats.updateValuesStats(ev, &props.Relational.OutputCols)
 
 	return props
 }
@@ -278,13 +259,20 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
-	// Update row count if limit is a constant.
-	if limit.Operator() == opt.ConstOp {
-		hardLimit := *limit.Private().(*tree.DInt)
-		if hardLimit > 0 {
-			props.Relational.Stats.RowCount = uint64(hardLimit)
-		}
-	}
+	props.Relational.Stats.updateLimitStats(limit, &inputProps.Stats)
+
+	return props
+}
+
+func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+
+	// Start with pass-through props from input.
+	*props.Relational = *inputProps
+
+	props.Relational.Stats.updateMax1RowStats(&inputProps.Stats)
 
 	return props
 }

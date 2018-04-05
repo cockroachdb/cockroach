@@ -24,19 +24,19 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 inner-join
  ├── columns: k:1(int!null) x:5(int)
- ├── stats: [rows=10000]
+ ├── stats: [rows=10000, distinct(1)=25, distinct(5)=250, distinct(5)=900]
  ├── cost: 2100.00
  ├── project
  │    ├── columns: a.k:1(int!null)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=100, distinct(1)=25]
  │    ├── cost: 1100.00
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=100, distinct(1)=25, distinct(4)=1, distinct(1,4)=90]
  │    │    ├── cost: 1100.00
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(1)=250, distinct(4)=250, distinct(1,4)=900]
  │    │    │    └── cost: 1000.00
  │    │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
  │    │         └── eq [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
@@ -46,7 +46,7 @@ inner-join
  │         └── variable: a.k [type=int, outer=(1)]
  ├── scan b
  │    ├── columns: b.x:5(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(5)=250, distinct(5)=900]
  │    └── cost: 1000.00
  └── filters [type=bool, outer=(1,5)]
       └── eq [type=bool, outer=(1,5)]

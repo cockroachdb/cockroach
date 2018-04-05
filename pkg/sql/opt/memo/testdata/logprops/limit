@@ -12,10 +12,10 @@ SELECT * FROM a LIMIT 1
 ----
 limit
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(1,2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  └── const: 1 [type=int]
 
 build
@@ -23,10 +23,10 @@ SELECT * FROM a LIMIT (SELECT 1)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  └── subquery [type=int, outer=(3)]
       ├── max1-row
       │    ├── columns: column3:3(int)
@@ -46,8 +46,8 @@ SELECT * FROM a LIMIT 0
 ----
 limit
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1000]
+ ├── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=250, distinct(2)=250, distinct(1,2)=900]
  └── const: 0 [type=int]

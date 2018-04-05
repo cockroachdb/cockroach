@@ -313,7 +313,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	}
 
 	if !flags.HasFlags(ExprFmtHideStats) {
-		tp.Childf("stats: [rows=%d]", logProps.Relational.Stats.RowCount)
+		ev.formatStats(tp, &logProps.Relational.Stats)
 	}
 
 	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
@@ -327,6 +327,17 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	for i := 0; i < ev.ChildCount(); i++ {
 		ev.Child(i).format(tp, flags)
 	}
+}
+
+func (ev ExprView) formatStats(tp treeprinter.Node, s *Statistics) {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "stats: [rows=%d", s.RowCount)
+	for _, col := range s.ColStats {
+		fmt.Fprintf(&buf, ", distinct%s=%d", col.Cols.String(), col.DistinctCount)
+	}
+	buf.WriteString("]")
+	tp.Child(buf.String())
 }
 
 func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
