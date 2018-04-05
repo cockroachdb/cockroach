@@ -26,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
+func registerAllocator(r *registry) {
 	runAllocator := func(ctx context.Context, t *test, c *cluster, start int, maxStdDev float64) {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 		c.Put(ctx, cockroach, "./cockroach")
@@ -75,14 +75,14 @@ func init() {
 		m.Wait()
 	}
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  `upreplicate/1to3`,
 		Nodes: nodes(3),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runAllocator(ctx, t, c, 1, 10.0)
 		},
 	})
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  `rebalance/3to5`,
 		Nodes: nodes(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {

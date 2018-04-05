@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 )
 
-func init() {
+func registerCopy(r *registry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
@@ -138,7 +138,7 @@ func init() {
 
 	for _, inTxn := range []bool{true, false} {
 		inTxn := inTxn
-		tests.Add(testSpec{
+		r.Add(testSpec{
 			Name:  fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
 			Nodes: nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {

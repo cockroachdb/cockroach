@@ -21,8 +21,8 @@ import (
 	"sync"
 )
 
-func init() {
-	tests.Add(testSpec{
+func registerBackup(r *registry) {
+	r.Add(testSpec{
 		Name:  `backup2TB`,
 		Nodes: nodes(10),
 		Run: func(ctx context.Context, t *test, c *cluster) {

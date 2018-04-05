@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-func init() {
+func registerKV(r *registry) {
 	runKV := func(ctx context.Context, t *test, c *cluster, percent int) {
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -46,7 +46,7 @@ func init() {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			tests.Add(testSpec{
+			r.Add(testSpec{
 				Name:  fmt.Sprintf("kv%d/nodes=%d", p, n),
 				Nodes: nodes(n + 1),
 				Run: func(ctx context.Context, t *test, c *cluster) {
@@ -57,8 +57,8 @@ func init() {
 	}
 }
 
-func init() {
-	tests.Add(testSpec{
+func registerKVSplits(r *registry) {
+	r.Add(testSpec{
 		Name:  "kv/splits/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -85,7 +85,7 @@ func init() {
 	})
 }
 
-func init() {
+func registerKVScalability(r *registry) {
 	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
 		nodes := c.nodes - 1
 
@@ -128,7 +128,7 @@ func init() {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			tests.Add(testSpec{
+			r.Add(testSpec{
 				Name:  fmt.Sprintf("kv%d/scale/nodes=6", p),
 				Nodes: nodes(7, cpu(8)),
 				Run: func(ctx context.Context, t *test, c *cluster) {

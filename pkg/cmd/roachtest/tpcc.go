@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-func init() {
+func registerTPCC(r *registry) {
 	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
 		nodes := c.nodes - 1
 
@@ -42,14 +42,14 @@ func init() {
 		m.Wait()
 	}
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  "tpcc/w=1/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, 1, " --wait=false")
 		},
 	})
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  "tpmc/w=1/nodes=3",
 		Nodes: nodes(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
