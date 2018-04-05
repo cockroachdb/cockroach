@@ -70,9 +70,8 @@ func (p *PhysicalProps) Defined() bool {
 	return p.Presentation.Defined() || p.Ordering.Defined()
 }
 
-// Fingerprint returns a string that uniquely describes this set of physical
-// properties. It is suitable for use as a hash key in a map.
-func (p *PhysicalProps) Fingerprint() string {
+// FormatString writes physical properties to a human-readable format.
+func (p *PhysicalProps) FormatString(verbose bool) string {
 	hasProjection := p.Presentation.Defined()
 	hasOrdering := p.Ordering.Defined()
 
@@ -84,8 +83,14 @@ func (p *PhysicalProps) Fingerprint() string {
 	var buf bytes.Buffer
 
 	if hasProjection {
-		buf.WriteString("p:")
-		p.Presentation.format(&buf)
+		if verbose {
+			buf.WriteString("[presentation: ")
+			p.Presentation.format(&buf)
+			buf.WriteByte(']')
+		} else {
+			buf.WriteString("p:")
+			p.Presentation.format(&buf)
+		}
 
 		if hasOrdering {
 			buf.WriteString(" ")
@@ -93,15 +98,27 @@ func (p *PhysicalProps) Fingerprint() string {
 	}
 
 	if hasOrdering {
-		buf.WriteString("o:")
-		p.Ordering.format(&buf)
+		if verbose {
+			buf.WriteString("[ordering: ")
+			p.Ordering.format(&buf)
+			buf.WriteByte(']')
+		} else {
+			buf.WriteString("o:")
+			p.Ordering.format(&buf)
+		}
 	}
 
 	return buf.String()
 }
 
+// Fingerprint returns a string that uniquely describes this set of physical
+// properties. It is suitable for use as a hash key in a map.
+func (p *PhysicalProps) Fingerprint() string {
+	return p.FormatString(false /* verbose */)
+}
+
 func (p *PhysicalProps) String() string {
-	return p.Fingerprint()
+	return p.FormatString(true /* verbose */)
 }
 
 // Equals returns true if the two physical properties are identical.
