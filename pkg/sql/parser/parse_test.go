@@ -950,6 +950,11 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`SET ROW (1, true, NULL)`},
 
+		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO kafka`},
+		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO kafka WITH topic_prefix = 'bar'`},
+		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE foo TO kafka`},
+		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO kafka AS OF SYSTEM TIME '1'`},
+
 		// Regression for #15926
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
@@ -1277,6 +1282,9 @@ func TestParse2(t *testing.T) {
 			`BACKUP DATABASE foo TO 'bar.12' INCREMENTAL FROM 'baz.34'`},
 		{`RESTORE DATABASE foo FROM bar`,
 			`RESTORE DATABASE foo FROM 'bar'`},
+
+		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT TABLE foo TO kafka`,
+			`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO kafka`},
 
 		{`SHOW ALL CLUSTER SETTINGS`, `SHOW CLUSTER SETTING all`},
 

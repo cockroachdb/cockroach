@@ -107,7 +107,13 @@ message SchemaChangeDetails {
   // be processed. The index represents the index of a mutation in a
   // mutation list containing mutations for the same mutationID.
   repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
+}
 
+message ChangefeedDetails {
+  util.hlc.Timestamp highwater = 1 [(gogoproto.nullable) = false];
+  repeated sqlbase.TableDescriptor table_descs = 2 [(gogoproto.nullable) = false];
+  string kafka_topic_prefix = 3;
+  string kafka_bootstrap_servers = 4;
 }
 
 message Payload {
@@ -132,6 +138,7 @@ message Payload {
     RestoreDetails restore = 11;
     SchemaChangeDetails schemaChange = 12;
     ImportDetails import = 13;
+    ChangefeedDetails changefeed = 14;
   }
 }
 
@@ -144,4 +151,5 @@ enum Type {
   RESTORE = 2 [(gogoproto.enumvalue_customname) = "TypeRestore"];
   SCHEMA_CHANGE = 3 [(gogoproto.enumvalue_customname) = "TypeSchemaChange"];
   IMPORT = 4 [(gogoproto.enumvalue_customname) = "TypeImport"];
+  CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
 }
