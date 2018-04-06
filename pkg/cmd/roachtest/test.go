@@ -34,8 +34,6 @@ import (
 	"github.com/petermattis/goid"
 )
 
-//go:generate ./gen-registry.sh
-
 var (
 	tests       = &registry{m: make(map[string]*test), out: os.Stdout}
 	parallelism = 10
