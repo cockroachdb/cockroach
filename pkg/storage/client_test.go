@@ -744,7 +744,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateDB(idx, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
+		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
@@ -904,8 +904,8 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.populateDB(i, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
-		nlActive, nlRenewal, metric.TestSampleInterval,
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
+		m.gossips[i], nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
