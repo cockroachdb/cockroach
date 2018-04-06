@@ -801,9 +801,13 @@ bench: TESTS := -
 bench: BENCHES := .
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
-.PHONY: check test testshort testrace testlogic testccllogic bench
+# -benchtime=1ns runs one iteration of each benchmark. The -short flag is set so
+# that longer running benchmarks can skip themselves.
+benchshort: override TESTFLAGS += -benchtime=1ns -short
+
+.PHONY: check test testshort testrace testlogic testccllogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench: gotestdashi
+check test testshort testrace bench benchshort: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testlogic: ## Run SQL Logic Tests.
