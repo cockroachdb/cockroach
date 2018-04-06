@@ -352,32 +352,31 @@ def analyze_pr(merge, pr):
 
     merge_base = merge_base_result[0]
 
-    commit = tip
+    commits_to_analyze = [tip]
 
     authors = set()
     ncommits = 0
-    while not merge_numbers.match(commit.message):
+    while len(commits_to_analyze) > 0:
         spin()
 
-        # TODO(couchand): other merges???
-        if commit.message.startswith("Merge branch"):
-            # TODO(couchand): something
-            print("uh-oh!  can't handle branch merges!  pr", pr)
-            break
+        commit = commits_to_analyze.pop(0)
 
-        extract_release_notes(pr, note, commit)
+        if not commit.message.startswith("Merge"):
+            extract_release_notes(pr, note, commit)
 
-        ncommits += 1
-        author = author_aliases.get(commit.author.name, commit.author.name)
-        if author != 'GitHub':
-            authors.add(author)
-        committer = author_aliases.get(commit.committer.name, commit.committer.name)
-        if committer != 'GitHub':
-            authors.add(committer)
+            ncommits += 1
+            author = author_aliases.get(commit.author.name, commit.author.name)
+            if author != 'GitHub':
+                authors.add(author)
+            committer = author_aliases.get(commit.committer.name, commit.committer.name)
+            if committer != 'GitHub':
+                authors.add(committer)
 
-        if len(commit.parents) == 0:
-            break
-        commit = commit.parents[0]
+        # Exclude any parents reachable from the other side of the
+        # PR merge commit.
+        for parent in commit.parents:
+          if not repo.is_ancestor(parent, merge.parents[0]):
+            commits_to_analyze.append(parent)
 
     text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
     stats = Stats._list_from_string(repo, text)
