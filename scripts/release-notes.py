@@ -471,10 +471,10 @@ print()
 ## Print the Contributors section.
 print("### Contributors")
 print()
-print("This release includes %d merged PRs by %s author%s." %
-      (len(allprs),
+print("This release includes %d merged PR%s by %s author%s." %
+      (len(allprs), len(allprs) != 1 and "s" or "",
        len(individual_authors), (len(individual_authors) != 1 and "s" or ""),
-      ), end=' ')
+      ), end='')
 
 ext_contributors = individual_authors - crdb_folk
 
@@ -483,7 +483,7 @@ if len(ext_contributors) > 0:
     # # Note: CRDB folk can be first-time contributors too, so
     # # not part of the if ext_contributors above.
     if len(firsttime_contributors) > 0:
-        print("We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
+        print(" We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
         for i, n in enumerate(firsttime_contributors):
             if i > 0 and i < len(firsttime_contributors)-1:
                 print(', ', end='')
@@ -492,11 +492,13 @@ if len(ext_contributors) > 0:
             print(n, end='')
         print('.')
     else:
-        print("We would like to thank the following contributors from the CockroachDB community:")
+        print(" We would like to thank the following contributors from the CockroachDB community:")
         print()
     for a in ext_contributors:
         print("-", a)
+else:
     print()
+print()
 
 ## Print the per-author contribution list.
 if not hidepercontributor:
