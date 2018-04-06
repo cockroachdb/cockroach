@@ -294,10 +294,12 @@ func BenchmarkTableReader(b *testing.B) {
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
+	const numRows = 10000
+	const numCols = 2
 	sqlutils.CreateTable(
 		b, sqlDB, "t",
 		"k INT PRIMARY KEY, v INT",
-		10000,
+		numRows,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 	)
 
@@ -316,6 +318,7 @@ func BenchmarkTableReader(b *testing.B) {
 		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 	}
 	post := PostProcessSpec{}
+	b.SetBytes(numRows * numCols * 8)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
