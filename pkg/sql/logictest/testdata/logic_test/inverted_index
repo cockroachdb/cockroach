@@ -156,6 +156,14 @@ INSERT INTO d VALUES (31,  '{"a": []}')
 statement ok
 INSERT INTO d VALUES (32,  '{"a": [1, 2, 3, 4]}')
 
+query IT
+SELECT * from d where b @> (NULL::JSON) ORDER BY a;
+----
+ 
+query IT
+SELECT * from d where b @> NULL ORDER BY a;
+----
+
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
