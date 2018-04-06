@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -150,6 +151,7 @@ type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
 	db                *client.DB
+	engines           []engine.Engine
 	gossip            *gossip.Gossip
 	livenessThreshold time.Duration
 	heartbeatInterval time.Duration
@@ -173,6 +175,7 @@ func NewNodeLiveness(
 	ambient log.AmbientContext,
 	clock *hlc.Clock,
 	db *client.DB,
+	engines []engine.Engine,
 	g *gossip.Gossip,
 	livenessThreshold time.Duration,
 	renewalDuration time.Duration,
@@ -182,6 +185,7 @@ func NewNodeLiveness(
 		ambientCtx:        ambient,
 		clock:             clock,
 		db:                db,
+		engines:           engines,
 		gossip:            g,
 		livenessThreshold: livenessThreshold,
 		heartbeatInterval: livenessThreshold - renewalDuration,
@@ -703,6 +707,19 @@ func (nl *NodeLiveness) updateLiveness(
 	handleCondFailed func(actual Liveness) error,
 ) error {
 	for {
+		for _, eng := range nl.engines {
+			batch := eng.NewBatch()
+			defer batch.Close()
+
+			if err := batch.LogData(nil); err != nil {
+				log.Warningf(ctx, "updateLiveness failed because LogData failed, err: %s", err)
+			}
+
+			if err := batch.Commit(true); err != nil {
+				log.Warningf(ctx, "updateLiveness failed because Commit failed, err: %s", err)
+			}
+		}
+
 		if err := nl.updateLivenessAttempt(ctx, newLiveness, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
 			if _, ok := err.(*errRetryLiveness); ok {

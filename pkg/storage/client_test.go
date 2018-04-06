@@ -744,7 +744,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateDB(idx, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
+		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
@@ -904,8 +904,8 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.populateDB(i, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
-		nlActive, nlRenewal, metric.TestSampleInterval,
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
+		m.gossips[i], nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]
@@ -1380,4 +1380,254 @@ func verifyRecomputedStats(
 		return fmt.Errorf("expected range's stats to agree with recomputation: got\n%+v\nrecomputed\n%+v", expMS, ms)
 	}
 	return nil
+}
+
+// MockEngine implements engine.Engine interface.
+type MockEngine struct {
+	engine.InMem
+}
+
+func (m MockEngine) NewBatch() engine.Batch {
+	return MockBatch{Batch: m.InMem.NewBatch()}
+}
+
+// Mock Batch implements engine.Batch interface.
+type MockBatch struct {
+	engine.Batch
+}
+
+func (mb MockBatch) Commit(syncCommit bool) error {
+	time.Sleep(5 * time.Millisecond)
+	err := mb.Batch.Commit(syncCommit)
+	return err
+}
+
+func (m *multiTestContext) MockStart(t *testing.T, numStores int) {
+	{
+		// Only the fields we nil out below can be injected into m as it
+		// starts up, so fail early if anything else was set (as we'd likely
+		// override it and the test wouldn't get what it wanted).
+		mCopy := *m
+		mCopy.storeConfig = nil
+		mCopy.clocks = nil
+		mCopy.clock = nil
+		mCopy.timeUntilStoreDead = 0
+		var empty multiTestContext
+		if !reflect.DeepEqual(empty, mCopy) {
+			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
+		}
+	}
+	m.t = t
+
+	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
+	m.mu = &syncutil.RWMutex{}
+	m.stores = make([]*storage.Store, numStores)
+	m.storePools = make([]*storage.StorePool, numStores)
+	m.distSenders = make([]*kv.DistSender, numStores)
+	m.dbs = make([]*client.DB, numStores)
+	m.stoppers = make([]*stop.Stopper, numStores)
+	m.senders = make([]*storage.Stores, numStores)
+	m.idents = make([]roachpb.StoreIdent, numStores)
+	m.grpcServers = make([]*grpc.Server, numStores)
+	m.gossips = make([]*gossip.Gossip, numStores)
+	m.nodeLivenesses = make([]*storage.NodeLiveness, numStores)
+
+	if m.manualClock == nil {
+		m.manualClock = hlc.NewManualClock(123)
+	}
+	if m.clock == nil {
+		m.clock = hlc.NewClock(m.manualClock.UnixNano, time.Nanosecond)
+	}
+	if m.transportStopper == nil {
+		m.transportStopper = stop.NewStopper()
+	}
+	st := cluster.MakeTestingClusterSettings()
+	if m.rpcContext == nil {
+		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
+			m.transportStopper, &st.Version)
+		// Create a breaker which never trips and never backs off to avoid
+		// introducing timing-based flakes.
+		m.rpcContext.BreakerFactory = func() *circuit.Breaker {
+			return circuit.NewBreakerWithOptions(&circuit.Options{
+				BackOff: &backoff.ZeroBackOff{},
+			})
+		}
+	}
+	m.transport = storage.NewRaftTransport(
+		log.AmbientContext{Tracer: st.Tracer}, st, m.getNodeIDAddress, nil, m.rpcContext,
+	)
+
+	for idx := 0; idx < numStores; idx++ {
+		m.addMockStore(idx)
+	}
+
+	// Wait for gossip to startup.
+	testutils.SucceedsSoon(t, func() error {
+		for i, g := range m.gossips {
+			if _, ok := g.GetSystemConfig(); !ok {
+				return errors.Errorf("system config not available at index %d", i)
+			}
+		}
+		return nil
+	})
+}
+
+// AddStore creates a new store on the same Transport but doesn't create any ranges.
+func (m *multiTestContext) addMockStore(idx int) {
+	var clock *hlc.Clock
+	if len(m.clocks) > idx {
+		clock = m.clocks[idx]
+	} else {
+		clock = m.clock
+		m.clocks = append(m.clocks, clock)
+	}
+	var eng engine.Engine
+	var needBootstrap bool
+	if len(m.engines) > idx {
+		eng = m.engines[idx]
+	} else {
+		engineStopper := stop.NewStopper()
+		m.engineStoppers = append(m.engineStoppers, engineStopper)
+		eng = MockEngine{InMem: engine.NewInMem(roachpb.Attributes{}, 1<<20)}
+		engineStopper.AddCloser(eng)
+		m.engines = append(m.engines, eng)
+		needBootstrap = true
+	}
+	grpcServer := rpc.NewServer(m.rpcContext)
+	m.grpcServers[idx] = grpcServer
+	storage.RegisterMultiRaftServer(grpcServer, m.transport)
+
+	stopper := stop.NewStopper()
+
+	// Give this store the first store as a resolver. We don't provide all of the
+	// previous stores as resolvers as doing so can cause delays in bringing the
+	// gossip network up.
+	resolvers := func() []resolver.Resolver {
+		m.nodeIDtoAddrMu.Lock()
+		defer m.nodeIDtoAddrMu.Unlock()
+		addr := m.nodeIDtoAddrMu.nodeIDtoAddr[1]
+		if addr == nil {
+			return nil
+		}
+		r, err := resolver.NewResolverFromAddress(addr)
+		if err != nil {
+			m.t.Fatal(err)
+		}
+		return []resolver.Resolver{r}
+	}()
+	m.gossips[idx] = gossip.NewTest(
+		roachpb.NodeID(idx+1),
+		m.rpcContext,
+		grpcServer,
+		m.transportStopper,
+		metric.NewRegistry(),
+	)
+	if m.timeUntilStoreDead == 0 {
+		m.timeUntilStoreDead = storage.TestTimeUntilStoreDeadOff
+	}
+
+	nodeID := roachpb.NodeID(idx + 1)
+	cfg := m.makeStoreConfig(idx)
+	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
+	m.populateDB(idx, stopper)
+	nlActive, nlRenewal := cfg.NodeLivenessDurations()
+	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
+		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
+		nlActive, nlRenewal, metric.TestSampleInterval,
+	)
+	m.populateStorePool(idx, m.nodeLivenesses[idx])
+	cfg.DB = m.dbs[idx]
+	cfg.NodeLiveness = m.nodeLivenesses[idx]
+	cfg.StorePool = m.storePools[idx]
+
+	store := storage.NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: nodeID})
+	ctx := context.Background()
+	if needBootstrap {
+		if err := store.Bootstrap(ctx, roachpb.StoreIdent{
+			NodeID:  roachpb.NodeID(idx + 1),
+			StoreID: roachpb.StoreID(idx + 1),
+		}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+			m.t.Fatal(err)
+		}
+
+		// Bootstrap the initial range on the first store
+		if idx == 0 {
+			err := store.BootstrapRange(sqlbase.MakeMetadataSchema().GetInitialValues(), cfg.Settings.Version.ServerVersion)
+			if err != nil {
+				m.t.Fatal(err)
+			}
+		}
+	}
+
+	sender := storage.NewStores(ambient, clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	sender.AddStore(store)
+	storesServer := storage.MakeServer(&roachpb.NodeDescriptor{NodeID: nodeID}, sender)
+	storage.RegisterConsistencyServer(grpcServer, storesServer)
+
+	ln, err := netutil.ListenAndServeGRPC(m.transportStopper, grpcServer, util.TestAddr)
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	m.nodeIDtoAddrMu.Lock()
+	if m.nodeIDtoAddrMu.nodeIDtoAddr == nil {
+		m.nodeIDtoAddrMu.nodeIDtoAddr = make(map[roachpb.NodeID]net.Addr)
+	}
+	_, ok := m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID]
+	if !ok {
+		m.nodeIDtoAddrMu.nodeIDtoAddr[nodeID] = ln.Addr()
+	}
+	m.nodeIDtoAddrMu.Unlock()
+	if ok {
+		m.t.Fatalf("node %d already listening", nodeID)
+	}
+
+	// Add newly created objects to the multiTestContext's collections.
+	// (these must be populated before the store is started so that
+	// FirstRange() can find the sender)
+	m.mu.Lock()
+	m.stores[idx] = store
+	m.stoppers[idx] = stopper
+	m.senders[idx] = sender
+	// Save the store identities for later so we can use them in
+	// replication operations even while the store is stopped.
+	m.idents[idx] = store.Ident
+	m.mu.Unlock()
+
+	// NB: On Mac OS X, we sporadically see excessively long dialing times (~15s)
+	// which cause various trickle down badness in tests. To avoid every test
+	// having to worry about such conditions we pre-warm the connection
+	// cache. See #8440 for an example of the headaches the long dial times
+	// cause.
+	if _, err := m.rpcContext.GRPCDial(ln.Addr().String()).Connect(ctx); err != nil {
+		m.t.Fatal(err)
+	}
+
+	m.gossips[idx].Start(ln.Addr(), resolvers)
+
+	if err := store.Start(ctx, stopper); err != nil {
+		m.t.Fatal(err)
+	}
+	if err := m.gossipNodeDesc(m.gossips[idx], nodeID); err != nil {
+		m.t.Fatal(err)
+	}
+	store.WaitForInit()
+
+	ran := struct {
+		sync.Once
+		ch chan struct{}
+	}{
+		ch: make(chan struct{}),
+	}
+	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
+		now := m.clocks[idx].Now()
+		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
+			log.Warning(ctx, err)
+		}
+		ran.Do(func() {
+			close(ran.ch)
+		})
+	})
+	// Wait until we see the first heartbeat by waiting for the callback (which
+	// fires *after* the node becomes live).
+	<-ran.ch
 }

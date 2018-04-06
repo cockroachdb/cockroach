@@ -1004,3 +1004,81 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 		})
 	}
 }
+
+// TestUpdateLivenessBlocks verifies that a node always writes to its local
+// RocksDB before updating its liveness. If write is blocking, updateLiveness
+// will also block.
+func TestUpdateLivenessBlocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.MockStart(t, 3)
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	// Advance clock past the liveness threshold to verify IsLive becomes false.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+	for idx, nl := range mtc.nodeLivenesses {
+		nodeID := mtc.gossips[idx].NodeID.Get()
+		live, err := nl.IsLive(nodeID)
+		if err != nil {
+			t.Error(err)
+		} else if live {
+			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
+		}
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := nl.Metrics().LiveNodes.Value(), int64(0); a != e {
+				return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+					nodeID, e, a)
+			}
+			return nil
+		})
+	}
+
+	// Trigger a manual heartbeat and check node is not alive within 5 ms because
+	// MockEngine's write will block for 5 ms before updating liveness.
+	// Then verify liveness is reestablished after 5 ms.
+	for idx, nl := range mtc.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			t.Fatal(err)
+		}
+		testutils.SucceedsSoon(t, func() error {
+			for {
+				errs := make(chan error)
+				go func() {
+					err := nl.Heartbeat(context.Background(), l)
+					errs <- err
+				}()
+
+				nodeID := mtc.gossips[idx].NodeID.Get()
+				select {
+				case err = <-errs:
+					return errors.Errorf("expected node %d to be considered not live within 5 milliseconds", nodeID)
+				case <-time.After(5 * time.Millisecond):
+					err = <-errs
+				}
+
+				if err == nil {
+					live, err := nl.IsLive(nodeID)
+					if err != nil {
+						return err
+					} else if !live {
+						return errors.Errorf("expected node %d to be considered live after waiting 5 milliseconds", nodeID)
+					}
+					break
+				}
+
+				if err == storage.ErrEpochIncremented {
+					log.Warningf(context.Background(), "retrying after %s", err)
+					continue
+				}
+
+				return err
+			}
+			return nil
+		})
+	}
+}
