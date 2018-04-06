@@ -55,17 +55,27 @@ type TableID int32
 type Metadata struct {
 	// cols stores information about each metadata column, indexed by ColumnID.
 	// Skip id 0 so that it is reserved for "unknown column".
-	cols []mdCol
+	cols []mdColumn
 
 	// tables maps from table id to the catalog metadata for the table. The
 	// table id is the id of the first column in the table. The remaining
 	// columns form a contiguous group following that id.
-	tables map[TableID]Table
+	tables map[TableID]mdTable
 }
 
-// mdCol stores information about one of the columns stored in the metadata,
+// mdTable stores information about one of the tables stored in the metadata.
+type mdTable struct {
+	// tab is a reference to the table in the catalog.
+	tab Table
+
+	// weakKeys is a cache of the weak key column combinations on this table.
+	// See RelationalProps.WeakKeys for more details.
+	weakKeys WeakKeys
+}
+
+// mdColumn stores information about one of the columns stored in the metadata,
 // including its label and type.
-type mdCol struct {
+type mdColumn struct {
 	// label is the best-effort name of this column. Since the same column can
 	// have multiple labels (using aliasing), one of those is chosen to be used
 	// for pretty-printing and debugging. This might be different than what is
@@ -78,14 +88,14 @@ type mdCol struct {
 
 // NewMetadata constructs a new instance of metadata for the optimizer.
 func NewMetadata() *Metadata {
-	// Skip mdCol index 0 so that it is reserved for "unknown column".
-	return &Metadata{cols: make([]mdCol, 1)}
+	// Skip mdColumn index 0 so that it is reserved for "unknown column".
+	return &Metadata{cols: make([]mdColumn, 1)}
 }
 
 // AddColumn assigns a new unique id to a column within the query and records
 // its label and type.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
-	md.cols = append(md.cols, mdCol{label: label, typ: typ})
+	md.cols = append(md.cols, mdColumn{label: label, typ: typ})
 	return ColumnID(len(md.cols) - 1)
 }
 
@@ -130,21 +140,41 @@ func (md *Metadata) AddTable(tab Table) TableID {
 	}
 
 	if md.tables == nil {
-		md.tables = make(map[TableID]Table)
+		md.tables = make(map[TableID]mdTable)
 	}
 
-	md.tables[tabID] = tab
+	md.tables[tabID] = mdTable{tab: tab}
 	return tabID
 }
 
 // Table looks up the catalog table associated with the given metadata id. The
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) Table {
-	return md.tables[tabID]
+	return md.tables[tabID].tab
 }
 
 // TableColumn returns the metadata id of the column at the given ordinal
 // position in the table.
 func (md *Metadata) TableColumn(tabID TableID, ord int) ColumnID {
 	return ColumnID(int(tabID) + ord)
+}
+
+// TableWeakKeys returns the weak key column combinations on the given table.
+// Weak keys are derived lazily and are cached in the metadata, since they may
+// be accessed multiple times during query optimization. For more details, see
+// RelationalProps.WeakKeys.
+func (md *Metadata) TableWeakKeys(tabID TableID) WeakKeys {
+	mdTab := md.tables[tabID]
+	if mdTab.weakKeys == nil {
+		mdTab.weakKeys = make(WeakKeys, 0, mdTab.tab.IndexCount())
+		for idx := 0; idx < mdTab.tab.IndexCount(); idx++ {
+			var cs ColSet
+			index := mdTab.tab.Index(idx)
+			for col := 0; col < index.UniqueColumnCount(); col++ {
+				cs.Add(int(md.TableColumn(tabID, index.Column(col).Ordinal)))
+			}
+			mdTab.weakKeys.Add(cs)
+		}
+	}
+	return mdTab.weakKeys
 }

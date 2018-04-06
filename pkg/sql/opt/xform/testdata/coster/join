@@ -30,14 +30,17 @@ inner-join
  │    ├── columns: a.k:1(int!null)
  │    ├── stats: [rows=100]
  │    ├── cost: 1100.00
+ │    ├── keys: (1)
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
  │    │    ├── stats: [rows=100]
  │    │    ├── cost: 1100.00
+ │    │    ├── keys: (1)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
  │    │    │    ├── stats: [rows=1000]
- │    │    │    └── cost: 1000.00
+ │    │    │    ├── cost: 1000.00
+ │    │    │    └── keys: (1)
  │    │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
  │    │         └── eq [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
  │    │              ├── variable: a.d [type=decimal, outer=(4)]
