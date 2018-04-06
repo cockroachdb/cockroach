@@ -2072,6 +2072,11 @@ func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool 
 		case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
 			*tree.UnionClause, *tree.ValuesClause:
 			return true
+		case *tree.Explain:
+			// The optimizer doesn't yet support EXPLAIN but if we return false, it gets
+			// executed with the old planner which can be very confusing; it's
+			// preferable to error out.
+			return true
 		}
 	}
 	return false
