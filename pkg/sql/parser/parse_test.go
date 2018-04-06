@@ -1879,6 +1879,20 @@ RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE`,
 		},
+		{
+			`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`,
+			`unimplemented at or near "EOF"
+SELECT * FROM ab, LATERAL (SELECT * FROM kv)
+                                            ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/24560`,
+		},
+		{
+			`SELECT * FROM ab, LATERAL foo(a)`,
+			`unimplemented at or near "EOF"
+SELECT * FROM ab, LATERAL foo(a)
+                                ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/24560`,
+		},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
