@@ -62,7 +62,7 @@ func (p *planner) showStateMachineSetting(
 		// value, and the corresponding sql migration that makes sure
 		// the above select finds something usually runs pretty quickly
 		// when the cluster is bootstrapped.
-		kvRawVal, obj, err := s.Validate(&st.SV, prevRawVal, nil)
+		kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil)
 		if err != nil {
 			return errors.Errorf("unable to read existing value: %s", err)
 		}
@@ -70,11 +70,16 @@ func (p *planner) showStateMachineSetting(
 		// NB: if there is no persisted cluster version yet, this will match
 		// kvRawVal (which is taken from `st.SV` in this case too).
 		gossipRawVal := []byte(s.Get(&st.SV))
+
+		_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil)
+		if err != nil {
+			gossipObj = fmt.Sprintf("<error: %s>", err)
+		}
 		if !bytes.Equal(gossipRawVal, kvRawVal) {
-			return errors.Errorf("gossip and KV store disagree about value")
+			return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later", gossipObj, kvObj)
 		}
 
-		d = tree.NewDString(obj.(fmt.Stringer).String())
+		d = tree.NewDString(kvObj.(fmt.Stringer).String())
 		return nil
 	}); err != nil {
 		return nil, err
