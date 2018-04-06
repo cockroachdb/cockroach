@@ -15,18 +15,68 @@
 package jobutils
 
 import (
+	gosql "database/sql"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
+
+// WaitForJob waits for the specified job ID to terminate.
+func WaitForJob(db *gosql.DB, jobID int64) error {
+	var jobFailedErr error
+	err := retry.ForDuration(time.Minute*2, func() error {
+		var status string
+		var payloadBytes []byte
+		if err := db.QueryRow(
+			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes); err != nil {
+			return err
+		}
+		if jobs.Status(status) == jobs.StatusFailed {
+			jobFailedErr = errors.New("job failed")
+			payload := &jobs.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
+			}
+			return nil
+		}
+		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+			return errors.Errorf("expected job status %s, but got %s", e, a)
+		}
+		return nil
+	})
+	if jobFailedErr != nil {
+		return jobFailedErr
+	}
+	return err
+}
+
+// BulkOpResponseFilter creates a blocking response filter for the responses
+// related to bulk IO/backup/restore/import: Export, Import and AddSSTable. See
+// discussion on RunJob for where this might be useful.
+func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaResponseFilter {
+	return func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		for _, res := range br.Responses {
+			if res.Export != nil || res.Import != nil || res.AddSstable != nil {
+				<-*allowProgressIota
+			}
+		}
+		return nil
+	}
+}
 
 // GetSystemJobsCount queries the number of entries in the jobs table.
 func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
