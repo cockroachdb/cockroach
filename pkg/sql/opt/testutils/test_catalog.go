@@ -17,10 +17,12 @@ package testutils
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -59,6 +61,7 @@ type TestTable struct {
 	Name    string
 	Columns []*TestColumn
 	Indexes []*TestIndex
+	Stats   []*TestTableStat
 }
 
 var _ opt.Table = &TestTable{}
@@ -92,6 +95,16 @@ func (tt *TestTable) IndexCount() int {
 // Index is part of the opt.Table interface.
 func (tt *TestTable) Index(i int) opt.Index {
 	return tt.Indexes[i]
+}
+
+// StatisticCount is part of the opt.Table interface.
+func (tt *TestTable) StatisticCount() int {
+	return len(tt.Stats)
+}
+
+// Statistic is part of the opt.Table interface.
+func (tt *TestTable) Statistic(i int) opt.TableStatistic {
+	return tt.Stats[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
@@ -166,4 +179,51 @@ func (tc *TestColumn) DatumType() types.T {
 // IsHidden is part of the opt.Column interface.
 func (tc *TestColumn) IsHidden() bool {
 	return tc.Hidden
+}
+
+// TestTableStat implements the opt.TableStatistic interface for testing purposes.
+type TestTableStat struct {
+	js stats.JSONStatistic
+	tt *TestTable
+}
+
+var _ opt.TableStatistic = &TestTableStat{}
+
+// CreatedAt is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) CreatedAt() time.Time {
+	d, err := tree.ParseDTimestamp(ts.js.CreatedAt, time.Microsecond)
+	if err != nil {
+		panic(err)
+	}
+	return d.Time
+}
+
+// ColumnCount is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) ColumnCount() int {
+	return len(ts.js.Columns)
+}
+
+// ColumnOrdinal is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) ColumnOrdinal(i int) int {
+	return ts.tt.FindOrdinal(ts.js.Columns[i])
+}
+
+// RowCount is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) RowCount() uint64 {
+	return ts.js.RowCount
+}
+
+// DistinctCount is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) DistinctCount() uint64 {
+	return ts.js.DistinctCount
+}
+
+// NullCount is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) NullCount() uint64 {
+	return ts.js.NullCount
+}
+
+// HasHistogram is part of the opt.TableStatistic interface.
+func (ts *TestTableStat) HasHistogram() bool {
+	return len(ts.js.HistogramBuckets) > 0
 }
