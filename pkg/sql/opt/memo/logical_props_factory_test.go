@@ -49,10 +49,10 @@ func TestLogicalJoinProps(t *testing.T) {
 		leftGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), a)))
 		rightGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), b)))
 		onGroup := f.ConstructTrue()
-		operands := norm.DynamicOperands{
-			norm.DynamicID(leftGroup),
-			norm.DynamicID(rightGroup),
-			norm.DynamicID(onGroup),
+		operands := memo.DynamicOperands{
+			memo.DynamicID(leftGroup),
+			memo.DynamicID(rightGroup),
+			memo.DynamicID(onGroup),
 		}
 		joinGroup := f.DynamicConstruct(op, operands)
 

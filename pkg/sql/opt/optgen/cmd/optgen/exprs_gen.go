@@ -52,6 +52,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	}
 
 	g.genMemoFuncs()
+	g.genMakeExpr()
 }
 
 // genLayoutTable generates the layout table; see opLayout.
@@ -211,4 +212,67 @@ func (g *exprsGen) genMemoFuncs() {
 		fmt.Fprintf(g.w, "return m.privateStorage.intern%s(val)", typ)
 		fmt.Fprintf(g.w, "}\n\n")
 	}
+}
+
+// genMakeExpr generates the MakeExpr method, which constructs expressions from
+// a dynamic type and arguments. The code looks similar to this:
+//
+//   type makeExprFunc func(operands DynamicOperands) Expr
+//
+//   var makeExprLookup [opt.NumOperators]makeExprFunc
+//
+//   func init() {
+//     // ScanOp
+//     makeExprLookup[opt.ScanOp] = func(operands DynamicOperands) Expr {
+//       return Expr(MakeScanExpr(PrivateID(operands[0])))
+//     }
+//
+//     // SelectOp
+//     makeExprLookup[opt.SelectOp] = func(operands DynamicOperands) Expr {
+//       return Expr(MakeSelectExpr(GroupID(operands[0]), GroupID(operands[1])))
+//     }
+//
+//     ... code for other ops ...
+//   }
+//
+func (g *exprsGen) genMakeExpr() {
+	funcType := "func(operands DynamicOperands) Expr"
+	fmt.Fprintf(g.w, "type makeExprFunc %s\n", funcType)
+
+	fmt.Fprintf(g.w, "var makeExprLookup [opt.NumOperators]makeExprFunc\n\n")
+
+	fmt.Fprintf(g.w, "func init() {\n")
+	fmt.Fprintf(g.w, "  // UnknownOp\n")
+	fmt.Fprintf(g.w, "  makeExprLookup[opt.UnknownOp] = %s {\n", funcType)
+	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
+	fmt.Fprintf(g.w, "  }\n\n")
+
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
+		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
+		fmt.Fprintf(g.w, "  makeExprLookup[opt.%sOp] = %s {\n", define.Name, funcType)
+
+		fmt.Fprintf(g.w, "    return Expr(Make%sExpr(", define.Name)
+		for i, field := range define.Fields {
+			if i != 0 {
+				fmt.Fprintf(g.w, ", ")
+			}
+
+			if isListType(string(field.Type)) {
+				fmt.Fprintf(g.w, "operands[%d].ListID()", i)
+			} else if isPrivateType(string(field.Type)) {
+				fmt.Fprintf(g.w, "PrivateID(operands[%d])", i)
+			} else {
+				fmt.Fprintf(g.w, "GroupID(operands[%d])", i)
+			}
+		}
+		fmt.Fprintf(g.w, "))\n")
+
+		fmt.Fprintf(g.w, "  }\n\n")
+	}
+
+	fmt.Fprintf(g.w, "}\n\n")
+
+	fmt.Fprintf(g.w, "func MakeExpr(op opt.Operator, operands DynamicOperands) Expr {\n")
+	fmt.Fprintf(g.w, "  return makeExprLookup[op](operands)\n")
+	fmt.Fprintf(g.w, "}\n")
 }

@@ -93,15 +93,6 @@ func TestRuleBinaryAssumption(t *testing.T) {
 	fn(opt.BitxorOp)
 }
 
-func TestDynamicListID(t *testing.T) {
-	listID := memo.ListID{Offset: 1, Length: 2}
-	dynID := norm.MakeDynamicListID(listID)
-	roundtripID := dynID.ListID()
-	if listID != roundtripID {
-		t.Errorf("invalid ListID/DynamicID conversions")
-	}
-}
-
 // TestSimplifyFilters tests factory.simplifyFilters. It's hard to fully test
 // using SQL, as And operator rules simplify the expression before the Filters
 // operator is created.
