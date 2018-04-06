@@ -80,6 +80,8 @@ func main() {
 		&slackToken, "slack-token", "", "Slack bot token")
 	runCmd.Flags().StringVar(
 		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+	runCmd.Flags().BoolVar(
+		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
