@@ -57,6 +57,7 @@ author_aliases = {
     'rytaft': "Rebecca Taft",
     'songhao': "Song Hao",
     'solongordon': "Solon Gordon",
+    'Amruta': "Amruta Ranade",
 }
 
 # FIXME(knz): This too.
@@ -71,6 +72,7 @@ crdb_folk = set([
     "Andy Woods",
     "Arjun Narayan",
     "Ben Darnell",
+    "Bob Vawter",
     "Bram Gruneir",
     "Daniel Harrison",
     "David Taylor",
@@ -81,6 +83,7 @@ crdb_folk = set([
     "Jordan Lewis",
     "Justin Jaffray",
     "Kuan Luo",
+    "Lauren Hirata",
     "Marc Berhault",
     "Masha Schneider",
     "Matt Jibson",
@@ -100,6 +103,7 @@ crdb_folk = set([
     "Spencer Kimball",
     "Tamir Duberstein",
     "Tobias Schottdorf",
+    "Victor Chen",
     "Vivek Menezes",
 ])
 
