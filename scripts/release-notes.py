@@ -211,8 +211,19 @@ hidedownloads = options.hide_downloads
 repo = Repo('.')
 heads = repo.heads
 
-firstCommit = repo.commit(options.from_commit)
-commit = repo.commit(options.until_commit)
+try:
+    firstCommit = repo.commit(options.from_commit)
+except:
+    print("Unable to find the first commit of the range.", file=sys.stderr)
+    print("No ref named %s." % options.from_commit, file=sys.stderr)
+    exit(0)
+
+try:
+    commit = repo.commit(options.until_commit)
+except:
+    print("Unable to find the last commit of the range.", file=sys.stderr)
+    print("No ref named %s." % options.until_commit, file=sys.stderr)
+    exit(0)
 
 if commit == firstCommit:
     print("Commit range is empty!", file=sys.stderr)
@@ -224,7 +235,16 @@ if commit == firstCommit:
     print("Note: the first commit is excluded. Use e.g.: --from <prev-release-tag> --until <new-release-candidate-sha>", file=sys.stderr)
     exit(0)
 
-# TODO(couchand): check here that pull_ref_prefix is valid
+# Check that pull_ref_prefix is valid
+testrefname = "{0}/1".format(pull_ref_prefix)
+try:
+    repo.commit(testrefname)
+except:
+    print("Unable to find pull request refs at %s." % pull_ref_prefix, file=sys.stderr)
+    print("Is your repo set up to fetch them?  Try adding", file=sys.stderr)
+    print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
+    print("to the GitHub remote section of .git/config.", file=sys.stderr)
+    exit(0)
 
 ### Reading data from repository ###
 
