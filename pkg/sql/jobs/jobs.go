@@ -60,6 +60,7 @@ type Details interface{}
 var _ Details = BackupDetails{}
 var _ Details = RestoreDetails{}
 var _ Details = SchemaChangeDetails{}
+var _ Details = ChangefeedDetails{}
 
 // Record stores the job fields that are not automatically managed by Job.
 type Record struct {
@@ -476,6 +477,8 @@ func detailsType(d isPayload_Details) Type {
 		return TypeSchemaChange
 	case *Payload_Import:
 		return TypeImport
+	case *Payload_Changefeed:
+		return TypeChangefeed
 	default:
 		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -498,6 +501,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_SchemaChange{SchemaChange: &d}
 	case ImportDetails:
 		return &Payload_Import{Import: &d}
+	case ChangefeedDetails:
+		return &Payload_Changefeed{Changefeed: &d}
 	default:
 		panic(fmt.Sprintf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -519,6 +524,8 @@ func (p *Payload) UnwrapDetails() (Details, error) {
 		return *d.SchemaChange, nil
 	case *Payload_Import:
 		return *d.Import, nil
+	case *Payload_Changefeed:
+		return *d.Changefeed, nil
 	default:
 		return nil, errors.Errorf("jobs.Payload: unsupported details type %T", d)
 	}
