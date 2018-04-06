@@ -25,9 +25,7 @@ using namespace cockroach;
 
 DBEngine::~DBEngine() {}
 
-DBStatus DBEngine::AssertPreClose() {
-  return kSuccess;
-}
+DBStatus DBEngine::AssertPreClose() { return kSuccess; }
 
 DBSSTable* DBEngine::GetSSTables(int* n) {
   std::vector<rocksdb::LiveFileMetaData> metadata;
@@ -114,7 +112,6 @@ DBImpl::~DBImpl() {
   rocksdb::Info(opts.info_log, "bloom filter utility:    %0.1f%%",
                 (100.0 * s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL)) /
                     s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED));
-
 }
 
 DBStatus DBImpl::AssertPreClose() {
