@@ -90,6 +90,9 @@ var (
 	// localHLCUpperBoundSuffix stores an upper bound to the wall time used by
 	// the HLC
 	localHLCUpperBoundSuffix = []byte("hlcu")
+	// localWriteDiskSuffix stores nothing.
+	// It's used to write to local RocksDB before updating node liveness.
+	localWriteDiskSuffix = []byte("disk")
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")
