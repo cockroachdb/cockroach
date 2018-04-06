@@ -142,9 +142,9 @@ rocksdb::Status compareNonRandomKeyInfo(const enginepbccl::KeyInfo& actual,
 
   auto diff = actual.creation_time() - expected.approximate_timestamp;
   if (diff > 5 || diff < -5) {
-    return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("actual creation time %" PRId64 " does not match expected timestamp %" PRId64,
-                          actual.creation_time(), expected.approximate_timestamp));
+    return rocksdb::Status::InvalidArgument(fmt::StringPrintf(
+        "actual creation time %" PRId64 " does not match expected timestamp %" PRId64,
+        actual.creation_time(), expected.approximate_timestamp));
   }
 
   if (actual.source() != expected.source) {
