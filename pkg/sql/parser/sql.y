@@ -7880,6 +7880,7 @@ unreserved_keyword:
 | STATISTICS
 | STDIN
 | STORE
+| STORED
 | STORING
 | STRICT
 | STRING
@@ -8071,7 +8072,6 @@ reserved_keyword:
 | SELECT
 | SESSION_USER
 | SOME
-| STORED
 | SYMMETRIC
 | TABLE
 | THEN
