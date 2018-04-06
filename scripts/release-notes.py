@@ -6,7 +6,12 @@
 #
 # Note: the first commit in the range is excluded!
 #
-# Requires: GitPython https://pypi.python.org/pypi/GitPython/
+# Requires:
+#   - GitPython https://pypi.python.org/pypi/GitPython/
+#   - You need to configure your local repo to pull the PR refs from
+#     GitHub.  To do this, add a line like:
+#       fetch = +refs/pull/*/head:refs/pull/origin/*
+#     to the GitHub remote section of .git/config.
 #
 # Disclaimer: this program is provided without warranties of any kind,
 # including suitability for any purpose. The author(s) will not be
@@ -27,6 +32,8 @@ import datetime, time
 import subprocess
 from git import Repo
 from optparse import OptionParser
+from git.repo.fun import name_to_object
+from git.util import Stats
 
 ### Global behavior constants ###
 
@@ -158,6 +165,16 @@ form2 = r': *(?P<cat2>[^ ]*) *:'
 form3 = r':(?P<cat3>)'
 relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + form2 + '|' + form3 + r') *(?P<note>.*)$', flags=re.S)
 
+## Merge commit format ##
+
+# The following merge commits have been seen in the wild:
+#
+# Merge pull request #XXXXX from ...      <- GitHub merges
+# Merge #XXXXX #XXXXX #XXXXX              <- Bors merges
+merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
+# TODO(couchand): handle this:
+# <some PR title/commit message> (#XXXXX) <- GitHub squash merges
+
 ### Initialization / option parsing ###
 
 parser = OptionParser()
@@ -169,6 +186,8 @@ parser.add_option("-f", "--from", dest="from_commit",
                   help="list history from COMMIT. Note: the first commit is excluded.", metavar="COMMIT")
 parser.add_option("-t", "--until", dest="until_commit", default="HEAD",
                   help="list history up and until COMMIT (default: HEAD)", metavar="COMMIT")
+parser.add_option("-p", "--pull-ref", dest="pull_ref_prefix", default="refs/pull/origin",
+                  help="prefix for pull request refs (default: refs/pull/origin)", metavar="PREFIX")
 parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_shas", default=False,
                   help="omit commit SHAs from the release notes and per-contributor sections")
 parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
@@ -180,6 +199,7 @@ parser.add_option("--hide-downloads-section", action="store_true", dest="hide_do
 
 sortkey = options.sort_key
 revsort = options.reverse_sort
+pull_ref_prefix = options.pull_ref_prefix
 hideshas = options.hide_shas
 hidepercontributor = options.hide_per_contributor
 hidedownloads = options.hide_downloads
@@ -199,6 +219,8 @@ if commit == firstCommit:
     print("  %s --from xxx --until yyy >output.md" % sys.argv[0], file=sys.stderr)
     print("Note: the first commit is excluded. Use e.g.: --from <prev-release-tag> --until <new-release-candidate-sha>", file=sys.stderr)
     exit(0)
+
+# TODO(couchand): check here that pull_ref_prefix is valid
 
 ### Reading data from repository ###
 
@@ -264,29 +286,7 @@ def extract_release_notes(pr, title, commit):
     catnotes.append(item)
     release_notes[cat] = catnotes
 
-# This function groups and counts all the commits that belong to a particular PR.
-def collect_commits(pr, title, commits, author):
-    ncommits = 0
-    otherauthors = set()
-    for commit in commits:
-        if commit.message.startswith("Merge pull request"):
-            continue
-        extract_release_notes(pr, title, commit)
-
-        ncommits += 1
-        this_commits_author = author_aliases.get(commit.author.name, commit.author.name)
-        if commit.author.name != 'GitHub' and this_commits_author != author:
-            otherauthors.add(this_commits_author)
-        this_commits_committer = author_aliases.get(commit.committer.name, commit.committer.name)
-        if commit.committer.name != 'GitHub' and this_commits_committer != author:
-            otherauthors.add(this_commits_committer)
-
-        n, a = collect_commits(pr, title, list(commit.parents), author)
-        ncommits += n
-        otherauthors.update(a)
-    return ncommits, otherauthors
-
-per_author_history = {}
+per_group_history = {}
 individual_authors = set()
 allprs = set()
 
@@ -304,42 +304,97 @@ def spin():
         print(next(spinner),  end='', file=sys.stderr)
         sys.stderr.flush()
 
+# This function groups and counts all the commits that belong to a particular PR.
+def analyze_pr(merge, pr):
+    allprs.add(pr)
+
+    refname = pull_ref_prefix + "/" + pr[1:]
+    tip = name_to_object(repo, refname)
+
+    noteexpr = re.compile("^%s: (?P<message>.*) r=.* a=.*" % pr[1:], flags=re.M)
+    m = noteexpr.search(merge.message)
+    note = ''
+    if m is None:
+        # GitHub merge
+        note = '\n'.join(merge.message.split('\n')[2:])
+    else:
+        # Bors merge
+        note = m.group('message')
+
+    merge_base_result = repo.merge_base(merge.parents[0], tip)
+    if len(merge_base_result) == 0:
+        print("uh-oh!  can't find merge base!  pr", pr)
+        exit(-1)
+
+    merge_base = merge_base_result[0]
+
+    commit = tip
+
+    authors = set()
+    ncommits = 0
+    while not merge_numbers.match(commit.message):
+        spin()
+
+        # TODO(couchand): other merges???
+        if commit.message.startswith("Merge branch"):
+            # TODO(couchand): something
+            print("uh-oh!  can't handle branch merges!  pr", pr)
+            break
+
+        extract_release_notes(pr, note, commit)
+
+        ncommits += 1
+        author = author_aliases.get(commit.author.name, commit.author.name)
+        if author != 'GitHub':
+            authors.add(author)
+        committer = author_aliases.get(commit.committer.name, commit.committer.name)
+        if committer != 'GitHub':
+            authors.add(committer)
+
+        if len(commit.parents) == 0:
+            break
+        commit = commit.parents[0]
+
+    text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
+    stats = Stats._list_from_string(repo, text)
+
+    individual_authors.update(authors)
+
+    if len(authors) == 0:
+        authors.add("Unknown Author")
+
+    item = {
+        'title': note,
+        'pr': pr,
+        'sha': merge.hexsha[:shamin],
+        'ncommits': ncommits,
+        'authors': ", ".join(sorted(authors)),
+        'insertions': stats.total['insertions'],
+        'deletions': stats.total['deletions'],
+        'files': stats.total['files'],
+        'lines': stats.total['lines'],
+        }
+
+    history = per_group_history.get(item['authors'], [])
+    history.append(item)
+    per_group_history[item['authors']] = history
+
 while commit != firstCommit:
     spin()
 
+    numbermatch = merge_numbers.search(commit.message)
     # Analyze the commit
-    if commit.message.startswith("Merge pull request"):
-        author = (author_aliases.get(commit.author.name, commit.author.name), commit.author.email)
-        lines = commit.message.split('\n', 3)
-        pr = lines[0].split(' ', 4)[3]
-        allprs.add(pr)
-        title = lines[2]
-        ncommits, otherauthors = collect_commits(pr, title, list(commit.parents), author[0])
-        individual_authors.add(author[0])
-        individual_authors.update(otherauthors)
-
-        stats = commit.stats.total
-        item = {
-            'title': title,
-            'pr': pr,
-            'sha': commit.hexsha[:shamin],
-            'ncommits': ncommits,
-            'otherauthors': otherauthors,
-            'insertions': stats['insertions'],
-            'deletions': stats['deletions'],
-            'files': stats['files'],
-            'lines': stats['lines'],
-            }
-        history = per_author_history.get(author, [])
-        history.append(item)
-        per_author_history[author] = history
+    if numbermatch is not None:
+        prs = numbermatch.group("numbers").strip().split(" ")
+        for pr in prs:
+            analyze_pr(commit, pr)
 
     if len(commit.parents) == 0:
         break
     commit = commit.parents[0]
 
-allauthors = list(per_author_history.keys())
-allauthors.sort(key=lambda x:x[0].lower())
+allgroups = list(per_group_history.keys())
+allgroups.sort(key=lambda x:x.lower())
 
 ext_contributors = individual_authors - crdb_folk
 firsttime_contributors = []
@@ -502,16 +557,16 @@ print()
 
 ## Print the per-author contribution list.
 if not hidepercontributor:
-    print("### PRs merged by committer")
+    print("### PRs merged by contributors")
     print()
     if not hideshas:
         fmt = "  - [%(pr)-6s][%(pr)s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
     else:
         fmt = "  - [%(pr)-6s][%(pr)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
 
-    for author in allauthors:
-        items = per_author_history[author]
-        print("- %s:" % author_aliases.get(author[0], author[0]))
+    for group in allgroups:
+        items = per_group_history[group]
+        print("- %s:" % group)
         items.sort(key=lambda x:x[sortkey],reverse=not revsort)
         for item in items:
             print(fmt % item, end='')
@@ -519,15 +574,10 @@ if not hidepercontributor:
                 seenshas.add(item['sha'])
             seenprs.add(item['pr'])
 
-            ncommits, otherauthors = item['ncommits'], item['otherauthors']
-            if ncommits > 1 or len(otherauthors) > 0:
+            ncommits = item['ncommits']
+            if ncommits > 1:
                 print(" (", end='')
-                if ncommits > 1:
-                    print("%d commits" % ncommits, end='')
-                if len(otherauthors)> 0:
-                    if ncommits > 1:
-                        print(" ", end='')
-                    print("w/", ', '.join(otherauthors), end='')
+                print("%d commits" % ncommits, end='')
                 print(")", end='')
             print()
         print()
