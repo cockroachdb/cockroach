@@ -282,6 +282,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx,
 		s.clock,
 		s.db,
+		s.engines,
 		s.gossip,
 		nlActive,
 		nlRenewal,
