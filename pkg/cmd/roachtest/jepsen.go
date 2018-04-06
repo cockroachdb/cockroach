@@ -27,6 +27,31 @@ import (
 	"time"
 )
 
+var jepsenTests = []string{
+	"bank",
+	"bank-multitable",
+	// The comments test is expected to fail because it requires linearizability.
+	// "comments",
+	"g2",
+	"monotonic",
+	"register",
+	"sequential",
+	"sets",
+}
+
+var jepsenNemeses = []string{
+	"--nemesis majority-ring",
+	"--nemesis split",
+	"--nemesis start-kill-2",
+	"--nemesis start-stop-2",
+	"--nemesis strobe-skews",
+	"--nemesis subcritical-skews",
+	"--nemesis majority-ring --nemesis2 subcritical-skews",
+	"--nemesis subcritical-skews --nemesis2 start-kill-2",
+	"--nemesis majority-ring --nemesis2 start-kill-2",
+	"--nemesis parts --nemesis2 start-kill-2",
+}
+
 func runJepsen(ctx context.Context, t *test, c *cluster) {
 	if c.name == "local" {
 		t.Fatal("local execution not supported")
@@ -102,9 +127,8 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 
 	var failures []string
-	// TODO(bdarnell): add the rest of the tests and nemeses.
-	for _, testName := range []string{"bank", "g2"} {
-		for _, nemesis := range []string{"start-kill-2", "strobe-skews"} {
+	for _, testName := range jepsenTests {
+		for _, nemesis := range jepsenNemeses {
 			testCfg := fmt.Sprintf("%s/%s", testName, nemesis)
 			c.l.printf("%s: running\n", testCfg)
 
@@ -153,6 +177,10 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 				} else {
 					c.l.printf("%s: failed: %s\n", testCfg, testErr)
 					failures = append(failures, testCfg)
+					// collect the systemd log on failure to diagnose #20492.
+					// TODO(bdarnell): remove the next two lines when that's resolved.
+					c.l.printf("%s: systemd log:", testCfg)
+					c.Run(ctx, controller, "journalctl -x --no-pager")
 					c.l.printf("%s: grabbing artifacts from controller. Tail of controller log:\n", testCfg)
 					c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
 					cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
