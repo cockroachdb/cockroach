@@ -394,6 +394,7 @@ func BenchmarkSortAll(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			b.SetBytes(int64(inputSize * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				s.Run(nil)
@@ -443,6 +444,7 @@ func BenchmarkSortLimit(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
+				b.SetBytes(int64(limit * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					s.Run(nil)
