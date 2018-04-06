@@ -176,8 +176,6 @@ relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + fo
 # Merge pull request #XXXXX from ...      <- GitHub merges
 # Merge #XXXXX #XXXXX #XXXXX              <- Bors merges
 merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
-# TODO(couchand): handle this:
-# <some PR title/commit message> (#XXXXX) <- GitHub squash merges
 
 ### Initialization / option parsing ###
 
