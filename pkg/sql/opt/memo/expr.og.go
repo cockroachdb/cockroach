@@ -3778,3 +3778,479 @@ func (m *Memo) InternTypedExpr(val tree.TypedExpr) PrivateID {
 func (m *Memo) InternFuncOpDef(val *FuncOpDef) PrivateID {
 	return m.privateStorage.internFuncOpDef(val)
 }
+
+type makeExprFunc func(operands DynamicOperands) Expr
+
+var makeExprLookup [opt.NumOperators]makeExprFunc
+
+func init() {
+	// UnknownOp
+	makeExprLookup[opt.UnknownOp] = func(operands DynamicOperands) Expr {
+		panic("op type not initialized")
+	}
+
+	// ScanOp
+	makeExprLookup[opt.ScanOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeScanExpr(PrivateID(operands[0])))
+	}
+
+	// ValuesOp
+	makeExprLookup[opt.ValuesOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeValuesExpr(operands[0].ListID(), PrivateID(operands[1])))
+	}
+
+	// SelectOp
+	makeExprLookup[opt.SelectOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeSelectExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ProjectOp
+	makeExprLookup[opt.ProjectOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeProjectExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// InnerJoinOp
+	makeExprLookup[opt.InnerJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeInnerJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// LeftJoinOp
+	makeExprLookup[opt.LeftJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLeftJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// RightJoinOp
+	makeExprLookup[opt.RightJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeRightJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// FullJoinOp
+	makeExprLookup[opt.FullJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFullJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// SemiJoinOp
+	makeExprLookup[opt.SemiJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeSemiJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// AntiJoinOp
+	makeExprLookup[opt.AntiJoinOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeAntiJoinExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// InnerJoinApplyOp
+	makeExprLookup[opt.InnerJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeInnerJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// LeftJoinApplyOp
+	makeExprLookup[opt.LeftJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLeftJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// RightJoinApplyOp
+	makeExprLookup[opt.RightJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeRightJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// FullJoinApplyOp
+	makeExprLookup[opt.FullJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFullJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// SemiJoinApplyOp
+	makeExprLookup[opt.SemiJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeSemiJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// AntiJoinApplyOp
+	makeExprLookup[opt.AntiJoinApplyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeAntiJoinApplyExpr(GroupID(operands[0]), GroupID(operands[1]), GroupID(operands[2])))
+	}
+
+	// GroupByOp
+	makeExprLookup[opt.GroupByOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeGroupByExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// UnionOp
+	makeExprLookup[opt.UnionOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeUnionExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// IntersectOp
+	makeExprLookup[opt.IntersectOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeIntersectExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// ExceptOp
+	makeExprLookup[opt.ExceptOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeExceptExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// UnionAllOp
+	makeExprLookup[opt.UnionAllOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeUnionAllExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// IntersectAllOp
+	makeExprLookup[opt.IntersectAllOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeIntersectAllExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// ExceptAllOp
+	makeExprLookup[opt.ExceptAllOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeExceptAllExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// LimitOp
+	makeExprLookup[opt.LimitOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLimitExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// OffsetOp
+	makeExprLookup[opt.OffsetOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeOffsetExpr(GroupID(operands[0]), GroupID(operands[1]), PrivateID(operands[2])))
+	}
+
+	// Max1RowOp
+	makeExprLookup[opt.Max1RowOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeMax1RowExpr(GroupID(operands[0])))
+	}
+
+	// SubqueryOp
+	makeExprLookup[opt.SubqueryOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeSubqueryExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// AnyOp
+	makeExprLookup[opt.AnyOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeAnyExpr(GroupID(operands[0])))
+	}
+
+	// VariableOp
+	makeExprLookup[opt.VariableOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeVariableExpr(PrivateID(operands[0])))
+	}
+
+	// ConstOp
+	makeExprLookup[opt.ConstOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeConstExpr(PrivateID(operands[0])))
+	}
+
+	// NullOp
+	makeExprLookup[opt.NullOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNullExpr(PrivateID(operands[0])))
+	}
+
+	// TrueOp
+	makeExprLookup[opt.TrueOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeTrueExpr())
+	}
+
+	// FalseOp
+	makeExprLookup[opt.FalseOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFalseExpr())
+	}
+
+	// PlaceholderOp
+	makeExprLookup[opt.PlaceholderOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakePlaceholderExpr(PrivateID(operands[0])))
+	}
+
+	// TupleOp
+	makeExprLookup[opt.TupleOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeTupleExpr(operands[0].ListID()))
+	}
+
+	// ProjectionsOp
+	makeExprLookup[opt.ProjectionsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeProjectionsExpr(operands[0].ListID(), PrivateID(operands[1])))
+	}
+
+	// AggregationsOp
+	makeExprLookup[opt.AggregationsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeAggregationsExpr(operands[0].ListID(), PrivateID(operands[1])))
+	}
+
+	// ExistsOp
+	makeExprLookup[opt.ExistsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeExistsExpr(GroupID(operands[0])))
+	}
+
+	// FiltersOp
+	makeExprLookup[opt.FiltersOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFiltersExpr(operands[0].ListID()))
+	}
+
+	// AndOp
+	makeExprLookup[opt.AndOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeAndExpr(operands[0].ListID()))
+	}
+
+	// OrOp
+	makeExprLookup[opt.OrOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeOrExpr(operands[0].ListID()))
+	}
+
+	// NotOp
+	makeExprLookup[opt.NotOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotExpr(GroupID(operands[0])))
+	}
+
+	// EqOp
+	makeExprLookup[opt.EqOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeEqExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// LtOp
+	makeExprLookup[opt.LtOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLtExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// GtOp
+	makeExprLookup[opt.GtOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeGtExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// LeOp
+	makeExprLookup[opt.LeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// GeOp
+	makeExprLookup[opt.GeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeGeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NeOp
+	makeExprLookup[opt.NeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// InOp
+	makeExprLookup[opt.InOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeInExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotInOp
+	makeExprLookup[opt.NotInOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotInExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// LikeOp
+	makeExprLookup[opt.LikeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLikeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotLikeOp
+	makeExprLookup[opt.NotLikeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotLikeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ILikeOp
+	makeExprLookup[opt.ILikeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeILikeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotILikeOp
+	makeExprLookup[opt.NotILikeOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotILikeExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// SimilarToOp
+	makeExprLookup[opt.SimilarToOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeSimilarToExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotSimilarToOp
+	makeExprLookup[opt.NotSimilarToOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotSimilarToExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// RegMatchOp
+	makeExprLookup[opt.RegMatchOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeRegMatchExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotRegMatchOp
+	makeExprLookup[opt.NotRegMatchOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotRegMatchExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// RegIMatchOp
+	makeExprLookup[opt.RegIMatchOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeRegIMatchExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// NotRegIMatchOp
+	makeExprLookup[opt.NotRegIMatchOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeNotRegIMatchExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// IsOp
+	makeExprLookup[opt.IsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeIsExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// IsNotOp
+	makeExprLookup[opt.IsNotOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeIsNotExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ContainsOp
+	makeExprLookup[opt.ContainsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeContainsExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// JsonExistsOp
+	makeExprLookup[opt.JsonExistsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeJsonExistsExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// JsonAllExistsOp
+	makeExprLookup[opt.JsonAllExistsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeJsonAllExistsExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// JsonSomeExistsOp
+	makeExprLookup[opt.JsonSomeExistsOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeJsonSomeExistsExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// BitandOp
+	makeExprLookup[opt.BitandOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeBitandExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// BitorOp
+	makeExprLookup[opt.BitorOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeBitorExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// BitxorOp
+	makeExprLookup[opt.BitxorOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeBitxorExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// PlusOp
+	makeExprLookup[opt.PlusOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakePlusExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// MinusOp
+	makeExprLookup[opt.MinusOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeMinusExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// MultOp
+	makeExprLookup[opt.MultOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeMultExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// DivOp
+	makeExprLookup[opt.DivOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeDivExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// FloorDivOp
+	makeExprLookup[opt.FloorDivOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFloorDivExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ModOp
+	makeExprLookup[opt.ModOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeModExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// PowOp
+	makeExprLookup[opt.PowOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakePowExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ConcatOp
+	makeExprLookup[opt.ConcatOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeConcatExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// LShiftOp
+	makeExprLookup[opt.LShiftOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeLShiftExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// RShiftOp
+	makeExprLookup[opt.RShiftOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeRShiftExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// FetchValOp
+	makeExprLookup[opt.FetchValOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFetchValExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// FetchTextOp
+	makeExprLookup[opt.FetchTextOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFetchTextExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// FetchValPathOp
+	makeExprLookup[opt.FetchValPathOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFetchValPathExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// FetchTextPathOp
+	makeExprLookup[opt.FetchTextPathOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFetchTextPathExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// UnaryMinusOp
+	makeExprLookup[opt.UnaryMinusOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeUnaryMinusExpr(GroupID(operands[0])))
+	}
+
+	// UnaryComplementOp
+	makeExprLookup[opt.UnaryComplementOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeUnaryComplementExpr(GroupID(operands[0])))
+	}
+
+	// CastOp
+	makeExprLookup[opt.CastOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeCastExpr(GroupID(operands[0]), PrivateID(operands[1])))
+	}
+
+	// CaseOp
+	makeExprLookup[opt.CaseOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeCaseExpr(GroupID(operands[0]), operands[1].ListID()))
+	}
+
+	// WhenOp
+	makeExprLookup[opt.WhenOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeWhenExpr(GroupID(operands[0]), GroupID(operands[1])))
+	}
+
+	// ArrayOp
+	makeExprLookup[opt.ArrayOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeArrayExpr(operands[0].ListID(), PrivateID(operands[1])))
+	}
+
+	// FunctionOp
+	makeExprLookup[opt.FunctionOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeFunctionExpr(operands[0].ListID(), PrivateID(operands[1])))
+	}
+
+	// CoalesceOp
+	makeExprLookup[opt.CoalesceOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeCoalesceExpr(operands[0].ListID()))
+	}
+
+	// UnsupportedExprOp
+	makeExprLookup[opt.UnsupportedExprOp] = func(operands DynamicOperands) Expr {
+		return Expr(MakeUnsupportedExprExpr(PrivateID(operands[0])))
+	}
+
+}
+
+func MakeExpr(op opt.Operator, operands DynamicOperands) Expr {
+	return makeExprLookup[op](operands)
+}

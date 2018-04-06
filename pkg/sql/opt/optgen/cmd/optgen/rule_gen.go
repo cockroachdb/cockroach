@@ -706,9 +706,9 @@ func (g *ruleGen) genConstruct(construct *lang.ConstructExpr) {
 		ref := t.Args[0].(*lang.RefExpr)
 		g.w.nest("%s.DynamicConstruct(\n", factoryVar)
 		g.w.writeIndent("%s.mem.NormExpr(%s).Operator(),\n", g.thisVar, ref.Label)
-		g.w.nestIndent("DynamicOperands{\n")
+		g.w.nestIndent("memo.DynamicOperands{\n")
 		for _, arg := range construct.Args {
-			g.w.writeIndent("DynamicID(")
+			g.w.writeIndent("memo.DynamicID(")
 			g.genNestedExpr(arg)
 			g.w.write("),\n")
 		}

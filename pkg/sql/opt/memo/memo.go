@@ -188,6 +188,7 @@ func (m *Memo) AddAltFingerprint(alt Fingerprint, group GroupID) {
 // newGroup creates a new group and adds it to the memo.
 func (m *Memo) newGroup(norm Expr) *group {
 	id := GroupID(len(m.groups))
+	m.exprMap[norm.Fingerprint()] = id
 	m.groups = append(m.groups, makeMemoGroup(id, norm))
 	return &m.groups[len(m.groups)-1]
 }
@@ -232,8 +233,6 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	ev := MakeNormExprView(m, mgrp.id)
 	logPropsFactory := logicalPropsFactory{evalCtx: evalCtx}
 	mgrp.logical = logPropsFactory.constructProps(ev)
-
-	m.exprMap[norm.Fingerprint()] = mgrp.id
 	return mgrp.id
 }
 
