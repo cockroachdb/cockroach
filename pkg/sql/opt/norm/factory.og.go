@@ -140,7 +140,7 @@ func (_f *Factory) ConstructSelect(
 		_andExpr := _f.mem.NormExpr(filter).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureSelectFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureSelectFiltersAnd) {
 				_group = _f.ConstructSelect(
 					input,
 					_f.ConstructFilters(
@@ -148,6 +148,9 @@ func (_f *Factory) ConstructSelect(
 					),
 				)
 				_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureSelectFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -157,7 +160,7 @@ func (_f *Factory) ConstructSelect(
 	{
 		_expr := _f.mem.NormExpr(filter)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureSelectFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureSelectFilters) {
 				_group = _f.ConstructSelect(
 					input,
 					_f.ConstructFilters(
@@ -165,6 +168,9 @@ func (_f *Factory) ConstructSelect(
 					),
 				)
 				_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureSelectFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -174,9 +180,12 @@ func (_f *Factory) ConstructSelect(
 	{
 		_trueExpr := _f.mem.NormExpr(filter).AsTrue()
 		if _trueExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateSelect) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateSelect) {
 				_group = input
 				_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateSelect, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -188,12 +197,15 @@ func (_f *Factory) ConstructSelect(
 		if _selectExpr2 != nil {
 			input := _selectExpr2.Input()
 			innerFilter := _selectExpr2.Filter()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.MergeSelects) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.MergeSelects) {
 				_group = _f.ConstructSelect(
 					input,
 					_f.concatFilters(innerFilter, filter),
 				)
 				_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.MergeSelects, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -212,7 +224,7 @@ func (_f *Factory) ConstructSelect(
 				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelatedCols(condition, _f.synthesizedCols(project)) {
-						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoProject) {
+						if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoProject) {
 							_group = _f.ConstructSelect(
 								_f.projectNoCycle(_f.ConstructSelect(
 									input,
@@ -225,6 +237,9 @@ func (_f *Factory) ConstructSelect(
 								),
 							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+							if _f.appliedRule != nil {
+								_f.appliedRule(opt.PushSelectIntoProject, _group, 0)
+							}
 							return _group
 						}
 					}
@@ -246,7 +261,7 @@ func (_f *Factory) ConstructSelect(
 				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, right) {
-						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoJoinLeft) {
+						if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoJoinLeft) {
 							_group = _f.ConstructSelect(
 								_f.DynamicConstruct(
 									_f.mem.NormExpr(input).Operator(),
@@ -266,6 +281,9 @@ func (_f *Factory) ConstructSelect(
 								),
 							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+							if _f.appliedRule != nil {
+								_f.appliedRule(opt.PushSelectIntoJoinLeft, _group, 0)
+							}
 							return _group
 						}
 					}
@@ -287,7 +305,7 @@ func (_f *Factory) ConstructSelect(
 				for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, left) {
-						if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoJoinRight) {
+						if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoJoinRight) {
 							_group = _f.ConstructSelect(
 								_f.DynamicConstruct(
 									_f.mem.NormExpr(input).Operator(),
@@ -307,6 +325,9 @@ func (_f *Factory) ConstructSelect(
 								),
 							)
 							_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+							if _f.appliedRule != nil {
+								_f.appliedRule(opt.PushSelectIntoJoinRight, _group, 0)
+							}
 							return _group
 						}
 					}
@@ -322,7 +343,7 @@ func (_f *Factory) ConstructSelect(
 			left := _expr.ChildGroup(_f.mem, 0)
 			right := _expr.ChildGroup(_f.mem, 1)
 			on := _expr.ChildGroup(_f.mem, 2)
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.MergeSelectInnerJoin) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.MergeSelectInnerJoin) {
 				_group = _f.DynamicConstruct(
 					_f.mem.NormExpr(input).Operator(),
 					memo.DynamicOperands{
@@ -332,6 +353,9 @@ func (_f *Factory) ConstructSelect(
 					},
 				)
 				_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.MergeSelectInnerJoin, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -351,7 +375,7 @@ func (_f *Factory) ConstructSelect(
 					for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 						condition := _item
 						if !_f.isCorrelated(condition, aggregations) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushSelectIntoGroupBy) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.PushSelectIntoGroupBy) {
 								_group = _f.ConstructSelect(
 									_f.ConstructGroupBy(
 										_f.ConstructSelect(
@@ -368,6 +392,9 @@ func (_f *Factory) ConstructSelect(
 									),
 								)
 								_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.PushSelectIntoGroupBy, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -399,9 +426,12 @@ func (_f *Factory) ConstructProject(
 	// [EliminateProject]
 	{
 		if _f.hasSameCols(input, projections) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateProject) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateProject) {
 				_group = input
 				_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateProject, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -413,12 +443,15 @@ func (_f *Factory) ConstructProject(
 		if _projectExpr2 != nil {
 			innerInput := _projectExpr2.Input()
 			if _f.hasSubsetCols(input, innerInput) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateProjectProject) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.EliminateProjectProject) {
 					_group = _f.ConstructProject(
 						innerInput,
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.EliminateProjectProject, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -432,7 +465,7 @@ func (_f *Factory) ConstructProject(
 			innerInput := _projectExpr2.Input()
 			innerProjections := _projectExpr2.Projections()
 			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedProjectCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedProjectCols) {
 					_group = _f.ConstructProject(
 						_f.ConstructProject(
 							innerInput,
@@ -441,6 +474,9 @@ func (_f *Factory) ConstructProject(
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedProjectCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -452,12 +488,15 @@ func (_f *Factory) ConstructProject(
 		_scanExpr := _f.mem.NormExpr(input).AsScan()
 		if _scanExpr != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedScanCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedScanCols) {
 					_group = _f.ConstructProject(
 						_f.filterUnusedColumns(input, _f.neededCols(projections)),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedScanCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -472,7 +511,7 @@ func (_f *Factory) ConstructProject(
 			filter := _selectExpr.Filter()
 			if _f.hasUnusedColumns(input, _f.neededCols2(projections, filter)) {
 				if !_f.ruleCycles[_projectExpr.Fingerprint()] {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedSelectCols) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedSelectCols) {
 						_f.ruleCycles[_projectExpr.Fingerprint()] = true
 						_group = _f.ConstructProject(
 							_f.ConstructSelect(
@@ -484,6 +523,9 @@ func (_f *Factory) ConstructProject(
 						delete(_f.ruleCycles, _projectExpr.Fingerprint())
 						if _f.mem.GroupByFingerprint(_projectExpr.Fingerprint()) == 0 {
 							_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+						}
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FilterUnusedSelectCols, _group, 0)
 						}
 						return _group
 					}
@@ -500,12 +542,15 @@ func (_f *Factory) ConstructProject(
 			limit := _limitExpr.Limit()
 			ordering := _limitExpr.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedLimitCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedLimitCols) {
 					_group = _f.ConstructProject(
 						_f.limitNoCycle(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedLimitCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -520,12 +565,15 @@ func (_f *Factory) ConstructProject(
 			offset := _offsetExpr.Offset()
 			ordering := _offsetExpr.Ordering()
 			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedOffsetCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedOffsetCols) {
 					_group = _f.ConstructProject(
 						_f.offsetNoCycle(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedOffsetCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -540,7 +588,7 @@ func (_f *Factory) ConstructProject(
 			right := _expr.ChildGroup(_f.mem, 1)
 			on := _expr.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedJoinLeftCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedJoinLeftCols) {
 					_group = _f.ConstructProject(
 						_f.DynamicConstruct(
 							_f.mem.NormExpr(input).Operator(),
@@ -553,6 +601,9 @@ func (_f *Factory) ConstructProject(
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedJoinLeftCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -567,7 +618,7 @@ func (_f *Factory) ConstructProject(
 			right := _expr.ChildGroup(_f.mem, 1)
 			on := _expr.ChildGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedJoinRightCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedJoinRightCols) {
 					_group = _f.ConstructProject(
 						_f.DynamicConstruct(
 							_f.mem.NormExpr(input).Operator(),
@@ -580,6 +631,9 @@ func (_f *Factory) ConstructProject(
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedJoinRightCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -594,7 +648,7 @@ func (_f *Factory) ConstructProject(
 			aggregations := _groupByExpr.Aggregations()
 			groupingCols := _groupByExpr.GroupingCols()
 			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedAggCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedAggCols) {
 					_group = _f.ConstructProject(
 						_f.ConstructGroupBy(
 							innerInput,
@@ -604,6 +658,9 @@ func (_f *Factory) ConstructProject(
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedAggCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -615,12 +672,15 @@ func (_f *Factory) ConstructProject(
 		_valuesExpr := _f.mem.NormExpr(input).AsValues()
 		if _valuesExpr != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedValueCols) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedValueCols) {
 					_group = _f.ConstructProject(
 						_f.filterUnusedColumns(input, _f.neededCols(projections)),
 						projections,
 					)
 					_f.mem.AddAltFingerprint(_projectExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FilterUnusedValueCols, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -652,7 +712,7 @@ func (_f *Factory) ConstructInnerJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructInnerJoin(
 					left,
 					right,
@@ -661,6 +721,9 @@ func (_f *Factory) ConstructInnerJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -671,7 +734,7 @@ func (_f *Factory) ConstructInnerJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructInnerJoin(
 					left,
 					right,
@@ -680,6 +743,9 @@ func (_f *Factory) ConstructInnerJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -693,7 +759,7 @@ func (_f *Factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructInnerJoin(
 							_f.ConstructSelect(
 								left,
@@ -707,6 +773,9 @@ func (_f *Factory) ConstructInnerJoin(
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinLeft, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -722,7 +791,7 @@ func (_f *Factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructInnerJoin(
 							left,
 							_f.ConstructSelect(
@@ -736,6 +805,9 @@ func (_f *Factory) ConstructInnerJoin(
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinRight, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -763,7 +835,7 @@ func (_f *Factory) ConstructLeftJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructLeftJoin(
 					left,
 					right,
@@ -772,6 +844,9 @@ func (_f *Factory) ConstructLeftJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -782,7 +857,7 @@ func (_f *Factory) ConstructLeftJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructLeftJoin(
 					left,
 					right,
@@ -791,6 +866,9 @@ func (_f *Factory) ConstructLeftJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -804,7 +882,7 @@ func (_f *Factory) ConstructLeftJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructLeftJoin(
 							left,
 							_f.ConstructSelect(
@@ -818,6 +896,9 @@ func (_f *Factory) ConstructLeftJoin(
 							),
 						)
 						_f.mem.AddAltFingerprint(_leftJoinExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinRight, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -845,7 +926,7 @@ func (_f *Factory) ConstructRightJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructRightJoin(
 					left,
 					right,
@@ -854,6 +935,9 @@ func (_f *Factory) ConstructRightJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -864,7 +948,7 @@ func (_f *Factory) ConstructRightJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructRightJoin(
 					left,
 					right,
@@ -873,6 +957,9 @@ func (_f *Factory) ConstructRightJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -886,7 +973,7 @@ func (_f *Factory) ConstructRightJoin(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructRightJoin(
 							_f.ConstructSelect(
 								left,
@@ -900,6 +987,9 @@ func (_f *Factory) ConstructRightJoin(
 							),
 						)
 						_f.mem.AddAltFingerprint(_rightJoinExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinLeft, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -927,7 +1017,7 @@ func (_f *Factory) ConstructFullJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructFullJoin(
 					left,
 					right,
@@ -936,6 +1026,9 @@ func (_f *Factory) ConstructFullJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_fullJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -946,7 +1039,7 @@ func (_f *Factory) ConstructFullJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructFullJoin(
 					left,
 					right,
@@ -955,6 +1048,9 @@ func (_f *Factory) ConstructFullJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_fullJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -980,7 +1076,7 @@ func (_f *Factory) ConstructSemiJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructSemiJoin(
 					left,
 					right,
@@ -989,6 +1085,9 @@ func (_f *Factory) ConstructSemiJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_semiJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -999,7 +1098,7 @@ func (_f *Factory) ConstructSemiJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructSemiJoin(
 					left,
 					right,
@@ -1008,6 +1107,9 @@ func (_f *Factory) ConstructSemiJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_semiJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1033,7 +1135,7 @@ func (_f *Factory) ConstructAntiJoin(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructAntiJoin(
 					left,
 					right,
@@ -1042,6 +1144,9 @@ func (_f *Factory) ConstructAntiJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_antiJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1052,7 +1157,7 @@ func (_f *Factory) ConstructAntiJoin(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructAntiJoin(
 					left,
 					right,
@@ -1061,6 +1166,9 @@ func (_f *Factory) ConstructAntiJoin(
 					),
 				)
 				_f.mem.AddAltFingerprint(_antiJoinExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1089,7 +1197,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructInnerJoinApply(
 					left,
 					right,
@@ -1098,6 +1206,9 @@ func (_f *Factory) ConstructInnerJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1108,7 +1219,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructInnerJoinApply(
 					left,
 					right,
@@ -1117,6 +1228,9 @@ func (_f *Factory) ConstructInnerJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1130,7 +1244,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructInnerJoinApply(
 							_f.ConstructSelect(
 								left,
@@ -1144,6 +1258,9 @@ func (_f *Factory) ConstructInnerJoinApply(
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinLeft, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -1159,7 +1276,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructInnerJoinApply(
 							left,
 							_f.ConstructSelect(
@@ -1173,6 +1290,9 @@ func (_f *Factory) ConstructInnerJoinApply(
 							),
 						)
 						_f.mem.AddAltFingerprint(_innerJoinApplyExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinRight, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -1200,7 +1320,7 @@ func (_f *Factory) ConstructLeftJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructLeftJoinApply(
 					left,
 					right,
@@ -1209,6 +1329,9 @@ func (_f *Factory) ConstructLeftJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1219,7 +1342,7 @@ func (_f *Factory) ConstructLeftJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructLeftJoinApply(
 					left,
 					right,
@@ -1228,6 +1351,9 @@ func (_f *Factory) ConstructLeftJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1241,7 +1367,7 @@ func (_f *Factory) ConstructLeftJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinRight) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinRight) {
 						_group = _f.ConstructLeftJoinApply(
 							left,
 							_f.ConstructSelect(
@@ -1255,6 +1381,9 @@ func (_f *Factory) ConstructLeftJoinApply(
 							),
 						)
 						_f.mem.AddAltFingerprint(_leftJoinApplyExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinRight, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -1282,7 +1411,7 @@ func (_f *Factory) ConstructRightJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructRightJoinApply(
 					left,
 					right,
@@ -1291,6 +1420,9 @@ func (_f *Factory) ConstructRightJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1301,7 +1433,7 @@ func (_f *Factory) ConstructRightJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructRightJoinApply(
 					left,
 					right,
@@ -1310,6 +1442,9 @@ func (_f *Factory) ConstructRightJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1323,7 +1458,7 @@ func (_f *Factory) ConstructRightJoinApply(
 			for _, _item := range _f.mem.LookupList(_filtersExpr.Conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushFilterIntoJoinLeft) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.PushFilterIntoJoinLeft) {
 						_group = _f.ConstructRightJoinApply(
 							_f.ConstructSelect(
 								left,
@@ -1337,6 +1472,9 @@ func (_f *Factory) ConstructRightJoinApply(
 							),
 						)
 						_f.mem.AddAltFingerprint(_rightJoinApplyExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.PushFilterIntoJoinLeft, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -1364,7 +1502,7 @@ func (_f *Factory) ConstructFullJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructFullJoinApply(
 					left,
 					right,
@@ -1373,6 +1511,9 @@ func (_f *Factory) ConstructFullJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_fullJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1383,7 +1524,7 @@ func (_f *Factory) ConstructFullJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructFullJoinApply(
 					left,
 					right,
@@ -1392,6 +1533,9 @@ func (_f *Factory) ConstructFullJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_fullJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1417,7 +1561,7 @@ func (_f *Factory) ConstructSemiJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructSemiJoinApply(
 					left,
 					right,
@@ -1426,6 +1570,9 @@ func (_f *Factory) ConstructSemiJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_semiJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1436,7 +1583,7 @@ func (_f *Factory) ConstructSemiJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructSemiJoinApply(
 					left,
 					right,
@@ -1445,6 +1592,9 @@ func (_f *Factory) ConstructSemiJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_semiJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1470,7 +1620,7 @@ func (_f *Factory) ConstructAntiJoinApply(
 		_andExpr := _f.mem.NormExpr(on).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFiltersAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFiltersAnd) {
 				_group = _f.ConstructAntiJoinApply(
 					left,
 					right,
@@ -1479,6 +1629,9 @@ func (_f *Factory) ConstructAntiJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_antiJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFiltersAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1489,7 +1642,7 @@ func (_f *Factory) ConstructAntiJoinApply(
 		filter := on
 		_expr := _f.mem.NormExpr(on)
 		if !(_expr.Operator() == opt.FiltersOp || _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EnsureJoinFilters) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EnsureJoinFilters) {
 				_group = _f.ConstructAntiJoinApply(
 					left,
 					right,
@@ -1498,6 +1651,9 @@ func (_f *Factory) ConstructAntiJoinApply(
 					),
 				)
 				_f.mem.AddAltFingerprint(_antiJoinApplyExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EnsureJoinFilters, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1527,9 +1683,12 @@ func (_f *Factory) ConstructGroupBy(
 	{
 		if _f.hasNoCols(aggregations) {
 			if _f.colsAreKey(groupingCols, input) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateDistinct) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.EliminateDistinct) {
 					_group = input
 					_f.mem.AddAltFingerprint(_groupByExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.EliminateDistinct, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -1539,13 +1698,16 @@ func (_f *Factory) ConstructGroupBy(
 	// [FilterUnusedGroupByCols]
 	{
 		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedGroupByCols) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FilterUnusedGroupByCols) {
 				_group = _f.ConstructGroupBy(
 					_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)),
 					aggregations,
 					groupingCols,
 				)
 				_f.mem.AddAltFingerprint(_groupByExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FilterUnusedGroupByCols, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -1737,7 +1899,7 @@ func (_f *Factory) ConstructLimit(
 			input := _projectExpr.Input()
 			projections := _projectExpr.Projections()
 			if !_f.ruleCycles[_limitExpr.Fingerprint()] {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushLimitIntoProject) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.PushLimitIntoProject) {
 					_f.ruleCycles[_limitExpr.Fingerprint()] = true
 					_group = _f.ConstructProject(
 						_f.ConstructLimit(
@@ -1750,6 +1912,9 @@ func (_f *Factory) ConstructLimit(
 					delete(_f.ruleCycles, _limitExpr.Fingerprint())
 					if _f.mem.GroupByFingerprint(_limitExpr.Fingerprint()) == 0 {
 						_f.mem.AddAltFingerprint(_limitExpr.Fingerprint(), _group)
+					}
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.PushLimitIntoProject, _group, 0)
 					}
 					return _group
 				}
@@ -1781,7 +1946,7 @@ func (_f *Factory) ConstructOffset(
 			input := _projectExpr.Input()
 			projections := _projectExpr.Projections()
 			if !_f.ruleCycles[_offsetExpr.Fingerprint()] {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.PushOffsetIntoProject) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.PushOffsetIntoProject) {
 					_f.ruleCycles[_offsetExpr.Fingerprint()] = true
 					_group = _f.ConstructProject(
 						_f.ConstructOffset(
@@ -1794,6 +1959,9 @@ func (_f *Factory) ConstructOffset(
 					delete(_f.ruleCycles, _offsetExpr.Fingerprint())
 					if _f.mem.GroupByFingerprint(_offsetExpr.Fingerprint()) == 0 {
 						_f.mem.AddAltFingerprint(_offsetExpr.Fingerprint(), _group)
+					}
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.PushOffsetIntoProject, _group, 0)
 					}
 					return _group
 				}
@@ -2084,9 +2252,12 @@ func (_f *Factory) ConstructFilters(
 	// [EliminateEmptyAnd]
 	{
 		if conditions.Length == 0 {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateEmptyAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateEmptyAnd) {
 				_group = _f.ConstructTrue()
 				_f.mem.AddAltFingerprint(_filtersExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateEmptyAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2097,9 +2268,12 @@ func (_f *Factory) ConstructFilters(
 		for _, _item := range _f.mem.LookupList(conditions) {
 			_expr := _f.mem.NormExpr(_item)
 			if _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp || _expr.Operator() == opt.NullOp {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.SimplifyFilters) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.SimplifyFilters) {
 					_group = _f.simplifyFilters(conditions)
 					_f.mem.AddAltFingerprint(_filtersExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.SimplifyFilters, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2125,9 +2299,12 @@ func (_f *Factory) ConstructAnd(
 	// [EliminateEmptyAnd]
 	{
 		if conditions.Length == 0 {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateEmptyAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateEmptyAnd) {
 				_group = _f.ConstructTrue()
 				_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateEmptyAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2138,9 +2315,12 @@ func (_f *Factory) ConstructAnd(
 		if conditions.Length == 1 {
 			_item := _f.mem.LookupList(conditions)[0]
 			item := _item
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateSingletonAndOr) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateSingletonAndOr) {
 				_group = item
 				_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateSingletonAndOr, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2151,9 +2331,12 @@ func (_f *Factory) ConstructAnd(
 		for _, _item := range _f.mem.LookupList(conditions) {
 			_expr := _f.mem.NormExpr(_item)
 			if _expr.Operator() == opt.AndOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.SimplifyAnd) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.SimplifyAnd) {
 					_group = _f.simplifyAnd(conditions)
 					_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.SimplifyAnd, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2167,11 +2350,14 @@ func (_f *Factory) ConstructAnd(
 			_nullExpr := _f.mem.NormExpr(_item).AsNull()
 			if _nullExpr != nil {
 				if _f.listOnlyHasNulls(conditions) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullAndOr) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullAndOr) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_andExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullAndOr, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -2198,9 +2384,12 @@ func (_f *Factory) ConstructOr(
 	// [EliminateEmptyOr]
 	{
 		if conditions.Length == 0 {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateEmptyOr) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateEmptyOr) {
 				_group = _f.ConstructFalse()
 				_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateEmptyOr, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2211,9 +2400,12 @@ func (_f *Factory) ConstructOr(
 		if conditions.Length == 1 {
 			_item := _f.mem.LookupList(conditions)[0]
 			item := _item
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateSingletonAndOr) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateSingletonAndOr) {
 				_group = item
 				_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateSingletonAndOr, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2224,9 +2416,12 @@ func (_f *Factory) ConstructOr(
 		for _, _item := range _f.mem.LookupList(conditions) {
 			_expr := _f.mem.NormExpr(_item)
 			if _expr.Operator() == opt.OrOp || _expr.Operator() == opt.TrueOp || _expr.Operator() == opt.FalseOp {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.SimplifyOr) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.SimplifyOr) {
 					_group = _f.simplifyOr(conditions)
 					_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.SimplifyOr, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2240,11 +2435,14 @@ func (_f *Factory) ConstructOr(
 			_nullExpr := _f.mem.NormExpr(_item).AsNull()
 			if _nullExpr != nil {
 				if _f.listOnlyHasNulls(conditions) {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullAndOr) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullAndOr) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_orExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullAndOr, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -2275,9 +2473,12 @@ func (_f *Factory) ConstructNot(
 			right := _expr.ChildGroup(_f.mem, 1)
 			_expr2 := _f.mem.NormExpr(input)
 			if !(_expr2.Operator() == opt.ContainsOp || _expr2.Operator() == opt.JsonExistsOp || _expr2.Operator() == opt.JsonSomeExistsOp || _expr2.Operator() == opt.JsonAllExistsOp) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NegateComparison) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.NegateComparison) {
 					_group = _f.negateComparison(_f.mem.NormExpr(input).Operator(), left, right)
 					_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.NegateComparison, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2289,9 +2490,12 @@ func (_f *Factory) ConstructNot(
 		_notExpr2 := _f.mem.NormExpr(input).AsNot()
 		if _notExpr2 != nil {
 			input := _notExpr2.Input()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateNot) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateNot) {
 				_group = input
 				_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateNot, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2302,11 +2506,14 @@ func (_f *Factory) ConstructNot(
 		_andExpr := _f.mem.NormExpr(input).AsAnd()
 		if _andExpr != nil {
 			conditions := _andExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NegateAnd) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.NegateAnd) {
 				_group = _f.ConstructOr(
 					_f.negateConditions(conditions),
 				)
 				_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.NegateAnd, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2317,11 +2524,14 @@ func (_f *Factory) ConstructNot(
 		_orExpr := _f.mem.NormExpr(input).AsOr()
 		if _orExpr != nil {
 			conditions := _orExpr.Conditions()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NegateOr) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.NegateOr) {
 				_group = _f.ConstructAnd(
 					_f.negateConditions(conditions),
 				)
 				_f.mem.AddAltFingerprint(_notExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.NegateOr, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2351,7 +2561,7 @@ func (_f *Factory) ConstructEq(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpPlusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpPlusConst) {
 								_group = _f.ConstructEq(
 									leftLeft,
 									_f.ConstructMinus(
@@ -2360,6 +2570,9 @@ func (_f *Factory) ConstructEq(
 									),
 								)
 								_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpPlusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2379,7 +2592,7 @@ func (_f *Factory) ConstructEq(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpMinusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpMinusConst) {
 								_group = _f.ConstructEq(
 									leftLeft,
 									_f.ConstructPlus(
@@ -2388,6 +2601,9 @@ func (_f *Factory) ConstructEq(
 									),
 								)
 								_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpMinusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2407,7 +2623,7 @@ func (_f *Factory) ConstructEq(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpConstMinus) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpConstMinus) {
 								_group = _f.ConstructEq(
 									_f.ConstructMinus(
 										leftLeft,
@@ -2416,6 +2632,9 @@ func (_f *Factory) ConstructEq(
 									leftRight,
 								)
 								_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpConstMinus, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2433,9 +2652,12 @@ func (_f *Factory) ConstructEq(
 			_tupleExpr2 := _f.mem.NormExpr(right).AsTuple()
 			if _tupleExpr2 != nil {
 				right := _tupleExpr2.Elems()
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeTupleEquality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeTupleEquality) {
 					_group = _f.normalizeTupleEquality(left, right)
 					_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.NormalizeTupleEquality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2446,11 +2668,14 @@ func (_f *Factory) ConstructEq(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2460,11 +2685,14 @@ func (_f *Factory) ConstructEq(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2476,12 +2704,15 @@ func (_f *Factory) ConstructEq(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructEq(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2492,12 +2723,15 @@ func (_f *Factory) ConstructEq(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructEq(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_eqExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2524,9 +2758,12 @@ func (_f *Factory) ConstructLt(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVarInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVarInequality) {
 					_group = _f.commuteInequality(opt.LtOp, left, right)
 					_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVarInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2537,9 +2774,12 @@ func (_f *Factory) ConstructLt(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConstInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConstInequality) {
 					_group = _f.commuteInequality(opt.LtOp, left, right)
 					_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConstInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2556,7 +2796,7 @@ func (_f *Factory) ConstructLt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpPlusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpPlusConst) {
 								_group = _f.ConstructLt(
 									leftLeft,
 									_f.ConstructMinus(
@@ -2565,6 +2805,9 @@ func (_f *Factory) ConstructLt(
 									),
 								)
 								_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpPlusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2584,7 +2827,7 @@ func (_f *Factory) ConstructLt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpMinusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpMinusConst) {
 								_group = _f.ConstructLt(
 									leftLeft,
 									_f.ConstructPlus(
@@ -2593,6 +2836,9 @@ func (_f *Factory) ConstructLt(
 									),
 								)
 								_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpMinusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2612,7 +2858,7 @@ func (_f *Factory) ConstructLt(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpConstMinus) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpConstMinus) {
 								_group = _f.ConstructLt(
 									_f.ConstructMinus(
 										leftLeft,
@@ -2621,6 +2867,9 @@ func (_f *Factory) ConstructLt(
 									leftRight,
 								)
 								_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpConstMinus, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2634,11 +2883,14 @@ func (_f *Factory) ConstructLt(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2648,11 +2900,14 @@ func (_f *Factory) ConstructLt(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_ltExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2678,9 +2933,12 @@ func (_f *Factory) ConstructGt(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVarInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVarInequality) {
 					_group = _f.commuteInequality(opt.GtOp, left, right)
 					_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVarInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2691,9 +2949,12 @@ func (_f *Factory) ConstructGt(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConstInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConstInequality) {
 					_group = _f.commuteInequality(opt.GtOp, left, right)
 					_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConstInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2710,7 +2971,7 @@ func (_f *Factory) ConstructGt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpPlusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpPlusConst) {
 								_group = _f.ConstructGt(
 									leftLeft,
 									_f.ConstructMinus(
@@ -2719,6 +2980,9 @@ func (_f *Factory) ConstructGt(
 									),
 								)
 								_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpPlusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2738,7 +3002,7 @@ func (_f *Factory) ConstructGt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpMinusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpMinusConst) {
 								_group = _f.ConstructGt(
 									leftLeft,
 									_f.ConstructPlus(
@@ -2747,6 +3011,9 @@ func (_f *Factory) ConstructGt(
 									),
 								)
 								_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpMinusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2766,7 +3033,7 @@ func (_f *Factory) ConstructGt(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpConstMinus) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpConstMinus) {
 								_group = _f.ConstructGt(
 									_f.ConstructMinus(
 										leftLeft,
@@ -2775,6 +3042,9 @@ func (_f *Factory) ConstructGt(
 									leftRight,
 								)
 								_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpConstMinus, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2788,11 +3058,14 @@ func (_f *Factory) ConstructGt(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2802,11 +3075,14 @@ func (_f *Factory) ConstructGt(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_gtExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2832,9 +3108,12 @@ func (_f *Factory) ConstructLe(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVarInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVarInequality) {
 					_group = _f.commuteInequality(opt.LeOp, left, right)
 					_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVarInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2845,9 +3124,12 @@ func (_f *Factory) ConstructLe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConstInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConstInequality) {
 					_group = _f.commuteInequality(opt.LeOp, left, right)
 					_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConstInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2864,7 +3146,7 @@ func (_f *Factory) ConstructLe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpPlusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpPlusConst) {
 								_group = _f.ConstructLe(
 									leftLeft,
 									_f.ConstructMinus(
@@ -2873,6 +3155,9 @@ func (_f *Factory) ConstructLe(
 									),
 								)
 								_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpPlusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2892,7 +3177,7 @@ func (_f *Factory) ConstructLe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpMinusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpMinusConst) {
 								_group = _f.ConstructLe(
 									leftLeft,
 									_f.ConstructPlus(
@@ -2901,6 +3186,9 @@ func (_f *Factory) ConstructLe(
 									),
 								)
 								_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpMinusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2920,7 +3208,7 @@ func (_f *Factory) ConstructLe(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpConstMinus) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpConstMinus) {
 								_group = _f.ConstructLe(
 									_f.ConstructMinus(
 										leftLeft,
@@ -2929,6 +3217,9 @@ func (_f *Factory) ConstructLe(
 									leftRight,
 								)
 								_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpConstMinus, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -2942,11 +3233,14 @@ func (_f *Factory) ConstructLe(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2956,11 +3250,14 @@ func (_f *Factory) ConstructLe(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_leExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -2986,9 +3283,12 @@ func (_f *Factory) ConstructGe(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVarInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVarInequality) {
 					_group = _f.commuteInequality(opt.GeOp, left, right)
 					_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVarInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -2999,9 +3299,12 @@ func (_f *Factory) ConstructGe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConstInequality) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConstInequality) {
 					_group = _f.commuteInequality(opt.GeOp, left, right)
 					_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConstInequality, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3018,7 +3321,7 @@ func (_f *Factory) ConstructGe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpPlusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpPlusConst) {
 								_group = _f.ConstructGe(
 									leftLeft,
 									_f.ConstructMinus(
@@ -3027,6 +3330,9 @@ func (_f *Factory) ConstructGe(
 									),
 								)
 								_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpPlusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -3046,7 +3352,7 @@ func (_f *Factory) ConstructGe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpMinusConst) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpMinusConst) {
 								_group = _f.ConstructGe(
 									leftLeft,
 									_f.ConstructPlus(
@@ -3055,6 +3361,9 @@ func (_f *Factory) ConstructGe(
 									),
 								)
 								_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpMinusConst, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -3074,7 +3383,7 @@ func (_f *Factory) ConstructGe(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeCmpConstMinus) {
+							if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeCmpConstMinus) {
 								_group = _f.ConstructGe(
 									_f.ConstructMinus(
 										leftLeft,
@@ -3083,6 +3392,9 @@ func (_f *Factory) ConstructGe(
 									leftRight,
 								)
 								_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+								if _f.appliedRule != nil {
+									_f.appliedRule(opt.NormalizeCmpConstMinus, _group, 0)
+								}
 								return _group
 							}
 						}
@@ -3096,11 +3408,14 @@ func (_f *Factory) ConstructGe(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3110,11 +3425,14 @@ func (_f *Factory) ConstructGe(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_geExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3138,11 +3456,14 @@ func (_f *Factory) ConstructNe(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3152,11 +3473,14 @@ func (_f *Factory) ConstructNe(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3168,12 +3492,15 @@ func (_f *Factory) ConstructNe(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructNe(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3184,12 +3511,15 @@ func (_f *Factory) ConstructNe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructNe(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_neExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3217,11 +3547,14 @@ func (_f *Factory) ConstructIn(
 			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
 			if _tupleExpr != nil {
 				if _tupleExpr.Elems().Length != 0 {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullInNonEmpty) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullInNonEmpty) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullInNonEmpty, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3236,9 +3569,12 @@ func (_f *Factory) ConstructIn(
 			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
 			if _tupleExpr != nil {
 				if _tupleExpr.Elems().Length == 0 {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullInEmpty) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullInEmpty) {
 						_group = _f.ConstructFalse()
 						_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullInEmpty, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3252,7 +3588,7 @@ func (_f *Factory) ConstructIn(
 		if _tupleExpr != nil {
 			elems := _tupleExpr.Elems()
 			if !_f.isSortedUniqueList(elems) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeInConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeInConst) {
 					_group = _f.ConstructIn(
 						left,
 						_f.ConstructTuple(
@@ -3260,6 +3596,9 @@ func (_f *Factory) ConstructIn(
 						),
 					)
 					_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.NormalizeInConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3274,11 +3613,14 @@ func (_f *Factory) ConstructIn(
 				_item := _f.mem.LookupList(_tupleExpr.Elems())[0]
 				_nullExpr := _f.mem.NormExpr(_item).AsNull()
 				if _nullExpr != nil {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldInNull) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldInNull) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_inExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldInNull, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3307,11 +3649,14 @@ func (_f *Factory) ConstructNotIn(
 			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
 			if _tupleExpr != nil {
 				if _tupleExpr.Elems().Length != 0 {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullInNonEmpty) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullInNonEmpty) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullInNonEmpty, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3326,9 +3671,12 @@ func (_f *Factory) ConstructNotIn(
 			_tupleExpr := _f.mem.NormExpr(right).AsTuple()
 			if _tupleExpr != nil {
 				if _tupleExpr.Elems().Length == 0 {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullNotInEmpty) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullNotInEmpty) {
 						_group = _f.ConstructTrue()
 						_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNullNotInEmpty, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3342,7 +3690,7 @@ func (_f *Factory) ConstructNotIn(
 		if _tupleExpr != nil {
 			elems := _tupleExpr.Elems()
 			if !_f.isSortedUniqueList(elems) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.NormalizeInConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.NormalizeInConst) {
 					_group = _f.ConstructNotIn(
 						left,
 						_f.ConstructTuple(
@@ -3350,6 +3698,9 @@ func (_f *Factory) ConstructNotIn(
 						),
 					)
 					_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.NormalizeInConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3364,11 +3715,14 @@ func (_f *Factory) ConstructNotIn(
 				_item := _f.mem.LookupList(_tupleExpr.Elems())[0]
 				_nullExpr := _f.mem.NormExpr(_item).AsNull()
 				if _nullExpr != nil {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldInNull) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldInNull) {
 						_group = _f.ConstructNull(
 							_f.boolType(),
 						)
 						_f.mem.AddAltFingerprint(_notInExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldInNull, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3394,11 +3748,14 @@ func (_f *Factory) ConstructLike(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_likeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3408,11 +3765,14 @@ func (_f *Factory) ConstructLike(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_likeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3436,11 +3796,14 @@ func (_f *Factory) ConstructNotLike(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notLikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3450,11 +3813,14 @@ func (_f *Factory) ConstructNotLike(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notLikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3478,11 +3844,14 @@ func (_f *Factory) ConstructILike(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_iLikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3492,11 +3861,14 @@ func (_f *Factory) ConstructILike(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_iLikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3520,11 +3892,14 @@ func (_f *Factory) ConstructNotILike(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notILikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3534,11 +3909,14 @@ func (_f *Factory) ConstructNotILike(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notILikeExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3562,11 +3940,14 @@ func (_f *Factory) ConstructSimilarTo(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_similarToExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3576,11 +3957,14 @@ func (_f *Factory) ConstructSimilarTo(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_similarToExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3604,11 +3988,14 @@ func (_f *Factory) ConstructNotSimilarTo(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notSimilarToExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3618,11 +4005,14 @@ func (_f *Factory) ConstructNotSimilarTo(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notSimilarToExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3646,11 +4036,14 @@ func (_f *Factory) ConstructRegMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_regMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3660,11 +4053,14 @@ func (_f *Factory) ConstructRegMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_regMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3688,11 +4084,14 @@ func (_f *Factory) ConstructNotRegMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notRegMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3702,11 +4101,14 @@ func (_f *Factory) ConstructNotRegMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notRegMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3730,11 +4132,14 @@ func (_f *Factory) ConstructRegIMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_regIMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3744,11 +4149,14 @@ func (_f *Factory) ConstructRegIMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_regIMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3772,11 +4180,14 @@ func (_f *Factory) ConstructNotRegIMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notRegIMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3786,11 +4197,14 @@ func (_f *Factory) ConstructNotRegIMatch(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_notRegIMatchExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -3816,9 +4230,12 @@ func (_f *Factory) ConstructIs(
 		if _nullExpr != nil {
 			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 			if _nullExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldIsNull) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldIsNull) {
 					_group = _f.ConstructTrue()
 					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldIsNull, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3833,9 +4250,12 @@ func (_f *Factory) ConstructIs(
 			if _nullExpr == nil {
 				_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 				if _nullExpr2 != nil {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNonNullIsNull) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNonNullIsNull) {
 						_group = _f.ConstructFalse()
 						_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNonNullIsNull, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3849,12 +4269,15 @@ func (_f *Factory) ConstructIs(
 		if _nullExpr != nil {
 			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 			if _nullExpr2 == nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteNullIs) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteNullIs) {
 					_group = _f.ConstructIs(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteNullIs, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3867,12 +4290,15 @@ func (_f *Factory) ConstructIs(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructIs(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3883,12 +4309,15 @@ func (_f *Factory) ConstructIs(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructIs(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3915,9 +4344,12 @@ func (_f *Factory) ConstructIsNot(
 		if _nullExpr != nil {
 			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 			if _nullExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldIsNotNull) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldIsNotNull) {
 					_group = _f.ConstructFalse()
 					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldIsNotNull, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3932,9 +4364,12 @@ func (_f *Factory) ConstructIsNot(
 			if _nullExpr == nil {
 				_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 				if _nullExpr2 != nil {
-					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNonNullIsNotNull) {
+					if _f.matchedRule == nil || _f.matchedRule(opt.FoldNonNullIsNotNull) {
 						_group = _f.ConstructTrue()
 						_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+						if _f.appliedRule != nil {
+							_f.appliedRule(opt.FoldNonNullIsNotNull, _group, 0)
+						}
 						return _group
 					}
 				}
@@ -3948,12 +4383,15 @@ func (_f *Factory) ConstructIsNot(
 		if _nullExpr != nil {
 			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
 			if _nullExpr2 == nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteNullIs) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteNullIs) {
 					_group = _f.ConstructIsNot(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteNullIs, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3966,12 +4404,15 @@ func (_f *Factory) ConstructIsNot(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructIsNot(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -3982,12 +4423,15 @@ func (_f *Factory) ConstructIsNot(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructIsNot(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4012,11 +4456,14 @@ func (_f *Factory) ConstructContains(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_containsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4026,11 +4473,14 @@ func (_f *Factory) ConstructContains(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_containsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4054,11 +4504,14 @@ func (_f *Factory) ConstructJsonExists(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4068,11 +4521,14 @@ func (_f *Factory) ConstructJsonExists(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4096,11 +4552,14 @@ func (_f *Factory) ConstructJsonAllExists(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonAllExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4110,11 +4569,14 @@ func (_f *Factory) ConstructJsonAllExists(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonAllExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4138,11 +4600,14 @@ func (_f *Factory) ConstructJsonSomeExists(
 	{
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonLeft) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonLeft) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonSomeExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonLeft, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4152,11 +4617,14 @@ func (_f *Factory) ConstructJsonSomeExists(
 	{
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullComparisonRight) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullComparisonRight) {
 				_group = _f.ConstructNull(
 					_f.boolType(),
 				)
 				_f.mem.AddAltFingerprint(_jsonSomeExistsExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullComparisonRight, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -4182,12 +4650,15 @@ func (_f *Factory) ConstructBitand(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructBitand(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4198,12 +4669,15 @@ func (_f *Factory) ConstructBitand(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructBitand(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4215,9 +4689,12 @@ func (_f *Factory) ConstructBitand(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.BitandOp, left, right)
 					_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4229,9 +4706,12 @@ func (_f *Factory) ConstructBitand(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.BitandOp, left, right)
 					_f.mem.AddAltFingerprint(_bitandExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4258,12 +4738,15 @@ func (_f *Factory) ConstructBitor(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructBitor(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4274,12 +4757,15 @@ func (_f *Factory) ConstructBitor(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructBitor(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4291,9 +4777,12 @@ func (_f *Factory) ConstructBitor(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.BitorOp, left, right)
 					_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4305,9 +4794,12 @@ func (_f *Factory) ConstructBitor(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.BitorOp, left, right)
 					_f.mem.AddAltFingerprint(_bitorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4334,12 +4826,15 @@ func (_f *Factory) ConstructBitxor(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructBitxor(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4350,12 +4845,15 @@ func (_f *Factory) ConstructBitxor(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructBitxor(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4367,9 +4865,12 @@ func (_f *Factory) ConstructBitxor(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.BitxorOp, left, right)
 					_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4381,9 +4882,12 @@ func (_f *Factory) ConstructBitxor(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.BitxorOp, left, right)
 					_f.mem.AddAltFingerprint(_bitxorExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4409,9 +4913,12 @@ func (_f *Factory) ConstructPlus(
 		_constExpr := _f.mem.NormExpr(right).AsConst()
 		if _constExpr != nil {
 			if _f.isZero(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldPlusZero) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldPlusZero) {
 					_group = left
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldPlusZero, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4423,9 +4930,12 @@ func (_f *Factory) ConstructPlus(
 		_constExpr := _f.mem.NormExpr(left).AsConst()
 		if _constExpr != nil {
 			if _f.isZero(left) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldZeroPlus) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldZeroPlus) {
 					_group = right
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldZeroPlus, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4438,12 +4948,15 @@ func (_f *Factory) ConstructPlus(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructPlus(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4454,12 +4967,15 @@ func (_f *Factory) ConstructPlus(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructPlus(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4471,9 +4987,12 @@ func (_f *Factory) ConstructPlus(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.PlusOp, left, right)
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4485,9 +5004,12 @@ func (_f *Factory) ConstructPlus(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.PlusOp, left, right)
 					_f.mem.AddAltFingerprint(_plusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4513,9 +5035,12 @@ func (_f *Factory) ConstructMinus(
 		_constExpr := _f.mem.NormExpr(right).AsConst()
 		if _constExpr != nil {
 			if _f.isZero(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldMinusZero) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldMinusZero) {
 					_group = left
 					_f.mem.AddAltFingerprint(_minusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldMinusZero, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4527,9 +5052,12 @@ func (_f *Factory) ConstructMinus(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.MinusOp, left, right)
 					_f.mem.AddAltFingerprint(_minusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4541,9 +5069,12 @@ func (_f *Factory) ConstructMinus(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.MinusOp, left, right)
 					_f.mem.AddAltFingerprint(_minusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4569,9 +5100,12 @@ func (_f *Factory) ConstructMult(
 		_constExpr := _f.mem.NormExpr(right).AsConst()
 		if _constExpr != nil {
 			if _f.isOne(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldMultOne) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldMultOne) {
 					_group = left
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldMultOne, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4583,9 +5117,12 @@ func (_f *Factory) ConstructMult(
 		_constExpr := _f.mem.NormExpr(left).AsConst()
 		if _constExpr != nil {
 			if _f.isOne(left) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldOneMult) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldOneMult) {
 					_group = right
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldOneMult, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4598,12 +5135,15 @@ func (_f *Factory) ConstructMult(
 		if _variableExpr == nil {
 			_variableExpr2 := _f.mem.NormExpr(right).AsVariable()
 			if _variableExpr2 != nil {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteVar) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteVar) {
 					_group = _f.ConstructMult(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteVar, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4614,12 +5154,15 @@ func (_f *Factory) ConstructMult(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteConst) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.CommuteConst) {
 					_group = _f.ConstructMult(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.CommuteConst, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4631,9 +5174,12 @@ func (_f *Factory) ConstructMult(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.MultOp, left, right)
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4645,9 +5191,12 @@ func (_f *Factory) ConstructMult(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.MultOp, left, right)
 					_f.mem.AddAltFingerprint(_multExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4673,9 +5222,12 @@ func (_f *Factory) ConstructDiv(
 		_constExpr := _f.mem.NormExpr(right).AsConst()
 		if _constExpr != nil {
 			if _f.isOne(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldDivOne) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldDivOne) {
 					_group = left
 					_f.mem.AddAltFingerprint(_divExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldDivOne, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4687,9 +5239,12 @@ func (_f *Factory) ConstructDiv(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.DivOp, left, right)
 					_f.mem.AddAltFingerprint(_divExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4701,9 +5256,12 @@ func (_f *Factory) ConstructDiv(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.DivOp, left, right)
 					_f.mem.AddAltFingerprint(_divExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4729,9 +5287,12 @@ func (_f *Factory) ConstructFloorDiv(
 		_constExpr := _f.mem.NormExpr(right).AsConst()
 		if _constExpr != nil {
 			if _f.isOne(right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldDivOne) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldDivOne) {
 					_group = left
 					_f.mem.AddAltFingerprint(_floorDivExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldDivOne, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4743,9 +5304,12 @@ func (_f *Factory) ConstructFloorDiv(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
 					_f.mem.AddAltFingerprint(_floorDivExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4757,9 +5321,12 @@ func (_f *Factory) ConstructFloorDiv(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
 					_f.mem.AddAltFingerprint(_floorDivExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4785,9 +5352,12 @@ func (_f *Factory) ConstructMod(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.ModOp, left, right)
 					_f.mem.AddAltFingerprint(_modExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4799,9 +5369,12 @@ func (_f *Factory) ConstructMod(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.ModOp, left, right)
 					_f.mem.AddAltFingerprint(_modExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4827,9 +5400,12 @@ func (_f *Factory) ConstructPow(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.PowOp, left, right)
 					_f.mem.AddAltFingerprint(_powExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4841,9 +5417,12 @@ func (_f *Factory) ConstructPow(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.PowOp, left, right)
 					_f.mem.AddAltFingerprint(_powExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4869,9 +5448,12 @@ func (_f *Factory) ConstructConcat(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.ConcatOp, left, right)
 					_f.mem.AddAltFingerprint(_concatExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4883,9 +5465,12 @@ func (_f *Factory) ConstructConcat(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.ConcatOp, left, right)
 					_f.mem.AddAltFingerprint(_concatExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4911,9 +5496,12 @@ func (_f *Factory) ConstructLShift(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.LShiftOp, left, right)
 					_f.mem.AddAltFingerprint(_lShiftExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4925,9 +5513,12 @@ func (_f *Factory) ConstructLShift(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.LShiftOp, left, right)
 					_f.mem.AddAltFingerprint(_lShiftExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4953,9 +5544,12 @@ func (_f *Factory) ConstructRShift(
 		_nullExpr := _f.mem.NormExpr(left).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.RShiftOp, left, right)
 					_f.mem.AddAltFingerprint(_rShiftExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4967,9 +5561,12 @@ func (_f *Factory) ConstructRShift(
 		_nullExpr := _f.mem.NormExpr(right).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.RShiftOp, left, right)
 					_f.mem.AddAltFingerprint(_rShiftExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -4997,9 +5594,12 @@ func (_f *Factory) ConstructFetchVal(
 		if _nullExpr != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.FetchValOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchValExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5013,9 +5613,12 @@ func (_f *Factory) ConstructFetchVal(
 		_nullExpr := _f.mem.NormExpr(index).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.FetchValOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchValExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5043,9 +5646,12 @@ func (_f *Factory) ConstructFetchText(
 		if _nullExpr != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchTextExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5059,9 +5665,12 @@ func (_f *Factory) ConstructFetchText(
 		_nullExpr := _f.mem.NormExpr(index).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchTextExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5089,9 +5698,12 @@ func (_f *Factory) ConstructFetchValPath(
 		if _nullExpr != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchValPathExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5105,9 +5717,12 @@ func (_f *Factory) ConstructFetchValPath(
 		_nullExpr := _f.mem.NormExpr(path).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchValPathExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5135,9 +5750,12 @@ func (_f *Factory) ConstructFetchTextPath(
 		if _nullExpr != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryLeft) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryLeft) {
 					_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchTextPathExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryLeft, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5151,9 +5769,12 @@ func (_f *Factory) ConstructFetchTextPath(
 		_nullExpr := _f.mem.NormExpr(path).AsNull()
 		if _nullExpr != nil {
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullBinaryRight) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullBinaryRight) {
 					_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
 					_f.mem.AddAltFingerprint(_fetchTextPathExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.FoldNullBinaryRight, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5180,12 +5801,15 @@ func (_f *Factory) ConstructUnaryMinus(
 			left := _minusExpr.Left()
 			right := _minusExpr.Right()
 			if _f.canConstructBinary(opt.MinusOp, right, left) {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.InvertMinus) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.InvertMinus) {
 					_group = _f.ConstructMinus(
 						right,
 						left,
 					)
 					_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.InvertMinus, _group, 0)
+					}
 					return _group
 				}
 			}
@@ -5197,9 +5821,12 @@ func (_f *Factory) ConstructUnaryMinus(
 		_unaryMinusExpr2 := _f.mem.NormExpr(input).AsUnaryMinus()
 		if _unaryMinusExpr2 != nil {
 			input := _unaryMinusExpr2.Input()
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateUnaryMinus) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateUnaryMinus) {
 				_group = input
 				_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateUnaryMinus, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5209,9 +5836,12 @@ func (_f *Factory) ConstructUnaryMinus(
 	{
 		_nullExpr := _f.mem.NormExpr(input).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullUnary) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullUnary) {
 				_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
 				_f.mem.AddAltFingerprint(_unaryMinusExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullUnary, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5234,9 +5864,12 @@ func (_f *Factory) ConstructUnaryComplement(
 	{
 		_nullExpr := _f.mem.NormExpr(input).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullUnary) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullUnary) {
 				_group = _f.foldNullUnary(opt.UnaryComplementOp, input)
 				_f.mem.AddAltFingerprint(_unaryComplementExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullUnary, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5259,9 +5892,12 @@ func (_f *Factory) ConstructCast(
 	// [EliminateCast]
 	{
 		if _f.hasType(input, typ) {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateCast) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateCast) {
 				_group = input
 				_f.mem.AddAltFingerprint(_castExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateCast, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5271,11 +5907,14 @@ func (_f *Factory) ConstructCast(
 	{
 		_nullExpr := _f.mem.NormExpr(input).AsNull()
 		if _nullExpr != nil {
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNullCast) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.FoldNullCast) {
 				_group = _f.ConstructNull(
 					typ,
 				)
 				_f.mem.AddAltFingerprint(_castExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.FoldNullCast, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5378,9 +6017,12 @@ func (_f *Factory) ConstructCoalesce(
 		if args.Length == 1 {
 			_item := _f.mem.LookupList(args)[0]
 			item := _item
-			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateCoalesce) {
+			if _f.matchedRule == nil || _f.matchedRule(opt.EliminateCoalesce) {
 				_group = item
 				_f.mem.AddAltFingerprint(_coalesceExpr.Fingerprint(), _group)
+				if _f.appliedRule != nil {
+					_f.appliedRule(opt.EliminateCoalesce, _group, 0)
+				}
 				return _group
 			}
 		}
@@ -5392,9 +6034,12 @@ func (_f *Factory) ConstructCoalesce(
 			_item := _f.mem.LookupList(args)[0]
 			_expr := _f.mem.NormExpr(_item)
 			if _expr.IsConstValue() {
-				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.SimplifyCoalesce) {
+				if _f.matchedRule == nil || _f.matchedRule(opt.SimplifyCoalesce) {
 					_group = _f.simplifyCoalesce(args)
 					_f.mem.AddAltFingerprint(_coalesceExpr.Fingerprint(), _group)
+					if _f.appliedRule != nil {
+						_f.appliedRule(opt.SimplifyCoalesce, _group, 0)
+					}
 					return _group
 				}
 			}

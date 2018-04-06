@@ -263,7 +263,7 @@ func (e *OptTester) OptSteps(verbose bool) (string, error) {
 		// Override SetOnRuleMatch to stop optimizing after the ith rule matches.
 		steps := i
 		lastRuleName := opt.InvalidRuleName
-		o.SetOnRuleMatch(func(ruleName opt.RuleName) bool {
+		o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 			if steps == 0 {
 				return false
 			}

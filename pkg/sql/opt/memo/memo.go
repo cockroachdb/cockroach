@@ -274,7 +274,8 @@ func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
 		}
 	} else {
 		// Add the denormalized expression to the memo.
-		m.group(group).addExpr(denorm)
+		mgrp := m.group(group)
+		mgrp.addExpr(denorm)
 		m.exprMap[denorm.Fingerprint()] = group
 	}
 }
