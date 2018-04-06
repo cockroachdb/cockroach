@@ -28,11 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -1002,5 +1004,127 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
 			}
 		})
+	}
+}
+
+// TestUpdateLivenessBlocks verifies that a node always writes to its local
+// RocksDB before updating its liveness. If write is blocking, updateLiveness
+// will also block.
+func TestUpdateLivenessBlocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mockStart(t, mtc)
+
+	// Verify liveness of all nodes for all nodes.
+	verifyLiveness(t, mtc)
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	// Advance clock past the liveness threshold to verify IsLive becomes false.
+	mtc.manualClock.Increment(mtc.nodeLivenesses[0].GetLivenessThreshold().Nanoseconds() + 1)
+	for idx, nl := range mtc.nodeLivenesses {
+		nodeID := mtc.gossips[idx].NodeID.Get()
+		live, err := nl.IsLive(nodeID)
+		if err != nil {
+			t.Error(err)
+		} else if live {
+			t.Errorf("expected node %d to be considered not-live after advancing node clock", nodeID)
+		}
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := nl.Metrics().LiveNodes.Value(), int64(0); a != e {
+				return errors.Errorf("expected node %d's LiveNodes metric to be %d; got %d",
+					nodeID, e, a)
+			}
+			return nil
+		})
+	}
+
+	// Trigger a manual heartbeat and check node is not alive within 5 ms because
+	// MockEngine's write will block for 5 ms before updating liveness.
+	// Then verify liveness is reestablished after 5 ms.
+	ch := make(chan bool)
+	addChannel(mtc, ch)
+	for idx, nl := range mtc.nodeLivenesses {
+		l, err := nl.Self()
+		if err != nil {
+			t.Fatal(err)
+		}
+		testutils.SucceedsSoon(t, func() error {
+			for {
+				errCh := make(chan error)
+				go func() {
+					err := nl.Heartbeat(context.Background(), l)
+					errCh <- err
+				}()
+
+				nodeID := mtc.gossips[idx].NodeID.Get()
+				select {
+				case err = <-errCh:
+					return errors.Errorf("expected node %d to be considered not live within 5 milliseconds", nodeID)
+				case <-time.After(5 * time.Millisecond):
+					ch <- true
+					err = <-errCh
+				}
+
+				if err == nil {
+					live, err := nl.IsLive(nodeID)
+					if err != nil {
+						return err
+					} else if !live {
+						return errors.Errorf("expected node %d to be considered live after waiting 5 milliseconds", nodeID)
+					}
+					break
+				}
+
+				if err == storage.ErrEpochIncremented {
+					log.Warningf(context.Background(), "retrying after %s", err)
+					continue
+				}
+
+				return err
+			}
+			return nil
+		})
+	}
+}
+
+// MockEngine implements engine.Engine interface.
+type MockEngine struct {
+	engine.InMem
+	ch chan bool
+}
+
+func (m MockEngine) NewBatch() engine.Batch {
+	return MockBatch{Batch: m.InMem.NewBatch(), ch: m.ch}
+}
+
+// Mock Batch implements engine.Batch interface.
+type MockBatch struct {
+	engine.Batch
+	ch chan bool
+}
+
+func (mb MockBatch) Commit(syncCommit bool) error {
+	if mb.ch != nil {
+		<-mb.ch
+	}
+	err := mb.Batch.Commit(syncCommit)
+	return err
+}
+
+func mockStart(t *testing.T, m *multiTestContext) {
+	engineStopper := stop.NewStopper()
+	m.engineStoppers = append(m.engineStoppers, engineStopper)
+	eng := MockEngine{InMem: engine.NewInMem(roachpb.Attributes{}, 1<<20)}
+	engineStopper.AddCloser(eng)
+	m.engines = append(m.engines, eng)
+	m.injEngines = true
+	m.Start(t, 1)
+}
+
+func addChannel(m *multiTestContext, ch chan bool) {
+	for idx := 0; idx < len(m.engines); idx++ {
+		eng := m.engines[idx].(MockEngine)
+		m.engines[idx] = MockEngine{InMem: eng.InMem, ch: ch}
 	}
 }

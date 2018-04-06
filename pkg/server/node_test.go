@@ -101,6 +101,7 @@ func createTestNode(
 		cfg.AmbientCtx,
 		cfg.Clock,
 		cfg.DB,
+		engines,
 		cfg.Gossip,
 		active,
 		renewal,
