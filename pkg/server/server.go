@@ -517,6 +517,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.distSender,
 			s.gossip,
 			s.stopper,
+			s.nodeLiveness,
 			sqlExecutorTestingKnobs.DistSQLPlannerKnobs,
 		),
 		ExecLogger:             log.NewSecondaryLogger(nil, "sql-exec", true /*enableGc*/, false /*forceSyncWrites*/),

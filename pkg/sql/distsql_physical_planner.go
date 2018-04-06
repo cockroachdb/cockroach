@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -83,6 +84,8 @@ type DistSQLPlanner struct {
 
 	// gossip handle used to check node version compatibility.
 	gossip *gossip.Gossip
+	// liveness is used to avoid planning on down nodes.
+	liveness *storage.NodeLiveness
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -123,8 +126,12 @@ func NewDistSQLPlanner(
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
+	liveness *storage.NodeLiveness,
 	testingKnobs DistSQLPlannerTestingKnobs,
 ) *DistSQLPlanner {
+	if liveness == nil {
+		panic("must specify liveness")
+	}
 	dsp := &DistSQLPlanner{
 		planVersion:  planVersion,
 		st:           st,
@@ -134,6 +141,7 @@ func NewDistSQLPlanner(
 		distSQLSrv:   distSQLSrv,
 		gossip:       gossip,
 		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		liveness:     liveness,
 		testingKnobs: testingKnobs,
 	}
 	dsp.initRunners()
@@ -519,31 +527,73 @@ type spanPartition struct {
 func (dsp *DistSQLPlanner) checkNodeHealth(
 	ctx context.Context, nodeID roachpb.NodeID, addr string,
 ) error {
-	// Check if the node is still in gossip - i.e. if it hasn't been
-	// decommissioned or overridden by another node at the same address.
-	if _, err := dsp.gossip.GetNodeIDAddress(nodeID); err != nil {
+	// NB: not all tests populate a NodeLiveness. Everything using the
+	// proper constructor NewDistSQLPlanner will, though.
+	isLive := func(_ roachpb.NodeID) (bool, error) {
+		return true, nil
+	}
+	if dsp.liveness != nil {
+		isLive = dsp.liveness.IsLive
+	}
+	return checkNodeHealth(ctx, nodeID, addr, dsp.testingKnobs, dsp.gossip, dsp.rpcContext.ConnHealth, isLive)
+}
+
+func checkNodeHealth(
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	addr string,
+	knobs DistSQLPlannerTestingKnobs,
+	g *gossip.Gossip,
+	connHealth func(string) error,
+	isLive func(roachpb.NodeID) (bool, error),
+) error {
+	// Check if the target's node descriptor is gossiped. If it isn't, the node
+	// is definitely gone and has been for a while.
+	//
+	// TODO(tschottdorf): it's not clear that this adds anything to the liveness
+	// check below. The node descriptor TTL is an hour as of 03/2018.
+	if _, err := g.GetNodeIDAddress(nodeID); err != nil {
 		log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
 			"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
 		return err
 	}
 
-	var err error
-	if dsp.testingKnobs.OverrideHealthCheck != nil {
-		err = dsp.testingKnobs.OverrideHealthCheck(nodeID, addr)
-	} else {
-		err = dsp.rpcContext.ConnHealth(addr)
+	{
+		// NB: as of #22658, ConnHealth does not work as expected; see the
+		// comment within. We still keep this code for now because in
+		// practice, once the node is down it will prevent using this node
+		// 90% of the time (it gets used around once per second as an
+		// artifact of rpcContext's reconnection mechanism at the time of
+		// writing). This is better than having it used in 100% of cases
+		// (until the liveness check below kicks in).
+		var err error
+		if knobs.OverrideHealthCheck != nil {
+			err = knobs.OverrideHealthCheck(nodeID, addr)
+		} else {
+			err = connHealth(addr)
+		}
+
+		if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
+			// This host is known to be unhealthy. Don't use it (use the gateway
+			// instead). Note: this can never happen for our nodeID (which
+			// always has its address in the nodeMap).
+			log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
+			return err
+		}
 	}
-	if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
-		// This host is known to be unhealthy. Don't use it (use the gateway
-		// instead). Note: this can never happen for our nodeID (which
-		// always has its address in the nodeMap).
-		log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
-		return err
+	{
+		live, err := isLive(nodeID)
+		if err == nil && !live {
+			err = errors.New("node is not live")
+		}
+		if err != nil {
+			return errors.Wrapf(err, "not using n%d due to liveness", nodeID)
+		}
 	}
 
 	// Check that the node is not draining.
 	drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
-	if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
 		// Because draining info has no expiration, an error
 		// implies that we have not yet received a node's
 		// draining information. Since this information is
