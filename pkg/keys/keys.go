@@ -81,6 +81,12 @@ func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localHLCUpperBoundSuffix, nil)
 }
 
+// StoreWriteDiskKey returns the key that's used to write to local RocksDB
+// before updating its node liveness
+func StoreWriteDiskKey() roachpb.Key {
+	return MakeStoreKey(localWriteDiskSuffix, nil)
+}
+
 // StoreSuggestedCompactionKey returns a store-local key for a
 // suggested compaction. It combines the specified start and end keys.
 func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {
