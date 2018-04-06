@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -136,7 +137,11 @@ func (r *registry) Run(filter []string) int {
 		for i := range tests {
 			t := tests[i]
 			sem <- struct{}{}
-			fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
+			if teamCity {
+				fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
+			} else {
+				fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
+			}
 			status.Lock()
 			status.running[t] = struct{}{}
 			status.Unlock()
@@ -445,10 +450,28 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
+
 				if t.Failed() {
+					if teamCity {
+						fmt.Fprintf(
+							out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
+							t.Name(), teamCityEscape(string(t.mu.output)), t.Name(),
+						)
+					}
 					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
 				} else {
 					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
+					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
+					// TeamCity regards the test as successful.
+				}
+
+				if teamCity {
+					fmt.Fprintf(out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
+
+					escapedTestName := teamCityNameEscape(t.Name())
+					artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
+					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+					fmt.Fprintf(out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
 				}
 			}
 
@@ -469,4 +492,22 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			t.spec.Run(ctx, t, c)
 		}
 	}()
+}
+
+// teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
+// in TeamCity build output marker.
+// Documentation here: https://confluence.jetbrains.com/display/TCD10/Build+Script+Interaction+with+TeamCity#BuildScriptInteractionwithTeamCity-Escapedvalues
+func teamCityEscape(s string) string {
+	r := strings.NewReplacer(
+		"\n", "|n",
+		"'", "|'",
+		"|", "||",
+		"[", "|[",
+		"]", "|]",
+	)
+	return r.Replace(s)
+}
+
+func teamCityNameEscape(name string) string {
+	return strings.Replace(name, ",", "_", -1)
 }
