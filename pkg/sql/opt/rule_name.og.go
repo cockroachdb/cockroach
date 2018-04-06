@@ -27,6 +27,7 @@ const (
 	NormalizeTupleEquality
 	FoldNullComparisonLeft
 	FoldNullComparisonRight
+	EliminateDistinct
 	EnsureJoinFiltersAnd
 	EnsureJoinFilters
 	PushFilterIntoJoinLeft

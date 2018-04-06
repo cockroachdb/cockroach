@@ -32,9 +32,11 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
    ├── inner-join
    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
    │    ├── scan a
-   │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    └── keys: (1)
    │    ├── scan b
-   │    │    └── columns: b.x:6(int!null) b.z:7(int)
+   │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+   │    │    └── keys: (6)
    │    └── and [type=bool, outer=(1,2,6)]
    │         ├── eq [type=bool, outer=(1,6)]
    │         │    ├── variable: a.x [type=int, outer=(1)]
@@ -53,9 +55,11 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     ├── inner-join
     │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
     │    ├── scan a
-    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    └── keys: (1)
     │    ├── scan b
-    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
     │    └── and [type=bool, outer=(1,2,6)]
     │         ├── eq [type=bool, outer=(1,6)]
     │         │    ├── variable: a.x [type=int, outer=(1)]
@@ -78,9 +82,11 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     ├── inner-join
     │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
     │    ├── scan a
-    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    └── keys: (1)
     │    ├── scan b
-    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
   - │    └── and [type=bool, outer=(1,2,6)]
   + │    └── filters [type=bool, outer=(1,2,6)]
     │         ├── eq [type=bool, outer=(1,6)]
@@ -100,11 +106,13 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     ├── inner-join
     │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
   - │    ├── scan a
-  - │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    ├── select
-  + │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    └── keys: (1)
+  + │    │    ├── keys: (1)
   + │    │    ├── scan a
-  + │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    └── keys: (1)
   + │    │    └── filters [type=bool, outer=(2)]
   + │    │         └── eq [type=bool, outer=(2)]
   + │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -112,7 +120,8 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   + │    │                   ├── const: 10 [type=int]
   + │    │                   └── const: 1 [type=int]
     │    ├── scan b
-    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
   - │    └── filters [type=bool, outer=(1,2,6)]
   - │         ├── eq [type=bool, outer=(1,6)]
   - │         │    ├── variable: a.x [type=int, outer=(1)]
@@ -136,21 +145,24 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   - │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
   - │    ├── select
   - │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
+  + │    ├── project
+  + │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
   - │    │    ├── scan a
-  - │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    ├── select
+    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    └── keys: (1)
   - │    │    └── filters [type=bool, outer=(2)]
   - │    │         └── eq [type=bool, outer=(2)]
   - │    │              ├── variable: a.i [type=int, outer=(2)]
   - │    │              └── minus [type=int]
   - │    │                   ├── const: 10 [type=int]
   - │    │                   └── const: 1 [type=int]
-  + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
-  + │    ├── project
-  + │    │    ├── columns: a.x:1(int!null) a.s:4(string)
-  + │    │    ├── select
-  + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    ├── keys: (1)
   + │    │    │    ├── scan a
-  + │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    │    └── keys: (1)
   + │    │    │    └── filters [type=bool, outer=(2)]
   + │    │    │         └── eq [type=bool, outer=(2)]
   + │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -161,7 +173,8 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   + │    │         ├── variable: a.x [type=int, outer=(1)]
   + │    │         └── variable: a.s [type=string, outer=(4)]
     │    ├── scan b
-    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
     │              ├── variable: a.x [type=int, outer=(1)]
@@ -176,12 +189,15 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
     │    ├── project
     │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
     │    │    ├── select
   - │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-  - │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    │    └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
     │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -192,7 +208,8 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │    │         ├── variable: a.x [type=int, outer=(1)]
     │    │         └── variable: a.s [type=string, outer=(4)]
     │    ├── scan b
-    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
     │              ├── variable: a.x [type=int, outer=(1)]
@@ -208,10 +225,13 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
     │    ├── project
     │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
     │    │    ├── select
     │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-    │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    │    └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
     │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -222,8 +242,9 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │    │         ├── variable: a.x [type=int, outer=(1)]
     │    │         └── variable: a.s [type=string, outer=(4)]
     │    ├── scan b
-  - │    │    └── columns: b.x:6(int!null) b.z:7(int)
-  + │    │    └── columns: b.x:6(int!null)
+  - │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    │    ├── columns: b.x:6(int!null)
+    │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
     │              ├── variable: a.x [type=int, outer=(1)]
@@ -244,10 +265,13 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
    │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
    │    ├── project
    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── keys: (1)
    │    │    ├── select
    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+   │    │    │    ├── keys: (1)
    │    │    │    ├── scan a
-   │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+   │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+   │    │    │    │    └── keys: (1)
    │    │    │    └── filters [type=bool, outer=(2)]
    │    │    │         └── eq [type=bool, outer=(2)]
    │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -258,7 +282,8 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
    │    │         ├── variable: a.x [type=int, outer=(1)]
    │    │         └── variable: a.s [type=string, outer=(4)]
    │    ├── scan b
-   │    │    └── columns: b.x:6(int!null)
+   │    │    ├── columns: b.x:6(int!null)
+   │    │    └── keys: (6)
    │    └── filters [type=bool, outer=(1,6)]
    │         └── eq [type=bool, outer=(1,6)]
    │              ├── variable: a.x [type=int, outer=(1)]
@@ -290,9 +315,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
    │    │         │    ├── full-join
    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
    │    │         │    │    ├── scan a
-   │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │         │    │    │    └── keys: (1)
    │    │         │    │    ├── scan b
-   │    │         │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+   │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+   │    │         │    │    │    └── keys: (6)
    │    │         │    │    └── eq [type=bool, outer=(1,6)]
    │    │         │    │         ├── variable: a.x [type=int, outer=(1)]
    │    │         │    │         └── variable: b.x [type=int, outer=(6)]
@@ -324,9 +351,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │         │    ├── full-join
     │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
     │    │         │    │    ├── scan a
-    │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    └── keys: (1)
     │    │         │    │    ├── scan b
-    │    │         │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── eq [type=bool, outer=(1,6)]
   - │    │         │    │         ├── variable: a.x [type=int, outer=(1)]
   - │    │         │    │         └── variable: b.x [type=int, outer=(6)]
@@ -362,9 +391,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │         │    ├── full-join
     │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
     │    │         │    │    ├── scan a
-    │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    └── keys: (1)
     │    │         │    │    ├── scan b
-    │    │         │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    └── keys: (6)
     │    │         │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │         └── eq [type=bool, outer=(1,6)]
     │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -401,9 +432,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    ├── full-join
   - │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │         │    │    │    └── keys: (1)
   - │    │         │    │    ├── scan b
-  - │    │         │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+  - │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -414,9 +447,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    ├── full-join
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │         │    │    │    │    └── keys: (1)
   + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+  + │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -455,10 +490,12 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int) b.z:7(int)
     │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    └── keys: (1)
     │    │         │    │    │    ├── scan b
-    │    │         │    │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    │    └── keys: (6)
     │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
     │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -497,10 +534,12 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int) b.z:7(int)
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
     │    │         │    │    │    ├── scan a
-    │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    └── keys: (1)
     │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    └── columns: b.x:6(int!null) b.z:7(int)
-  + │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+    │    │         │    │    │    │    └── keys: (6)
     │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
     │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -539,9 +578,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    ├── select
     │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    └── keys: (1)
   - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -549,9 +590,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    │    ├── full-join
   + │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   + │    │         │    │    │    │    ├── scan a
-  + │    │         │    │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    │    └── keys: (1)
   + │    │         │    │    │    │    ├── scan b
-  + │    │         │    │    │    │    │    └── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    │    └── keys: (6)
   + │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -596,9 +639,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │         │    │    │    ├── full-join
     │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
     │    │         │    │    │    │    ├── scan a
-    │    │         │    │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    │    └── keys: (1)
     │    │         │    │    │    │    ├── scan b
-    │    │         │    │    │    │    │    └── columns: b.x:6(int!null)
+    │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+    │    │         │    │    │    │    │    └── keys: (6)
     │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
     │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -644,9 +689,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    │    ├── full-join
   - │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    │    │    ├── scan a
-  - │    │         │    │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    │    └── keys: (1)
   - │    │         │    │    │    │    ├── scan b
-  - │    │         │    │    │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    │    └── keys: (6)
   - │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -659,9 +706,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │         └── variable: a.i [type=int, outer=(2)]
   - │    │         │    └── true [type=bool]
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    └── keys: (1)
   + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -702,9 +751,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    ├── full-join
   - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    └── keys: (1)
   - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -716,9 +767,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    └── projections [outer=(2)]
   - │    │         │         └── variable: a.i [type=int, outer=(2)]
   + │    │         │    │    ├── scan a
-  + │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    └── keys: (1)
   + │    │         │    │    ├── scan b
-  + │    │         │    │    │    └── columns: b.x:6(int!null)
+  + │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    └── keys: (6)
   + │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -755,9 +808,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    ├── select
     │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    └── keys: (1)
   - │    │         │    │    ├── scan b
-  - │    │         │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -769,9 +824,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    ├── full-join
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    └── keys: (1)
   + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -812,9 +869,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    ├── full-join
   - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    └── keys: (1)
   - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -826,9 +885,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    └── projections [outer=(2)]
   - │    │         │         └── variable: a.i [type=int, outer=(2)]
   + │    │         │    │    ├── scan a
-  + │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    └── keys: (1)
   + │    │         │    │    ├── scan b
-  + │    │         │    │    │    └── columns: b.x:6(int!null)
+  + │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    └── keys: (6)
   + │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │         └── eq [type=bool, outer=(1,6)]
   + │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -865,9 +926,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    ├── full-join
   - │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    └── keys: (1)
   - │    │         │    │    ├── scan b
-  - │    │         │    │    │    └── columns: b.x:6(int!null)
+  - │    │         │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
   - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -890,9 +953,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │    │         ├── full-join
   + │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   + │    │    │         │    ├── scan a
-  + │    │    │         │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    └── keys: (1)
   + │    │    │         │    ├── scan b
-  + │    │    │         │    │    └── columns: b.x:6(int!null)
+  + │    │    │         │    │    ├── columns: b.x:6(int!null)
+  + │    │    │         │    │    └── keys: (6)
   + │    │    │         │    └── filters [type=bool, outer=(1,6)]
   + │    │    │         │         └── eq [type=bool, outer=(1,6)]
   + │    │    │         │              ├── variable: a.x [type=int, outer=(1)]
@@ -932,9 +997,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │    │         ├── select
     │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   - │    │    │         │    ├── scan a
-  - │    │    │         │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  - │    │    │         │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │    │         │    │    └── keys: (1)
   - │    │    │         │    ├── scan b
-  - │    │    │         │    │    └── columns: b.x:6(int!null)
+  - │    │    │         │    │    ├── columns: b.x:6(int!null)
+  - │    │    │         │    │    └── keys: (6)
   - │    │    │         │    └── filters [type=bool, outer=(1,6)]
   - │    │    │         │         └── eq [type=bool, outer=(1,6)]
   - │    │    │         │              ├── variable: a.x [type=int, outer=(1)]
@@ -946,9 +1013,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │    │         │    ├── full-join
   + │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
   + │    │    │         │    │    ├── scan a
-  + │    │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    │    └── keys: (1)
   + │    │    │         │    │    ├── scan b
-  + │    │    │         │    │    │    └── columns: b.x:6(int!null)
+  + │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │    │         │    │    │    └── keys: (6)
   + │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
   + │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -990,9 +1059,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │    │         │    ├── full-join
     │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
     │    │    │         │    │    ├── scan a
-    │    │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+    │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │    │         │    │    │    └── keys: (1)
     │    │    │         │    │    ├── scan b
-    │    │    │         │    │    │    └── columns: b.x:6(int!null)
+    │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+    │    │    │         │    │    │    └── keys: (6)
     │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
     │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
     │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -1041,9 +1112,11 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
    │    │    │         │    ├── full-join
    │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
    │    │    │         │    │    ├── scan a
-   │    │    │         │    │    │    └── columns: a.x:1(int!null) a.i:2(int)
+   │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+   │    │    │         │    │    │    └── keys: (1)
    │    │    │         │    │    ├── scan b
-   │    │    │         │    │    │    └── columns: b.x:6(int!null)
+   │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+   │    │    │         │    │    │    └── keys: (6)
    │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
    │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
    │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
@@ -1075,13 +1148,17 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
    ├── columns: column6:6(decimal)
    ├── select
    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+   │    ├── keys: (1)
    │    ├── group-by
    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── keys: (1)
    │    │    ├── project
    │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+   │    │    │    ├── keys: (1)
    │    │    │    ├── scan a
-   │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    │    │    └── keys: (1)
    │    │    │    └── projections [outer=(1,4)]
    │    │    │         ├── variable: a.s [type=string, outer=(4)]
    │    │    │         └── variable: a.x [type=int, outer=(1)]
@@ -1099,14 +1176,18 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     ├── columns: column6:6(decimal)
     ├── select
     │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── keys: (1)
     │    ├── group-by
     │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
     │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
     │    │    ├── project
     │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+    │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-  - │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    └── keys: (1)
     │    │    │    └── projections [outer=(1,4)]
     │    │    │         ├── variable: a.s [type=string, outer=(4)]
     │    │    │         └── variable: a.x [type=int, outer=(1)]
@@ -1124,18 +1205,23 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     ├── columns: column6:6(decimal)
     ├── select
     │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── keys: (1)
     │    ├── group-by
     │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
     │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
   - │    │    ├── project
   - │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+  - │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    └── keys: (1)
   - │    │    │    └── projections [outer=(1,4)]
   - │    │    │         ├── variable: a.s [type=string, outer=(4)]
   - │    │    │         └── variable: a.x [type=int, outer=(1)]
   + │    │    ├── scan a
-  + │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
     │    │         └── function: sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1150,11 +1236,14 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     ├── columns: column6:6(decimal)
     ├── select
     │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── keys: (1)
     │    ├── group-by
     │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
     │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
     │    │    ├── scan a
-    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
     │    │         └── function: sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1173,11 +1262,14 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     ├── columns: column6:6(decimal)
     ├── select
   - │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    ├── keys: (1)
   - │    ├── group-by
   - │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   - │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    ├── keys: (1)
   - │    │    ├── scan a
-  - │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    └── keys: (1)
   - │    │    └── aggregations [outer=(1)]
   - │    │         └── function: sum [type=decimal, outer=(1)]
   - │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1187,8 +1279,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │    │    ├── group-by
   + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   + │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── keys: (1)
   + │    │    │    ├── scan a
-  + │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
   + │    │    │         └── function: sum [type=decimal, outer=(1)]
   + │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1212,16 +1306,20 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │    │    ├── select
     │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   - │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
   - │    │    │         └── function: sum [type=decimal, outer=(1)]
   - │    │    │              └── variable: a.x [type=int, outer=(1)]
   + │    │    │    ├── group-by
   + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   + │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── keys: (1)
   + │    │    │    │    ├── scan a
-  + │    │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    │    └── keys: (1)
   + │    │    │    │    └── aggregations [outer=(1)]
   + │    │    │    │         └── function: sum [type=decimal, outer=(1)]
   + │    │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1248,11 +1346,14 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     │    │    ├── columns: column6:6(decimal)
     │    │    ├── select
     │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    │    ├── keys: (1)
     │    │    │    ├── group-by
     │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
     │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    ├── keys: (1)
     │    │    │    │    ├── scan a
-    │    │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    │    └── keys: (1)
     │    │    │    │    └── aggregations [outer=(1)]
     │    │    │    │         └── function: sum [type=decimal, outer=(1)]
     │    │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1278,13 +1379,18 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   - │    │    ├── select
   + │    ├── select
   + │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    ├── keys: (1)
   + │    │    ├── group-by
     │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── keys: (1)
   - │    │    │    ├── group-by
   - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   - │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── keys: (1)
   - │    │    │    │    ├── scan a
-  - │    │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    │    └── keys: (1)
   - │    │    │    │    └── aggregations [outer=(1)]
   - │    │    │    │         └── function: sum [type=decimal, outer=(1)]
   - │    │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1295,9 +1401,9 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   - │    │    └── projections [outer=(6)]
   - │    │         └── variable: column6 [type=decimal, outer=(6)]
   - │    └── true [type=bool]
-  + │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    ├── scan a
-  + │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
   + │    │    │         └── function: sum [type=decimal, outer=(1)]
   + │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1318,13 +1424,18 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   - │    ├── select
   + ├── select
   + │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    ├── keys: (1)
   + │    ├── group-by
     │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
   - │    │    ├── group-by
   - │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
   - │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
   - │    │    │         └── function: sum [type=decimal, outer=(1)]
   - │    │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1334,9 +1445,9 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   - │    │              └── const: 1 [type=decimal]
   - │    └── projections [outer=(6)]
   - │         └── variable: column6 [type=decimal, outer=(6)]
-  + │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
   + │    │    ├── scan a
-  + │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    └── keys: (1)
   + │    │    └── aggregations [outer=(1)]
   + │    │         └── function: sum [type=decimal, outer=(1)]
   + │    │              └── variable: a.x [type=int, outer=(1)]
@@ -1354,11 +1465,14 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
    ├── columns: column6:6(decimal)
    ├── select
    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+   │    ├── keys: (1)
    │    ├── group-by
    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── keys: (1)
    │    │    ├── scan a
-   │    │    │    └── columns: a.x:1(int!null) a.s:4(string)
+   │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+   │    │    │    └── keys: (1)
    │    │    └── aggregations [outer=(1)]
    │    │         └── function: sum [type=decimal, outer=(1)]
    │    │              └── variable: a.x [type=int, outer=(1)]

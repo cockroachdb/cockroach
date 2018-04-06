@@ -1523,6 +1523,19 @@ func (_f *Factory) ConstructGroupBy(
 		return _group
 	}
 
+	// [EliminateDistinct]
+	{
+		if _f.hasNoCols(aggregations) {
+			if _f.colsAreKey(groupingCols, input) {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateDistinct) {
+					_group = input
+					_f.mem.AddAltFingerprint(_groupByExpr.Fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	// [FilterUnusedGroupByCols]
 	{
 		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {

@@ -1,0 +1,16 @@
+# =============================================================================
+# groupby.opt contains normalization rules for the GroupBy operator.
+# =============================================================================
+
+# EliminateDistinct discards a GroupBy operator that is eliminating duplicate
+# rows by using grouping columns that are statically known to form a strong key.
+# By definition, a strong key does not allow duplicate values, so the GroupBy is
+# redundant and can be eliminated.
+[EliminateDistinct, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:* & (HasNoCols $aggregations)
+    $groupingCols:* & (ColsAreKey $groupingCols $input)
+)
+=>
+$input
