@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
 
-func init() {
+func registerVersion(r *registry) {
 	runVersion := func(ctx context.Context, t *test, c *cluster, version string) {
 		nodes := c.nodes - 1
 		goos := ifLocal(runtime.GOOS, "linux")
@@ -209,7 +209,7 @@ func init() {
 
 	const version = "v1.1.5"
 	for _, n := range []int{3, 5} {
-		tests.Add(testSpec{
+		r.Add(testSpec{
 			Name:  fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
 			Nodes: nodes(n + 1),
 			Run: func(ctx context.Context, t *test, c *cluster) {

@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
+func registerLargeRange(r *registry) {
 	const size = 10 << 30 // 10 GB
 	// TODO(nvanbenschoten): Snapshots currently hold the entirety of a range in
 	// memory on the receiving side. This is dangerous when we grow a range to
@@ -37,7 +37,7 @@ func init() {
 	// splitting the single large range also triggers rebalancing.
 	const numNodes = 3
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {

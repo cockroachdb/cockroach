@@ -27,7 +27,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func init() {
+func registerDrop(r *registry) {
 	// TODO(tschottdorf): rearrange all tests so that their synopses are available
 	// via godoc and (some variation on) `roachtest run <testname> --help`.
 
@@ -158,7 +158,7 @@ gc:
 	// 1GB
 	initDiskSpace := int(1E9)
 
-	tests.Add(testSpec{
+	r.Add(testSpec{
 		Name:  fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
 		Nodes: nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {

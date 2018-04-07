@@ -18,7 +18,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -38,7 +37,7 @@ func main() {
 		Short: "run automated tests on cockroach cluster\n",
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
-	` + strings.Join(allTests(), "\n\t") + `
+Use 'roachtest run -n' to see a list of all tests.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if clusterName != "" && local {
@@ -46,7 +45,10 @@ func main() {
 			}
 
 			initBinaries()
-			os.Exit(tests.Run(args))
+
+			r := newRegistry()
+			registerTests(r)
+			os.Exit(r.Run(args))
 			return nil
 		},
 	}
