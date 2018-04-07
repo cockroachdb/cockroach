@@ -223,3 +223,9 @@ func (r diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 
 	return r.rowContainer.keyValToRow(r.Key(), r.Value())
 }
+
+func (d diskRowIterator) Close() {
+	if d.SortedDiskMapIterator != nil {
+		d.SortedDiskMapIterator.Close()
+	}
+}
