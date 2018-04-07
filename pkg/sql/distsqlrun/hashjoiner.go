@@ -97,6 +97,8 @@ type hashJoiner struct {
 	// Used by tests to force a storedSide.
 	forcedStoredSide *joinSide
 
+	bucketIterator rowMarkerIterator
+
 	// testingKnobMemFailPoint specifies a phase in which the hashJoiner will
 	// fail at a random point during this phase.
 	testingKnobMemFailPoint hashJoinPhase
@@ -199,6 +201,12 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 		nil /* ordering */, h.rightSource.OutputTypes(), evalCtx, rowContainerMon)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
+
+	defer func() {
+		if h.bucketIterator != nil {
+			h.bucketIterator.Close()
+		}
+	}()
 
 	row, earlyExit, err := h.bufferPhase(ctx)
 
@@ -477,11 +485,18 @@ func (h *hashJoiner) probeRow(
 	// probeMatched specifies whether the row we are probing with has at least
 	// one match.
 	probeMatched := false
-	i, err := storedRows.NewBucketIterator(ctx, row, h.eqCols[otherSide(h.storedSide)])
-	if err != nil {
-		return false, err
+	if h.bucketIterator == nil {
+		i, err := storedRows.NewBucketIterator(ctx, row, h.eqCols[otherSide(h.storedSide)])
+		if err != nil {
+			return false, err
+		}
+		h.bucketIterator = i
+	} else {
+		if err := h.bucketIterator.Reset(ctx, row); err != nil {
+			return false, err
+		}
 	}
-	defer i.Close()
+	i := h.bucketIterator
 	for i.Rewind(); ; i.Next() {
 		if ok, err := i.Valid(); err != nil {
 			return false, err
