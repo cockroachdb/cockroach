@@ -834,6 +834,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		}
 
 		rightDatum := rhs.private.(tree.Datum)
+
+		// NULL is never contained, return no spans.
+		if rightDatum == tree.DNull {
+			return LogicalSpans{}, true, true
+		}
+
 		rd := rightDatum.(*tree.DJSON).JSON
 
 		switch rd.Type() {
