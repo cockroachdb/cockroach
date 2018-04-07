@@ -63,8 +63,12 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	// copied it from the old jepsen scripts. It's slow, so we should
 	// probably either remove it or use a new base image with more of
 	// these preinstalled.
-	c.Run(ctx, c.All(), "sudo", "apt-get", "-qqy", "update")
-	c.Run(ctx, c.All(), "sudo", "apt-get", "-qqy", "upgrade", "-o", "Dpkg::Options::='--force-confold'")
+	//
+	// In spite of -qqy, these produce huge amounts of output, so we
+	// send it all to /dev/null. I apologize to whoever debugs this in
+	// the future if these start to fail.
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy update > /dev/null 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' > /dev/null 2>&1"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
@@ -78,8 +82,8 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
 	// Install Jepsen and its prereqs on the controller.
-	c.Run(ctx, controller, "sudo", "apt-get", "-qqy", "install",
-		"openjdk-8-jre", "openjdk-8-jre-headless", "libjna-java", "gnuplot")
+	c.Run(ctx, controller, "sh", "-c", `"sudo apt-get -qqy install
+		openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`)
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "./jepsen", "tc-nightly", controller)
 
@@ -127,9 +131,13 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 
 	var failures []string
+	testIdx := 0
+	numTests := len(jepsenTests) * len(jepsenNemeses)
 	for _, testName := range jepsenTests {
 		for _, nemesis := range jepsenNemeses {
-			testCfg := fmt.Sprintf("%s/%s", testName, nemesis)
+			testIdx++
+			testCfg := fmt.Sprintf("%s %s", testName, nemesis)
+			t.Status(fmt.Sprintf("%d/%d: %s (%d failures)", testIdx, numTests, testCfg, len(failures)))
 			c.l.printf("%s: running\n", testCfg)
 
 			// Reset the "latest" alias for the next run.
@@ -156,7 +164,7 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 
 			select {
 			case testErr := <-errCh:
-				outputDir := filepath.Join(artifacts, c.t.Name(), testCfg, "results")
+				outputDir := filepath.Join(artifacts, c.t.Name(), testCfg)
 				if err := os.MkdirAll(outputDir, 0777); err != nil {
 					t.Fatal(err)
 				}
@@ -171,7 +179,7 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 							"jepsen/cockroachdb/store/latest/"+file,
 							filepath.Join(outputDir, file))
 						if err := cmd.Run(); err != nil {
-							t.Fatal(err)
+							c.l.printf("failed to retrieve %s: %s", file, err)
 						}
 					}
 				} else {
