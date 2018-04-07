@@ -325,7 +325,7 @@ func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 
 // Flush implements the SortedDiskMapBatchWriter interface.
 func (b *RocksDBMapBatchWriter) Flush() error {
-	if len(b.batch.Repr()) < 1 {
+	if b.batch.Empty() {
 		return nil
 	}
 	if err := b.batch.Commit(false /* syncCommit */); err != nil {
@@ -335,6 +335,7 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 	return nil
 }
 
+// Empty implements the SortedDiskMapBatchWriter interface.
 func (b *RocksDBMapBatchWriter) Empty() bool {
 	return b.batch.Empty()
 }
