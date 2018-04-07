@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-func init() {
+func registerRoachmart(r *registry) {
 	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
@@ -73,7 +73,7 @@ func init() {
 
 	for _, v := range []bool{true, false} {
 		v := v
-		tests.Add(testSpec{
+		r.Add(testSpec{
 			Name:  fmt.Sprintf("roachmart/partition=%v", v),
 			Nodes: nodes(9, geo()),
 			Run: func(ctx context.Context, t *test, c *cluster) {

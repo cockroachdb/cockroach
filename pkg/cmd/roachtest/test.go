@@ -36,20 +36,10 @@ import (
 )
 
 var (
-	tests       = &registry{m: make(map[string]*test), out: os.Stdout}
 	parallelism = 10
 	debug       = false
 	dryrun      = false
 )
-
-func allTests() []string {
-	t := tests.List(nil)
-	r := make([]string, len(t))
-	for i := range t {
-		r[i] = t[i].Name()
-	}
-	return r
-}
 
 type testSpec struct {
 	Name string
@@ -62,6 +52,10 @@ type registry struct {
 	m              map[string]*test
 	out            io.Writer
 	statusInterval time.Duration
+}
+
+func newRegistry() *registry {
+	return &registry{m: make(map[string]*test), out: os.Stdout}
 }
 
 func (r *registry) Add(spec testSpec) {

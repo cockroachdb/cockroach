@@ -218,8 +218,8 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func init() {
-	tests.Add(testSpec{
+func registerJepsen(r *registry) {
+	r.Add(testSpec{
 		Name:  "jepsen",
 		Nodes: nodes(6),
 		Run:   runJepsen,
