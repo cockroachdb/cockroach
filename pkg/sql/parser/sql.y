@@ -545,7 +545,7 @@ func newNameFromStr(s string) *tree.Name {
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
 // needed to make the grammar LALR(1).
-%token     NOT_LA WITH_LA AS_LA
+%token     NOT_LA WITH_LA AS_LA ON_LA
 
 %union {
   id             int
@@ -2780,7 +2780,7 @@ show_databases_stmt:
 //
 // %SeeAlso: WEBDOCS/show-grants.html
 show_grants_stmt:
-  SHOW GRANTS ON ROLE opt_name_list for_grantee_clause
+  SHOW GRANTS ON_LA ROLE opt_name_list for_grantee_clause
   {
     $$.val = &tree.ShowRoleGrants{Roles: $5.nameList(), Grantees: $6.nameList()}
   }
@@ -7619,6 +7619,7 @@ unreserved_keyword:
 | RESTRICT
 | RESUME
 | REVOKE
+| ROLE
 | ROLES
 | ROLLBACK
 | ROLLUP
@@ -7840,7 +7841,6 @@ reserved_keyword:
 | PRIMARY
 | REFERENCES
 | RETURNING
-| ROLE
 | SELECT
 | SESSION_USER
 | SOME
