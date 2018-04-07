@@ -101,7 +101,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	}
 
 	switch lval.id {
-	case NOT, NULLS, WITH, AS:
+	case AS, NOT, NULLS, ON, WITH:
 	default:
 		s.lastTok = *lval
 		return lval.id
@@ -110,17 +110,25 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	s.nextTok = &s.tokBuf
 	s.scan(s.nextTok)
 
-	// If you update these cases, update lookaheadKeywords below.
+	// If you add additional cases here, don't forget to add the corresponding
+	// case to the switch earlier in this method.
 	switch lval.id {
 	case AS:
 		switch s.nextTok.id {
 		case OF:
 			lval.id = AS_LA
 		}
+
 	case NOT:
 		switch s.nextTok.id {
 		case BETWEEN, IN, LIKE, ILIKE, SIMILAR:
 			lval.id = NOT_LA
+		}
+
+	case ON:
+		switch s.nextTok.id {
+		case ROLE:
+			lval.id = ON_LA
 		}
 
 	case WITH:

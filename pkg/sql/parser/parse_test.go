@@ -384,6 +384,7 @@ func TestParse(t *testing.T) {
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`SHOW GRANTS`},
 		{`SHOW GRANTS ON foo`},
+		// TODO(peter): {`SHOW GRANTS ON "role"`},
 		{`SHOW GRANTS ON foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
