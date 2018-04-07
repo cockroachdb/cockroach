@@ -97,6 +97,11 @@ type hashJoiner struct {
 	// Used by tests to force a storedSide.
 	forcedStoredSide *joinSide
 
+	// bucketIterator is an iterator that is used during the probePhase to read
+	// the rows that we've added to our hash table, and, depending on the join
+	// type, to mark those rows as seen.
+	bucketIterator rowMarkerIterator
+
 	// testingKnobMemFailPoint specifies a phase in which the hashJoiner will
 	// fail at a random point during this phase.
 	testingKnobMemFailPoint hashJoinPhase
@@ -480,11 +485,18 @@ func (h *hashJoiner) probeRow(
 	// probeMatched specifies whether the row we are probing with has at least
 	// one match.
 	probeMatched := false
-	i, err := storedRows.NewBucketIterator(ctx, row, h.eqCols[otherSide(h.storedSide)])
-	if err != nil {
-		return false, err
+	if h.bucketIterator == nil {
+		i, err := storedRows.NewBucketIterator(ctx, row, h.eqCols[otherSide(h.storedSide)])
+		if err != nil {
+			return false, err
+		}
+		h.bucketIterator = i
+	} else {
+		if err := h.bucketIterator.Reset(ctx, row); err != nil {
+			return false, err
+		}
 	}
-	defer i.Close()
+	i := h.bucketIterator
 	for i.Rewind(); ; i.Next() {
 		if ok, err := i.Valid(); err != nil {
 			return false, err
@@ -576,6 +588,14 @@ func (h *hashJoiner) probeRow(
 func (h *hashJoiner) probePhase(
 	ctx context.Context, storedRows hashRowContainer,
 ) (earlyExit bool, _ error) {
+	defer func() {
+		// probeRow will create a bucket iterator if there is work to do. Make
+		// sure the iterator gets cleaned up at the end of the probe phase.
+		if h.bucketIterator != nil {
+			h.bucketIterator.Close()
+		}
+	}()
+
 	side := otherSide(h.storedSide)
 
 	src := h.leftSource
