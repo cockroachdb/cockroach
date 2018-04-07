@@ -84,7 +84,7 @@ explain_stmt ::=
 	| 'EXPLAIN' '(' explain_option_list ')' explainable_stmt
 
 grant_stmt ::=
-	'GRANT' privileges 'ON' targets 'TO' name_list
+	'GRANT' privileges on targets 'TO' name_list
 	| 'GRANT' privilege_list 'TO' name_list
 	| 'GRANT' privilege_list 'TO' name_list 'WITH' 'ADMIN' 'OPTION'
 
@@ -110,7 +110,7 @@ resume_stmt ::=
 	'RESUME' 'JOB' a_expr
 
 revoke_stmt ::=
-	'REVOKE' privileges 'ON' targets 'FROM' name_list
+	'REVOKE' privileges on targets 'FROM' name_list
 	| 'REVOKE' privilege_list 'FROM' name_list
 	| 'REVOKE' 'ADMIN' 'OPTION' 'FOR' privilege_list 'FROM' name_list
 
@@ -243,7 +243,7 @@ create_ddl_stmt ::=
 	| create_sequence_stmt
 
 create_stats_stmt ::=
-	'CREATE' 'STATISTICS' statistics_name 'ON' name_list 'FROM' table_name
+	'CREATE' 'STATISTICS' statistics_name on name_list 'FROM' table_name
 
 name ::=
 	'identifier'
@@ -312,6 +312,10 @@ explain_option_list ::=
 privileges ::=
 	'ALL'
 	| privilege_list
+
+on ::=
+	'ON'
+	| 'ON'
 
 name_list ::=
 	( name ) ( ( ',' name ) )*
@@ -578,10 +582,10 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
-	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
+	'CREATE' opt_unique 'INDEX' opt_index_name on table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name on table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name on table_name '(' index_params ')'
+	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name on table_name '(' index_params ')'
 
 create_table_stmt ::=
 	'CREATE' 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
@@ -744,6 +748,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESUME'
 	| 'REVOKE'
+	| 'ROLE'
 	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
@@ -1018,7 +1023,7 @@ transaction_mode_list ::=
 
 var_value ::=
 	a_expr
-	| 'ON'
+	| on
 
 view_name ::=
 	table_name
@@ -1477,7 +1482,6 @@ reserved_keyword ::=
 	| 'PRIMARY'
 	| 'REFERENCES'
 	| 'RETURNING'
-	| 'ROLE'
 	| 'SELECT'
 	| 'SESSION_USER'
 	| 'SOME'
@@ -2003,7 +2007,7 @@ join_type ::=
 
 join_qual ::=
 	'USING' '(' name_list ')'
-	| 'ON' a_expr
+	| on a_expr
 
 partition ::=
 	'PARTITION' partition_name

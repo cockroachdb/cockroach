@@ -384,6 +384,7 @@ func TestParse(t *testing.T) {
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`SHOW GRANTS`},
 		{`SHOW GRANTS ON foo`},
+		{`SHOW GRANTS ON "role"`},
 		{`SHOW GRANTS ON foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
@@ -991,6 +992,7 @@ func TestParse2(t *testing.T) {
 		{`CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))`,
 			`CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))`},
 		{`CREATE INDEX ON a (b) COVERING (c)`, `CREATE INDEX ON a (b) STORING (c)`},
+		{`CREATE INDEX ON role (b)`, `CREATE INDEX ON "role" (b)`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
