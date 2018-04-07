@@ -317,7 +317,9 @@ type nodeSpec struct {
 
 func (s *nodeSpec) args() []string {
 	var args []string
-	args = append(args, s.MachineType)
+	if s.MachineType != "" {
+		args = append(args, s.MachineType)
+	}
 	if s.Geo {
 		args = append(args, "--geo")
 	}
