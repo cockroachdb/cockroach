@@ -202,12 +202,6 @@ func (h *hashJoiner) Run(wg *sync.WaitGroup) {
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
-	defer func() {
-		if h.bucketIterator != nil {
-			h.bucketIterator.Close()
-		}
-	}()
-
 	row, earlyExit, err := h.bufferPhase(ctx)
 
 	bufferPhaseOom := false
@@ -588,6 +582,15 @@ func (h *hashJoiner) probeRow(
 func (h *hashJoiner) probePhase(
 	ctx context.Context, storedRows hashRowContainer,
 ) (earlyExit bool, _ error) {
+
+	defer func() {
+		// probeRow will create a bucket iterator if there is work to do. Make
+		// sure the iterator gets cleaned up at the end of the probe phase.
+		if h.bucketIterator != nil {
+			h.bucketIterator.Close()
+		}
+	}()
+
 	side := otherSide(h.storedSide)
 
 	src := h.leftSource

@@ -31,6 +31,9 @@ import (
 // rowMarkerIterator is a rowIterator that can be used to mark rows.
 type rowMarkerIterator interface {
 	rowIterator
+	// Reset resets this iterator to point at a bucket that matches the given
+	// row. This will cause rowIterator.Rewind to rewind to the front of the
+	// input row's bucket.
 	Reset(ctx context.Context, row sqlbase.EncDatumRow) error
 	Mark(ctx context.Context, mark bool) error
 	IsMarked(ctx context.Context) bool
@@ -260,7 +263,6 @@ var _ rowMarkerIterator = &hashMemRowBucketIterator{}
 func (h *hashMemRowContainer) NewBucketIterator(
 	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
 ) (rowMarkerIterator, error) {
-
 	ret := &hashMemRowBucketIterator{
 		hashMemRowContainer: h,
 		probeEqCols:         probeEqCols,
@@ -466,6 +468,9 @@ type hashDiskRowBucketIterator struct {
 	diskRowIterator
 	*hashDiskRowContainer
 	probeEqCols columns
+	// haveMarkedRows returns true if we've marked rows since the last time we
+	// recreated our underlying diskRowIterator.
+	haveMarkedRows bool
 	// encodedEqCols is the encoding of the equality columns of the rows in the
 	// bucket that this iterator iterates over.
 	encodedEqCols []byte
@@ -477,14 +482,15 @@ var _ rowMarkerIterator = &hashDiskRowBucketIterator{}
 func (h *hashDiskRowContainer) NewBucketIterator(
 	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
 ) (rowMarkerIterator, error) {
-	ret := hashDiskRowBucketIterator{
+	ret := &hashDiskRowBucketIterator{
 		hashDiskRowContainer: h,
 		probeEqCols:          probeEqCols,
+		diskRowIterator:      h.NewIterator(ctx).(diskRowIterator),
 	}
 	if err := ret.Reset(ctx, row); err != nil {
 		return nil, err
 	}
-	return &ret, nil
+	return ret, nil
 }
 
 // Rewind implements the rowIterator interface.
@@ -526,9 +532,10 @@ func (i *hashDiskRowBucketIterator) Reset(ctx context.Context, row sqlbase.EncDa
 		return err
 	}
 	i.encodedEqCols = append(i.encodedEqCols[:0], encoded...)
-	if !i.bufferedRows.Empty() {
+	if i.haveMarkedRows {
 		// We have to recreate our iterator if we need to flush marks to disk.
 		// TODO(jordan): do this less by keeping a cache of written marks.
+		i.haveMarkedRows = false
 		i.diskRowIterator.Close()
 		i.diskRowIterator = i.hashDiskRowContainer.NewIterator(ctx).(diskRowIterator)
 	}
@@ -554,6 +561,7 @@ func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	if !i.hashDiskRowContainer.shouldMark {
 		log.Fatal(ctx, "hash disk row container not set up for marking")
 	}
+	i.haveMarkedRows = true
 	markBytes := encodedFalse
 	if mark {
 		markBytes = encodedTrue
@@ -573,11 +581,6 @@ func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	// unmarked rows. The writes are flushed when creating a NewIterator() in
 	// NewUnmarkedIterator().
 	return i.hashDiskRowContainer.bufferedRows.Put(i.Key(), rowVal)
-}
-
-// Close implements the rowIterator interface.
-func (i *hashDiskRowBucketIterator) Close() {
-	i.diskRowIterator.Close()
 }
 
 // hashDiskRowIterator iterates over all unmarked rows in a

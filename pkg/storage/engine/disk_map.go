@@ -79,8 +79,6 @@ type SortedDiskMapBatchWriter interface {
 	// Flush flushes all writes to the underlying store. The batch can be reused
 	// after a call to Flush().
 	Flush() error
-	// Empty returns true if there have been no writes to this batch writer.
-	Empty() bool
 
 	// Close flushes all writes to the underlying store and frees up resources
 	// held by the batch writer.
@@ -325,7 +323,7 @@ func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 
 // Flush implements the SortedDiskMapBatchWriter interface.
 func (b *RocksDBMapBatchWriter) Flush() error {
-	if len(b.batch.Repr()) < 1 {
+	if b.batch.Empty() {
 		return nil
 	}
 	if err := b.batch.Commit(false /* syncCommit */); err != nil {
@@ -333,10 +331,6 @@ func (b *RocksDBMapBatchWriter) Flush() error {
 	}
 	b.batch = b.store.NewWriteOnlyBatch()
 	return nil
-}
-
-func (b *RocksDBMapBatchWriter) Empty() bool {
-	return b.batch.Empty()
 }
 
 // Close implements the SortedDiskMapBatchWriter interface.
