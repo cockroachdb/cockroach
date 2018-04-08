@@ -267,6 +267,14 @@ SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 7  {"a": "b", "c": "d"}
 
 statement ok
+PREPARE query (STRING, STRING) AS SELECT * from d where b->$1 = $2 ORDER BY a
+
+query IT
+EXECUTE query ('a', '"b"')
+----
+7  {"a": "b", "c": "d"}
+
+statement ok
 DELETE from d WHERE a=6;
 
 query IT
@@ -737,7 +745,6 @@ DROP TABLE del_cascade_test
 
 statement ok
 UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
-
 
 query IT
 SELECT * from update_cascade_test ORDER BY update_cascade;
