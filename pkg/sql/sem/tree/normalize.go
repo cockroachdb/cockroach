@@ -434,8 +434,13 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
+				rhs, err := expr.TypedRight().Eval(v.ctx)
+				if err != nil {
+					break
+				}
+
 				j := json.NewObjectBuilder(1)
-				j.Add(string(*str.(*DString)), expr.Right.(*DJSON).JSON)
+				j.Add(string(*str.(*DString)), rhs.(*DJSON).JSON)
 
 				dj, err := MakeDJSON(j.Build())
 				if err != nil {
