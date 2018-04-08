@@ -390,13 +390,13 @@ func BenchmarkSortAll(b *testing.B) {
 				}
 			}
 			rowSource := NewRepeatableRowSource(types, input)
-			s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
-			if err != nil {
-				b.Fatal(err)
-			}
 			b.SetBytes(int64(inputSize * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
 				s.Run(nil)
 				rowSource.Reset()
 			}
@@ -438,15 +438,15 @@ func BenchmarkSortLimit(b *testing.B) {
 
 		for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
-				s, err := newSorter(
-					&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
-				)
-				if err != nil {
-					b.Fatal(err)
-				}
 				b.SetBytes(int64(limit * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					s, err := newSorter(
+						&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
+					)
+					if err != nil {
+						b.Fatal(err)
+					}
 					s.Run(nil)
 					rowSource.Reset()
 				}
