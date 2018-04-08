@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -152,6 +153,34 @@ func selectTargets(
 	return matched.descs, matched.requestedDBs, nil
 }
 
+// rewriteViewQueryDBNames rewrites the passed table's ViewQuery replacing all
+// non-empty db qualifiers with `newDB`.
+//
+// TODO: this AST traversal misses tables named in strings (#24556).
+func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
+	stmt, err := parser.ParseOne(table.ViewQuery)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse underlying query from view %q", table.Name)
+	}
+	// Re-format to change all DB names to `newDB`.
+	f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+	f.WithReformatTableNames(
+		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
+			tn, err := t.Normalize()
+			if err != nil {
+				return
+			}
+			// empty catalog e.g. ``"".information_schema.tables` should stay empty.
+			if tn.CatalogName != "" {
+				tn.CatalogName = tree.Name(newDB)
+			}
+			ctx.FormatNode(tn)
+		})
+	f.FormatNode(stmt)
+	table.ViewQuery = f.CloseAndGetString()
+	return nil
+}
+
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
 // for each table in sqlDescs and returns a mapping from old ID to said
 // TableRewrite. It first validates that the provided sqlDescs can be restored
@@ -165,7 +194,7 @@ func allocateTableRewrites(
 	opts map[string]string,
 ) (tableRewriteMap, error) {
 	tableRewrites := make(tableRewriteMap)
-	_, renaming := opts[restoreOptIntoDB]
+	overrideDB, renaming := opts[restoreOptIntoDB]
 
 	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
@@ -193,10 +222,6 @@ func allocateTableRewrites(
 	// options.
 	// Check that foreign key targets exist.
 	for _, table := range tablesByID {
-		if renaming && table.IsView() {
-			return nil, errors.Errorf("cannot restore view when using %q option", restoreOptIntoDB)
-		}
-
 		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
@@ -247,8 +272,8 @@ func allocateTableRewrites(
 
 		for _, table := range tablesByID {
 			var targetDB string
-			if override, ok := opts[restoreOptIntoDB]; ok {
-				targetDB = override
+			if renaming {
+				targetDB = overrideDB
 			} else {
 				database, ok := databasesByID[table.ParentID]
 				if !ok {
@@ -366,12 +391,26 @@ func CheckTableExists(
 // rewriteTableDescs mutates tables to match the ID and privilege specified in
 // tableRewrites, as well as adjusting cross-table references to use the new
 // IDs.
-func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap) error {
+func rewriteTableDescs(
+	tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap, overrideDB string,
+) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
 		if !ok {
 			return errors.Errorf("missing table rewrite for table %d", table.ID)
 		}
+		if table.IsView() && overrideDB != "" {
+			// restore checks that all dependencies are also being restored, but if
+			// the restore is overriding the destination database, qualifiers in the
+			// view query string may be wrong. Since the destination override is
+			// applied to everything being restored, anything the view query
+			// references will be in the override DB post-restore, so all database
+			// qualifiers in the view query should be replaced with overrideDB.
+			if err := rewriteViewQueryDBNames(table, overrideDB); err != nil {
+				return err
+			}
+		}
+
 		table.ID = tableRewrite.TableID
 		table.ParentID = tableRewrite.ParentID
 
@@ -914,6 +953,7 @@ func restore(
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
 	tableRewrites tableRewriteMap,
+	overrideDB string,
 	job *jobs.Job,
 	resultsCh chan<- tree.Datums,
 ) (roachpb.BulkOpSummary, []*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
@@ -954,7 +994,7 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, tableRewrites); err != nil {
+	if err := rewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
 		return mu.res, nil, nil, err
 	}
 
@@ -1273,7 +1313,7 @@ func doRestorePlan(
 			tables = append(tables, tableDesc)
 		}
 	}
-	if err := rewriteTableDescs(tables, tableRewrites); err != nil {
+	if err := rewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
 	}
 
@@ -1291,6 +1331,7 @@ func doRestorePlan(
 			TableRewrites: tableRewrites,
 			URIs:          from,
 			TableDescs:    tables,
+			OverrideDB:    opts[restoreOptIntoDB],
 		},
 	})
 	if err != nil {
@@ -1344,6 +1385,7 @@ func (r *restoreResumer) Resume(
 		details.EndTime,
 		sqlDescs,
 		details.TableRewrites,
+		details.OverrideDB,
 		job,
 		resultsCh,
 	)

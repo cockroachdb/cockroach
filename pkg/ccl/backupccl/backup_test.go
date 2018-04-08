@@ -1192,7 +1192,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		)`)
 
 		// and a few views for good measure.
-		origDB.Exec(t, `CREATE VIEW store.early_customers AS SELECT id from store.customers WHERE id < 5`)
+		origDB.Exec(t, `CREATE VIEW store.early_customers AS SELECT id, email from store.customers WHERE id < 5`)
 		origDB.Exec(t, `CREATE VIEW storestats.ordercounts AS
 			SELECT c.id, c.email, COUNT(o.id)
 			FROM store.customers AS c
@@ -1401,6 +1401,13 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		if _, err := db.DB.Exec(
+			`RESTORE DATABASE storestats FROM $1`, localFoo,
+		); !testutils.IsError(err, `cannot restore "ordercounts" without restoring referenced table`) {
+			t.Fatal(err)
+		}
+
 		db.Exec(t, createStore)
 		db.Exec(t, createStoreStats)
 
@@ -1434,6 +1441,25 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		}
 
 		db.CheckQueryResults(t, `SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
+
+		db.Exec(t, `CREATE DATABASE otherstore`)
+		db.Exec(t, `RESTORE store.* FROM $1 WITH into_db = 'otherstore'`, localFoo)
+		// we want to observe just the view-related errors, not fk errors below.
+		db.Exec(t, `ALTER TABLE otherstore.orders DROP CONSTRAINT fk_customerid_ref_customers`)
+		db.Exec(t, `DROP TABLE otherstore.receipts`)
+
+		if _, err := db.DB.Exec(`DROP TABLE otherstore.customers`); !testutils.IsError(err,
+			`cannot drop relation "customers" because view "early_customers" depends on it`,
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.DB.Exec(`ALTER TABLE otherstore.customers DROP COLUMN email`); !testutils.IsError(
+			err, `cannot drop column "email" because view "early_customers" depends on it`) {
+			t.Fatal(err)
+		}
+		db.Exec(t, `DROP DATABASE store CASCADE`)
+		db.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
+
 	})
 }
 
