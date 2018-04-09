@@ -177,3 +177,5 @@ ReactDOM.render(
 );
 
 store.subscribe(alertDataSync(store));
+
+console.log("react version", React.version)
