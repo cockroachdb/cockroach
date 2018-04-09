@@ -270,9 +270,9 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	// switch. Other types are handled inside the switch and return.
 	var msg protoutil.Message
 	switch {
-	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexSuffix):
+	case bytes.Equal(suffix, keys.LocalLeaseAppliedIndexLegacySuffix):
 		fallthrough
-	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+	case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
 		i, err := value.GetInt()
 		if err != nil {
 			return "", err
@@ -301,7 +301,10 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 	case bytes.Equal(suffix, keys.LocalRangeLeaseSuffix):
 		msg = &roachpb.Lease{}
 
-	case bytes.Equal(suffix, keys.LocalRangeStatsSuffix):
+	case bytes.Equal(suffix, keys.LocalRangeAppliedStateSuffix):
+		msg = &enginepb.RangeAppliedState{}
+
+	case bytes.Equal(suffix, keys.LocalRangeStatsLegacySuffix):
 		msg = &enginepb.MVCCStats{}
 
 	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
@@ -726,7 +729,7 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 					return false, err
 				}
 				getReplicaInfo(rangeID).truncatedIndex = trunc.Index
-			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexSuffix):
+			case bytes.Equal(suffix, keys.LocalRaftAppliedIndexLegacySuffix):
 				idx, err := kv.Value.GetInt()
 				if err != nil {
 					return false, err

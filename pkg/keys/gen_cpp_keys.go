@@ -65,8 +65,14 @@ namespace cockroach {
 
 `)
 
-	fmt.Fprintf(f, "const rocksdb::Slice kLocalMax(%s);\n", rocksdbSlice(keys.LocalMax))
-	fmt.Fprintf(f, "const rocksdb::Slice kMeta2KeyMax(%s);\n", rocksdbSlice(keys.Meta2KeyMax))
+	genKey := func(key roachpb.Key, name string) {
+		fmt.Fprintf(f, "const rocksdb::Slice k%s(%s);\n", name, rocksdbSlice(key))
+	}
+	genKey(keys.LocalMax, "LocalMax")
+	genKey(keys.LocalRangeIDPrefix.AsRawKey(), "LocalRangeIDPrefix")
+	genKey(keys.LocalRangeIDReplicatedInfix, "LocalRangeIDReplicatedInfix")
+	genKey(keys.LocalRangeAppliedStateSuffix, "LocalRangeAppliedStateSuffix")
+	genKey(keys.Meta2KeyMax, "Meta2KeyMax")
 	fmt.Fprintf(f, "\n")
 
 	genSortedSpans := func(spans []roachpb.Span, name string) {

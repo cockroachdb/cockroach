@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -431,7 +432,7 @@ func TestReplicaContains(t *testing.T) {
 	r.mu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
-	if statsKey := keys.RangeStatsKey(desc.RangeID); !r.ContainsKey(statsKey) {
+	if statsKey := keys.RangeStatsLegacyKey(desc.RangeID); !r.ContainsKey(statsKey) {
 		t.Errorf("expected range to contain range stats key %q", statsKey)
 	}
 	if !r.ContainsKey(roachpb.Key("aa")) {
@@ -9634,4 +9635,264 @@ func TestReplicaPushed1PC(t *testing.T) {
 			}
 		})
 	}
+}
+
+// assertUsingRangeAppliedState asserts that the value of
+// ReplicaState.UsingAppliedStateKey is equal to the expected value.
+func assertUsingRangeAppliedState(t *testing.T, repl *Replica, expSet bool) {
+	t.Helper()
+	repl.raftMu.Lock()
+	defer repl.raftMu.Unlock()
+	repl.mu.Lock()
+	defer repl.mu.Unlock()
+
+	usingAppliedStateKey := repl.mu.state.UsingAppliedStateKey
+	if usingAppliedStateKey != expSet {
+		t.Errorf("expected ReplicaState.UsingAppliedStateKey=%t, found %t",
+			expSet, usingAppliedStateKey)
+	}
+}
+
+// assertRangeAppliedStateRelatedKeysExist performs a series of assertions
+// that each key related to the RangeAppliedState key migration is either
+// present or missing, depending on the expRASK flag.
+func assertRangeAppliedStateRelatedKeysExist(
+	ctx context.Context, t *testing.T, repl *Replica, expRASK bool,
+) {
+	t.Helper()
+	repl.raftMu.Lock()
+	defer repl.raftMu.Unlock()
+	repl.mu.Lock()
+	defer repl.mu.Unlock()
+
+	assertHasKey := func(key roachpb.Key, expect bool) {
+		t.Helper()
+		val, _, err := engine.MVCCGet(ctx, repl.store.Engine(), key, hlc.Timestamp{}, true, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		exists := val != nil
+		if exists != expect {
+			t.Errorf("expected key %s to exist=%t, found %t", key, expect, exists)
+		}
+	}
+
+	rsl := repl.mu.stateLoader
+	assertHasKey(rsl.RangeAppliedStateKey(), expRASK)
+	assertHasKey(rsl.RaftAppliedIndexLegacyKey(), !expRASK)
+	assertHasKey(rsl.LeaseAppliedIndexLegacyKey(), !expRASK)
+	assertHasKey(rsl.RangeStatsLegacyKey(), !expRASK)
+}
+
+// TestReplicaBootstrapRangeAppliedStateKey verifies that a bootstrapped range
+// is only created with a RangeAppliedStateKey if the cluster version is high
+// enough to permit it.
+func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		version                 roachpb.Version
+		expRangeAppliedStateKey bool
+	}{
+		{
+			version:                 cluster.VersionByKey(cluster.Version2_0),
+			expRangeAppliedStateKey: false,
+		},
+		{
+			version:                 cluster.VersionByKey(cluster.VersionRangeAppliedStateKey),
+			expRangeAppliedStateKey: true,
+		},
+		{
+			version:                 cluster.BinaryServerVersion,
+			expRangeAppliedStateKey: true,
+		},
+	}
+	for _, c := range testCases {
+		t.Run(fmt.Sprintf("version=%s", c.version), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			cfg := TestStoreConfig(nil)
+			cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
+				c.version /* minVersion */, cluster.BinaryServerVersion /* serverVersion */)
+			tc := testContext{}
+			tc.StartWithStoreConfig(t, stopper, cfg)
+			repl := tc.repl
+
+			// Check that that UsingAppliedStateKey flag in ReplicaState is set
+			// as expected.
+			assertInMemState := func(t *testing.T) {
+				t.Helper()
+				assertUsingRangeAppliedState(t, repl, c.expRangeAppliedStateKey)
+			}
+
+			// Check that persisted keys agree with the UsingAppliedStateKey flag.
+			assertPersistentState := func(t *testing.T) {
+				t.Helper()
+				assertRangeAppliedStateRelatedKeysExist(ctx, t, repl, c.expRangeAppliedStateKey)
+			}
+
+			// Check that in-mem and persistent state agree.
+			assertInMemAndPersistentStateAgree := func(t *testing.T) {
+				t.Helper()
+				repl.AssertState(ctx, tc.engine)
+			}
+
+			// Check that the MVCCStats are correct.
+			computeStatsDelta := func(db *client.DB) (enginepb.MVCCStats, error) {
+				var b client.Batch
+				b.AddRawRequest(&roachpb.RecomputeStatsRequest{
+					Span:   roachpb.Span{Key: roachpb.KeyMin},
+					DryRun: true,
+				})
+				if err := db.Run(ctx, &b); err != nil {
+					return enginepb.MVCCStats{}, err
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.RecomputeStatsResponse)
+				delta := enginepb.MVCCStats(resp.AddedDelta)
+				delta.AgeTo(0)
+				return delta, nil
+			}
+			assertEmptyStatsDelta := func(t *testing.T) {
+				t.Helper()
+				delta, err := computeStatsDelta(repl.DB())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if delta != (enginepb.MVCCStats{}) {
+					t.Errorf("unexpected stats adjustment of %+v", delta)
+				}
+			}
+
+			// Perform initial series of assertions.
+			assertInMemState(t)
+			assertPersistentState(t)
+			assertInMemAndPersistentStateAgree(t)
+			assertEmptyStatsDelta(t)
+
+			// Save the ReplicaState and perform persistent assertions again.
+			repl.raftMu.Lock()
+			repl.mu.Lock()
+			if _, err := repl.mu.stateLoader.Save(ctx, tc.engine, repl.mu.state); err != nil {
+				t.Fatalf("could not save ReplicaState: %v", err)
+			}
+			repl.mu.Unlock()
+			repl.raftMu.Unlock()
+			assertPersistentState(t)
+			assertInMemAndPersistentStateAgree(t)
+			assertEmptyStatsDelta(t)
+
+			// Load the ReplicaState and perform in-memory assertions again.
+			repl.raftMu.Lock()
+			repl.mu.Lock()
+			state, err := repl.mu.stateLoader.Load(ctx, tc.engine, repl.DescLocked())
+			if err != nil {
+				t.Fatalf("could not load ReplicaState: %v", err)
+			}
+			repl.mu.state = state
+			repl.mu.Unlock()
+			repl.raftMu.Unlock()
+			assertInMemState(t)
+			assertInMemAndPersistentStateAgree(t)
+		})
+	}
+}
+
+// TestReplicaMigrateRangeAppliedStateKey verifies that a range which is not yet
+// using the RangeAppliedStateKey will eventually trigger a migration to begin
+// using it once the cluster version is high enough to permit its use.
+func TestReplicaMigrateRangeAppliedStateKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	cfg := TestStoreConfig(nil)
+	cfg.Settings = cluster.MakeTestingClusterSettingsWithVersion(
+		cluster.VersionByKey(cluster.Version2_0), /* minVersion */
+		cluster.BinaryServerVersion /* serverVersion */)
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, stopper, cfg)
+	repl := tc.repl
+
+	assertMigrationComplete := func(t *testing.T, exp bool) {
+		t.Helper()
+		assertUsingRangeAppliedState(t, repl, exp)
+		assertRangeAppliedStateRelatedKeysExist(ctx, t, repl, exp)
+	}
+
+	// We should not be using the AppliedStateKey to begin with.
+	assertMigrationComplete(t, false)
+
+	// Begin performing some writes regularly.
+	errCh := make(chan *roachpb.Error, 1)
+	pArgs := putArgs(roachpb.Key("a"), []byte("val"))
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		ticker := time.NewTicker(2 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if _, pErr := tc.SendWrapped(&pArgs); pErr != nil {
+					errCh <- pErr
+					return
+				}
+			case <-stopper.ShouldQuiesce():
+				return
+			}
+		}
+	})
+
+	migrateCh := make(chan struct{}, 1)
+	repl.mu.Lock()
+	repl.store.TestingKnobs().TestingApplyFilter =
+		func(args storagebase.ApplyFilterArgs) *roachpb.Error {
+			if args.State != nil && args.State.UsingAppliedStateKey {
+				select {
+				case migrateCh <- struct{}{}:
+				default:
+				}
+			}
+			return nil
+		}
+	repl.mu.Unlock()
+
+	// No attempt should be made to migrate to the AppliedStateKey
+	select {
+	case <-time.After(20 * time.Millisecond):
+		// Expected. Assert again that we're not yet using the AppliedStateKey.
+		assertMigrationComplete(t, false)
+	case <-migrateCh:
+		t.Fatalf("unexpected migration attempt")
+	case pErr := <-errCh:
+		t.Fatalf("unexpected error %s", pErr)
+	}
+
+	// Bump the cluster version to trigger the ReplicaAppliedState key migration.
+	cv := cluster.ClusterVersion{
+		MinimumVersion: cluster.VersionByKey(cluster.VersionRangeAppliedStateKey),
+		UseVersion:     cluster.BinaryServerVersion,
+	}
+	if err := cfg.Settings.InitializeVersion(cv); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait until we see a proposal attempt a migration.
+	select {
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("expected to see a migration attempt")
+	case <-migrateCh:
+		// Expected.
+	case pErr := <-errCh:
+		t.Fatalf("unexpected error %s", pErr)
+	}
+
+	// Assert that the replica is now using the ReplicaAppliedState key. The
+	// migration will also trigger assertStateLocked, so we're sure that the
+	// in-memory and on-disk ReplicaStates are not diverging.
+	assertMigrationComplete(t, true)
 }

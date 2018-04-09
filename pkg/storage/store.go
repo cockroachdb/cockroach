@@ -1982,10 +1982,6 @@ func (s *Store) BootstrapRange(
 			return err
 		}
 	}
-	// Set range stats.
-	if err := engine.AccountForSelf(ms, desc.RangeID); err != nil {
-		return err
-	}
 
 	lease := roachpb.BootstrapLease()
 	updatedMS, err := writeInitialState(ctx, s.cfg.Settings, batch, *ms, *desc,

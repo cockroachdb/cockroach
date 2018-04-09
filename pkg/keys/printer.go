@@ -145,8 +145,9 @@ var (
 		{name: "AbortSpan", suffix: LocalAbortSpanSuffix, ppFunc: abortSpanKeyPrint, psFunc: abortSpanKeyParse},
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
-		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexSuffix},
-		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexSuffix},
+		{name: "RangeAppliedState", suffix: LocalRangeAppliedStateSuffix},
+		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexLegacySuffix},
+		{name: "LeaseAppliedIndex", suffix: LocalLeaseAppliedIndexLegacySuffix},
 		{name: "RaftLog", suffix: LocalRaftLogSuffix,
 			ppFunc: raftLogKeyPrint,
 			psFunc: raftLogKeyParse,
@@ -156,7 +157,7 @@ var (
 		{name: "RangeLastReplicaGCTimestamp", suffix: LocalRangeLastReplicaGCTimestampSuffix},
 		{name: "RangeLastVerificationTimestamp", suffix: LocalRangeLastVerificationTimestampSuffixDeprecated},
 		{name: "RangeLease", suffix: LocalRangeLeaseSuffix},
-		{name: "RangeStats", suffix: LocalRangeStatsSuffix},
+		{name: "RangeStats", suffix: LocalRangeStatsLegacySuffix},
 		{name: "RangeTxnSpanGCThreshold", suffix: LocalTxnSpanGCThresholdSuffix},
 		{name: "RangeFrozenStatus", suffix: LocalRangeFrozenStatusSuffix},
 		{name: "RangeLastGC", suffix: LocalRangeLastGCSuffix},
@@ -284,7 +285,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	var replicated bool
 	switch {
 	case bytes.Equal(localRangeIDUnreplicatedInfix, []byte(infix)):
-	case bytes.Equal(localRangeIDReplicatedInfix, []byte(infix)):
+	case bytes.Equal(LocalRangeIDReplicatedInfix, []byte(infix)):
 		replicated = true
 	default:
 		panic(errors.Errorf("invalid infix: %q", infix))

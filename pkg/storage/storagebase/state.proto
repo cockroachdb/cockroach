@@ -69,8 +69,16 @@ message ReplicaState {
   // Transaction at lower timestamps must not be allowed to write their initial
   // transaction entry.
   util.hlc.Timestamp txn_span_gc_threshold = 9 [(gogoproto.customname) = "TxnSpanGCThreshold", (gogoproto.moretags) = "cockroachdb:\"randnullable\""];
-
   reserved 10;
+  // using_applied_state_key specifies whether the Range has been upgraded
+  // to begin using the RangeAppliedState key. This key holds a combination
+  // of the Raft applied index, the lease applied index, and the MVCC stats.
+  //
+  // When set to true in a ReplicatedEvalResult, the flag indicates that the
+  // range should begin using the RangeAppliedState key. Handling of this flag
+  // is idempotent by Replica state machines, meaning that it is ok for multiple
+  // Raft commands to set it to true.
+  bool using_applied_state_key = 11;
 }
 
 message RangeInfo {

@@ -66,6 +66,15 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     7551962144604783939,
 		populatedSum: 3716674106872807900,
 	},
+	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return enginepb.NewPopulatedRangeAppliedState(r, false)
+		},
+		emptySum:     615555020845646359,
+		populatedSum: 94706924697857278,
+	},
+	// MVCCStats is still serialized beneath Raft in tests that use old cluster
+	// versions before the RangeAppliedState key.
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
 			return enginepb.NewPopulatedMVCCStats(r, false)

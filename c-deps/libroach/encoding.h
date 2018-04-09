@@ -22,6 +22,10 @@
 
 namespace cockroach {
 
+const int kIntZero = 136;
+const int kIntSmall = 109;
+const int kIntMax = 253;
+
 // EncodeUint32 encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer.
 void EncodeUint32(std::string* buf, uint32_t v);
@@ -30,6 +34,10 @@ void EncodeUint32(std::string* buf, uint32_t v);
 // representation. The encoded bytes are appended to the supplied buffer.
 void EncodeUint64(std::string* buf, uint64_t v);
 
+// EncodeUvarint64 encodes the uint64 value using a variable-length
+// representation. The encoded bytes are appended to the supplied buffer.
+void EncodeUvarint64(std::string* buf, uint64_t v);
+
 // DecodedUint32 decodes a fixed-length encoded uint32 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
@@ -37,6 +45,11 @@ bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value);
 // DecodedUint64 decodes a fixed-length encoded uint64 from a buffer, returning
 // true on a successful decode. The decoded value is returned in *value.
 bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value);
+
+// DecodeUvarint64 decodes a variable-length encoded uint64 from a buffer,
+// returning true on a successful decode. The decoded value is returned in
+// *value.
+bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value);
 
 const int kMVCCVersionTimestampSize = 12;
 
@@ -75,6 +88,14 @@ WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64
 WARN_UNUSED_RESULT inline bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, DBTimestamp* ts) {
   return DecodeKey(buf, key, &ts->wall_time, &ts->logical);
 }
+
+const int kLocalSuffixLength = 4;
+
+// DecodeRangeIDKey parses a local range ID key into range ID, infix,
+// suffix, and detail.
+WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
+                                         rocksdb::Slice* infix, rocksdb::Slice* suffix,
+                                         rocksdb::Slice* detail);
 
 // KeyPrefix strips the timestamp from an MVCC encoded key, returning
 // a slice that is still MVCC encoded. This is used by the prefix
