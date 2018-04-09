@@ -38,6 +38,8 @@ type distinct struct {
 	memAcc       mon.BoundAccount
 	datumAlloc   sqlbase.DatumAlloc
 	scratch      []byte
+
+	trailingMeta []ProducerMetadata
 }
 
 // sortedDistinct is a specialized distinct that can be used when all of the
@@ -191,18 +193,24 @@ func (d *distinct) close() {
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (d *distinct) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
 	if !d.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(d.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
+		if trace := getTraceData(d.ctx); trace != nil {
+			d.trailingMeta = append(d.trailingMeta, ProducerMetadata{TraceData: trace})
 		}
+		if err != nil {
+			d.trailingMeta = append(d.trailingMeta, ProducerMetadata{Err: err})
+		}
+
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		d.close()
 	}
-	return meta
+	if len(d.trailingMeta) > 0 {
+		meta := &d.trailingMeta[0]
+		d.trailingMeta = d.trailingMeta[1:]
+		return meta
+	}
+	return nil
 }
 
 // Next is part of the RowSource interface.

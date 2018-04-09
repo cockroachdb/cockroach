@@ -73,41 +73,6 @@ func (s *sorterBase) init(
 	return s.processorBase.init(post, input.OutputTypes(), flowCtx, output)
 }
 
-// closeAndQueueTrailingMeta closes input and puts the processor in a mode where
-// future calls to Next() will return only "trailing metadata". The first such
-// piece of metadata is returned. The next ones have to be retrieved with
-// popTrailingMeta().
-//
-// If an error is passed in, it will be part of the trailing metadata.
-//
-// This method is to be called when the processor is done producing rows and
-// draining its inputs (if it wants to drain them).
-func (s *sorterBase) closeAndQueueTrailingMeta(err error) *ProducerMetadata {
-	if s.closed {
-		log.Fatalf(s.ctx, "closeAndQueueTrailingMeta() called after close. err: %v", err)
-	}
-
-	if err != nil {
-		s.meta = append(s.meta, ProducerMetadata{Err: err})
-	}
-	if trace := getTraceData(s.ctx); trace != nil {
-		s.meta = append(s.meta, ProducerMetadata{TraceData: trace})
-	}
-	s.close()
-
-	return s.popTrailingMeta()
-}
-
-// popTrailingMeta peels off one piece of trailing metadata.
-func (s *sorterBase) popTrailingMeta() *ProducerMetadata {
-	if len(s.meta) > 0 {
-		meta := &s.meta[0]
-		s.meta = s.meta[1:]
-		return meta
-	}
-	return nil
-}
-
 func newSorter(
 	ctx context.Context,
 	flowCtx *FlowCtx,
@@ -164,7 +129,8 @@ type sortAllProcessor struct {
 
 	// The following variables are used by the state machine, and are used by Next()
 	// to determine where to resume emitting rows.
-	i       rowIterator
+	i rowIterator
+	// !!!
 	started bool
 	closed  bool
 }

@@ -366,6 +366,10 @@ type processorBase struct {
 	// evalCtx is used for expression evaluation. It overrides the one in flowCtx.
 	evalCtx *tree.EvalContext
 
+	// closed is set by internalClose() is called. Once set, the processors span
+	// has been closed.
+	closed bool
+
 	// ctx and span contain the tracing state while the processor is active
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
@@ -375,8 +379,137 @@ type processorBase struct {
 	// ctx to this.
 	origCtx context.Context
 
-	// closed is used for closing a processor when used as a RowSource.
-	closed bool
+	state procState
+
+	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
+	// callback is expected to close all inputs, do other cleanup on the
+	// processor (including calling internalClose()) and  generate the trailing
+	// meta that needs to be returned to the consumer. As a special case,
+	// moveToTrailingMeta() handles getting the tracing information into
+	// trailingMeta, so the callback doesn't need to worry about that.
+	//
+	// If no callback is specified, internalClose() will be called automatically.
+	// So, if no trailing metadata other than the trace needs to be returned and
+	// no closing other than internalClose is needed, then no callback needs to be
+	// specified.
+	trailingMetaCallback func() []ProducerMetadata
+	// trailingMeta is scratch space where metadata is stored to be returned
+	// later.
+	trailingMeta []ProducerMetadata
+
+	// inputToDrain, if specified, will be drained by drainHelper(). Also,
+	// moveToDraining() calls ConsumerDone() on it.
+	inputToDrain RowSource
+}
+
+type procState int
+
+const (
+	// stateRunning is the common state of a processor: it's producing rows for
+	// its consumer and forwarding metadata from its input. Different processors
+	// might have sub-states internally.
+	//
+	// If the consumer calls ConsumerDone or if the processor's limit is reached,
+	// then the processor will transition to draining. If the input is exhausted,
+	// then it will transition to trailingMeta.
+	stateRunning procState = iota
+	// stateDraining is the state in which the processor is forwarding metadata
+	// from its input and otherwise ignoring all rows. Once the input is
+	// exhausted, the processor will transition to trailingMeta.
+	stateDraining
+	// stateTrailingMeta is the state in which the processor is outputting final
+	// metadata such as the tracing information or the TxnCoordMeta. Once all the
+	// trailing metadata has been produced, the processor transitions to
+	// exhausted.
+	stateTrailingMeta
+	// stateExhausted is the state of a processor that has no more rows or
+	// metadata to produce.
+	stateExhausted
+)
+
+// moveToDraining switches the processor to the draining state. Only metadata is
+// returned from now on. In this state, the processor is expected to drain its
+// inputs.
+//
+// An error can be optionally passed. It will be the first piece of metadata
+// returned by drainHelper().
+func (pb *processorBase) moveToDraining(err error) {
+	if err != nil {
+		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{Err: err})
+	}
+	if pb.inputToDrain != nil {
+		pb.state = stateDraining
+		pb.inputToDrain.ConsumerDone()
+	} else {
+		pb.moveToTrailingMeta(nil /* err */)
+	}
+}
+
+// drainHelper is supposed to be used in states draining and trailingMetadata.
+// It deals with optionally draining an put and returning trailing meta.
+func (pb *processorBase) drainHelper() *ProducerMetadata {
+	// trailingMeta always has priority; it seems like a good idea because it
+	// causes metadata to be sent quickly after it is produced (e.g. the error
+	// passed to moveToDraining()).
+	if len(pb.trailingMeta) > 1 {
+		return pb.consumeTrailingMeta()
+	}
+
+	switch pb.state {
+	case stateDraining:
+		for {
+			row, meta := pb.inputToDrain.Next()
+			if row == nil || meta == nil {
+				pb.moveToTrailingMeta(nil /* err */)
+				return pb.consumeTrailingMeta()
+			}
+			if meta != nil {
+				return meta
+			}
+		}
+	default:
+		return nil
+	}
+}
+
+// consumeTrailingMeta peels off one piece of trailing metadata.
+func (pb *processorBase) consumeTrailingMeta() *ProducerMetadata {
+	if len(pb.trailingMeta) > 0 {
+		meta := &pb.trailingMeta[0]
+		pb.trailingMeta = pb.trailingMeta[1:]
+		return meta
+	}
+	pb.state = stateExhausted
+	return nil
+}
+
+// moveToTrailingMeta switches the processor to the "trailing meta" state: only
+// trailing metadata is returned from now on.
+//
+// An error can be optionally passed. It will be the first piece of metadata
+// returned by consumeTrailingMeta.
+//
+// trailingMetaCallback, if any, is called; it is expected to close the
+// processor's inputs.
+//
+// This method is to be called when the processor is done producing rows and
+// draining its inputs (if it wants to drain them).
+func (pb *processorBase) moveToTrailingMeta(err error) {
+	pb.state = stateTrailingMeta
+	if err != nil {
+		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{Err: err})
+	}
+	if trace := getTraceData(pb.ctx); trace != nil {
+		pb.trailingMeta = append(pb.trailingMeta, ProducerMetadata{TraceData: trace})
+	}
+	// trailingMetaCallback is called after reading the tracing data because it
+	// generally calls internalClose, indirectly, which switches the context and
+	// the span.
+	if pb.trailingMetaCallback != nil {
+		pb.trailingMeta = pb.trailingMetaCallback()
+	} else {
+		pb.internalClose()
+	}
 }
 
 // OutputTypes is part of the processor interface.
@@ -404,11 +537,30 @@ var procNameToLogTag = map[string]string{
 	valuesProcName:                  "values",
 }
 
+// procStateOpts contains fields used by the processorBase's family of functions
+// that deal with draining and trailing metadata: the processorBase implements
+// generic useful functionality that needs to call back into the Processor.
+type procStateOpts struct {
+	// trailingMetaCallback, if specified, is a callback to be called by
+	// moveToTrailingMeta(). See processorBase.trailingMetaCallback.
+	trailingMetaCallback func() []ProducerMetadata
+	// inputToDrain, if specified, will be drained by drainHelper(). Also,
+	// moveToDraining() calls ConsumerDone() on it.
+	inputToDrain RowSource
+}
+
+// init initializes the processorBase.
 func (pb *processorBase) init(
-	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+	post *PostProcessSpec,
+	types []sqlbase.ColumnType,
+	flowCtx *FlowCtx,
+	output RowReceiver,
+	opts procStateOpts,
 ) error {
 	pb.flowCtx = flowCtx
 	pb.evalCtx = flowCtx.NewEvalCtx()
+	pb.trailingMetaCallback = opts.trailingMetaCallback
+	pb.inputToDrain = opts.inputToDrain
 	return pb.out.Init(post, types, pb.evalCtx, output)
 }
 
@@ -434,6 +586,7 @@ func (pb *processorBase) startInternal(ctx context.Context, name string) context
 //   if pb.internalClose() {
 //     // Perform processor specific close work.
 //   }
+// !!! maybe the retval is not needed any more
 func (pb *processorBase) internalClose() bool {
 	closing := !pb.closed
 	if closing {
