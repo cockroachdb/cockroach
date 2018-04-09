@@ -5,6 +5,7 @@ import * as sinon from "sinon";
 import moment from "moment";
 import _ from "lodash";
 
+import "src/enzymeInit";
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
 import * as timewindow from "src/redux/timewindow";
 
