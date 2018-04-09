@@ -106,11 +106,15 @@ func newJoinReader(
 			0, /* numMergedColumns */
 			post,
 			output,
+			procStateOpts{}, // joinReader doesn't implement RowSource and so doesn't use it.
 		); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := jr.processorBase.init(post, jr.desc.ColumnTypes(), flowCtx, output); err != nil {
+		if err := jr.processorBase.init(
+			post, jr.desc.ColumnTypes(), flowCtx, output,
+			procStateOpts{}, // joinReader doesn't implement RowSource and so doesn't use it.
+		); err != nil {
 			return nil, err
 		}
 	}
