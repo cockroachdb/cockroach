@@ -769,7 +769,9 @@ func TestImportControlJob(t *testing.T) {
 
 		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT PRIMARY KEY) CSV DATA (%s)`, csvURLs)
 
-		if _, err := jobutils.RunJob(t, sqlDB, &allowResponse, "cancel", query); !testutils.IsError(err, "job canceled") {
+		if _, err := jobutils.RunJob(
+			t, sqlDB, &allowResponse, []string{"cancel"}, query,
+		); !testutils.IsError(err, "job canceled") {
 			t.Fatalf("expected 'job canceled' error, but got %+v", err)
 		}
 		// Check that executing again succeeds. This won't work if the first import
@@ -809,7 +811,9 @@ func TestImportControlJob(t *testing.T) {
 		csvURLs := strings.Join(urls, ", ")
 		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
 
-		jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query)
+		jobID, err := jobutils.RunJob(
+			t, sqlDB, &allowResponse, []string{"PAUSE"}, query,
+		)
 		if !testutils.IsError(err, "job paused") {
 			t.Fatalf("unexpected: %v", err)
 		}
