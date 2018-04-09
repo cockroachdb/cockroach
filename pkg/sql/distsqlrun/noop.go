@@ -39,7 +39,9 @@ func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
-	if err := n.init(post, input.OutputTypes(), flowCtx, output); err != nil {
+	if err := n.init(
+		post, input.OutputTypes(), flowCtx, output, procStateOpts{inputToDrain: n.input},
+	); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -69,54 +71,26 @@ func (n *noopProcessor) close() {
 	}
 }
 
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !n.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(n.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		n.close()
-	}
-	return meta
-}
-
 // Next is part of the RowSource interface.
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if n.closed {
-		return nil, n.producerMeta(nil /* err */)
-	}
-
 	for {
+		if n.state != stateRunning {
+			return nil, n.drainHelper()
+		}
+
 		row, meta := n.input.Next()
+
 		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			return nil, n.producerMeta(nil /* err */)
-		}
-
-		outRow, status, err := n.out.ProcessRow(n.ctx, row)
-		if err != nil {
-			return nil, n.producerMeta(err)
-		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			n.input.ConsumerDone()
+			n.moveToDraining(nil /* err */)
 			continue
 		}
-		return outRow, nil
+
+		if outRow := n.processRowHelper(row); outRow != nil {
+			return outRow, nil
+		}
 	}
 }
 

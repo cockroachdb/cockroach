@@ -41,6 +41,11 @@ type mergeJoiner struct {
 	matchedRightCount       int
 
 	streamMerger streamMerger
+
+	// trailingMetaMode, if set, means that the processor is no longer reading
+	// rows from its input. Instead, it returns metadata from trailingMeta.
+	trailingMetaMode bool
+	trailingMeta     []ProducerMetadata
 }
 
 var _ Processor = &mergeJoiner{}
@@ -120,18 +125,26 @@ func (m *mergeJoiner) close() {
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (m *mergeJoiner) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
 	if !m.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(m.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
+		m.trailingMetaMode = true
+
+		if trace := getTraceData(m.ctx); trace != nil {
+			m.trailingMeta = append(m.trailingMeta, ProducerMetadata{TraceData: trace})
 		}
+		if err != nil {
+			m.trailingMeta = append(m.trailingMeta, ProducerMetadata{Err: err})
+		}
+
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		m.close()
 	}
-	return meta
+	if len(m.trailingMeta) > 0 {
+		meta := &m.trailingMeta[0]
+		m.trailingMeta = m.trailingMeta[1:]
+		return meta
+	}
+	return nil
 }
 
 // Start is part of the RowSource interface.
