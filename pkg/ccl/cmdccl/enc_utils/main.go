@@ -206,8 +206,8 @@ func readFile(filename string) ([]byte, error) {
 	}
 
 	size := len(data)
-	var counter uint32 = reg.settings.Counter
-	var nonce []byte = reg.settings.Nonce
+	counter := reg.settings.Counter
+	nonce := reg.settings.Nonce
 	if len(nonce) != 12 {
 		log.Fatalf(context.Background(), "nonce has wrong length: %d, expected 12", len(nonce))
 	}
