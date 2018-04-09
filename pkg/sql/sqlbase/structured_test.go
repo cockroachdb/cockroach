@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1345,5 +1346,16 @@ func TestKeysPerRow(t *testing.T) {
 				t.Errorf("expected %d keys got %d", test.expected, keys)
 			}
 		})
+	}
+}
+
+func TestDatumTypeToColumnSemanticType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, typ := range types.AnyNonArray {
+		_, err := DatumTypeToColumnSemanticType(typ)
+		if err != nil {
+			t.Errorf("couldn't get semantic type: %s", err)
+		}
 	}
 }

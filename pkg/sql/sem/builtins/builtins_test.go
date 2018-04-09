@@ -165,3 +165,13 @@ func TestEscapeFormatRandom(t *testing.T) {
 		}
 	}
 }
+
+func TestAllTypesAsJSON(t *testing.T) {
+	for _, typ := range types.AnyNonArray {
+		d := tree.SampleDatum(typ)
+		_, err := AsJSON(d)
+		if err != nil {
+			t.Errorf("couldn't convert %s to JSON: %s", d, err)
+		}
+	}
+}
