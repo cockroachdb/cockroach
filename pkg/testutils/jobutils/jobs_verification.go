@@ -81,7 +81,8 @@ func RunJob(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
 	allowProgressIota *chan struct{},
-	op, query string,
+	ops []string,
+	query string,
 	args ...interface{},
 ) (int64, error) {
 	*allowProgressIota = make(chan struct{})
@@ -97,7 +98,10 @@ func RunJob(
 	}
 	var jobID int64
 	db.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
-	db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
+	for _, op := range ops {
+		db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
+		*allowProgressIota <- struct{}{}
+	}
 	close(*allowProgressIota)
 	return jobID, <-errCh
 }
