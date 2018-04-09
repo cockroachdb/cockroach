@@ -113,6 +113,7 @@ func newJoinReader(
 		0, /* numMergedColumns */
 		post,
 		output,
+		procStateOpts{}, // joinReader doesn't implement RowSource and so doesn't use it.
 	); err != nil {
 		return nil, err
 	}

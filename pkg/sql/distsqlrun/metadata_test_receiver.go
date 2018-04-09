@@ -31,7 +31,7 @@ type metadataTestReceiver struct {
 	// do not return this metadata immediately because metadata propagation errors
 	// are prioritized over query errors, which ensures that tests which expect a
 	// query error can still fail if they do not properly propagate metadata.
-	trailingErrMetadata []*ProducerMetadata
+	trailingErrMetadata []ProducerMetadata
 
 	senders   []string
 	rowCounts map[string]rowNumCounter
@@ -56,7 +56,30 @@ func newMetadataTestReceiver(
 		senders:   senders,
 		rowCounts: make(map[string]rowNumCounter),
 	}
-	if err := mtr.init(post, input.OutputTypes(), flowCtx, output); err != nil {
+	if err := mtr.init(
+		post,
+		input.OutputTypes(),
+		flowCtx,
+		output,
+		procStateOpts{
+			inputsToDrain: []RowSource{input},
+			trailingMetaCallback: func() []ProducerMetadata {
+				var trailingMeta []ProducerMetadata
+				if mtr.rowCounts != nil {
+					if meta := mtr.checkRowNumMetadata(); meta != nil {
+						trailingMeta = append(trailingMeta, *meta)
+					}
+				}
+
+				if trace := getTraceData(mtr.ctx); trace != nil {
+					trailingMeta = append(trailingMeta, ProducerMetadata{TraceData: trace})
+				}
+				trailingMeta = append(trailingMeta, mtr.trailingErrMetadata...)
+
+				return trailingMeta
+			},
+		},
+	); err != nil {
 		return nil, err
 	}
 	return mtr, nil
@@ -72,12 +95,6 @@ func (mtr *metadataTestReceiver) Run(ctx context.Context, wg *sync.WaitGroup) {
 	Run(ctx, mtr, mtr.out.output)
 	if wg != nil {
 		wg.Done()
-	}
-}
-
-func (mtr *metadataTestReceiver) close() {
-	if mtr.internalClose() {
-		mtr.input.ConsumerClosed()
 	}
 }
 
@@ -131,34 +148,6 @@ func (mtr *metadataTestReceiver) checkRowNumMetadata() *ProducerMetadata {
 	return nil
 }
 
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error.
-func (mtr *metadataTestReceiver) producerMeta() *ProducerMetadata {
-	if mtr.rowCounts != nil {
-		if meta := mtr.checkRowNumMetadata(); meta != nil {
-			return meta
-		}
-	}
-
-	if !mtr.closed {
-		if trace := getTraceData(mtr.ctx); trace != nil {
-			return &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		mtr.close()
-	}
-
-	if len(mtr.trailingErrMetadata) > 0 {
-		meta := mtr.trailingErrMetadata[0]
-		mtr.trailingErrMetadata = mtr.trailingErrMetadata[1:]
-		return meta
-	}
-
-	return nil
-}
-
 // Start is part of the RowSource interface.
 func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 	mtr.input.Start(ctx)
@@ -166,8 +155,16 @@ func (mtr *metadataTestReceiver) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
+//
+// This implementation doesn't follow the usual patterns of other processors; it
+// makes more limited use of the processorBase's facilities because it needs to
+// inspect metdata while draining.
 func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
+		if mtr.state == stateTrailingMeta {
+			return nil, mtr.drainHelper()
+		}
+
 		row, meta := mtr.input.Next()
 
 		if meta != nil {
@@ -196,7 +193,7 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 				mtr.rowCounts[rowNum.SenderID] = rcnt
 			}
 			if meta.Err != nil {
-				mtr.trailingErrMetadata = append(mtr.trailingErrMetadata, meta)
+				mtr.trailingErrMetadata = append(mtr.trailingErrMetadata, *meta)
 				continue
 			}
 
@@ -204,25 +201,32 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 		}
 
 		if row == nil {
-			// We have exhausted the input. Check that we received all the RowNum
-			// metadata we expected to get.
-			return nil, mtr.producerMeta()
+			mtr.moveToTrailingMeta()
+			continue
 		}
 
+		// We don't use processorBase.processRowHelper() here because we need
+		// special handling for errors.
 		outRow, status, err := mtr.out.ProcessRow(mtr.ctx, row)
 		if err != nil {
-			mtr.trailingErrMetadata = append(mtr.trailingErrMetadata, &ProducerMetadata{Err: err})
+			mtr.trailingErrMetadata = append(mtr.trailingErrMetadata, ProducerMetadata{Err: err})
 			continue
 		}
 		switch status {
 		case NeedMoreRows:
-			if outRow == nil && err == nil {
+			if outRow == nil {
 				continue
 			}
 		case DrainRequested:
-			mtr.input.ConsumerDone()
+			mtr.moveToDraining(nil /* err */)
 			continue
 		}
+
+		// Swallow rows if we're draining.
+		if mtr.state == stateDraining && outRow != nil {
+			continue
+		}
+
 		return outRow, nil
 	}
 }
@@ -235,5 +239,5 @@ func (mtr *metadataTestReceiver) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (mtr *metadataTestReceiver) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	mtr.close()
+	mtr.internalClose()
 }

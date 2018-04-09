@@ -34,7 +34,6 @@ import (
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
 	processorBase
-	rowSourceBase
 
 	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
@@ -45,14 +44,6 @@ type tableReader struct {
 	// initialization, call input.Next() to retrieve rows once initialized.
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
-
-	// TODO(andrei): get rid of this field and move the actions it gates into the
-	// Start() method once Start() is able to queue trailing metadata.
-	started bool
-
-	// trailingMetadata contains producer metadata that is sent once the consumer
-	// status is not NeedMoreRows.
-	trailingMetadata []ProducerMetadata
 }
 
 var _ Processor = &tableReader{}
@@ -78,7 +69,20 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.init(post, types, flowCtx, output); err != nil {
+	if err := tr.init(
+		post,
+		types,
+		flowCtx,
+		output,
+		procStateOpts{
+			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
+			// on top of a tableReader; draining doesn't apply to it. Moreover, Andrei
+			// doesn't trust that the adapter will do the right thing on a Next() call
+			// after it had previously returned an error.
+			inputsToDrain:        nil,
+			trailingMetaCallback: tr.generateTrailingMeta,
+		},
+	); err != nil {
 		return nil, err
 	}
 
@@ -176,103 +180,72 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-// close the tableReader and finish any tracing. Any subsequent calls to Next()
-// will return empty data.
-func (tr *tableReader) close() {
-	tr.internalClose()
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
-	if !tr.closed {
-		if err != nil {
-			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Err: err})
-		}
-		ranges := misplannedRanges(tr.ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
-		if ranges != nil {
-			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Ranges: ranges})
-		}
-		traceData := getTraceData(tr.ctx)
-		if traceData != nil {
-			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
-		}
-		if tr.flowCtx.txn.Type() == client.LeafTxn {
-			txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
-			if txnMeta.Txn.ID != (uuid.UUID{}) {
-				tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TxnMeta: &txnMeta})
-			}
-		}
-		tr.close()
+func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
+	var trailingMeta []ProducerMetadata
+	ranges := misplannedRanges(tr.ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+	if ranges != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if len(tr.trailingMetadata) > 0 {
-		meta := &tr.trailingMetadata[0]
-		tr.trailingMetadata = tr.trailingMetadata[1:]
-		return meta
+	if tr.flowCtx.txn.Type() == client.LeafTxn {
+		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
+		if txnMeta.Txn.ID != (uuid.UUID{}) {
+			trailingMeta = append(trailingMeta, ProducerMetadata{TxnMeta: &txnMeta})
+		}
 	}
-	return nil
+	return trailingMeta
 }
 
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) context.Context {
 	tr.input.Start(ctx)
-	return tr.startInternal(ctx, tableReaderProcName)
+	ctx = tr.startInternal(ctx, tableReaderProcName)
+
+	if tr.flowCtx.txn == nil {
+		log.Fatalf(ctx, "tableReader outside of txn")
+	}
+	log.VEventf(ctx, 1, "starting")
+
+	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+	if err := tr.fetcher.StartScan(
+		ctx, tr.flowCtx.txn, tr.spans,
+		true /* limit batches */, tr.limitHint, false, /* traceKV */
+	); err != nil {
+		tr.moveToDraining(err)
+	}
+
+	return ctx
 }
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if !tr.started {
-		tr.started = true
-		if tr.flowCtx.txn == nil {
-			log.Fatalf(tr.ctx, "tableReader outside of txn")
-		}
-		log.VEventf(tr.ctx, 1, "starting")
-
-		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-		if err := tr.fetcher.StartScan(
-			tr.ctx, tr.flowCtx.txn, tr.spans,
-			true /* limit batches */, tr.limitHint, false, /* traceKV */
-		); err != nil {
-			log.Eventf(tr.ctx, "scan error: %s", err)
-			return nil, tr.producerMeta(err)
-		}
-	}
-
-	if tr.closed || tr.consumerStatus != NeedMoreRows {
-		return nil, tr.producerMeta(nil /* err */)
-	}
-
 	for {
+		if tr.state != stateRunning {
+			return nil, tr.drainHelper()
+		}
+
 		row, meta := tr.input.Next()
 
 		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			return nil, tr.producerMeta(nil /* err */)
-		}
-
-		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
-		if outRow != nil {
-			return outRow, nil
-		}
-		if outRow == nil && err == nil && status == NeedMoreRows {
+			tr.moveToDraining(nil /* err */)
 			continue
 		}
-		return nil, tr.producerMeta(err)
+
+		if outRow := tr.processRowHelper(row); outRow != nil {
+			return outRow, nil
+		}
 	}
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (tr *tableReader) ConsumerDone() {
-	tr.consumerDone()
+	tr.moveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
-	tr.consumerClosed("tableReader")
 	// The consumer is done, Next() will not be called again.
-	tr.close()
+	tr.internalClose()
 }
