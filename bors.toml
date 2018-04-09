@@ -7,3 +7,7 @@ pr_status = [
 block_labels = [
   "do-not-merge"
 ]
+
+[committer]
+name = "craig[bot]"
+email = "bors@cockroachlabs.com"
