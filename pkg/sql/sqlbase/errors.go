@@ -233,7 +233,7 @@ func NewStatementCompletionUnknownError(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 
-var queryCanceledError error = pgerror.NewErrorf(
+var queryCanceledError = pgerror.NewErrorf(
 	pgerror.CodeQueryCanceledError, "query execution canceled")
 
 // NewQueryCanceledError creates a query cancellation error.
