@@ -1,12 +1,15 @@
 import React from "react";
 import { assert } from "chai";
-import { shallow } from "enzyme";
+import Enzyme, { shallow } from "enzyme";
+import Adapter from "enzyme-adapter-react-16";
 import * as sinon from "sinon";
 import moment from "moment";
 import _ from "lodash";
 
 import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
 import * as timewindow from "src/redux/timewindow";
+
+Enzyme.configure({ adapter: new Adapter() });
 
 describe("<TimeWindowManager>", function() {
   let spy: sinon.SinonSpy;
