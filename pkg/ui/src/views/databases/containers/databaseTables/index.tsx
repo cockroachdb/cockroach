@@ -25,13 +25,7 @@ const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "databases/sort_setting/tables", (s) => s.localSettings,
 );
 
-// Specialization of generic SortedTable component:
-//   https://github.com/Microsoft/TypeScript/issues/3960
-//
-// The variable name must start with a capital letter or TSX will not recognize
-// it as a component.
-// tslint:disable-next-line:variable-name
-const DatabaseTableListSortedTable = SortedTable as new () => SortedTable<TableInfo>;
+class DatabaseTableListSortedTable extends SortedTable<TableInfo> {}
 
 // DatabaseSummaryTables displays a summary section describing the tables
 // contained in a single database.
