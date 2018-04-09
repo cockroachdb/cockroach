@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -97,6 +98,39 @@ type Index interface {
 	Column(i int) IndexColumn
 }
 
+// TableStatistic is an interface to a table statistic. Each statistic is
+// associated with a set of columns.
+type TableStatistic interface {
+	// CreatedAt indicates when the statistic was generated.
+	CreatedAt() time.Time
+
+	// ColumnCount is the number of columns the statistic pertains to.
+	ColumnCount() int
+
+	// ColumnOrdinal returns the column ordinal (see Table.Column) of the ith
+	// column in this statistic, with 0 <= i < ColumnCount.
+	ColumnOrdinal(i int) int
+
+	// RowCount returns the estimated number of rows in the table.
+	RowCount() uint64
+
+	// DistinctCount returns the estimated number of distinct values on the
+	// columns of the statistic. If there are multiple columns, each "value" is a
+	// tuple with the values on each column. Rows where any statistic column have
+	// a NULL don't contribute to this count.
+	DistinctCount() uint64
+
+	// NullCount returns the estimated number of rows which have a NULL value on
+	// any column in the statistic.
+	NullCount() uint64
+
+	// HasHistogram returns whether a histogram is available for this statistic.
+	// Only single-column statistics can have histograms.
+	HasHistogram() bool
+
+	// TODO(radu): add Histogram().
+}
+
 // Table is an interface to a database table, exposing only the information
 // needed by the query optimizer.
 type Table interface {
@@ -120,6 +154,12 @@ type Table interface {
 	// table's primary key. If a primary key was not explicitly specified, then
 	// the system implicitly creates one based on a hidden rowid column.
 	Index(i int) Index
+
+	// StatisticCount returns the number of statistics available for the table.
+	StatisticCount() int
+
+	// Statistic returns the ith statistic, where i < StatisticCount.
+	Statistic(i int) TableStatistic
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
