@@ -72,8 +72,14 @@ std::unordered_set<int> FileRegistry::GetUsedEnvTypes() {
 }
 
 std::string FileRegistry::TransformPath(const std::string& filename) {
+  // Check for the rare case when we're referring to the db directory itself (without slash).
+  if (filename == db_dir_) {
+    return "";
+  }
+
   // The db_dir usually does not include a trailing slash. We add it here.
   auto prefixLength = db_dir_.size();
+
   std::string db_dir(db_dir_);
   if (prefixLength == 0 || db_dir[prefixLength - 1] != '/') {
     db_dir.append("/");
@@ -89,6 +95,11 @@ std::string FileRegistry::TransformPath(const std::string& filename) {
   if (filename.compare(0, prefixLength, db_dir) != 0) {
     // Does not start with db_dir.
     return filename;
+  }
+
+  // Matched rocksdbdir prefix. Check if there's a double slash (it happens):
+  if ((nameLength > prefixLength) && (filename[prefixLength] == '/')) {
+    prefixLength++;
   }
 
   if (nameLength == prefixLength) {
