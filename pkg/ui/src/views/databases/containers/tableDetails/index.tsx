@@ -18,13 +18,7 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import * as hljs from "highlight.js";
 
-// Specialization of generic SortedTable component:
-//   https://github.com/Microsoft/TypeScript/issues/3960
-//
-// The variable name must start with a capital letter or JSX will not recognize
-// it as a component.
-// tslint:disable-next-line:variable-name
-export const GrantsSortedTable = SortedTable as new () => SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties>;
+class GrantsSortedTable extends SortedTable<protos.cockroach.server.serverpb.TableDetailsResponse.Grant$Properties> {}
 
 const databaseTableGrantsSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "tableDetails/sort_setting/grants", (s) => s.localSettings,
