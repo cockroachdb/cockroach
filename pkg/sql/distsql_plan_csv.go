@@ -196,7 +196,7 @@ func (l *DistLoader) LoadCSV(
 	splits = append(splits, samples...)
 	splits = append(splits, tableSpan.EndKey)
 
-	// jobSpans is a slite of split points, including table start and end keys
+	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
 	// of adjacent keys.
 	spans := make([]distsqlrun.OutputRouterSpec_RangeRouterSpec_Span, len(splits)-1)

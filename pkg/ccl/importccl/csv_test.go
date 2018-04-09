@@ -873,8 +873,8 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
 	sqlDB.Exec(t, `CREATE DATABASE liveness`)
 
+	const rows = 5000
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		const rows = 5000
 		if r.Method == "GET" {
 			for i := 0; i < rows; i++ {
 				fmt.Fprintln(w, i)
@@ -923,6 +923,13 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	if !testutils.IsError(err, "job .*: node liveness error") {
 		t.Fatalf("unexpected: %v", err)
 	}
+
+	// Ensure that partial progress has been recorded
+	partialProgress := jobutils.GetJobPayload(t, sqlDB, jobID)
+	if len(partialProgress.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress) == 0 {
+		t.Fatal("no partial import progress detected")
+	}
+
 	// Make the node live again
 	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 	// The registry should now adopt the job and resume it.
@@ -930,19 +937,30 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify that the job lease was updated
-	rescheduledLease := &jobs.Payload{}
-	{
-		var actualLeaseBytes []byte
-		sqlDB.QueryRow(
-			t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&actualLeaseBytes)
-		if err := protoutil.Unmarshal(actualLeaseBytes, rescheduledLease); err != nil {
-			t.Fatal(err)
-		}
-	}
+	rescheduledLease := jobutils.GetJobPayload(t, sqlDB, jobID)
 	if rescheduledLease.ModifiedMicros <= originalLease.ModifiedMicros {
 		t.Fatalf("expecting rescheduled job to have a later modification time: %d vs %d",
 			rescheduledLease.StartedMicros, originalLease.StartedMicros)
+	}
+
+	// Verify that all expected rows are present after a stop/start cycle.
+	var rowCount int
+	sqlDB.QueryRow(t, "SELECT COUNT(*) from liveness.t").Scan(&rowCount)
+	if rowCount != rows {
+		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
+	}
+
+	// Verify that all write progress coalesced into a single span
+	// encompassing the entire table.
+	spans := rescheduledLease.Details.(*jobs.Payload_Import).Import.Tables[0].SpanProgress
+	if len(spans) != 1 {
+		t.Fatalf("expecting only a single progress span, had %d\n%s", len(spans), spans)
+	}
+
+	// Ensure that an entire table range is marked as complete
+	tableSpan := rescheduledLease.Details.(*jobs.Payload_Import).Import.Tables[0].Desc.TableSpan()
+	if !tableSpan.EqualValue(spans[0]) {
+		t.Fatalf("expected entire table to be marked complete, had %s", spans[0])
 	}
 }
 

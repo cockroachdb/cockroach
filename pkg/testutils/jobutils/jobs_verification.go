@@ -44,7 +44,7 @@ func WaitForJob(db *gosql.DB, jobID int64) error {
 		if err := db.QueryRow(
 			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
 		).Scan(&status, &payloadBytes); err != nil {
-			return err
+			return errors.Wrap(err, "could not query job table")
 		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			jobFailedErr = errors.New("job failed")
@@ -166,4 +166,15 @@ func VerifySystemJob(
 	}
 
 	return nil
+}
+
+// GetJobPayload loads the Payload message associated with the job.
+func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Payload {
+	ret := &jobs.Payload{}
+	var buf []byte
+	db.QueryRow(t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
+	if err := protoutil.Unmarshal(buf, ret); err != nil {
+		t.Fatal(err)
+	}
+	return ret
 }

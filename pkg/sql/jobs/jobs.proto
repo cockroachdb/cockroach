@@ -91,6 +91,10 @@ message ImportDetails {
     repeated bytes samples = 15;
     // Skip the first N lines of the input (e.g. to ignore column headers)
     uint32 skip = 16;
+    // The spans of split keys which have had their SSTable's generated.
+    // This allows us to skip the shuffle stage for already-completed
+    // spans when resuming an import job.
+    repeated roachpb.Span span_progress = 17 [(gogoproto.nullable) = false];
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 }
