@@ -74,6 +74,7 @@ func loadFileRegistry() {
 	}
 
 	log.Infof(context.Background(), "file registry version: %s", reg.Version)
+	log.Infof(context.Background(), "file registry contains %d entries", len(reg.Files))
 	for name, entry := range reg.Files {
 		var encSettings enginepbccl.EncryptionSettings
 		settings := entry.EncryptionSettings
@@ -82,9 +83,9 @@ func loadFileRegistry() {
 		}
 
 		fileRegistry[name] = fileEntry{entry.EnvType, encSettings}
-	}
 
-	log.Infof(context.Background(), "file registry contains %d entries", len(reg.Files))
+		log.Infof(context.Background(), "  %-30s level: %-8s type: %-12s keyID: %s", name, entry.EnvType, encSettings.EncryptionType, encSettings.KeyId[:8])
+	}
 }
 
 func loadStoreKey() {
@@ -131,10 +132,17 @@ func loadKeyRegistry() {
 		log.Fatalf(context.Background(), "could not unmarshal %s: %v", keyRegistryPath, err)
 	}
 
+	log.Infof(context.Background(), "key registry contains %d store keys(s) and %d data key(s)",
+		len(reg.StoreKeys), len(reg.DataKeys))
+	for _, e := range reg.StoreKeys {
+		log.Infof(context.Background(), "  store key: type: %-12s %v", e.EncryptionType, e)
+	}
+	for _, e := range reg.DataKeys {
+		log.Infof(context.Background(), "  data  key: type: %-12s %v", e.Info.EncryptionType, e.Info)
+	}
 	for k, e := range reg.DataKeys {
 		keyRegistry[k] = keyEntry{e.Info.EncryptionType, e.Key}
 	}
-	log.Infof(context.Background(), "data key registry contains %d data key(s)", len(reg.DataKeys))
 }
 
 func loadCurrent() {

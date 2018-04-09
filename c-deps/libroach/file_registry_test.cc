@@ -29,8 +29,13 @@ TEST(FileRegistry, TransformPath) {
       {"/", "/foo", "foo"},
       {"/rocksdir", "/rocksdirfoo", "/rocksdirfoo"},
       {"/rocksdir", "/rocksdir/foo", "foo"},
-      {"/myfile", "/myfile", "/myfile"},
-      {"/mnt/otherdevice/myfile", "/mnt/otherdevice/myfile", "/mnt/otherdevice/myfile"},
+      // We get the occasional double-slash.
+      {"/rocksdir", "/rocksdir//foo", "foo"},
+      {"/mydir", "/mydir", ""},
+      {"/mydir", "/mydir/", ""},
+      {"/mydir", "/mydir//", ""},
+      {"/mnt/otherdevice/", "/mnt/otherdevice/myfile", "myfile"},
+      {"/mnt/otherdevice/myfile", "/mnt/otherdevice/myfile", ""},
   };
 
   int test_num = 0;
