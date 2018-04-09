@@ -909,7 +909,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP orig_fkdb.fk TO $1`,
 			`RESTORE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
 		} {
-			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query, foreignDir)
+			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, []string{"PAUSE"}, query, foreignDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
@@ -933,32 +933,10 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
 		} {
-			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query, pauseDir)
+			ops := []string{"PAUSE", "RESUME", "PAUSE"}
+			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, ops, query, pauseDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
-			}
-			if i == 1 {
-				allowResponse = make(chan struct{})
-				sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-
-				prevLowWaterMark := keys.MinKey
-				checkpointChanges := 0
-				for checks := 0; checks < 1000; checks++ {
-					allowResponse <- struct{}{}
-					mark, err := getLowWaterMark(jobID, sqlDB.DB)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !mark.Equal(prevLowWaterMark) {
-						prevLowWaterMark = mark
-						checkpointChanges++
-						sqlDB.Exec(t, fmt.Sprintf(`PAUSE JOB %d`, jobID))
-						sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-						break
-					}
-				}
-				sqlDB.Exec(t, fmt.Sprintf(`PAUSE JOB %d`, jobID))
-				close(allowResponse)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
 			if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
@@ -984,7 +962,9 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
 		} {
-			if _, err := jobutils.RunJob(t, sqlDB, &allowResponse, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+			if _, err := jobutils.RunJob(
+				t, sqlDB, &allowResponse, []string{"cancel"}, query, cancelDir,
+			); !testutils.IsError(err, "job canceled") {
 				t.Fatalf("%d: expected 'job canceled' error, but got %+v", i, err)
 			}
 			// Check that executing the same backup or restore succeeds. This won't
