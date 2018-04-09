@@ -16,11 +16,13 @@ package distsqlrun
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -198,7 +200,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 // writeResults inserts the new statistics into system.table_statistics.
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
-	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			// histogram will be passed to the INSERT statement; we want it to be a
 			// nil interface{} if we don't generate a histogram.
@@ -262,6 +264,18 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
+	// around forever (we would need the stat cache to evict old entries
+	// automatically though).
+	return s.flowCtx.gossip.AddInfo(
+		gossip.MakeKeyTableStatAddedKey(strconv.Itoa(int(s.tableID))),
+		nil, /* value */
+		0,   /* ttl */
+	)
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of
