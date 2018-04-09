@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awsutil"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -89,6 +91,7 @@ type TableStatisticsCache struct {
 		statsCache     *cache.UnorderedCache
 		histogramCache *cache.UnorderedCache
 	}
+	Gossip      *gossip.Gossip
 	ClientDB    *client.DB
 	SQLExecutor sqlutil.InternalExecutor
 }
@@ -98,9 +101,14 @@ type TableStatisticsCache struct {
 // the underlying histogramCache set to histogramCacheSize.
 // Both underlying caches internally use a hash map, so lookups are cheap.
 func NewTableStatisticsCache(
-	statsCacheSize int, histogramCacheSize int, db *client.DB, sqlExecutor sqlutil.InternalExecutor,
+	statsCacheSize int,
+	histogramCacheSize int,
+	g *gossip.Gossip,
+	db *client.DB,
+	sqlExecutor sqlutil.InternalExecutor,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
+		Gossip:      g,
 		ClientDB:    db,
 		SQLExecutor: sqlExecutor,
 	}
@@ -112,7 +120,22 @@ func NewTableStatisticsCache(
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > histogramCacheSize },
 	})
+	g.RegisterCallback(
+		gossip.MakePrefixPattern(gossip.KeyTableStatAddedPrefix),
+		tableStatsCache.tableStatAddedGossipUpdate,
+	)
 	return tableStatsCache
+}
+
+// tableStatAddedGossipUpdate is the gossip callback that fires when a new
+// statistic is available for a table.
+func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roachpb.Value) {
+	tableID, err := gossip.TableIDFromTableStatAddedKey(key)
+	if err != nil {
+		log.Errorf(context.Background(), "tableStatAddedGossipUpdate(%s) error: %v", key, err)
+		return
+	}
+	sc.InvalidateTableStats(context.Background(), sqlbase.ID(tableID))
 }
 
 // lookupTableStats returns the cached statistics of the given table ID.

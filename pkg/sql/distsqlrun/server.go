@@ -348,8 +348,7 @@ func (ds *ServerImpl) setupFlow(
 			*req.EvalContext.SeqState.LastSeqIncremented)
 	}
 
-	// TODO(radu): we should sanity check some of these fields (especially
-	// txnProto).
+	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
 		AmbientContext: ds.AmbientContext,
@@ -357,6 +356,7 @@ func (ds *ServerImpl) setupFlow(
 		id:             req.Flow.FlowID,
 		EvalCtx:        evalCtx,
 		rpcCtx:         ds.RPCContext,
+		gossip:         ds.Gossip,
 		txn:            txn,
 		clientDB:       ds.DB,
 		executor:       ds.Executor,
