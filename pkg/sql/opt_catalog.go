@@ -135,6 +135,18 @@ func (ot *optTable) Index(i int) opt.Index {
 	return wrapper
 }
 
+// StatisticCount is part of the opt.Table interface.
+func (ot *optTable) StatisticCount() int {
+	// TODO(radu): implement this.
+	return 0
+}
+
+// Statistic is part of the opt.Table interface.
+func (ot *optTable) Statistic(i int) opt.TableStatistic {
+	// TODO(radu): implement this.
+	panic("unimplemented")
+}
+
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
 func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) int {

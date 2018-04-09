@@ -105,11 +105,23 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
-	// TODO: Need actual number of rows.
-	if def.Constraint != nil {
-		props.Relational.Stats.RowCount = 100
-	} else {
+	if tab.StatisticCount() == 0 {
+		// No statistics.
 		props.Relational.Stats.RowCount = 1000
+	} else {
+		// Get the RowCount from the most recent statistic.
+		mostRecent, mostRecentTime := 0, tab.Statistic(0).CreatedAt()
+		for i := 1; i < tab.StatisticCount(); i++ {
+			if t := tab.Statistic(i).CreatedAt(); mostRecentTime.Before(t) {
+				mostRecent, mostRecentTime = i, t
+			}
+		}
+		props.Relational.Stats.RowCount = tab.Statistic(mostRecent).RowCount()
+	}
+
+	if def.Constraint != nil {
+		// TODO: calculate selectivity.
+		props.Relational.Stats.RowCount /= 10
 	}
 
 	// Cap number of rows at limit, if it exists.
