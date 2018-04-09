@@ -3012,7 +3012,7 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 		res.Replicated.Timestamp = ba.Timestamp
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			res.Replicated.Delta = ms.ToNetworkStats()
+			res.Replicated.Delta = ms.ToStatsDelta()
 		} else {
 			res.Replicated.DeprecatedDelta = &ms
 		}
@@ -3028,6 +3028,24 @@ func (r *Replica) evaluateProposal(
 			}
 			res.Replicated.DeprecatedStartKey = rSpan.Key
 			res.Replicated.DeprecatedEndKey = rSpan.EndKey
+		}
+		// If the RangeAppliedState key is not being used and the cluster version is
+		// high enough to guarantee that all current and future binaries will
+		// understand the key, we send the migration flag through Raft. Because
+		// there is a delay between command proposal and application, we may end up
+		// setting this migration flag multiple times. This is ok, because the
+		// migration is idempotent.
+		// TODO(nvanbenschoten): This will be baked in to 2.1, so it can be removed
+		// in the 2.2 release.
+		r.mu.RLock()
+		usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
+		r.mu.RUnlock()
+		if !usingAppliedStateKey &&
+			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
+			if res.Replicated.State == nil {
+				res.Replicated.State = &storagebase.ReplicaState{}
+			}
+			res.Replicated.State.UsingAppliedStateKey = true
 		}
 	}
 
@@ -4809,7 +4827,7 @@ func (r *Replica) processRaftCommand(
 		}
 
 		if deprecatedDelta := raftCmd.ReplicatedEvalResult.DeprecatedDelta; deprecatedDelta != nil {
-			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToStatsDelta()
 			raftCmd.ReplicatedEvalResult.DeprecatedDelta = nil
 		}
 
@@ -4863,7 +4881,7 @@ func (r *Replica) processRaftCommand(
 			var err error
 			delta, err = r.applyRaftCommand(
 				ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
-			raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = delta.ToStatsDelta()
 
 			// applyRaftCommand returned an error, which usually indicates
 			// either a serious logic bug in CockroachDB or a disk
@@ -5071,6 +5089,7 @@ func (r *Replica) applyRaftCommand(
 	}
 
 	r.mu.Lock()
+	usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
 
@@ -5112,27 +5131,53 @@ func (r *Replica) applyRaftCommand(
 	// remaining writes are the raft applied index and the updated MVCC stats.
 	writer := batch.Distinct()
 
-	// Advance the last applied index. We use a blind write in order to avoid
-	// reading the previous applied index keys on every write operation. This
-	// requires a little additional work in order maintain the MVCC stats.
-	var appliedIndexNewMS enginepb.MVCCStats
-	if err := r.raftMu.stateLoader.SetAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
-		raftAppliedIndex, leaseAppliedIndex); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set applied index")
-	}
-	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
-
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
 	deltaStats := rResult.Delta.ToStats()
-	// Note that calling ms.Add will never result in ms.LastUpdateNanos
-	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
-	// across all deltaStats).
-	ms.Add(deltaStats)
-	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
+
+	if !usingAppliedStateKey && rResult.State != nil && rResult.State.UsingAppliedStateKey {
+		// The Raft command wants us to begin using the RangeAppliedState key
+		// and we haven't performed the migration yet. Delete the old keys
+		// that this new key is replacing.
+		err := r.raftMu.stateLoader.MigrateToRangeAppliedStateKey(ctx, writer, &deltaStats)
+		if err != nil {
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to migrate to range applied state")
+		}
+		usingAppliedStateKey = true
+	}
+
+	if usingAppliedStateKey {
+		// Note that calling ms.Add will never result in ms.LastUpdateNanos
+		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+		// across all deltaStats).
+		ms.Add(deltaStats)
+
+		// Set the range applied state, which includes the last applied raft and
+		// lease index along with the mvcc stats, all in one key.
+		if err := r.raftMu.stateLoader.SetRangeAppliedState(ctx, writer,
+			raftAppliedIndex, leaseAppliedIndex, &ms); err != nil {
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set range applied state")
+		}
+	} else {
+		// Advance the last applied index. We use a blind write in order to avoid
+		// reading the previous applied index keys on every write operation. This
+		// requires a little additional work in order maintain the MVCC stats.
+		var appliedIndexNewMS enginepb.MVCCStats
+		if err := r.raftMu.stateLoader.SetLegacyAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
+			raftAppliedIndex, leaseAppliedIndex); err != nil {
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set applied index")
+		}
+		deltaStats.SysBytes += appliedIndexNewMS.SysBytes -
+			r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
+
+		// Note that calling ms.Add will never result in ms.LastUpdateNanos
+		// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
+		// across all deltaStats).
+		ms.Add(deltaStats)
+		if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
+		}
 	}
 
 	// TODO(peter): We did not close the writer in an earlier version of

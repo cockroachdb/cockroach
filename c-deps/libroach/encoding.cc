@@ -15,6 +15,7 @@
 #include "encoding.h"
 #include <rocksdb/slice.h>
 #include "db.h"
+#include "keys.h"
 
 namespace cockroach {
 
@@ -34,6 +35,65 @@ void EncodeUint64(std::string* buf, uint64_t v) {
       uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8),  uint8_t(v),
   };
   buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+}
+
+void EncodeUvarint64(std::string* buf, uint64_t v) {
+  if (v <= kIntSmall) {
+    const uint8_t tmp[1] = {
+        uint8_t(v + kIntZero),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xff) {
+    const uint8_t tmp[2] = {
+        uint8_t(kIntMax - 7),
+        uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffff) {
+    const uint8_t tmp[3] = {
+        uint8_t(kIntMax - 6),
+        uint8_t(v >> 8),
+        uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffffff) {
+    const uint8_t tmp[4] = {
+        uint8_t(kIntMax - 5),
+        uint8_t(v >> 16),
+        uint8_t(v >> 8),
+        uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffffffff) {
+    const uint8_t tmp[5] = {
+        uint8_t(kIntMax - 4), uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8), uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffffffffff) {
+    const uint8_t tmp[6] = {
+        uint8_t(kIntMax - 3), uint8_t(v >> 32), uint8_t(v >> 24),
+        uint8_t(v >> 16),     uint8_t(v >> 8),  uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffffffffffff) {
+    const uint8_t tmp[7] = {
+        uint8_t(kIntMax - 2), uint8_t(v >> 40), uint8_t(v >> 32), uint8_t(v >> 24),
+        uint8_t(v >> 16),     uint8_t(v >> 8),  uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else if (v <= 0xffffffffffffff) {
+    const uint8_t tmp[8] = {
+        uint8_t(kIntMax - 1), uint8_t(v >> 48), uint8_t(v >> 40), uint8_t(v >> 32),
+        uint8_t(v >> 24),     uint8_t(v >> 16), uint8_t(v >> 8),  uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  } else {
+    const uint8_t tmp[9] = {
+        uint8_t(kIntMax), uint8_t(v >> 56), uint8_t(v >> 48), uint8_t(v >> 40), uint8_t(v >> 32),
+        uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8),  uint8_t(v),
+    };
+    buf->append(reinterpret_cast<const char*>(tmp), sizeof(tmp));
+  }
 }
 
 bool DecodeUint32(rocksdb::Slice* buf, uint32_t* value) {
@@ -57,6 +117,30 @@ bool DecodeUint64(rocksdb::Slice* buf, uint64_t* value) {
            (uint64_t(b[3]) << 32) | (uint64_t(b[4]) << 24) | (uint64_t(b[5]) << 16) |
            (uint64_t(b[6]) << 8) | uint64_t(b[7]);
   buf->remove_prefix(N);
+  return true;
+}
+
+bool DecodeUvarint64(rocksdb::Slice* buf, uint64_t* value) {
+  if (buf->size() == 0) {
+    return false;
+  }
+  int length = uint8_t((*buf)[0]) - kIntZero;
+  buf->remove_prefix(1);  // skip length byte
+  if (length <= kIntSmall) {
+    *value = uint64_t(length);
+    return true;
+  }
+  length -= kIntSmall;
+  if (length < 0 || length > 8) {
+    return false;
+  } else if (buf->size() < length) {
+    return false;
+  }
+  *value = 0;
+  for (int i = 0; i < length; i++) {
+    *value = (*value << 8) | uint8_t((*buf)[i]);
+  }
+  buf->remove_prefix(length);
   return true;
 }
 
@@ -157,6 +241,30 @@ WARN_UNUSED_RESULT bool DecodeKey(rocksdb::Slice buf, rocksdb::Slice* key, int64
     }
   }
   return timestamp.empty();
+}
+
+WARN_UNUSED_RESULT bool DecodeRangeIDKey(rocksdb::Slice buf, int64_t* range_id,
+                                         rocksdb::Slice* infix, rocksdb::Slice* suffix,
+                                         rocksdb::Slice* detail) {
+  if (!buf.starts_with(kLocalRangeIDPrefix)) {
+    return false;
+  }
+  // Cut the prefix, the Range ID, and the infix specifier.
+  buf.remove_prefix(kLocalRangeIDPrefix.size());
+  uint64_t range_id_uint;
+  if (!DecodeUvarint64(&buf, &range_id_uint)) {
+    return false;
+  }
+  *range_id = int64_t(range_id_uint);
+  if (buf.size() < kLocalSuffixLength + 1) {
+    return false;
+  }
+  *infix = rocksdb::Slice(buf.data(), 1);
+  buf.remove_prefix(1);
+  *suffix = rocksdb::Slice(buf.data(), kLocalSuffixLength);
+  buf.remove_prefix(kLocalSuffixLength);
+  *detail = buf;
+  return true;
 }
 
 rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {

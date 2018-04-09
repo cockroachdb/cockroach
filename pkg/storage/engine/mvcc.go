@@ -46,12 +46,12 @@ var (
 	NilKey = MVCCKey{}
 )
 
-// AccountForSelf adjusts ms to account for the predicted impact it will have on
-// the values that it records when the structure is initially stored. Specifically,
-// MVCCStats is stored on the RangeStats key, which means that its creation will
-// have an impact on system-local data size and key count.
-func AccountForSelf(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
-	key := keys.RangeStatsKey(rangeID)
+// AccountForLegacyMVCCStats adjusts ms to account for the predicted impact it
+// will have on the values that it records when the structure is initially stored.
+// Specifically, MVCCStats is stored on the RangeStats legacy key, which means
+// that its creation will have an impact on system-local data size and key count.
+func AccountForLegacyMVCCStats(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
+	key := keys.RangeStatsLegacyKey(rangeID)
 	metaKey := MakeMVCCMetadataKey(key)
 
 	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
@@ -2587,7 +2587,7 @@ func ComputeStatsGo(
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
-	meta := &enginepb.MVCCMetadata{}
+	var meta enginepb.MVCCMetadata
 	var prevKey []byte
 	first := false
 
@@ -2617,7 +2617,24 @@ func ComputeStatsGo(
 			}
 		}
 
-		isSys := bytes.Compare(unsafeKey.Key, keys.LocalMax) < 0
+		// Check for ignored keys.
+		if bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
+			// RangeID-local key.
+			_ /* rangeID */, infix, suffix, _ /* detail */, err := keys.DecodeRangeIDKey(unsafeKey.Key)
+			if err != nil {
+				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode rangeID key")
+			}
+
+			if infix.Equal(keys.LocalRangeIDReplicatedInfix) {
+				// Replicated RangeID-local key.
+				if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
+					// RangeAppliedState key. Ignore.
+					continue
+				}
+			}
+		}
+
+		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
@@ -2641,7 +2658,7 @@ func ComputeStatsGo(
 			first = true
 
 			if !implicitMeta {
-				if err := protoutil.Unmarshal(unsafeValue, meta); err != nil {
+				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}

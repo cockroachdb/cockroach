@@ -112,12 +112,12 @@ var (
 	// in storage/engine/rocksdb/db.cc.
 	LocalRangeIDPrefix = roachpb.RKey(makeKey(localPrefix, roachpb.Key("i")))
 
-	// localRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
+	// LocalRangeIDReplicatedInfix is the post-Range ID specifier for all Raft
 	// replicated per-range data. By appending this after the Range ID, these
 	// keys will be sorted directly before the local unreplicated keys for the
 	// same Range ID, so they can be manipulated either together or individually
 	// in a single scan.
-	localRangeIDReplicatedInfix = []byte("r")
+	LocalRangeIDReplicatedInfix = []byte("r")
 	// LocalAbortSpanSuffix is the suffix for AbortSpan entries. The
 	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
@@ -127,18 +127,21 @@ var (
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
-	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
-	LocalRaftAppliedIndexSuffix = []byte("rfta")
+	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
+	// key.
+	LocalRangeAppliedStateSuffix = []byte("rask")
+	// LocalRaftAppliedIndexLegacySuffix is the suffix for the raft applied index.
+	LocalRaftAppliedIndexLegacySuffix = []byte("rfta")
 	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
 	LocalRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
-	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
-	LocalLeaseAppliedIndexSuffix = []byte("rlla")
-	// LocalRangeStatsSuffix is the suffix for range statistics.
-	LocalRangeStatsSuffix = []byte("stat")
+	// LocalLeaseAppliedIndexLegacySuffix is the suffix for the applied lease index.
+	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
+	// LocalRangeStatsLegacySuffix is the suffix for range statistics.
+	LocalRangeStatsLegacySuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")

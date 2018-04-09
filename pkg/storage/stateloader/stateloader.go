@@ -86,15 +86,27 @@ func (rsl StateLoader) Load(
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
+	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
 		return storagebase.ReplicaState{}, err
-	}
+	} else if as != nil {
+		s.UsingAppliedStateKey = true
 
-	ms, err := rsl.LoadMVCCStats(ctx, reader)
-	if err != nil {
-		return storagebase.ReplicaState{}, err
+		s.RaftAppliedIndex = as.RaftAppliedIndex
+		s.LeaseAppliedIndex = as.LeaseAppliedIndex
+
+		ms := as.RangeStats.ToStats()
+		s.Stats = &ms
+	} else {
+		if s.RaftAppliedIndex, s.LeaseAppliedIndex, err = rsl.LoadAppliedIndex(ctx, reader); err != nil {
+			return storagebase.ReplicaState{}, err
+		}
+
+		ms, err := rsl.LoadMVCCStats(ctx, reader)
+		if err != nil {
+			return storagebase.ReplicaState{}, err
+		}
+		s.Stats = &ms
 	}
-	s.Stats = &ms
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
@@ -125,11 +137,6 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetLease(ctx, eng, ms, *state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetAppliedIndex(
-		ctx, eng, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
-	); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
 	if err := rsl.SetGCThreshold(ctx, eng, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -139,8 +146,20 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetTruncatedState(ctx, eng, ms, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := rsl.SetMVCCStats(ctx, eng, ms); err != nil {
-		return enginepb.MVCCStats{}, err
+	if state.UsingAppliedStateKey {
+		rai, lai := state.RaftAppliedIndex, state.LeaseAppliedIndex
+		if err := rsl.SetRangeAppliedState(ctx, eng, rai, lai, ms); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+	} else {
+		if err := rsl.SetLegacyAppliedIndex(
+			ctx, eng, ms, state.RaftAppliedIndex, state.LeaseAppliedIndex,
+		); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
+		if err := rsl.SetLegacyMVCCStats(ctx, eng, ms); err != nil {
+			return enginepb.MVCCStats{}, err
+		}
 	}
 	return *ms, nil
 }
@@ -161,12 +180,45 @@ func (rsl StateLoader) SetLease(
 		hlc.Timestamp{}, nil, &lease)
 }
 
+// LoadRangeAppliedState loads the Range applied state. The returned pointer
+// will be nil if the applied state key is not found.
+func (rsl StateLoader) LoadRangeAppliedState(
+	ctx context.Context, reader engine.Reader,
+) (*enginepb.RangeAppliedState, error) {
+	var as enginepb.RangeAppliedState
+	found, err := engine.MVCCGetProto(ctx, reader, rsl.RangeAppliedStateKey(), hlc.Timestamp{},
+		true /* consistent */, nil /* txn */, &as)
+	if !found {
+		return nil, err
+	}
+	return &as, err
+}
+
+// AssertNoRangeAppliedState asserts that no Range applied state key is present.
+func (rsl StateLoader) AssertNoRangeAppliedState(ctx context.Context, reader engine.Reader) error {
+	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
+		return err
+	} else if as != nil {
+		log.Fatalf(ctx, "unexpected RangeAppliedState present: %v", as)
+	}
+	return nil
+}
+
 // LoadAppliedIndex returns the Raft applied index and the lease applied index.
 func (rsl StateLoader) LoadAppliedIndex(
 	ctx context.Context, reader engine.Reader,
-) (uint64, uint64, error) {
-	var appliedIndex uint64
-	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexKey(),
+) (raftAppliedIndex uint64, leaseAppliedIndex uint64, err error) {
+	// Check the applied state key.
+	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
+		return 0, 0, err
+	} else if as != nil {
+		return as.RaftAppliedIndex, as.LeaseAppliedIndex, nil
+	}
+
+	// If the range applied state is not found, check the legacy Raft applied
+	// index and the lease applied index keys. This is where these indices were
+	// stored before the range applied state was introduced.
+	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -176,11 +228,10 @@ func (rsl StateLoader) LoadAppliedIndex(
 		if err != nil {
 			return 0, 0, err
 		}
-		appliedIndex = uint64(int64AppliedIndex)
+		raftAppliedIndex = uint64(int64AppliedIndex)
 	}
 	// TODO(tschottdorf): code duplication.
-	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexKey(),
+	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -192,23 +243,85 @@ func (rsl StateLoader) LoadAppliedIndex(
 		}
 		leaseAppliedIndex = uint64(int64LeaseAppliedIndex)
 	}
-
-	return appliedIndex, leaseAppliedIndex, nil
+	return raftAppliedIndex, leaseAppliedIndex, nil
 }
 
-// SetAppliedIndex sets the {raft,lease} applied index values, properly
-// accounting for existing keys in the returned stats.
-func (rsl StateLoader) SetAppliedIndex(
+// LoadMVCCStats loads the MVCC stats.
+func (rsl StateLoader) LoadMVCCStats(
+	ctx context.Context, reader engine.Reader,
+) (enginepb.MVCCStats, error) {
+	// Check the applied state key.
+	if as, err := rsl.LoadRangeAppliedState(ctx, reader); err != nil {
+		return enginepb.MVCCStats{}, err
+	} else if as != nil {
+		return as.RangeStats.ToStats(), nil
+	}
+
+	// If the range applied state is not found, check the legacy stats
+	// key. This is where stats were stored before the range applied
+	// state was introduced.
+	var ms enginepb.MVCCStats
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{},
+		true /* consistent */, nil /* txn */, &ms)
+	return ms, err
+}
+
+// SetRangeAppliedState overwrites the range applied state. This state is a
+// combination of the Raft and lease applied indices, along with the MVCC stats.
+//
+// The applied indices and the stats used to be stored separately in different
+// keys. We now deem those keys to be "legacy" because they have been replaced
+// by the range applied state key.
+func (rsl StateLoader) SetRangeAppliedState(
+	ctx context.Context,
+	eng engine.ReadWriter,
+	appliedIndex, leaseAppliedIndex uint64,
+	newMS *enginepb.MVCCStats,
+) error {
+	as := enginepb.RangeAppliedState{
+		RaftAppliedIndex:  appliedIndex,
+		LeaseAppliedIndex: leaseAppliedIndex,
+		RangeStats:        newMS.ToPersistentStats(),
+	}
+	// The RangeAppliedStateKey is not included in stats. This is also reflected
+	// in C.MVCCComputeStats and ComputeStatsGo.
+	ms := (*enginepb.MVCCStats)(nil)
+	return engine.MVCCPutProto(ctx, eng, ms, rsl.RangeAppliedStateKey(), hlc.Timestamp{}, nil, &as)
+}
+
+// MigrateToRangeAppliedStateKey TODO
+func (rsl StateLoader) MigrateToRangeAppliedStateKey(
+	ctx context.Context, eng engine.ReadWriter, ms *enginepb.MVCCStats,
+) error {
+	noTS := hlc.Timestamp{}
+	if err := engine.MVCCDelete(ctx, eng, ms, rsl.RaftAppliedIndexLegacyKey(), noTS, nil); err != nil {
+		return err
+	}
+	if err := engine.MVCCDelete(ctx, eng, ms, rsl.LeaseAppliedIndexLegacyKey(), noTS, nil); err != nil {
+		return err
+	}
+	return engine.MVCCDelete(ctx, eng, ms, rsl.RangeStatsLegacyKey(), noTS, nil)
+}
+
+// SetLegacyAppliedIndex sets the legacy {raft,lease} applied index values,
+// properly accounting for existing keys in the returned stats.
+//
+// The range applied state key cannot already exist or an assetion will be
+// triggered. See comment on SetRangeAppliedState for why this is "legacy".
+func (rsl StateLoader) SetLegacyAppliedIndex(
 	ctx context.Context,
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	appliedIndex,
-	leaseAppliedIndex uint64,
+	appliedIndex, leaseAppliedIndex uint64,
 ) error {
+	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+		return err
+	}
+
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
+		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
@@ -216,28 +329,34 @@ func (rsl StateLoader) SetAppliedIndex(
 	}
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
+		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */)
 }
 
-// SetAppliedIndexBlind sets the {raft,lease} applied index values using a
-// "blind" put which ignores any existing keys. This is identical to
-// setAppliedIndex but is used to optimize the writing of the applied index
-// values during write operations where we definitively know the size of the
-// previous values.
-func (rsl StateLoader) SetAppliedIndexBlind(
+// SetLegacyAppliedIndexBlind sets the legacy {raft,lease} applied index values
+// using a "blind" put which ignores any existing keys. This is identical to
+// SetLegacyAppliedIndex but is used to optimize the writing of the applied
+// index values during write operations where we definitively know the size of
+// the previous values.
+//
+// The range applied state key cannot already exist or an assetion will be
+// triggered. See comment on SetRangeAppliedState for why this is "legacy".
+func (rsl StateLoader) SetLegacyAppliedIndexBlind(
 	ctx context.Context,
 	eng engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	appliedIndex,
-	leaseAppliedIndex uint64,
+	appliedIndex, leaseAppliedIndex uint64,
 ) error {
+	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+		return err
+	}
+
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
+		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
@@ -245,7 +364,7 @@ func (rsl StateLoader) SetAppliedIndexBlind(
 	}
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
+		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */)
@@ -261,10 +380,45 @@ func inlineValueIntEncodedSize(v int64) int {
 // CalcAppliedIndexSysBytes calculates the size (MVCCStats.SysBytes) of the {raft,lease} applied
 // index keys/values.
 func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex uint64) int64 {
-	return int64(engine.MakeMVCCMetadataKey(rsl.RaftAppliedIndexKey()).EncodedSize() +
-		engine.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexKey()).EncodedSize() +
+	return int64(engine.MakeMVCCMetadataKey(rsl.RaftAppliedIndexLegacyKey()).EncodedSize() +
+		engine.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexLegacyKey()).EncodedSize() +
 		inlineValueIntEncodedSize(int64(appliedIndex)) +
 		inlineValueIntEncodedSize(int64(leaseAppliedIndex)))
+}
+
+func (rsl StateLoader) writeLegacyMVCCStatsInternal(
+	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+) error {
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, newMS)
+}
+
+// SetLegacyMVCCStats overwrites the legacy MVCC stats key.
+//
+// The range applied state key cannot already exist or an assetion will be
+// triggered. See comment on SetRangeAppliedState for why this is "legacy".
+func (rsl StateLoader) SetLegacyMVCCStats(
+	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+) error {
+	if err := rsl.AssertNoRangeAppliedState(ctx, eng); err != nil {
+		return err
+	}
+
+	return rsl.writeLegacyMVCCStatsInternal(ctx, eng, newMS)
+}
+
+// SetMVCCStats overwrites the MVCC stats. This needs to perform a read on the
+// RangeAppliedState key before overwriting the stats. Use SetRangeAppliedState
+// when performance is important.
+func (rsl StateLoader) SetMVCCStats(
+	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
+) error {
+	if as, err := rsl.LoadRangeAppliedState(ctx, eng); err != nil {
+		return err
+	} else if as != nil {
+		return rsl.SetRangeAppliedState(ctx, eng, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS)
+	}
+
+	return rsl.writeLegacyMVCCStatsInternal(ctx, eng, newMS)
 }
 
 // LoadTruncatedState loads the truncated state.
@@ -335,22 +489,6 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 
 	return engine.MVCCPutProto(ctx, eng, ms,
 		rsl.RangeTxnSpanGCThresholdKey(), hlc.Timestamp{}, nil, threshold)
-}
-
-// LoadMVCCStats loads the MVCC stats.
-func (rsl StateLoader) LoadMVCCStats(
-	ctx context.Context, reader engine.Reader,
-) (enginepb.MVCCStats, error) {
-	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
-	return ms, err
-}
-
-// SetMVCCStats overwrites the MVCC stats.
-func (rsl StateLoader) SetMVCCStats(
-	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
-) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
 }
 
 // The rest is not technically part of ReplicaState.

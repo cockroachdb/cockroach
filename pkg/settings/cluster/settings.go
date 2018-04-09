@@ -204,6 +204,7 @@ func MakeTestingClusterSettings() *Settings {
 func MakeTestingClusterSettingsWithVersion(minVersion, serverVersion roachpb.Version) *Settings {
 	st := MakeClusterSettings(minVersion, serverVersion)
 	cv := st.Version.BootstrapVersion()
+	cv.MinimumVersion = minVersion
 	// Initialize with all features enabled.
 	if err := st.InitializeVersion(cv); err != nil {
 		log.Fatalf(context.TODO(), "unable to initialize version: %s", err)

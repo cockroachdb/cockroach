@@ -27,10 +27,14 @@ TEST(Libroach, Encoding) {
     0, 1, 2, 3,
     1 << 16, (1 << 16) - 1, (1 << 16) + 1,
     1 << 24, (1 << 24) - 1, (1 << 24) + 1,
-    UINT32_MAX, UINT32_MAX - 1,
+    UINT32_MAX - 1, UINT32_MAX,
   };
 
   std::vector<uint64_t> cases64{
+    0, 1, 2, 3,
+    1 << 16, (1 << 16) - 1, (1 << 16) + 1,
+    1 << 24, (1 << 24) - 1, (1 << 24) + 1,
+    UINT32_MAX - 1, UINT32_MAX,
     (1ULL << 32) + 1,
     1ULL << 40, (1ULL << 40) - 1, (1ULL << 40) + 1,
     1ULL << 48, (1ULL << 48) - 1, (1ULL << 48) + 1,
@@ -64,6 +68,15 @@ TEST(Libroach, Encoding) {
     uint64_t out;
     rocksdb::Slice slice(buf);
     DecodeUint64(&slice, &out);
+    EXPECT_EQ(*it, out);
+  }
+
+  for (auto it = cases64.begin(); it != cases64.end(); it++) {
+    std::string buf;
+    EncodeUvarint64(&buf, *it);
+    uint64_t out;
+    rocksdb::Slice slice(buf);
+    DecodeUvarint64(&slice, &out);
     EXPECT_EQ(*it, out);
   }
 }

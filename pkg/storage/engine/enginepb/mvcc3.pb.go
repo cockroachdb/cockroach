@@ -84,10 +84,13 @@ func (m *TxnMeta) String() string            { return proto.CompactTextString(m)
 func (*TxnMeta) ProtoMessage()               {}
 func (*TxnMeta) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{0} }
 
-// MVCCNetworkStats is convertible to MVCCStats, but uses variable width
-// encodings for most fields. This makes the encodings incompatible. Note that
-// with proto3, zero-valued primitive types will not be encoded at all.
-type MVCCNetworkStats struct {
+// MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
+// encodings for most fields that make it more efficient to store negative
+// values. This makes the encodings incompatible.
+type MVCCStatsDelta struct {
+	// TODO(nvanbenschoten): now that we've split MVCCPersistentStats
+	// from this MVCCStatsDelta type, we can turn contains_estimates
+	// into a three-valued type ('UNCHANGED', 'NO', and 'YES').
 	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
 	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
 	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
@@ -104,14 +107,63 @@ type MVCCNetworkStats struct {
 	SysCount          int64 `protobuf:"zigzag64,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
 }
 
-func (m *MVCCNetworkStats) Reset()                    { *m = MVCCNetworkStats{} }
-func (m *MVCCNetworkStats) String() string            { return proto.CompactTextString(m) }
-func (*MVCCNetworkStats) ProtoMessage()               {}
-func (*MVCCNetworkStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{1} }
+func (m *MVCCStatsDelta) Reset()                    { *m = MVCCStatsDelta{} }
+func (m *MVCCStatsDelta) String() string            { return proto.CompactTextString(m) }
+func (*MVCCStatsDelta) ProtoMessage()               {}
+func (*MVCCStatsDelta) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{1} }
+
+// MVCCPersistentStats is convertible to MVCCStats, but uses signed variable
+// width encodings for most fields that make it efficient to store positive
+// values but inefficient to store negative values. This makes the encodings
+// incompatible.
+type MVCCPersistentStats struct {
+	ContainsEstimates bool  `protobuf:"varint,14,opt,name=contains_estimates,json=containsEstimates,proto3" json:"contains_estimates,omitempty"`
+	LastUpdateNanos   int64 `protobuf:"fixed64,1,opt,name=last_update_nanos,json=lastUpdateNanos,proto3" json:"last_update_nanos,omitempty"`
+	IntentAge         int64 `protobuf:"fixed64,2,opt,name=intent_age,json=intentAge,proto3" json:"intent_age,omitempty"`
+	GCBytesAge        int64 `protobuf:"fixed64,3,opt,name=gc_bytes_age,json=gcBytesAge,proto3" json:"gc_bytes_age,omitempty"`
+	LiveBytes         int64 `protobuf:"varint,4,opt,name=live_bytes,json=liveBytes,proto3" json:"live_bytes,omitempty"`
+	LiveCount         int64 `protobuf:"varint,5,opt,name=live_count,json=liveCount,proto3" json:"live_count,omitempty"`
+	KeyBytes          int64 `protobuf:"varint,6,opt,name=key_bytes,json=keyBytes,proto3" json:"key_bytes,omitempty"`
+	KeyCount          int64 `protobuf:"varint,7,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
+	ValBytes          int64 `protobuf:"varint,8,opt,name=val_bytes,json=valBytes,proto3" json:"val_bytes,omitempty"`
+	ValCount          int64 `protobuf:"varint,9,opt,name=val_count,json=valCount,proto3" json:"val_count,omitempty"`
+	IntentBytes       int64 `protobuf:"varint,10,opt,name=intent_bytes,json=intentBytes,proto3" json:"intent_bytes,omitempty"`
+	IntentCount       int64 `protobuf:"varint,11,opt,name=intent_count,json=intentCount,proto3" json:"intent_count,omitempty"`
+	SysBytes          int64 `protobuf:"varint,12,opt,name=sys_bytes,json=sysBytes,proto3" json:"sys_bytes,omitempty"`
+	SysCount          int64 `protobuf:"varint,13,opt,name=sys_count,json=sysCount,proto3" json:"sys_count,omitempty"`
+}
+
+func (m *MVCCPersistentStats) Reset()                    { *m = MVCCPersistentStats{} }
+func (m *MVCCPersistentStats) String() string            { return proto.CompactTextString(m) }
+func (*MVCCPersistentStats) ProtoMessage()               {}
+func (*MVCCPersistentStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{2} }
+
+// RangeAppliedState combines the raft and lease applied indices with
+// mvcc stats. These are all persisted on each transition of the Raft
+// state machine (i.e. on each Raft application), so they are stored
+// in the same RocksDB key for efficiency.
+type RangeAppliedState struct {
+	// raft_applied_index is the highest (and last) index applied to the Raft
+	// state machine.
+	RaftAppliedIndex uint64 `protobuf:"varint,1,opt,name=raft_applied_index,json=raftAppliedIndex,proto3" json:"raft_applied_index,omitempty"`
+	// lease_applied_index is the highest (and last) lease index applied to the
+	// Raft state machine.
+	LeaseAppliedIndex uint64 `protobuf:"varint,2,opt,name=lease_applied_index,json=leaseAppliedIndex,proto3" json:"lease_applied_index,omitempty"`
+	// range_stats is the set of mvcc stats that accounts for the current value
+	// of the Raft state machine.
+	RangeStats MVCCPersistentStats `protobuf:"bytes,3,opt,name=range_stats,json=rangeStats" json:"range_stats"`
+}
+
+func (m *RangeAppliedState) Reset()                    { *m = RangeAppliedState{} }
+func (m *RangeAppliedState) String() string            { return proto.CompactTextString(m) }
+func (*RangeAppliedState) ProtoMessage()               {}
+func (*RangeAppliedState) Descriptor() ([]byte, []int) { return fileDescriptorMvcc3, []int{3} }
 
 func init() {
 	proto.RegisterType((*TxnMeta)(nil), "cockroach.storage.engine.enginepb.TxnMeta")
-	proto.RegisterType((*MVCCNetworkStats)(nil), "cockroach.storage.engine.enginepb.MVCCNetworkStats")
+	proto.RegisterType((*MVCCStatsDelta)(nil), "cockroach.storage.engine.enginepb.MVCCStatsDelta")
+	proto.RegisterType((*MVCCPersistentStats)(nil), "cockroach.storage.engine.enginepb.MVCCPersistentStats")
+	proto.RegisterType((*RangeAppliedState)(nil), "cockroach.storage.engine.enginepb.RangeAppliedState")
 	proto.RegisterEnum("cockroach.storage.engine.enginepb.IsolationType", IsolationType_name, IsolationType_value)
 }
 func (this *TxnMeta) Equal(that interface{}) bool {
@@ -159,14 +211,14 @@ func (this *TxnMeta) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *MVCCNetworkStats) Equal(that interface{}) bool {
+func (this *MVCCStatsDelta) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*MVCCNetworkStats)
+	that1, ok := that.(*MVCCStatsDelta)
 	if !ok {
-		that2, ok := that.(MVCCNetworkStats)
+		that2, ok := that.(MVCCStatsDelta)
 		if ok {
 			that1 = &that2
 		} else {
@@ -218,6 +270,99 @@ func (this *MVCCNetworkStats) Equal(that interface{}) bool {
 		return false
 	}
 	if this.SysCount != that1.SysCount {
+		return false
+	}
+	return true
+}
+func (this *MVCCPersistentStats) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*MVCCPersistentStats)
+	if !ok {
+		that2, ok := that.(MVCCPersistentStats)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.ContainsEstimates != that1.ContainsEstimates {
+		return false
+	}
+	if this.LastUpdateNanos != that1.LastUpdateNanos {
+		return false
+	}
+	if this.IntentAge != that1.IntentAge {
+		return false
+	}
+	if this.GCBytesAge != that1.GCBytesAge {
+		return false
+	}
+	if this.LiveBytes != that1.LiveBytes {
+		return false
+	}
+	if this.LiveCount != that1.LiveCount {
+		return false
+	}
+	if this.KeyBytes != that1.KeyBytes {
+		return false
+	}
+	if this.KeyCount != that1.KeyCount {
+		return false
+	}
+	if this.ValBytes != that1.ValBytes {
+		return false
+	}
+	if this.ValCount != that1.ValCount {
+		return false
+	}
+	if this.IntentBytes != that1.IntentBytes {
+		return false
+	}
+	if this.IntentCount != that1.IntentCount {
+		return false
+	}
+	if this.SysBytes != that1.SysBytes {
+		return false
+	}
+	if this.SysCount != that1.SysCount {
+		return false
+	}
+	return true
+}
+func (this *RangeAppliedState) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*RangeAppliedState)
+	if !ok {
+		that2, ok := that.(RangeAppliedState)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.RaftAppliedIndex != that1.RaftAppliedIndex {
+		return false
+	}
+	if this.LeaseAppliedIndex != that1.LeaseAppliedIndex {
+		return false
+	}
+	if !this.RangeStats.Equal(&that1.RangeStats) {
 		return false
 	}
 	return true
@@ -287,7 +432,7 @@ func (m *TxnMeta) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *MVCCNetworkStats) Marshal() (dAtA []byte, err error) {
+func (m *MVCCStatsDelta) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -297,7 +442,7 @@ func (m *MVCCNetworkStats) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *MVCCNetworkStats) MarshalTo(dAtA []byte) (int, error) {
+func (m *MVCCStatsDelta) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -383,6 +528,138 @@ func (m *MVCCNetworkStats) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MVCCPersistentStats) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MVCCPersistentStats) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.LastUpdateNanos != 0 {
+		dAtA[i] = 0x9
+		i++
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
+		i += 8
+	}
+	if m.IntentAge != 0 {
+		dAtA[i] = 0x11
+		i++
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
+		i += 8
+	}
+	if m.GCBytesAge != 0 {
+		dAtA[i] = 0x19
+		i++
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
+		i += 8
+	}
+	if m.LiveBytes != 0 {
+		dAtA[i] = 0x20
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.LiveBytes))
+	}
+	if m.LiveCount != 0 {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.LiveCount))
+	}
+	if m.KeyBytes != 0 {
+		dAtA[i] = 0x30
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.KeyBytes))
+	}
+	if m.KeyCount != 0 {
+		dAtA[i] = 0x38
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.KeyCount))
+	}
+	if m.ValBytes != 0 {
+		dAtA[i] = 0x40
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.ValBytes))
+	}
+	if m.ValCount != 0 {
+		dAtA[i] = 0x48
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.ValCount))
+	}
+	if m.IntentBytes != 0 {
+		dAtA[i] = 0x50
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.IntentBytes))
+	}
+	if m.IntentCount != 0 {
+		dAtA[i] = 0x58
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.IntentCount))
+	}
+	if m.SysBytes != 0 {
+		dAtA[i] = 0x60
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.SysBytes))
+	}
+	if m.SysCount != 0 {
+		dAtA[i] = 0x68
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.SysCount))
+	}
+	if m.ContainsEstimates {
+		dAtA[i] = 0x70
+		i++
+		if m.ContainsEstimates {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	return i, nil
+}
+
+func (m *RangeAppliedState) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RangeAppliedState) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.RaftAppliedIndex != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.RaftAppliedIndex))
+	}
+	if m.LeaseAppliedIndex != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMvcc3(dAtA, i, uint64(m.LeaseAppliedIndex))
+	}
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintMvcc3(dAtA, i, uint64(m.RangeStats.Size()))
+	n3, err := m.RangeStats.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
 func encodeVarintMvcc3(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -422,6 +699,77 @@ func NewPopulatedTxnMeta(r randyMvcc3, easy bool) *TxnMeta {
 	return this
 }
 
+func NewPopulatedMVCCPersistentStats(r randyMvcc3, easy bool) *MVCCPersistentStats {
+	this := &MVCCPersistentStats{}
+	this.LastUpdateNanos = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.LastUpdateNanos *= -1
+	}
+	this.IntentAge = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.IntentAge *= -1
+	}
+	this.GCBytesAge = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.GCBytesAge *= -1
+	}
+	this.LiveBytes = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.LiveBytes *= -1
+	}
+	this.LiveCount = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.LiveCount *= -1
+	}
+	this.KeyBytes = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.KeyBytes *= -1
+	}
+	this.KeyCount = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.KeyCount *= -1
+	}
+	this.ValBytes = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.ValBytes *= -1
+	}
+	this.ValCount = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.ValCount *= -1
+	}
+	this.IntentBytes = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.IntentBytes *= -1
+	}
+	this.IntentCount = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.IntentCount *= -1
+	}
+	this.SysBytes = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.SysBytes *= -1
+	}
+	this.SysCount = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.SysCount *= -1
+	}
+	this.ContainsEstimates = bool(bool(r.Intn(2) == 0))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedRangeAppliedState(r randyMvcc3, easy bool) *RangeAppliedState {
+	this := &RangeAppliedState{}
+	this.RaftAppliedIndex = uint64(uint64(r.Uint32()))
+	this.LeaseAppliedIndex = uint64(uint64(r.Uint32()))
+	v4 := NewPopulatedMVCCPersistentStats(r, easy)
+	this.RangeStats = *v4
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
 type randyMvcc3 interface {
 	Float32() float32
 	Float64() float64
@@ -441,9 +789,9 @@ func randUTF8RuneMvcc3(r randyMvcc3) rune {
 	return rune(ru + 61)
 }
 func randStringMvcc3(r randyMvcc3) string {
-	v4 := r.Intn(100)
-	tmps := make([]rune, v4)
-	for i := 0; i < v4; i++ {
+	v5 := r.Intn(100)
+	tmps := make([]rune, v5)
+	for i := 0; i < v5; i++ {
 		tmps[i] = randUTF8RuneMvcc3(r)
 	}
 	return string(tmps)
@@ -465,11 +813,11 @@ func randFieldMvcc3(dAtA []byte, r randyMvcc3, fieldNumber int, wire int) []byte
 	switch wire {
 	case 0:
 		dAtA = encodeVarintPopulateMvcc3(dAtA, uint64(key))
-		v5 := r.Int63()
+		v6 := r.Int63()
 		if r.Intn(2) == 0 {
-			v5 *= -1
+			v6 *= -1
 		}
-		dAtA = encodeVarintPopulateMvcc3(dAtA, uint64(v5))
+		dAtA = encodeVarintPopulateMvcc3(dAtA, uint64(v6))
 	case 1:
 		dAtA = encodeVarintPopulateMvcc3(dAtA, uint64(key))
 		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
@@ -523,7 +871,7 @@ func (m *TxnMeta) Size() (n int) {
 	return n
 }
 
-func (m *MVCCNetworkStats) Size() (n int) {
+func (m *MVCCStatsDelta) Size() (n int) {
 	var l int
 	_ = l
 	if m.LastUpdateNanos != 0 {
@@ -568,6 +916,68 @@ func (m *MVCCNetworkStats) Size() (n int) {
 	if m.ContainsEstimates {
 		n += 2
 	}
+	return n
+}
+
+func (m *MVCCPersistentStats) Size() (n int) {
+	var l int
+	_ = l
+	if m.LastUpdateNanos != 0 {
+		n += 9
+	}
+	if m.IntentAge != 0 {
+		n += 9
+	}
+	if m.GCBytesAge != 0 {
+		n += 9
+	}
+	if m.LiveBytes != 0 {
+		n += 1 + sovMvcc3(uint64(m.LiveBytes))
+	}
+	if m.LiveCount != 0 {
+		n += 1 + sovMvcc3(uint64(m.LiveCount))
+	}
+	if m.KeyBytes != 0 {
+		n += 1 + sovMvcc3(uint64(m.KeyBytes))
+	}
+	if m.KeyCount != 0 {
+		n += 1 + sovMvcc3(uint64(m.KeyCount))
+	}
+	if m.ValBytes != 0 {
+		n += 1 + sovMvcc3(uint64(m.ValBytes))
+	}
+	if m.ValCount != 0 {
+		n += 1 + sovMvcc3(uint64(m.ValCount))
+	}
+	if m.IntentBytes != 0 {
+		n += 1 + sovMvcc3(uint64(m.IntentBytes))
+	}
+	if m.IntentCount != 0 {
+		n += 1 + sovMvcc3(uint64(m.IntentCount))
+	}
+	if m.SysBytes != 0 {
+		n += 1 + sovMvcc3(uint64(m.SysBytes))
+	}
+	if m.SysCount != 0 {
+		n += 1 + sovMvcc3(uint64(m.SysCount))
+	}
+	if m.ContainsEstimates {
+		n += 2
+	}
+	return n
+}
+
+func (m *RangeAppliedState) Size() (n int) {
+	var l int
+	_ = l
+	if m.RaftAppliedIndex != 0 {
+		n += 1 + sovMvcc3(uint64(m.RaftAppliedIndex))
+	}
+	if m.LeaseAppliedIndex != 0 {
+		n += 1 + sovMvcc3(uint64(m.LeaseAppliedIndex))
+	}
+	l = m.RangeStats.Size()
+	n += 1 + l + sovMvcc3(uint64(l))
 	return n
 }
 
@@ -820,7 +1230,7 @@ func (m *TxnMeta) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
+func (m *MVCCStatsDelta) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -843,10 +1253,10 @@ func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MVCCNetworkStats: wiretype end group for non-group")
+			return fmt.Errorf("proto: MVCCStatsDelta: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MVCCNetworkStats: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: MVCCStatsDelta: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1130,6 +1540,414 @@ func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *MVCCPersistentStats) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MVCCPersistentStats: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MVCCPersistentStats: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LastUpdateNanos", wireType)
+			}
+			m.LastUpdateNanos = 0
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.LastUpdateNanos = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+		case 2:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentAge", wireType)
+			}
+			m.IntentAge = 0
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IntentAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+		case 3:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GCBytesAge", wireType)
+			}
+			m.GCBytesAge = 0
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.GCBytesAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LiveBytes", wireType)
+			}
+			m.LiveBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LiveBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LiveCount", wireType)
+			}
+			m.LiveCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LiveCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyBytes", wireType)
+			}
+			m.KeyBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.KeyBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KeyCount", wireType)
+			}
+			m.KeyCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.KeyCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValBytes", wireType)
+			}
+			m.ValBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ValBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValCount", wireType)
+			}
+			m.ValCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ValCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentBytes", wireType)
+			}
+			m.IntentBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.IntentBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IntentCount", wireType)
+			}
+			m.IntentCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.IntentCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 12:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysBytes", wireType)
+			}
+			m.SysBytes = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SysBytes |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 13:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SysCount", wireType)
+			}
+			m.SysCount = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SysCount |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 14:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainsEstimates", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ContainsEstimates = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RangeAppliedState) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMvcc3
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RangeAppliedState: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RangeAppliedState: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RaftAppliedIndex", wireType)
+			}
+			m.RaftAppliedIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RaftAppliedIndex |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LeaseAppliedIndex", wireType)
+			}
+			m.LeaseAppliedIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LeaseAppliedIndex |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RangeStats", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMvcc3
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.RangeStats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMvcc3(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMvcc3
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipMvcc3(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1238,47 +2056,56 @@ var (
 func init() { proto.RegisterFile("storage/engine/enginepb/mvcc3.proto", fileDescriptorMvcc3) }
 
 var fileDescriptorMvcc3 = []byte{
-	// 659 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x93, 0xc1, 0x6e, 0x12, 0x41,
-	0x18, 0xc7, 0x19, 0x4a, 0x5b, 0x18, 0x68, 0xdd, 0x4e, 0x7a, 0xd8, 0x60, 0x0a, 0xb4, 0x5e, 0x48,
-	0x13, 0x77, 0x9b, 0x36, 0x5e, 0x7a, 0x03, 0xda, 0x28, 0x49, 0x8b, 0xba, 0x50, 0x0f, 0x5e, 0xc8,
-	0x30, 0x4c, 0x96, 0x09, 0xcb, 0xce, 0xca, 0x0c, 0xd8, 0x7d, 0x03, 0x8f, 0x3e, 0x42, 0x13, 0x5f,
-	0xc2, 0x47, 0xe8, 0xd1, 0xa3, 0xf1, 0x40, 0x14, 0x2f, 0x3e, 0x81, 0x07, 0x4f, 0x66, 0x66, 0xd8,
-	0xa5, 0x9e, 0x3c, 0xf1, 0xcd, 0xff, 0xf7, 0xff, 0x7f, 0xdf, 0xce, 0xb7, 0x2c, 0x7c, 0x22, 0x24,
-	0x9f, 0x62, 0x9f, 0xba, 0x34, 0xf4, 0x59, 0x98, 0xfc, 0x44, 0x03, 0x77, 0x32, 0x27, 0xe4, 0xcc,
-	0x89, 0xa6, 0x5c, 0x72, 0x74, 0x48, 0x38, 0x19, 0x4f, 0x39, 0x26, 0x23, 0x67, 0x65, 0x77, 0x8c,
-	0xcf, 0x49, 0xec, 0x65, 0x7b, 0x26, 0x59, 0xe0, 0x8e, 0x02, 0xe2, 0x4a, 0x36, 0xa1, 0x42, 0xe2,
-	0x49, 0x64, 0xc2, 0xe5, 0x7d, 0x9f, 0xfb, 0x5c, 0x97, 0xae, 0xaa, 0x8c, 0x7a, 0xf4, 0x27, 0x0b,
-	0xb7, 0x7b, 0xb7, 0xe1, 0x35, 0x95, 0x18, 0xbd, 0x86, 0x59, 0x36, 0xb4, 0x41, 0x0d, 0xd4, 0x4b,
-	0xcd, 0xc6, 0xfd, 0xa2, 0x9a, 0xf9, 0xb6, 0xa8, 0x9e, 0xf9, 0x4c, 0x8e, 0x66, 0x03, 0x87, 0xf0,
-	0x89, 0x9b, 0x4e, 0x1f, 0x0e, 0xd6, 0xb5, 0x1b, 0x8d, 0x7d, 0x57, 0x0f, 0x9d, 0xcd, 0xd8, 0xd0,
-	0xb9, 0xb9, 0x69, 0x5f, 0x2c, 0x17, 0xd5, 0x6c, 0xfb, 0xc2, 0xcb, 0xb2, 0x21, 0xea, 0xc0, 0x02,
-	0x13, 0x3c, 0xc0, 0x92, 0xf1, 0xd0, 0xce, 0xd6, 0x40, 0x7d, 0xf7, 0xf4, 0xc4, 0xf9, 0xef, 0x2d,
-	0x9c, 0x76, 0x92, 0xe9, 0xc5, 0x11, 0xf5, 0xd6, 0x2d, 0x90, 0x05, 0x37, 0xc6, 0x34, 0xb6, 0x37,
-	0xd4, 0x33, 0x7a, 0xaa, 0x44, 0xfb, 0x70, 0x93, 0x46, 0x9c, 0x8c, 0xec, 0x5c, 0x0d, 0xd4, 0x77,
-	0x3c, 0x73, 0x40, 0x0d, 0x58, 0x48, 0xef, 0x6f, 0x6f, 0xd6, 0x40, 0xbd, 0x78, 0x7a, 0xf0, 0x60,
-	0xae, 0x7a, 0x5e, 0x67, 0x14, 0x10, 0xa7, 0x97, 0x98, 0x9a, 0x39, 0x75, 0x61, 0x6f, 0x9d, 0x42,
-	0x65, 0x98, 0x8f, 0xa6, 0x8c, 0x4f, 0x99, 0x8c, 0xed, 0xad, 0x1a, 0xa8, 0x6f, 0x7a, 0xe9, 0x59,
-	0x31, 0x41, 0xdf, 0xcd, 0x68, 0x48, 0xa8, 0xbd, 0x6d, 0x58, 0x72, 0x46, 0x55, 0x58, 0x1c, 0x60,
-	0x49, 0x46, 0x7d, 0x16, 0x0e, 0xe9, 0xad, 0x9d, 0xd7, 0x18, 0x6a, 0xa9, 0xad, 0x94, 0xf3, 0xfc,
-	0xe7, 0xbb, 0x2a, 0xf8, 0x75, 0x57, 0x05, 0x47, 0xbf, 0x37, 0xa0, 0x75, 0xfd, 0xa6, 0xd5, 0xea,
-	0x50, 0xf9, 0x9e, 0x4f, 0xc7, 0x5d, 0x89, 0xa5, 0x40, 0xc7, 0x70, 0x2f, 0xc0, 0x42, 0xf6, 0x67,
-	0xd1, 0x10, 0x4b, 0xda, 0x0f, 0x71, 0xc8, 0x85, 0x7e, 0x29, 0x96, 0xf7, 0x48, 0x81, 0x1b, 0xad,
-	0x77, 0x94, 0x8c, 0x0e, 0x20, 0x64, 0xa1, 0xa4, 0xa1, 0xec, 0x63, 0x9f, 0xea, 0xfd, 0x5a, 0x5e,
-	0xc1, 0x28, 0x0d, 0x9f, 0xa2, 0x13, 0x58, 0xf2, 0x49, 0x7f, 0x10, 0x4b, 0x2a, 0xb4, 0x41, 0xad,
-	0xcd, 0x6a, 0xee, 0x2e, 0x17, 0x55, 0xf8, 0xbc, 0xd5, 0x54, 0x72, 0xc3, 0xa7, 0x1e, 0xf4, 0x49,
-	0x52, 0xab, 0x86, 0x01, 0x9b, 0x53, 0x93, 0xd1, 0x2b, 0x45, 0x5e, 0x41, 0x29, 0xda, 0x91, 0x62,
-	0xc2, 0x67, 0xa1, 0xd4, 0x7b, 0x5d, 0xe1, 0x96, 0x12, 0xd0, 0x63, 0x58, 0x18, 0xd3, 0x78, 0x15,
-	0xde, 0xd2, 0x34, 0x3f, 0xa6, 0xb1, 0xc9, 0xae, 0xa0, 0x89, 0x6e, 0xa7, 0x30, 0x4d, 0xce, 0x71,
-	0xb0, 0x4a, 0xe6, 0x0d, 0x9c, 0xe3, 0x20, 0x4d, 0x2a, 0x68, 0x92, 0x85, 0x14, 0x9a, 0xe4, 0x21,
-	0x2c, 0xad, 0x56, 0x60, 0xc2, 0x50, 0xf3, 0xa2, 0xd1, 0x4c, 0x7e, 0x6d, 0x31, 0x2d, 0x8a, 0x0f,
-	0x2d, 0xe9, 0x7c, 0x11, 0x8b, 0x55, 0x8b, 0x92, 0x19, 0x21, 0x62, 0x91, 0xce, 0x57, 0xd0, 0x84,
-	0x77, 0x52, 0x68, 0x92, 0x4f, 0x21, 0x22, 0x3c, 0x94, 0x98, 0x85, 0xa2, 0x4f, 0x85, 0x64, 0x13,
-	0xac, 0x5a, 0xec, 0xd6, 0x40, 0x3d, 0xef, 0xed, 0x25, 0xe4, 0x32, 0x01, 0xe7, 0x39, 0xf5, 0xe2,
-	0x8f, 0x9f, 0xc1, 0x9d, 0x7f, 0xfe, 0xe2, 0xc8, 0x82, 0xa5, 0xee, 0xa5, 0xd7, 0x6e, 0x5c, 0xb5,
-	0xdf, 0x36, 0x9a, 0x57, 0x97, 0x56, 0x06, 0x95, 0x60, 0xbe, 0xdb, 0x69, 0xbc, 0xea, 0xbe, 0x78,
-	0xd9, 0xb3, 0x40, 0x39, 0xf7, 0xe1, 0x53, 0x25, 0xd3, 0xb4, 0xef, 0x7f, 0x54, 0x32, 0xf7, 0xcb,
-	0x0a, 0xf8, 0xb2, 0xac, 0x80, 0xaf, 0xcb, 0x0a, 0xf8, 0xbe, 0xac, 0x80, 0x8f, 0x3f, 0x2b, 0x99,
-	0xc1, 0x96, 0xfe, 0x9a, 0xcf, 0xfe, 0x06, 0x00, 0x00, 0xff, 0xff, 0x24, 0xe4, 0xa2, 0x02, 0x47,
-	0x04, 0x00, 0x00,
+	// 802 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x55, 0x4f, 0x6f, 0xf3, 0x34,
+	0x18, 0x6f, 0x9a, 0x6e, 0x6b, 0xdd, 0xae, 0xa4, 0x7e, 0xdf, 0x43, 0x54, 0xf4, 0xb6, 0x7d, 0xc7,
+	0xa5, 0x9a, 0x20, 0x99, 0x36, 0xc1, 0x61, 0xb7, 0xb4, 0x9b, 0xa0, 0xd2, 0x36, 0x46, 0xda, 0x71,
+	0x40, 0x42, 0x91, 0x9b, 0x9a, 0xd4, 0x6a, 0x9a, 0x84, 0xd8, 0xad, 0x96, 0x6f, 0xc0, 0x91, 0x8f,
+	0x30, 0x89, 0x2f, 0xc1, 0x47, 0xd8, 0x91, 0x23, 0xda, 0xa1, 0x82, 0x72, 0xe1, 0x03, 0x70, 0x42,
+	0x42, 0x42, 0xb6, 0x93, 0x74, 0x43, 0xa8, 0x45, 0x9c, 0xde, 0x53, 0xed, 0xdf, 0x9f, 0xe7, 0xb1,
+	0xfd, 0x73, 0x1d, 0xf0, 0x01, 0x65, 0x61, 0x8c, 0x3c, 0x6c, 0xe2, 0xc0, 0x23, 0x41, 0xf6, 0x13,
+	0x8d, 0xcd, 0xf9, 0xd2, 0x75, 0xcf, 0x8c, 0x28, 0x0e, 0x59, 0x08, 0xdf, 0xba, 0xa1, 0x3b, 0x8b,
+	0x43, 0xe4, 0x4e, 0x8d, 0x54, 0x6e, 0x48, 0x9d, 0x91, 0xc9, 0x9b, 0xfa, 0x82, 0x11, 0xdf, 0x9c,
+	0xfa, 0xae, 0xc9, 0xc8, 0x1c, 0x53, 0x86, 0xe6, 0x91, 0x34, 0x37, 0x5f, 0x7b, 0xa1, 0x17, 0x8a,
+	0xa1, 0xc9, 0x47, 0x12, 0x3d, 0xfa, 0xb3, 0x08, 0x0e, 0x46, 0xf7, 0xc1, 0x35, 0x66, 0x08, 0x7e,
+	0x01, 0x8a, 0x64, 0xa2, 0x2b, 0x1d, 0xa5, 0x5b, 0xeb, 0x59, 0x8f, 0xab, 0x76, 0xe1, 0x69, 0xd5,
+	0x3e, 0xf3, 0x08, 0x9b, 0x2e, 0xc6, 0x86, 0x1b, 0xce, 0xcd, 0xbc, 0xfb, 0x64, 0xbc, 0x19, 0x9b,
+	0xd1, 0xcc, 0x33, 0x45, 0xd3, 0xc5, 0x82, 0x4c, 0x8c, 0xbb, 0xbb, 0xc1, 0xc5, 0x7a, 0xd5, 0x2e,
+	0x0e, 0x2e, 0xec, 0x22, 0x99, 0xc0, 0x1b, 0x50, 0x21, 0x34, 0xf4, 0x11, 0x23, 0x61, 0xa0, 0x17,
+	0x3b, 0x4a, 0xb7, 0x7e, 0x7a, 0x62, 0xec, 0xdc, 0x85, 0x31, 0xc8, 0x3c, 0xa3, 0x24, 0xc2, 0xf6,
+	0xa6, 0x04, 0xd4, 0x80, 0x3a, 0xc3, 0x89, 0xae, 0xf2, 0x35, 0xda, 0x7c, 0x08, 0x5f, 0x83, 0x3d,
+	0x1c, 0x85, 0xee, 0x54, 0x2f, 0x75, 0x94, 0xee, 0xa1, 0x2d, 0x27, 0xd0, 0x02, 0x95, 0x7c, 0xff,
+	0xfa, 0x5e, 0x47, 0xe9, 0x56, 0x4f, 0xdf, 0x3c, 0xeb, 0xcb, 0xd7, 0x6b, 0x4c, 0x7d, 0xd7, 0x18,
+	0x65, 0xa2, 0x5e, 0x89, 0x6f, 0xd8, 0xde, 0xb8, 0x60, 0x13, 0x94, 0xa3, 0x98, 0x84, 0x31, 0x61,
+	0x89, 0xbe, 0xdf, 0x51, 0xba, 0x7b, 0x76, 0x3e, 0xe7, 0x1c, 0xc5, 0xdf, 0x2e, 0x70, 0xe0, 0x62,
+	0xfd, 0x40, 0x72, 0xd9, 0x1c, 0xb6, 0x41, 0x75, 0x8c, 0x98, 0x3b, 0x75, 0x48, 0x30, 0xc1, 0xf7,
+	0x7a, 0x59, 0xd0, 0x40, 0x40, 0x03, 0x8e, 0x9c, 0x97, 0x7f, 0x7c, 0x68, 0x2b, 0xbf, 0x3f, 0xb4,
+	0x95, 0xa3, 0x3f, 0x54, 0x50, 0xbf, 0xfe, 0xb2, 0xdf, 0x1f, 0x32, 0xc4, 0xe8, 0x05, 0xf6, 0x19,
+	0x82, 0xc7, 0xa0, 0xe1, 0x23, 0xca, 0x9c, 0x45, 0x34, 0x41, 0x0c, 0x3b, 0x01, 0x0a, 0x42, 0x2a,
+	0x22, 0xd1, 0xec, 0xf7, 0x38, 0x71, 0x27, 0xf0, 0x1b, 0x0e, 0xc3, 0x37, 0x00, 0x90, 0x80, 0xe1,
+	0x80, 0x39, 0xc8, 0xc3, 0xe2, 0x74, 0x35, 0xbb, 0x22, 0x11, 0xcb, 0xc3, 0xf0, 0x04, 0xd4, 0x3c,
+	0xd7, 0x19, 0x27, 0x0c, 0x53, 0x21, 0xe0, 0x87, 0xa6, 0xf5, 0xea, 0xeb, 0x55, 0x1b, 0x7c, 0xda,
+	0xef, 0x71, 0xd8, 0xf2, 0xb0, 0x0d, 0x3c, 0x37, 0x1b, 0xf3, 0x82, 0x3e, 0x59, 0x62, 0xe9, 0x11,
+	0x07, 0x0a, 0xed, 0x0a, 0x47, 0x84, 0x22, 0xa7, 0xdd, 0x70, 0x11, 0x30, 0x71, 0xaa, 0x29, 0xdd,
+	0xe7, 0x00, 0x7c, 0x1f, 0x54, 0x66, 0x38, 0x49, 0xcd, 0xfb, 0x82, 0x2d, 0xcf, 0x70, 0x22, 0xbd,
+	0x29, 0x29, 0xad, 0x07, 0x39, 0x99, 0x3b, 0x97, 0xc8, 0x4f, 0x9d, 0x65, 0x49, 0x2e, 0x91, 0x9f,
+	0x3b, 0x39, 0x29, 0x9d, 0x95, 0x9c, 0x94, 0xce, 0xb7, 0xa0, 0x96, 0x1e, 0x81, 0x34, 0x03, 0xc1,
+	0x57, 0x25, 0x26, 0xfd, 0x1b, 0x89, 0x2c, 0x51, 0x7d, 0x2e, 0xc9, 0xfb, 0xd3, 0x84, 0xa6, 0x25,
+	0x6a, 0xb2, 0x05, 0x4d, 0x68, 0xde, 0x9f, 0x93, 0xd2, 0x7c, 0x98, 0x93, 0xd2, 0xf9, 0x11, 0x80,
+	0x6e, 0x18, 0x30, 0x44, 0x02, 0xea, 0x60, 0xca, 0xc8, 0x1c, 0xf1, 0x12, 0xf5, 0x8e, 0xd2, 0x2d,
+	0xdb, 0x8d, 0x8c, 0xb9, 0xcc, 0x88, 0xf3, 0x92, 0x88, 0xfd, 0x2f, 0x15, 0xbc, 0xe2, 0xb1, 0xdf,
+	0xe2, 0x98, 0x12, 0xca, 0x97, 0x21, 0x2e, 0xc0, 0xbb, 0x96, 0xbd, 0xba, 0x3d, 0x7b, 0x75, 0x6b,
+	0xf6, 0xea, 0xb6, 0xec, 0xd5, 0x6d, 0xd9, 0xab, 0xdb, 0xb2, 0x57, 0x77, 0x64, 0xaf, 0xee, 0xce,
+	0x5e, 0xdd, 0x91, 0xbd, 0xba, 0x2d, 0x7b, 0xf5, 0xff, 0x67, 0xbf, 0xf9, 0xdb, 0x3f, 0x29, 0xa0,
+	0x61, 0xa3, 0xc0, 0xc3, 0x56, 0x14, 0xf9, 0x04, 0x4f, 0x78, 0xfa, 0x18, 0x7e, 0x08, 0x60, 0x8c,
+	0xbe, 0x61, 0x0e, 0x92, 0x60, 0xfa, 0x7c, 0xf0, 0xf8, 0x4b, 0xb6, 0xc6, 0x99, 0x54, 0x2d, 0x1e,
+	0x11, 0x68, 0x80, 0x57, 0x3e, 0x46, 0x14, 0xff, 0x43, 0x5e, 0x14, 0xf2, 0x86, 0xa0, 0x5e, 0xe8,
+	0xbf, 0x06, 0xd5, 0x98, 0xb7, 0x74, 0x28, 0xbf, 0x6a, 0xe2, 0x3e, 0x54, 0x4f, 0x3f, 0xf9, 0x0f,
+	0x4f, 0xf1, 0xbf, 0x5c, 0xd4, 0xf4, 0xad, 0x04, 0xa2, 0xa0, 0x40, 0x36, 0x9b, 0x3b, 0xfe, 0x18,
+	0x1c, 0xbe, 0x78, 0xbd, 0xa1, 0x06, 0x6a, 0xc3, 0x4b, 0x7b, 0x60, 0x5d, 0x0d, 0xbe, 0xb2, 0x7a,
+	0x57, 0x97, 0x5a, 0x01, 0xd6, 0x40, 0x79, 0x78, 0x63, 0xdd, 0x0e, 0x3f, 0xfb, 0x7c, 0xa4, 0x29,
+	0xcd, 0xd2, 0x77, 0x3f, 0xb4, 0x0a, 0x3d, 0xfd, 0xf1, 0xd7, 0x56, 0xe1, 0x71, 0xdd, 0x52, 0x7e,
+	0x5a, 0xb7, 0x94, 0x9f, 0xd7, 0x2d, 0xe5, 0x97, 0x75, 0x4b, 0xf9, 0xfe, 0xb7, 0x56, 0x61, 0xbc,
+	0x2f, 0x3e, 0x54, 0x67, 0x7f, 0x07, 0x00, 0x00, 0xff, 0xff, 0xb5, 0x2c, 0x7e, 0x04, 0x22, 0x07,
+	0x00, 0x00,
 }
