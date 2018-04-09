@@ -230,13 +230,21 @@ func partitionCustomer(db *gosql.DB, wIDs []int, partitions int) {
 
 func partitionHistory(db *gosql.DB, wIDs []int, partitions int) {
 	const maxVal = math.MaxUint64
+	temp := make([]byte, 16)
 	rowids := make([]uuid.UUID, partitions+1)
 	for i := 0; i < partitions; i++ {
+		var err error
+
 		// We're splitting the UUID rowid column evenly into N partitions. The
 		// column is sorted lexicographically on the bytes of the UUID which means
 		// we should put the partitioning values at the front of the UUID.
-		binary.BigEndian.PutUint64(rowids[i].GetBytes()[:], uint64(i)*(maxVal/uint64(partitions)))
+		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(partitions)))
+		rowids[i], err = uuid.FromBytes(temp)
+		if err != nil {
+			panic(err)
+		}
 	}
+
 	rowids[partitions], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
 
 	var buf bytes.Buffer
