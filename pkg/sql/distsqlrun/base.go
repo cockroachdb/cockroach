@@ -123,7 +123,9 @@ type RowSource interface {
 	// producers). Therefore, consumers need to be aware that some rows might have
 	// been skipped in case they continue to consume rows. Usually a consumer
 	// should react to an error by calling ConsumerDone(), thus asking the
-	// RowSource to drain, and separately discard any future data rows.
+	// RowSource to drain, and separately discard any future data rows. A consumer
+	// receiving an error should also call ConsumerDone() on any other input it
+	// has.
 	Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 
 	// ConsumerDone lets the source know that we will not need any more data

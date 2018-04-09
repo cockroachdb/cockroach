@@ -54,10 +54,6 @@ type scrubTableReader struct {
 	// indexIdx refers to the index being scanned. This is only used
 	// during scrub physical checks.
 	indexIdx int
-
-	// TODO(andrei): get rid of this field and move the actions it gates into the
-	// Start() method.
-	started bool
 }
 
 var _ Processor = &scrubTableReader{}
@@ -83,7 +79,20 @@ func newScrubTableReader(
 	tr.tableDesc = spec.Table
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	if err := tr.init(post, ScrubTypes, flowCtx, output); err != nil {
+	if err := tr.init(
+		post,
+		ScrubTypes,
+		flowCtx,
+		output,
+		procStateOpts{
+			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
+			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
+			// doesn't trust that the adapter will do the right thing on a Next() call
+			// after it had previously returned an error.
+			inputsToDrain:        nil,
+			trailingMetaCallback: tr.generateTrailingMeta,
+		},
+	); err != nil {
 		return nil, err
 	}
 
@@ -213,31 +222,24 @@ func (tr *scrubTableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 // Start is part of the RowSource interface.
 func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
-	return tr.startInternal(ctx, scrubTableReaderProcName)
+	ctx = tr.startInternal(ctx, scrubTableReaderProcName)
+
+	log.VEventf(ctx, 1, "starting")
+
+	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
+	if err := tr.fetcher.StartScan(
+		ctx, tr.flowCtx.txn, tr.spans,
+		true /* limit batches */, tr.limitHint, false, /* traceKV */
+	); err != nil {
+		tr.moveToDraining(err)
+	}
+
+	return ctx
 }
 
 // Next is part of the RowSource interface.
 func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if !tr.started {
-		tr.started = true
-
-		log.VEventf(tr.ctx, 1, "starting")
-
-		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
-		if err := tr.fetcher.StartScan(
-			tr.ctx, tr.flowCtx.txn, tr.spans,
-			true /* limit batches */, tr.limitHint, false, /* traceKV */
-		); err != nil {
-			log.Errorf(tr.ctx, "scan error: %s", err)
-			return nil, tr.producerMeta(err)
-		}
-	}
-
-	if tr.closed || tr.consumerStatus != NeedMoreRows {
-		return nil, tr.producerMeta(nil /* err */)
-	}
-
-	for {
+	for tr.state == stateRunning {
 		var row sqlbase.EncDatumRow
 		var err error
 		// If we are running a scrub physical check, we use a specialized
@@ -264,18 +266,13 @@ func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			continue
 		}
 		if row == nil || err != nil {
-			// This was the last-row or an error was encountered, annotate the
-			// metadata with misplanned ranges and trace data.
-			return nil, tr.producerMeta(scrub.UnwrapScrubError(err))
+			tr.moveToDraining(scrub.UnwrapScrubError(err))
+			break
 		}
 
-		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
-		if outRow != nil {
+		if outRow := tr.processRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
-		if outRow == nil && err == nil && status == NeedMoreRows {
-			continue
-		}
-		return nil, tr.producerMeta(err)
 	}
+	return nil, tr.drainHelper()
 }

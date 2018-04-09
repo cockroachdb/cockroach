@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// metadataTestSender intersperses a metadata record after every row.
 type metadataTestSender struct {
 	processorBase
 	input RowSource
@@ -29,10 +30,7 @@ type metadataTestSender struct {
 	// sendRowNumMeta is set to true when the next call to Next() must return
 	// RowNum metadata, and false otherwise.
 	sendRowNumMeta bool
-	// sentLastMsg, if set, indicates that the "terminal" RowNum with LastMsg set
-	// has been sent.
-	sentLastMsg bool
-	rowNumCnt   int32
+	rowNumCnt      int32
 }
 
 var _ Processor = &metadataTestSender{}
@@ -44,7 +42,27 @@ func newMetadataTestSender(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver, id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
-	if err := mts.init(post, input.OutputTypes(), flowCtx, output); err != nil {
+	if err := mts.init(
+		post,
+		input.OutputTypes(),
+		flowCtx,
+		output,
+		procStateOpts{
+			inputsToDrain: []RowSource{mts.input},
+			trailingMetaCallback: func() []ProducerMetadata {
+				mts.internalClose()
+				// Send a final record with LastMsg set.
+				meta := ProducerMetadata{
+					RowNum: &RemoteProducerMetadata_RowNum{
+						RowNum:   mts.rowNumCnt,
+						SenderID: mts.id,
+						LastMsg:  true,
+					},
+				}
+				return []ProducerMetadata{meta}
+			},
+		},
+	); err != nil {
 		return nil, err
 	}
 	return mts, nil
@@ -63,41 +81,6 @@ func (mts *metadataTestSender) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (mts *metadataTestSender) close() {
-	if mts.internalClose() {
-		mts.input.ConsumerClosed()
-	}
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (mts *metadataTestSender) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !mts.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(mts.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		mts.close()
-	}
-	if meta == nil && !mts.sentLastMsg {
-		mts.sentLastMsg = true
-		meta = &ProducerMetadata{
-			RowNum: &RemoteProducerMetadata_RowNum{
-				RowNum:   mts.rowNumCnt,
-				SenderID: mts.id,
-				LastMsg:  true,
-			},
-		}
-	}
-	return meta
-}
-
 // Start is part of the RowSource interface.
 func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
 	mts.input.Start(ctx)
@@ -106,6 +89,7 @@ func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	// Every call after a row has been returned returns a metadata record.
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++
@@ -118,40 +102,34 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 
-	for {
+	for mts.state == stateRunning {
 		row, meta := mts.input.Next()
 		if meta != nil {
+			// Other processors will start draining when they get an error meta from
+			// their input. We don't do that here, as the mts should be an unintrusive
+			// as possible.
 			return nil, meta
 		}
-		if mts.closed || row == nil {
-			return nil, mts.producerMeta(nil /* err */)
+		if row == nil {
+			mts.moveToDraining(nil /* err */)
+			break
 		}
 
-		outRow, status, err := mts.out.ProcessRow(mts.ctx, row)
-		if err != nil {
-			return nil, mts.producerMeta(err)
+		if outRow := mts.processRowHelper(row); outRow != nil {
+			mts.sendRowNumMeta = true
+			return outRow, nil
 		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			mts.input.ConsumerDone()
-			continue
-		}
-		mts.sendRowNumMeta = true
-		return outRow, nil
 	}
+	return nil, mts.drainHelper()
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerDone() {
-	mts.input.ConsumerDone()
+	mts.moveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	mts.close()
+	mts.internalClose()
 }

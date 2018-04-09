@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -74,6 +73,9 @@ func newMergeJoiner(
 	if err := m.joinerBase.init(
 		flowCtx, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
+		procStateOpts{
+			inputsToDrain: []RowSource{leftSource, rightSource},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -105,35 +107,6 @@ func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (m *mergeJoiner) close() {
-	if !m.closed {
-		log.VEventf(m.ctx, 2, "exiting merge joiner run")
-	}
-	if m.internalClose() {
-		m.leftSource.ConsumerClosed()
-		m.rightSource.ConsumerClosed()
-	}
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (m *mergeJoiner) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !m.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(m.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		m.close()
-	}
-	return meta
-}
-
 // Start is part of the RowSource interface.
 func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 	m.streamMerger.start(ctx)
@@ -144,35 +117,24 @@ func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 
 // Next is part of the Processor interface.
 func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if m.closed {
-		return nil, m.producerMeta(nil /* err */)
-	}
-
-	for {
+	for m.state == stateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
+			if meta.Err != nil {
+				m.moveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
-			return nil, m.producerMeta(nil /* err */)
+			m.moveToDraining(nil /* err */)
+			break
 		}
 
-		outRow, status, err := m.out.ProcessRow(m.ctx, row)
-		if err != nil {
-			return nil, m.producerMeta(err)
+		if outRow := m.processRowHelper(row); outRow != nil {
+			return outRow, nil
 		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			m.leftSource.ConsumerDone()
-			m.rightSource.ConsumerDone()
-			continue
-		}
-		return outRow, nil
 	}
+	return nil, m.drainHelper()
 }
 
 func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -274,12 +236,11 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 // ConsumerDone is part of the RowSource interface.
 func (m *mergeJoiner) ConsumerDone() {
-	m.leftSource.ConsumerDone()
-	m.rightSource.ConsumerDone()
+	m.moveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (m *mergeJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	m.close()
+	m.internalClose()
 }

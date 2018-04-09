@@ -144,6 +144,8 @@ func TestServer(t *testing.T) {
 				if !testutils.IsError(err, tc.expectedErr) {
 					t.Errorf("expected error '%s', got %v", tc.expectedErr, err)
 				}
+				// In the expectedErr == nil case, we leave a flow hanging; we're not
+				// consuming it. It will get canceled by the draining process.
 			})
 		}
 	})

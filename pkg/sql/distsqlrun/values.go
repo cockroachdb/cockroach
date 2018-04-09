@@ -25,15 +25,12 @@ import (
 // rows.
 type valuesProcessor struct {
 	processorBase
-	rowSourceBase
 
 	columns []DatumInfo
 	data    [][]byte
 
 	sd     StreamDecoder
 	rowBuf sqlbase.EncDatumRow
-
-	started bool
 }
 
 var _ Processor = &valuesProcessor{}
@@ -52,7 +49,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(post, types, flowCtx, output); err != nil {
+	if err := v.init(post, types, flowCtx, output, procStateOpts{}); err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -70,106 +67,68 @@ func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (v *valuesProcessor) close() {
-	v.internalClose()
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (v *valuesProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !v.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(v.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		v.close()
-	}
-	return meta
-}
-
 // Start is part of the RowSource interface.
 func (v *valuesProcessor) Start(ctx context.Context) context.Context {
-	return v.startInternal(ctx, valuesProcName)
+	ctx = v.startInternal(ctx, valuesProcName)
+
+	// Add a bogus header to apease the StreamDecoder, which wants to receive a
+	// header before any data.
+	m := &ProducerMessage{
+		Typing: v.columns,
+		Header: &ProducerHeader{}}
+	if err := v.sd.AddMessage(m); err != nil {
+		v.moveToDraining(err)
+		return ctx
+	}
+
+	v.rowBuf = make(sqlbase.EncDatumRow, len(v.columns))
+	return ctx
 }
 
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if v.closed {
-		return nil, v.producerMeta(nil /* err */)
-	}
-
-	if !v.started {
-		v.started = true
-
-		// Add a bogus header to apease the StreamDecoder, which wants to receive a
-		// header before any data.
-		m := &ProducerMessage{
-			Typing: v.columns,
-			Header: &ProducerHeader{}}
-		if err := v.sd.AddMessage(m); err != nil {
-			return nil, v.producerMeta(err)
-		}
-
-		v.rowBuf = make(sqlbase.EncDatumRow, len(v.columns))
-	}
-
-	for {
+	for v.state == stateRunning {
 		row, meta, err := v.sd.GetRow(v.rowBuf)
 		if err != nil {
-			return nil, v.producerMeta(err)
+			v.moveToDraining(err)
+			break
 		}
 
-		if row == nil && meta == nil {
+		if meta != nil {
+			return nil, meta
+		}
+
+		if row == nil {
 			if len(v.data) == 0 {
-				return nil, v.producerMeta(nil /* err */)
+				v.moveToDraining(nil /* err */)
+				break
 			}
 			// Push a chunk of data to the stream decoder.
 			m := &ProducerMessage{}
 			m.Data.RawBytes = v.data[0]
 			if err := v.sd.AddMessage(m); err != nil {
-				return nil, v.producerMeta(err)
+				v.moveToDraining(err)
+				break
 			}
 			v.data = v.data[1:]
 			continue
 		}
 
-		if row != nil {
-			if v.consumerStatus != NeedMoreRows {
-				continue
-			}
-			outRow, status, err := v.out.ProcessRow(v.ctx, row)
-			if err != nil {
-				return nil, v.producerMeta(err)
-			}
-			switch status {
-			case NeedMoreRows:
-				if outRow == nil && err == nil {
-					continue
-				}
-			case DrainRequested:
-				continue
-			}
+		if outRow := v.processRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
-
-		return nil, meta
 	}
+	return nil, v.drainHelper()
+
 }
 
 // ConsumerDone is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerDone() {
-	v.consumerDone()
+	v.moveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerClosed() {
-	v.consumerClosed("values")
 	// The consumer is done, Next() will not be called again.
-	v.close()
+	v.internalClose()
 }

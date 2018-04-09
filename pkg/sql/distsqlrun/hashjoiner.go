@@ -148,6 +148,7 @@ func newHashJoiner(
 		uint32(numMergedColumns),
 		post,
 		output,
+		procStateOpts{}, // hashJoiner doesn't implement RowSource and so doesn't use it.
 	); err != nil {
 		return nil, err
 	}
