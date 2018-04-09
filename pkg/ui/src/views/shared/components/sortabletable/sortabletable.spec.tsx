@@ -1,10 +1,13 @@
 import React from "react";
 import _ from "lodash";
 import { assert } from "chai";
-import { shallow } from "enzyme";
+import Enzyme, { shallow } from "enzyme";
+import Adapter from "enzyme-adapter-react-16";
 import * as sinon from "sinon";
 
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
+
+Enzyme.configure({ adapter: new Adapter() });
 
 const columns: SortableColumn[] = [
   {

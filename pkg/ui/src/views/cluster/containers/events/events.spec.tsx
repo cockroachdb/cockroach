@@ -1,6 +1,7 @@
 import React from "react";
 import { assert } from "chai";
-import { shallow } from "enzyme";
+import Enzyme, { shallow } from "enzyme";
+import Adapter from "enzyme-adapter-react-16";
 import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
@@ -9,6 +10,8 @@ import * as protos from  "src/js/protos";
 import { EventBoxUnconnected as EventBox, EventRow, getEventInfo } from "src/views/cluster/containers/events";
 import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
+
+Enzyme.configure({ adapter: new Adapter() });
 
 type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
 

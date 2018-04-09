@@ -1,11 +1,14 @@
 import React from "react";
 import _ from "lodash";
 import { assert } from "chai";
-import { mount } from "enzyme";
+import Enzyme, { mount } from "enzyme";
+import Adapter from "enzyme-adapter-react-16";
 import * as sinon from "sinon";
 
 import { SortedTable, ColumnDescriptor } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
+
+Enzyme.configure({ adapter: new Adapter() });
 
 class TestRow {
   constructor(public name: string, public value: number) { }

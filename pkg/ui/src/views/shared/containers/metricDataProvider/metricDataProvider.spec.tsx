@@ -1,6 +1,7 @@
 import React from "react";
 import { assert } from "chai";
-import { shallow } from "enzyme";
+import Enzyme, { shallow } from "enzyme";
+import Adapter from "enzyme-adapter-react-16";
 import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
@@ -13,6 +14,8 @@ import {
   MetricsDataProviderUnconnected as MetricsDataProvider,
 } from "src/views/shared/containers/metricDataProvider";
 import { requestMetrics, MetricsQuery } from "src/redux/metrics";
+
+Enzyme.configure({ adapter: new Adapter() });
 
 // TextGraph is a proof-of-concept component used to demonstrate that
 // MetricsDataProvider is working correctly. Used in tests.
