@@ -45,7 +45,7 @@ case "${cmd}" in
     stop)
     gcloud compute instances stop "${NAME}"
     ;;
-    delete)
+    delete|destroy)
     gcloud compute instances delete "${NAME}"
     ;;
     ssh)
