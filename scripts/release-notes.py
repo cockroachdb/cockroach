@@ -327,6 +327,63 @@ def spin():
         sys.stderr.flush()
 
 # This function groups and counts all the commits that belong to a particular PR.
+# Some description is in order regarding the logic here: it should visit all
+# commits that are on the PR and only on the PR. If there's some secondary
+# branch merge included on the PR, as long as those commits don't otherwise end
+# up reachable from the target branch, they'll be included.  If there's a back-
+# merge from the target branch, that should be excluded.
+#
+# Examples:
+#
+# ### secondary branch merged into PR
+#
+# Dev branched off of K, made a commit J, made a commit G while someone else
+# committed H, merged H from the secondary branch to the topic branch in E,
+# made a final commit in C, then merged to master in A.
+#
+#     A <-- master
+#     |\
+#     | \
+#     B  C <-- PR tip
+#     |  |
+#     |  |
+#     D  E <-- secondary merge
+#     |  |\
+#     |  | \
+#     F  G  H <-- secondary branch
+#     |  | /
+#     |  |/
+#     I  J
+#     | /
+#     |/
+#     K <-- merge base
+#
+# C, E, G, H, and J will each be checked.  None of them are reachable from B,
+# so they will all be visited. E will be not be counted because the message
+# starts with "Merge", so in the end C, G, H, and J will be included.
+#
+# ### back-merge from target branch
+#
+# Dev branched off F, made one commit G, merged the latest from master in E,
+# made one final commit in C, then merged the PR.
+#
+#     A <-- master
+#     |\
+#     | \
+#     B  C <-- PR tip
+#     |  |
+#     |  |
+#     D  E <-- back-merge
+#     | /|
+#     |/ |
+#     F  G
+#     | /
+#     |/
+#     H <-- merge base
+#
+# C, E, F, and G will each be checked. F is reachable from B, so it will be
+# excluded. E starts with "Merge", so it will not be counted. Only C and G will
+# have statistics included.
 def analyze_pr(merge, pr):
     allprs.add(pr)
 
