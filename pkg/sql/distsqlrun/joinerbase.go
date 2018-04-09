@@ -42,6 +42,10 @@ type joinerBase struct {
 	numMergedEqualityColumns int
 }
 
+// init initializes the joinerBase.
+//
+// opts is passed along to the underlying processorBase. The zero value is used
+// if the processor using the joinerBase is not implementing RowSource.
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
 	leftTypes []sqlbase.ColumnType,
@@ -53,6 +57,7 @@ func (jb *joinerBase) init(
 	numMergedColumns uint32,
 	post *PostProcessSpec,
 	output RowReceiver,
+	opts procStateOpts,
 ) error {
 	jb.joinType = jType
 
@@ -99,7 +104,7 @@ func (jb *joinerBase) init(
 	}
 	outputTypes := condTypes[:outputSize]
 
-	if err := jb.processorBase.init(post, outputTypes, flowCtx, output); err != nil {
+	if err := jb.processorBase.init(post, outputTypes, flowCtx, output, opts); err != nil {
 		return err
 	}
 	return jb.onCond.init(onExpr, condTypes, jb.evalCtx)
