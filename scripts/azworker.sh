@@ -86,7 +86,7 @@ case ${1-} in
   stop)
     az vm deallocate -g "${RG}" -n "${NAME}"
     ;;
-  delete)
+  delete|destroy)
     # The straightforward thing to do would be to first delete the VM, then
     # check if there are any virtual machines left in the group. However, the
     # deleted VM doesn't disappear right away from the listing. So we instead
