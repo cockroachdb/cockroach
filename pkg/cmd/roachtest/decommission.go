@@ -46,24 +46,47 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 	c.Put(ctx, workload, "./workload", c.Node(nodes))
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Start(ctx, c.All())
 
-	waitReplication := func(downNode int) error {
+	for i := 1; i <= numDecom; i++ {
+		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+	}
+
+	c.Start(ctx, c.Range(numDecom+1, nodes))
+	c.Run(ctx, c.Node(nodes), `./workload init kv --drop`)
+
+	waitReplicatedAwayFrom := func(downNodeID string) error {
 		db := c.Conn(ctx, nodes)
 		defer db.Close()
 
 		for ok := false; !ok; {
 			if err := db.QueryRow(
 				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NULL",
-				downNode,
+				downNodeID,
 			).Scan(&ok); err != nil {
 				return err
 			}
+			time.Sleep(time.Second)
 		}
 		return nil
 	}
 
-	if err := waitReplication(0 /* no down node */); err != nil {
+	waitUpReplicated := func(targetNodeID string) error {
+		db := c.Conn(ctx, nodes)
+		defer db.Close()
+
+		for ok := false; !ok; {
+			stmtReplicaCount := fmt.Sprintf(
+				`SELECT COUNT(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database = 'kv';`, targetNodeID)
+			t.Status(stmtReplicaCount)
+			if err := db.QueryRow(stmtReplicaCount).Scan(&ok); err != nil {
+				return err
+			}
+			time.Sleep(time.Second)
+		}
+		return nil
+	}
+
+	if err := waitReplicatedAwayFrom("0" /* no down node */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,7 +96,19 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		// TODO(tschottdorf): in remote mode, the ui shows that we consistently write
 		// at 330 qps (despite asking for 500 below). Locally we get 500qps (and a lot
 		// more without rate limiting). Check what's up with that.
-		"./workload run kv --max-rate 500 --tolerate-errors --init" + loadDuration + " {pgurl:1-%d}",
+		"./workload run kv --max-rate 500 --tolerate-errors" + loadDuration + " {pgurl:1-%d}",
+	}
+
+	run := func(stmt string) {
+		db := c.Conn(ctx, nodes)
+		defer db.Close()
+
+		t.Status(stmt)
+		_, err := db.ExecContext(ctx, stmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.l.printf(fmt.Sprintf("run: %s\n", stmt))
 	}
 
 	var m *errgroup.Group // see comment in version.go
@@ -111,59 +146,53 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		decom := func(id string) error {
 			port := fmt.Sprintf("{pgport:%d}", nodes) // always use last node
+			t.Status("decommissioning node %s", id)
 			return c.RunE(ctx, c.Node(nodes), "./cockroach node decommission --insecure --wait=live --port "+port+" "+id)
 		}
 
 		for tBegin, whileDown, node := timeutil.Now(), true, 1; timeutil.Since(tBegin) <= duration; whileDown, node = !whileDown, (node%numDecom)+1 {
 			t.Status(fmt.Sprintf("decommissioning %d (down=%t)", node, whileDown))
 			id, err := nodeID(node)
+
 			if err != nil {
 				return err
 			}
+			run(fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"+node%d"}'`, node))
+
+			if err := waitUpReplicated(id); err != nil {
+				return err
+			}
+
 			if whileDown {
 				if err := stop(node); err != nil {
 					return err
 				}
 			}
+
+			run(fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-node%d"}'`, node))
+
 			if err := decom(id); err != nil {
 				return err
 			}
-			if whileDown {
-				if err := waitReplication(node); err != nil {
-					return err
-				}
-			} else {
+
+			if err := waitReplicatedAwayFrom(id); err != nil {
+				return err
+			}
+
+			if !whileDown {
 				if err := stop(node); err != nil {
 					return err
 				}
 			}
+
 			if err := c.RunE(ctx, c.Node(node), "rm -rf {store-dir}"); err != nil {
 				return err
 			}
-			c.Start(ctx, c.Node(node), startArgs("-a", "--join "+c.InternalIP(ctx, nodes)))
-			t.Status("sleeping")
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			// Give the cluster some time to mess up.
-			//
-			// NB: we should have zone configs set so that the newly arrived
-			// nodes look appealing to the allocator and then sleep until
-			// they've taken on some data. I wasted at least an hour on this
-			// but roachprod gets in the way big time as it owns the `start`
-			// invocation and thus I can't set store attributes or
-			// localities. Additionally, the used localities are a flag to
-			// `roachtest` and so outside of the control of the test.
-			//
-			// As written, the test is likely ineffective at putting data on
-			// the nodes being cycled. In fact, the default localities put
-			// the first node in the same locality as the fourth, and so it
-			// won't usually be considered for diversity.
-			//
-			// TODO(petermattis): allow overriding args for the start invocation
-			// or provide the required functionality otherwise.
-			case <-time.After(time.Minute):
-			}
+
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+
+			c.Start(ctx, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d", c.InternalIP(ctx, nodes), node)))
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes
 		// having disappeared. Verify that the workloads don't dip their qps or
