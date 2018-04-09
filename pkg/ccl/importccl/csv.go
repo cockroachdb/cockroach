@@ -1133,9 +1133,24 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 			}
 			fn = sr.sample
 		}
+
+		// Populate the split-point spans which have already been imported.
+		var completedSpans roachpb.SpanGroup
+		job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+		if err != nil {
+			return err
+		}
+		if details, ok := job.Payload().Details.(*jobs.Payload_Import); ok {
+			completedSpans.Add(details.Import.Tables[0].SpanProgress...)
+		}
+
 		typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch {
+				// Allow KV pairs to be dropped if they belong to a completed span.
+				if completedSpans.Contains(kv.Key) {
+					continue
+				}
 				if fn(kv) {
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
@@ -1320,6 +1335,7 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 
 					var checksum []byte
 					name := span.Name
+
 					if chunk > 0 {
 						name = fmt.Sprintf("%d-%s", chunk, name)
 					}
@@ -1404,12 +1420,49 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 				return err
 			}
 
+			// There's no direct way to return an error from the Progressed()
+			// callback when decoding the span.End key.
+			var progressErr error
 			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
 				d := details.(*jobs.Payload_Import).Import
 				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+
+				// Fold the newly-completed span into existing progress.  Since
+				// we know what all of the sampling points are and that they're
+				// in sorted order, we can just find our known end-point and use
+				// the previous key as the span-start.
+				progressErr = func() error {
+					samples := d.Tables[0].Samples
+					// Binary-search for the index of span.End.
+					idx := sort.Search(len(samples), func(i int) bool {
+						key := roachpb.Key(samples[i])
+						return key.Compare(span.End) >= 0
+					})
+					finished := roachpb.Span{EndKey: span.End}
+					// Special case: if we're processing the first span, we want
+					// to mark the table key itself as being complete.  This
+					// means that at the end of importing, the table's entire
+					// key-space will be marked as complete.
+					if idx == 0 {
+						_, table, err := keys.DecodeTablePrefix(span.End)
+						if err != nil {
+							return errors.Wrapf(err, "expected a table key, had %s", span.End)
+						}
+						finished.Key = keys.MakeTablePrefix(uint32(table))
+					} else {
+						finished.Key = samples[idx-1]
+					}
+					var sg roachpb.SpanGroup
+					sg.Add(d.Tables[0].SpanProgress...)
+					sg.Add(finished)
+					d.Tables[0].SpanProgress = sg.Slice()
+					return nil
+				}()
 				return d.Tables[0].Completed()
 			}); err != nil {
 				return err
+			} else if progressErr != nil {
+				return progressErr
 			}
 		}
 		return nil
