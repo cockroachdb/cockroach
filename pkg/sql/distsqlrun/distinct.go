@@ -84,7 +84,15 @@ func newDistinct(
 		types:        input.OutputTypes(),
 	}
 
-	if err := d.init(post, d.types, flowCtx, output); err != nil {
+	if err := d.init(
+		post, d.types, flowCtx, output,
+		procStateOpts{
+			inputsToDrain: []RowSource{d.input},
+			trailingMetaCallback: func() []ProducerMetadata {
+				d.close()
+				return nil
+			},
+		}); err != nil {
 		return nil, err
 	}
 
@@ -177,47 +185,25 @@ func (d *distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 }
 
 func (d *distinct) close() {
-	if !d.closed {
-		// Need to close the mem accounting while the context is still valid.
-		d.memAcc.Close(d.ctx)
-	}
-	if d.internalClose() {
-		d.input.ConsumerClosed()
-	}
-}
-
-// producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (d *distinct) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
-	if !d.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(d.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		d.close()
-	}
-	return meta
+	// Need to close the mem accounting while the context is still valid.
+	d.memAcc.Close(d.ctx)
+	d.internalClose()
 }
 
 // Next is part of the RowSource interface.
 func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if d.closed {
-		return nil, d.producerMeta(nil /* err */)
-	}
-
 	for {
+		if d.state != stateRunning {
+			return nil, d.drainHelper()
+		}
+
 		row, meta := d.input.Next()
 		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			return nil, d.producerMeta(nil /* err */)
+			d.moveToDraining(nil /* err */)
+			continue
 		}
 
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
@@ -226,7 +212,8 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// the row is the key we use in our 'seen' set.
 		encoding, err := d.encode(d.scratch, row)
 		if err != nil {
-			return nil, d.producerMeta(err)
+			d.moveToDraining(err)
+			continue
 		}
 		d.scratch = encoding[:0]
 
@@ -234,7 +221,8 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			return nil, d.producerMeta(err)
+			d.moveToDraining(err)
+			continue
 		}
 
 		if !matched {
@@ -244,7 +232,8 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// allocated on it, which implies that UnsafeReset() is safe to call here.
 			d.lastGroupKey = row
 			if err := d.arena.UnsafeReset(d.ctx); err != nil {
-				return nil, d.producerMeta(err)
+				d.moveToDraining(err)
+				continue
 			}
 			d.seen = make(map[string]struct{})
 		}
@@ -255,47 +244,40 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			}
 			s, err := d.arena.AllocBytes(d.ctx, encoding)
 			if err != nil {
-				return nil, d.producerMeta(err)
+				d.moveToDraining(err)
+				continue
 			}
 			d.seen[s] = struct{}{}
 		}
 
-		outRow, status, err := d.out.ProcessRow(d.ctx, row)
-		if err != nil {
-			return nil, d.producerMeta(err)
+		if outRow := d.processRowHelper(row); outRow != nil {
+			return outRow, nil
 		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			d.input.ConsumerDone()
-			continue
-		}
-
-		return outRow, nil
 	}
 }
 
 // Next is part of the RowSource interface.
+//
+// sortedDistinct is simpler than distinct. All it has to do is keep track
+// of the last row it saw, emitting if the new row is different.
 func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if d.closed {
-		return nil, d.producerMeta(nil /* err */)
-	}
 	for {
-		// sortedDistinct is simpler than distinct. All it has to do is keep track
-		// of the last row it saw, emitting if the new row is different.
+		if d.state != stateRunning {
+			return nil, d.drainHelper()
+		}
+
 		row, meta := d.input.Next()
-		if d.closed || meta != nil {
+		if meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			return nil, d.producerMeta(nil /* err */)
+			d.moveToDraining(nil /* err */)
+			continue
 		}
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			return nil, d.producerMeta(err)
+			d.moveToDraining(err)
+			continue
 		}
 		if matched {
 			continue
@@ -303,21 +285,9 @@ func (d *sortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		d.lastGroupKey = row
 
-		outRow, status, err := d.out.ProcessRow(d.ctx, row)
-		if err != nil {
-			return nil, d.producerMeta(err)
+		if outRow := d.processRowHelper(row); outRow != nil {
+			return outRow, nil
 		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil && err == nil {
-				continue
-			}
-		case DrainRequested:
-			d.input.ConsumerDone()
-			continue
-		}
-
-		return outRow, nil
 	}
 }
 
