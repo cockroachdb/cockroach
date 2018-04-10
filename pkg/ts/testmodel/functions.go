@@ -24,40 +24,48 @@ import (
 type aggFunc func(DataSeries) float64
 type fillFunc func(DataSeries, DataSeries, int64) DataSeries
 
-func aggFuncSum(data DataSeries) float64 {
+// AggregateSum returns the sum value of all points in the provided data series.
+func AggregateSum(data DataSeries) float64 {
 	total := 0.0
 	for _, dp := range data {
-		total += dp.value
+		total += dp.Value
 	}
 	return total
 }
 
-func aggFuncLast(data DataSeries) float64 {
-	return data[len(data)-1].value
+// AggregateLast returns the last value in the provided data series.
+func AggregateLast(data DataSeries) float64 {
+	return data[len(data)-1].Value
 }
 
-func aggFuncAvg(data DataSeries) float64 {
+// AggregateAverage returns the average value of the points in the provided data
+// series.
+func AggregateAverage(data DataSeries) float64 {
 	if len(data) == 0 {
 		return 0.0
 	}
-	return aggFuncSum(data) / float64(len(data))
+	return AggregateSum(data) / float64(len(data))
 }
 
-func aggFuncMax(data DataSeries) float64 {
+// AggregateMax returns the maximum value of any point in the provided data
+// series.
+func AggregateMax(data DataSeries) float64 {
 	max := -math.MaxFloat64
 	for _, dp := range data {
-		if dp.value > max {
-			max = dp.value
+		if dp.Value > max {
+			max = dp.Value
 		}
 	}
 	return max
 }
 
-func aggFuncMin(data DataSeries) float64 {
+// AggregateMin returns the minimum value of any point in the provided data
+// series.
+func AggregateMin(data DataSeries) float64 {
 	min := math.MaxFloat64
 	for _, dp := range data {
-		if dp.value < min {
-			min = dp.value
+		if dp.Value < min {
+			min = dp.Value
 		}
 	}
 	return min
@@ -68,13 +76,13 @@ func aggFuncMin(data DataSeries) float64 {
 func getAggFunction(agg tspb.TimeSeriesQueryAggregator) aggFunc {
 	switch agg {
 	case tspb.TimeSeriesQueryAggregator_AVG:
-		return aggFuncAvg
+		return AggregateAverage
 	case tspb.TimeSeriesQueryAggregator_SUM:
-		return aggFuncSum
+		return AggregateSum
 	case tspb.TimeSeriesQueryAggregator_MAX:
-		return aggFuncMax
+		return AggregateMax
 	case tspb.TimeSeriesQueryAggregator_MIN:
-		return aggFuncMin
+		return AggregateMin
 	}
 
 	// The model should not be called with an invalid aggregator option.
@@ -86,13 +94,13 @@ func fillFuncLinearInterpolate(before DataSeries, after DataSeries, resolution i
 	end := after[0]
 
 	// compute interpolation step
-	step := (end.value - start.value) / float64(end.timestamp-start.timestamp)
+	step := (end.Value - start.Value) / float64(end.TimestampNanos-start.TimestampNanos)
 
-	result := make(DataSeries, (end.timestamp-start.timestamp)/resolution-1)
+	result := make(DataSeries, (end.TimestampNanos-start.TimestampNanos)/resolution-1)
 	for i := range result {
 		result[i] = dp(
-			start.timestamp+(resolution*int64(i+1)),
-			start.value+(step*float64(i+1)*float64(resolution)),
+			start.TimestampNanos+(resolution*int64(i+1)),
+			start.Value+(step*float64(i+1)*float64(resolution)),
 		)
 	}
 	return result

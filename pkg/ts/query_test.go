@@ -24,11 +24,13 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -711,7 +713,6 @@ func (tm *testModel) assertQuery(
 		tm.queryMemoryBudget,
 		int64(len(tm.seenSources)),
 	)
-
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -723,6 +724,23 @@ func (tm *testModel) assertQuery(
 		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 
+	// Query the testmodel.
+	modelDatapoints := tm.model.Query(
+		name,
+		sources,
+		q.GetDownsampler(),
+		q.GetSourceAggregator(),
+		q.GetDerivative(),
+		r.SlabDuration(),
+		sampleDuration, start, end, interpolationLimit,
+	)
+	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			tm.t.Error(diff)
+		}
+	}
+
+	// TODO(mrtracy): Delete after this point, rely on testmodel instead.
 	// Construct an expected result for comparison.
 	var expectedDatapoints []tspb.TimeSeriesDatapoint
 	expectedSources := make([]string, 0)

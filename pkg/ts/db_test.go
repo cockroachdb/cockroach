@@ -16,11 +16,16 @@ package ts
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"reflect"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 
 	"github.com/kr/pretty"
 
@@ -58,6 +63,7 @@ type testModel struct {
 	t           testing.TB
 	modelData   map[string]roachpb.Value
 	seenSources map[string]struct{}
+	model       *testmodel.ModelDB
 	*localtestcluster.LocalTestCluster
 	DB                *DB
 	workerMemMonitor  *mon.BytesMonitor
@@ -91,6 +97,7 @@ func newTestModel(t *testing.T) testModel {
 		t:                 t,
 		modelData:         make(map[string]roachpb.Value),
 		seenSources:       make(map[string]struct{}),
+		model:             testmodel.NewModelDB(),
 		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
 		workerMemMonitor:  &workerMonitor,
 		resultMemMonitor:  &resultMonitor,
@@ -137,6 +144,53 @@ func (tm *testModel) assertModelCorrect() {
 			tm.t.Error(diff)
 		}
 	}
+
+	modelDisk := tm.getNewModelDiskLayout()
+	if a, e := actualData, modelDisk; !reflect.DeepEqual(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			tm.t.Error(diff)
+		}
+	}
+}
+
+func (tm *testModel) getNewModelDiskLayout() map[string]roachpb.Value {
+	result := make(map[string]roachpb.Value)
+	tm.model.VisitAllSeries(func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
+		// For computing the expected disk layout, only consider resolution-specific
+		// series.
+		resolution, seriesName, valid := getResolutionFromKey(name)
+		if !valid {
+			return data, false
+		}
+
+		tsdata := tspb.TimeSeriesData{
+			Name:   seriesName,
+			Source: source,
+			// Downsample data points according to resolution. Downsampling currently
+			// always uses the last data point when storing to disk.
+			Datapoints: data,
+		}
+
+		slabs, err := tsdata.ToInternal(resolution.SlabDuration(), resolution.SampleDuration())
+		if err != nil {
+			tm.t.Fatalf("error converting testmodel data to internal format: %s", err.Error())
+			return data, false
+		}
+
+		for _, slab := range slabs {
+			key := MakeDataKey(seriesName, source, resolution, slab.StartTimestampNanos)
+			keyStr := string(key)
+			var val roachpb.Value
+			if err := val.SetProto(&slab); err != nil {
+				tm.t.Fatal(err)
+			}
+			result[keyStr] = val
+		}
+
+		return data, false
+	})
+
+	return result
 }
 
 // assertKeyCount asserts that the model contains the expected number of keys.
@@ -146,12 +200,28 @@ func (tm *testModel) assertKeyCount(expected int) {
 	if a, e := len(tm.modelData), expected; a != e {
 		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
 	}
+
+	// check key count from test model.
+	if a, e := len(tm.getNewModelDiskLayout()), expected; a != e {
+		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
+	}
 }
 
 func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	if !TimeseriesStorageEnabled.Get(&tm.Cfg.Settings.SV) {
 		return
 	}
+
+	// Store in the new model. Record for both full-resolution data *and* a series
+	// for the specific resolution recorded.
+	tm.model.Record(data.Name, data.Source, data.Datapoints)
+	tm.model.Record(
+		resolutionModelKey(data.Name, r),
+		data.Source,
+		testmodel.DataSeries(data.Datapoints).GroupByResolution(
+			r.SampleDuration(), testmodel.AggregateLast,
+		),
+	)
 
 	// Note the source, used to construct keys for model queries.
 	tm.seenSources[data.Source] = struct{}{}
@@ -191,6 +261,30 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	}
 }
 
+// resolutionModelKey returns a string to store resolution-specific data in
+// the test model.
+func resolutionModelKey(name string, r Resolution) string {
+	return fmt.Sprintf("@%d.%s", r, name)
+}
+
+func getResolutionFromKey(key string) (Resolution, string, bool) {
+	if len(key) < 3 || !strings.HasPrefix(key, "@") {
+		return 0, key, false
+	}
+
+	parts := strings.SplitN(key[1:], ".", 2)
+	if len(parts) != 2 {
+		return 0, key, false
+	}
+
+	val, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, key, false
+	}
+
+	return Resolution(val), parts[1], true
+}
+
 // storeTimeSeriesData instructs the model to store the given time series data
 // in both the model and the system under test.
 func (tm *testModel) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesData) {
@@ -199,7 +293,8 @@ func (tm *testModel) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesDat
 		tm.t.Fatalf("error storing time series data: %s", err)
 	}
 
-	// Store data in the model.
+	// Store data in the original model.
+	// TODO(mrtracy): remove this.
 	for _, d := range data {
 		tm.storeInModel(r, d)
 	}
@@ -223,6 +318,7 @@ func (tm *testModel) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInf
 	}
 
 	// Prune data from the model.
+	// TODO(mrtracy): delete.
 	thresholds := tm.DB.computeThresholds(nowNanos)
 	for k := range tm.modelData {
 		name, _, res, ts, err := DecodeDataKey(roachpb.Key(k))
@@ -238,6 +334,21 @@ func (tm *testModel) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInf
 				delete(tm.modelData, k)
 			}
 		}
+	}
+
+	// Prune the appropriate resolution-specific series from the test model using
+	// VisitSeries.
+	for _, ts := range timeSeries {
+		tm.model.VisitSeries(
+			resolutionModelKey(ts.Name, ts.Resolution),
+			func(name, source string, data testmodel.DataSeries) (testmodel.DataSeries, bool) {
+				pruned := data.TimeSlice(thresholds[ts.Resolution], math.MaxInt64)
+				if len(pruned) != len(data) {
+					return pruned, true
+				}
+				return data, false
+			},
+		)
 	}
 }
 
@@ -335,8 +446,8 @@ func TestStoreTimeSeries(t *testing.T) {
 		{
 			Name: "test.metric",
 			Datapoints: []tspb.TimeSeriesDatapoint{
-				datapoint(-446061360000000001, 200),
-				datapoint(450000000000000000, 1),
+				datapoint(-446061360000000000, 200),
+				datapoint(450000000000000001, 1),
 				datapoint(460000000000000000, 777),
 			},
 		},
