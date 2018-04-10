@@ -131,15 +131,11 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
     const simplifiedEvents = _.map(events, getEventInfo);
 
     return <div>
-      {
-        // TODO(mrtracy): This currently always links back to the main cluster
-        // page, when it should link back to the dashboard previously visible.
-      }
       <Helmet>
         <title>Events</title>
       </Helmet>
       <section className="section section--heading">
-        <h2>Events</h2>
+        <h1>Events</h1>
       </section>
       <section className="section l-columns">
         <div className="l-columns__left events-table">
