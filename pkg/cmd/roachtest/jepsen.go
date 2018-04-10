@@ -82,8 +82,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
 	// Install Jepsen and its prereqs on the controller.
-	c.Run(ctx, controller, "sh", "-c", `"sudo apt-get -qqy install
-		openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`)
+	c.Run(ctx, controller, "sh", "-c", `"sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`)
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "./jepsen", "tc-nightly", controller)
 
