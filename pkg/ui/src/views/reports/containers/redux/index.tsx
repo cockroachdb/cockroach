@@ -16,10 +16,6 @@ interface ReduxDebugState {
 }
 
 class ReduxDebug extends React.Component<ReduxDebugProps, ReduxDebugState> {
-  static title() {
-    return "Redux State";
-  }
-
   constructor(props: any) {
     super(props);
     this.state = { copied: false };
@@ -34,6 +30,7 @@ class ReduxDebug extends React.Component<ReduxDebugProps, ReduxDebugState> {
 
     return (
       <div>
+        <section className="section"><h1>Redux State</h1></section>
         <section className="section">
           <CopyToClipboard text={ text } onCopy={() => this.setState({ copied: true})}>
             <span className={spanClass}>

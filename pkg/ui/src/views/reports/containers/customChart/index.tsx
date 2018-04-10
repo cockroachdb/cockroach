@@ -80,10 +80,6 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     },
   );
 
-  static title() {
-    return "Custom Chart";
-  }
-
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
       props.refreshNodes();
@@ -256,6 +252,7 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const units = this.currentAxisUnits();
     return (
       <div>
+        <section className="section"><h1>Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown />

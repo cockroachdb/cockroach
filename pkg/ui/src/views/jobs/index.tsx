@@ -176,21 +176,6 @@ const titleTooltip = (
 );
 
 class JobsTable extends React.Component<JobsTableProps, {}> {
-  static title() {
-    return (
-      <div>
-        Jobs
-        <div className="section-heading__tooltip">
-          <ToolTipWrapper text={titleTooltip}>
-            <div className="section-heading__tooltip-hover-area">
-              <div className="section-heading__info-icon">i</div>
-            </div>
-          </ToolTipWrapper>
-        </div>
-      </div>
-    );
-  }
-
   refresh(props = this.props) {
     props.refreshJobs(new JobsRequest({
       status: props.status,
@@ -240,6 +225,18 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   render() {
     const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
+      <section className="section">
+        <h1>
+          Jobs
+          <div className="section-heading__tooltip">
+            <ToolTipWrapper text={titleTooltip}>
+              <div className="section-heading__tooltip-hover-area">
+                <div className="section-heading__info-icon">i</div>
+              </div>
+            </ToolTipWrapper>
+          </div>
+        </h1>
+      </section>
       <div>
         <PageConfig>
           <PageConfigItem>

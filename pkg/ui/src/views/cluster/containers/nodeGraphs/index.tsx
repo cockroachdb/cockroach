@@ -108,16 +108,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     },
   );
 
-  static title({ params }: { params: { [name: string]: any } }) {
-    const dashboard = params[dashboardNameAttr];
-
-    if (dashboard in dashboards) {
-      return dashboards[dashboard].label + " Dashboard";
-    }
-
-    return "Cluster Metrics";
-  }
-
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
       props.refreshNodes();
@@ -158,6 +148,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       ? selectedDashboard
       : defaultDashboard;
 
+    const title = dashboards[dashboard].label + " Dashboard";
     const selectedNode = params[nodeIDAttr] || "";
     const nodeSources = (selectedNode !== "") ? [selectedNode] : null;
 
@@ -201,40 +192,43 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       );
     });
 
-    return <div>
-      <PageConfig>
-        <PageConfigItem>
-          <Dropdown
-            title="Graph"
-            options={this.nodeDropdownOptions(this.props.nodesSummary)}
-            selected={selectedNode}
-            onChange={this.nodeChange}
-          />
-        </PageConfigItem>
-        <PageConfigItem>
-          <Dropdown
-            title="Dashboard"
-            options={dashboardDropdownOptions}
-            selected={dashboard}
-            onChange={this.dashChange}
-          />
-        </PageConfigItem>
-        <PageConfigItem>
-          <TimeScaleDropdown />
-        </PageConfigItem>
-      </PageConfig>
-      <section className="section">
-        <div className="l-columns">
-          <div className="chart-group l-columns__left">
-            { graphComponents }
+    return (
+      <div>
+        <section className="section"><h1>{ title }</h1></section>
+        <PageConfig>
+          <PageConfigItem>
+            <Dropdown
+              title="Graph"
+              options={this.nodeDropdownOptions(this.props.nodesSummary)}
+              selected={selectedNode}
+              onChange={this.nodeChange}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown
+              title="Dashboard"
+              options={dashboardDropdownOptions}
+              selected={dashboard}
+              onChange={this.dashChange}
+            />
+          </PageConfigItem>
+          <PageConfigItem>
+            <TimeScaleDropdown />
+          </PageConfigItem>
+        </PageConfig>
+        <section className="section">
+          <div className="l-columns">
+            <div className="chart-group l-columns__left">
+              { graphComponents }
+            </div>
+            <div className="l-columns__right">
+              <Alerts />
+              <ClusterSummaryBar nodesSummary={this.props.nodesSummary} nodeSources={nodeSources} />
+            </div>
           </div>
-          <div className="l-columns__right">
-            <Alerts />
-            <ClusterSummaryBar nodesSummary={this.props.nodesSummary} nodeSources={nodeSources} />
-          </div>
-        </div>
-      </section>
-    </div>;
+        </section>
+      </div>
+    );
   }
 }
 
