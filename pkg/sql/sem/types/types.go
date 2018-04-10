@@ -109,7 +109,7 @@ var (
 	// compared with ==.
 	FamCollatedString T = TCollatedString{}
 	// FamTuple is the type family of a DTuple. CANNOT be compared with ==.
-	FamTuple T = TTuple(nil)
+	FamTuple T = TTuple{}
 	// FamArray is the type family of a DArray. CANNOT be compared with ==.
 	FamArray T = TArray{}
 	// FamTable is the type family of a DTable. CANNOT be compared with ==.
@@ -320,19 +320,26 @@ func (tINet) SQLName() string          { return "inet" }
 func (tINet) IsAmbiguous() bool        { return false }
 
 // TTuple is the type of a DTuple.
-type TTuple []T
+type TTuple struct {
+	Types  []T
+	Labels []string
+}
 
 // String implements the fmt.Stringer interface.
 func (t TTuple) String() string {
 	var buf bytes.Buffer
 	buf.WriteString("tuple")
-	if t != nil {
+	if t.Types != nil {
 		buf.WriteByte('{')
-		for i, typ := range t {
+		for i, typ := range t.Types {
 			if i != 0 {
 				buf.WriteString(", ")
 			}
 			buf.WriteString(typ.String())
+			if t.Labels != nil {
+				buf.WriteString(" AS ")
+				buf.WriteString(t.Labels[i])
+			}
 		}
 		buf.WriteByte('}')
 	}
@@ -345,11 +352,11 @@ func (t TTuple) Equivalent(other T) bool {
 		return true
 	}
 	u, ok := UnwrapType(other).(TTuple)
-	if !ok || len(t) != len(u) {
+	if !ok || len(t.Types) != len(u.Types) {
 		return false
 	}
-	for i, typ := range t {
-		if !typ.Equivalent(u[i]) {
+	for i, typ := range t.Types {
+		if !typ.Equivalent(u.Types[i]) {
 			return false
 		}
 	}
@@ -370,7 +377,7 @@ func (TTuple) SQLName() string { return "record" }
 
 // IsAmbiguous implements the T interface.
 func (t TTuple) IsAmbiguous() bool {
-	for _, typ := range t {
+	for _, typ := range t.Types {
 		if typ == nil || typ.IsAmbiguous() {
 			return true
 		}
@@ -492,7 +499,7 @@ func (TTable) SQLName() string { return "anyelement" }
 
 // IsAmbiguous implements the T interface.
 func (a TTable) IsAmbiguous() bool {
-	return a.Cols == nil || a.Cols.IsAmbiguous()
+	return a.Cols.Types == nil || a.Cols.IsAmbiguous()
 }
 
 type tAny struct{}

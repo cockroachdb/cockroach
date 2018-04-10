@@ -92,7 +92,7 @@ var Generators = map[string][]tree.Builtin{
 				}
 				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
 				return types.TTable{
-					Cols:   types.TTuple{t},
+					Cols:   types.TTuple{Types: []types.T{t}, Labels: arrayValueGeneratorLabels},
 					Labels: arrayValueGeneratorLabels,
 				}
 			},
@@ -109,7 +109,10 @@ var Generators = map[string][]tree.Builtin{
 				}
 				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
 				return types.TTable{
-					Cols:   types.TTuple{t, types.Int},
+					Cols: types.TTuple{
+						Types:  []types.T{t, types.Int},
+						Labels: expandArrayValueGeneratorLabels,
+					},
 					Labels: expandArrayValueGeneratorLabels,
 				}
 			},
@@ -170,7 +173,10 @@ type keywordsValueGenerator struct {
 }
 
 var keywordsValueGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.String, types.String, types.String},
+	Cols: types.TTuple{
+		Types:  []types.T{types.String, types.String, types.String},
+		Labels: []string{"word", "catcode", "catdesc"},
+	},
 	Labels: []string{"word", "catcode", "catdesc"},
 }
 
@@ -235,12 +241,18 @@ type seriesValueGenerator struct {
 }
 
 var seriesValueGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.Int},
+	Cols: types.TTuple{
+		Types:  []types.T{types.Int},
+		Labels: []string{"generate_series"},
+	},
 	Labels: []string{"generate_series"},
 }
 
 var seriesTSValueGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.Timestamp},
+	Cols: types.TTuple{
+		Types:  []types.T{types.Timestamp},
+		Labels: []string{"generate_series"},
+	},
 	Labels: []string{"generate_series"},
 }
 
@@ -375,7 +387,10 @@ var arrayValueGeneratorLabels = []string{"unnest"}
 // ResolvedType implements the tree.ValueGenerator interface.
 func (s *arrayValueGenerator) ResolvedType() types.TTable {
 	return types.TTable{
-		Cols:   types.TTuple{s.array.ParamTyp},
+		Cols: types.TTuple{
+			Types:  []types.T{s.array.ParamTyp},
+			Labels: arrayValueGeneratorLabels,
+		},
 		Labels: arrayValueGeneratorLabels,
 	}
 }
@@ -421,7 +436,10 @@ var expandArrayValueGeneratorLabels = []string{"x", "n"}
 // ResolvedType implements the tree.ValueGenerator interface.
 func (s *expandArrayValueGenerator) ResolvedType() types.TTable {
 	return types.TTable{
-		Cols:   types.TTuple{s.avg.array.ParamTyp, types.Int},
+		Cols: types.TTuple{
+			Types:  []types.T{s.avg.array.ParamTyp, types.Int},
+			Labels: expandArrayValueGeneratorLabels,
+		},
 		Labels: expandArrayValueGeneratorLabels,
 	}
 }
@@ -526,12 +544,18 @@ var jsonArrayElementsTextImpl = makeGeneratorBuiltin(
 )
 
 var jsonArrayGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.JSON},
+	Cols: types.TTuple{
+		Types:  []types.T{types.JSON},
+		Labels: []string{"value"},
+	},
 	Labels: []string{"value"},
 }
 
 var jsonArrayTextGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.String},
+	Cols: types.TTuple{
+		Types:  []types.T{types.String},
+		Labels: []string{"value"},
+	},
 	Labels: []string{"value"},
 }
 
@@ -618,7 +642,10 @@ var jsonObjectKeysImpl = makeGeneratorBuiltin(
 )
 
 var jsonObjectKeysGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.String},
+	Cols: types.TTuple{
+		Types:  []types.T{types.String},
+		Labels: []string{"json_object_keys"},
+	},
 	Labels: []string{"json_object_keys"},
 }
 
@@ -684,12 +711,18 @@ var jsonEachTextImpl = makeGeneratorBuiltin(
 )
 
 var jsonEachGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.String, types.JSON},
+	Cols: types.TTuple{
+		Types:  []types.T{types.String, types.JSON},
+		Labels: []string{"key", "value"},
+	},
 	Labels: []string{"key", "value"},
 }
 
 var jsonEachTextGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.String, types.String},
+	Cols: types.TTuple{
+		Types:  []types.T{types.String, types.String},
+		Labels: []string{"key", "value"},
+	},
 	Labels: []string{"key", "value"},
 }
 

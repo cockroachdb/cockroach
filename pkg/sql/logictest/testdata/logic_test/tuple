@@ -1,5 +1,7 @@
 # LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
 
+subtest unlabeled_tuple
+
 query TT
 SELECT (1, 2, 'hello', NULL, NULL), (true, NULL, (false, 6.6, false))
 ----
@@ -165,6 +167,9 @@ query II
 SELECT k, v FROM kv WHERE (k, v) IN ((1, 100))
 ----
 
+statement ok
+DROP TABLE kv
+
 # Issue #12295
 
 query B
@@ -198,6 +203,9 @@ query B
 SELECT (1, 2) IN (SELECT a, b FROM t ORDER BY 1 DESC, 2 DESC)
 ----
 true
+
+statement ok
+DROP TABLE t
 
 # Issue #12302
 
@@ -628,6 +636,8 @@ SELECT * FROM uvw WHERE (u, v, w) < (2, NULL, 3) ORDER BY u, v, w
 1  3     2
 1  3     3
 
+statement ok
+DROP TABLE uvw
 
 # Regression test for #6390.
 statement ok
@@ -650,7 +660,9 @@ render           ·         ·                      (a, b, c)                   
 ·                filter    (a, b, c) > (1, 2, 3)  ·                                  ·
 
 statement ok
-DROP TABLE abc;
+DROP TABLE abc
+
+statement ok
 CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b DESC, c))
 
 query TTTTT
@@ -664,3 +676,66 @@ render     ·         ·                      (a, b, c)                         
 ·          table     abc@abc_a_b_c_idx      ·                                 ·
 ·          spans     /1-                    ·                                 ·
 ·          filter    (a, b, c) > (1, 2, 3)  ·                                 ·
+
+statement ok
+DROP TABLE abc
+
+subtest labeled_tuple
+
+# Selecting two tuples
+query TT
+SELECT ((1, 2, 'hello', NULL, NULL) AS a1, b2, c3, d4, e5), ((true, NULL, (false, 6.6, false)) AS a1, b2, c3)
+----
+(1,2,'hello',,) (true,,(false, 6.6, false))
+
+# Comparing tuples
+query BBB
+SELECT
+	((2, 2) AS a, b) < ((1, 1) AS c, d),
+	((2, 2) AS a, b) < (1, 2),
+	(2, 2) < ((1, 3) AS c, d)
+----
+false false false
+
+statement error pq: tuples \(\(1, 2\) AS a, b\), \(\(1, 'hi'\) AS c, d\) are not comparable at index 2: unsupported comparison operator: <int> > <string>
+SELECT ((1, 2) AS a, b) > ((1, 'hi') AS c, d)
+
+statement error pq: expected tuple \(\(1, 2, 3\) AS a, b, c\) to have a length of 2
+SELECT ((1, 2) AS a, b, c) > ((1, 2, 3) AS a, b, c)
+
+query BBBBBBBBBBBBBBBB colnames
+SELECT ((((1, 2) AS a, b), 'value') AS c, d) = ((((1, 2) AS e, f), 'value') AS g, h) AS nnnn
+      ,((((1, 2) AS a, b), 'value') AS c, d) = (((1, 2) AS e, f), 'value')           AS nnnu
+			,((((1, 2) AS a, b), 'value') AS c, d) = (((1, 2), 'value') AS g, h)           AS nnun
+			,((((1, 2) AS a, b), 'value') AS c, d) = ((1, 2), 'value')                     AS nnuu
+			,(((1, 2) AS a, b), 'value')           = ((((1, 2) AS e, f), 'value') AS g, h) AS nunn
+			,(((1, 2) AS a, b), 'value')           = (((1, 2) AS e, f), 'value')           AS nunu
+			,(((1, 2) AS a, b), 'value')           = (((1, 2), 'value') AS g, h)           AS nuun
+			,(((1, 2) AS a, b), 'value')           = ((1, 2), 'value')                     AS nuuu
+			,(((1, 2), 'value') AS c, d)           = ((((1, 2) AS e, f), 'value') AS g, h) AS unnn
+      ,(((1, 2), 'value') AS c, d)           = (((1, 2) AS e, f), 'value')           AS unnu
+			,(((1, 2), 'value') AS c, d)           = (((1, 2), 'value') AS g, h)           AS unun
+			,(((1, 2), 'value') AS c, d)           = ((1, 2), 'value')                     AS unuu
+			,((1, 2), 'value')                     = ((((1, 2) AS e, f), 'value') AS g, h) AS uunn
+			,((1, 2), 'value')                     = (((1, 2) AS e, f), 'value')           AS uunu
+			,((1, 2), 'value')                     = (((1, 2), 'value') AS g, h)           AS uuun
+			,((1, 2), 'value')                     = ((1, 2), 'value')                     AS uuuu
+----
+nnnn  nnnu  nnun  nnuu  nunn  nunu  nuun  nuuu  unnn  unnu  unun  unuu  uunn  uunu  uuun  uuuu
+true  true  true  true  true  true  true  true  true  true  true  true  true  true  true  true
+
+query BB
+SELECT (((ROW(POW(1, 10.0) + 9) AS t1), 'a' || 'b') AS t2, t3) = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6)
+      ,(ROW(POW(1, 10.0) + 9), 'a' || 'b') = (((ROW(SQRT(100.0)) AS t4), 'ab') AS t5, t6)
+----
+true true
+
+query error pq: tuples \(\(\(\(1, 2\) AS a, b\), 'equal'\) AS c, d\), \(\(\(\(1, 'huh'\) AS e, f\), 'equal'\) AS g, h\) are not comparable at index 1: tuples \(\(1, 2\) AS a, b\), \(\(1, 'huh'\) AS e, f\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
+SELECT ((((1, 2) AS a, b), 'equal') AS c, d) = ((((1, 'huh') AS e, f), 'equal') AS g, h)
+
+# Try giving everything the same name for a fairly well nested tuple.
+query T colnames
+SELECT ((((((1, '2', 3) AS a, a, a), ((4,'5') AS a, a), (ROW(6) AS a)) AS a, a, a), ((7, 8) AS a, a), (ROW('9') AS a)) AS a, a, a)
+----
+((((((1, '2', 3) AS a, a, a), ((4, '5') AS a, a), (ROW(6) AS a)) AS a, a, a), ((7, 8) AS a, a), (ROW('9') AS a)) AS a, a, a)
+(((1, '2', 3), (4, '5'), (6)),(7, 8),('9'))

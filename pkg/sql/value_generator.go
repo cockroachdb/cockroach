@@ -58,10 +58,10 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 
 	if tType, ok := normalized.ResolvedType().(types.TTable); ok {
 		// Set-generating functions: generate_series() etc.
-		columns := make(sqlbase.ResultColumns, len(tType.Cols))
+		columns := make(sqlbase.ResultColumns, len(tType.Cols.Types))
 		for i := range columns {
 			columns[i].Name = tType.Labels[i]
-			columns[i].Typ = tType.Cols[i]
+			columns[i].Typ = tType.Cols.Types[i]
 		}
 
 		return &valueGenerator{
