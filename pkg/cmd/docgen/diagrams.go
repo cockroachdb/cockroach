@@ -970,7 +970,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "show_grants_stmt",
-		inline:  []string{"opt_name_list", "name_list", "on_privilege_target_clause", "targets", "table_pattern_list", "for_grantee_clause", "name_list"},
+		inline:  []string{"name_list", "on_privilege_target_clause", "targets", "table_pattern_list", "for_grantee_clause", "name_list"},
 		replace: map[string]string{"'ROLE' name ( ( ',' name ) )*": "'ROLE' role_name ( ( ',' role_name ) )*", "table_pattern": "table_name", "'DATABASE' name ( ( ',' name ) )*": "'DATABASE' database_name ( ( ',' database_name ) )*", "'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*"},
 		unlink:  []string{"role_name", "table_name", "database_name", "user_name"},
 	},

@@ -446,8 +446,7 @@ show_databases_stmt ::=
 	'SHOW' 'DATABASES'
 
 show_grants_stmt ::=
-	'SHOW' 'GRANTS' 'ON' 'ROLE' opt_name_list for_grantee_clause
-	| 'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
+	'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
 
 show_histogram_stmt ::=
 	'SHOW' 'HISTOGRAM' 'ICONST'
@@ -744,6 +743,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESUME'
 	| 'REVOKE'
+	| 'ROLE'
 	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
@@ -1026,16 +1026,12 @@ view_name ::=
 sequence_name ::=
 	db_object_name
 
-opt_name_list ::=
-	name_list
+on_privilege_target_clause ::=
+	on_targets
 	| 
 
 for_grantee_clause ::=
 	'FOR' name_list
-	| 
-
-on_privilege_target_clause ::=
-	'ON' targets
 	| 
 
 opt_compact ::=
@@ -1367,6 +1363,16 @@ opt_comma ::=
 	','
 	| 
 
+on_targets ::=
+	'ON' 'ROLE' name_list
+	| 'ON' 'identifier'
+	| 'ON' col_name_keyword
+	| 'ON' unreserved_keyword
+	| 'ON' complex_table_pattern
+	| 'ON' table_pattern ',' table_pattern_list
+	| 'ON' 'TABLE' table_pattern_list
+	| 'ON' 'DATABASE' name_list
+
 single_set_clause ::=
 	column_name '=' a_expr
 
@@ -1477,7 +1483,6 @@ reserved_keyword ::=
 	| 'PRIMARY'
 	| 'REFERENCES'
 	| 'RETURNING'
-	| 'ROLE'
 	| 'SELECT'
 	| 'SESSION_USER'
 	| 'SOME'
@@ -1711,6 +1716,13 @@ transaction_user_priority ::=
 transaction_read_mode ::=
 	'READ' 'ONLY'
 	| 'READ' 'WRITE'
+
+complex_table_pattern ::=
+	name '.' unrestricted_name
+	| name '.' unrestricted_name '.' unrestricted_name
+	| name '.' unrestricted_name '.' '*'
+	| name '.' '*'
+	| '*'
 
 alter_table_cmd ::=
 	'ADD' column_def
