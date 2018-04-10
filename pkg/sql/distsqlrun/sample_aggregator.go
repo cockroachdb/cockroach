@@ -53,6 +53,8 @@ type sampleAggregator struct {
 
 var _ Processor = &sampleAggregator{}
 
+const sampleAggregatorProcName = "sample aggregator"
+
 func newSampleAggregator(
 	flowCtx *FlowCtx,
 	spec *SampleAggregatorSpec,
@@ -100,7 +102,7 @@ func newSampleAggregator(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -111,18 +113,20 @@ func (s *sampleAggregator) pushTrailingMeta(ctx context.Context) {
 }
 
 // Run is part of the Processor interface.
-func (s *sampleAggregator) Run(wg *sync.WaitGroup) {
+func (s *sampleAggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
-	ctx, span := processorSpan(s.flowCtx.Ctx, "sample aggregator")
-	defer tracing.FinishSpan(span)
 
-	earlyExit, err := s.mainLoop(ctx)
+	s.input.Start(ctx)
+	s.startInternal(ctx, sampleAggregatorProcName)
+	defer tracing.FinishSpan(s.span)
+
+	earlyExit, err := s.mainLoop(s.ctx)
 	if err != nil {
-		DrainAndClose(ctx, s.out.output, err, s.pushTrailingMeta, s.input)
+		DrainAndClose(s.ctx, s.out.output, err, s.pushTrailingMeta, s.input)
 	} else if !earlyExit {
-		s.pushTrailingMeta(ctx)
+		s.pushTrailingMeta(s.ctx)
 		s.input.ConsumerClosed()
 		s.out.Close()
 	}
@@ -208,7 +212,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				typ := s.inTypes[colIdx]
 
 				h, err := generateHistogram(
-					&s.flowCtx.EvalCtx,
+					s.evalCtx,
 					s.sr.Get(),
 					colIdx,
 					typ,

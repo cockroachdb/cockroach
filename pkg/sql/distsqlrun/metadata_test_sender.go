@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -37,22 +38,26 @@ type metadataTestSender struct {
 var _ Processor = &metadataTestSender{}
 var _ RowSource = &metadataTestSender{}
 
+const metadataTestSenderProcName = "meta sender"
+
 func newMetadataTestSender(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver, id string,
 ) (*metadataTestSender, error) {
 	mts := &metadataTestSender{input: input, id: id}
-	if err := mts.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := mts.init(post, input.OutputTypes(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return mts, nil
 }
 
 // Run is part of the Processor interface.
-func (mts *metadataTestSender) Run(wg *sync.WaitGroup) {
+func (mts *metadataTestSender) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if mts.out.output == nil {
 		panic("metadataTestSender output not initialized for emitting rows")
 	}
-	Run(mts.flowCtx.Ctx, mts, mts.out.output)
+
+	ctx = mts.Start(ctx)
+	Run(ctx, mts, mts.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -93,10 +98,14 @@ func (mts *metadataTestSender) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
+// Start is part of the RowSource interface.
+func (mts *metadataTestSender) Start(ctx context.Context) context.Context {
+	mts.input.Start(ctx)
+	return mts.startInternal(ctx, metadataTestSenderProcName)
+}
+
 // Next is part of the RowSource interface.
 func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	mts.maybeStart("metadataTestSender", "" /* logTag */)
-
 	if mts.sendRowNumMeta {
 		mts.sendRowNumMeta = false
 		mts.rowNumCnt++

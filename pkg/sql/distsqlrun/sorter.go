@@ -19,7 +19,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,8 +29,6 @@ import (
 // sorter sorts the input rows according to the specified ordering.
 type sorterBase struct {
 	processorBase
-
-	evalCtx *tree.EvalContext
 
 	input    RowSource
 	ordering sqlbase.ColumnOrdering
@@ -72,9 +69,8 @@ func (s *sorterBase) init(
 	s.matchLen = matchLen
 	s.count = count
 	s.tempStorage = flowCtx.TempStorage
-	s.evalCtx = flowCtx.NewEvalCtx()
 	s.close = close
-	return s.processorBase.init(post, input.OutputTypes(), flowCtx, s.evalCtx, output)
+	return s.processorBase.init(post, input.OutputTypes(), flowCtx, output)
 }
 
 // closeAndQueueTrailingMeta closes input and puts the processor in a mode where
@@ -113,7 +109,12 @@ func (s *sorterBase) popTrailingMeta() *ProducerMetadata {
 }
 
 func newSorter(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	spec *SorterSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (Processor, error) {
 	count := int64(0)
 	if post.Limit != 0 {
@@ -129,7 +130,7 @@ func newSorter(
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			return newSortAllProcessor(flowCtx, spec, input, post, output)
+			return newSortAllProcessor(ctx, flowCtx, spec, input, post, output)
 		}
 		// No specified ordering match length but specified limit; we can optimize
 		// our sort procedure by maintaining a max-heap populated with only the
@@ -163,15 +164,23 @@ type sortAllProcessor struct {
 
 	// The following variables are used by the state machine, and are used by Next()
 	// to determine where to resume emitting rows.
-	i      rowIterator
-	closed bool
+	i       rowIterator
+	started bool
+	closed  bool
 }
 
 var _ Processor = &sortAllProcessor{}
 var _ RowSource = &sortAllProcessor{}
 
+const sortAllProcName = "sortAll"
+
 func newSortAllProcessor(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, out RowReceiver,
+	ctx context.Context,
+	flowCtx *FlowCtx,
+	spec *SorterSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	out RowReceiver,
 ) (Processor, error) {
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
 	useTempStorage := settingUseTempStorageSorts.Get(&flowCtx.Settings.SV) ||
@@ -190,7 +199,7 @@ func newSortAllProcessor(
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(flowCtx.Ctx, rowContainerMon, mon.BoundAccount{})
+		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
 		rowContainerMon = &limitedMon
 	}
 
@@ -198,7 +207,6 @@ func newSortAllProcessor(
 		rowContainerMon: rowContainerMon,
 		useTempStorage:  useTempStorage,
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
 	if err := proc.sorterBase.init(
 		flowCtx, input, post, out,
 		convertToColumnOrdering(spec.OutputOrdering),
@@ -206,15 +214,25 @@ func newSortAllProcessor(
 	); err != nil {
 		return nil, err
 	}
+	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
 	return proc, nil
 }
 
+// Start is part of the RowSource interface.
+func (s *sortAllProcessor) Start(ctx context.Context) context.Context {
+	s.input.Start(ctx)
+	return s.startInternal(ctx, sortAllProcName)
+}
+
+// Next is part of the RowSource interface.
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
+	if !s.started {
+		s.started = true
 		if err := s.fill(); err != nil {
 			return nil, s.closeAndQueueTrailingMeta(err)
 		}
 	}
+
 	if s.closed {
 		return nil, s.popTrailingMeta()
 	}
@@ -325,11 +343,12 @@ func (s *sortAllProcessor) fillWithContainer(
 	return nil, nil
 }
 
-func (s *sortAllProcessor) Run(wg *sync.WaitGroup) {
+func (s *sortAllProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
-	Run(s.flowCtx.Ctx, s, s.out.output)
+	ctx = s.Start(ctx)
+	Run(ctx, s, s.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -391,10 +410,13 @@ type sortTopKProcessor struct {
 	rows            memRowContainer
 	rowContainerMon *mon.BytesMonitor
 	k               int64
+	started         bool
 }
 
 var _ Processor = &sortTopKProcessor{}
 var _ RowSource = &sortTopKProcessor{}
+
+const sortTopKProcName = "sortTopK"
 
 func newSortTopKProcessor(
 	flowCtx *FlowCtx,
@@ -410,22 +432,31 @@ func newSortTopKProcessor(
 		rowContainerMon: rowContainerMon,
 		k:               k,
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
 	if err := proc.sorterBase.init(
 		flowCtx, input, post, out,
 		ordering, spec.OrderingMatchLen, proc.close,
 	); err != nil {
 		return nil, err
 	}
+	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
 	return proc, nil
 }
 
+// Start is part of the RowSource interface.
+func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
+	s.input.Start(ctx)
+	return s.startInternal(ctx, sortTopKProcName)
+}
+
+// Next is part of the RowSource interface.
 func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if s.maybeStart("sortTopK", "SortTopK") {
+	if !s.started {
+		s.started = true
+
 		// The execution loop for the SortTopK processor is similar to that of the
 		// SortAll processor; the difference is that we push rows into a max-heap
 		// of size at most K, and only sort those.
-		ctx := s.evalCtx.Ctx()
+		ctx := s.ctx
 
 		heapCreated := false
 		for {
@@ -482,11 +513,12 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-func (s *sortTopKProcessor) Run(wg *sync.WaitGroup) {
+func (s *sortTopKProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
-	Run(s.flowCtx.Ctx, s, s.out.output)
+	ctx = s.Start(ctx)
+	Run(ctx, s, s.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -529,6 +561,8 @@ type sortChunksProcessor struct {
 var _ Processor = &sortChunksProcessor{}
 var _ RowSource = &sortChunksProcessor{}
 
+const sortChunksProcName = "sortChunks"
+
 func newSortChunksProcessor(
 	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, out RowReceiver,
 ) (Processor, error) {
@@ -538,12 +572,12 @@ func newSortChunksProcessor(
 	proc := &sortChunksProcessor{
 		rowContainerMon: rowContainerMon,
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), flowCtx.NewEvalCtx(), rowContainerMon)
 	if err := proc.sorterBase.init(
 		flowCtx, input, post, out, ordering, spec.OrderingMatchLen, proc.close,
 	); err != nil {
 		return nil, err
 	}
+	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
 	return proc, nil
 }
 
@@ -615,8 +649,14 @@ func (s *sortChunksProcessor) fill() error {
 	return nil
 }
 
+// Start is part of the RowSource interface.
+func (s *sortChunksProcessor) Start(ctx context.Context) context.Context {
+	s.input.Start(ctx)
+	return s.startInternal(ctx, sortChunksProcName)
+}
+
+// Next is part of the RowSource interface.
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.maybeStart("sortChunks", "SortChunks")
 	if s.closed {
 		return nil, s.popTrailingMeta()
 	}
@@ -646,11 +686,12 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-func (s *sortChunksProcessor) Run(wg *sync.WaitGroup) {
+func (s *sortChunksProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
-	Run(s.flowCtx.Ctx, s, s.out.output)
+	ctx = s.Start(ctx)
+	Run(ctx, s, s.out.output)
 	if wg != nil {
 		wg.Done()
 	}

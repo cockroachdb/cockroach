@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,10 +32,14 @@ type valuesProcessor struct {
 
 	sd     StreamDecoder
 	rowBuf sqlbase.EncDatumRow
+
+	started bool
 }
 
 var _ Processor = &valuesProcessor{}
 var _ RowSource = &valuesProcessor{}
+
+const valuesProcName = "values"
 
 func newValuesProcessor(
 	flowCtx *FlowCtx, spec *ValuesCoreSpec, post *PostProcessSpec, output RowReceiver,
@@ -47,18 +52,19 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := v.init(post, types, flowCtx, output); err != nil {
 		return nil, err
 	}
 	return v, nil
 }
 
 // Run is part of the processor interface.
-func (v *valuesProcessor) Run(wg *sync.WaitGroup) {
+func (v *valuesProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if v.out.output == nil {
 		panic("valuesProcessor output not initialized for emitting rows")
 	}
-	Run(v.flowCtx.Ctx, v, v.out.output)
+	ctx = v.Start(ctx)
+	Run(ctx, v, v.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -87,9 +93,20 @@ func (v *valuesProcessor) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
+// Start is part of the RowSource interface.
+func (v *valuesProcessor) Start(ctx context.Context) context.Context {
+	return v.startInternal(ctx, valuesProcName)
+}
+
 // Next is part of the RowSource interface.
 func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if v.maybeStart("values", "" /* logTag */) {
+	if v.closed {
+		return nil, v.producerMeta(nil /* err */)
+	}
+
+	if !v.started {
+		v.started = true
+
 		// Add a bogus header to apease the StreamDecoder, which wants to receive a
 		// header before any data.
 		m := &ProducerMessage{
@@ -100,9 +117,6 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		v.rowBuf = make(sqlbase.EncDatumRow, len(v.columns))
-	}
-	if v.closed {
-		return nil, v.producerMeta(nil /* err */)
 	}
 
 	for {

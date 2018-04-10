@@ -397,7 +397,6 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
 				Settings: s.ClusterSettings(),
 				// Run in a RootTxn so that there's no txn metadata produced.
@@ -410,7 +409,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			irj.Run(nil)
+			irj.Run(context.Background(), nil /* wg */)
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
@@ -581,7 +580,6 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	defer sp.Finish()
 
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		// Run in a LeafTxn so that txn metadata is produced.
@@ -610,7 +608,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	irj.Run(nil)
+	irj.Run(ctx, nil /* wg */)
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
 	}

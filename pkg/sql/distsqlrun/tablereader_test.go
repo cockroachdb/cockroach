@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"testing"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -116,54 +116,58 @@ func TestTableReader(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			for _, rowSource := range []bool{false, true} {
-				t.Run(fmt.Sprintf("row-source=%t", rowSource), func(t *testing.T) {
-					ts := c.spec
-					ts.Table = *td
+			testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
+				ts := c.spec
+				ts.Table = *td
 
-					evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-					defer evalCtx.Stop(context.Background())
-					flowCtx := FlowCtx{
-						Ctx:      context.Background(),
-						EvalCtx:  evalCtx,
-						Settings: s.ClusterSettings(),
-						txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
-						nodeID:   s.NodeID(),
-					}
+				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+				defer evalCtx.Stop(context.Background())
+				flowCtx := FlowCtx{
+					EvalCtx:  evalCtx,
+					Settings: s.ClusterSettings(),
+					txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+					nodeID:   s.NodeID(),
+				}
 
-					tr, err := newTableReader(&flowCtx, &ts, &c.post, nil /* output */)
-					if err != nil {
-						t.Fatal(err)
-					}
+				var out RowReceiver
+				var buf *RowBuffer
+				if !rowSource {
+					buf = &RowBuffer{}
+					out = buf
+				}
+				tr, err := newTableReader(&flowCtx, &ts, &c.post, out)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-					var out RowSource
-					if rowSource {
-						out = tr
-					} else {
-						buf := &RowBuffer{}
-						Run(context.Background(), tr, buf)
-						if !buf.ProducerClosed {
-							t.Fatalf("output RowReceiver not closed")
-						}
-						out = buf
+				var results RowSource
+				if rowSource {
+					tr.Start(context.Background())
+					results = tr
+				} else {
+					tr.Run(context.Background(), nil /* wg */)
+					if !buf.ProducerClosed {
+						t.Fatalf("output RowReceiver not closed")
 					}
+					buf.Start(context.Background())
+					results = buf
+				}
 
-					var res sqlbase.EncDatumRows
-					for {
-						row, meta := out.Next()
-						if meta != nil && meta.TxnMeta == nil {
-							t.Fatalf("unexpected metadata: %+v", meta)
-						}
-						if row == nil {
-							break
-						}
-						res = append(res, row)
+				var res sqlbase.EncDatumRows
+				for {
+					row, meta := results.Next()
+					if meta != nil && meta.TxnMeta == nil {
+						t.Fatalf("unexpected metadata: %+v", meta)
 					}
-					if result := res.String(tr.OutputTypes()); result != c.expected {
-						t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+					if row == nil {
+						break
 					}
-				})
-			}
+					res = append(res, row)
+				}
+				if result := res.String(tr.OutputTypes()); result != c.expected {
+					t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+				}
+			})
 		})
 	}
 }
@@ -203,7 +207,6 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: st,
 		txn:      client.NewTxn(tc.Server(0).DB(), nodeID, client.RootTxn),
@@ -218,65 +221,70 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		OutputColumns: []uint32{0},
 	}
 
-	for _, rowSource := range []bool{false, true} {
-		t.Run(fmt.Sprintf("row-source=%t", rowSource), func(t *testing.T) {
-			tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
-			if err != nil {
-				t.Fatal(err)
-			}
+	testutils.RunTrueAndFalse(t, "row-source", func(t *testing.T, rowSource bool) {
+		var out RowReceiver
+		var buf *RowBuffer
+		if !rowSource {
+			buf = &RowBuffer{}
+			out = buf
+		}
+		tr, err := newTableReader(&flowCtx, &spec, &post, out)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			var out RowSource
-			if rowSource {
-				out = tr
-			} else {
-				buf := &RowBuffer{}
-				Run(context.Background(), tr, buf)
-				if !buf.ProducerClosed {
-					t.Fatalf("output RowReceiver not closed")
-				}
-				out = buf
+		var results RowSource
+		if rowSource {
+			tr.Start(context.Background())
+			results = tr
+		} else {
+			tr.Run(context.Background(), nil /* wg */)
+			if !buf.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
 			}
+			buf.Start(context.Background())
+			results = buf
+		}
 
-			var res sqlbase.EncDatumRows
-			var metas []*ProducerMetadata
-			for {
-				row, meta := out.Next()
-				if meta != nil {
-					metas = append(metas, meta)
-					continue
-				}
-				if row == nil {
-					break
-				}
-				res = append(res, row)
+		var res sqlbase.EncDatumRows
+		var metas []*ProducerMetadata
+		for {
+			row, meta := results.Next()
+			if meta != nil {
+				metas = append(metas, meta)
+				continue
 			}
+			if row == nil {
+				break
+			}
+			res = append(res, row)
+		}
 
-			if len(res) != 3 {
-				t.Fatalf("expected 3 rows, got: %d", len(res))
+		if len(res) != 3 {
+			t.Fatalf("expected 3 rows, got: %d", len(res))
+		}
+		var misplannedRanges []roachpb.RangeInfo
+		for _, m := range metas {
+			if len(m.Ranges) > 0 {
+				misplannedRanges = m.Ranges
+			} else if m.TxnMeta == nil {
+				t.Fatalf("expected only txn meta or misplanned ranges, got: %+v", metas)
 			}
-			var misplannedRanges []roachpb.RangeInfo
-			for _, m := range metas {
-				if len(m.Ranges) > 0 {
-					misplannedRanges = m.Ranges
-				} else if m.TxnMeta == nil {
-					t.Fatalf("expected only txn meta or misplanned ranges, got: %+v", metas)
-				}
-			}
-			if len(misplannedRanges) != 2 {
-				t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
-			}
-			// The metadata about misplanned ranges can come in any order (it depends on
-			// the order in which parallel sub-batches complete after having been split by
-			// DistSender).
-			sort.Slice(misplannedRanges, func(i, j int) bool {
-				return misplannedRanges[i].Lease.Replica.NodeID < misplannedRanges[j].Lease.Replica.NodeID
-			})
-			if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
-				misplannedRanges[1].Lease.Replica.NodeID != 3 {
-				t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
-			}
+		}
+		if len(misplannedRanges) != 2 {
+			t.Fatalf("expected 2 misplanned ranges, got: %+v", misplannedRanges)
+		}
+		// The metadata about misplanned ranges can come in any order (it depends on
+		// the order in which parallel sub-batches complete after having been split by
+		// DistSender).
+		sort.Slice(misplannedRanges, func(i, j int) bool {
+			return misplannedRanges[i].Lease.Replica.NodeID < misplannedRanges[j].Lease.Replica.NodeID
 		})
-	}
+		if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
+			misplannedRanges[1].Lease.Replica.NodeID != 3 {
+			t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
+		}
+	})
 }
 
 func BenchmarkTableReader(b *testing.B) {
@@ -298,7 +306,6 @@ func BenchmarkTableReader(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
@@ -315,6 +322,7 @@ func BenchmarkTableReader(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+		tr.Start(context.Background())
 		for {
 			row, meta := tr.Next()
 			if meta != nil && meta.TxnMeta == nil {

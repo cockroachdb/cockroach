@@ -1065,8 +1065,8 @@ func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(cp.flowCtx.Ctx, "readCSVProcessor")
+func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -1259,13 +1259,15 @@ func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
 	return sstOutputTypes
 }
 
-func (sp *sstWriter) Run(wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(sp.flowCtx.Ctx, "sstWriter")
-	defer tracing.FinishSpan(span)
-
+func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
+
+	sp.input.Start(ctx)
+
+	ctx, span := tracing.ChildSpan(ctx, "sstWriter")
+	defer tracing.FinishSpan(span)
 
 	err := func() error {
 		job, err := sp.registry.LoadJob(ctx, sp.progress.JobID)

@@ -31,18 +31,21 @@ import (
 func TestRunDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.Background()
+
 	// A source with no rows and 2 ProducerMetadata messages.
 	src := &RowChannel{}
 	src.InitWithBufSize(nil, 10)
 	src.Push(nil /* row */, &ProducerMetadata{Err: fmt.Errorf("test")})
 	src.Push(nil /* row */, nil /* meta */)
+	src.Start(ctx)
 
 	// A receiver that is marked as done consuming rows so that Run will
 	// immediately move from forwarding rows and metadata to draining metadata.
 	buf := &RowBuffer{}
 	buf.ConsumerDone()
 
-	Run(context.Background(), src, buf)
+	Run(ctx, src, buf)
 
 	if src.consumerStatus != DrainRequested {
 		t.Fatalf("expected DrainRequested, but found %d", src.consumerStatus)

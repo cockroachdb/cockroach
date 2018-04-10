@@ -400,7 +400,6 @@ func TestProcessorBaseContext(t *testing.T) {
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
 		flowCtx := &FlowCtx{
-			Ctx:      ctx,
 			Settings: st,
 			EvalCtx:  tree.MakeTestingEvalContext(st),
 		}
@@ -411,10 +410,11 @@ func TestProcessorBaseContext(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		noop.Start(ctx)
 
-		// The context should be valid before Next is called in case ConsumerDone
-		// or ConsumerClosed are called without calling Next.j
-		if noop.ctx != ctx {
+		// The context should be valid after Start but before Next is called in case
+		// ConsumerDone or ConsumerClosed are called without calling Next.
+		if noop.ctx == nil {
 			t.Fatalf("processorBase.ctx not initialized")
 		}
 		f(noop)

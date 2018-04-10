@@ -52,10 +52,6 @@ type FlowID struct {
 type FlowCtx struct {
 	log.AmbientContext
 
-	// Context used for all execution within the flow.
-	// Created in Start(), canceled in Cleanup().
-	Ctx context.Context
-
 	Settings *cluster.Settings
 
 	stopper *stop.Stopper
@@ -65,7 +61,10 @@ type FlowCtx struct {
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
 	// Processors that intend to evaluate expressions with this EvalCtx should
 	// get a copy with NewEvalCtx instead of storing a pointer to this one
-	// directly.
+	// directly (since some processor mutate the EvalContext they use).
+	//
+	// TODO(andrei): Get rid of this field and pass a non-shared EvalContext to
+	// ctors of the processors that need it.
 	EvalCtx tree.EvalContext
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
@@ -159,6 +158,7 @@ type Flow struct {
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
 	// multiple times).
 	ctxCancel context.CancelFunc
+	ctxDone   <-chan struct{}
 
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *FlowSpec
@@ -270,7 +270,9 @@ func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int)
 	return nil
 }
 
-func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (Processor, error) {
+func (f *Flow) makeProcessor(
+	ctx context.Context, ps *ProcessorSpec, inputs []RowSource,
+) (Processor, error) {
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
@@ -298,7 +300,7 @@ func (f *Flow) makeProcessor(ps *ProcessorSpec, inputs []RowSource) (Processor, 
 		outputs[i] = r
 		f.startables = append(f.startables, r)
 	}
-	proc, err := newProcessor(&f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+	proc, err := newProcessor(ctx, &f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +377,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	// which are fused with their consumer.
 	for i := range spec.Processors {
 		pspec := &spec.Processors[i]
-		p, err := f.makeProcessor(pspec, inputSyncs[i])
+		p, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
 		if err != nil {
 			return err
 		}
@@ -448,7 +450,8 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
 
-	f.Ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
+	f.ctxDone = ctx.Done()
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
@@ -457,7 +460,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.waitGroup.Add(len(f.inboundStreams))
 
 	if err := f.flowRegistry.RegisterFlow(
-		f.Ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
+		ctx, f.id, f, f.inboundStreams, flowStreamDefaultTimeout,
 	); err != nil {
 		if f.syncFlowConsumer != nil {
 			// For sync flows, the error goes to the consumer.
@@ -471,14 +474,14 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	f.status = FlowRunning
 
 	if log.V(1) {
-		log.Infof(f.Ctx, "registered flow %s", f.id.Short())
+		log.Infof(ctx, "registered flow %s", f.id.Short())
 	}
 	for _, s := range f.startables {
-		s.start(f.Ctx, &f.waitGroup, f.ctxCancel)
+		s.start(ctx, &f.waitGroup, f.ctxCancel)
 	}
 	for _, p := range f.processors {
 		f.waitGroup.Add(1)
-		go p.Run(&f.waitGroup)
+		go p.Run(ctx, &f.waitGroup)
 	}
 	return nil
 }
@@ -494,7 +497,7 @@ func (f *Flow) Wait() {
 	}()
 
 	select {
-	case <-f.Ctx.Done():
+	case <-f.ctxDone:
 		f.cancel()
 		<-waitChan
 	case <-waitChan:

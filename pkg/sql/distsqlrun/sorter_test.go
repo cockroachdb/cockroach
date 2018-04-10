@@ -291,7 +291,6 @@ func TestSorter(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Ctx:         ctx,
 		EvalCtx:     evalCtx,
 		Settings:    cluster.MakeTestingClusterSettings(),
 		TempStorage: tempEngine,
@@ -318,13 +317,13 @@ func TestSorter(t *testing.T) {
 					var s Processor
 					if !testingForceSortAll {
 						var err error
-						s, err = newSorter(&flowCtx, &c.spec, in, &c.post, out)
+						s, err = newSorter(context.Background(), &flowCtx, &c.spec, in, &c.post, out)
 						if err != nil {
 							t.Fatal(err)
 						}
 					} else {
 						var err error
-						s, err = newSortAllProcessor(&flowCtx, &c.spec, in, &c.post, out)
+						s, err = newSortAllProcessor(context.Background(), &flowCtx, &c.spec, in, &c.post, out)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -333,7 +332,7 @@ func TestSorter(t *testing.T) {
 					// a memory row container which will hit this limit and fall
 					// back to using a disk row container.
 					flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-					s.Run(nil)
+					s.Run(context.Background(), nil /* wg */)
 					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
@@ -366,7 +365,6 @@ func BenchmarkSortAll(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -390,13 +388,13 @@ func BenchmarkSortAll(b *testing.B) {
 				}
 			}
 			rowSource := NewRepeatableRowSource(types, input)
-			s, err := newSorter(&flowCtx, &spec, rowSource, &post, &RowDisposer{})
+			s, err := newSorter(context.Background(), &flowCtx, &spec, rowSource, &post, &RowDisposer{})
 			if err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s.Run(nil)
+				s.Run(context.Background(), nil /* wg */)
 				rowSource.Reset()
 			}
 		})
@@ -411,7 +409,6 @@ func BenchmarkSortLimit(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -438,14 +435,19 @@ func BenchmarkSortLimit(b *testing.B) {
 		for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
 				s, err := newSorter(
-					&flowCtx, &spec, rowSource, &PostProcessSpec{Limit: limit}, &RowDisposer{},
+					context.Background(),
+					&flowCtx,
+					&spec,
+					rowSource,
+					&PostProcessSpec{Limit: limit},
+					&RowDisposer{},
 				)
 				if err != nil {
 					b.Fatal(err)
 				}
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					s.Run(nil)
+					s.Run(context.Background(), nil /* wg */)
 					rowSource.Reset()
 				}
 			})
