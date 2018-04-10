@@ -447,7 +447,7 @@ func (node *ComparisonExpr) memoizeFn() {
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
-			rightRet = t[0]
+			rightRet = t.Types[0]
 		}
 	}
 
@@ -696,7 +696,8 @@ func (node *Placeholder) ResolvedType() types.T {
 
 // Tuple represents a parenthesized list of expressions.
 type Tuple struct {
-	Exprs Exprs
+	Exprs  Exprs
+	Labels NameList
 	// Row indicates whether or not the tuple should be textually represented as
 	// ROW ( ... ).
 	Row bool
@@ -708,23 +709,33 @@ type Tuple struct {
 func NewTypedTuple(typedExprs TypedExprs) *Tuple {
 	node := &Tuple{
 		Exprs: make(Exprs, len(typedExprs)),
-		types: make(types.TTuple, len(typedExprs)),
+		types: types.TTuple{Types: make([]types.T, len(typedExprs))},
 	}
 	for i := range typedExprs {
 		node.Exprs[i] = typedExprs[i].(Expr)
-		node.types[i] = typedExprs[i].ResolvedType()
+		node.types.Types[i] = typedExprs[i].ResolvedType()
 	}
 	return node
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Tuple) Format(ctx *FmtCtx) {
+	// If there are labels, extra parentheses are required surrounding the
+	// expression.
+	if len(node.Labels) > 0 {
+		ctx.WriteByte('(')
+	}
 	if node.Row {
 		ctx.WriteString("ROW")
 	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
+	if len(node.Labels) > 0 {
+		ctx.WriteString(" AS ")
+		node.Labels.Format(ctx)
+		ctx.WriteByte(')')
+	}
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -740,7 +751,7 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 	return &Tuple{
 		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
 		Row:   node.Row,
-		types: append(types.TTuple(nil), node.types[:prefix]...),
+		types: types.TTuple{Types: append([]types.T(nil), node.types.Types[:prefix]...)},
 	}
 }
 
@@ -752,11 +763,11 @@ func (node *Tuple) Project(set util.FastIntSet) *Tuple {
 	t := &Tuple{
 		Exprs: make(Exprs, 0, set.Len()),
 		Row:   node.Row,
-		types: make(types.TTuple, 0, set.Len()),
+		types: types.TTuple{Types: make([]types.T, 0, set.Len())},
 	}
 	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
 		t.Exprs = append(t.Exprs, node.Exprs[i])
-		t.types = append(t.types, node.types[i])
+		t.types.Types = append(t.types.Types, node.types.Types[i])
 	}
 	return t
 }

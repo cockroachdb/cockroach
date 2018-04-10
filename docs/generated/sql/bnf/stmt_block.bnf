@@ -1299,6 +1299,7 @@ d_expr ::=
 	| 'ARRAY' select_with_parens
 	| 'ARRAY' array_expr
 	| row
+	| '(' row 'AS' name_list ')'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*

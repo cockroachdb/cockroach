@@ -191,10 +191,10 @@ func typeAsFirstArg(ev ExprView) types.T {
 // typeAsTuple constructs a tuple type that is composed of the types of all the
 // expression's children.
 func typeAsTuple(ev ExprView) types.T {
-	types := make(types.TTuple, ev.ChildCount())
+	types := types.TTuple{Types: make([]types.T, ev.ChildCount())}
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
-		types[i] = child.Logical().Scalar.Type
+		types.Types[i] = child.Logical().Scalar.Type
 	}
 	return types
 }
