@@ -118,6 +118,7 @@ spec:
       - name: datadir
         persistentVolumeClaim:
           claimName: datadir
+  podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
