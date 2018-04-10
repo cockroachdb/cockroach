@@ -140,7 +140,7 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 	}
 }
 func ttuple(tys ...types.T) types.TTuple {
-	return types.TTuple(tys)
+	return types.TTuple{Types: tys}
 }
 
 func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
