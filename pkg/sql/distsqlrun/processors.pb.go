@@ -434,7 +434,7 @@ type JoinReaderSpec struct {
 	// join is: [-1, -1, 2, -1, 3], the internal columns would be columns 3 and
 	// 5. But when an index lookup is done, the entire right side is returned.
 	// The index map tells the processor which columns it should select. In the
-	// example the indexMap would be [2, 3].
+	// example the indexMap would be [2, 4].
 	IndexMap []uint32 `protobuf:"varint,5,rep,packed,name=index_map,json=indexMap" json:"index_map,omitempty"`
 }
 

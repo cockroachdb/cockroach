@@ -89,8 +89,6 @@ func newJoinReader(
 		indexMap:   spec.IndexMap,
 	}
 
-	types := jr.getOutputTypes()
-
 	var err error
 	jr.index, _, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
 	if err != nil {
@@ -100,19 +98,25 @@ func newJoinReader(
 	for i := 0; i < len(jr.index.ColumnIDs); i++ {
 		indexCols[i] = uint32(jr.index.ColumnIDs[i])
 	}
-	if err := jr.joinerBase.init(
-		flowCtx,
-		input.OutputTypes(),
-		jr.desc.ColumnTypes(),
-		sqlbase.InnerJoin,
-		spec.OnExpr,
-		jr.lookupCols,
-		indexCols,
-		0, /* numMergedColumns */
-		post,
-		output,
-	); err != nil {
-		return nil, err
+	if jr.isLookupJoin() {
+		if err := jr.joinerBase.init(
+			flowCtx,
+			jr.inputTypes,
+			jr.rightTypes(),
+			sqlbase.InnerJoin,
+			spec.OnExpr,
+			jr.lookupCols,
+			indexCols,
+			0, /* numMergedColumns */
+			post,
+			output,
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := jr.processorBase.init(post, jr.desc.ColumnTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
+			return nil, err
+		}
 	}
 
 	_, _, err = initRowFetcher(
@@ -123,7 +127,11 @@ func newJoinReader(
 		return nil, err
 	}
 
-	jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(types))
+	if jr.isLookupJoin() {
+		jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(jr.out.outputCols))
+	} else {
+		jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(jr.desc.Columns))
+	}
 
 	// TODO(radu): verify the input types match the index key types
 
@@ -132,23 +140,10 @@ func newJoinReader(
 
 // For an index join only the right side (primary index side) is emitted.
 // For a lookup join, both sides are included in the output.
-func (jr *joinReader) getOutputTypes() []sqlbase.ColumnType {
-	numTypes := len(jr.desc.Columns)
-	if jr.isLookupJoin() {
-		numTypes += len(jr.input.OutputTypes())
-	}
-
-	types := make([]sqlbase.ColumnType, numTypes)
-	i := 0
-	if jr.isLookupJoin() {
-		for _, t := range jr.input.OutputTypes() {
-			types[i] = t
-			i++
-		}
-	}
-	for _, col := range jr.desc.Columns {
-		types[i] = col.Type
-		i++
+func (jr *joinReader) rightTypes() []sqlbase.ColumnType {
+	types := make([]sqlbase.ColumnType, len(jr.indexMap))
+	for i, m := range jr.indexMap {
+		types[i] = jr.desc.ColumnTypes()[m]
 	}
 	return types
 }
@@ -324,6 +319,24 @@ func (jr *joinReader) isLookupJoin() bool {
 	return len(jr.lookupCols) > 0
 }
 
+// trimIndexRow takes a fetched row which belongs to the right side of the join
+// and removes all columns not specified in the indexMap if an indexMap is
+// defined. Transforms a full row from the right side to one that only contains
+// the internal columns.
+// Used when performing a lookup, since the rowFetcher returns the entire row
+// from the table in which it performs the lookup.
+func (jr *joinReader) trimIndexRow(indexRow sqlbase.EncDatumRow) sqlbase.EncDatumRow {
+	if jr.indexMap == nil {
+		return indexRow
+	}
+	// If a mapping for the index row was provided, use it.
+	mappedIndexRow := make(sqlbase.EncDatumRow, 0, len(indexRow))
+	for _, m := range jr.indexMap {
+		mappedIndexRow = append(mappedIndexRow, indexRow[m])
+	}
+	return mappedIndexRow
+}
+
 // Index lookup iterates through all matches of the given spans and emits the
 // corresponding row.
 //
@@ -361,15 +374,7 @@ func (jr *joinReader) indexLookup(
 			break
 		}
 
-		// If a mapping for the index row was provided, use it.
-		mappedIndexRow := make(sqlbase.EncDatumRow, 0, len(indexRow))
-		if jr.indexMap != nil {
-			for _, m := range jr.indexMap {
-				mappedIndexRow = append(mappedIndexRow, indexRow[m])
-			}
-		} else {
-			mappedIndexRow = indexRow
-		}
+		indexRow = jr.trimIndexRow(indexRow)
 		rows := spanToRows[indexKey]
 
 		if !jr.isLookupJoin() {
@@ -380,7 +385,7 @@ func (jr *joinReader) indexLookup(
 		} else {
 			for _, row := range rows {
 				jr.renderedRow = jr.renderedRow[:0]
-				if jr.renderedRow, err = jr.render(row, mappedIndexRow); err != nil {
+				if jr.renderedRow, err = jr.render(row, indexRow); err != nil {
 					return false, err
 				}
 				if jr.renderedRow == nil {

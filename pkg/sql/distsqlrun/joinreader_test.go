@@ -69,6 +69,7 @@ func TestJoinReader(t *testing.T) {
 		onExpr      string
 		input       [][]tree.Datum
 		lookupCols  columns
+		indexMap    columns
 		outputTypes []sqlbase.ColumnType
 		expected    string
 	}{
@@ -84,55 +85,6 @@ func TestJoinReader(t *testing.T) {
 				{aFn(10), bFn(10)},
 				{aFn(15), bFn(15)},
 			},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
-		},
-		{
-			description: "Test selecting columns from second table",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 4},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(10), bFn(10)},
-				{aFn(15), bFn(15)},
-			},
-			lookupCols:  []uint32{0, 1},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
-		},
-		{
-			description: "Test duplicates in the input of lookup joins",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 3},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(10), bFn(10)},
-				{aFn(15), bFn(15)},
-			},
-			lookupCols:  []uint32{0, 1},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
-		},
-		{
-			description: "Test selecting rows using the primary index in lookup join",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 4},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(10), bFn(10)},
-				{aFn(15), bFn(15)},
-			},
-			lookupCols:  []uint32{0, 1},
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
@@ -157,10 +109,10 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
 		},
 		{
-			description: "Test lookup join with onExpr",
+			description: "Test selecting columns from second table",
 			post: PostProcessSpec{
 				Projection:    true,
-				OutputColumns: []uint32{0, 1, 4},
+				OutputColumns: []uint32{0, 1, 2},
 			},
 			input: [][]tree.Datum{
 				{aFn(2), bFn(2)},
@@ -169,8 +121,61 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
+			indexMap:    []uint32{2},
 			outputTypes: threeIntCols,
-			onExpr:      "@2 < @5",
+			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+		},
+		{
+			description: "Test duplicates in the input of lookup joins",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			indexMap:    []uint32{1},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
+		},
+		{
+			description: "Test selecting rows using the primary index in lookup join",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			indexMap:    []uint32{2},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+		},
+		{
+			description: "Test lookup join with onExpr",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			indexMap:    []uint32{2},
+			outputTypes: threeIntCols,
+			onExpr:      "@2 < @3",
 			expected:    "[[1 0 1] [1 5 6]]",
 		},
 	}
@@ -199,7 +204,12 @@ func TestJoinReader(t *testing.T) {
 			out := &RowBuffer{}
 			jr, err := newJoinReader(
 				&flowCtx,
-				&JoinReaderSpec{Table: *td, LookupColumns: c.lookupCols, OnExpr: Expression{Expr: c.onExpr}},
+				&JoinReaderSpec{
+					Table:         *td,
+					LookupColumns: c.lookupCols,
+					IndexMap:      c.indexMap,
+					OnExpr:        Expression{Expr: c.onExpr},
+				},
 				in,
 				&c.post,
 				out,
