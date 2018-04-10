@@ -23,10 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -204,9 +202,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
-			// histogram will be passed to the INSERT statement; we want it to be a
-			// nil interface{} if we don't generate a histogram.
-			var histogram interface{}
+			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
 				typ := s.inTypes[colIdx]
@@ -222,47 +218,29 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				histogram, err = protoutil.Marshal(&h)
-				if err != nil {
-					return err
-				}
+				histogram = &h
 			}
 
-			columnIDs := tree.NewDArray(types.Int)
-			for _, c := range si.spec.Columns {
-				if err := columnIDs.Append(tree.NewDInt(tree.DInt(int(s.sampledCols[c])))); err != nil {
-					return err
-				}
+			columnIDs := make([]sqlbase.ColumnID, len(si.spec.Columns))
+			for i, c := range si.spec.Columns {
+				columnIDs[i] = s.sampledCols[c]
 			}
 
-			var name interface{}
-			if si.spec.StatName != "" {
-				name = si.spec.StatName
-			}
-
-			if _, err := s.flowCtx.executor.ExecuteStatementInTransaction(
-				ctx, "insert-statistic", txn,
-				`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			if err := stats.InsertNewStat(
+				ctx,
+				s.flowCtx.gossip,
+				s.flowCtx.executor,
+				txn,
 				s.tableID,
-				name,
+				si.spec.StatName,
 				columnIDs,
 				si.numRows,
-				si.sketch.Estimate(),
+				int64(si.sketch.Estimate()),
 				si.numNulls,
 				histogram,
 			); err != nil {
 				return err
 			}
-
-			// TODO(radu): we need to clear out old stats that are superseded.
 		}
 		return nil
 	})

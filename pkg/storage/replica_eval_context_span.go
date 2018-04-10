@@ -132,9 +132,9 @@ func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeStatsLegacyKey(rec.GetRangeID())},
-	)
+	// Thanks to commutativity, the command queue does not have to serialize on
+	// the MVCCStats key. This means that the key is not included in SpanSet
+	// declarations, so there's nothing to assert here.
 	return rec.i.GetMVCCStats()
 }
 

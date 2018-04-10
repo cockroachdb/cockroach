@@ -276,7 +276,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	statsCacheSize, histogramCacheSize := 2, 2
-	sc := NewTableStatisticsCache(statsCacheSize, histogramCacheSize, db, ex)
+	sc := NewTableStatisticsCache(statsCacheSize, histogramCacheSize, s.Gossip(), db, ex)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
 			t.Fatal(err)
