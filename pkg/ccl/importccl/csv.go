@@ -951,7 +951,7 @@ func doDistributedCSVTransform(
 		}
 	}()
 
-	if err := p.DistLoader().LoadCSV(
+	if err := p.DistSQLPlanner().LoadCSV(
 		ctx,
 		job,
 		p.ExecCfg().DB,
