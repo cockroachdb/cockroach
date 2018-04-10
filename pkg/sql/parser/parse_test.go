@@ -948,6 +948,10 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
+		{`EXPORT CSV ('a') TABLE a`},
+		{`EXPORT CSV ('a') SELECT * FROM a`},
+		{`EXPORT CSV ('s3://my/path/%part%.csv' WITH comma = '|') TABLE a`},
+		{`EXPORT CSV ('s3://my/path/%part%.csv' WITH comma = '|') SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10`},
 		{`SET ROW (1, true, NULL)`},
 
 		{`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO kafka`},
