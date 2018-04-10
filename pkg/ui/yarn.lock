@@ -74,10 +74,6 @@
   version "0.0.32"
   resolved "https://registry.yarnpkg.com/@types/classnames/-/classnames-0.0.32.tgz#449abcd9a826807811ef101e58df9f83cfc61713"
 
-"@types/codemirror@*":
-  version "0.0.39"
-  resolved "https://registry.yarnpkg.com/@types/codemirror/-/codemirror-0.0.39.tgz#4312ba2bdbd9b202891c350efe9cbadd9d01da71"
-
 "@types/combokeys@^2.4.5":
   version "2.4.5"
   resolved "https://registry.yarnpkg.com/@types/combokeys/-/combokeys-2.4.5.tgz#98f794f4baf72a6219cf255516386252c95ac53d"
@@ -174,23 +170,17 @@
   version "15.5.2"
   resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.5.2.tgz#3c6b8dceb2906cc87fe4358e809f9d20c8d59be1"
 
-"@types/react-codemirror@^0.2.6":
-  version "0.2.7"
-  resolved "https://registry.yarnpkg.com/@types/react-codemirror/-/react-codemirror-0.2.7.tgz#4fb8c9a4aa6c300f062a0571ab5959fb46e3b15b"
-  dependencies:
-    "@types/codemirror" "*"
-    "@types/react" "*"
-
 "@types/react-copy-to-clipboard@^4.2.5":
   version "4.2.5"
   resolved "https://registry.yarnpkg.com/@types/react-copy-to-clipboard/-/react-copy-to-clipboard-4.2.5.tgz#bda288b4256288676019b75ca86f1714bbd206d4"
   dependencies:
     "@types/react" "*"
 
-"@types/react-dom@^0.14.23":
-  version "0.14.23"
-  resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-0.14.23.tgz#cecfcfad754b4c2765fe5d29b81b301889ad6c2e"
+"@types/react-dom@^16.0.4":
+  version "16.0.4"
+  resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-16.0.4.tgz#2e8fd45f5443780ed49bf2cdd9809e6091177a7d"
   dependencies:
+    "@types/node" "*"
     "@types/react" "*"
 
 "@types/react-paginate@^4.3.1":
@@ -232,9 +222,15 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react@*", "@types/react@^15.0.39", "@types/react@~15.0.39":
+"@types/react@*", "@types/react@~15.0.39":
   version "15.0.39"
   resolved "https://registry.yarnpkg.com/@types/react/-/react-15.0.39.tgz#5a820c75cabf4cbfa177a3ab5a9a0634c46b14d1"
+
+"@types/react@^16.3.6":
+  version "16.3.6"
+  resolved "https://registry.yarnpkg.com/@types/react/-/react-16.3.6.tgz#50cec71f14cbaaf49a53167dc1d6739be1d43f12"
+  dependencies:
+    csstype "^2.0.0"
 
 "@types/redux-thunk@^2.1.0":
   version "2.1.32"
@@ -1837,6 +1833,10 @@ cssom@0.3.x, "cssom@>= 0.3.2 < 0.4.0":
   resolved "https://registry.yarnpkg.com/cssstyle/-/cssstyle-0.2.37.tgz#541097234cb2513c83ceed3acddc27ff27987d54"
   dependencies:
     cssom "0.3.x"
+
+csstype@^2.0.0:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/csstype/-/csstype-2.1.1.tgz#37b01a7a9958ef0b88167ff6678deccd732e0ae2"
 
 currently-unhandled@^0.4.1:
   version "0.4.1"
