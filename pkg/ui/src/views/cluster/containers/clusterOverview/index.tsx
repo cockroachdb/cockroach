@@ -198,13 +198,10 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(
  * Renders the main content of the cluster visualization page.
  */
 class ClusterOverview extends React.Component<RouterState, {}> {
-  static title() {
-    return "Cluster Overview";
-  }
-
   render() {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <section className="section"><h1>Cluster Overview</h1></section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
