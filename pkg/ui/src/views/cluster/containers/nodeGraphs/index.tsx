@@ -1,6 +1,7 @@
 import _ from "lodash";
 import React from "react";
 import PropTypes from "prop-types";
+import { Helmet } from "react-helmet";
 import { InjectedRouter, RouterState } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
@@ -194,6 +195,9 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
     return (
       <div>
+        <Helmet>
+          <title>{ title }</title>
+        </Helmet>
         <section className="section"><h1>{ title }</h1></section>
         <PageConfig>
           <PageConfigItem>

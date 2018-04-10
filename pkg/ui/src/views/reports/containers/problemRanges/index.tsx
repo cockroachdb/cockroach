@@ -1,6 +1,7 @@
 import _ from "lodash";
 import Long from "long";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { Link, RouterState } from "react-router";
 
@@ -174,6 +175,9 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
   render() {
     return (
       <div className="section">
+        <Helmet>
+          <title>Problem Ranges | Debug</title>
+        </Helmet>
         <h1>Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}

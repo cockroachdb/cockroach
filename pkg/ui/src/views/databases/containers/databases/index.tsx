@@ -1,6 +1,7 @@
 import _ from "lodash";
 import React from "react";
 import PropTypes from "prop-types";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 
@@ -75,6 +76,9 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 
   render() {
     return <div>
+      <Helmet>
+        <title>Tables | Databases</title>
+      </Helmet>
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
@@ -98,6 +102,9 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
 
   render() {
     return <div>
+      <Helmet>
+        <title>Grants | Databases</title>
+      </Helmet>
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="grants"/>
       <div className="section databases">

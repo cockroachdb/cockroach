@@ -2,6 +2,7 @@ import _ from "lodash";
 import Long from "long";
 import { Link, RouterState } from "react-router";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
@@ -93,6 +94,9 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
     const rangeID = this.props.params[rangeIDAttr];
     return (
       <div className="section command-queue">
+        <Helmet>
+          <title>{ `Command Queue | r${rangeID.toString()} Range | Debug` }</title>
+        </Helmet>
         <h1>
           <Link
             to={`/reports/range/${rangeID.toString()}`}

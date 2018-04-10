@@ -1,6 +1,7 @@
 import _ from "lodash";
 import Long from "long";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
@@ -164,6 +165,9 @@ class Range extends React.Component<RangeProps, {}> {
 
     return (
       <div className="section">
+        <Helmet>
+          <title>{ `r${responseRangeID.toString()} Range | Debug` }</title>
+        </Helmet>
         <h1>Range Report for r{responseRangeID.toString()}</h1>
         <RangeTable infos={infos} replicas={replicas} />
         <LeaseTable info={_.head(infos)} />
