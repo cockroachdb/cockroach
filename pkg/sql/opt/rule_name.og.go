@@ -68,6 +68,10 @@ const (
 	FoldNullNotInEmpty
 	NormalizeInConst
 	FoldInNull
+	FoldIsNull
+	FoldNonNullIsNull
+	FoldIsNotNull
+	FoldNonNullIsNotNull
 	EnsureSelectFiltersAnd
 	EnsureSelectFilters
 	EliminateSelect

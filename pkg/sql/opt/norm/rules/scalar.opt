@@ -138,3 +138,19 @@
 )
 =>
 (Null (BoolType))
+
+# FoldIsNull replaces NULL IS NULL with True.
+[FoldIsNull, Normalize]
+(Is (Null) (Null)) => (True)
+
+# FoldNonNullIsNull replaces x IS NULL with False where x is a non-Null constant.
+[FoldNonNullIsNull, Normalize]
+(Is ^(Null) & (ConstValue) (Null)) => (False)
+
+# FoldIsNotNull replaces NULL IS NOT NULL with False.
+[FoldIsNotNull, Normalize]
+(IsNot (Null) (Null)) => (False)
+
+# FoldNonNullIsNotNull replaces x IS NOT NULL with True where x is a non-Null constant.
+[FoldNonNullIsNotNull, Normalize]
+(IsNot ^(Null) & (ConstValue) (Null)) => (True)
