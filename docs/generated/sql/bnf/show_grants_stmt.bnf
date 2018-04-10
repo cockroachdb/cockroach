@@ -1,0 +1,5 @@
+show_grants_stmt ::=
+	'SHOW' 'GRANTS' 'ON' ( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS' 'ON' ( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 
+	| 'SHOW' 'GRANTS'  'FOR' user_name ( ( ',' user_name ) )*
+	| 'SHOW' 'GRANTS'  

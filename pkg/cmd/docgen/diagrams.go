@@ -99,12 +99,18 @@ func init() {
 				if err != nil {
 					log.Fatalf("%s: %+v", s.name, err)
 				}
+				if !quiet {
+					fmt.Printf("raw data:\n%s\n", string(g))
+				}
 				replacements := make([]string, 0, len(s.replace))
 				for from := range s.replace {
 					replacements = append(replacements, from)
 				}
 				sort.Strings(replacements)
 				for _, from := range replacements {
+					if !quiet {
+						fmt.Printf("replacing: %q -> %q\n", from, s.replace[from])
+					}
 					g = bytes.Replace(g, []byte(from), []byte(s.replace[from]), -1)
 				}
 				replacements = replacements[:0]
@@ -113,8 +119,14 @@ func init() {
 				}
 				sort.Strings(replacements)
 				for _, from := range replacements {
+					if !quiet {
+						fmt.Printf("replacing re: %q -> %q\n", from, s.replace[from])
+					}
 					re := regexp.MustCompile(from)
 					g = re.ReplaceAll(g, []byte(s.regreplace[from]))
+				}
+				if !quiet {
+					fmt.Printf("result:\n%s\n", string(g))
 				}
 				write(filepath.Join(bnfDir, s.name+".bnf"), g)
 			}
@@ -380,13 +392,14 @@ var specs = []stmtSpec{
 	{
 		name:   "backup",
 		stmt:   "backup_stmt",
-		inline: []string{"targets", "table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
+		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
 		replace: map[string]string{
 			"non_reserved_word_or_sconst":                     "destination",
 			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const":          "'AS OF SYSTEM TIME' timestamp",
 			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
+			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
 		unlink: []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location"},
 	},
@@ -589,9 +602,21 @@ var specs = []stmtSpec{
 	},
 	{name: "family_def", inline: []string{"opt_name", "name_list"}},
 	{
-		name:    "grant_stmt",
-		inline:  []string{"privileges", "privilege_list", "privilege", "targets", "table_pattern_list", "name_list"},
-		replace: map[string]string{"table_pattern": "table_name", "'DATABASE' ( name ( ',' name )* )": "'DATABASE' ( database_name ( ',' database_name )* )", "'TO' ( name ( ',' name )* )": "'TO' ( user_name ( ',' user_name )* )"},
+		name:   "family_def",
+		inline: []string{"name_list"},
+	},
+	{
+		name:   "grant_privileges",
+		stmt:   "grant_stmt",
+		inline: []string{"privileges", "privilege_list", "privilege", "table_pattern_list", "name_list"},
+		replace: map[string]string{
+			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
+			"table_pattern":                            "table_name",
+			"'TO' ( ( name ) ( ( ',' name ) )*":        "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
+			"| 'GRANT' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )": "",
+			"'WITH' 'ADMIN' 'OPTION'": "",
+			"targets":                 "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+		},
 		unlink:  []string{"table_name", "database_name", "user_name"},
 		nosplit: true,
 	},
@@ -679,7 +704,7 @@ var specs = []stmtSpec{
 	{
 		name:    "restore",
 		stmt:    "restore_stmt",
-		inline:  []string{"targets", "table_pattern_list", "name_list", "opt_as_of_clause", "opt_with_options"},
+		inline:  []string{"name_list", "opt_as_of_clause", "opt_with_options"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'RESTORE'")},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'RESTORE' 'DATABASE'")},
 		replace: map[string]string{
@@ -687,12 +712,28 @@ var specs = []stmtSpec{
 			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const": "",
 			"string_or_placeholder_list":             "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
 			"'WITH' 'OPTIONS'":                       "'WITH OPTIONS'",
+			"targets":                                "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
 		unlink: []string{"destination", "timestamp", "full_backup_location", "incremental_backup_location"},
 	},
 	{
-		name:   "revoke_stmt",
-		inline: []string{"privileges", "privilege_list", "privilege", "targets"},
+		name:   "revoke_privileges",
+		stmt:   "revoke_stmt",
+		inline: []string{"privileges", "privilege_list", "privilege", "name_list"},
+		replace: map[string]string{
+			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
+			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"'FROM' ( ( name ) ( ( ',' name ) )*": "'FROM' ( ( user_name ) ( ( ',' user_name ) )*",
+			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )":  "",
+			"| 'REVOKE'  ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",
+			"'ADMIN' 'OPTION' 'FOR'": "",
+		},
+		unlink:  []string{"table_name", "database_name", "user_name"},
+		nosplit: true,
+	},
+	{
+		name: "revoke_roles",
+		stmt: "revoke_stmt",
 		replace: map[string]string{
 			"table_pattern_list":        "table_name ( ',' table_name )*",
 			"name_list":                 "database_name ( ',' database_name )*",
@@ -802,27 +843,86 @@ var specs = []stmtSpec{
 		unlink:  []string{"location"},
 	},
 	{
-		name:   "show_grants",
-		stmt:   "show_stmt",
-		inline: []string{"on_privilege_target_clause", "targets", "for_grantee_clause", "table_pattern_list", "name_list"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'SHOW' 'GRANTS'")},
+		name:   "show_grants_stmt",
+		inline: []string{"name_list", "opt_on_targets_roles", "for_grantee_clause", "name_list"},
 		replace: map[string]string{
-			"table_pattern":                 "table_name",
-			"'DATABASE' name ( ',' name )*": "'DATABASE' database_name ( ',' database_name )*",
-			"'FOR' name ( ',' name )*":      "'FOR' user_name ( ',' user_name )*",
+			"targets_roles":                "( 'ROLE' | 'ROLE' name ( ',' name ) )* | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"'FOR' name ( ( ',' name ) )*": "'FOR' user_name ( ( ',' user_name ) )*",
 		},
-		unlink: []string{"table_name", "database_name", "user_name"},
+		unlink: []string{"role_name", "table_name", "database_name", "user_name"},
 	},
-	{name: "show_index", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")}, replace: map[string]string{"var_name": "table_name"}, unlink: []string{"table_name"}},
-	{name: "show_jobs", stmt: "show_jobs_stmt"},
-	{name: "show_keys", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")}},
-	{name: "show_queries", stmt: "show_queries_stmt"},
-	{name: "show_sessions", stmt: "show_sessions_stmt"},
-	{name: "show_tables", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TABLES'")}},
-	{name: "show_trace", stmt: "show_trace_stmt"},
-	{name: "show_transaction", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")}},
-	{name: "show_users", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")}},
-	{name: "table_constraint", inline: []string{"constraint_elem", "opt_storing", "storing"}},
+	{
+		name:    "show_index",
+		stmt:    "show_stmt",
+		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'INDEX'")},
+		replace: map[string]string{"var_name": "table_name"},
+		unlink:  []string{"table_name"},
+	},
+	{
+		name: "show_jobs",
+		stmt: "show_jobs_stmt",
+	},
+	{
+		name:  "show_keys",
+		stmt:  "show_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'KEYS'")},
+	},
+	{
+		name: "show_queries",
+		stmt: "show_queries_stmt",
+	},
+	{
+		name: "show_roles_stmt",
+	},
+	{
+		name: "show_schemas",
+		stmt: "show_schemas_stmt",
+	},
+	{
+		name: "show_sessions",
+		stmt: "show_sessions_stmt",
+	},
+	{
+		name:  "show_tables",
+		stmt:  "show_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TABLES'")},
+	},
+	{
+		name:    "show_trace",
+		stmt:    "show_trace_stmt",
+		inline:  []string{"opt_compact"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'EXPERIMENTAL_REPLICA'")},
+	},
+	{
+		name:  "show_transaction",
+		stmt:  "show_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")},
+	},
+	{
+		name:  "show_users",
+		stmt:  "show_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")},
+	},
+	{
+		name:   "sort_clause",
+		inline: []string{"sortby_list", "sortby", "opt_asc_desc"},
+	},
+	{
+		name:    "split_index_at",
+		stmt:    "alter_split_index_stmt",
+		inline:  []string{"table_name_with_index"},
+		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
+		unlink:  []string{"table_name", "index_name"},
+	},
+	{
+		name:   "split_table_at",
+		stmt:   "alter_split_stmt",
+		unlink: []string{"table_name"},
+	},
+	{
+		name:   "table_constraint",
+		inline: []string{"constraint_elem", "opt_storing", "storing"},
+	},
 	{
 		name:    "truncate_stmt",
 		inline:  []string{"opt_table", "relation_expr_list", "opt_drop_behavior"},
