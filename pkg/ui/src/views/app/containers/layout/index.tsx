@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
 import { StickyContainer } from "react-sticky";
 
@@ -15,6 +16,7 @@ import AlertBanner from "src/views/app/containers/alertBanner";
 export default class extends React.Component<RouterState, {}> {
   render() {
     return <div>
+      <Helmet titleTemplate="%s | Cockroach Console" defaultTitle="Cockroach Console" />
       <TimeWindowManager/>
       <AlertBanner/>
       <NavigationBar/>

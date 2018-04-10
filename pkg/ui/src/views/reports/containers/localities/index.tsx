@@ -1,5 +1,6 @@
 import _ from "lodash";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
 import spinner from "assets/spinner.gif";
@@ -91,6 +92,9 @@ class Localities extends React.Component<LocalitiesProps, {}> {
   render() {
     return (
       <div>
+        <Helmet>
+          <title>Localities | Debug</title>
+        </Helmet>
         <section className="section"><h1>Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }

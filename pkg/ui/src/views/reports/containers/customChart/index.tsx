@@ -1,5 +1,6 @@
 import _ from "lodash";
 import * as React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
@@ -252,6 +253,9 @@ class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
     const units = this.currentAxisUnits();
     return (
       <div>
+        <Helmet>
+          <title>Custom Chart | Debug</title>
+        </Helmet>
         <section className="section"><h1>Custom Chart</h1></section>
         <PageConfig>
           <PageConfigItem>

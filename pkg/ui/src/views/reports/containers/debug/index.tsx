@@ -1,5 +1,6 @@
 import _ from "lodash";
 import React from "react";
+import { Helmet } from "react-helmet";
 
 import LicenseType from "src/views/shared/components/licenseType";
 
@@ -47,6 +48,9 @@ function DebugTable(props: { heading: string, children?: React.ReactNode }) {
 export default function Debug() {
   return (
     <div className="section">
+      <Helmet>
+        <title>Debug</title>
+      </Helmet>
       <h1>Advanced Debugging</h1>
       <DebugTable heading="Reports">
         <DebugTableRow title="Node Diagnostics">

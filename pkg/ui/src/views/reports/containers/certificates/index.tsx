@@ -1,5 +1,6 @@
 import _ from "lodash";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
@@ -142,6 +143,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     if (!_.isNil(this.props.lastError)) {
       return (
         <div className="section">
+          <Helmet>
+            <title>Certificates | Debug</title>
+          </Helmet>
           <h1>Certificates</h1>
           <h2>Error loading certificates for node {nodeID}</h2>
         </div>
@@ -151,6 +155,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     if (_.isEmpty(certificates)) {
       return (
         <div className="section">
+          <Helmet>
+            <title>Certificates | Debug</title>
+          </Helmet>
           <h1>Certificates</h1>
           <h2>Loading cluster status...</h2>
         </div>
@@ -160,6 +167,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     if (_.isEmpty(certificates.certificates)) {
       return (
         <div className="section">
+          <Helmet>
+            <title>Certificates | Debug</title>
+          </Helmet>
           <h1>Certificates</h1>
           <h2>No certificates were found on node {this.props.params[nodeIDAttr]}.</h2>
         </div>
@@ -175,6 +185,9 @@ class Certificates extends React.Component<CertificatesProps, {}> {
 
     return (
       <div className="section">
+        <Helmet>
+          <title>Certificates | Debug</title>
+        </Helmet>
         <h1>Certificates</h1>
         <h2>{header} certificates</h2>
         {

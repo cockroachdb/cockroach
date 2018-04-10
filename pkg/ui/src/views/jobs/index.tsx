@@ -2,6 +2,7 @@ import _ from "lodash";
 import moment from "moment";
 import { Line } from "rc-progress";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
@@ -225,6 +226,9 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   render() {
     const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
+      <Helmet>
+        <title>Jobs</title>
+      </Helmet>
       <section className="section">
         <h1>
           Jobs
