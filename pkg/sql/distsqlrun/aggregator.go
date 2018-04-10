@@ -93,13 +93,12 @@ type aggregator struct {
 	processorBase
 	rowSourceBase
 
-	accumulating bool
-	draining     bool
-	input        RowSource
-	inputTypes   []sqlbase.ColumnType
-	funcs        []*aggregateFuncHolder
-	outputTypes  []sqlbase.ColumnType
-	datumAlloc   sqlbase.DatumAlloc
+	state       aggregatorState
+	input       RowSource
+	inputTypes  []sqlbase.ColumnType
+	funcs       []*aggregateFuncHolder
+	outputTypes []sqlbase.ColumnType
+	datumAlloc  sqlbase.DatumAlloc
 
 	bucketsAcc mon.BoundAccount
 
@@ -122,6 +121,26 @@ var _ Processor = &aggregator{}
 var _ RowSource = &aggregator{}
 
 const aggregatorProcName = "aggregator"
+
+// aggregatorState represents the state of the processor.
+type aggregatorState int
+
+const (
+	// aggAccumulating means that rows are being read from the input and used to
+	// compute intermediary aggregation results.
+	aggAccumulating aggregatorState = iota
+	// aggEmittingRows means that accumulation has finished and rows are being
+	// sent to the output.
+	aggEmittingRows
+	// aggDraining means that the input is being drained of its metadata.
+	aggDraining
+	// aggEmittingMeta means that the processor is emitting trailing metadata.
+	aggEmittingMeta
+	// aggDone means that the processor has exhausted sent all its rows and
+	// exhausted its input of metadata. This is the only state where an
+	// aggregator can return nil, nil from Next().
+	aggDone
+)
 
 func newAggregator(
 	flowCtx *FlowCtx,
@@ -191,7 +210,7 @@ func (ag *aggregator) Start(ctx context.Context) context.Context {
 	ag.input.Start(ctx)
 	ctx = ag.startInternal(ctx, aggregatorProcName)
 	ag.cancelChecker = sqlbase.NewCancelChecker(ctx)
-	ag.accumulating = true
+	ag.state = aggAccumulating
 	return ctx
 }
 
@@ -217,92 +236,102 @@ func (ag *aggregator) close() {
 				aggFunc.Close(ag.ctx)
 			}
 		}
-		ag.accumulating = false
-		ag.draining = true
 	}
 	ag.internalClose()
 }
 
 // producerMeta constructs the ProducerMetadata after consumption of rows has
-// terminated, either due to being indicated by the consumer, or because the
-// processor ran out of rows or encountered an error. It is ok for err to be
-// nil indicating that we're done producing rows even though no error occurred.
-func (ag *aggregator) producerMeta(err error) *ProducerMetadata {
+// terminated and the input has been drained. It also closes the processor, if
+// it has not been closed already.
+func (ag *aggregator) producerMeta() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	var meta *ProducerMetadata
-	if !ag.closed {
-		if err != nil {
-			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(ag.ctx); trace != nil {
-			meta = &ProducerMetadata{TraceData: trace}
-		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
-		ag.close()
+	if trace := getTraceData(ag.ctx); trace != nil {
+		meta = &ProducerMetadata{TraceData: trace}
 	}
-	return meta
+	// We need to close now that we've collected tracing data. The consumer is
+	// allowed to not call ConsumerDone().
+	ag.close()
+	return aggDone, nil, meta
 }
 
-// Next is part of the RowSource interface.
-func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if ag.accumulating {
-		for {
-			row, meta := ag.input.Next()
-			if meta != nil {
-				if meta.Err != nil {
-					return nil, ag.producerMeta(meta.Err)
-				}
-				return nil, meta
+// accumulateRows continually reads rows from the input and accumulates them
+// into intermediary aggregate results. If it encounters metadata, the metadata
+// is immediately returned. Subsequent calls of this function will resume row
+// accumulation.
+func (ag *aggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	for {
+		row, meta := ag.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return ag.startDrain(meta.Err)
 			}
-			if row == nil {
-				break
-			}
-			if ag.closed || ag.consumerStatus != NeedMoreRows {
-				continue
-			}
-			if err := ag.accumulateRow(row); err != nil {
-				return nil, ag.producerMeta(err)
-			}
+			return aggAccumulating, nil, meta
 		}
-
-		// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
-		// aggregated.
-		if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
-			ag.buckets[""] = struct{}{}
-		}
-
-		ag.bucketsIter = make([]string, 0, len(ag.buckets))
-		for bucket := range ag.buckets {
-			ag.bucketsIter = append(ag.bucketsIter, bucket)
-		}
-		ag.buckets = nil
-
-		ag.accumulating = false
-		log.VEvent(ag.ctx, 1, "accumulation complete")
-
-		ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
-	}
-
-	if ag.draining {
-		for {
-			row, meta := ag.input.Next()
-			if row != nil {
-				continue
-			}
-			if meta != nil {
-				return nil, meta
-			}
+		if row == nil {
 			break
 		}
-		ag.draining = false
+
+		if err := ag.accumulateRow(row); err != nil {
+			return ag.startDrain(err)
+		}
 	}
 
-	if ag.closed || ag.consumerStatus != NeedMoreRows {
-		return nil, ag.producerMeta(nil /* err */)
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
+	// aggregated.
+	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
+		ag.buckets[""] = struct{}{}
 	}
 
+	ag.bucketsIter = make([]string, 0, len(ag.buckets))
+	for bucket := range ag.buckets {
+		ag.bucketsIter = append(ag.bucketsIter, bucket)
+	}
+	ag.buckets = nil
+
+	log.VEvent(ag.ctx, 1, "accumulation complete")
+
+	ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
+
+	// Transition to aggEmittingRows, and let it generate the next row/meta.
+	return aggEmittingRows, nil, nil
+}
+
+// drainInput reads the input until it finds metadata, then returns it.
+func (ag *aggregator) drainInput() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	for {
+		row, meta := ag.input.Next()
+		if row != nil {
+			continue
+		}
+		if meta != nil {
+			return aggDraining, nil, meta
+		}
+
+		// The input has no more metadata, so send our own trailing metadata.
+		return aggEmittingMeta, nil, nil
+	}
+}
+
+// startDrain informs the consumer that we're going to drain it, and transitions
+// the processor to the draining state. If given an error, it will produce error
+// metadata as well.
+func (ag *aggregator) startDrain(
+	err error,
+) (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	var meta *ProducerMetadata
+	ag.input.ConsumerDone()
+	if err != nil {
+		meta = &ProducerMetadata{Err: err}
+	}
+	return aggDraining, nil, meta
+}
+
+// emitRow constructs an output row from an accumulated bucket and returns it.
+// Once there are no more buckets, the aggregator will drain.
+func (ag *aggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
 		if len(ag.bucketsIter) == 0 {
-			return nil, ag.producerMeta(nil /* err */)
+			return aggDraining, nil, nil
 		}
 
 		bucket := ag.bucketsIter[0]
@@ -311,7 +340,7 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		for i, f := range ag.funcs {
 			result, err := f.get(bucket)
 			if err != nil {
-				return nil, ag.producerMeta(err)
+				return ag.startDrain(err)
 			}
 			if result == nil {
 				// Special case useful when this is a local stage of a distributed
@@ -323,13 +352,40 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		outRow, status, err := ag.out.ProcessRow(ag.ctx, ag.row)
 		if outRow != nil {
-			return outRow, nil
+			return aggEmittingRows, outRow, nil
 		}
 		if outRow == nil && err == nil && status == NeedMoreRows {
 			continue
 		}
-		return nil, ag.producerMeta(err)
+		return ag.startDrain(err)
 	}
+}
+
+// Next is part of the RowSource interface.
+func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	for ag.state != aggDone {
+		var row sqlbase.EncDatumRow
+		var meta *ProducerMetadata
+		switch ag.state {
+		case aggAccumulating:
+			ag.state, row, meta = ag.accumulateRows()
+		case aggEmittingRows:
+			ag.state, row, meta = ag.emitRow()
+		case aggDraining:
+			ag.state, row, meta = ag.drainInput()
+		case aggEmittingMeta:
+			ag.state, row, meta = ag.producerMeta()
+		}
+
+		// If row == nil and meta == nil, but we aren't in the aggDone state, we
+		// have a state transition without any output. As a result, we need to
+		// execute the next state to produce output.
+		if !(row == nil && meta == nil) {
+			return row, meta
+		}
+	}
+
+	return nil, nil
 }
 
 // ConsumerDone is part of the RowSource interface.
@@ -341,6 +397,7 @@ func (ag *aggregator) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (ag *aggregator) ConsumerClosed() {
 	ag.consumerClosed("aggregator")
+	ag.input.ConsumerClosed()
 	// The consumer is done, Next() will not be called again.
 	ag.close()
 }
