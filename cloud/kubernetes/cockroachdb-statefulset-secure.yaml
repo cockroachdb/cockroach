@@ -220,6 +220,7 @@ spec:
           claimName: datadir
       - name: certs
         emptyDir: {}
+  podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
   volumeClaimTemplates:
