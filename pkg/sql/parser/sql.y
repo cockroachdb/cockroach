@@ -500,7 +500,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   NOT NOTHING NOTNULL NULL NULLIF
 %token <str>   NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
+%token <str>   OF OFF OFFSET OID OIDVECTOR ON ON_LA ONLY OPTION OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
@@ -545,7 +545,7 @@ func newNameFromStr(s string) *tree.Name {
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
 // needed to make the grammar LALR(1).
-%token     NOT_LA WITH_LA AS_LA
+%token     NOT_LA WITH_LA AS_LA ON_LA
 
 %union {
   id             int
@@ -824,6 +824,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
 %type <empty> first_or_next
+%type <str> on
 
 %type <tree.Statement>  insert_rest
 %type <tree.NameList> opt_conf_expr
@@ -1771,7 +1772,7 @@ create_ddl_stmt:
 //   ON <colname> [, ...]
 //   FROM <tablename>
 create_stats_stmt:
-  CREATE STATISTICS statistics_name ON name_list FROM table_name
+  CREATE STATISTICS statistics_name on name_list FROM table_name
   {
     $$.val = &tree.CreateStats{
       Name: tree.Name($3),
@@ -2145,7 +2146,7 @@ deallocate_stmt:
 //
 // %SeeAlso: REVOKE, WEBDOCS/grant.html
 grant_stmt:
-  GRANT privileges ON targets TO name_list
+  GRANT privileges on targets TO name_list
   {
     $$.val = &tree.Grant{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
@@ -2176,7 +2177,7 @@ grant_stmt:
 //
 // %SeeAlso: GRANT, WEBDOCS/revoke.html
 revoke_stmt:
-  REVOKE privileges ON targets FROM name_list
+  REVOKE privileges on targets FROM name_list
   {
     $$.val = &tree.Revoke{Privileges: $2.privilegeList(), Grantees: $6.nameList(), Targets: $4.targetList()}
   }
@@ -2537,7 +2538,7 @@ attrs:
 
 var_value:
   a_expr
-| ON
+| on
   {
     $$.val = tree.Expr(&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{$1}})
   }
@@ -2780,7 +2781,7 @@ show_databases_stmt:
 //
 // %SeeAlso: WEBDOCS/show-grants.html
 show_grants_stmt:
-  SHOW GRANTS ON ROLE opt_name_list for_grantee_clause
+  SHOW GRANTS ON_LA ROLE opt_name_list for_grantee_clause
   {
     $$.val = &tree.ShowRoleGrants{Roles: $5.nameList(), Grantees: $6.nameList()}
   }
@@ -3820,7 +3821,7 @@ create_view_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  CREATE opt_unique INDEX opt_index_name on table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
@@ -3833,7 +3834,7 @@ create_index_stmt:
       Inverted: $7.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| CREATE opt_unique INDEX IF NOT EXISTS index_name on table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
@@ -3847,7 +3848,7 @@ create_index_stmt:
       Inverted: $10.bool(),
     }
   }
-| CREATE INVERTED INDEX opt_index_name ON table_name '(' index_params ')'
+| CREATE INVERTED INDEX opt_index_name on table_name '(' index_params ')'
   {
     $$.val = &tree.CreateIndex{
       Name:       tree.Name($4),
@@ -3856,7 +3857,7 @@ create_index_stmt:
       Columns:    $8.idxElems(),
     }
   }
-| CREATE INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')'
+| CREATE INVERTED INDEX IF NOT EXISTS index_name on table_name '(' index_params ')'
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
@@ -5299,7 +5300,7 @@ join_qual:
   {
     $$.val = &tree.UsingJoinCond{Cols: $3.nameList()}
   }
-| ON a_expr
+| on a_expr
   {
     $$.val = &tree.OnJoinCond{Expr: $2.expr()}
   }
@@ -7438,6 +7439,10 @@ opt_name_parens:
     $$ = ""
   }
 
+on:
+  ON
+| ON_LA
+
 // Structural, low-level names
 
 // Non-reserved word and also string literal constants.
@@ -7619,6 +7624,7 @@ unreserved_keyword:
 | RESTRICT
 | RESUME
 | REVOKE
+| ROLE
 | ROLES
 | ROLLBACK
 | ROLLUP
@@ -7840,7 +7846,6 @@ reserved_keyword:
 | PRIMARY
 | REFERENCES
 | RETURNING
-| ROLE
 | SELECT
 | SESSION_USER
 | SOME

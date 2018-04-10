@@ -94,6 +94,8 @@ func TestScanner(t *testing.T) {
 		{`WITH`, []int{WITH}},
 		{`WITH TIME`, []int{WITH_LA, TIME}},
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
+		{`ON`, []int{ON}},
+		{`ON ROLE`, []int{ON_LA, ROLE}},
 		{`1`, []int{ICONST}},
 		{`0xa`, []int{ICONST}},
 		{`x'2F'`, []int{BCONST}},

@@ -50,6 +50,7 @@ var lookaheadKeywords = map[string]struct{}{
 	"like":       {},
 	"of":         {},
 	"ordinality": {},
+	"role":       {},
 	"similar":    {},
 	"time":       {},
 }
