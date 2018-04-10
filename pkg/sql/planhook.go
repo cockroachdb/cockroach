@@ -70,7 +70,7 @@ type PlanHookState interface {
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
-	DistLoader() *DistLoader
+	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *LeaseManager
 	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
 	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
