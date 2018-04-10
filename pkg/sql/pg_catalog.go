@@ -1310,11 +1310,11 @@ CREATE TABLE pg_catalog.pg_proc (
 							// columns are marked to return "anyelement"
 							// (e.g. `unnest`)
 							retOid = oid.T_anyelement
-							if len(t.Cols) == 1 {
+							if len(t.Cols.Types) == 1 {
 								// Functions returning tables with exactly one column
 								// are marked to return the type of that column
 								// (e.g. `generate_series`).
-								retOid = t.Cols[0].Oid()
+								retOid = t.Cols.Types[0].Oid()
 							}
 						} else {
 							retOid = fixedRetType.Oid()

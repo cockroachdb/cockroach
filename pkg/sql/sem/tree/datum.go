@@ -2462,9 +2462,9 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() types.T {
-	typ := make(types.TTuple, len(d.D))
+	typ := types.TTuple{Types: make([]types.T, len(d.D))}
 	for i, v := range d.D {
-		typ[i] = v.ResolvedType()
+		typ.Types[i] = v.ResolvedType()
 	}
 	return typ
 }
@@ -2607,6 +2607,7 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
+// TODO(bram): We don't format tuples in the same way as postgres. See #25522.
 func (d *DTuple) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&d.D)
 }
@@ -3355,7 +3356,7 @@ func DatumTypeSize(t types.T) (uintptr, bool) {
 	case types.TTuple:
 		sz := uintptr(0)
 		variable := false
-		for _, typ := range ty {
+		for _, typ := range ty.Types {
 			typsz, typvariable := DatumTypeSize(typ)
 			sz += typsz
 			variable = variable || typvariable

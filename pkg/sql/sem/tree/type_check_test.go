@@ -106,6 +106,37 @@ func TestTypeCheck(t *testing.T) {
 		{`1:::DECIMAL + $1`, `1:::DECIMAL + $1:::DECIMAL`},
 		{`$1:::INT`, `$1:::INT`},
 
+		// Tuples with labels
+		{`(ROW (1) AS a)`, `(ROW(1:::INT) AS a)`},
+		{`(ROW(1:::INT) AS a)`, `(ROW(1:::INT) AS a)`},
+		{`((1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
+		{`((1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW (1,2) AS a,b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
+		{
+			`((1,2,3) AS "One","Two","Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+		},
+		{
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
+		},
+		{
+			`(ROW (1,2,3) AS "One",Two,"Three")`,
+			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+		},
+		{
+			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+		},
+		// And tuples without labels still work as advertized
+		{`(ROW (1))`, `ROW(1:::INT)`},
+		{`ROW(1:::INT)`, `ROW(1:::INT)`},
+		{`((1,2))`, `(1:::INT, 2:::INT)`},
+		{`(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
+		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
+		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
+
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
@@ -178,6 +209,18 @@ func TestTypeCheckError(t *testing.T) {
 		{`ANNOTATE_TYPE('a', int)`, `could not parse "a" as type int`},
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
+
+		{`((unnest(ARRAY[]:::int[])).*)`, `column access expressions must be replaced before type checking`},
+		{`((unnest(ARRAY[]:::int[])).unnest)`, `column access expressions must be replaced before type checking`},
+
+		{
+			`((1,2) AS a)`,
+			`the number of expressions in a labeled tuple (2) must match the number of labels (1)`,
+		},
+		{
+			`(ROW (1) AS a,b)`,
+			`the number of expressions in a labeled tuple (1) must match the number of labels (2)`,
+		},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)

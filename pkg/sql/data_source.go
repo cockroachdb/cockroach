@@ -267,7 +267,7 @@ func renameSource(
 			(len(src.info.SourceAliases) == 1 && src.info.SourceAliases[0].Name == sqlbase.AnonymousTable))
 		noColNameSpecified := len(colAlias) == 0
 		if vg, ok := src.plan.(*valueGenerator); ok && isAnonymousTable && noColNameSpecified {
-			if tType, ok := vg.expr.ResolvedType().(types.TTable); ok && len(tType.Cols) == 1 {
+			if tType, ok := vg.expr.ResolvedType().(types.TTable); ok && len(tType.Cols.Types) == 1 {
 				colAlias = tree.NameList{as.Alias}
 			}
 		}

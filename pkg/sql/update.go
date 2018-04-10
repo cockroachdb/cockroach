@@ -285,9 +285,9 @@ func (p *planner) Update(
 				}
 			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
-				desiredTupleType := make(types.TTuple, len(setExpr.Names))
+				desiredTupleType := types.TTuple{Types: make([]types.T, len(setExpr.Names))}
 				for i := range setExpr.Names {
-					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
+					desiredTupleType.Types[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
 				}
 				col, expr, err := p.computeRender(ctx, selectExpr, desiredTupleType,
 					render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
@@ -706,7 +706,7 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 
 func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
-	for i, typ := range renderedResult.ResolvedType().(types.TTuple) {
+	for i, typ := range renderedResult.ResolvedType().(types.TTuple).Types {
 		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
@@ -766,7 +766,7 @@ func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
 			switch t := expr.Expr.(type) {
 			case *tree.Subquery:
 				if tup, ok := t.ResolvedType().(types.TTuple); ok {
-					n = len(tup)
+					n = len(tup.Types)
 				}
 			case *tree.Tuple:
 				n = len(t.Exprs)
