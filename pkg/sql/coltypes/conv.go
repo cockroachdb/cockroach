@@ -119,9 +119,9 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		}
 		return ArrayOf(elemTyp, nil)
 	case types.TTuple:
-		colTyp := make(TTuple, len(typ))
-		for i := range typ {
-			elemTyp, err := DatumTypeToColumnType(typ[i])
+		colTyp := make(TTuple, len(typ.Types))
+		for i := range typ.Types {
+			elemTyp, err := DatumTypeToColumnType(typ.Types[i])
 			if err != nil {
 				return nil, err
 			}
@@ -186,9 +186,9 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", t, ct.ParamType))
 		}
 	case TTuple:
-		ret := make(types.TTuple, len(ct))
+		ret := types.TTuple{Types: make([]types.T, len(ct))}
 		for i := range ct {
-			ret[i] = CastTargetToDatumType(ct[i])
+			ret.Types[i] = CastTargetToDatumType(ct[i])
 		}
 		return ret
 	case *TOid:

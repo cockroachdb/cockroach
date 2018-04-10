@@ -127,9 +127,9 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 	if len(s.cols) == 1 {
 		s.typ = s.cols[0].typ
 	} else {
-		t := make(types.TTuple, len(s.cols))
+		t := types.TTuple{Types: make([]types.T, len(s.cols))}
 		for i := range s.cols {
-			t[i] = s.cols[i].typ
+			t.Types[i] = s.cols[i].typ
 		}
 		s.typ = t
 	}
@@ -145,7 +145,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 		// with the current type checking code, but seems semantically incorrect. A
 		// tuple represents a fixed number of elements. Instead, we should either
 		// be using the table type (TTable) or introduce a new vtuple type.
-		s.typ = types.TTuple{s.typ}
+		s.typ = types.TTuple{Types: []types.T{s.typ}}
 	}
 
 	return s, nil
