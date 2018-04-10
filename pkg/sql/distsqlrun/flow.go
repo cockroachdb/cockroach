@@ -21,6 +21,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -69,6 +70,8 @@ type FlowCtx struct {
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
 	rpcCtx *rpc.Context
+	// gossip is used by the sample aggregator to notify nodes of a new statistic.
+	gossip *gossip.Gossip
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a
