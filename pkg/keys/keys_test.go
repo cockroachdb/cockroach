@@ -37,6 +37,7 @@ func TestStoreKeyEncodeDecode(t *testing.T) {
 		{key: StoreGossipKey(), expSuffix: localStoreGossipSuffix, expDetail: nil},
 		{key: StoreClusterVersionKey(), expSuffix: localStoreClusterVersionSuffix, expDetail: nil},
 		{key: StoreLastUpKey(), expSuffix: localStoreLastUpSuffix, expDetail: nil},
+		{key: StoreHLCUpperBoundKey(), expSuffix: localHLCUpperBoundSuffix, expDetail: nil},
 		{
 			key:       StoreSuggestedCompactionKey(roachpb.Key("a"), roachpb.Key("z")),
 			expSuffix: localStoreSuggestedCompactionSuffix,
