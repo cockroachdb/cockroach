@@ -39,6 +39,12 @@ type Grant struct {
 type TargetList struct {
 	Databases NameList
 	Tables    TablePatterns
+
+	// ForRoles and Roles are used internally in the parser and not used
+	// in the AST. Therefore they do not participate in pretty-printing,
+	// etc.
+	ForRoles bool
+	Roles    NameList
 }
 
 // Format implements the NodeFormatter interface.
@@ -47,6 +53,7 @@ func (tl *TargetList) Format(ctx *FmtCtx) {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
 	} else {
+		ctx.WriteString("TABLE ")
 		ctx.FormatNode(&tl.Tables)
 	}
 }
