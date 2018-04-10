@@ -47,6 +47,10 @@ type tableReader struct {
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
 
+	// TODO(andrei): get rid of this field and move the actions it gates into the
+	// Start() method once Start() is able to queue trailing metadata.
+	started bool
+
 	// trailingMetadata contains producer metadata that is sent once the consumer
 	// status is not NeedMoreRows.
 	trailingMetadata []ProducerMetadata
@@ -54,6 +58,8 @@ type tableReader struct {
 
 var _ Processor = &tableReader{}
 var _ RowSource = &tableReader{}
+
+const tableReaderProcName = "table reader"
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -73,7 +79,7 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.init(post, types, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := tr.init(post, types, flowCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -90,7 +96,7 @@ func newTableReader(
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
 	}
-
+	tr.input = &rowFetcherWrapper{RowFetcher: &tr.fetcher}
 	return tr, nil
 }
 
@@ -101,11 +107,17 @@ type rowFetcherWrapper struct {
 	*sqlbase.RowFetcher
 }
 
-var _ RowSource = rowFetcherWrapper{}
+var _ RowSource = &rowFetcherWrapper{}
+
+// Start is part of the RowSource interface.
+func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
+	w.ctx = ctx
+	return ctx
+}
 
 // Next() calls NextRow() on the underlying RowFetcher. If the returned
 // ProducerMetadata is not nil, only its Err field will be set.
-func (w rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	row, _, _, err := w.NextRow(w.ctx)
 	if err != nil {
 		return row, &ProducerMetadata{Err: err}
@@ -154,11 +166,12 @@ func initRowFetcher(
 }
 
 // Run is part of the processor interface.
-func (tr *tableReader) Run(wg *sync.WaitGroup) {
+func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if tr.out.output == nil {
 		panic("tableReader output not initialized for emitting rows")
 	}
-	Run(tr.flowCtx.Ctx, tr, tr.out.output)
+	ctx = tr.Start(ctx)
+	Run(ctx, tr, tr.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -203,9 +216,16 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 	return nil
 }
 
+// Start is part of the RowSource interface.
+func (tr *tableReader) Start(ctx context.Context) context.Context {
+	tr.input.Start(ctx)
+	return tr.startInternal(ctx, tableReaderProcName)
+}
+
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if tr.maybeStart("table reader", "TableReader") {
+	if !tr.started {
+		tr.started = true
 		if tr.flowCtx.txn == nil {
 			log.Fatalf(tr.ctx, "tableReader outside of txn")
 		}
@@ -219,8 +239,6 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			log.Eventf(tr.ctx, "scan error: %s", err)
 			return nil, tr.producerMeta(err)
 		}
-
-		tr.input = rowFetcherWrapper{ctx: tr.ctx, RowFetcher: &tr.fetcher}
 	}
 
 	if tr.closed || tr.consumerStatus != NeedMoreRows {

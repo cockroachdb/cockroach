@@ -72,7 +72,6 @@ func TestValues(t *testing.T) {
 					out := &RowBuffer{}
 					st := cluster.MakeTestingClusterSettings()
 					flowCtx := FlowCtx{
-						Ctx:      context.Background(),
 						Settings: st,
 					}
 
@@ -80,7 +79,7 @@ func TestValues(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					v.Run(nil)
+					v.Run(context.Background(), nil)
 					if !out.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}

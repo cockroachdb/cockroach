@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"bytes"
+	"context"
 
 	"sync"
 
@@ -53,7 +54,16 @@ type scrubTableReader struct {
 	// indexIdx refers to the index being scanned. This is only used
 	// during scrub physical checks.
 	indexIdx int
+
+	// TODO(andrei): get rid of this field and move the actions it gates into the
+	// Start() method.
+	started bool
 }
+
+var _ Processor = &scrubTableReader{}
+var _ RowSource = &scrubTableReader{}
+
+var scrubTableReaderProcName = "scrub"
 
 // newScrubTableReader creates a scrubTableReader.
 func newScrubTableReader(
@@ -62,6 +72,10 @@ func newScrubTableReader(
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
+	if flowCtx.txn == nil {
+		return nil, errors.Errorf("scrubTableReader outside of txn")
+	}
+
 	tr := &scrubTableReader{
 		indexIdx: int(spec.IndexIdx),
 	}
@@ -69,7 +83,7 @@ func newScrubTableReader(
 	tr.tableDesc = spec.Table
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	if err := tr.init(post, ScrubTypes, flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := tr.init(post, ScrubTypes, flowCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -186,22 +200,27 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 }
 
 // Run is part of the processor interface.
-func (tr *scrubTableReader) Run(wg *sync.WaitGroup) {
+func (tr *scrubTableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if tr.out.output == nil {
 		panic("scrubTableReader output not initialized for emitting rows")
 	}
-	Run(tr.flowCtx.Ctx, tr, tr.out.output)
+	ctx = tr.Start(ctx)
+	Run(ctx, tr, tr.out.output)
 	if wg != nil {
 		wg.Done()
 	}
 }
 
+// Start is part of the RowSource interface.
+func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
+	return tr.startInternal(ctx, scrubTableReaderProcName)
+}
+
 // Next is part of the RowSource interface.
 func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if tr.maybeStart("scrub table reader", "ScrubTableReader") {
-		if tr.flowCtx.txn == nil {
-			log.Fatalf(tr.ctx, "scrubTableReader outside of txn")
-		}
+	if !tr.started {
+		tr.started = true
+
 		log.VEventf(tr.ctx, 1, "starting")
 
 		// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.

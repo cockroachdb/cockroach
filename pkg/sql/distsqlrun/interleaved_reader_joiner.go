@@ -222,19 +222,22 @@ func (irj *interleavedReaderJoiner) sendMisplannedRangesMetadata(ctx context.Con
 	}
 }
 
-// Run is part of the processor interface.
-func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
+const interleavedReaderJoinerProcName = "interleaved reader joiner"
+
+// Run is part of the Processor interface.
+func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if wg != nil {
 		defer wg.Done()
 	}
+
+	irj.startInternal(ctx, interleavedReaderJoinerProcName)
+	defer tracing.FinishSpan(irj.span)
+	ctx = irj.ctx
 
 	tableIDs := make([]sqlbase.ID, len(irj.tables))
 	for i := range tableIDs {
 		tableIDs[i] = irj.tables[i].tableID
 	}
-	ctx := log.WithLogTag(irj.flowCtx.Ctx, "InterleaveReaderJoiner", tableIDs)
-	ctx, span := processorSpan(ctx, "interleaved reader joiner")
-	defer tracing.FinishSpan(span)
 
 	txn := irj.flowCtx.txn
 	if txn == nil {

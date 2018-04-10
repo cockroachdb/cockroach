@@ -33,7 +33,6 @@ func BenchmarkNoop(b *testing.B) {
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -54,7 +53,7 @@ func BenchmarkNoop(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				d.Run(nil)
+				d.Run(context.Background(), nil /* wg */)
 				input.Reset()
 			}
 		})
