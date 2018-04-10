@@ -1,0 +1,18 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: example
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      containers:
+      - name: loadgen
+        image: cockroachdb/loadgen-kv:0.1
+        imagePullPolicy: IfNotPresent
+        command:
+          - "/kv"
+          - "postgres://root@cockroachdb-public:26257/kv?sslmode=disable"
