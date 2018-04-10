@@ -396,6 +396,12 @@ func (*Explain) StatementTag() string { return "EXPLAIN" }
 func (*Explain) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*Export) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Export) StatementTag() string { return "EXPORT" }
+
+// StatementType implements the Statement interface.
 func (*Grant) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -907,6 +913,7 @@ func (n *DropSequence) String() string              { return AsString(n) }
 func (n *DropUser) String() string                  { return AsString(n) }
 func (n *Execute) String() string                   { return AsString(n) }
 func (n *Explain) String() string                   { return AsString(n) }
+func (n *Export) String() string                    { return AsString(n) }
 func (n *Grant) String() string                     { return AsString(n) }
 func (n *GrantRole) String() string                 { return AsString(n) }
 func (n *Insert) String() string                    { return AsString(n) }
