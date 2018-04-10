@@ -85,7 +85,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
   render() {
     const { tableInfo, grantsSortSetting } = this.props;
 
-    const title = this.props.params[databaseNameAttr] + "." + this.props.params[tableNameAttr]
+    const title = this.props.params[databaseNameAttr] + "." + this.props.params[tableNameAttr];
 
     if (tableInfo) {
       return <div>
