@@ -183,7 +183,7 @@ Clifford Stein
 query T rowsort
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJysks-L6jAQx-_vr5A5KeSBaa2HwoMe3uH5WHSRvS0eYjOrWWum5AfsIv7vS9qDtmyjwh6bzGc-35nmBJokLsURLeSvwIFBBhsGtaESrSUTjtuihfyAfMpA6dq7cLxhUJJByE_glKsQcljSb6qBgUQnVNUUnRmQdxfEOrFDyOdndtWWx9u-iG2FaxQSTac51EYdhfkshHf7kJXByrt8VHBWJDCk5j-q3hIdOuJ0UJw8Iv5PSt_jfSI6-Hr0TkqPSIcIlzCDSdLBJJcAXpORaFD2_-ftkm_G-SfsPozUH6fCNzcukskfo3Z7Ny745I74s0cW-VdZp3Tput5I96zT_caLX6OtSVu869FPw2ZQ7rDdtCVvSnw2VDaa9nPVcM2BROva23n7sdDtVQh4DfMoPOvAvA8nUTiNm9MHzEkfnkXhLG7OovC0B2_Ov74CAAD__1i6oG0=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJysk09rMjEQh-_vp5A5KeQF95-HhUIOPdRStEhvxUPcTDV1zSxJFlrE716ye9BdulGhxyTzzPOb0T2CJokLcUAL-TtEwCCDNYPKUIHWkvHXbdFcfkE-ZaB0VTt_vWZQkEHIj-CUKxFyWNB_qoCBRCdU2RSdGFDtzoh1YouQz07som0UbvsmNiWuUEg0neZQGXUQ5puL2u18VgbL2uUjHjEew5A6-lP1hmjfESeD4vge8TMpfYv3hWhfV6NPUnpE2kfobIHxhPGU8WwwVTKY6hym1mQkGpT93_Z6yS-jPQm78-P1Ryvxw415PHkwartzYx5NzqMMxk_vWeqjsk7pwnW9ge5Zp_uVf_8KbUXa4k0fwNRvBuUW201bqk2Br4aKRtMelw3XXEi0rn2dtYe5bp98wEs4CsJpB476cByEk7A5ucMc9-E0CGdhcxaEpz14ffr3EwAA__9Ts6Lr
 
 
 query TTT
@@ -242,6 +242,16 @@ query T rowsort
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books ON books.edition = 1 WHERE books.title = authors.book]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkTFrwzAQhff-CvHmK8ROsggKmgopJSkhW_Gg2EeqxtEZSYaW4P9ebA9NCnHbUe_ue--hO8NLxWt74gj9igyEJQpCE6TkGCX08ri0qj6gZwTnmzb1ckEoJTD0GcmlmqGxlntpQKg4WVcPSx1B2vSNxGQPDD3v6MI2m7bd2X3NW7YVhytzNMGdbPg0tk1vfVfCpk1amYxMjlvR2X-in8T5qeS9yLHPfRY5to16F-eVeK1MDsKjqxMHrcxCPahMa71a7646kpmTWZBZ3iybX5X95fu3HBvxkf90gVlXELg68HjiKG0o-SVIOcSMz83ADULFMY3T-fhY-XHUF7yEs0k4n4bzSXj2Ay66u68AAAD__9tr5dM=
+
+
+statement ok
+CREATE TABLE players (id DECIMAL PRIMARY KEY, name STRING, team INT); INSERT INTO players VALUES (1.0, 'ready', 0)
+
+
+query B
+SELECT p1.team = p2.team FROM players p1 JOIN players p2 ON p1.id = p2.id;
+----
+true
 
 
 statement ok
