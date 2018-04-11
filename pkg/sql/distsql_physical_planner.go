@@ -1775,22 +1775,26 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
-	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan)
-
-	// Refer to comment about JoinReaderSpec.IndexMap for description.
-	indexMap := make([]uint32, 0, len(rightPlan.planToStreamColMap))
-	for i, m := range rightPlan.planToStreamColMap {
-		if m >= 0 {
-			indexMap = append(indexMap, uint32(i))
+	var rightMap []int
+	if isLookupJoin {
+		rightMap = make([]int, n.pred.numRightCols)
+		// The table must have n.pred.numRightCols columns since the right side is
+		// a scanNode, and scanNodes always produce all columns of the table.
+		for i := 0; i < n.pred.numRightCols; i++ {
+			rightMap[i] = i
 		}
+	} else {
+		rightMap = rightPlan.planToStreamColMap
 	}
+
+	post, joinToStreamColMap := joinOutColumns(n, leftPlan.planToStreamColMap, rightMap)
+	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan.planToStreamColMap, rightMap)
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
 	if isLookupJoin {
 		lookupExpr := shiftExprCols(
-			planCtx.EvalContext(), lookupJoinScan.origFilter, rightPlan.planToStreamColMap, leftPlan.planToStreamColMap,
+			planCtx.EvalContext(), lookupJoinScan.origFilter, leftPlan.planToStreamColMap, rightPlan.planToStreamColMap,
 		)
 		post.Filter = lookupExpr
 		var indexColumns = make([]uint32, len(lookupJoinScan.index.ColumnIDs))
@@ -1823,7 +1827,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			Table:         *(lookupJoinScan.desc),
 			IndexIdx:      0,
 			LookupColumns: lookupCols,
-			IndexMap:      indexMap,
 			OnExpr:        onExpr,
 		}
 	} else if leftMergeOrd.Columns == nil {
