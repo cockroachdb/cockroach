@@ -387,6 +387,11 @@ func (s *SSTWriterSpec) summary() (string, []string) {
 	return "SSTWriter", res
 }
 
+// summary implements the diagramCellType interface.
+func (s *CSVWriterSpec) summary() (string, []string) {
+	return "CSVWriter", []string{s.Destination}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
