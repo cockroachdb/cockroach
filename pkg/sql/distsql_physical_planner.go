@@ -225,6 +225,13 @@ func (dsp *DistSQLPlanner) CheckSupport(node planNode) (bool, error) {
 	return (rec == shouldDistribute), nil
 }
 
+// CheckPossible is like CheckSupport but returns whether the query *can* be run
+// via distSQL, regardless of whether or not it is recommended.
+func (dsp *DistSQLPlanner) CheckPossible(node planNode) bool {
+	_, err := dsp.checkSupportForNode(node)
+	return err == nil
+}
+
 type distRecommendation int
 
 const (
