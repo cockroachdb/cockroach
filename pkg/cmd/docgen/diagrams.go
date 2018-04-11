@@ -875,6 +875,10 @@ var specs = []stmtSpec{
 		name: "show_roles_stmt",
 	},
 	{
+		name:    "show_ranges_stmt",
+		replace: map[string]string{"ranges_kw": "EXPERIMENTAL_RANGES"},
+	},
+	{
 		name: "show_schemas",
 		stmt: "show_schemas_stmt",
 	},
