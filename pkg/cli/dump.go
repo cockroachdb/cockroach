@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -130,6 +131,46 @@ func runDump(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+	// Put FK ALTERs at the end.
+	if dumpCtx.dumpMode != dumpDataOnly {
+		hasRefs := false
+		for _, md := range mds {
+			for _, ref := range md.refs {
+				if !hasRefs {
+					hasRefs = true
+					if _, err := w.Write([]byte("\n")); err != nil {
+						return err
+					}
+				}
+				_, err := fmt.Fprintf(w, "ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY %s REFERENCES %s;\n",
+					md.name.TableName.String(),
+					ref.constraint,
+					ref.fk,
+					ref.references,
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if hasRefs {
+			const alterValidateMessage = `-- Validate foreign key constraints. These can fail if there was unvalidated data during the dump.`
+			if _, err := w.Write([]byte("\n" + alterValidateMessage + "\n")); err != nil {
+				return err
+			}
+			for _, md := range mds {
+				for _, ref := range md.refs {
+					_, err := fmt.Fprintf(w, "ALTER TABLE %s VALIDATE CONSTRAINT %s;\n",
+						md.name.TableName.String(),
+						ref.constraint,
+					)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -149,11 +190,19 @@ func collect(tid int64, byID map[int64]basicMetadata, seen map[int64]bool, colle
 }
 
 type basicMetadata struct {
-	ID         int64
-	name       *tree.TableName
+	ID   int64
+	name *tree.TableName
+	// createStmt but without FKs
 	createStmt string
 	dependsOn  []int64
 	kind       string // "string", "table", or "view"
+	refs       []fkRef
+}
+
+type fkRef struct {
+	constraint string
+	fk         string
+	references string
 }
 
 // tableMetadata describes one table to dump.
@@ -303,13 +352,35 @@ func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basic
 		return basicMetadata{}, err
 	}
 
-	return basicMetadata{
+	md := basicMetadata{
 		ID:         id,
 		name:       tree.NewTableName(tree.Name(dbName), tree.Name(tableName)),
 		createStmt: createStatement,
 		dependsOn:  refs,
 		kind:       kind,
-	}, nil
+	}
+
+	// Extract references.
+	{
+		selfRE := regexp.MustCompile(`^	CONSTRAINT (.*) FOREIGN KEY (.*) REFERENCES (.*),$`)
+		lines := strings.Split(createStatement, "\n")
+		for i := 0; i < len(lines); i++ {
+			match := selfRE.FindStringSubmatch(lines[i])
+			if len(match) == 0 {
+				continue
+			}
+			md.refs = append(md.refs, fkRef{
+				constraint: match[1],
+				fk:         match[2],
+				references: match[3],
+			})
+			lines = append(lines[:i], lines[i+1:]...)
+			i--
+		}
+		md.createStmt = strings.Join(lines, "\n")
+	}
+
+	return md, nil
 }
 
 func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
