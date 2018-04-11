@@ -722,6 +722,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 // work as intended on import jobs.
 func TestImportControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("#24658")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
