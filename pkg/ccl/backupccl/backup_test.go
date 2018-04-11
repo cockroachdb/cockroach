@@ -470,11 +470,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, fullDir)
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
-	sqlDB.Exec(t, `BACKUP bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
+	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`BACKUP bank TO '%s' INCREMENTAL FROM '%s'`,
+			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir, sanitizedFullDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -485,11 +485,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.Exec(t, `RESTORE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
+	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`RESTORE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
+			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir, sanitizedIncDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -907,8 +907,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		}
 
 		for i, query := range []string{
-			`BACKUP orig_fkdb.fk TO $1`,
-			`RESTORE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
+			`BACKUP TABLE orig_fkdb.fk TO $1`,
+			`RESTORE TABLE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
 		} {
 			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, []string{"PAUSE"}, query, foreignDir)
 			if !testutils.IsError(err, "job paused") {
@@ -932,7 +932,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 		for i, query := range []string{
 			`BACKUP DATABASE data TO $1`,
-			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
+			`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
 		} {
 			ops := []string{"PAUSE", "RESUME", "PAUSE"}
 			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, ops, query, pauseDir)
@@ -961,7 +961,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 		for i, query := range []string{
 			`BACKUP DATABASE data TO $1`,
-			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
+			`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
 		} {
 			if _, err := jobutils.RunJob(
 				t, sqlDB, &allowResponse, []string{"cancel"}, query, cancelDir,
