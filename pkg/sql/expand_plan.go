@@ -122,6 +122,14 @@ func doExpandPlan(
 	case *deleteNode:
 		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
+	case *distSQLNode:
+		distSQLParams := noParamsBase
+		distSQLParams.atTop = true
+		n.plan, err = doExpandPlan(ctx, p, distSQLParams, n.plan)
+		if err != nil {
+			return plan, err
+		}
+
 	case *explainDistSQLNode:
 		// EXPLAIN only shows the structure of the plan, and wants to do
 		// so "as if" plan was at the top level w.r.t spool semantics.
@@ -565,6 +573,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *deleteNode:
 		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+
+	case *distSQLNode:
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
