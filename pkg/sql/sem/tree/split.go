@@ -38,7 +38,7 @@ func (node *Split) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Rows)
 }
 
-// TestingRelocate represents an `ALTER TABLE/INDEX .. TESTING_RELOCATE ..`
+// TestingRelocate represents an `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE ..`
 // statement.
 type TestingRelocate struct {
 	// Only one of Table and Index can be set.
@@ -60,7 +60,7 @@ func (node *TestingRelocate) Format(ctx *FmtCtx) {
 		ctx.WriteString("TABLE ")
 		ctx.FormatNode(node.Table)
 	}
-	ctx.WriteString(" TESTING_RELOCATE ")
+	ctx.WriteString(" EXPERIMENTAL_RELOCATE ")
 	ctx.FormatNode(node.Rows)
 }
 
