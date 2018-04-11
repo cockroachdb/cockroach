@@ -380,8 +380,8 @@ func TestParse(t *testing.T) {
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`SHOW GRANTS`},
-		{`SHOW GRANTS ON foo`},
-		{`SHOW GRANTS ON foo, db.foo`},
+		{`SHOW GRANTS ON TABLE foo`},
+		{`SHOW GRANTS ON TABLE foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
@@ -432,8 +432,8 @@ func TestParse(t *testing.T) {
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
-		{`GRANT SELECT ON foo TO root`},
-		{`GRANT SELECT, DELETE, UPDATE ON foo, db.foo TO root, bar`},
+		{`GRANT SELECT ON TABLE foo TO root`},
+		{`GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar`},
 		{`GRANT DROP ON DATABASE foo TO root`},
 		{`GRANT ALL ON DATABASE foo TO root, test`},
 		{`GRANT SELECT, INSERT ON DATABASE bar TO foo, bar, baz`},
@@ -444,8 +444,8 @@ func TestParse(t *testing.T) {
 
 		// Tables are the default, but can also be specified with
 		// REVOKE x ON TABLE y. However, the stringer does not output TABLE.
-		{`REVOKE SELECT ON foo FROM root`},
-		{`REVOKE UPDATE, DELETE ON foo, db.foo FROM root, bar`},
+		{`REVOKE SELECT ON TABLE foo FROM root`},
+		{`REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar`},
 		{`REVOKE INSERT ON DATABASE foo FROM root`},
 		{`REVOKE ALL ON DATABASE foo FROM root, test`},
 		{`REVOKE SELECT, INSERT ON DATABASE bar FROM foo, bar, baz`},
@@ -918,24 +918,24 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX (index_name), CONSTRAINT (cst_name)`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
-		{`BACKUP foo TO 'bar'`},
-		{`BACKUP foo.foo, baz.baz TO 'bar'`},
+		{`BACKUP TABLE foo TO 'bar'`},
+		{`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
 		{`SHOW BACKUP 'bar'`},
-		{`BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
-		{`BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
+		{`BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
+		{`BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
 		{`BACKUP DATABASE foo TO 'bar'`},
 		{`BACKUP DATABASE foo, baz TO 'bar'`},
 		{`BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
-		{`RESTORE foo FROM 'bar'`},
-		{`RESTORE foo FROM $1`},
-		{`RESTORE foo FROM $1, $2, 'bar'`},
-		{`RESTORE foo, baz FROM 'bar'`},
-		{`RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+		{`RESTORE TABLE foo FROM 'bar'`},
+		{`RESTORE TABLE foo FROM $1`},
+		{`RESTORE TABLE foo FROM $1, $2, 'bar'`},
+		{`RESTORE TABLE foo, baz FROM 'bar'`},
+		{`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
 		{`RESTORE DATABASE foo FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
-		{`BACKUP foo TO 'bar' WITH key1, key2 = 'value'`},
-		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`},
+		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
+		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
@@ -1301,6 +1301,54 @@ func TestParse2(t *testing.T) {
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
 
+		// Alternative forms for table patterns.
+
+		{`SHOW GRANTS ON foo`,
+			`SHOW GRANTS ON TABLE foo`},
+		{`SHOW GRANTS ON foo, db.foo`,
+			`SHOW GRANTS ON TABLE foo, db.foo`},
+		{`BACKUP foo TO 'bar'`,
+			`BACKUP TABLE foo TO 'bar'`},
+		{`BACKUP foo.foo, baz.baz TO 'bar'`,
+			`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
+		{`BACKUP foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`,
+			`BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
+		{`BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`,
+			`BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
+		// Tables named "role" are handled specially to support SHOW GRANTS ON ROLE,
+		// but that special handling should not impact BACKUP.
+		{`BACKUP role TO 'bar'`,
+			`BACKUP TABLE role TO 'bar'`},
+		{`RESTORE foo FROM 'bar'`,
+			`RESTORE TABLE foo FROM 'bar'`},
+		{`RESTORE foo FROM $1`,
+			`RESTORE TABLE foo FROM $1`},
+		{`RESTORE foo FROM $1, $2, 'bar'`,
+			`RESTORE TABLE foo FROM $1, $2, 'bar'`},
+		{`RESTORE foo, baz FROM 'bar'`,
+			`RESTORE TABLE foo, baz FROM 'bar'`},
+		{`RESTORE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`,
+			`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+		{`BACKUP foo TO 'bar' WITH key1, key2 = 'value'`,
+			`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
+		{`RESTORE foo FROM 'bar' WITH key1, key2 = 'value'`,
+			`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
+
+		{`GRANT SELECT ON foo TO root`,
+			`GRANT SELECT ON TABLE foo TO root`},
+		{`GRANT SELECT, DELETE, UPDATE ON foo, db.foo TO root, bar`,
+			`GRANT SELECT, DELETE, UPDATE ON TABLE foo, db.foo TO root, bar`},
+		// Tables named "role" are handled specially to support SHOW GRANTS ON ROLE,
+		// but that special handling should not impact GRANT.
+		{`GRANT SELECT ON role TO root`,
+			`GRANT SELECT ON TABLE role TO root`},
+		{`REVOKE SELECT ON foo FROM root`,
+			`REVOKE SELECT ON TABLE foo FROM root`},
+		{`REVOKE UPDATE, DELETE ON foo, db.foo FROM root, bar`,
+			`REVOKE UPDATE, DELETE ON TABLE foo, db.foo FROM root, bar`},
+
+		// RBAC-related statements.
+
 		{`CREATE ROLE foo`,
 			`CREATE ROLE 'foo'`},
 		{`CREATE ROLE IF NOT EXISTS foo`,
@@ -1309,6 +1357,18 @@ func TestParse2(t *testing.T) {
 			`DROP ROLE 'foo', 'bar'`},
 		{`DROP ROLE IF EXISTS foo, bar`,
 			`DROP ROLE IF EXISTS 'foo', 'bar'`},
+
+		// Clarify the ambiguity between "ON ROLE" (RBAC) and "ON ROLE"
+		// (regular table named "role").
+		{`SHOW GRANTS ON role`, `SHOW GRANTS ON ROLE`},
+		{`SHOW GRANTS ON "role"`, `SHOW GRANTS ON TABLE role`},
+		{`SHOW GRANTS ON role foo`, `SHOW GRANTS ON ROLE foo`},
+		{`SHOW GRANTS ON role, foo`, `SHOW GRANTS ON TABLE role, foo`},
+		{`SHOW GRANTS ON role foo, bar`, `SHOW GRANTS ON ROLE foo, bar`},
+		{`SHOW GRANTS ON "role", foo`, `SHOW GRANTS ON TABLE role, foo`},
+		{`SHOW GRANTS ON "role".foo`, `SHOW GRANTS ON TABLE role.foo`},
+		{`SHOW GRANTS ON role.foo`, `SHOW GRANTS ON TABLE role.foo`},
+		{`SHOW GRANTS ON role.*`, `SHOW GRANTS ON TABLE role.*`},
 
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
@@ -1788,6 +1848,36 @@ HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
 UPDATE foo SET a.b = 1
                  ^
 HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
+		},
+		// Ensure that the support for ON ROLE <namelist> doesn't leak
+		// where it should not be recognized.
+		{
+			`GRANT SELECT ON ROLE foo, bar TO blix`,
+			`syntax error at or near "foo"
+GRANT SELECT ON ROLE foo, bar TO blix
+                     ^
+HINT: try \h GRANT`,
+		},
+		{
+			`REVOKE SELECT ON ROLE foo, bar FROM blix`,
+			`syntax error at or near "foo"
+REVOKE SELECT ON ROLE foo, bar FROM blix
+                      ^
+HINT: try \h REVOKE`,
+		},
+		{
+			`BACKUP ROLE foo, bar TO 'baz'`,
+			`syntax error at or near "foo"
+BACKUP ROLE foo, bar TO 'baz'
+            ^
+HINT: try \h BACKUP`,
+		},
+		{
+			`RESTORE ROLE foo, bar FROM 'baz'`,
+			`syntax error at or near "foo"
+RESTORE ROLE foo, bar FROM 'baz'
+             ^
+HINT: try \h RESTORE`,
 		},
 	}
 	for _, d := range testData {

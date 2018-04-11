@@ -186,7 +186,11 @@ alter_user_stmt ::=
 	alter_user_password_stmt
 
 targets ::=
-	table_pattern_list
+	'identifier'
+	| col_name_keyword
+	| unreserved_keyword
+	| complex_table_pattern
+	| table_pattern ',' table_pattern_list
 	| 'TABLE' table_pattern_list
 	| 'DATABASE' name_list
 
@@ -440,8 +444,7 @@ show_databases_stmt ::=
 	'SHOW' 'DATABASES'
 
 show_grants_stmt ::=
-	'SHOW' 'GRANTS' 'ON' 'ROLE' opt_name_list for_grantee_clause
-	| 'SHOW' 'GRANTS' on_privilege_target_clause for_grantee_clause
+	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
 
 show_histogram_stmt ::=
 	'SHOW' 'HISTOGRAM' 'ICONST'
@@ -548,52 +551,71 @@ alter_user_password_stmt ::=
 	'ALTER' 'USER' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 	| 'ALTER' 'USER' 'IF' 'EXISTS' string_or_placeholder 'WITH' 'PASSWORD' string_or_placeholder
 
-table_pattern_list ::=
-	( table_pattern ) ( ( ',' table_pattern ) )*
-
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
-
-kv_option_list ::=
-	( kv_option ) ( ( ',' kv_option ) )*
-
-db_object_name ::=
-	name
-	| name '.' unrestricted_name
-	| name '.' unrestricted_name '.' unrestricted_name
-
-opt_password ::=
-	opt_with 'PASSWORD' string_or_placeholder
-	| 
-
-create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-
-create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
-	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
-	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
-
-create_table_stmt ::=
-	'CREATE' 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
-
-create_table_as_stmt ::=
-	'CREATE' 'TABLE' table_name opt_column_list 'AS' select_stmt
-	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name opt_column_list 'AS' select_stmt
-
-create_view_stmt ::=
-	'CREATE' 'VIEW' view_name opt_column_list 'AS' select_stmt
-
-create_sequence_stmt ::=
-	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
-	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
-
-statistics_name ::=
-	name
+col_name_keyword ::=
+	'ANNOTATE_TYPE'
+	| 'BETWEEN'
+	| 'BIGINT'
+	| 'BIGSERIAL'
+	| 'BIT'
+	| 'BOOL'
+	| 'BOOLEAN'
+	| 'BYTEA'
+	| 'BYTES'
+	| 'CHAR'
+	| 'CHARACTER'
+	| 'CHARACTERISTICS'
+	| 'COALESCE'
+	| 'DATE'
+	| 'DEC'
+	| 'DECIMAL'
+	| 'EXISTS'
+	| 'EXTRACT'
+	| 'EXTRACT_DURATION'
+	| 'FLOAT'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'GREATEST'
+	| 'GROUPING'
+	| 'IF'
+	| 'IFNULL'
+	| 'INET'
+	| 'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'INTERVAL'
+	| 'JSON'
+	| 'JSONB'
+	| 'LEAST'
+	| 'NAME'
+	| 'NULLIF'
+	| 'NUMERIC'
+	| 'OUT'
+	| 'OVERLAY'
+	| 'POSITION'
+	| 'PRECISION'
+	| 'REAL'
+	| 'ROW'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLINT'
+	| 'SMALLSERIAL'
+	| 'STRING'
+	| 'SUBSTRING'
+	| 'TIME'
+	| 'TIMESTAMP'
+	| 'TIMESTAMPTZ'
+	| 'TREAT'
+	| 'TRIM'
+	| 'UUID'
+	| 'VALUES'
+	| 'VARCHAR'
+	| 'VIRTUAL'
+	| 'WORK'
 
 unreserved_keyword ::=
 	'ABORT'
@@ -720,6 +742,7 @@ unreserved_keyword ::=
 	| 'RESTRICT'
 	| 'RESUME'
 	| 'REVOKE'
+	| 'ROLE'
 	| 'ROLES'
 	| 'ROLLBACK'
 	| 'ROLLUP'
@@ -782,71 +805,61 @@ unreserved_keyword ::=
 	| 'YEAR'
 	| 'ZONE'
 
-col_name_keyword ::=
-	'ANNOTATE_TYPE'
-	| 'BETWEEN'
-	| 'BIGINT'
-	| 'BIGSERIAL'
-	| 'BIT'
-	| 'BOOL'
-	| 'BOOLEAN'
-	| 'BYTEA'
-	| 'BYTES'
-	| 'CHAR'
-	| 'CHARACTER'
-	| 'CHARACTERISTICS'
-	| 'COALESCE'
-	| 'DATE'
-	| 'DEC'
-	| 'DECIMAL'
-	| 'EXISTS'
-	| 'EXTRACT'
-	| 'EXTRACT_DURATION'
-	| 'FLOAT'
-	| 'FLOAT4'
-	| 'FLOAT8'
-	| 'GREATEST'
-	| 'GROUPING'
-	| 'IF'
-	| 'IFNULL'
-	| 'INET'
-	| 'INT'
-	| 'INT2'
-	| 'INT4'
-	| 'INT8'
-	| 'INT64'
-	| 'INTEGER'
-	| 'INTERVAL'
-	| 'JSON'
-	| 'JSONB'
-	| 'LEAST'
-	| 'NAME'
-	| 'NULLIF'
-	| 'NUMERIC'
-	| 'OUT'
-	| 'OVERLAY'
-	| 'POSITION'
-	| 'PRECISION'
-	| 'REAL'
-	| 'ROW'
-	| 'SERIAL'
-	| 'SERIAL2'
-	| 'SERIAL4'
-	| 'SERIAL8'
-	| 'SMALLINT'
-	| 'SMALLSERIAL'
-	| 'STRING'
-	| 'SUBSTRING'
-	| 'TIME'
-	| 'TIMESTAMP'
-	| 'TIMESTAMPTZ'
-	| 'TREAT'
-	| 'TRIM'
-	| 'UUID'
-	| 'VALUES'
-	| 'VARCHAR'
-	| 'VIRTUAL'
-	| 'WORK'
+complex_table_pattern ::=
+	complex_db_object_name
+	| name '.' unrestricted_name '.' '*'
+	| name '.' '*'
+	| '*'
+
+table_pattern ::=
+	simple_db_object_name
+	| complex_table_pattern
+
+table_pattern_list ::=
+	( table_pattern ) ( ( ',' table_pattern ) )*
+
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
+
+kv_option_list ::=
+	( kv_option ) ( ( ',' kv_option ) )*
+
+db_object_name ::=
+	simple_db_object_name
+	| complex_db_object_name
+
+opt_password ::=
+	opt_with 'PASSWORD' string_or_placeholder
+	| 
+
+create_database_stmt ::=
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
+
+create_index_stmt ::=
+	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
+	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
+
+create_table_stmt ::=
+	'CREATE' 'TABLE' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+
+create_table_as_stmt ::=
+	'CREATE' 'TABLE' table_name opt_column_list 'AS' select_stmt
+	| 'CREATE' 'TABLE' 'IF' 'NOT' 'EXISTS' table_name opt_column_list 'AS' select_stmt
+
+create_view_stmt ::=
+	'CREATE' 'VIEW' view_name opt_column_list 'AS' select_stmt
+
+create_sequence_stmt ::=
+	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
+	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+statistics_name ::=
+	name
 
 with_clause ::=
 	'WITH' cte_list
@@ -1017,16 +1030,12 @@ view_name ::=
 sequence_name ::=
 	db_object_name
 
-opt_name_list ::=
-	name_list
+opt_on_targets_roles ::=
+	'ON' targets_roles
 	| 
 
 for_grantee_clause ::=
 	'FOR' name_list
-	| 
-
-on_privilege_target_clause ::=
-	'ON' targets
 	| 
 
 opt_compact ::=
@@ -1103,11 +1112,19 @@ alter_sequence_options_stmt ::=
 alter_rename_database_stmt ::=
 	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_name
 
-table_pattern ::=
-	db_object_name
-	| name '.' unrestricted_name '.' '*'
-	| name '.' '*'
-	| '*'
+complex_db_object_name ::=
+	name '.' unrestricted_name
+	| name '.' unrestricted_name '.' unrestricted_name
+
+unrestricted_name ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
+	| reserved_keyword
+
+simple_db_object_name ::=
+	name
 
 non_reserved_word ::=
 	'identifier'
@@ -1120,13 +1137,6 @@ kv_option ::=
 	| name
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
-
-unrestricted_name ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
-	| reserved_keyword
 
 opt_with ::=
 	'WITH'
@@ -1358,6 +1368,10 @@ opt_comma ::=
 	','
 	| 
 
+targets_roles ::=
+	'ROLE' name_list
+	| targets
+
 single_set_clause ::=
 	column_name '=' a_expr
 
@@ -1468,7 +1482,6 @@ reserved_keyword ::=
 	| 'PRIMARY'
 	| 'REFERENCES'
 	| 'RETURNING'
-	| 'ROLE'
 	| 'SELECT'
 	| 'SESSION_USER'
 	| 'SOME'

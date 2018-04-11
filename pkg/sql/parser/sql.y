@@ -749,8 +749,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
-%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name
-%type <*tree.UnresolvedName> table_pattern
+%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name simple_db_object_name complex_db_object_name 
+%type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target
 
@@ -777,7 +777,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params
-%type <tree.NameList> name_list opt_name_list privilege_list
+%type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list
@@ -922,8 +922,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList>    targets
-%type <*tree.TargetList> on_privilege_target_clause
+%type <tree.TargetList>    targets targets_roles
+%type <*tree.TargetList>   opt_on_targets_roles
 %type <tree.NameList>       for_grantee_clause
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
@@ -2144,20 +2144,6 @@ revoke_stmt:
   }
 | REVOKE error // SHOW HELP: REVOKE
 
-targets:
-  table_pattern_list
-  {
-    $$.val = tree.TargetList{Tables: $1.tablePatterns()}
-  }
-| TABLE table_pattern_list
-  {
-    $$.val = tree.TargetList{Tables: $2.tablePatterns()}
-  }
-|  DATABASE name_list
-  {
-    $$.val = tree.TargetList{Databases: $2.nameList()}
-  }
-
 // ALL is always by itself.
 privileges:
   ALL
@@ -2728,14 +2714,14 @@ show_databases_stmt:
 //
 // %SeeAlso: WEBDOCS/show-grants.html
 show_grants_stmt:
-  SHOW GRANTS ON ROLE opt_name_list for_grantee_clause
+  SHOW GRANTS opt_on_targets_roles for_grantee_clause
   {
-    $$.val = &tree.ShowRoleGrants{Roles: $5.nameList(), Grantees: $6.nameList()}
-  }
-|
-  SHOW GRANTS on_privilege_target_clause for_grantee_clause
-  {
-    $$.val = &tree.ShowGrants{Targets: $3.targetListPtr(), Grantees: $4.nameList()}
+    lst := $3.targetListPtr()
+    if lst != nil && lst.ForRoles {
+      $$.val = &tree.ShowRoleGrants{Roles: lst.Roles, Grantees: $4.nameList()}
+    } else {
+      $$.val = &tree.ShowGrants{Targets: lst, Grantees: $4.nameList()}
+    }
   }
 | SHOW GRANTS error // SHOW HELP: SHOW GRANTS
 
@@ -3049,8 +3035,8 @@ show_testing_stmt:
     $$.val = &tree.ShowFingerprints{Table: $5.newNormalizableTableNameFromUnresolvedName()}
   }
 
-on_privilege_target_clause:
-  ON targets
+opt_on_targets_roles:
+  ON targets_roles
   {
     tmp := $2.targetList()
     $$.val = &tmp
@@ -3059,6 +3045,196 @@ on_privilege_target_clause:
   {
     $$.val = (*tree.TargetList)(nil)
   }
+
+// targets is a non-terminal for a list of privilege targets, either a
+// list of databases or a list of tables.
+//
+// This rule is complex and cannot be decomposed as a tree of
+// non-terminals because it must resolve syntax ambiguities in the
+// SHOW GRANTS ON ROLE statement. It was constructed as follows.
+//
+// 1. Start with the desired definition of targets:
+//
+//    targets ::=
+//        table_pattern_list
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 2. Now we must disambiguate the first rule "table_pattern_list"
+//    between one that recognizes ROLE and one that recognizes
+//    <some table pattern list>". So first, inline the definition of
+//    table_pattern_list.
+//
+//    targets ::=
+//        table_pattern                          # <- here
+//        table_pattern_list ',' table_pattern   # <- here
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 3. We now must disambiguate the "ROLE" inside the prefix "table_pattern".
+//    However having "table_pattern_list" as prefix is cumbersome, so swap it.
+//
+//    targets ::=
+//        table_pattern
+//        table_pattern ',' table_pattern_list   # <- here
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 4. The rule that has table_pattern followed by a comma is now
+//    non-problematic, because it will never match "ROLE" followed
+//    by an optional name list (neither "ROLE;" nor "ROLE <ident>"
+//    would match). We just need to focus on the first one "table_pattern".
+//    This needs to tweak "table_pattern".
+//
+//    Here we could inline table_pattern but now we don't have to any
+//    more, we just need to create a variant of it which is
+//    unambiguous with a single ROLE keyword. That is, we need a
+//    table_pattern which cannot contain a single name. We do
+//    this as follows.
+//
+//    targets ::=
+//        complex_table_pattern                  # <- here
+//        table_pattern ',' table_pattern_list
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//    complex_table_pattern ::=
+//        name '.' unrestricted_name
+//        name '.' unrestricted_name '.' unrestricted_name
+//        name '.' unrestricted_name '.' '*'
+//        name '.' '*'
+//        '*'
+//
+// 5. At this point the rule cannot start with a simple identifier any
+//    more, keyword or not. But more importantly, any token sequence
+//    that starts with ROLE cannot be matched by any of these remaining
+//    rules. This means that the prefix is now free to use, without
+//    ambiguity. We do this as follows, to gain a syntax rule for "ROLE
+//    <namelist>". (We'll handle a ROLE with no name list below.)
+//
+//    targets ::=
+//        ROLE name_list                        # <- here
+//        complex_table_pattern
+//        table_pattern ',' table_pattern_list
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 6. Now on to the finishing touches. First we'd like to regain the
+//    ability to use "<tablename>" when the table name is a simple
+//    identifier. This is done as follows:
+//
+//    targets ::=
+//        ROLE name_list
+//        name                                  # <- here
+//        complex_table_pattern
+//        table_pattern ',' table_pattern_list
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 7. Then, we want to recognize "ROLE" without any subsequent name
+//    list. This requires some care: we can't add "ROLE" to the set of
+//    rules above, because "name" would then overlap. To disambiguate,
+//    we must first inline "name" as follows:
+//
+//    targets ::=
+//        ROLE name_list
+//        IDENT                    # <- here, always <table>
+//        col_name_keyword         # <- here, always <table>
+//        unreserved_keyword       # <- here, either ROLE or <table>
+//        complex_table_pattern
+//        table_pattern ',' table_pattern_list
+//        TABLE table_pattern_list
+//        DATABASE name_list
+//
+// 8. And now the rule is sufficiently simple that we can disambiguate
+//    in the action, like this:
+//
+//    targets ::=
+//        ...
+//        unreserved_keyword {
+//             if $1 == "role" { /* handle ROLE */ }
+//             else { /* handle ON <tablename> */ }
+//        }
+//        ...
+//
+//   (but see the comment on the action of this sub-rule below for
+//   more nuance.)
+//
+// Tada!
+targets:
+  IDENT
+  {
+    $$.val = tree.TargetList{Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}
+  }
+| col_name_keyword
+  {
+    $$.val = tree.TargetList{Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}}}
+  }
+| unreserved_keyword
+  {
+    // This sub-rule is meant to support both ROLE and other keywords
+    // used as table name without the TABLE prefix. The keyword ROLE
+    // here can have two meanings:
+    //
+    // - for all statements except SHOW GRANTS, it must be interpreted
+    //   as a plain table name.
+    // - for SHOW GRANTS specifically, it must be handled as an ON ROLE
+    //   specifier without a name list (the rule with a name list is separate,
+    //   see above).
+    //
+    // Yet we want to use a single "targets" non-terminal for all
+    // statements that use targets, to share the code. This action
+    // achieves this as follows:
+    //
+    // - for all statements (including SHOW GRANTS), it populates the
+    //   Tables list in TargetList{} with the given name. This will
+    //   include the given keyword as table pattern in all cases,
+    //   including when the keyword was ROLE.
+    //
+    // - if ROLE was specified, it remembers this fact in the ForRoles
+    //   field.  This distinguishes `ON ROLE` (where "role" is
+    //   specified as keyword), which triggers the special case in
+    //   SHOW GRANTS, from `ON "role"` (where "role" is specified as
+    //   identifier), which is always handled as a table name.
+    //
+    //   Both `ON ROLE` and `ON "role"` populate the Tables list in the same way,
+    //   so that other statements than SHOW GRANTS don't observe any difference.
+    //
+    // Arguably this code is a bit too clever. Future work should aim
+    // to remove the special casing of SHOW GRANTS altogether instead
+    // of increasing (or attempting to modify) the grey magic occurring
+    // here.
+    $$.val = tree.TargetList{
+      Tables: tree.TablePatterns{&tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}},
+      ForRoles: $1 == "role", // backdoor for "SHOW GRANTS ON ROLE" (no name list)
+    }
+  }
+| complex_table_pattern
+  {
+    $$.val = tree.TargetList{Tables: tree.TablePatterns{$1.unresolvedName()}}
+  }
+| table_pattern ',' table_pattern_list
+  {
+    remainderPats := $3.tablePatterns()
+    $$.val = tree.TargetList{Tables: append(tree.TablePatterns{$1.unresolvedName()}, remainderPats...)}
+  }
+| TABLE table_pattern_list
+  {
+    $$.val = tree.TargetList{Tables: $2.tablePatterns()}
+  }
+| DATABASE name_list
+  {
+    $$.val = tree.TargetList{Databases: $2.nameList()}
+  }
+
+// target_roles is the variant of targets which recognizes ON ROLES
+// with a name list. This cannot be included in targets directly
+// because some statements must not recognize this syntax.
+targets_roles:
+  ROLE name_list
+  {
+     $$.val = tree.TargetList{ForRoles: true, Roles: $2.nameList()}
+  }
+| targets
 
 for_grantee_clause:
   FOR name_list
@@ -7070,18 +7246,24 @@ table_name_with_index:
 //   <schema>.*
 //   *
 table_pattern:
-  db_object_name
+  simple_db_object_name
+| complex_table_pattern
+
+// complex_table_pattern is the part of table_pattern which recognizes
+// every pattern not composed of a single identifier.
+complex_table_pattern:
+  complex_db_object_name
 | name '.' unrestricted_name '.' '*'
   {
-    $$.val = &tree.UnresolvedName{Star: true, NumParts: 3, Parts: tree.NameParts{"", $3, $1}}
+     $$.val = &tree.UnresolvedName{Star: true, NumParts: 3, Parts: tree.NameParts{"", $3, $1}}
   }
 | name '.' '*'
   {
-    $$.val = &tree.UnresolvedName{Star: true, NumParts: 2, Parts: tree.NameParts{"", $1}}
+     $$.val = &tree.UnresolvedName{Star: true, NumParts: 2, Parts: tree.NameParts{"", $1}}
   }
 | '*'
   {
-    $$.val = &tree.UnresolvedName{Star: true, NumParts: 1}
+     $$.val = &tree.UnresolvedName{Star: true, NumParts: 1}
   }
 
 name_list:
@@ -7092,16 +7274,6 @@ name_list:
 | name_list ',' name
   {
     $$.val = append($1.nameList(), tree.Name($3))
-  }
-
-opt_name_list:
-  name_list
-  {
-    $$.val = $1.nameList()
-  }
-| /* EMPTY */
-  {
-    $$.val = tree.NameList(nil)
   }
 
 // Constants
@@ -7339,11 +7511,23 @@ func_name:
 // <schema>.<table>
 // <catalog/db>.<schema>.<table>
 db_object_name:
+  simple_db_object_name
+| complex_db_object_name
+
+// simple_db_object_name is the part of db_object_name that recognizes
+// simple identifiers.
+simple_db_object_name:
   name
   {
     $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
-| name '.' unrestricted_name
+
+// complex_db_object_name is the part of db_object_name that recognizes
+// composite names (not simple identifiers).
+// It is split away from db_object_name in order to enable the definition
+// of table_pattern.
+complex_db_object_name:
+  name '.' unrestricted_name
   {
     $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
   }
@@ -7539,6 +7723,7 @@ unreserved_keyword:
 | RESTRICT
 | RESUME
 | REVOKE
+| ROLE
 | ROLES
 | ROLLBACK
 | ROLLUP
@@ -7775,7 +7960,6 @@ reserved_keyword:
 | PRIMARY
 | REFERENCES
 | RETURNING
-| ROLE
 | SELECT
 | SESSION_USER
 | SOME
