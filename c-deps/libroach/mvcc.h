@@ -70,7 +70,6 @@ template <bool reverse> class mvccScanner {
         iters_before_seek_(kMaxItersBeforeSeek / 2) {
     memset(&results_, 0, sizeof(results_));
     results_.status = kSuccess;
-
     iter_->kvs.reset();
     iter_->intents.reset();
   }

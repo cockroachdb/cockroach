@@ -175,7 +175,7 @@ func TestReadOnlyBasics(t *testing.T) {
 		func() { _, _, _, _ = b.GetProto(a, getVal) },
 		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
 		func() { b.NewIterator(IterOptions{}).Close() },
-		func() { b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}).Close() },
+		func() { b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}, false).Close() },
 	}
 	defer func() {
 		b.Close()
