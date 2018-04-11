@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet";
 import { Link, RouterState } from "react-router";
 import { connect } from "react-redux";
 
@@ -84,14 +85,19 @@ class TableMain extends React.Component<TableMainProps, {}> {
   render() {
     const { tableInfo, grantsSortSetting } = this.props;
 
+    const title = this.props.params[databaseNameAttr] + "." + this.props.params[tableNameAttr];
+
     if (tableInfo) {
       return <div>
+        <Helmet>
+          <title>{`${title} Table | Databases`}</title>
+        </Helmet>
         <section className="section">
           <section className="section parent-link">
             <Link to="/databases/tables">&lt; Back to Databases</Link>
           </section>
           <div className="database-summary-title">
-            <h2>{ this.props.params[tableNameAttr] }</h2>
+            <h2>{ title }</h2>
           </div>
           <div className="content l-columns">
             <div className="l-columns__left">

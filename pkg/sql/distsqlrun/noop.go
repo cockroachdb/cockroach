@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,22 +33,31 @@ type noopProcessor struct {
 var _ Processor = &noopProcessor{}
 var _ RowSource = &noopProcessor{}
 
+const noopProcName = "noop"
+
 func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
-	if err := n.init(post, input.OutputTypes(), flowCtx, nil /* evalCtx */, output); err != nil {
+	if err := n.init(post, input.OutputTypes(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return n, nil
 }
 
-// Run is part of the processor interface.
-func (n *noopProcessor) Run(wg *sync.WaitGroup) {
+// Start is part of the RowSource interface.
+func (n *noopProcessor) Start(ctx context.Context) context.Context {
+	n.input.Start(ctx)
+	return n.startInternal(ctx, noopProcName)
+}
+
+// Run is part of the Processor interface.
+func (n *noopProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if n.out.output == nil {
 		panic("noopProcessor output not initialized for emitting rows")
 	}
-	Run(n.flowCtx.Ctx, n, n.out.output)
+	ctx = n.Start(ctx)
+	Run(ctx, n, n.out.output)
 	if wg != nil {
 		wg.Done()
 	}
@@ -80,8 +90,6 @@ func (n *noopProcessor) producerMeta(err error) *ProducerMetadata {
 
 // Next is part of the RowSource interface.
 func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	n.maybeStart("noop", "" /* logTag */)
-
 	if n.closed {
 		return nil, n.producerMeta(nil /* err */)
 	}

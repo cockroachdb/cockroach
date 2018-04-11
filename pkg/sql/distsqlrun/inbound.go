@@ -120,7 +120,7 @@ func processInboundStreamHelper(
 	// Check for context cancellation while reading from the stream on another
 	// goroutine.
 	select {
-	case <-f.Ctx.Done():
+	case <-f.ctxDone:
 		return sqlbase.QueryCanceledError
 	case err := <-errChan:
 		return err

@@ -62,6 +62,9 @@ func (r *RepeatableRowSource) OutputTypes() []sqlbase.ColumnType {
 	return r.types
 }
 
+// Start is part of the RowSource interface.
+func (r *RepeatableRowSource) Start(ctx context.Context) context.Context { return ctx }
+
 // Next is part of the RowSource interface.
 func (r *RepeatableRowSource) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	// If we've emitted all rows, signal that we have reached the end.

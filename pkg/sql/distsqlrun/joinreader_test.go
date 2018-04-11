@@ -180,7 +180,6 @@ func TestJoinReader(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
 				Settings: st,
 				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
@@ -208,7 +207,7 @@ func TestJoinReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			jr.Run(nil)
+			jr.Run(context.Background(), nil /* wg */)
 
 			if !in.Done {
 				t.Fatal("joinReader didn't consume all the rows")
@@ -263,7 +262,6 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer sp.Finish()
 
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.LeafTxn),
@@ -283,7 +281,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(nil)
+		jr.Run(ctx, nil /* wg */)
 	})
 
 	// ConsumerDone verifies that the producer drains properly by checking that
@@ -302,7 +300,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		jr.Run(nil)
+		jr.Run(ctx, nil /* wg */)
 		row, meta := out.Next()
 		if row != nil {
 			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))

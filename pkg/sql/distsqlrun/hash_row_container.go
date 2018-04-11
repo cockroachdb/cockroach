@@ -31,6 +31,10 @@ import (
 // rowMarkerIterator is a rowIterator that can be used to mark rows.
 type rowMarkerIterator interface {
 	rowIterator
+	// Reset resets this iterator to point at a bucket that matches the given
+	// row. This will cause rowIterator.Rewind to rewind to the front of the
+	// input row's bucket.
+	Reset(ctx context.Context, row sqlbase.EncDatumRow) error
 	Mark(ctx context.Context, mark bool) error
 	IsMarked(ctx context.Context) bool
 }
@@ -100,7 +104,6 @@ func (e *columnEncoder) init(types []sqlbase.ColumnType, keyCols columns) {
 // encodeEqualityCols returns the encoding of the specified columns of the given
 // row. The returned byte slice is only valid until the next call to
 // encodeEqualityColumns().
-// TODO(asubiotto): This logic could be shared with the diskRowContainer.
 func (e *columnEncoder) encodeEqualityCols(
 	ctx context.Context, row sqlbase.EncDatumRow, eqCols columns,
 ) ([]byte, error) {
@@ -248,6 +251,7 @@ func (h *hashMemRowContainer) reserveMarkMemoryMaybe(ctx context.Context) error 
 // hashMemRowBucketIterator iterates over the rows in a bucket.
 type hashMemRowBucketIterator struct {
 	*hashMemRowContainer
+	probeEqCols columns
 	// rowIdxs are the indices of rows in the bucket.
 	rowIdxs []int
 	curIdx  int
@@ -259,12 +263,15 @@ var _ rowMarkerIterator = &hashMemRowBucketIterator{}
 func (h *hashMemRowContainer) NewBucketIterator(
 	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
 ) (rowMarkerIterator, error) {
-	encoded, err := h.encodeEqualityCols(ctx, row, probeEqCols)
-	if err != nil {
-		return nil, err
+	ret := &hashMemRowBucketIterator{
+		hashMemRowContainer: h,
+		probeEqCols:         probeEqCols,
 	}
 
-	return &hashMemRowBucketIterator{hashMemRowContainer: h, rowIdxs: h.buckets[string(encoded)]}, nil
+	if err := ret.Reset(ctx, row); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // Rewind implements the rowIterator interface.
@@ -312,6 +319,15 @@ func (i *hashMemRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	}
 
 	i.marked[i.rowIdxs[i.curIdx]] = mark
+	return nil
+}
+
+func (i *hashMemRowBucketIterator) Reset(ctx context.Context, row sqlbase.EncDatumRow) error {
+	encoded, err := i.encodeEqualityCols(ctx, row, i.probeEqCols)
+	if err != nil {
+		return err
+	}
+	i.rowIdxs = i.buckets[string(encoded)]
 	return nil
 }
 
@@ -450,39 +466,40 @@ func (h *hashDiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumR
 // hashDiskRowBucketIterator iterates over the rows in a bucket.
 type hashDiskRowBucketIterator struct {
 	diskRowIterator
-	hashDiskRowContainer *hashDiskRowContainer
+	*hashDiskRowContainer
+	probeEqCols columns
+	// haveMarkedRows returns true if we've marked rows since the last time we
+	// recreated our underlying diskRowIterator.
+	haveMarkedRows bool
 	// encodedEqCols is the encoding of the equality columns of the rows in the
 	// bucket that this iterator iterates over.
 	encodedEqCols []byte
 }
 
-var _ rowMarkerIterator = hashDiskRowBucketIterator{}
+var _ rowMarkerIterator = &hashDiskRowBucketIterator{}
 
 // NewBucketIterator implements the hashRowContainer interface.
 func (h *hashDiskRowContainer) NewBucketIterator(
 	ctx context.Context, row sqlbase.EncDatumRow, probeEqCols columns,
 ) (rowMarkerIterator, error) {
-	encoded, err := h.encodeEqualityCols(ctx, row, probeEqCols)
-	if err != nil {
+	ret := &hashDiskRowBucketIterator{
+		hashDiskRowContainer: h,
+		probeEqCols:          probeEqCols,
+		diskRowIterator:      h.NewIterator(ctx).(diskRowIterator),
+	}
+	if err := ret.Reset(ctx, row); err != nil {
 		return nil, err
 	}
-	encodedEqCols := make([]byte, len(encoded))
-	copy(encodedEqCols, encoded)
-
-	return hashDiskRowBucketIterator{
-		diskRowIterator:      h.NewIterator(ctx).(diskRowIterator),
-		hashDiskRowContainer: h,
-		encodedEqCols:        encodedEqCols,
-	}, nil
+	return ret, nil
 }
 
 // Rewind implements the rowIterator interface.
-func (i hashDiskRowBucketIterator) Rewind() {
+func (i *hashDiskRowBucketIterator) Rewind() {
 	i.Seek(i.encodedEqCols)
 }
 
 // Valid implements the rowIterator interface.
-func (i hashDiskRowBucketIterator) Valid() (bool, error) {
+func (i *hashDiskRowBucketIterator) Valid() (bool, error) {
 	ok, err := i.diskRowIterator.Valid()
 	if !ok || err != nil {
 		return ok, err
@@ -496,7 +513,7 @@ func (i hashDiskRowBucketIterator) Valid() (bool, error) {
 }
 
 // Row implements the rowIterator interface.
-func (i hashDiskRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
+func (i *hashDiskRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
 	row, err := i.diskRowIterator.Row()
 	if err != nil {
 		return nil, err
@@ -509,8 +526,24 @@ func (i hashDiskRowBucketIterator) Row() (sqlbase.EncDatumRow, error) {
 	return row, nil
 }
 
+func (i *hashDiskRowBucketIterator) Reset(ctx context.Context, row sqlbase.EncDatumRow) error {
+	encoded, err := i.hashDiskRowContainer.encodeEqualityCols(ctx, row, i.probeEqCols)
+	if err != nil {
+		return err
+	}
+	i.encodedEqCols = append(i.encodedEqCols[:0], encoded...)
+	if i.haveMarkedRows {
+		// We have to recreate our iterator if we need to flush marks to disk.
+		// TODO(jordan): do this less by keeping a cache of written marks.
+		i.haveMarkedRows = false
+		i.diskRowIterator.Close()
+		i.diskRowIterator = i.hashDiskRowContainer.NewIterator(ctx).(diskRowIterator)
+	}
+	return nil
+}
+
 // IsMarked implements the rowMarkerIterator interface.
-func (i hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
+func (i *hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 	if !i.hashDiskRowContainer.shouldMark {
 		log.Fatal(ctx, "hash disk row container not set up for marking")
 	}
@@ -524,10 +557,11 @@ func (i hashDiskRowBucketIterator) IsMarked(ctx context.Context) bool {
 }
 
 // Mark implements the rowMarkerIterator interface.
-func (i hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
+func (i *hashDiskRowBucketIterator) Mark(ctx context.Context, mark bool) error {
 	if !i.hashDiskRowContainer.shouldMark {
 		log.Fatal(ctx, "hash disk row container not set up for marking")
 	}
+	i.haveMarkedRows = true
 	markBytes := encodedFalse
 	if mark {
 		markBytes = encodedTrue
@@ -555,12 +589,12 @@ type hashDiskRowIterator struct {
 	diskRowIterator
 }
 
-var _ rowIterator = hashDiskRowIterator{}
+var _ rowIterator = &hashDiskRowIterator{}
 
 // NewUnmarkedIterator implements the hashRowContainer interface.
 func (h *hashDiskRowContainer) NewUnmarkedIterator(ctx context.Context) rowIterator {
 	if h.shouldMark {
-		return hashDiskRowIterator{
+		return &hashDiskRowIterator{
 			diskRowIterator: h.NewIterator(ctx).(diskRowIterator),
 		}
 	}
@@ -568,7 +602,7 @@ func (h *hashDiskRowContainer) NewUnmarkedIterator(ctx context.Context) rowItera
 }
 
 // Rewind implements the rowIterator interface.
-func (i hashDiskRowIterator) Rewind() {
+func (i *hashDiskRowIterator) Rewind() {
 	i.diskRowIterator.Rewind()
 	// If the current row is marked, move the iterator to the next unmarked row.
 	if i.isRowMarked() {
@@ -577,7 +611,7 @@ func (i hashDiskRowIterator) Rewind() {
 }
 
 // Next implements the rowIterator interface.
-func (i hashDiskRowIterator) Next() {
+func (i *hashDiskRowIterator) Next() {
 	i.diskRowIterator.Next()
 	for i.isRowMarked() {
 		i.diskRowIterator.Next()
@@ -585,7 +619,7 @@ func (i hashDiskRowIterator) Next() {
 }
 
 // Row implements the rowIterator interface.
-func (i hashDiskRowIterator) Row() (sqlbase.EncDatumRow, error) {
+func (i *hashDiskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	row, err := i.diskRowIterator.Row()
 	if err != nil {
 		return nil, err
@@ -599,7 +633,7 @@ func (i hashDiskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 // isRowMarked returns true if the current row is marked or false if it wasn't
 // marked or there was an error establishing the row's validity. Subsequent
 // calls to Valid() will uncover this error.
-func (i hashDiskRowIterator) isRowMarked() bool {
+func (i *hashDiskRowIterator) isRowMarked() bool {
 	// isRowMarked is not necessarily called after Valid().
 	ok, err := i.diskRowIterator.Valid()
 	if !ok || err != nil {

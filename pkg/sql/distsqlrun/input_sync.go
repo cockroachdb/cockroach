@@ -259,6 +259,14 @@ func (s *orderedSynchronizer) drainSources() {
 	}
 }
 
+// Start is part of the RowSource interface.
+func (s *orderedSynchronizer) Start(ctx context.Context) context.Context {
+	for _, src := range s.sources {
+		src.src.Start(ctx)
+	}
+	return ctx
+}
+
 // Next is part of the RowSource interface.
 func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.state == notInitialized {

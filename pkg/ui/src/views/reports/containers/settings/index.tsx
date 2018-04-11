@@ -1,5 +1,6 @@
 import _ from "lodash";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
@@ -77,6 +78,9 @@ class Settings extends React.Component<SettingsProps, {}> {
 
     return (
       <div className="section">
+        <Helmet>
+          <title>Cluster Settings | Debug</title>
+        </Helmet>
         <h1>Cluster Settings</h1>
         <h2></h2>
         <Loading

@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouterState, Link } from "react-router";
@@ -61,6 +62,9 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
     return (
       <div>
+        <Helmet>
+          <title>{`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`}</title>
+        </Helmet>
         <div className="section section--heading">
           <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>

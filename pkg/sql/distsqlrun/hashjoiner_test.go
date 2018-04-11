@@ -919,7 +919,6 @@ func TestHashJoiner(t *testing.T) {
 				rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
-					Ctx:         ctx,
 					Settings:    st,
 					EvalCtx:     evalCtx,
 					TempStorage: tempEngine,
@@ -933,7 +932,7 @@ func TestHashJoiner(t *testing.T) {
 				outTypes := h.OutputTypes()
 				setup(h)
 				h.forcedStoredSide = &side
-				h.Run(nil)
+				h.Run(context.Background(), nil /* wg */)
 
 				if !out.ProducerClosed {
 					return errors.New("output RowReceiver not closed")
@@ -1089,7 +1088,6 @@ func TestHashJoinerError(t *testing.T) {
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
-				Ctx:         ctx,
 				Settings:    st,
 				EvalCtx:     evalCtx,
 				TempStorage: tempEngine,
@@ -1103,7 +1101,7 @@ func TestHashJoinerError(t *testing.T) {
 			}
 			outTypes := h.OutputTypes()
 			setup(h)
-			h.Run(nil)
+			h.Run(context.Background(), nil /* wg */)
 
 			if !out.ProducerClosed {
 				return errors.New("output RowReceiver not closed")
@@ -1224,7 +1222,6 @@ func TestHashJoinerDrain(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		Ctx:      ctx,
 		Settings: settings,
 		EvalCtx:  evalCtx,
 	}
@@ -1240,7 +1237,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	h.initialBufferSize = 0
 
 	out.ConsumerDone()
-	h.Run(nil)
+	h.Run(context.Background(), nil /* wg */)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -1348,7 +1345,6 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Ctx:      context.Background(),
 		Settings: st,
 		EvalCtx:  evalCtx,
 	}
@@ -1361,7 +1357,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	// Disable initial buffering. We always store the right stream in this case.
 	h.initialBufferSize = 0
 
-	h.Run(nil)
+	h.Run(context.Background(), nil /* wg */)
 
 	if !out.ProducerClosed {
 		t.Fatalf("output RowReceiver not closed")
@@ -1396,11 +1392,28 @@ func BenchmarkHashJoiner(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
 	flowCtx := &FlowCtx{
-		Ctx:      ctx,
-		Settings: st,
-		EvalCtx:  evalCtx,
+		Settings:    st,
+		EvalCtx:     evalCtx,
+		diskMonitor: &diskMonitor,
 	}
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer tempEngine.Close()
+	flowCtx.TempStorage = tempEngine
 
 	spec := &HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -1411,23 +1424,35 @@ func BenchmarkHashJoiner(b *testing.B) {
 	post := &PostProcessSpec{}
 
 	const numCols = 1
-	for _, numRows := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			rows := makeIntRows(numRows, numCols)
-			leftInput := NewRepeatableRowSource(oneIntCol, rows)
-			rightInput := NewRepeatableRowSource(oneIntCol, rows)
-			b.SetBytes(int64(8 * numRows * numCols))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				// TODO(asubiotto): Get rid of uncleared state between
-				// hashJoiner Run()s to omit instantiation time from benchmarks.
-				h, err := newHashJoiner(flowCtx, spec, leftInput, rightInput, post, &RowDisposer{})
-				if err != nil {
-					b.Fatal(err)
+	for _, spill := range []bool{true, false} {
+		if spill {
+			flowCtx.testingKnobs.MemoryLimitBytes = 1
+		}
+		b.Run(fmt.Sprintf("spill=%t", spill), func(b *testing.B) {
+			for _, numRows := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+				if spill && numRows < 1<<8 {
+					// The benchmark takes a long time with a small number of rows and
+					// spilling, since the times change wildly. Disable for now.
+					continue
 				}
-				h.Run(nil)
-				leftInput.Reset()
-				rightInput.Reset()
+				b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+					rows := makeIntRows(numRows, numCols)
+					leftInput := NewRepeatableRowSource(oneIntCol, rows)
+					rightInput := NewRepeatableRowSource(oneIntCol, rows)
+					b.SetBytes(int64(8 * numRows * numCols))
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						// TODO(asubiotto): Get rid of uncleared state between
+						// hashJoiner Run()s to omit instantiation time from benchmarks.
+						h, err := newHashJoiner(flowCtx, spec, leftInput, rightInput, post, &RowDisposer{})
+						if err != nil {
+							b.Fatal(err)
+						}
+						h.Run(context.Background(), nil /* wg */)
+						leftInput.Reset()
+						rightInput.Reset()
+					}
+				})
 			}
 		})
 	}

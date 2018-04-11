@@ -15,6 +15,8 @@
 package distsqlrun
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -35,6 +37,11 @@ type streamMerger struct {
 	// during SCRUB secondary index checks.
 	nullEquality bool
 	datumAlloc   sqlbase.DatumAlloc
+}
+
+func (sm *streamMerger) start(ctx context.Context) {
+	sm.left.start(ctx)
+	sm.right.start(ctx)
 }
 
 // NextBatch returns a set of rows from the left stream and a set of rows from
