@@ -2087,18 +2087,22 @@ func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool 
 }
 
 // shouldUseDistSQL determines whether we should use DistSQL for the
-// given logical plan, based on the session settings.
+// given logical plan, based on the session settings. If plan is nil,
+// planner.curPlan.plan is used as plan.
 func shouldUseDistSQL(
 	ctx context.Context,
 	distSQLMode sessiondata.DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *planner,
+	plan planNode,
 ) (bool, error) {
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false, nil
 	}
 
-	plan := planner.curPlan.plan
+	if plan == nil {
+		plan = planner.curPlan.plan
+	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.(*zeroNode); ok {
@@ -2196,7 +2200,7 @@ func (e *Executor) execStmt(
 	if !useOptimizer {
 		var err error
 		useDistSQL, err = shouldUseDistSQL(
-			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner,
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, nil,
 		)
 		if err != nil {
 			return err
