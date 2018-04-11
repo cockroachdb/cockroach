@@ -252,12 +252,15 @@ func (k *testKafkaProducer) Messages() []*sarama.ProducerMessage {
 	return msgs
 }
 
+// WaitUntilNewMessages waits until one full poll has finished (every new
+// message has been added) and there is at least one message waiting to be read.
+// Then, all messages waiting to be read are consumed and returned.
 func (k *testKafkaProducer) WaitUntilNewMessages() []*sarama.ProducerMessage {
 	for {
+		<-k.flushCh
 		if msgs := k.Messages(); len(msgs) > 0 {
 			return msgs
 		}
-		<-k.flushCh
 	}
 }
 
