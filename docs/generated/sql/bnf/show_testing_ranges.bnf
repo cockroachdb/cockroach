@@ -1,0 +1,3 @@
+show_testing_stmt ::=
+	'SHOW' 'TESTING_RANGES' 'FROM' 'TABLE' table_name
+	| 'SHOW' 'TESTING_RANGES' 'FROM' 'INDEX' table_name_with_index
