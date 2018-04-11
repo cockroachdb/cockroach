@@ -295,6 +295,30 @@ project
            ├── variable: a.y [type=int]
            └── const: 2 [type=int]
 
+# FetchVal, FetchText, FetchValPath, FetchTextPath
+build
+SELECT '[1, 2]'->1, '[1, 2]'->>1, '{"a": 5}'#>ARRAY['a'], '{"a": 5}'#>>ARRAY['a'] FROM a
+----
+project
+ ├── columns: column3:3(jsonb) column4:4(string) column5:5(jsonb) column6:6(string)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(int)
+ └── projections
+      ├── fetch-val [type=jsonb]
+      │    ├── const: '[1, 2]' [type=jsonb]
+      │    └── const: 1 [type=int]
+      ├── fetch-text [type=string]
+      │    ├── const: '[1, 2]' [type=jsonb]
+      │    └── const: 1 [type=int]
+      ├── fetch-val-path [type=jsonb]
+      │    ├── const: '{"a": 5}' [type=jsonb]
+      │    └── array: string[] [type=string[]]
+      │         └── const: 'a' [type=string]
+      └── fetch-text-path [type=string]
+           ├── const: '{"a": 5}' [type=jsonb]
+           └── array: string[] [type=string[]]
+                └── const: 'a' [type=string]
+
 # Concat
 build
 SELECT b.x || 'more' FROM b
