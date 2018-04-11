@@ -95,7 +95,7 @@ func clearExistingData(
 		}
 	}
 
-	iter := batch.NewIterator(false)
+	iter := batch.NewIterator(engine.IterOptions{})
 	defer iter.Close()
 
 	iter.Seek(start)

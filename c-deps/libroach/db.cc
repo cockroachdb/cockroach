@@ -15,6 +15,8 @@
 #include "db.h"
 #include <algorithm>
 #include <rocksdb/convenience.h>
+#include <rocksdb/iostats_context.h>
+#include <rocksdb/perf_context.h>
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
 #include <stdarg.h>
@@ -57,6 +59,25 @@ DBKey ToDBKey(const rocksdb::Slice& s) {
   return key;
 }
 
+void DBIterSetupStats(DBIterator* iter) {
+  if (iter->stats != nullptr) {
+    rocksdb::get_perf_context()->Reset();
+    rocksdb::get_iostats_context()->Reset();
+    // TODO(tschottdorf): managing the perf level is a little awkward.
+    // Is this (and the sibling in DBIterAggStats) the best we can do?
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+  }
+}
+
+void DBIterAggStats(DBIterator* iter) {
+  if (iter->stats != nullptr) {
+    auto pctx = rocksdb::get_perf_context();
+    // auto ioctx = rocksdb::get_iostats_context()->Reset();
+    iter->stats->internal_delete_skipped_count += pctx->internal_delete_skipped_count;
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+  }
+}
+
 }  // namespace cockroach
 
 namespace {
@@ -74,6 +95,8 @@ DBIterState DBIterGetState(DBIterator* iter) {
       state.value = ToDBSlice(iter->rep->value());
     }
   }
+
+  DBIterAggStats(iter);
   return state;
 }
 
@@ -370,11 +393,18 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
   return db->EnvWriteFile(path, contents);
 }
 
-DBIterator* DBNewIter(DBEngine* db, bool prefix) {
+DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
   rocksdb::ReadOptions opts;
   opts.prefix_same_as_start = prefix;
   opts.total_order_seek = !prefix;
-  return db->NewIter(&opts);
+  auto db_iter = db->NewIter(&opts);
+
+  if (stats) {
+    db_iter->stats.reset(new IteratorStats);
+    *db_iter->stats = {};
+  }
+
+  return db_iter;
 }
 
 DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts) {
@@ -396,27 +426,48 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
     // want to iterate, the table might contain timestamps we care about.
     return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
   };
-  return db->NewIter(&opts);
+
+  auto db_iter = db->NewIter(&opts);
+  // TODO(tschottdorf): plumb this in. We should be able to figure out
+  // how many SSTables this touches, which will be interesting. I'm not
+  // sure which of the stats indicates that number, though.
+  bool stats = false;
+  if (stats) {
+    db_iter->stats.reset(new IteratorStats);
+  }
+  return db_iter;
 }
 
 void DBIterDestroy(DBIterator* iter) { delete iter; }
 
+IteratorStats DBIterStats(DBIterator* iter) {
+  IteratorStats stats = {};
+  if (iter->stats != nullptr) {
+    stats = *iter->stats;
+  }
+  return stats;
+}
+
 DBIterState DBIterSeek(DBIterator* iter, DBKey key) {
+  DBIterSetupStats(iter);
   iter->rep->Seek(EncodeKey(key));
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterSeekToFirst(DBIterator* iter) {
+  DBIterSetupStats(iter);
   iter->rep->SeekToFirst();
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterSeekToLast(DBIterator* iter) {
+  DBIterSetupStats(iter);
   iter->rep->SeekToLast();
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
+  DBIterSetupStats(iter);
   // If we're skipping the current key versions, remember the key the
   // iterator was pointing out.
   std::string old_key;
@@ -459,6 +510,7 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
 }
 
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
+  DBIterSetupStats(iter);
   // If we're skipping the current key versions, remember the key the
   // iterator was pointed out.
   std::string old_key;

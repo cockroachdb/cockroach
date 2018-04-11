@@ -377,7 +377,7 @@ func (r *Replica) sha512(
 	legacyTombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneIncorrectLegacyKey(desc.RangeID))
 
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(false /* prefix */)
+	iter := snap.NewIterator(engine.IterOptions{})
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator

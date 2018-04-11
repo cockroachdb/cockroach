@@ -96,7 +96,7 @@ func TruncateLog(
 		//
 		// Note that any sideloaded payloads that may be removed by this truncation
 		// don't matter; they're not tracked in the raft log delta.
-		iter := batch.NewIterator(false /* prefix */)
+		iter := batch.NewIterator(engine.IterOptions{})
 		defer iter.Close()
 		// We can pass zero as nowNanos because we're only interested in SysBytes.
 		var err error

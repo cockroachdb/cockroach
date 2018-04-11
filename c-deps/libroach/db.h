@@ -71,4 +71,7 @@ std::string EncodeKey(DBKey k);
 MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
                                          DBKey end, int64_t now_nanos);
 
+void DBIterSetupStats(DBIterator* iter);
+void DBIterAggStats(DBIterator* iter);
+
 }  // namespace cockroach

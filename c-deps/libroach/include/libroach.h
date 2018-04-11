@@ -175,9 +175,11 @@ DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 // the user-key prefix of the key supplied to DBIterSeek() to restrict
 // which sstables are searched, but iteration (using Next) over keys
 // without the same user-key prefix will not work correctly (keys may
-// be skipped). It is the callers responsibility to call
-// DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, bool prefix);
+// be skipped). When stats is true, the iterator will collect RocksDB
+// performance counters which can be retrieved via `DBIterStats`.
+//
+// It is the callers responsibility to call DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats);
 
 DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts);
 
@@ -186,6 +188,14 @@ void DBIterDestroy(DBIterator* iter);
 
 // Positions the iterator at the first key that is >= "key".
 DBIterState DBIterSeek(DBIterator* iter, DBKey key);
+
+typedef struct {
+  uint64_t internal_delete_skipped_count;
+  // New fields added here must also be added in various other places;
+  // just grep the repo for internal_delete_skipped_count. Sorry.
+} IteratorStats;
+
+IteratorStats DBIterStats(DBIterator* iter);
 
 // Positions the iterator at the first key in the database.
 DBIterState DBIterSeekToFirst(DBIterator* iter);
