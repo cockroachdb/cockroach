@@ -477,6 +477,9 @@ func (v *planVisitor) visit(plan planNode) {
 			v.visit(n.plan)
 		}
 
+	case *distSQLWrapper:
+		v.visit(n.plan)
+
 	case *explainDistSQLNode:
 		v.visit(n.plan)
 
@@ -570,7 +573,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",
 	reflect.TypeOf(&createTableNode{}):          "create table",
-	reflect.TypeOf(&CreateUserNode{}):           "create user | role",
+	reflect.TypeOf(&CreateUserNode{}):           "create user/role",
 	reflect.TypeOf(&createViewNode{}):           "create view",
 	reflect.TypeOf(&createSequenceNode{}):       "create sequence",
 	reflect.TypeOf(&createStatsNode{}):          "create statistics",
@@ -582,8 +585,9 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTableNode{}):            "drop table",
 	reflect.TypeOf(&dropViewNode{}):             "drop view",
 	reflect.TypeOf(&dropSequenceNode{}):         "drop sequence",
-	reflect.TypeOf(&DropUserNode{}):             "drop user | role",
-	reflect.TypeOf(&explainDistSQLNode{}):       "explain dist_sql",
+	reflect.TypeOf(&DropUserNode{}):             "drop user/role",
+	reflect.TypeOf(&distSQLWrapper{}):           "distsql query",
+	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
 	reflect.TypeOf(&showTraceNode{}):            "show trace for",
 	reflect.TypeOf(&showTraceReplicaNode{}):     "show trace for",
