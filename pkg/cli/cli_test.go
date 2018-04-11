@@ -58,6 +58,8 @@ type cliTest struct {
 	// logScope binds the lifetime of the log files to this test, when t
 	// is not nil
 	logScope *log.TestLogScope
+	// if true, doesn't print args during RunWithArgs
+	omitArgs bool
 }
 
 type cliTestParams struct {
@@ -290,8 +292,10 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 		}
 		args = append(args, origArgs[1:]...)
 
-		fmt.Fprintf(os.Stderr, "%s\n", args)
-		fmt.Println(strings.Join(origArgs, " "))
+		if !c.omitArgs {
+			fmt.Fprintf(os.Stderr, "%s\n", args)
+			fmt.Println(strings.Join(origArgs, " "))
+		}
 
 		return Run(args)
 	}(); err != nil {
@@ -1693,7 +1697,7 @@ Use "cockroach [command] --help" for more information about a command.
 			}
 
 			// Filter out all test flags.
-			testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule)`)
+			testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule|rewrite)`)
 			lines := strings.Split(buf.String(), "\n")
 			final := []string{}
 			for _, l := range lines {
