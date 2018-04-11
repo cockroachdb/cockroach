@@ -270,22 +270,22 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 		return nil, errors.New("not enough parts found")
 	}
 
-	var pu pemUsage
+	var fileUsage pemUsage
 	var name string
 	prefix := parts[0]
 	switch parts[0] {
 	case `ca`:
-		pu = CAPem
+		fileUsage = CAPem
 		if numParts != 2 {
 			return nil, errors.Errorf("CA certificate filename should match ca%s", certExtension)
 		}
 	case `node`:
-		pu = NodePem
+		fileUsage = NodePem
 		if numParts != 2 {
 			return nil, errors.Errorf("node certificate filename should match node%s", certExtension)
 		}
 	case `client`:
-		pu = ClientPem
+		fileUsage = ClientPem
 		// strip prefix and suffix and re-join middle parts.
 		name = strings.Join(parts[1:numParts-1], `.`)
 		if len(name) == 0 {
@@ -303,7 +303,7 @@ func (cl *CertificateLoader) certInfoFromFilename(filename string) (*CertInfo, e
 	}
 
 	return &CertInfo{
-		FileUsage:    pu,
+		FileUsage:    fileUsage,
 		Filename:     filename,
 		FileContents: certPEMBlock,
 		Name:         name,
@@ -380,9 +380,12 @@ func parseCertificate(ci *CertInfo) error {
 	for i, c := range derCerts {
 		x509Cert, err := x509.ParseCertificate(c.Bytes)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse certificate at position %d in file %s", i, ci.Filename)
+			return errors.Wrapf(err, "failed to parse certificate %d in file %s", i, ci.Filename)
 		}
 
+		if err := validateCockroachCertificate(ci, x509Cert); err != nil {
+			return errors.Wrapf(err, "failed to validate certificate %d in file %s", i, ci.Filename)
+		}
 		if x509Cert.NotAfter.After(latest) {
 			latest = x509Cert.NotAfter
 		}
@@ -391,5 +394,68 @@ func parseCertificate(ci *CertInfo) error {
 
 	ci.ParsedCertificates = certs
 	ci.ExpirationTime = latest
+	return nil
+}
+
+// validateCockroachCertificate takes a CertInfo and a parsed certificate and checks the
+// values of certain fields.
+func validateCockroachCertificate(ci *CertInfo, cert *x509.Certificate) error {
+
+	hasKeyUsage := func(usage x509.KeyUsage) bool {
+		return cert.KeyUsage&usage != 0
+	}
+
+	hasExtendedKeyUsage := func(usage x509.ExtKeyUsage) bool {
+		if cert.ExtKeyUsage == nil {
+			return false
+		}
+		for _, u := range cert.ExtKeyUsage {
+			if u == usage {
+				return true
+			}
+		}
+		return false
+	}
+
+	switch ci.FileUsage {
+	case NodePem:
+		// Check Subject Common Name.
+		if a, e := cert.Subject.CommonName, NodeUser; a != e {
+			return errors.Errorf("node certificate has Subject \"CN=%s\", expected \"CN=%s\"", a, e)
+		}
+
+		// Check key usages.
+		hasEncipherment := hasKeyUsage(x509.KeyUsageKeyEncipherment)
+		hasSignature := hasKeyUsage(x509.KeyUsageDigitalSignature)
+		if !hasEncipherment || !hasSignature {
+			return errors.Errorf("node certificate key usages: KeyEncipherment=%t, DigitalSignature=%t, but both are needed",
+				hasEncipherment, hasSignature)
+		}
+
+		hasServer := hasExtendedKeyUsage(x509.ExtKeyUsageServerAuth)
+		hasClient := hasExtendedKeyUsage(x509.ExtKeyUsageClientAuth)
+		if !hasServer || !hasClient {
+			return errors.Errorf("node certificate extended key usages: ServerAuth=%t, ClientAuth=%t, but both are needed",
+				hasServer, hasClient)
+		}
+	case ClientPem:
+		// Check that CommonName matches the username extracted from the filename.
+		if a, e := cert.Subject.CommonName, ci.Name; a != e {
+			return errors.Errorf("client certificate has Subject \"CN=%s\", expected \"CN=%s\" (must match filename)", a, e)
+		}
+
+		// Check key usages.
+		hasEncipherment := hasKeyUsage(x509.KeyUsageKeyEncipherment)
+		hasSignature := hasKeyUsage(x509.KeyUsageDigitalSignature)
+		if !hasEncipherment || !hasSignature {
+			return errors.Errorf("client certificate key usages: KeyEncipherment=%t, DigitalSignature=%t, but both are needed",
+				hasEncipherment, hasSignature)
+		}
+
+		if !hasExtendedKeyUsage(x509.ExtKeyUsageClientAuth) {
+			return errors.Errorf("client certificate does not have ClientAuth extended key usage")
+		}
+
+	}
 	return nil
 }
