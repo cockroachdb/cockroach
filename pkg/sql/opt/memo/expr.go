@@ -39,6 +39,10 @@ type ExprID struct {
 	Expr  ExprOrdinal
 }
 
+// InvalidExprID is the uninitialized ExprID that never points to a valid
+// expression.
+var InvalidExprID = ExprID{}
+
 // MakeNormExprID returns the id of the normalized expression for the given
 // group.
 func MakeNormExprID(group GroupID) ExprID {
