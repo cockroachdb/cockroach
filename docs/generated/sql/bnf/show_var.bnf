@@ -18,5 +18,6 @@ show_stmt ::=
 	| show_sessions_stmt
 	| show_stats_stmt
 	| show_tables_stmt
+	| show_testing_stmt
 	| show_trace_stmt
 	| show_users_stmt

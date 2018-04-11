@@ -1029,6 +1029,10 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TABLES'")},
 	},
 	{
+		name: "show_testing_ranges",
+		stmt: "show_testing_stmt",
+	},
+	{
 		name:    "show_trace",
 		stmt:    "show_trace_stmt",
 		inline:  []string{"opt_compact"},

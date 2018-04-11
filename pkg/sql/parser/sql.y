@@ -3075,12 +3075,10 @@ show_zone_stmt:
 show_testing_stmt:
   SHOW TESTING_RANGES FROM TABLE table_name
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowRanges{Table: $5.newNormalizableTableNameFromUnresolvedName()}
   }
 | SHOW TESTING_RANGES FROM INDEX table_name_with_index
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowRanges{Index: $5.newTableWithIdx()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
