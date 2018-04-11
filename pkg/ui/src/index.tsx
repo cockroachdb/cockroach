@@ -38,7 +38,6 @@ import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
-import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
@@ -86,11 +85,8 @@ ReactDOM.render(
         </Route>
 
         { /* node details */ }
-        <Route path="nodes">
-          <IndexRoute component={ NodesOverview } />
-        </Route>
         <Route path="node">
-          <IndexRedirect to="/nodes" />
+          <IndexRedirect to="/overview/list" />
           <Route path={ `:${nodeIDAttr}` }>
             <IndexRoute component={ NodeOverview } />
             <Route path="logs" component={ NodeLogs } />
@@ -159,13 +155,16 @@ ReactDOM.render(
             to={ `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}` }
           />
           <Route path="nodes">
-            <IndexRedirect to="/nodes" />
+            <IndexRedirect to="/overview/list" />
             <Route path={`:${nodeIDAttr}`}>
               <IndexRedirect to={ `/node/:${nodeIDAttr}` } />
               <Redirect from="logs" to={ `/node/:${nodeIDAttr}/logs` } />
             </Route>
           </Route>
           <Redirect from="events" to="/events" />
+        </Route>
+        <Route path="nodes">
+          <IndexRedirect to="/overview/list" />
         </Route>
 
         { /* 404 */ }

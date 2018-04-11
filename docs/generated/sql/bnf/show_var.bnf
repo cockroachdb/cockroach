@@ -12,6 +12,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_jobs_stmt
 	| show_queries_stmt
+	| show_ranges_stmt
 	| show_roles_stmt
 	| show_schemas_stmt
 	| show_session_stmt

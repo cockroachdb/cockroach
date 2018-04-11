@@ -152,6 +152,7 @@ show_stmt ::=
 	| show_indexes_stmt
 	| show_jobs_stmt
 	| show_queries_stmt
+	| show_ranges_stmt
 	| show_roles_stmt
 	| show_schemas_stmt
 	| show_session_stmt
@@ -468,6 +469,10 @@ show_queries_stmt ::=
 	| 'SHOW' 'CLUSTER' 'QUERIES'
 	| 'SHOW' 'LOCAL' 'QUERIES'
 
+show_ranges_stmt ::=
+	'SHOW' ranges_kw 'FROM' 'TABLE' table_name
+	| 'SHOW' ranges_kw 'FROM' 'INDEX' table_name_with_index
+
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
 
@@ -652,6 +657,8 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL_AUDIT'
 	| 'EXPERIMENTAL_CHANGEFEED'
 	| 'EXPERIMENTAL_FINGERPRINTS'
+	| 'EXPERIMENTAL_RANGES'
+	| 'EXPERIMENTAL_RELOCATE'
 	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPLAIN'
 	| 'FILTER'
@@ -1047,6 +1054,14 @@ for_grantee_clause ::=
 	'FOR' name_list
 	| 
 
+ranges_kw ::=
+	'TESTING_RANGES'
+	| 'EXPERIMENTAL_RANGES'
+
+table_name_with_index ::=
+	table_name '@' index_name
+	| table_name
+
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -1396,10 +1411,6 @@ opt_column ::=
 
 column_name ::=
 	name
-
-table_name_with_index ::=
-	table_name '@' index_name
-	| table_name
 
 alter_index_cmds ::=
 	( alter_index_cmd ) ( ( ',' alter_index_cmd ) )*
