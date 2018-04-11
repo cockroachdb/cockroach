@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 import moment from "moment";
@@ -386,6 +387,9 @@ const NodesMainConnected = connect(
 function NodesPage() {
   return (
     <div>
+      <Helmet>
+        <title>Nodes</title>
+      </Helmet>
       <NodesMainConnected />
     </div>
   );

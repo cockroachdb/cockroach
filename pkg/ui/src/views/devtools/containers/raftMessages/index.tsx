@@ -65,10 +65,6 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     },
   );
 
-  static title() {
-    return "Raft Messages";
-  }
-
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
       props.refreshNodes();

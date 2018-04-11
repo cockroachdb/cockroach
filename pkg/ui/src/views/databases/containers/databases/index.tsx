@@ -1,6 +1,7 @@
 import _ from "lodash";
 import React from "react";
 import PropTypes from "prop-types";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { InjectedRouter, RouterState } from "react-router";
 
@@ -69,16 +70,16 @@ type DatabaseListProps = DatabaseListData & DatabaseListActions;
 
 // DatabaseTablesList displays the "Tables" sub-tab of the main database page.
 class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
-  static title() {
-    return "Databases";
-  }
-
   componentWillMount() {
     this.props.refreshDatabases();
   }
 
   render() {
     return <div>
+      <Helmet>
+        <title>Tables | Databases</title>
+      </Helmet>
+      <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {
@@ -95,16 +96,16 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
 
 // DatabaseTablesList displays the "Grants" sub-tab of the main database page.
 class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
-  static title() {
-    return "Databases";
-  }
-
   componentWillMount() {
     this.props.refreshDatabases();
   }
 
   render() {
     return <div>
+      <Helmet>
+        <title>Grants | Databases</title>
+      </Helmet>
+      <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
         { _.map(this.props.databaseNames, (n) => {

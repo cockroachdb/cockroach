@@ -3,6 +3,7 @@ import _ from "lodash";
 import Long from "long";
 import moment from "moment";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
@@ -332,6 +333,9 @@ class Nodes extends React.Component<NodesProps, {}> {
 
     return (
       <section className="section">
+        <Helmet>
+          <title>Node Diagnostics | Debug</title>
+        </Helmet>
         <h1>Node Diagnostics</h1>
         <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
         <h2>Nodes</h2>
