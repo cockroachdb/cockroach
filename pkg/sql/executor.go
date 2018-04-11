@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -266,6 +267,7 @@ type ExecutorConfig struct {
 	JobRegistry     *jobs.Registry
 	VirtualSchemas  *VirtualSchemaHolder
 	DistSQLPlanner  *DistSQLPlanner
+	TableStatsCache *stats.TableStatisticsCache
 	ExecLogger      *log.SecondaryLogger
 	AuditLogger     *log.SecondaryLogger
 
