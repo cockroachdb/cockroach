@@ -72,6 +72,10 @@ type planMaker interface {
 
 var _ planMaker = &planner{}
 
+// RunParams is passed around by some hooks outside `sql` but has no exported
+// members so even exported it remains essentially opaque to external users.
+type RunParams runParams
+
 // runParams is a struct containing all parameters passed to planNode.Next() and
 // planNode.Start().
 type runParams struct {
@@ -523,10 +527,10 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
 	for _, planHook := range planHooks {
-		if fn, header, err := planHook(ctx, stmt, p); err != nil {
+		if fn, header, subplans, err := planHook(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
-			return &hookFnNode{f: fn, header: header}, nil
+			return &hookFnNode{f: fn, header: header, subplans: subplans}, nil
 		}
 	}
 	for _, planHook := range wrappedPlanHooks {
