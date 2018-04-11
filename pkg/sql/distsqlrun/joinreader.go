@@ -57,12 +57,7 @@ type joinReader struct {
 	inputTypes []sqlbase.ColumnType
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
-	// Further described in JoinReaderSpec.IndexMap found in processors.proto.
 	lookupCols columns
-	// The index map is used in lookup joins to retrieve the index rows from the
-	// internal columns.
-	// Further described in JoinReaderSpec.IndexMap found in processors.proto.
-	indexMap []uint32
 
 	renderedRow sqlbase.EncDatumRow
 }
@@ -88,10 +83,7 @@ func newJoinReader(
 		input:      input,
 		inputTypes: input.OutputTypes(),
 		lookupCols: spec.LookupColumns,
-		indexMap:   spec.IndexMap,
 	}
-
-	types := jr.getOutputTypes()
 
 	var err error
 	jr.index, _, err = jr.desc.FindIndexByIndexIdx(int(spec.IndexIdx))
@@ -102,19 +94,25 @@ func newJoinReader(
 	for i := 0; i < len(jr.index.ColumnIDs); i++ {
 		indexCols[i] = uint32(jr.index.ColumnIDs[i])
 	}
-	if err := jr.joinerBase.init(
-		flowCtx,
-		input.OutputTypes(),
-		jr.desc.ColumnTypes(),
-		sqlbase.InnerJoin,
-		spec.OnExpr,
-		jr.lookupCols,
-		indexCols,
-		0, /* numMergedColumns */
-		post,
-		output,
-	); err != nil {
-		return nil, err
+	if jr.isLookupJoin() {
+		if err := jr.joinerBase.init(
+			flowCtx,
+			input.OutputTypes(),
+			jr.desc.ColumnTypes(),
+			sqlbase.InnerJoin,
+			spec.OnExpr,
+			jr.lookupCols,
+			indexCols,
+			0, /* numMergedColumns */
+			post,
+			output,
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := jr.processorBase.init(post, jr.desc.ColumnTypes(), flowCtx, output); err != nil {
+			return nil, err
+		}
 	}
 
 	_, _, err = initRowFetcher(
@@ -125,75 +123,37 @@ func newJoinReader(
 		return nil, err
 	}
 
-	jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(types))
+	jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(jr.out.outputCols))
 
 	// TODO(radu): verify the input types match the index key types
 
 	return jr, nil
 }
 
-// For an index join only the right side (primary index side) is emitted.
-// For a lookup join, both sides are included in the output.
-func (jr *joinReader) getOutputTypes() []sqlbase.ColumnType {
-	numTypes := len(jr.desc.Columns)
-	if jr.isLookupJoin() {
-		numTypes += len(jr.input.OutputTypes())
-	}
-
-	types := make([]sqlbase.ColumnType, numTypes)
-	i := 0
-	if jr.isLookupJoin() {
-		for _, t := range jr.input.OutputTypes() {
-			types[i] = t
-			i++
-		}
-	}
-	for _, col := range jr.desc.Columns {
-		types[i] = col.Type
-		i++
-	}
-	return types
-}
-
 // The rows that will be non-empty when fetched from the row fetcher. Used so
 // extra information doesn't need to be sent over the wire.
 func (jr *joinReader) rowFetcherColumns() util.FastIntSet {
-	// Collect the columns needed for the output as well as for evaluating the
-	// on condition.
-	neededColIdxs := jr.out.neededColumns()
+	neededCols := jr.out.neededColumns()
+	if !jr.isLookupJoin() {
+		return neededCols
+	}
+
+	// Get the columns from the right side of the join and shift them over by
+	// the size of the left side so the right side starts at 0.
+	rowFetcherColumns := util.MakeFastIntSet()
+	for i, ok := neededCols.Next(len(jr.inputTypes)); ok; i, ok = neededCols.Next(i + 1) {
+		rowFetcherColumns.Add(i - len(jr.inputTypes))
+	}
+
+	// Add columns needed by OnExpr.
 	for _, v := range jr.onCond.vars.GetIndexedVars() {
-		if v.Used {
-			neededColIdxs.Add(v.Idx)
+		rightIdx := v.Idx - len(jr.inputTypes)
+		if rightIdx >= 0 {
+			rowFetcherColumns.Add(rightIdx)
 		}
 	}
 
-	// Choose the columns from the right side.
-	offset := 0
-	if jr.isLookupJoin() {
-		offset = len(jr.input.OutputTypes())
-	}
-	rightCols := util.MakeFastIntSet()
-	rightCols.AddRange(offset, offset+len(jr.desc.Columns)-1)
-	neededColIdxs = neededColIdxs.Intersection(rightCols)
-
-	// Shift the right columns down so the indexes are with respect to the right
-	// side.
-	neededColIdxs = neededColIdxs.Shift(-1 * offset)
-
-	neededCols := util.MakeFastIntSet()
-	if jr.indexMap != nil {
-		// If there is an index map, map back the column indexes to the row they
-		// represent.
-		neededColIdxs.ForEach(func(idx int) {
-			neededCols.Add(int(jr.indexMap[idx]))
-		})
-	} else {
-		// If no indexMap is present, the columnIDs are the same as the column
-		// indexes.
-		neededCols = neededColIdxs
-	}
-
-	return neededCols
+	return rowFetcherColumns
 }
 
 // Generate a key to create a span for a given row.
@@ -363,15 +323,6 @@ func (jr *joinReader) indexLookup(
 			break
 		}
 
-		// If a mapping for the index row was provided, use it.
-		mappedIndexRow := make(sqlbase.EncDatumRow, 0, len(indexRow))
-		if jr.indexMap != nil {
-			for _, m := range jr.indexMap {
-				mappedIndexRow = append(mappedIndexRow, indexRow[m])
-			}
-		} else {
-			mappedIndexRow = indexRow
-		}
 		rows := spanToRows[indexKey]
 
 		if !jr.isLookupJoin() {
@@ -382,7 +333,7 @@ func (jr *joinReader) indexLookup(
 		} else {
 			for _, row := range rows {
 				jr.renderedRow = jr.renderedRow[:0]
-				if jr.renderedRow, err = jr.render(row, mappedIndexRow); err != nil {
+				if jr.renderedRow, err = jr.render(row, indexRow); err != nil {
 					return false, err
 				}
 				if jr.renderedRow == nil {
