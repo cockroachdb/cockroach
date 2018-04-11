@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,11 +38,7 @@ import (
 )
 
 func insertTableStat(
-	ctx context.Context,
-	db *client.DB,
-	ex sqlutil.InternalExecutor,
-	stat *TableStatistic,
-	histogram *HistogramData,
+	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor, stat *TableStatistic,
 ) error {
 	insertStatStmt := `
 INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
@@ -71,8 +66,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	if len(stat.Name) != 0 {
 		args[2] = stat.Name
 	}
-	if histogram != nil {
-		histogramBytes, err := protoutil.Marshal(histogram)
+	if stat.Histogram != nil {
+		histogramBytes, err := protoutil.Marshal(stat.Histogram)
 		if err != nil {
 			return err
 		}
@@ -108,7 +103,6 @@ func checkStatsForTable(
 	if err != nil {
 		return errors.Errorf(err.Error())
 	}
-	testutils.SortStructs(statsList, "TableID", "StatisticID")
 	if !reflect.DeepEqual(statsList, expected) {
 		return errors.Errorf("for lookup of key %d, expected stats %s, got %s", tableID, expected, statsList)
 	}
@@ -120,135 +114,72 @@ func checkStatsForTable(
 	return nil
 }
 
-func checkHistForTable(
-	ctx context.Context,
-	sc *TableStatisticsCache,
-	expected *HistogramData,
-	tableID sqlbase.ID,
-	statisticID uint64,
-) error {
-	// Initially the histogram won't be in the cache.
-	if histogram, ok := sc.lookupHistogram(ctx, tableID, statisticID); ok {
-		return errors.Errorf("lookup of missing key {table %d, statistic %d} returned: %s",
-			tableID, statisticID, histogram)
-	}
-
-	// Perform the lookup and refresh, and confirm the
-	// returned histogram matches the expected value.
-	histogram, err := sc.GetHistogram(ctx, tableID, statisticID)
-	if expected == nil {
-		// GetHistogram should return an error if the requested histogram doesn't exist.
-		if err == nil {
-			return errors.Errorf("expected an error for lookup of nonexistent histogram with key {table %d, statistic %d}",
-				tableID, statisticID)
-		}
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !reflect.DeepEqual(histogram, expected) {
-		return errors.Errorf("for lookup of table %d and statistic %d, expected stat %s, got %s",
-			tableID, statisticID, expected, histogram)
-	}
-
-	// Now the histogram should be in the cache.
-	if _, ok := sc.lookupHistogram(ctx, tableID, statisticID); !ok {
-		return errors.Errorf("for lookup of table %d and statistic %d, expected stats %s",
-			tableID, statisticID, expected)
-	}
-	return nil
-}
-
 func initTestData(
 	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor,
-) (map[sqlbase.ID][]*TableStatistic, map[HistogramCacheKey]*HistogramData, error) {
-	// The expected stats must be ordered by TableID, StatisticID so they can
+) (map[sqlbase.ID][]*TableStatistic, error) {
+	// The expected stats must be ordered by TableID+, CreatedAt- so they can
 	// later be compared with the returned stats using reflect.DeepEqual.
-	expStatsList := []struct {
-		Stat      TableStatistic
-		Histogram *HistogramData
-	}{
+	expStatsList := []TableStatistic{
 		{
-			Stat: TableStatistic{
-				TableID:       sqlbase.ID(0),
-				StatisticID:   0,
-				Name:          "table0",
-				ColumnIDs:     []sqlbase.ColumnID{1},
-				CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
-				RowCount:      32,
-				DistinctCount: 30,
-				NullCount:     0,
-				HasHistogram:  true,
-			},
+			TableID:       sqlbase.ID(0),
+			StatisticID:   0,
+			Name:          "table0",
+			ColumnIDs:     []sqlbase.ColumnID{1},
+			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 24, 0, time.UTC),
+			RowCount:      32,
+			DistinctCount: 30,
+			NullCount:     0,
 			Histogram: &HistogramData{Buckets: []HistogramData_Bucket{
 				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
 			},
 		},
 		{
-			Stat: TableStatistic{
-				TableID:       sqlbase.ID(0),
-				StatisticID:   1,
-				ColumnIDs:     []sqlbase.ColumnID{2, 3},
-				CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
-				RowCount:      32,
-				DistinctCount: 5,
-				NullCount:     5,
-			},
+			TableID:       sqlbase.ID(0),
+			StatisticID:   1,
+			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
+			RowCount:      32,
+			DistinctCount: 5,
+			NullCount:     5,
 		},
 		{
-			Stat: TableStatistic{
-				TableID:       sqlbase.ID(1),
-				StatisticID:   0,
-				ColumnIDs:     []sqlbase.ColumnID{0},
-				CreatedAt:     time.Date(2017, 11, 20, 11, 35, 23, 0, time.UTC),
-				RowCount:      320000,
-				DistinctCount: 300000,
-				NullCount:     100,
-			},
+			TableID:       sqlbase.ID(1),
+			StatisticID:   0,
+			ColumnIDs:     []sqlbase.ColumnID{0},
+			CreatedAt:     time.Date(2017, 11, 20, 11, 35, 23, 0, time.UTC),
+			RowCount:      320000,
+			DistinctCount: 300000,
+			NullCount:     100,
 		},
 		{
-			Stat: TableStatistic{
-				TableID:       sqlbase.ID(2),
-				StatisticID:   34,
-				Name:          "table2",
-				ColumnIDs:     []sqlbase.ColumnID{1, 2, 3},
-				CreatedAt:     time.Date(2001, 1, 10, 5, 25, 14, 0, time.UTC),
-				RowCount:      0,
-				DistinctCount: 0,
-				NullCount:     0,
-			},
+			TableID:       sqlbase.ID(2),
+			StatisticID:   34,
+			Name:          "table2",
+			ColumnIDs:     []sqlbase.ColumnID{1, 2, 3},
+			CreatedAt:     time.Date(2001, 1, 10, 5, 25, 14, 0, time.UTC),
+			RowCount:      0,
+			DistinctCount: 0,
+			NullCount:     0,
 		},
 	}
 
 	// Insert the stats into system.table_statistics
 	// and store them in maps for fast retrieval.
 	expectedStats := make(map[sqlbase.ID][]*TableStatistic)
-	expectedHist := make(map[HistogramCacheKey]*HistogramData)
 	for i := range expStatsList {
-		stat := &expStatsList[i].Stat
-		histogram := expStatsList[i].Histogram
+		stat := &expStatsList[i]
 
-		if err := insertTableStat(ctx, db, ex, stat, histogram); err != nil {
-			return nil, nil, err
+		if err := insertTableStat(ctx, db, ex, stat); err != nil {
+			return nil, err
 		}
 
 		expectedStats[stat.TableID] = append(expectedStats[stat.TableID], stat)
-		if stat.HasHistogram != (histogram != nil) {
-			return nil, nil, errors.Errorf("HasHistogram must be true iff there is a histogram. Data: %s",
-				expStatsList[i])
-		}
-		if histogram != nil {
-			histCacheKey := HistogramCacheKey{TableID: stat.TableID, StatisticID: stat.StatisticID}
-			expectedHist[histCacheKey] = histogram
-		}
 	}
 
 	// Add another TableID for which we don't have stats.
 	expectedStats[sqlbase.ID(3)] = nil
-	expectedHist[HistogramCacheKey{TableID: sqlbase.ID(3), StatisticID: 0}] = nil
 
-	return expectedStats, expectedHist, nil
+	return expectedStats, nil
 }
 
 func TestTableStatisticsCache(t *testing.T) {
@@ -259,7 +190,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 
-	expectedStats, expectedHist, err := initTestData(ctx, db, ex)
+	expectedStats, err := initTestData(ctx, db, ex)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,8 +206,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	// Create a cache and iteratively query the cache for each tableID. This
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
-	statsCacheSize, histogramCacheSize := 2, 2
-	sc := NewTableStatisticsCache(statsCacheSize, histogramCacheSize, s.Gossip(), db, ex)
+	sc := NewTableStatisticsCache(2 /* cacheSize */, s.Gossip(), db, ex)
 	for _, tableID := range tableIDs {
 		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
 			t.Fatal(err)
@@ -304,26 +234,5 @@ func TestTableStatisticsCache(t *testing.T) {
 	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
-	}
-
-	// Now test the histogram cache.
-	for key, hist := range expectedHist {
-		if err := checkHistForTable(ctx, sc, hist, key.TableID, key.StatisticID); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Key {0, 0} should still be in the cache.
-	key := HistogramCacheKey{TableID: 0, StatisticID: 0}
-	if _, ok := sc.lookupHistogram(ctx, key.TableID, key.StatisticID); !ok {
-		t.Fatalf("for lookup of table %d and statistic %d, expected histogram %s",
-			key.TableID, key.StatisticID, expectedHist[key])
-	}
-
-	// After invalidation key {0, 0} should be gone.
-	sc.InvalidateHistogram(ctx, key.TableID, key.StatisticID)
-	if histogram, ok := sc.lookupHistogram(ctx, key.TableID, key.StatisticID); ok {
-		t.Fatalf("lookup of invalidated key {table %d, statistic %d} returned: %s",
-			key.TableID, key.StatisticID, histogram)
 	}
 }
