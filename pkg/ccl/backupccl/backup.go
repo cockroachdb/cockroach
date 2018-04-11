@@ -777,23 +777,23 @@ func VerifyUsableExportTarget(
 
 func backupPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	incrementalFromFn, err := p.TypeAsStringArray(backupStmt.IncrementalFrom, "BACKUP")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	optsFn, err := p.TypeAsStringOpts(backupStmt.Options, backupOptionExpectValues)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	header := sqlbase.ResultColumns{
@@ -806,7 +806,7 @@ func backupPlanHook(
 		{Name: "bytes", Typ: types.Int},
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -1066,7 +1066,7 @@ func backupPlanHook(
 		}
 		return <-errCh
 	}
-	return fn, header, nil
+	return fn, header, nil, nil
 }
 
 type backupResumer struct {
@@ -1180,25 +1180,25 @@ func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	if err := utilccl.CheckEnterpriseEnabled(
 		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "SHOW BACKUP",
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if err := p.RequireSuperUser(ctx, "SHOW BACKUP"); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	toFn, err := p.TypeAsString(backup.Path, "SHOW BACKUP")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	header := sqlbase.ResultColumns{
 		{Name: "database", Typ: types.String},
@@ -1208,7 +1208,7 @@ func showBackupPlanHook(
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
 	}
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -1263,7 +1263,7 @@ func showBackupPlanHook(
 		}
 		return nil
 	}
-	return fn, header, nil
+	return fn, header, nil, nil
 }
 
 type versionedValues struct {
