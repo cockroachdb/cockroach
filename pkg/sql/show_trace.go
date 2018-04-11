@@ -32,8 +32,10 @@ import (
 // It is used as the top-level node for SHOW TRACE FOR statements.
 type showTraceNode struct {
 	// plan is the wrapped execution plan that will be traced.
-	plan    planNode
-	columns sqlbase.ResultColumns
+	plan planNode
+	// stmtType represents the statement type of the wrapped execution plan.
+	stmtType tree.StatementType
+	columns  sqlbase.ResultColumns
 
 	// If set, the trace will also include "KV trace" messages - verbose messages
 	// around the interaction of SQL with KV. Some of the messages are per-row.
@@ -116,7 +118,7 @@ WHERE message LIKE 'fetched: %'
 		return nil, err
 	}
 	tracePlan, err := p.makeShowTraceNode(
-		stmtPlan, n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
+		stmtPlan, n.Statement.StatementType(), n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
 	if err != nil {
 		plan.Close(ctx)
 		stmtPlan.Close(ctx)
@@ -174,10 +176,13 @@ WHERE message LIKE 'fetched: %'
 //
 // Args:
 // plan: The wrapped execution plan to be traced.
+// stmtType: The statement type of the wrapped execution plan.
 // kvTrancingEnabled: If set, the trace will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
-func (p *planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
+func (p *planner) makeShowTraceNode(
+	plan planNode, stmtType tree.StatementType, kvTracingEnabled bool,
+) (planNode, error) {
 	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
 	if err != nil {
 		return nil, err
@@ -185,6 +190,7 @@ func (p *planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planN
 	return &showTraceNode{
 		plan:             plan,
 		columns:          sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		stmtType:         stmtType,
 		kvTracingEnabled: kvTracingEnabled,
 	}, nil
 }
