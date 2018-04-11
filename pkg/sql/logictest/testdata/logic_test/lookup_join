@@ -211,6 +211,32 @@ distinct                  ·               ·
 ·                         spans           ALL
 
 
+query TITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+Tree                      Level  Type      Field           Description                 Columns                                                                                                                                             Ordering
+distinct                  0      distinct  ·               ·                           ("(authors.name)")                                                                                                                                  weak-key("(authors.name)")
+ └── render               1      render    ·               ·                           ("(authors.name)")                                                                                                                                  ·
+      │                   1      ·         render 0        test.public.authors."name"  ·                                                                                                                                                   ·
+      └── join            2      join      ·               ·                           ("name", book[omitted], rowid[hidden,omitted], title[omitted], edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])  ·
+           │              2      ·         type            inner                       ·                                                                                                                                                   ·
+           │              2      ·         equality        (book) = (title)            ·                                                                                                                                                   ·
+           ├── scan       3      scan      ·               ·                           ("name", book, rowid[hidden,omitted])                                                                                                               rowid!=NULL; key(rowid)
+           │              3      ·         table           authors@primary             ·                                                                                                                                                   ·
+           │              3      ·         spans           ALL                         ·                                                                                                                                                   ·
+           └── join       3      join      ·               ·                           (title, edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])                                                         title=title; title!=NULL
+                │         3      ·         type            inner                       ·                                                                                                                                                   ·
+                │         3      ·         equality        (title) = (title)           ·                                                                                                                                                   ·
+                │         3      ·         mergeJoinOrder  +"(title=title)"            ·                                                                                                                                                   ·
+                │         3      ·         pred            b1.shelf != b2.shelf        ·                                                                                                                                                   ·
+                ├── scan  4      scan      ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
+                │         4      ·         table           books@primary               ·                                                                                                                                                   ·
+                │         4      ·         spans           ALL                         ·                                                                                                                                                   ·
+                └── scan  4      scan      ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
+·                         4      ·         table           books@primary               ·                                                                                                                                                   ·
+·                         4      ·         spans           ALL                         ·                                                                                                                                                   ·
+
+
 # Ensure lookup join preserves sort from the left side.
 query T
 SELECT DISTINCT(a.name) FROM (SELECT * FROM authors ORDER BY name) AS a JOIN books AS b1 ON a.book = b1.title
@@ -242,6 +268,16 @@ query T rowsort
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books ON books.edition = 1 WHERE books.title = authors.book]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkTFrwzAQhff-CvHmK8ROsggKmgopJSkhW_Gg2EeqxtEZSYaW4P9ebA9NCnHbUe_ue--hO8NLxWt74gj9igyEJQpCE6TkGCX08ri0qj6gZwTnmzb1ckEoJTD0GcmlmqGxlntpQKg4WVcPSx1B2vSNxGQPDD3v6MI2m7bd2X3NW7YVhytzNMGdbPg0tk1vfVfCpk1amYxMjlvR2X-in8T5qeS9yLHPfRY5to16F-eVeK1MDsKjqxMHrcxCPahMa71a7646kpmTWZBZ3iybX5X95fu3HBvxkf90gVlXELg68HjiKG0o-SVIOcSMz83ADULFMY3T-fhY-XHUF7yEs0k4n4bzSXj2Ay66u68AAAD__9tr5dM=
+
+
+statement ok
+CREATE TABLE players (id DECIMAL PRIMARY KEY, name STRING, team INT); INSERT INTO players VALUES (1.0, 'ready', 0)
+
+
+query B
+SELECT p1.team = p2.team FROM players p1 JOIN players p2 ON p1.id = p2.id;
+----
+true
 
 
 statement ok
