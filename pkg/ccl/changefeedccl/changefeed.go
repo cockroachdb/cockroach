@@ -61,29 +61,30 @@ var changefeedOptionExpectValues = map[string]bool{
 	changefeedOptTopicPrefix: true,
 }
 
+// changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	switch strings.ToLower(changefeedStmt.SinkType) {
 	case `kafka`:
 	default:
-		return nil, nil, errors.Errorf(`unknown CHANGEFEED sink: %s`, changefeedStmt.SinkType)
+		return nil, nil, nil, errors.Errorf(`unknown CHANGEFEED sink: %s`, changefeedStmt.SinkType)
 	}
 
 	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedOptionExpectValues)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: types.Int},
 	}
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
 
@@ -144,7 +145,7 @@ func changefeedPlanHook(
 		}
 		return nil
 	}
-	return fn, header, nil
+	return fn, header, nil, nil
 }
 
 func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
