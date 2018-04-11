@@ -19,6 +19,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
@@ -54,6 +55,10 @@ func TestAllRegisteredWorkloadsValidate(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
+			if meta.Name == `tpcc` && (testing.Short() || util.RaceEnabled) {
+				t.Skip(`tpcc loads a lot of data`)
+			}
+
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 				UseDatabase: "d",
