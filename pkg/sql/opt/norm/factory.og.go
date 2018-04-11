@@ -3810,6 +3810,57 @@ func (_f *Factory) ConstructIs(
 		return _group
 	}
 
+	// [FoldIsNull]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+			if _nullExpr2 != nil {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldIsNull) {
+					_group = _f.ConstructTrue()
+					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [FoldNonNullIsNull]
+	{
+		_expr := _f.mem.NormExpr(left)
+		if _expr.IsConstValue() {
+			_nullExpr := _f.mem.NormExpr(left).AsNull()
+			if _nullExpr == nil {
+				_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+				if _nullExpr2 != nil {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNonNullIsNull) {
+						_group = _f.ConstructFalse()
+						_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [CommuteNullIs]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+			if _nullExpr2 == nil {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteNullIs) {
+					_group = _f.ConstructIs(
+						right,
+						left,
+					)
+					_f.mem.AddAltFingerprint(_isExpr.Fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	// [CommuteVar]
 	{
 		_variableExpr := _f.mem.NormExpr(left).AsVariable()
@@ -3856,6 +3907,57 @@ func (_f *Factory) ConstructIsNot(
 	_group := _f.mem.GroupByFingerprint(_isNotExpr.Fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	// [FoldIsNotNull]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+			if _nullExpr2 != nil {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldIsNotNull) {
+					_group = _f.ConstructFalse()
+					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [FoldNonNullIsNotNull]
+	{
+		_expr := _f.mem.NormExpr(left)
+		if _expr.IsConstValue() {
+			_nullExpr := _f.mem.NormExpr(left).AsNull()
+			if _nullExpr == nil {
+				_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+				if _nullExpr2 != nil {
+					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FoldNonNullIsNotNull) {
+						_group = _f.ConstructTrue()
+						_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [CommuteNullIs]
+	{
+		_nullExpr := _f.mem.NormExpr(left).AsNull()
+		if _nullExpr != nil {
+			_nullExpr2 := _f.mem.NormExpr(right).AsNull()
+			if _nullExpr2 == nil {
+				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.CommuteNullIs) {
+					_group = _f.ConstructIsNot(
+						right,
+						left,
+					)
+					_f.mem.AddAltFingerprint(_isNotExpr.Fingerprint(), _group)
+					return _group
+				}
+			}
+		}
 	}
 
 	// [CommuteVar]

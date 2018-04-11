@@ -374,3 +374,81 @@ scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── constraint: /1: contradiction
  └── keys: (1)
+
+# --------------------------------------------------
+# FoldIsNull
+# --------------------------------------------------
+opt
+SELECT NULL IS NULL
+----
+project
+ ├── columns: column1:1(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── true [type=bool]
+
+# --------------------------------------------------
+# FoldNonNullIsNull
+# --------------------------------------------------
+opt
+SELECT 1 IS NULL
+----
+project
+ ├── columns: column1:1(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── false [type=bool]
+
+# --------------------------------------------------
+# FoldIsNotNull
+# --------------------------------------------------
+opt
+SELECT NULL IS NOT NULL, NULL IS NOT TRUE
+----
+project
+ ├── columns: column1:1(bool) column2:2(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── false [type=bool]
+      └── true [type=bool]
+
+# --------------------------------------------------
+# FoldNonNullIsNotNull
+# --------------------------------------------------
+
+# We could (but do not currently) infer that k IS NOT NULL is always True given
+# that k is declared NOT NULL.
+opt
+SELECT 1 IS NOT NULL, k IS NOT NULL, i IS NOT NULL from a
+----
+project
+ ├── columns: column6:6(bool) column7:7(bool) column8:8(bool)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    └── keys: (1)
+ └── projections [outer=(1,2)]
+      ├── true [type=bool]
+      ├── is-not [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── null [type=unknown]
+      └── is-not [type=bool, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── null [type=unknown]
+
+# --------------------------------------------------
+# CommuteNullIs
+# --------------------------------------------------
+opt
+SELECT NULL IS NOT TRUE, NULL IS TRUE
+----
+project
+ ├── columns: column1:1(bool) column2:2(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── true [type=bool]
+      └── false [type=bool]
+
