@@ -522,7 +522,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str>   SYMMETRIC SYNTAX SYSTEM
 
-%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
+%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THAN THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
@@ -576,7 +576,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_split_stmt
 %type <tree.Statement> alter_rename_table_stmt
 %type <tree.Statement> alter_scatter_stmt
-%type <tree.Statement> alter_testing_relocate_stmt
+%type <tree.Statement> alter_relocate_stmt
 %type <tree.Statement> alter_zone_table_stmt
 
 // ALTER DATABASE
@@ -591,7 +591,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> alter_scatter_index_stmt
 %type <tree.Statement> alter_split_index_stmt
 %type <tree.Statement> alter_rename_index_stmt
-%type <tree.Statement> alter_testing_relocate_index_stmt
+%type <tree.Statement> alter_relocate_index_stmt
 %type <tree.Statement> alter_zone_index_stmt
 
 // ALTER VIEW
@@ -684,11 +684,13 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_create_sequence_stmt
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
+%type <tree.Statement> show_fingerprints_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
+%type <tree.Statement> show_ranges_stmt
 %type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_session_stmt
@@ -696,7 +698,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_stats_stmt
 %type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_tables_stmt
-%type <tree.Statement> show_testing_stmt
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_users_stmt
@@ -931,6 +932,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
+%type <str> relocate_kw ranges_kw
+
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
 %nonassoc  SET                 // see relation_expr_opt_alias
@@ -1103,8 +1106,8 @@ alter_ddl_stmt:
 // %SeeAlso: WEBDOCS/alter-table.html
 alter_table_stmt:
   alter_onetable_stmt
+| alter_relocate_stmt
 | alter_split_stmt
-| alter_testing_relocate_stmt
 | alter_scatter_stmt
 | alter_zone_table_stmt
 | alter_rename_table_stmt
@@ -1185,8 +1188,8 @@ alter_range_stmt:
 // %SeeAlso: WEBDOCS/alter-index.html
 alter_index_stmt:
   alter_oneindex_stmt
+| alter_relocate_index_stmt
 | alter_split_index_stmt
-| alter_testing_relocate_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
 | alter_zone_index_stmt
@@ -1226,15 +1229,19 @@ alter_split_index_stmt:
     $$.val = &tree.Split{Index: $3.newTableWithIdx(), Rows: $6.slct()}
   }
 
-alter_testing_relocate_stmt:
-  ALTER TABLE table_name TESTING_RELOCATE select_stmt
+alter_relocate_stmt:
+  ALTER TABLE table_name relocate_kw select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.TestingRelocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $5.slct()}
   }
 
-alter_testing_relocate_index_stmt:
-  ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
+relocate_kw:
+  TESTING_RELOCATE
+| EXPERIMENTAL_RELOCATE
+
+alter_relocate_index_stmt:
+  ALTER INDEX table_name_with_index relocate_kw select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.TestingRelocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
@@ -2618,11 +2625,13 @@ show_stmt:
 | show_create_sequence_stmt // EXTEND WITH HELP: SHOW CREATE SEQUENCE
 | show_csettings_stmt       // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt       // EXTEND WITH HELP: SHOW DATABASES
+| show_fingerprints_stmt
 | show_grants_stmt          // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt       // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt         // EXTEND WITH HELP: SHOW INDEXES
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
+| show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
 | show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
@@ -2630,7 +2639,6 @@ show_stmt:
 | show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
 | show_syntax_stmt          // EXTEND WITH HELP: SHOW SYNTAX
 | show_tables_stmt          // EXTEND WITH HELP: SHOW TABLES
-| show_testing_stmt
 | show_trace_stmt           // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
@@ -3072,18 +3080,28 @@ show_zone_stmt:
     $$.val = &tree.ShowZoneConfig{}
   }
 
-show_testing_stmt:
-  SHOW TESTING_RANGES FROM TABLE table_name
+// %Help: SHOW RANGES - list ranges
+// %Category: Misc
+// %Text:
+// SHOW EXPERIMENTAL_RANGES FROM TABLE <tablename>
+// SHOW EXPERIMENTAL_RANGES FROM INDEX [ <tablename> @ ] <indexname>
+show_ranges_stmt:
+  SHOW ranges_kw FROM TABLE table_name
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowRanges{Table: $5.newNormalizableTableNameFromUnresolvedName()}
   }
-| SHOW TESTING_RANGES FROM INDEX table_name_with_index
+| SHOW ranges_kw FROM INDEX table_name_with_index
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowRanges{Index: $5.newTableWithIdx()}
   }
-| SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
+| SHOW ranges_kw error // SHOW HELP: SHOW RANGES
+
+ranges_kw:
+  TESTING_RANGES
+| EXPERIMENTAL_RANGES
+
+show_fingerprints_stmt:
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
   {
     /* SKIP DOC */
     $$.val = &tree.ShowFingerprints{Table: $5.newNormalizableTableNameFromUnresolvedName()}
@@ -7712,6 +7730,8 @@ unreserved_keyword:
 | EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_CHANGEFEED
 | EXPERIMENTAL_FINGERPRINTS
+| EXPERIMENTAL_RANGES
+| EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
 | FILTER

@@ -1,5 +1,4 @@
 import React from "react";
-import { Helmet } from "react-helmet";
 import { Link } from "react-router";
 import { connect } from "react-redux";
 import moment from "moment";
@@ -380,19 +379,4 @@ const NodesMainConnected = connect(
   },
 )(NodesMain);
 
-/**
- * Renders the main content of the nodes page, which is primarily a data table
- * of all nodes.
- */
-function NodesPage() {
-  return (
-    <div>
-      <Helmet>
-        <title>Nodes</title>
-      </Helmet>
-      <NodesMainConnected />
-    </div>
-  );
-}
-
-export { NodesPage as default, NodesMainConnected as NodesOverview };
+export { NodesMainConnected as NodesOverview };

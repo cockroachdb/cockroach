@@ -486,7 +486,7 @@ func (n *RenameTable) StatementTag() string {
 func (*TestingRelocate) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*TestingRelocate) StatementTag() string { return "TESTING_RELOCATE" }
+func (*TestingRelocate) StatementTag() string { return "EXPERIMENTAL_RELOCATE" }
 
 // StatementType implements the Statement interface.
 func (*Restore) StatementType() StatementType { return Rows }
@@ -800,7 +800,7 @@ func (*ShowZoneConfig) StatementTag() string { return "SHOW ZONE CONFIGURATION" 
 func (*ShowRanges) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*ShowRanges) StatementTag() string { return "SHOW TESTING_RANGES" }
+func (*ShowRanges) StatementTag() string { return "SHOW EXPERIMENTAL_RANGES" }
 
 func (*ShowRanges) hiddenFromStats() {}
 
