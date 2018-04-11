@@ -1785,16 +1785,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
-	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan)
-
-	// Refer to comment about JoinReaderSpec.IndexMap for description.
-	indexMap := make([]uint32, 0, len(rightPlan.planToStreamColMap))
-	for i, m := range rightPlan.planToStreamColMap {
-		if m >= 0 {
-			indexMap = append(indexMap, uint32(i))
-		}
-	}
+	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan, isLookupJoin)
+	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan, isLookupJoin)
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
@@ -1833,7 +1825,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			Table:         *(lookupJoinScan.desc),
 			IndexIdx:      0,
 			LookupColumns: lookupCols,
-			IndexMap:      indexMap,
 			OnExpr:        onExpr,
 		}
 	} else if leftMergeOrd.Columns == nil {
