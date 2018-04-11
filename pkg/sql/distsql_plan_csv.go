@@ -33,6 +33,48 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ExportPlanResultTypes is the result types for EXPORT plans.
+var ExportPlanResultTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_STRING}, // filename
+	{SemanticType: sqlbase.ColumnType_INT},    // rows
+	{SemanticType: sqlbase.ColumnType_INT},    // bytes
+}
+
+// PlanAndRunExport makes and runs an EXPORT plan for the given input and output
+// planNode and spec respectively.  The input planNode must be runnable via
+// DistSQL. The output spec's results must conform to the exportResultTypes.
+func (dsp *DistSQLPlanner) PlanAndRunExport(
+	ctx context.Context,
+	txn *client.Txn,
+	evalCtx *extendedEvalContext,
+	in planNode,
+	out distsqlrun.ProcessorCoreUnion,
+	resultRows *RowResultWriter,
+) error {
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
+	p, err := dsp.createPlanForNode(&planCtx, in)
+	if err != nil {
+		return errors.Wrap(err, "constructing distSQL plan")
+	}
+
+	p.AddNoGroupingStage(
+		out, distsqlrun.PostProcessSpec{}, ExportPlanResultTypes, distsqlrun.Ordering{},
+	)
+
+	// this mirrors the call in addAggregators for non-multi-stage.
+	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(ExportPlanResultTypes))
+
+	dsp.FinalizePlan(&planCtx, &p)
+
+	recv := makeDistSQLReceiver(
+		ctx, resultRows, tree.Rows,
+		nil /* rangeCache */, nil /* leaseCache */, txn, func(ts hlc.Timestamp) {},
+	)
+
+	dsp.Run(&planCtx, txn, &p, recv, evalCtx)
+	return resultRows.Err()
+}
+
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
 	rowContainer *sqlbase.RowContainer
