@@ -176,6 +176,7 @@ var _ planNode = &dropViewNode{}
 var _ planNode = &dropSequenceNode{}
 var _ planNode = &zeroNode{}
 var _ planNode = &unaryNode{}
+var _ planNode = &distSQLWrapper{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
 var _ planNode = &showTraceNode{}
@@ -497,6 +498,9 @@ func startExec(params runParams, plan planNode) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
 			switch p.(type) {
+			case *distSQLWrapper:
+				// Do not recurse: the plan is executed in distSQL.
+				return false, nil
 			case *explainPlanNode, *explainDistSQLNode:
 				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
 				return false, nil

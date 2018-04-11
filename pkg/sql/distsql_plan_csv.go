@@ -119,21 +119,22 @@ func (b *RowResultWriter) Err() error {
 // callbackResultWriter is a rowResultWriter that runs a callback function
 // on AddRow.
 type callbackResultWriter struct {
-	fn  func(ctx context.Context, row tree.Datums) error
-	err error
+	fn           func(ctx context.Context, row tree.Datums) error
+	rowsAffected int
+	err          error
 }
 
 var _ rowResultWriter = &callbackResultWriter{}
 
-// makeCallbackResultWriter creates a new callbackResultWriter.
+// newCallbackResultWriter creates a new callbackResultWriter.
 func newCallbackResultWriter(
 	fn func(ctx context.Context, row tree.Datums) error,
-) callbackResultWriter {
-	return callbackResultWriter{fn: fn}
+) *callbackResultWriter {
+	return &callbackResultWriter{fn: fn}
 }
 
-func (*callbackResultWriter) IncrementRowsAffected(n int) {
-	panic("IncrementRowsAffected not supported by callbackResultWriter")
+func (c *callbackResultWriter) IncrementRowsAffected(n int) {
+	c.rowsAffected += n
 }
 
 func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
@@ -496,7 +497,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 
 	recv := makeDistSQLReceiver(
 		ctx,
-		&rowResultWriter,
+		rowResultWriter,
 		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* leaseCache */
