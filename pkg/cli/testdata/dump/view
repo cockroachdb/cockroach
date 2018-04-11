@@ -1,0 +1,11 @@
+# Test that we don't dump data of views.
+
+sql
+CREATE DATABASE d;
+CREATE VIEW d.bar AS SELECT 1;
+----
+CREATE VIEW
+
+dump d
+----
+CREATE VIEW bar ("1") AS SELECT 1;
