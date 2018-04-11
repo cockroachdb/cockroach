@@ -25,17 +25,18 @@ import (
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
-// event. It is invoked each time a normalization rule has been matched by the
-// optimizer. The name of the matched rule is passed as a parameter. If the
-// function returns false, then the rule is not applied (i.e. it's skipped).
+// event supported by the optimizer and factory. It is invoked each time an
+// optimization rule (Normalize or Explore) has been matched. The name of the
+// matched rule is passed as a parameter. If the function returns false, then
+// the rule is not applied (i.e. skipped).
 type MatchedRuleFunc func(ruleName opt.RuleName) bool
 
-// AppliedRuleFunc defines the callback function for the AppliedRuleFunc event
-// supported by the Optimizer and Factory. It is invoked each time an
-// optimization rule (Normalize or Explore) has been applied by the optimizer.
-// The function is called with the name of the rule and the memo group it
-// affected. If the rule was an exploration rule, then the added parameter
-// gives the number of expressions added to the group by the rule.
+// AppliedRuleFunc defines the callback function for the NotifyOnAppliedRule
+// event supported by the optimizer and factory. It is invoked each time an
+// optimization rule (Normalize or Explore) has been applied. The function is
+// called with the name of the rule and the memo group it affected. If the rule
+// was an exploration rule, then the added parameter gives the number of
+// expressions added to the group by the rule.
 type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
 
 //go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
@@ -101,9 +102,9 @@ func (f *Factory) DisableOptimizations() {
 
 // NotifyOnMatchedRule sets a callback function which is invoked each time a
 // normalize rule has been matched by the factory. If matchedRule is nil, then
-// no further notifications are sent. If no callback function is set, then all
-// rules are applied by default. In addition, callers can invoke the
-// DisableOptimizations convenience method to disable all rules.
+// no further notifications are sent, and all rules are applied by default. In
+// addition, callers can invoke the DisableOptimizations convenience method to
+// disable all rules.
 func (f *Factory) NotifyOnMatchedRule(matchedRule MatchedRuleFunc) {
 	f.matchedRule = matchedRule
 }

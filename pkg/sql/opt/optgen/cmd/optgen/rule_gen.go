@@ -642,12 +642,12 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 	case *lang.CustomFuncExpr:
 		// Top-level custom function returns a memo.Expr slice, so iterate
 		// through that and memoize each expression.
-		g.w.writeIndent("exprs := ")
+		g.w.writeIndent("_exprs := ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
 		g.w.writeIndent("_before := _e.mem.ExprCount(_root.Group)\n")
-		g.w.nestIndent("for i := range exprs {\n")
-		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])\n")
+		g.w.nestIndent("for i := range _exprs {\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])\n")
 		g.w.unnest("}\n")
 
 	default:
