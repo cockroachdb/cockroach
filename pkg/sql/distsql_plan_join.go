@@ -111,8 +111,8 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 
 	joinType := n.joinType
 
-	post, joinToStreamColMap := joinOutColumns(n, plans[0], plans[1])
-	onExpr := remapOnExpr(planCtx.EvalContext(), n, plans[0], plans[1])
+	post, joinToStreamColMap := joinOutColumns(n, plans[0], plans[1], false /* isLookupJoin */)
+	onExpr := remapOnExpr(planCtx.EvalContext(), n, plans[0], plans[1], false /* isLookupJoin */)
 
 	ancestor, descendant := n.interleavedNodes()
 
@@ -236,7 +236,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 }
 
 func joinOutColumns(
-	n *joinNode, leftPlan, rightPlan physicalPlan,
+	n *joinNode, leftPlan, rightPlan physicalPlan, isLookupJoin bool,
 ) (post distsqlrun.PostProcessSpec, joinToStreamColMap []int) {
 	joinToStreamColMap = makePlanToStreamColMap(len(n.columns))
 	post.Projection = true
@@ -259,7 +259,17 @@ func joinOutColumns(
 		}
 		joinCol++
 	}
+
 	for i := 0; i < n.pred.numRightCols; i++ {
+		// The lookup join's internal columns consist of the entire right row.
+		if isLookupJoin {
+			joinToStreamColMap[joinCol] = addOutCol(
+				uint32(i + len(leftPlan.ResultTypes)),
+			)
+			joinCol++
+			continue
+		}
+
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
 				uint32(rightPlan.planToStreamColMap[i] + len(leftPlan.ResultTypes)),
@@ -275,7 +285,7 @@ func joinOutColumns(
 // join columns as described above) to values that make sense in the joiner (0
 // to N-1 for the left input columns, N to N+M-1 for the right input columns).
 func remapOnExpr(
-	evalCtx *tree.EvalContext, n *joinNode, leftPlan, rightPlan physicalPlan,
+	evalCtx *tree.EvalContext, n *joinNode, leftPlan, rightPlan physicalPlan, isLookupJoin bool,
 ) distsqlrun.Expression {
 	if n.pred.onCond == nil {
 		return distsqlrun.Expression{}
@@ -288,7 +298,11 @@ func remapOnExpr(
 		idx++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
-		joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftPlan.ResultTypes)
+		if isLookupJoin {
+			joinColMap[idx] = i + len(leftPlan.ResultTypes)
+		} else {
+			joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftPlan.ResultTypes)
+		}
 		idx++
 	}
 

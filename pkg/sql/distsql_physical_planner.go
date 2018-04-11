@@ -1785,16 +1785,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
-	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan)
-
-	// Refer to comment about JoinReaderSpec.IndexMap for description.
-	indexMap := make([]uint32, 0, len(rightPlan.planToStreamColMap))
-	for i, m := range rightPlan.planToStreamColMap {
-		if m >= 0 {
-			indexMap = append(indexMap, uint32(i))
-		}
-	}
+	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan, isLookupJoin)
+	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan, isLookupJoin)
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
@@ -1829,12 +1821,17 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			return physicalPlan{}, err
 		}
 
+		rightColMap := make([]int32, len(rightPlan.planToStreamColMap))
+		for i, val := range rightPlan.planToStreamColMap {
+			rightColMap[i] = int32(val)
+		}
+
 		core.JoinReader = &distsqlrun.JoinReaderSpec{
-			Table:         *(lookupJoinScan.desc),
-			IndexIdx:      0,
-			LookupColumns: lookupCols,
-			IndexMap:      indexMap,
-			OnExpr:        onExpr,
+			Table:          *(lookupJoinScan.desc),
+			IndexIdx:       0,
+			LookupColumns:  lookupCols,
+			OnExpr:         onExpr,
+			RightColumnMap: rightColMap,
 		}
 	} else if leftMergeOrd.Columns == nil {
 		core.HashJoiner = &distsqlrun.HashJoinerSpec{
