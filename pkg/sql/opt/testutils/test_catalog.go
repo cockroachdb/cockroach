@@ -222,8 +222,3 @@ func (ts *TestTableStat) DistinctCount() uint64 {
 func (ts *TestTableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
-
-// HasHistogram is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) HasHistogram() bool {
-	return len(ts.js.HistogramBuckets) > 0
-}
