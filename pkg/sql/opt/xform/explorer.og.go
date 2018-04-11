@@ -32,10 +32,10 @@ func (_e *explorer) exploreScan(_rootState *exploreState, _root memo.ExprID) (_f
 			def := _rootExpr.Def()
 			if _e.canGenerateIndexScans(def) {
 				if _e.o.matchedRule == nil || _e.o.matchedRule(opt.GenerateIndexScans) {
-					exprs := _e.generateIndexScans(def)
+					_exprs := _e.generateIndexScans(def)
 					_before := _e.mem.ExprCount(_root.Group)
-					for i := range exprs {
-						_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])
+					for i := range _exprs {
+						_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])
 					}
 					if _e.o.appliedRule != nil {
 						_after := _e.mem.ExprCount(_root.Group)
@@ -72,10 +72,10 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 				if _e.canConstrainScan(def) {
 					filter := _rootExpr.Filter()
 					if _e.o.matchedRule == nil || _e.o.matchedRule(opt.ConstrainScan) {
-						exprs := _e.constrainScan(filter, def)
+						_exprs := _e.constrainScan(filter, def)
 						_before := _e.mem.ExprCount(_root.Group)
-						for i := range exprs {
-							_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])
+						for i := range _exprs {
+							_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])
 						}
 						if _e.o.appliedRule != nil {
 							_after := _e.mem.ExprCount(_root.Group)

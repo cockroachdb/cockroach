@@ -53,7 +53,7 @@ type Optimizer struct {
 	evalCtx  *tree.EvalContext
 	f        *norm.Factory
 	mem      *memo.Memo
-	coster   coster
+	coster   Coster
 	explorer explorer
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
@@ -79,9 +79,9 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 		evalCtx:  evalCtx,
 		f:        f,
 		mem:      f.Memo(),
+		coster:   newCoster(f.Memo()),
 		stateMap: make(map[optStateKey]*optState),
 	}
-	o.coster.init(o.mem)
 	o.explorer.init(o)
 	return o
 }
@@ -91,6 +91,20 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 // Optimize method in order to find the lowest cost plan.
 func (o *Optimizer) Factory() *norm.Factory {
 	return o.f
+}
+
+// Coster returns the coster instance that the optimizer is currently using to
+// estimate the cost of executing portions of the expression tree. When a new
+// optimizer is constructed, it creates a default coster that will be used
+// unless it is overridden with a call to SetCoster.
+func (o *Optimizer) Coster() Coster {
+	return o.coster
+}
+
+// SetCoster overrides the default coster. The optimizer will now use the given
+// coster to estimate the cost of expression execution.
+func (o *Optimizer) SetCoster(coster Coster) {
+	o.coster = coster
 }
 
 // DisableOptimizations disables all transformation rules, including normalize
@@ -452,7 +466,8 @@ func (o *Optimizer) enforceProps(
 // group. If so, then the candidate becomes the new lowest cost expression.
 func (o *Optimizer) ratchetCost(candidate *memo.BestExpr) {
 	group := candidate.Group()
-	o.coster.computeCost(candidate, o.mem.GroupProperties(group))
+	cost := o.coster.ComputeCost(candidate, o.mem.GroupProperties(group))
+	candidate.SetCost(cost)
 	state := o.lookupOptState(group, candidate.Required())
 	if state.best == memo.UnknownBestExprID {
 		// Lazily allocate the best expression only when it's needed.

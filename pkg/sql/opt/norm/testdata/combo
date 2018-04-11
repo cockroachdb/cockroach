@@ -1,5 +1,12 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+CREATE TABLE a (
+    x INT PRIMARY KEY,
+    i INT,
+    f FLOAT,
+    s STRING,
+    j JSON,
+    UNIQUE INDEX (s DESC, f) STORING (j)
+)
 ----
 TABLE a
  ├── x int not null
@@ -7,8 +14,13 @@ TABLE a
  ├── f float
  ├── s string
  ├── j jsonb
- └── INDEX primary
-      └── x int not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── f float
+      ├── x int not null (storing)
+      └── j jsonb (storing)
 
 exec-ddl
 CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
@@ -25,15 +37,17 @@ TABLE b
 optsteps
 SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
 ----
-----
-*** Initial expr:
+================================================================================
+Initial expression
+  Cost: 2000.00
+================================================================================
   project
    ├── columns: s:4(string)
    ├── inner-join
    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
    │    ├── scan a
    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-   │    │    └── keys: (1)
+   │    │    └── keys: (1) weak(3,4)
    │    ├── scan b
    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
    │    │    └── keys: (6)
@@ -48,15 +62,17 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
    │              └── const: 10 [type=int]
    └── projections [outer=(4)]
         └── variable: a.s [type=string, outer=(4)]
-
-*** NormalizeCmpPlusConst applied; best expr changed:
+================================================================================
+NormalizeCmpPlusConst
+  Cost: 2000.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
     │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
     │    ├── scan a
     │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-    │    │    └── keys: (1)
+    │    │    └── keys: (1) weak(3,4)
     │    ├── scan b
     │    │    ├── columns: b.x:6(int!null) b.z:7(int)
     │    │    └── keys: (6)
@@ -75,15 +91,17 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   + │                   └── const: 1 [type=int]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** EnsureJoinFiltersAnd applied; best expr changed:
+================================================================================
+EnsureJoinFiltersAnd
+  Cost: 2000.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
     │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
     │    ├── scan a
     │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-    │    │    └── keys: (1)
+    │    │    └── keys: (1) weak(3,4)
     │    ├── scan b
     │    │    ├── columns: b.x:6(int!null) b.z:7(int)
     │    │    └── keys: (6)
@@ -99,8 +117,10 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │                   └── const: 1 [type=int]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** PushFilterIntoJoinLeft applied; best expr changed:
+================================================================================
+PushFilterIntoJoinLeft
+  Cost: 2100.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
@@ -108,11 +128,11 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   - │    ├── scan a
   + │    ├── select
     │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  - │    │    └── keys: (1)
-  + │    │    ├── keys: (1)
+  - │    │    └── keys: (1) weak(3,4)
+  + │    │    ├── keys: (1) weak(3,4)
   + │    │    ├── scan a
   + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │    │    └── keys: (1)
+  + │    │    │    └── keys: (1) weak(3,4)
   + │    │    └── filters [type=bool, outer=(2)]
   + │    │         └── eq [type=bool, outer=(2)]
   + │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -137,32 +157,35 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
   + │              └── variable: b.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** FilterUnusedJoinLeftCols applied; best expr changed:
+================================================================================
+FilterUnusedJoinLeftCols
+  Cost: 2100.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
   - │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
   - │    ├── select
   - │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    ├── keys: (1) weak(3,4)
+  - │    │    ├── scan a
   + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
   + │    ├── project
   + │    │    ├── columns: a.x:1(int!null) a.s:4(string)
-    │    │    ├── keys: (1)
-  - │    │    ├── scan a
+  + │    │    ├── keys: (1)
   + │    │    ├── select
     │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  - │    │    │    └── keys: (1)
+  - │    │    │    └── keys: (1) weak(3,4)
   - │    │    └── filters [type=bool, outer=(2)]
   - │    │         └── eq [type=bool, outer=(2)]
   - │    │              ├── variable: a.i [type=int, outer=(2)]
   - │    │              └── minus [type=int]
   - │    │                   ├── const: 10 [type=int]
   - │    │                   └── const: 1 [type=int]
-  + │    │    │    ├── keys: (1)
+  + │    │    │    ├── keys: (1) weak(3,4)
   + │    │    │    ├── scan a
   + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │    │    │    └── keys: (1)
+  + │    │    │    │    └── keys: (1) weak(3,4)
   + │    │    │    └── filters [type=bool, outer=(2)]
   + │    │    │         └── eq [type=bool, outer=(2)]
   + │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -181,8 +204,10 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │              └── variable: b.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** FilterUnusedSelectCols applied; best expr changed:
+================================================================================
+FilterUnusedSelectCols
+  Cost: 2100.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
@@ -192,12 +217,14 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │    │    ├── keys: (1)
     │    │    ├── select
   - │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    ├── keys: (1) weak(3,4)
   + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
-    │    │    │    ├── keys: (1)
+  + │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
   - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    │    └── keys: (1) weak(3,4)
   + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
-    │    │    │    │    └── keys: (1)
+  + │    │    │    │    └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
     │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -216,8 +243,10 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │              └── variable: b.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** FilterUnusedJoinRightCols applied; best expr changed:
+================================================================================
+FilterUnusedJoinRightCols
+  Cost: 2100.00
+================================================================================
    project
     ├── columns: s:4(string)
     ├── inner-join
@@ -251,14 +280,19 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
     │              └── variable: b.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
-
-*** GenerateIndexScans applied; best expr unchanged.
-
-*** ConstrainScan applied; best expr unchanged.
-
-*** GenerateIndexScans applied; best expr unchanged.
-
-*** Final best expr:
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+ConstrainScan (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 2100.00
+================================================================================
   project
    ├── columns: s:4(string)
    ├── inner-join
@@ -290,15 +324,16 @@ SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
    │              └── variable: b.x [type=int, outer=(6)]
    └── projections [outer=(4)]
         └── variable: a.s [type=string, outer=(4)]
-----
-----
+
 
 # Select/Project/Limit/Offset rules have cyclical dependencies.
 optsteps
 SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET 1
 ----
-----
-*** Initial expr:
+================================================================================
+Initial expression
+  Cost: 14500.00
+================================================================================
   limit
    ├── columns: i:2(int) column8:8(int)
    ├── ordering: +2
@@ -316,7 +351,7 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
    │    │         │    │    ├── scan a
    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-   │    │         │    │    │    └── keys: (1)
+   │    │         │    │    │    └── keys: (1) weak(3,4)
    │    │         │    │    ├── scan b
    │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
    │    │         │    │    │    └── keys: (6)
@@ -333,8 +368,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
    │    │                   └── const: 1 [type=int]
    │    └── const: 1 [type=int]
    └── const: 5 [type=int]
-
-*** EnsureJoinFilters applied; best expr changed:
+================================================================================
+EnsureJoinFilters
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -352,7 +389,7 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
     │    │         │    │    ├── scan a
     │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-    │    │         │    │    │    └── keys: (1)
+    │    │         │    │    │    └── keys: (1) weak(3,4)
     │    │         │    │    ├── scan b
     │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
     │    │         │    │    │    └── keys: (6)
@@ -373,8 +410,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** EnsureSelectFilters applied; best expr changed:
+================================================================================
+EnsureSelectFilters
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -392,7 +431,7 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
     │    │         │    │    ├── scan a
     │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-    │    │         │    │    │    └── keys: (1)
+    │    │         │    │    │    └── keys: (1) weak(3,4)
     │    │         │    │    ├── scan b
     │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
     │    │         │    │    │    └── keys: (6)
@@ -414,8 +453,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** FilterUnusedSelectCols applied; best expr changed:
+================================================================================
+FilterUnusedSelectCols
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -433,7 +474,7 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   - │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
   - │    │         │    │    ├── scan a
   - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  - │    │         │    │    │    └── keys: (1)
+  - │    │         │    │    │    └── keys: (1) weak(3,4)
   - │    │         │    │    ├── scan b
   - │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
   - │    │         │    │    │    └── keys: (6)
@@ -448,7 +489,7 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
   + │    │         │    │    │    ├── scan a
   + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │         │    │    │    │    └── keys: (1)
+  + │    │         │    │    │    │    └── keys: (1) weak(3,4)
   + │    │         │    │    │    ├── scan b
   + │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
   + │    │         │    │    │    │    └── keys: (6)
@@ -469,8 +510,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** FilterUnusedJoinLeftCols applied; best expr changed:
+================================================================================
+FilterUnusedJoinLeftCols
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -491,8 +534,9 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int) b.z:7(int)
     │    │         │    │    │    ├── scan a
   - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │         │    │    │    │    └── keys: (1) weak(3,4)
   + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
-    │    │         │    │    │    │    └── keys: (1)
+  + │    │         │    │    │    │    └── keys: (1)
     │    │         │    │    │    ├── scan b
     │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
     │    │         │    │    │    │    └── keys: (6)
@@ -513,8 +557,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** FilterUnusedJoinRightCols applied; best expr changed:
+================================================================================
+FilterUnusedJoinRightCols
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -557,8 +603,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** PushSelectIntoProject applied; best expr changed:
+================================================================================
+PushSelectIntoProject
+  Cost: 13250.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -617,8 +665,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** EliminateEmptyAnd applied; best expr changed:
+================================================================================
+EliminateEmptyAnd
+  Cost: 13250.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -663,8 +713,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** EliminateSelect applied; best expr changed:
+================================================================================
+EliminateSelect
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -728,8 +780,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** EliminateProjectProject applied; best expr changed:
+================================================================================
+EliminateProjectProject
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -787,8 +841,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** FilterUnusedSelectCols applied; best expr changed:
+================================================================================
+FilterUnusedSelectCols
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -846,8 +902,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** EliminateProjectProject applied; best expr changed:
+================================================================================
+EliminateProjectProject
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -905,8 +963,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │    │                   └── const: 1 [type=int]
     │    └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** PushOffsetIntoProject applied; best expr changed:
+================================================================================
+PushOffsetIntoProject
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -973,8 +1033,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   + │              ├── variable: a.i [type=int, outer=(2)]
   + │              └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** FilterUnusedOffsetCols applied; best expr changed:
+================================================================================
+FilterUnusedOffsetCols
+  Cost: 14500.00
+================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
     ├── ordering: +2
@@ -1035,8 +1097,10 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
     │              ├── variable: a.i [type=int, outer=(2)]
     │              └── const: 1 [type=int]
     └── const: 5 [type=int]
-
-*** PushLimitIntoProject applied; best expr changed:
+================================================================================
+PushLimitIntoProject
+  Cost: 14500.00
+================================================================================
   -limit
   +project
     ├── columns: i:2(int) column8:8(int)
@@ -1087,12 +1151,16 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
   +      └── plus [type=int, outer=(2)]
   +           ├── variable: a.i [type=int, outer=(2)]
   +           └── const: 1 [type=int]
-
-*** GenerateIndexScans applied; best expr unchanged.
-
-*** GenerateIndexScans applied; best expr unchanged.
-
-*** Final best expr:
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 14500.00
+================================================================================
   project
    ├── columns: i:2(int) column8:8(int)
    ├── ordering: +2
@@ -1134,16 +1202,17 @@ SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET
         └── plus [type=int, outer=(2)]
              ├── variable: a.i [type=int, outer=(2)]
              └── const: 1 [type=int]
-----
-----
+
 
 # Cyclical rules that trigger assert in AddAltFingerprint without extra code to
 # check whether nested rule has already called AddAltFingerprint.
 optsteps
 SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
 ----
-----
-*** Initial expr:
+================================================================================
+Initial expression
+  Cost: 1010.00
+================================================================================
   project
    ├── columns: column6:6(decimal)
    ├── select
@@ -1158,7 +1227,7 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
    │    │    │    ├── keys: (1)
    │    │    │    ├── scan a
    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-   │    │    │    │    └── keys: (1)
+   │    │    │    │    └── keys: (1) weak(3,4)
    │    │    │    └── projections [outer=(1,4)]
    │    │    │         ├── variable: a.s [type=string, outer=(4)]
    │    │    │         └── variable: a.x [type=int, outer=(1)]
@@ -1170,8 +1239,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
    │         └── const: 1 [type=decimal]
    └── projections [outer=(6)]
         └── variable: column6 [type=decimal, outer=(6)]
-
-*** FilterUnusedScanCols applied; best expr changed:
+================================================================================
+FilterUnusedScanCols
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1186,8 +1257,9 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
   - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    │    └── keys: (1) weak(3,4)
   + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
-    │    │    │    │    └── keys: (1)
+  + │    │    │    │    └── keys: (1)
     │    │    │    └── projections [outer=(1,4)]
     │    │    │         ├── variable: a.s [type=string, outer=(4)]
     │    │    │         └── variable: a.x [type=int, outer=(1)]
@@ -1199,8 +1271,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     │         └── const: 1 [type=decimal]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** EliminateProject applied; best expr changed:
+================================================================================
+EliminateProject
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1230,8 +1304,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     │         └── const: 1 [type=decimal]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** EnsureSelectFilters applied; best expr changed:
+================================================================================
+EnsureSelectFilters
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1256,8 +1332,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │              └── const: 1 [type=decimal]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** FilterUnusedSelectCols applied; best expr changed:
+================================================================================
+FilterUnusedSelectCols
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1294,8 +1372,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
     │              └── const: 1 [type=decimal]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** PushSelectIntoProject applied; best expr changed:
+================================================================================
+PushSelectIntoProject
+  Cost: 1011.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1336,8 +1416,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │    └── filters [type=bool]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** EliminateEmptyAnd applied; best expr changed:
+================================================================================
+EliminateEmptyAnd
+  Cost: 1011.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
     ├── select
@@ -1367,8 +1449,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │    └── true [type=bool]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** EliminateSelect applied; best expr changed:
+================================================================================
+EliminateSelect
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
   - ├── select
@@ -1415,8 +1499,10 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │         └── variable: column6 [type=decimal, outer=(6)]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** EliminateProject applied; best expr changed:
+================================================================================
+EliminateProject
+  Cost: 1010.00
+================================================================================
    project
     ├── columns: column6:6(decimal)
   - ├── project
@@ -1457,10 +1543,35 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
   + │              └── const: 1 [type=decimal]
     └── projections [outer=(6)]
          └── variable: column6 [type=decimal, outer=(6)]
-
-*** GenerateIndexScans applied; best expr unchanged.
-
-*** Final best expr:
+--------------------------------------------------------------------------------
+GenerateIndexScans (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: column6:6(decimal)
+    ├── select
+    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── keys: (1)
+    │    ├── group-by
+    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── keys: (1)
+  - │    │    ├── scan a
+  + │    │    ├── scan a@secondary
+    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    └── keys: (1)
+    │    │    └── aggregations [outer=(1)]
+    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
+    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
+    │              ├── variable: column6 [type=decimal, outer=(6)]
+    │              └── const: 1 [type=decimal]
+    └── projections [outer=(6)]
+         └── variable: column6 [type=decimal, outer=(6)]
+================================================================================
+Final best expression
+  Cost: 1010.00
+================================================================================
   project
    ├── columns: column6:6(decimal)
    ├── select
@@ -1482,5 +1593,190 @@ SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
    │              └── const: 1 [type=decimal]
    └── projections [outer=(6)]
         └── variable: column6 [type=decimal, outer=(6)]
+
+optsteps
+SELECT s, x FROM a WHERE s='foo' AND f>100
 ----
-----
+================================================================================
+Initial expression
+  Cost: 1100.00
+================================================================================
+  project
+   ├── columns: s:4(string) x:1(int!null)
+   ├── keys: (1)
+   ├── select
+   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    ├── keys: (1) weak(3,4)
+   │    ├── scan a
+   │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    └── keys: (1) weak(3,4)
+   │    └── and [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+   │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+   │         │    ├── variable: a.s [type=string, outer=(4)]
+   │         │    └── const: 'foo' [type=string]
+   │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+   │              ├── variable: a.f [type=float, outer=(3)]
+   │              └── const: 100.0 [type=float]
+   └── projections [outer=(1,4)]
+        ├── variable: a.s [type=string, outer=(4)]
+        └── variable: a.x [type=int, outer=(1)]
+================================================================================
+EnsureSelectFiltersAnd
+  Cost: 1100.00
+================================================================================
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+    ├── select
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── keys: (1) weak(3,4)
+    │    ├── scan a
+    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    └── keys: (1) weak(3,4)
+  - │    └── and [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+  + │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+    │         │    ├── variable: a.s [type=string, outer=(4)]
+    │         │    └── const: 'foo' [type=string]
+    │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+    │              ├── variable: a.f [type=float, outer=(3)]
+    │              └── const: 100.0 [type=float]
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+================================================================================
+FilterUnusedSelectCols
+  Cost: 1100.00
+================================================================================
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+    ├── select
+  - │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── keys: (1) weak(3,4)
+    │    ├── scan a
+  - │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    │    └── keys: (1) weak(3,4)
+    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+    │         │    ├── variable: a.s [type=string, outer=(4)]
+    │         │    └── const: 'foo' [type=string]
+    │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+    │              ├── variable: a.f [type=float, outer=(3)]
+    │              └── const: 100.0 [type=float]
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+--------------------------------------------------------------------------------
+GenerateIndexScans (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+    ├── select
+    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── keys: (1) weak(3,4)
+  - │    ├── scan a
+  + │    ├── scan a@secondary
+    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    │    └── keys: (1) weak(3,4)
+    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+    │         │    ├── variable: a.s [type=string, outer=(4)]
+    │         │    └── const: 'foo' [type=string]
+    │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+    │              ├── variable: a.f [type=float, outer=(3)]
+    │              └── const: 100.0 [type=float]
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+--------------------------------------------------------------------------------
+ConstrainScan (higher cost)
+--------------------------------------------------------------------------------
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+    ├── select
+    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── keys: (1) weak(3,4)
+  - │    ├── scan a@secondary
+  + │    ├── scan a
+    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    │    └── keys: (1) weak(3,4)
+    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+    │         │    ├── variable: a.s [type=string, outer=(4)]
+    │         │    └── const: 'foo' [type=string]
+    │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+    │              ├── variable: a.f [type=float, outer=(3)]
+    │              └── const: 100.0 [type=float]
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+================================================================================
+ConstrainScan
+  Cost: 110.00
+================================================================================
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+    ├── select
+    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── keys: (1) weak(3,4)
+  - │    ├── scan a
+  + │    ├── scan a@secondary
+    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  + │    │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+    │    │    └── keys: (1) weak(3,4)
+  - │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+  - │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+  - │         │    ├── variable: a.s [type=string, outer=(4)]
+  - │         │    └── const: 'foo' [type=string]
+  - │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
+  - │              ├── variable: a.f [type=float, outer=(3)]
+  - │              └── const: 100.0 [type=float]
+  + │    └── filters [type=bool]
+  + │         ├── true [type=bool]
+  + │         └── true [type=bool]
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+================================================================================
+SimplifyFilters
+  Cost: 100.00
+================================================================================
+   project
+    ├── columns: s:4(string) x:1(int!null)
+    ├── keys: (1)
+  - ├── select
+  + ├── scan a@secondary
+    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  - │    ├── keys: (1) weak(3,4)
+  - │    ├── scan a@secondary
+  - │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  - │    │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  - │    │    └── keys: (1) weak(3,4)
+  - │    └── filters [type=bool]
+  - │         ├── true [type=bool]
+  - │         └── true [type=bool]
+  + │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+  + │    └── keys: (1) weak(3,4)
+    └── projections [outer=(1,4)]
+         ├── variable: a.s [type=string, outer=(4)]
+         └── variable: a.x [type=int, outer=(1)]
+================================================================================
+Final best expression
+  Cost: 100.00
+================================================================================
+  project
+   ├── columns: s:4(string) x:1(int!null)
+   ├── keys: (1)
+   ├── scan a@secondary
+   │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+   │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
+   │    └── keys: (1) weak(3,4)
+   └── projections [outer=(1,4)]
+        ├── variable: a.s [type=string, outer=(4)]
+        └── variable: a.x [type=int, outer=(1)]

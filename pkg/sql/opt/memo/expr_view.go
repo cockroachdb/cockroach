@@ -117,7 +117,7 @@ func (ev ExprView) Physical() *PhysicalProps {
 	if ev.best == normBestOrdinal {
 		panic("physical properties are not available when traversing the normalized tree")
 	}
-	return ev.mem.LookupPhysicalProps(ev.lookupBestExpr().required)
+	return ev.mem.LookupPhysicalProps(ev.bestExpr().required)
 }
 
 // Group returns the memo group containing this expression.
@@ -135,7 +135,7 @@ func (ev ExprView) Child(nth int) ExprView {
 		group := ev.ChildGroup(nth)
 		return MakeNormExprView(ev.mem, group)
 	}
-	return MakeExprView(ev.mem, ev.lookupBestExpr().Child(nth))
+	return MakeExprView(ev.mem, ev.bestExpr().Child(nth))
 }
 
 // ChildCount returns the number of expressions that are inputs to this
@@ -144,7 +144,7 @@ func (ev ExprView) ChildCount() int {
 	if ev.best == normBestOrdinal {
 		return ev.mem.NormExpr(ev.group).ChildCount()
 	}
-	return ev.lookupBestExpr().ChildCount()
+	return ev.bestExpr().ChildCount()
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
@@ -153,7 +153,7 @@ func (ev ExprView) ChildGroup(nth int) GroupID {
 	if ev.best == normBestOrdinal {
 		return ev.mem.NormExpr(ev.group).ChildGroup(ev.mem, nth)
 	}
-	return ev.lookupBestExpr().Child(nth).group
+	return ev.bestExpr().Child(nth).group
 }
 
 // Private returns any private data associated with this expression, or nil if
@@ -162,7 +162,7 @@ func (ev ExprView) Private() interface{} {
 	if ev.best == normBestOrdinal {
 		return ev.mem.NormExpr(ev.group).Private(ev.mem)
 	}
-	return ev.mem.Expr(ev.lookupBestExpr().eid).Private(ev.mem)
+	return ev.mem.Expr(ev.bestExpr().eid).Private(ev.mem)
 }
 
 // Metadata returns the metadata that's specific to this expression tree. Some
@@ -172,11 +172,21 @@ func (ev ExprView) Metadata() *opt.Metadata {
 	return ev.mem.metadata
 }
 
-func (ev ExprView) lookupChildGroup(nth int) *group {
+// Cost returns the cost of executing this expression tree, as estimated by the
+// optimizer. It is not available when the ExprView is traversing the normalized
+// expression tree.
+func (ev ExprView) Cost() Cost {
+	if ev.best == normBestOrdinal {
+		panic("Cost is not available when traversing the normalized tree")
+	}
+	return ev.mem.bestExpr(BestExprID{group: ev.group, ordinal: ev.best}).cost
+}
+
+func (ev ExprView) childGroup(nth int) *group {
 	return ev.mem.group(ev.ChildGroup(nth))
 }
 
-func (ev ExprView) lookupBestExpr() *BestExpr {
+func (ev ExprView) bestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
@@ -321,7 +331,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	}
 
 	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
-		tp.Childf("cost: %.2f", ev.lookupBestExpr().cost)
+		tp.Childf("cost: %.2f", ev.bestExpr().cost)
 	}
 
 	// Format weak keys.
