@@ -153,6 +153,33 @@ func TestTrace(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowTraceForDistSQL",
+			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
+				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
+					t.Fatal(err)
+				}
+				return sqlDB.Query(
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+						"WHERE operation IS NOT NULL ORDER BY op")
+			},
+			expSpans: []string{
+				"session recording",
+				"sql txn",
+				"flow",
+				"table reader",
+				"starting plan",
+				"consuming rows",
+				"dist sender",
+				"/cockroach.roachpb.Internal/Batch",
+			},
+			// Depending on whether the data is local or not, we may not see these
+			// spans.
+			optionalSpans: []string{
+				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+				"noop",
+			},
+		},
+		{
 			name: "ShowTraceForSplitBatch",
 			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {

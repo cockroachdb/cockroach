@@ -146,6 +146,21 @@ func doExpandPlan(
 		showTraceParams := noParamsBase
 		showTraceParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, showTraceParams, n.plan)
+		if err != nil {
+			return plan, err
+		}
+		// Check if we can use distSQL for the wrapped plan and this is not a kv
+		// trace. distSQL does not handle kv tracing because this option is not
+		// plumbed down to the tableReader level.
+		// TODO(asubiotto): Handle kv tracing in distSQL.
+		ok, err := p.prepareForDistSQLSupportCheck(ctx)
+		if ok && err == nil {
+			if useDistSQL, err := shouldUseDistSQL(
+				ctx, p.SessionData().DistSQLMode, p.ExecCfg().DistSQLPlanner, n.plan,
+			); useDistSQL && err == nil && !n.kvTracingEnabled {
+				n.plan = p.newDistSQLWrapper(n.plan, n.stmtType)
+			}
+		}
 
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
