@@ -141,6 +141,6 @@ func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]
 	t.Helper()
 	res := sr.QueryStr(t, query)
 	if !reflect.DeepEqual(res, expected) {
-		t.Errorf("query '%s': expected:\n%v\ngot:%v\n", query, expected, res)
+		t.Errorf("query '%s': expected:\n%v\ngot:\n%v\n", query, expected, res)
 	}
 }
