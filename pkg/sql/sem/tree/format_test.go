@@ -56,7 +56,7 @@ func TestFormatStatement(t *testing.T) {
 		{`SHOW CREATE TABLE foo`, tree.FmtAnonymize,
 			`SHOW CREATE TABLE _`},
 		{`GRANT SELECT ON bar TO foo`, tree.FmtAnonymize,
-			`GRANT SELECT ON _ TO _`},
+			`GRANT SELECT ON TABLE _ TO _`},
 
 		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, tree.FmtHideConstants,
 			`SELECT (_ + COALESCE(_, _, x)) - ARRAY[_]`},
