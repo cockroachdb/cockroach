@@ -82,6 +82,15 @@ func (be *BestExpr) Operator() opt.Operator {
 	return be.op
 }
 
+// Expr returns the memo expression referenced by this best expression. Note
+// that if the best expression is an enforcer (like a Sort), then the memo
+// expression is wrapped by the enforcer (maybe even by multiple enforcers).
+// This means that the same ExprID can be returned by different best expressions
+// in the same group, each of which would have a different Operator type.
+func (be *BestExpr) Expr() ExprID {
+	return be.eid
+}
+
 // Group returns the memo group which contains this best expression.
 func (be *BestExpr) Group() GroupID {
 	return be.eid.Group

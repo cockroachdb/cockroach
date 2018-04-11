@@ -19,17 +19,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// coster encapsulates the cost model for the optimizer. The coster assigns an
-// estimated cost to each expression in the memo so that the optimizer can
-// choose the lowest cost expression tree. The estimated cost is a best-effort
-// approximation of the actual cost of execution, based on table and index
-// statistics that are propagated throughout the logical expression tree.
+// Coster is used by the optimizer to assign a cost to a candidate expression
+// that can provide a set of required physical properties. If a candidate
+// expression has a lower cost than any other expression in the memo group, then
+// it becomes the new best expression for the group.
+//
+// Coster is an interface so that different costing algorithms can be used by
+// the optimizer. For example, the OptSteps command uses a custom coster that
+// assigns infinite costs to some expressions in order to prevent them from
+// being part of the lowest cost tree (for debugging purposes).
+type Coster interface {
+	// ComputeCost returns the estimated cost of executing the candidate
+	// expression. The optimizer does not expect the cost to correspond to any
+	// real-world metric, but does expect costs to be comparable to one another,
+	// as well as summable.
+	ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost
+}
+
+// coster encapsulates the default cost model for the optimizer. The coster
+// assigns an estimated cost to each expression in the memo so that the
+// optimizer can choose the lowest cost expression tree. The estimated cost is
+// a best-effort approximation of the actual cost of execution, based on table
+// and index statistics that are propagated throughout the logical expression
+// tree.
 type coster struct {
 	mem *memo.Memo
 }
 
-func (c *coster) init(mem *memo.Memo) {
-	c.mem = mem
+func newCoster(mem *memo.Memo) *coster {
+	return &coster{mem: mem}
 }
 
 // computeCost calculates the estimated cost of the candidate best expression,
@@ -38,27 +56,24 @@ func (c *coster) init(mem *memo.Memo) {
 // branch-and-bound pruning will work properly.
 //
 // TODO: This is just a skeleton, and needs to compute real costs.
-func (c *coster) computeCost(candidate *memo.BestExpr, props *memo.LogicalProps) {
-	var cost memo.Cost
+func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
 	switch candidate.Operator() {
 	case opt.SortOp:
-		cost = c.computeSortCost(candidate, props)
+		return c.computeSortCost(candidate, props)
 
 	case opt.ScanOp:
-		cost = c.computeScanCost(candidate, props)
+		return c.computeScanCost(candidate, props)
 
 	case opt.SelectOp:
-		cost = c.computeSelectCost(candidate, props)
+		return c.computeSelectCost(candidate, props)
 
 	case opt.ValuesOp:
-		cost = c.computeValuesCost(candidate, props)
+		return c.computeValuesCost(candidate, props)
 
 	default:
 		// By default, cost of parent is sum of child costs.
-		cost = c.computeChildrenCost(candidate)
+		return c.computeChildrenCost(candidate)
 	}
-
-	candidate.SetCost(cost)
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {

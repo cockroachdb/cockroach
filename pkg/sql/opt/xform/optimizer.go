@@ -25,19 +25,14 @@ import (
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
-// event supported by the Optimizer and Factory. It is invoked each time an
-// optimization rule (Normalize or Explore) has been matched by the optimizer.
-// The name of the matched rule is passed as a parameter. If the function
-// returns false, then the rule is not applied (i.e. skipped).
-type MatchedRuleFunc func(ruleName opt.RuleName) bool
+// event supported by the optimizer. See the comment in factory.go for more
+// details.
+type MatchedRuleFunc = norm.MatchedRuleFunc
 
-// AppliedRuleFunc defines the callback function for the AppliedRuleFunc event
-// supported by the Optimizer and Factory. It is invoked each time an
-// optimization rule (Normalize or Explore) has been applied by the optimizer.
-// The function is called with the name of the rule and the memo group it
-// affected. If the rule was an exploration rule, then the added parameter
-// gives the number of expressions added to the group by the rule.
-type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
+// AppliedRuleFunc defines the callback function for the NotifyOnAppliedRule
+// event supported by the optimizer. See the comment in factory.go for more
+// details.
+type AppliedRuleFunc = norm.AppliedRuleFunc
 
 // Optimizer transforms an input expression tree into the logically equivalent
 // output expression tree with the lowest possible execution cost.
@@ -53,7 +48,7 @@ type Optimizer struct {
 	evalCtx  *tree.EvalContext
 	f        *norm.Factory
 	mem      *memo.Memo
-	coster   coster
+	coster   Coster
 	explorer explorer
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
@@ -79,9 +74,9 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 		evalCtx:  evalCtx,
 		f:        f,
 		mem:      f.Memo(),
+		coster:   newCoster(f.Memo()),
 		stateMap: make(map[optStateKey]*optState),
 	}
-	o.coster.init(o.mem)
 	o.explorer.init(o)
 	return o
 }
@@ -93,6 +88,20 @@ func (o *Optimizer) Factory() *norm.Factory {
 	return o.f
 }
 
+// Coster returns the coster instance that the optimizer is currently using to
+// estimate the cost of executing portions of the expression tree. When a new
+// optimizer is constructed, it creates a default coster that will be used
+// unless it is overridden with a call to SetCoster.
+func (o *Optimizer) Coster() Coster {
+	return o.coster
+}
+
+// SetCoster overrides the default coster. The optimizer will now use the given
+// coster to estimate the cost of expression execution.
+func (o *Optimizer) SetCoster(coster Coster) {
+	o.coster = coster
+}
+
 // DisableOptimizations disables all transformation rules, including normalize
 // and explore rules. The unaltered input expression tree becomes the output
 // expression tree (because no transforms are applied).
@@ -102,15 +111,15 @@ func (o *Optimizer) DisableOptimizations() {
 
 // NotifyOnMatchedRule sets a callback function which is invoked each time an
 // optimization rule (Normalize or Explore) has been matched by the optimizer.
-// If matchedRule is nil, then no notifications are sent. If no callback
-// function is set, then all rules are applied by default. In addition, callers
-// can invoke the DisableOptimizations convenience method to disable all rules.
+// If matchedRule is nil, then no notifications are sent, and all rules are
+// applied by default. In addition, callers can invoke the DisableOptimizations
+// convenience method to disable all rules.
 func (o *Optimizer) NotifyOnMatchedRule(matchedRule MatchedRuleFunc) {
 	o.matchedRule = matchedRule
 
 	// Also pass through the call to the factory so that normalization rules
 	// make same callback.
-	o.f.NotifyOnMatchedRule(norm.MatchedRuleFunc(matchedRule))
+	o.f.NotifyOnMatchedRule(matchedRule)
 }
 
 // NotifyOnAppliedRule sets a callback function which is invoked each time an
@@ -121,7 +130,7 @@ func (o *Optimizer) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 
 	// Also pass through the call to the factory so that normalization rules
 	// make same callback.
-	o.f.NotifyOnAppliedRule(norm.AppliedRuleFunc(appliedRule))
+	o.f.NotifyOnAppliedRule(appliedRule)
 }
 
 // Memo returns the memo structure that the optimizer is using to optimize.
@@ -454,7 +463,8 @@ func (o *Optimizer) enforceProps(
 // group. If so, then the candidate becomes the new lowest cost expression.
 func (o *Optimizer) ratchetCost(candidate *memo.BestExpr) {
 	group := candidate.Group()
-	o.coster.computeCost(candidate, o.mem.GroupProperties(group))
+	cost := o.coster.ComputeCost(candidate, o.mem.GroupProperties(group))
+	candidate.SetCost(cost)
 	state := o.lookupOptState(group, candidate.Required())
 	if state.best == memo.UnknownBestExprID {
 		// Lazily allocate the best expression only when it's needed.
