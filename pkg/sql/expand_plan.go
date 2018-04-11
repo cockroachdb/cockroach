@@ -139,9 +139,6 @@ func doExpandPlan(
 		explainParams := noParamsBase
 		explainParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
 
 	case *showTraceNode:
 		// SHOW TRACE only shows the execution trace of the plan, and wants to do
@@ -149,15 +146,9 @@ func doExpandPlan(
 		showTraceParams := noParamsBase
 		showTraceParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, showTraceParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
 
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
 
 	case *explainPlanNode:
 		// EXPLAIN only shows the structure of the plan, and wants to do
@@ -671,6 +662,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *serializeNode:
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
+
+	case *distSQLWrapper:
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
