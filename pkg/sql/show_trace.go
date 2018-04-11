@@ -110,11 +110,38 @@ WHERE message LIKE 'fetched: %'
 	}
 
 	// SHOW TRACE FOR SELECT ...
-	stmtPlan, err := p.newPlan(ctx, n.Statement, nil)
+	/*stmtPlan, err := p.newPlan(ctx, n.Statement, nil)
 	if err != nil {
 		plan.Close(ctx)
 		return nil, err
+	}*/
+	if err := p.makePlan(ctx, Statement{AST: n.Statement}); err != nil {
+		// TODO(asubiotto): Any cleanup required?
+		return nil, err
 	}
+
+	stmtPlan := p.curPlan.plan
+
+	// TODO(asubiotto): We need to determine whether or not distSQL should be
+	// used on stmtPlan. shouldUseDistSQL relies on some planner state
+	// which at this stage is not initialized. I could initialize it calling
+	// makePlan(...) above instead of newPlan but I want to double check there
+	// won't be any side-effects.
+	// CheckSupport() checks that we can run the plan and it is recommended to do
+	// so.
+	/*if useDistSQL, err := shouldUseDistSQL(
+		ctx, p.SessionData().DistSQLMode, p.extendedEvalCtx.DistSQLPlanner, p,
+	); err != nil {
+		return nil, err
+	}*/
+
+	// TODO(asubiotto): This check fails if doing newPlan because n.spans is not
+	// populated on a scanNode and the recommendation for spans != 1 is
+	// canDistribute which results in useDistSQL = false.
+	if useDistSQL, err := p.ExecCfg().DistSQLPlanner.CheckSupport(stmtPlan); useDistSQL && err == nil {
+		stmtPlan = p.makeDistSQLNode(stmtPlan, n.Statement.StatementType())
+	}
+
 	tracePlan, err := p.makeShowTraceNode(
 		stmtPlan, n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
 	if err != nil {
