@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import d3 from "d3";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { RouterState } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
@@ -198,13 +199,13 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(
  * Renders the main content of the cluster visualization page.
  */
 class ClusterOverview extends React.Component<RouterState, {}> {
-  static title() {
-    return "Cluster Overview";
-  }
-
   render() {
     return (
       <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <Helmet>
+          <title>Cluster Overview</title>
+        </Helmet>
+        <section className="section"><h1>Cluster Overview</h1></section>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>

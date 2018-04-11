@@ -3,6 +3,7 @@ import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import _ from "lodash";
 import moment from "moment";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { RouterState } from "react-router";
 
@@ -437,6 +438,9 @@ class Network extends React.Component<NetworkProps, {}> {
     const filters = getFilters(this.props.location);
     return (
       <div className="section">
+        <Helmet>
+          <title>Network Diagnostics | Debug</title>
+        </Helmet>
         <h1>Network Diagnostics</h1>
         <Loading
           loading={!contentAvailable(nodesSummary)}

@@ -1,5 +1,6 @@
 import _ from "lodash";
 import React from "react";
+import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
 import spinner from "assets/spinner.gif";
@@ -78,10 +79,6 @@ interface LocalitiesProps {
 }
 
 class Localities extends React.Component<LocalitiesProps, {}> {
-  static title() {
-    return <h1>Localities</h1>;
-  }
-
   componentWillMount() {
     this.props.refreshLocations();
     this.props.refreshNodes();
@@ -94,26 +91,32 @@ class Localities extends React.Component<LocalitiesProps, {}> {
 
   render() {
     return (
-      <Loading
-        loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
-        className="loading-image loading-image__spinner-left"
-        image={ spinner }
-      >
-        <section className="section">
-          <table className="locality-table">
-            <thead>
-              <tr>
-                <th>Localities</th>
-                <th>Nodes</th>
-                <th>Location</th>
-              </tr>
-            </thead>
-            <tbody>
-              { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
-            </tbody>
-          </table>
-        </section>
-      </Loading>
+      <div>
+        <Helmet>
+          <title>Localities | Debug</title>
+        </Helmet>
+        <section className="section"><h1>Localities</h1></section>
+        <Loading
+          loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
+          className="loading-image loading-image__spinner-left"
+          image={ spinner }
+        >
+          <section className="section">
+            <table className="locality-table">
+              <thead>
+                <tr>
+                  <th>Localities</th>
+                  <th>Nodes</th>
+                  <th>Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                { renderLocalityTree(this.props.locationTree, this.props.localityTree) }
+              </tbody>
+            </table>
+          </section>
+        </Loading>
+      </div>
     );
   }
 }
