@@ -82,18 +82,14 @@ func TestDumpData(t *testing.T) {
 			}
 			if d.Cmd == "dump" && d.Input != "noroundtrip" {
 				if s != d.Expected {
-					d.Fatalf(t, "unexpected: %s\nexpected: %s", s, d.Expected)
+					return s
 				}
 
-				if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", "drop database if exists tmp; create database tmp"}); err != nil {
-					d.Fatalf(t, "%v", err)
-				} else {
-					t.Log(out)
-				}
+				c.RunWithArgs([]string{"sql", "-e", "drop database if exists tmp; create database tmp"})
 				if out, err := c.RunWithCaptureArgs([]string{"sql", "-d", "tmp", "-e", s}); err != nil {
 					d.Fatalf(t, "%v", err)
 				} else {
-					t.Log(out)
+					t.Logf("executed SQL: %s\nresult: %s", s, out)
 				}
 				args[1] = "tmp"
 				roundtrip, err := c.RunWithCaptureArgs(args)
@@ -101,7 +97,7 @@ func TestDumpData(t *testing.T) {
 					d.Fatalf(t, "%v", err)
 				}
 				if roundtrip != s {
-					d.Fatalf(t, "unexpected: %s", roundtrip)
+					d.Fatalf(t, "roundtrip results unexpected: %s, expected: %s", roundtrip, s)
 				}
 			}
 			return s
