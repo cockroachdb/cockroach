@@ -1171,25 +1171,26 @@ var RestoreHeader = sqlbase.ResultColumns{
 	{Name: "bytes", Typ: types.Int},
 }
 
+// restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -1245,7 +1246,7 @@ func restorePlanHook(
 		}
 		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
 	}
-	return fn, RestoreHeader, nil
+	return fn, RestoreHeader, nil, nil
 }
 
 func doRestorePlan(

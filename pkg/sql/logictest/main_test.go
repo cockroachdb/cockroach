@@ -15,45 +15,19 @@
 package logictest
 
 import (
-	"context"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go
-
-// Add a placeholder implementation to test the plan hook. It accepts statements
-// of the form `SHOW planhook` and returns a single row with the string value
-// 'planhook'.
-func init() {
-	testingPlanHook := func(
-		_ context.Context, stmt tree.Statement, state sql.PlanHookState,
-	) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
-		show, ok := stmt.(*tree.ShowVar)
-		if !ok || show.Name != "planhook" {
-			return nil, nil, nil
-		}
-		header := sqlbase.ResultColumns{
-			{Name: "value", Typ: types.String},
-		}
-		return func(_ context.Context, resultsCh chan<- tree.Datums) error {
-			resultsCh <- tree.Datums{tree.NewDString(show.Name)}
-			return nil
-		}, header, nil
-	}
-	sql.AddPlanHook(testingPlanHook)
-}
 
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
