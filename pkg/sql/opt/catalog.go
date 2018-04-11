@@ -124,10 +124,6 @@ type TableStatistic interface {
 	// any column in the statistic.
 	NullCount() uint64
 
-	// HasHistogram returns whether a histogram is available for this statistic.
-	// Only single-column statistics can have histograms.
-	HasHistogram() bool
-
 	// TODO(radu): add Histogram().
 }
 

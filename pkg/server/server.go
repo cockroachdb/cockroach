@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 
 	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
@@ -376,8 +377,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// of the server's components. There's a circular dependency - many things
 	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
 	// which in turn needs many things. That's why everybody that needs an
-	// InternalExecutor takes pointers to this one instance.
-	sqlExecutor := sql.InternalExecutor{}
+	// InternalExecutor uses this one instance.
+	internalExecutor := &sql.InternalExecutor{}
 
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
@@ -398,7 +399,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
-		SQLExecutor:             &sqlExecutor,
+		SQLExecutor:             internalExecutor,
 		LogRangeEvents:          s.cfg.EventLogEnabled,
 		TimeSeriesDataStore:     s.tsDB,
 
@@ -422,11 +423,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
-		s.cfg.AmbientCtx, s.clock, s.db, &sqlExecutor, &s.nodeIDContainer, st, func(opName, user string) (interface{}, func()) {
+		s.cfg.AmbientCtx,
+		s.clock,
+		s.db,
+		internalExecutor,
+		&s.nodeIDContainer,
+		st,
+		func(opName, user string) (interface{}, func()) {
 			// This is a hack to get around a Go package dependency cycle. See comment
 			// in sql/jobs/registry.go on planHookMaker.
 			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
-		})
+		},
+	)
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
@@ -436,7 +444,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		DB:             s.db,
-		Executor:       &sqlExecutor,
+		Executor:       internalExecutor,
 		FlowDB:         client.NewDB(s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
@@ -459,7 +467,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
-	s.admin = newAdminServer(s, &sqlExecutor)
+	s.admin = newAdminServer(s, internalExecutor)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		st,
@@ -474,7 +482,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	s.authentication = newAuthenticationServer(s, &sqlExecutor)
+	s.authentication = newAuthenticationServer(s, internalExecutor)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
@@ -524,6 +532,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeDescriptorCache:    s.distSender.RangeDescriptorCache(),
 		LeaseHolderCache:        s.distSender.LeaseHolderCache(),
 		TestingKnobs:            sqlExecutorTestingKnobs,
+
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
 			distsqlrun.Version,
@@ -538,8 +547,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.nodeLiveness,
 			sqlExecutorTestingKnobs.DistSQLPlannerKnobs,
 		),
-		ExecLogger:             log.NewSecondaryLogger(nil, "sql-exec", true /*enableGc*/, false /*forceSyncWrites*/),
-		AuditLogger:            log.NewSecondaryLogger(s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true /*forceSyncWrites*/),
+
+		TableStatsCache: stats.NewTableStatisticsCache(
+			s.cfg.SQLTableStatCacheSize,
+			s.gossip,
+			s.db,
+			internalExecutor,
+		),
+
+		ExecLogger: log.NewSecondaryLogger(
+			nil /* dirName */, "sql-exec", true /* enableGc */, false, /*forceSyncWrites*/
+		),
+
+		AuditLogger: log.NewSecondaryLogger(
+			s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true, /*forceSyncWrites*/
+		),
+
 		ConnResultsBufferBytes: s.cfg.ConnResultsBufferBytes,
 	}
 
@@ -573,7 +596,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
 	}
 
-	sqlExecutor.ExecCfg = &execCfg
+	internalExecutor.ExecCfg = &execCfg
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetExecCfg(&execCfg)
