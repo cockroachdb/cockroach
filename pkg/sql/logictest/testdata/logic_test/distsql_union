@@ -36,6 +36,8 @@ NULL       /2       1         {1}       1
 /4         /5       4         {4}       4
 /5         NULL     5         {5}       5
 
+subtest Union
+
 # Simple UNION ALL and UNION. (The ORDER BY applies to the UNION, not the last select.)
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM xyz UNION ALL SELECT x FROM xyz ORDER BY x]
@@ -186,6 +188,8 @@ VALUES (1), (2) UNION VALUES (2), (3)
 1
 2
 3
+
+subtest Intersect
 
 # Basic INTERSECT ALL and INTERSECT case -- should return every row.
 query T
@@ -390,6 +394,37 @@ query I rowsort
 2
 2
 
+# INTERSECT ALL and INTERSECT with a projection on the result.
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))
+----
+1
+2
+3
+4
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT ALL (SELECT x, y FROM xyz))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzclk2L2zAQhu_9FWFOLagQKR9tDIWUstDAkpRsbsUHbzxNDFnLSDJsuuS_F9tdsnZizZq5mBwV-5FejR_I-wKpjnEZPaGF4DdIEKBAwAgEjEHABEIBmdFbtFab4pUKWMTPEAwFJGmWu-LnUMBWG4TgBVziDggBbKLHA64xitGAgBhdlBzKQzKTPEXmOH8-_gUBq9wFg7kUcwXhSYDO3f8tzzs9Hgf7yO7ru7wioQDroh1CIE-ix-lUa7rzVnmqTYwG49pmYUFSr1y54s_I7h_QrbJ6tM0xw2CwWG7u1g93PzaD7_f3IOCAf9zHMvWnbybZ7V8X5xk0BnC-2Yhxsyuxl_qzzpoDuHrwuHaw7NkHl71Op1rT3ZaOqmdzl71Op1rT3ZYVo57NXfY6nWpNd1tWjHs2d9nrdKo13W1ZQRTJNdpMpxbf1ViGxbUw3mE1Jqtzs8VfRm_LY6rlquTK_-QYraueqmqxSKtHRcD3w1MOPOPAkpVbTvy07DAy1Q2ecuAZB5as3I2RXdCqSQ_f0iP_vEdeWNZnNmzSY47gfpgQ3A8TgvthSnCCJgSfcAT3w4TgfpgQ3A9TghM0IfiUI_gXjqJ-mFDUDxOK-mFKUYImFP3KUdQPE4r6YUJRP0wpStCEojOOopLVEwiakJSgCUsJmtKUwqmuwCsLvLbAqwvMvsArDJLVGORFZehkq5-mbPXTlK1-mrSVwClbu5Sly2_WpS11pSlbO_Wlzjhl60V58Noanj78CwAA__92o0EQ
+
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))
+----
+1
+2
+3
+4
+5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) INTERSECT (SELECT x, y FROM xyz))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUmNFq2zAUhu_3FOFcbaBBJDluahh0bIUVSjva3I1cuLGWGNLY2Ao0K3n3kZiRxqrPX88lSi6d9PM5OtX3W84zLbLE3MSPpqToF0kSpEiQJkEBCRrQWFBeZBNTllmx-ZMKuEqeKOoLShf50m4-HguaZIWh6JlsaueGIhrFD3NzZ-LEFCQoMTZO59sieZE-xsXq4mn1hwTdLm3Uu5DiQtF4LShb2t0tSxtPDUVyLd5e9nta2nQxsfs1qwJMtd0NHla9WVzOXuPH611Tqk1T7zcLfYyzCBqb2t1quciKxBQm2bvZ9i5t2m6ay8B_C2GHFsR_dfkjLmf3xt7m-22OVrmJelc3o8u7-8tvo97X62sSNDe_7cftCj59KdLp7N_Fbic0ruzsfYd7k33O8voAXi083Css_QQOKOsncA42C32Mswgam_IUOF5aCDu0cEqBo_x4D8r68f5gs9DHOIugsSlP3ntpIezQwil5r_14D8r68f5gs9DHOIugsSlP3ntpIezQwil5H_jxHpT14_3BZqGPcRZBY1OevPfSQtihhVPyHvyadWfKPFuU5k2_HPQ3yzLJ1FRjKrNlMTE_i2yyLVNd3m657QeJKW31rawurhbVV5sGX8KyDsuXcLAHy3awVJ3o8y60CrvQWvO0Yieu-YlrtvSAr8zDEvTN06rfiT7rQmuw0wJ24uCfPWgBqzocsjBY9Bm_UUJ-pwxZ-pyHz7uIzcNIbEADsXkaic3TSGwJshSFKR8rwG1AI7kBjuxGONjpAEd-Sz5SJcKddOFwx3HJxwtaOp8vElgunYRp9QjmafgMBjh6CPM4fArzOLSVj1c5BIN38rWVrTwNbeVxaCvA0ZblcWirk7J7g1cSHJ_4lK3hjq3KiZo2tio-aRQ4vSn-HAMGB2hkK8KBrQBHtgIcHpr5kFUDMHgnZdvYCmhkK8CRrQhHW5bHka2KP8KqIcD5lK3hrq38KRYtnU8a3QfvWk7StLEV0MhWhANbAY5sBTiyVfMhqxUYvJOyrd5yeRq-5vI4fM8FOHrR5XFkq-aPshqNjk_ZGu7YqvmzbH3p4_WHvwEAAP__N8_xtQ==
+
+subtest Except
+
 # Basic EXCEPT ALL and EXCEPT case.
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT y FROM xyz) EXCEPT ALL (SELECT x AS y FROM xyz) ORDER BY y]
@@ -568,3 +603,22 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzUmF9r2lAYxu_3KeS92tgZeP
 query I rowsort
 (SELECT y FROM xyz ORDER BY z) EXCEPT (SELECT y FROM xyz ORDER BY z)
 ----
+
+# EXCEPT ALL and EXCEPT with a projection on the result.
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT ALL (SELECT x, y FROM xyz))
+----
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT ALL (SELECT x, y FROM xyz))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzclkFr2zAUx-_7FOGdNtAgkpNsMQwyRmGF0pQuh8HwwY3fEkNqGUmGZiXffdheyezEejHvYnJU7J_01_MP8n-FTCd4Hz-jhfAXSBCgQEAAAiYgYAqRgNzoNVqrTflKDdwmLxCOBaRZXrjy50jAWhuE8BVc6nYIIazipx0-YpygAQEJujjdVYfkJn2OzX7xsv8DApaFC0cLKRYKooMAXbh_Wx53etqPtrHdNnd5QyIB1sUbhFAexIDTqc50x62KTJsEDSaNzaKSpF45c8Xvsd3-QLfMm9FW-xzD0c3PbzcPq9HXuzsQsMPf7n0V-cMXk262b4vjAFq3P14rYFzrTOZ7_VHn7dufPXjSOFgO7GvLQadTnemuyEU1sKHLQadTnemuSIlgYEOXg06nOtNdkRKTgQ1dDjqd6kx3RUoQzfERba4zixe1lHF5J0w2WM_I6sKs8cHodXVMvVxWXPU_nKB19VNVL26z-lEZ8HJ4xoHnHFiycsupn5Y9Rqb6wTMOPOfAkpW7NbITWrXp8f904J934IVlc2bjNj3hCO6HCcH9MCG4H6YEJ2hC8ClHcD9MCO6HCcH9MCU4QROCzziCf-Io6ocJRf0woagfphQlaELRzxxF_TChqB8mFPXDlKIETSg65ygqWT2BoAlJCZqwlKApTSmc6gq8ssBrC7y6wOwLvMIgWY1BnlSGXrb6acpWP03Z6qdJWwmcsrVPWTr9Zn3aUl-asrVXX-qNU7aelAevrdHh3d8AAAD__1FYPIg=
+
+query I rowsort
+SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT (SELECT x, y FROM xyz))
+----
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM ((SELECT x, y FROM xyz) EXCEPT (SELECT x, y FROM xyz))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUmFFr2zwUhu-_XxHO1TfQIJIcNzUMOrbCCqUtXS8GIxdurDWGNDa2As1K_vtIzEht1eet5xIll076-Byd6nkt55kWWWKu4kdTUvSTJAlSJEiToIAEjWgiKC-yqSnLrNj8SQVcJE8UDQWli3xpNx9PBE2zwlD0TDa1c0MR3cX3c3Nr4sQUJCgxNk7n2yJ5kT7GxersafWbBF0vbTQ4k-JM0WQtKFva3S1LGz8YiuRavL3s17S06WJq6zWrAky13Q3uV4NZXM5e4yfrXVOqS1PvNwt9iLMIWpva3Wq5yIrEFCap3Wx7ly5tt81l5L-FsEcL4p-6_BaXs-_GXuf1Nu9WuYkG5z--nN_cDT5fXpKgufll_9-2_-FTkT7M_l7stkHrsk7ed7JX2ccsb67-1cLjWmHpJ21AWT9ps7dZ6EOcRdDalKe08dJC2KOFo0kb5Ud6UNaP9HubhT7EWQStTXmS3ksLYY8WjkZ67Ud6UNaP9HubhT7EWQStTXmS3ksLYY8Wjkb6wI_0oKwf6fc2C32Iswham_IkvZcWwh4tHI304OerW1Pm2aI0b_q1YLhZk0keTDWjMlsWU3NTZNNtmeryesttP0hMaatvZXVxsai-2jT4EpZNWL6Egxosu8FS9aJP-9Aq7ENrzdOKnbjmJ67Z0iO-Mg9L0DdPq2Ev-qQPrcFOC9iJg3_2qAOsmnDIwmDRJ_xGCfmdMmbpUx4-7SM2DyOxAQ3E5mkkNk8jsSXIUhSmfKwAtwGN5AY4shvhYKcDHPkt-UiVCHfShcMdxyUfL2jpfL5IYLl0EqbTI5in4TMY4OghzOPwKczj0FY-XuUYDN7J10628jS0lcehrQBHW5bHoa1OytYGryQ4PvEp28AdW5UTNV1sVXzSKHB6U_w5BgwO0MhWhANbAY5sBTg8NPMhq0Zg8E7KdrEV0MhWgCNbEY62LI8jWxV_hFVjgPMp28BdW_lTLFo6nzR6CN61nKTpYiugka0IB7YCHNkKcGSr5kNWKzB4J2U7veXyNHzN5XH4ngtw9KLL48hWzR9lNRodn7IN3LFV82fZ5tIn6__-BAAA__8JI-0t

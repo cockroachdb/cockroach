@@ -56,19 +56,9 @@ func (jb *joinerBase) init(
 ) error {
 	jb.joinType = jType
 
-	numLeftCols, numRightCols := len(leftTypes), len(rightTypes)
-	if post != nil {
-		if post.Projection {
-			numLeftCols, numRightCols = len(post.OutputColumns), len(post.OutputColumns)
-		} else if post.RenderExprs != nil {
-			numLeftCols, numRightCols = len(post.RenderExprs), len(post.RenderExprs)
-		}
-	}
 	if isSetOpJoin(jb.joinType) {
-		if err := isValidSetOpJoin(
-			onExpr, numLeftCols, numRightCols, len(leftEqColumns),
-		); err != nil {
-			return err
+		if onExpr.Expr != "" {
+			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 		}
 	}
 
@@ -161,18 +151,6 @@ func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
 
 func isSetOpJoin(joinType sqlbase.JoinType) bool {
 	return joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin
-}
-
-func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numEqCols int) error {
-	if onExpr.Expr != "" {
-		return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
-	}
-	if numLeftCols != numEqCols || numRightCols != numEqCols {
-		return errors.Errorf(
-			"expected %v left and right columns, got %v left and %v right columns",
-			numEqCols, numLeftCols, numRightCols)
-	}
-	return nil
 }
 
 // shouldEmitUnmatchedRow determines if we should emit am ummatched row (with
