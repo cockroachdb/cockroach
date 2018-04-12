@@ -24,8 +24,9 @@ interface IconLinkProps {
  * a string title.
  */
 class IconLink extends React.Component<IconLinkProps, {}> {
-  static defaultProps = {
+  static defaultProps: Partial<IconLinkProps> = {
     className: "normal",
+    activeFor: [],
   };
 
   static contextTypes = {
@@ -35,20 +36,14 @@ class IconLink extends React.Component<IconLinkProps, {}> {
   render() {
     const { icon, title, to, activeFor, className } = this.props;
 
-    let isActive = false;
-    if (!_.isNil(activeFor)) {
-      const router = this.context.router;
-      const options = typeof activeFor === "string" ? [activeFor] : activeFor;
-      isActive = _.some(options, (opt) => router.isActive(opt, false));
-    }
-    const classOverrides = classNames({ active: isActive });
-
+    const router = this.context.router;
+    const linkRoutes = [to].concat(activeFor);
+    const isActive = _.some(linkRoutes, (route) => router.isActive(route, false));
     return (
       <li className={className} >
         <Link
           to={to}
-          activeClassName="active"
-          className={classOverrides}
+          className={classNames({ active: isActive })}
         >
           <div className="image-container"
                dangerouslySetInnerHTML={trustIcon(icon)}/>
