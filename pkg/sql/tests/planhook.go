@@ -28,19 +28,33 @@ import (
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		_ context.Context, stmt tree.Statement, state sql.PlanHookState,
-	) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+		ctx context.Context, stmt tree.Statement, state sql.PlanHookState,
+	) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 		show, ok := stmt.(*tree.ShowVar)
 		if !ok || show.Name != "planhook" {
-			return nil, nil, nil
+			return nil, nil, nil, nil
 		}
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: types.String},
 		}
-		return func(_ context.Context, resultsCh chan<- tree.Datums) error {
-			resultsCh <- tree.Datums{tree.NewDString(show.Name)}
+		rows := &tree.Tuple{Exprs: tree.Exprs{tree.NewStrVal(show.Name)}}
+		sel := &tree.Select{Select: &tree.ValuesClause{Tuples: []*tree.Tuple{rows}}}
+		subPlan, err := state.Select(ctx, sel, nil)
+
+		return func(_ context.Context, subPlans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+			for {
+				ok, err := subPlans[0].Next(state.RunParams(ctx))
+				if err != nil {
+					return err
+				}
+				if !ok {
+					break
+				}
+				resultsCh <- subPlans[0].Values()
+			}
+			subPlans[0].Close(ctx)
 			return nil
-		}, header, nil
+		}, header, []sql.PlanNode{subPlan}, err
 	}
 	sql.AddPlanHook(testingPlanHook)
 }

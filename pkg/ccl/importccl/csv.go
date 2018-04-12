@@ -683,38 +683,39 @@ func importJobDescription(
 	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
 }
 
+// importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var createFileFn func() (string, error)
 	if importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
 	if importStmt.FileFormat != "CSV" {
 		// not possible with current parser rules.
-		return nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
+		return nil, nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 	}
 
 	optsFn, err := p.TypeAsStringOpts(importStmt.Options, importOptionExpectValues)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -900,7 +901,7 @@ func importPlanHook(
 		}
 		return <-errCh
 	}
-	return fn, backupccl.RestoreHeader, nil
+	return fn, backupccl.RestoreHeader, nil, nil
 }
 
 func doDistributedCSVTransform(
