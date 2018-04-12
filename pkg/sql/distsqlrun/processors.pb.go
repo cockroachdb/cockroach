@@ -392,20 +392,23 @@ func (*TableReaderSpec) Descriptor() ([]byte, []int) { return fileDescriptorProc
 // performs KV operations to retrieve specific rows that correspond to the
 // values in the input stream (join by lookup).
 //
-// The "internal columns" of a JoinReader (see ProcessorSpec) are either the
-// columns of the table or the concatenation of the columns of the input stream
-// with the table columns, depending on the lookup columns specified.
-// Internally, only the values for the columns needed by the post-processing
-// stage are be populated.
+// The "internal columns" of a JoinReader (see ProcessorSpec) depend on whether
+// it is an index join or a lookup join.
+// For an index join: the internal columns are the columns of the table (right
+// side) of the index join.
+// For a lookup join: the internal columns are the input stream columns (left
+// side) concattenated with the needed columns from the table (right side) of
+// the join. This includes relevant outputted columns, or columns needed for
+// the onExpr.
 //
 // Example:
-// Input stream columns: | a | b |              Table columns: | c |
+// Input stream columns: | a | b |              Table columns: | c | d | e |
 //
-// If performing a lookup join on a = c (lookup columns are [0, 2]):
-//        Internal columns: | a | b | c |
+// If performing a lookup join on a = c (lookup columns is [0]), outputting a, b, c, e:
+//        Internal columns: | a | c | e |
 //
-// If performing an index join (lookup columns is []):
-//        Internal columns: | c |
+// If performing an index join (where a = c and b = d) (lookup columns is []):
+//        Internal columns: | c | d | e |
 type JoinReaderSpec struct {
 	Table cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
 	// If 0, we use the primary index; each row in the input stream has a value
@@ -434,7 +437,7 @@ type JoinReaderSpec struct {
 	// join is: [-1, -1, 2, -1, 3], the internal columns would be columns 3 and
 	// 5. But when an index lookup is done, the entire right side is returned.
 	// The index map tells the processor which columns it should select. In the
-	// example the indexMap would be [2, 3].
+	// example the indexMap would be [2, 4].
 	IndexMap []uint32 `protobuf:"varint,5,rep,packed,name=index_map,json=indexMap" json:"index_map,omitempty"`
 }
 
