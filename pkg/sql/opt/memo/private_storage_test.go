@@ -272,7 +272,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	datum := tree.NewDInt(1)
 	typ := types.Int
 
-	result := testutils.TestNoMallocs(func() {
+	testutils.TestNoMallocs(t, func() error {
 		ps.internColumnID(colID)
 		ps.internColSet(colSet)
 		ps.internColList(colList)
@@ -283,11 +283,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internDatum(datum)
 		ps.internType(typ)
 		ps.internTypedExpr(datum)
+		return nil
 	})
-
-	if !result {
-		t.Errorf("intern methods should not allocate after initial add")
-	}
 }
 
 func BenchmarkPrivateStorage(b *testing.B) {
