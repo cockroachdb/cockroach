@@ -105,11 +105,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: disableNetTrace,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.table_statistics table",
-		workFn:           createTableStatisticsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.TableStatisticsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.table_statistics table",
 	},
 	{
 		// Introduced in v2.0.
@@ -118,11 +115,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootUser,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.locations table",
-		workFn:           createLocationsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.locations table",
 	},
 	{
 		// Introduced in v2.0.
@@ -131,11 +125,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.role_members table",
-		workFn:           createRoleMembersTable,
-		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.role_members table",
 	},
 	{
 		// Introduced in v2.0.
@@ -465,18 +456,6 @@ func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, er
 
 func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
-}
-
-func createTableStatisticsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
-}
-
-func createLocationsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.LocationsTable)
-}
-
-func createRoleMembersTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
