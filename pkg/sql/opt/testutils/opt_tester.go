@@ -226,7 +226,7 @@ func (e *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	o.Optimize(root, required)
-	return fmt.Sprintf("[%d: \"%s\"]\n%s", root, required, o.Memo().String()), nil
+	return o.Memo().String(), nil
 }
 
 // OptSteps returns a string that shows each optimization step using the

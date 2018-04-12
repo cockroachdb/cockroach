@@ -106,6 +106,7 @@ func (o *Optimizer) Memo() *memo.Memo {
 func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *memo.PhysicalProps) memo.ExprView {
 	required := o.mem.InternPhysicalProps(requiredProps)
 	state := o.optimizeGroup(root, required)
+	o.mem.SetRoot(state.best)
 	return memo.MakeExprView(o.mem, state.best)
 }
 

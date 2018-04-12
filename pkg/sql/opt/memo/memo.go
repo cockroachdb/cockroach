@@ -124,6 +124,10 @@ type Memo struct {
 	// Intern the set of unique privates used by expressions in the memo, since
 	// there are so many duplicates.
 	privateStorage privateStorage
+
+	// root is the root of the lowest cost expression tree in the memo. It is
+	// set once via a call to the SetRoot method.
+	root BestExprID
 }
 
 // New constructs a new empty memo instance.
@@ -153,6 +157,17 @@ func New() *Memo {
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
 	return m.metadata
+}
+
+// SetRoot stores the root of the memo's lowest cost expression tree.
+func (m *Memo) SetRoot(root BestExprID) {
+	if int(root.group) >= len(m.groups) {
+		panic("the given root group is not part of this memo")
+	}
+	if root.ordinal != normBestOrdinal && int(root.ordinal) >= m.groups[root.group].bestExprCount() {
+		panic("the given root expression is not part of this memo")
+	}
+	m.root = root
 }
 
 // --------------------------------------------------------------------
@@ -360,7 +375,11 @@ func (m *Memo) String() string {
 		m.formatBestExprSet(child, mgrp)
 	}
 
-	return tp.String()
+	if m.root == UnknownBestExprID {
+		return tp.String()
+	}
+	required := m.LookupPhysicalProps(m.bestExpr(m.root).required)
+	return fmt.Sprintf("[%d: \"%s\"]\n%s", m.root.group, required, tp.String())
 }
 
 func (m *Memo) formatExpr(buf *bytes.Buffer, e *Expr) {
