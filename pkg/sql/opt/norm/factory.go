@@ -26,26 +26,6 @@ import (
 
 //go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
 
-// DynamicID is used when dynamically creating operators using the factory's
-// DynamicConstruct method. Each operand, whether it be a group, a private, or
-// a list, is first converted to a DynamicID and then passed as one of the
-// DynamicOperands.
-type DynamicID uint64
-
-// MakeDynamicListID constructs a DynamicID from a ListID.
-func MakeDynamicListID(id memo.ListID) DynamicID {
-	return (DynamicID(id.Offset) << 32) | DynamicID(id.Length)
-}
-
-// ListID converts the DynamicID to a ListID.
-func (id DynamicID) ListID() memo.ListID {
-	return memo.ListID{Offset: uint32(id >> 32), Length: uint32(id & 0xffffffff)}
-}
-
-// DynamicOperands is the list of operands passed to the factory's
-// DynamicConstruct method in order to dynamically create an operator.
-type DynamicOperands [opt.MaxOperands]DynamicID
-
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
 // normalization transformations defined for that expression type. This may

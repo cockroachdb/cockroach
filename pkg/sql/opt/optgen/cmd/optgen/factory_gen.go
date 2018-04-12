@@ -45,7 +45,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.genInternPrivateFuncs()
 	g.genConstructFuncs()
-	g.genDynamicConstructLookup()
+	g.genDynamicConstruct()
 }
 
 func (g *factoryGen) genInternPrivateFuncs() {
@@ -122,33 +122,33 @@ func (g *factoryGen) genConstructFuncs() {
 	}
 }
 
-// genDynamicConstructLookup generates a lookup table used by the factory's
-// DynamicConstruct method. The DynamicConstruct method constructs expressions
-// from a dynamic type and arguments. The code looks similar to this:
+// genDynamicConstruct generates the factory's DynamicConstruct method, which
+// constructs expressions from a dynamic type and arguments. The code looks
+// similar to this:
 //
-//   type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+//   type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 //
-//   var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+//   var dynConstructLookup [opt.NumOperators]dynConstructFunc
 //
 //   func init() {
 //     // ScanOp
-//     dynConstructLookup[opt.ScanOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+//     dynConstructLookup[opt.ScanOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 //       return f.ConstructScan(memo.PrivateID(operands[0]))
 //     }
 //
 //     // SelectOp
-//     dynConstructLookup[opt.SelectOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+//     dynConstructLookup[opt.SelectOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 //       return f.ConstructSelect(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 //     }
 //
 //     ... code for other ops ...
 //   }
 //
-func (g *factoryGen) genDynamicConstructLookup() {
-	funcType := "func(f *Factory, operands DynamicOperands) memo.GroupID"
-	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
+func (g *factoryGen) genDynamicConstruct() {
+	funcType := "func(f *Factory, operands memo.DynamicOperands) memo.GroupID"
+	g.w.writeIndent("type dynConstructFunc %s\n", funcType)
 
-	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc\n\n")
+	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructFunc\n\n")
 
 	g.w.nestIndent("func init() {\n")
 	g.w.writeIndent("// UnknownOp\n")
@@ -181,7 +181,7 @@ func (g *factoryGen) genDynamicConstructLookup() {
 
 	g.w.unnest("}\n\n")
 
-	args := "op opt.Operator, operands DynamicOperands"
+	args := "op opt.Operator, operands memo.DynamicOperands"
 	g.w.nestIndent("func (f *Factory) DynamicConstruct(%s) memo.GroupID {\n", args)
 	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
 	g.w.unnest("}\n")
