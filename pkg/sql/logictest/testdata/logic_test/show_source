@@ -78,6 +78,8 @@ query T colnames
 SELECT * FROM [SHOW DATABASES]
 ----
 Database
+default
+postgres
 system
 test
 

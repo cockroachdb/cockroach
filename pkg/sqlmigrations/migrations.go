@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -185,6 +186,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// with the same function to catch any tables written in a mixed-version setting.
 		name:   "ensure admin role privileges in all descriptors",
 		workFn: ensureMaxPrivileges,
+	},
+	{
+		// Introduced in v2.0.
+		name:   "create default databases",
+		workFn: createDefaultDbs,
 	},
 }
 
@@ -956,4 +962,34 @@ func addDefaultSystemJobsZoneConfig(ctx context.Context, r runner) error {
 		jobsZone.GC.TTLSeconds = 10 * 60 // 10m
 	}
 	return upsertZoneConfig(ctx, r, keys.JobsTableID, jobsZone)
+}
+
+func createDefaultDbs(ctx context.Context, r runner) error {
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Create the default databases. These are plain databases with
+	// default permissions. Nothing special happens if they exist
+	// already.
+	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s"`
+
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		for _, dbName := range []string{sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName} {
+			stmt := fmt.Sprintf(createDbStmt, dbName)
+			var res sql.StatementResults
+			res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+			if err == nil {
+				res.Close(ctx)
+			}
+			if err != nil {
+				log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+				break
+			}
+		}
+		if err == nil {
+			break
+		}
+	}
+	return err
 }

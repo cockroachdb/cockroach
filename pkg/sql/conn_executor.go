@@ -411,6 +411,11 @@ func (s *Server) ServeConn(
 	settings := &s.cfg.Settings.SV
 	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
 
+	curDb := args.Database
+	if curDb == "" {
+		curDb = sessiondata.DefaultDatabaseName
+	}
+
 	ex := connExecutor{
 		server:     s,
 		stmtBuf:    stmtBuf,
@@ -418,7 +423,7 @@ func (s *Server) ServeConn(
 		mon:        &sessionRootMon,
 		sessionMon: &sessionMon,
 		sessionData: sessiondata.SessionData{
-			Database:      args.Database,
+			Database:      curDb,
 			DistSQLMode:   distSQLMode,
 			SearchPath:    sqlbase.DefaultSearchPath,
 			Location:      time.UTC,
@@ -464,7 +469,7 @@ func (s *Server) ServeConn(
 		data: &ex.sessionData,
 		defaults: sessionDefaults{
 			applicationName: args.ApplicationName,
-			database:        args.Database,
+			database:        curDb,
 		},
 		settings:       s.cfg.Settings,
 		curTxnReadOnly: &ex.state.readOnly,
