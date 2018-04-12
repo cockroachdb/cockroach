@@ -321,7 +321,7 @@ SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
-group           0  group   ·            ·                                    (count, "k + v")                ·
+group           0  group   ·            ·                                    (count, "k + v")                weak-key("k + v")
  │              0  ·       aggregate 0  count_rows()                         ·                               ·
  │              0  ·       aggregate 1  k + v                                ·                               ·
  │              0  ·       group by     @1                                   ·                               ·
@@ -349,15 +349,15 @@ EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 render               0  render  ·            ·                 (count, "k + v")                ·
  │                   0  ·       render 0     agg0              ·                               ·
  │                   0  ·       render 1     agg1 + agg2       ·                               ·
- └── group           1  group   ·            ·                 (agg0, agg1, agg2)              ·
+ └── group           1  group   ·            ·                 (agg0, agg1, agg2)              agg1!=NULL; key(agg1)
       │              1  ·       aggregate 0  count_rows()      ·                               ·
       │              1  ·       aggregate 1  k                 ·                               ·
       │              1  ·       aggregate 2  v                 ·                               ·
       │              1  ·       group by     @1-@2             ·                               ·
-      └── render     2  render  ·            ·                 (k, v)                          k!=NULL; key(k)
+      └── render     2  render  ·            ·                 (k, v)                          k!=NULL; key(k); +k
            │         2  ·       render 0     test.public.kv.k  ·                               ·
            │         2  ·       render 1     test.public.kv.v  ·                               ·
-           └── scan  3  scan    ·            ·                 (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
+           └── scan  3  scan    ·            ·                 (k, v, w[omitted], s[omitted])  k!=NULL; key(k); +k
 ·                    3  ·       table        kv@primary        ·                               ·
 ·                    3  ·       spans        ALL               ·                               ·
 
@@ -1484,3 +1484,195 @@ render                    ·            ·
                 └── scan  ·            ·
 ·                         table        xy@primary
 ·                         spans        ALL
+
+# Test that ordering on GROUP BY columns is maintained.
+statement ok
+CREATE TABLE group_ord (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo(z)
+)
+
+statement ok
+INSERT INTO group_ord VALUES
+(1, 2, 3),
+(3, 4, 5),
+(5, NULL, 5),
+(6, 2, 3),
+(7, 2, 2),
+(8, 4, 2)
+
+# The ordering is on all the GROUP BY columns, and isn't preserved after the
+# aggregation.
+query II rowsort
+SELECT x, max(y) FROM group_ord GROUP BY x
+----
+1  2
+3  4
+5  NULL
+6  2
+7  2
+8  4
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x
+----
+group           0  group   ·            ·                        (x, max)            x!=NULL; key(x)
+ │              0  ·       aggregate 0  x                        ·                   ·
+ │              0  ·       aggregate 1  max(y)                   ·                   ·
+ │              0  ·       group by     @1                       ·                   ·
+ └── render     1  render  ·            ·                        (x, y)              x!=NULL; key(x); +x
+      │         1  ·       render 0     test.public.group_ord.x  ·                   ·
+      │         1  ·       render 1     test.public.group_ord.y  ·                   ·
+      └── scan  2  scan    ·            ·                        (x, y, z[omitted])  x!=NULL; key(x); +x
+·               2  ·       table        group_ord@primary        ·                   ·
+·               2  ·       spans        ALL                      ·                   ·
+
+# The ordering is on all the GROUP BY columns, and is preserved after the
+# aggregation.
+query II
+SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
+----
+1  2
+3  4
+5  NULL
+6  2
+7  2
+8  4
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
+----
+group           0  group   ·            ·                        (x, max)            x!=NULL; key(x); +x
+ │              0  ·       aggregate 0  x                        ·                   ·
+ │              0  ·       aggregate 1  max(y)                   ·                   ·
+ │              0  ·       group by     @1                       ·                   ·
+ └── render     1  render  ·            ·                        (x, y)              x!=NULL; key(x); +x
+      │         1  ·       render 0     test.public.group_ord.x  ·                   ·
+      │         1  ·       render 1     test.public.group_ord.y  ·                   ·
+      └── scan  2  scan    ·            ·                        (x, y, z[omitted])  x!=NULL; key(x); +x
+·               2  ·       table        group_ord@primary        ·                   ·
+·               2  ·       spans        ALL                      ·                   ·
+
+# The ordering is on some of the GROUP BY columns, and isn't preserved after
+# the aggregation.
+query III rowsort
+SELECT z, x, max(y) FROM group_ord GROUP BY x, z
+----
+5  3  4
+3  6  2
+3  1  2
+5  5  NULL
+2  7  2
+2  8  4
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT z, x, max(y) FROM group_ord GROUP BY x, z
+----
+group           0  group   ·            ·                        (z, x, max)  x!=NULL; key(x)
+ │              0  ·       aggregate 0  z                        ·            ·
+ │              0  ·       aggregate 1  x                        ·            ·
+ │              0  ·       aggregate 2  max(y)                   ·            ·
+ │              0  ·       group by     @1-@2                    ·            ·
+ └── render     1  render  ·            ·                        (x, z, y)    x!=NULL; key(x); +x
+      │         1  ·       render 0     test.public.group_ord.x  ·            ·
+      │         1  ·       render 1     test.public.group_ord.z  ·            ·
+      │         1  ·       render 2     test.public.group_ord.y  ·            ·
+      └── scan  2  scan    ·            ·                        (x, y, z)    x!=NULL; key(x); +x
+·               2  ·       table        group_ord@primary        ·            ·
+·               2  ·       spans        ALL                      ·            ·
+
+# The ordering is on some of the GROUP BY columns, and is preserved after
+# the aggregation.
+query III
+SELECT z, x, max(y) FROM group_ord GROUP BY x, z ORDER BY x
+----
+3  1  2
+5  3  4
+5  5  NULL
+3  6  2
+2  7  2
+2  8  4
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT z, x, max(y) FROM group_ord GROUP BY x, z ORDER BY x
+----
+group           0  group   ·            ·                        (z, x, max)  x!=NULL; key(x); +x
+ │              0  ·       aggregate 0  z                        ·            ·
+ │              0  ·       aggregate 1  x                        ·            ·
+ │              0  ·       aggregate 2  max(y)                   ·            ·
+ │              0  ·       group by     @1-@2                    ·            ·
+ └── render     1  render  ·            ·                        (x, z, y)    x!=NULL; key(x); +x
+      │         1  ·       render 0     test.public.group_ord.x  ·            ·
+      │         1  ·       render 1     test.public.group_ord.z  ·            ·
+      │         1  ·       render 2     test.public.group_ord.y  ·            ·
+      └── scan  2  scan    ·            ·                        (x, y, z)    x!=NULL; key(x); +x
+·               2  ·       table        group_ord@primary        ·            ·
+·               2  ·       spans        ALL                      ·            ·
+
+# If the underlying ordering isn't from the primary index, it needs to be hinted
+# for now.
+query II rowsort
+SELECT z, max(y) FROM group_ord@foo GROUP BY z
+----
+5  4
+2  4
+3  2
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT z, max(y) FROM group_ord@foo GROUP BY z
+----
+group                 0  group       ·            ·                        (z, max)                     weak-key(z)
+ │                    0  ·           aggregate 0  z                        ·                            ·
+ │                    0  ·           aggregate 1  max(y)                   ·                            ·
+ │                    0  ·           group by     @1                       ·                            ·
+ └── render           1  render      ·            ·                        (z, y)                       +z
+      │               1  ·           render 0     test.public.group_ord.z  ·                            ·
+      │               1  ·           render 1     test.public.group_ord.y  ·                            ·
+      └── index-join  2  index-join  ·            ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
+           ├── scan   3  scan        ·            ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
+           │          3  ·           table        group_ord@foo            ·                            ·
+           │          3  ·           spans        ALL                      ·                            ·
+           └── scan   3  scan        ·            ·                        (x[omitted], y, z)           ·
+·                     3  ·           table        group_ord@primary        ·                            ·
+
+# Test that a merge join is used on two aggregate subqueries with orderings on
+# the GROUP BY columns. Note that an ORDER BY is not necessary on the
+# subqueries.
+query IIII rowsort
+SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y) FROM group_ord@foo GROUP BY z) ON x = z
+----
+5  NULL  5  4
+3  4     3  2
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y) FROM group_ord@foo GROUP BY z) ON x = z
+----
+join                       0  join        ·               ·                        (x, max, z, min)             x=z; x!=NULL
+ │                         0  ·           type            inner                    ·                            ·
+ │                         0  ·           equality        (x) = (z)                ·                            ·
+ │                         0  ·           mergeJoinOrder  +"(x=z)"                 ·                            ·
+ ├── group                 1  group       ·               ·                        (x, max)                     x!=NULL; key(x); +x
+ │    │                    1  ·           aggregate 0     x                        ·                            ·
+ │    │                    1  ·           aggregate 1     max(y)                   ·                            ·
+ │    │                    1  ·           group by        @1                       ·                            ·
+ │    └── render           2  render      ·               ·                        (x, y)                       x!=NULL; key(x); +x
+ │         │               2  ·           render 0        test.public.group_ord.x  ·                            ·
+ │         │               2  ·           render 1        test.public.group_ord.y  ·                            ·
+ │         └── scan        3  scan        ·               ·                        (x, y, z[omitted])           x!=NULL; key(x); +x
+ │                         3  ·           table           group_ord@primary        ·                            ·
+ │                         3  ·           spans           ALL                      ·                            ·
+ └── group                 1  group       ·               ·                        (z, min)                     weak-key(z); +z
+      │                    1  ·           aggregate 0     z                        ·                            ·
+      │                    1  ·           aggregate 1     min(y)                   ·                            ·
+      │                    1  ·           group by        @1                       ·                            ·
+      └── render           2  render      ·               ·                        (z, y)                       +z
+           │               2  ·           render 0        test.public.group_ord.z  ·                            ·
+           │               2  ·           render 1        test.public.group_ord.y  ·                            ·
+           └── index-join  3  index-join  ·               ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
+                ├── scan   4  scan        ·               ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
+                │          4  ·           table           group_ord@foo            ·                            ·
+                │          4  ·           spans           ALL                      ·                            ·
+                └── scan   4  scan        ·               ·                        (x[omitted], y, z)           ·
+·                          4  ·           table           group_ord@primary        ·                            ·

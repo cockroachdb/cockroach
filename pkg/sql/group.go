@@ -50,9 +50,13 @@ type groupNode struct {
 
 	// Indices of the group by columns in the source plan.
 	groupCols []int
+	// Indices of the group by columns in the source plan that have an ordering.
+	orderedGroupCols []int
 
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
+
+	props physicalProps
 
 	run groupRun
 }
@@ -338,8 +342,12 @@ func (p *planner) groupBy(
 type groupRun struct {
 	// The set of bucket keys. We add buckets as we are processing input rows, and
 	// we remove them as we are outputting results.
-	buckets   map[string]struct{}
-	populated bool
+	buckets     map[string]struct{}
+	populated   bool
+	sourceEmpty bool
+
+	lastOrderedGroupKey tree.Datums
+	consumedGroupKey    bool
 
 	addNullBucketIfEmpty bool
 
@@ -349,14 +357,74 @@ type groupRun struct {
 	// gotOneRow becomes true after one result row has been produced.
 	// Used in conjunction with needOnlyOneRow.
 	gotOneRow bool
+
+	scratch []byte
+}
+
+// matchLastGroupKey takes a row and matches it with the row stored by
+// lastOrderedGroupKey. It returns true if the two rows are equal on the
+// grouping columns, and false otherwise.
+func (n *groupNode) matchLastGroupKey(ctx *tree.EvalContext, row tree.Datums) bool {
+	for _, i := range n.orderedGroupCols {
+		if n.run.lastOrderedGroupKey[i].Compare(ctx, row[i]) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// accumulateRow takes a row and accumulates it into all the aggregate
+// functions.
+func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
+	bucket := n.run.scratch
+	for _, idx := range n.groupCols {
+		var err error
+		bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
+		if err != nil {
+			return err
+		}
+	}
+
+	n.run.buckets[string(bucket)] = struct{}{}
+
+	// Feed the aggregateFuncHolders for this bucket the non-grouped values.
+	for _, f := range n.funcs {
+		if f.hasFilter() && values[f.filterRenderIdx] != tree.DBoolTrue {
+			continue
+		}
+
+		var value tree.Datum
+		if f.argRenderIdx != noRenderIdx {
+			value = values[f.argRenderIdx]
+		}
+
+		if err := f.add(params.ctx, params.EvalContext(), bucket, value); err != nil {
+			return err
+		}
+	}
+
+	n.run.scratch = bucket[:0]
+	n.run.gotOneRow = true
+
+	return nil
 }
 
 func (n *groupNode) Next(params runParams) (bool, error) {
-	var scratch []byte
-	// We're going to consume n.plan until it's exhausted (feeding all the rows to
-	// n.funcs), and then call n.setupOutput.
-	// Subsequent calls to next will skip the first part and just return a result.
-	for !n.run.populated {
+	// We're going to accumulate rows from n.plan until it's either exhausted or
+	// the ordered group columns change. Subsequent calls to Next will return the
+	// result of each bucket, then continue accumulating n.plan when there are no
+	// more buckets.
+	for (!n.run.populated || len(n.run.buckets) == 0) && !n.run.sourceEmpty {
+		// We've finished consuming the old buckets.
+		n.run.populated = false
+
+		if !n.run.consumedGroupKey && n.run.lastOrderedGroupKey != nil {
+			if err := n.accumulateRow(params, n.run.lastOrderedGroupKey); err != nil {
+				return false, err
+			}
+			n.run.consumedGroupKey = true
+		}
+
 		next := false
 		if err := params.p.cancelChecker.Check(); err != nil {
 			return false, err
@@ -369,46 +437,29 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			}
 		}
 		if !next {
+			n.run.sourceEmpty = true
+			n.setupOutput()
+			break
+		}
+
+		values := n.plan.Values()
+		if n.run.lastOrderedGroupKey == nil {
+			n.run.lastOrderedGroupKey = make(tree.Datums, len(values))
+			copy(n.run.lastOrderedGroupKey, values)
+			n.run.consumedGroupKey = true
+		}
+		if !n.matchLastGroupKey(params.EvalContext(), values) {
+			copy(n.run.lastOrderedGroupKey, values)
+			n.run.consumedGroupKey = false
 			n.run.populated = true
 			n.setupOutput()
 			break
 		}
 
 		// Add row to bucket.
-
-		values := n.plan.Values()
-
-		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
-
-		bucket := scratch
-		for _, idx := range n.groupCols {
-			var err error
-			bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
-			if err != nil {
-				return false, err
-			}
+		if err := n.accumulateRow(params, values); err != nil {
+			return false, err
 		}
-
-		n.run.buckets[string(bucket)] = struct{}{}
-
-		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
-		for _, f := range n.funcs {
-			if f.hasFilter() && values[f.filterRenderIdx] != tree.DBoolTrue {
-				continue
-			}
-
-			var value tree.Datum
-			if f.argRenderIdx != noRenderIdx {
-				value = values[f.argRenderIdx]
-			}
-
-			if err := f.add(params.ctx, params.EvalContext(), bucket, value); err != nil {
-				return false, err
-			}
-		}
-		scratch = bucket[:0]
-
-		n.run.gotOneRow = true
 	}
 
 	if len(n.run.buckets) == 0 {
@@ -458,7 +509,9 @@ func (n *groupNode) setupOutput() {
 	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
 		n.run.buckets[""] = struct{}{}
 	}
-	n.run.values = make(tree.Datums, len(n.funcs))
+	if n.run.values == nil {
+		n.run.values = make(tree.Datums, len(n.funcs))
+	}
 }
 
 // requiresIsDistinctFromNullFilter returns whether a
