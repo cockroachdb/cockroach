@@ -379,7 +379,7 @@ func BenchmarkSortAll(b *testing.B) {
 	}
 	post := PostProcessSpec{}
 
-	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+	for _, inputSize := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
 			input := make(sqlbase.EncDatumRows, inputSize)
 			for i := range input {
@@ -388,13 +388,13 @@ func BenchmarkSortAll(b *testing.B) {
 				}
 			}
 			rowSource := NewRepeatableRowSource(types, input)
-			s, err := newSorter(context.Background(), &flowCtx, &spec, rowSource, &post, &RowDisposer{})
-			if err != nil {
-				b.Fatal(err)
-			}
 			b.SetBytes(int64(inputSize * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				s, err := newSorter(context.Background(), &flowCtx, &spec, rowSource, &post, &RowDisposer{})
+				if err != nil {
+					b.Fatal(err)
+				}
 				s.Run(context.Background(), nil /* wg */)
 				rowSource.Reset()
 			}
@@ -433,22 +433,22 @@ func BenchmarkSortLimit(b *testing.B) {
 		}
 		rowSource := NewRepeatableRowSource(types, input)
 
-		for _, limit := range []uint64{1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
-				s, err := newSorter(
-					context.Background(),
-					&flowCtx,
-					&spec,
-					rowSource,
-					&PostProcessSpec{Limit: limit},
-					&RowDisposer{},
-				)
-				if err != nil {
-					b.Fatal(err)
-				}
 				b.SetBytes(int64(inputSize * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					s, err := newSorter(
+						context.Background(),
+						&flowCtx,
+						&spec,
+						rowSource,
+						&PostProcessSpec{Limit: limit},
+						&RowDisposer{},
+					)
+					if err != nil {
+						b.Fatal(err)
+					}
 					s.Run(context.Background(), nil /* wg */)
 					rowSource.Reset()
 				}
