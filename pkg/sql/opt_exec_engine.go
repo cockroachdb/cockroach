@@ -52,7 +52,7 @@ var _ exec.TestEngine = &execEngine{}
 
 func newExecEngine(p *planner, cleanup func()) *execEngine {
 	ee := &execEngine{planner: p, cleanup: cleanup}
-	ee.catalog.init(p)
+	ee.catalog.init(p.execCfg.TableStatsCache, p)
 	return ee
 }
 
