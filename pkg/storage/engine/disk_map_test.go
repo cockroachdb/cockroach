@@ -196,7 +196,7 @@ func TestRocksDBMapSandbox(t *testing.T) {
 			diskMaps[j].Close(ctx)
 			numKeysRemaining := 0
 			func() {
-				i := tempEngine.NewIterator(false)
+				i := tempEngine.NewIterator(IterOptions{})
 				defer i.Close()
 				for i.Seek(NilKey); ; i.Next() {
 					if ok, err := i.Valid(); err != nil {

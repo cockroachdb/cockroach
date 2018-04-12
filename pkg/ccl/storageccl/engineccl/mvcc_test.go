@@ -307,7 +307,7 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 			defer leaktest.AfterTest(t)()
 
 			var expectedKVs []engine.MVCCKeyValue
-			iter := eng.NewIterator(false)
+			iter := eng.NewIterator(engine.IterOptions{})
 			defer iter.Close()
 			iter.Seek(engine.MVCCKey{})
 			for {
