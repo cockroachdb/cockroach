@@ -121,3 +121,39 @@ query I
 SELECT COUNT(DISTINCT(1)) FROM pg_tables
 ----
 1
+
+# Test that current_schema reports the first valid entry in search_path, or
+# NULL if there is no such entry.
+
+statement ok
+SET search_path = nonexistent, public
+
+query T
+SELECT current_schema
+----
+public
+
+statement ok
+SET search_path = nonexistent
+
+query T
+SELECT current_schema
+----
+NULL
+
+# Test that current_schemas only reports the valid entries in
+# search_path.
+
+statement ok
+SET search_path = nonexistent, public
+
+query T
+SELECT current_schemas(false)
+----
+{"public"}
+
+# Test that object creation targets the first valid entry in
+# search_path, not just the first entry.
+
+statement ok
+CREATE TABLE sometable(x INT); SELECT * FROM public.sometable
