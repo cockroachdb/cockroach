@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/opentracing/opentracing-go"
 )
 
 // tableReader is the start of a computation flow; it performs KV operations to
@@ -196,6 +198,12 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		if ranges != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{Ranges: ranges})
 		}
+		// If stats have been collected, output a summary to the trace.
+		if len(tr.stats) != 0 {
+			for _, stat := range tr.stats {
+				log.Info(tr.ctx, stat.SummarizeStats())
+			}
+		}
 		traceData := getTraceData(tr.ctx)
 		if traceData != nil {
 			tr.trailingMetadata = append(tr.trailingMetadata, ProducerMetadata{TraceData: traceData})
@@ -218,8 +226,13 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) context.Context {
-	tr.input.Start(ctx)
-	return tr.startInternal(ctx, tableReaderProcName)
+	ctx = tr.startInternal(ctx, tableReaderProcName)
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		isc := NewInputStatCollector(tr.input, "tableReader input")
+		tr.stats = append(tr.stats, isc)
+		tr.input = isc
+	}
+	return tr.input.Start(ctx)
 }
 
 // Next is part of the RowSource interface.

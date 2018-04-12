@@ -885,7 +885,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 }
 
 var debugGossipValuesCmd = &cobra.Command{
-	Use:   "gossip-values <directory>",
+	Use:   "gossip-values",
 	Short: "dump all the values in a node's gossip instance",
 	Long: `
 Pretty-prints the values in a node's gossip instance.
@@ -893,7 +893,7 @@ Pretty-prints the values in a node's gossip instance.
 Can connect to a running server to get the values or can be provided with
 a JSON file captured from a node's /_status/gossip/ debug endpoint.
 `,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.NoArgs,
 	RunE: MaybeDecorateGRPCError(runDebugGossipValues),
 }
 

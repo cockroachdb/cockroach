@@ -15,26 +15,26 @@
 package testutils
 
 import (
+	"errors"
 	"runtime"
+	"testing"
 )
 
-// TestNoMallocs returns true if calling the given function results in zero
-// memory allocations. It iterates up to 100 times to combat flakiness, as
-// there might be initial "warmup" allocations, or possibly background memory
-// allocations that cause issues. The test completes successfully as soon as at
-// least one run results in 0 allocations.
-func TestNoMallocs(fn func()) bool {
-	for i := 0; i < 100; i++ {
+// TestNoMallocs repeatedly invokes the given function until it results in zero
+// memory allocations. It uses SucceedsSoon to repeatedly iterate in order to
+// combat flakiness, as there might be initial "warmup" allocations, or possibly
+// background memory allocations that cause issues. The test completes
+// successfully as soon as at least one run results in 0 allocations.
+func TestNoMallocs(t testing.TB, fn func()) {
+	SucceedsSoon(t, func() error {
 		var mem runtime.MemStats
 		runtime.ReadMemStats(&mem)
 		before := mem.Mallocs
-
 		fn()
-
 		runtime.ReadMemStats(&mem)
 		if mem.Mallocs-before == 0 {
-			return true
+			return nil
 		}
-	}
-	return false
+		return errors.New("memory was allocated during function invocation")
+	})
 }
