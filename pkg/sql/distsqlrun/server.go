@@ -537,8 +537,6 @@ const (
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
 
-var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
-
 // Implements the tree.EvalPlanner interface by returning errors.
 type dummyEvalPlanner struct {
 }
@@ -547,32 +545,30 @@ type dummyEvalPlanner struct {
 func (ep *dummyEvalPlanner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
 ) (tree.Datums, error) {
-	return nil, errEvalPlanner
+	return nil, errors.New("QueryRow is not supported in distributed execution")
 }
 
 // Implements the tree.EvalDatabase interface.
 func (ep *dummyEvalPlanner) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	return nil, errEvalPlanner
+	return nil, errors.New("table name parsing is not supported in distributed execution")
 }
 
 // Implements the tree.EvalDatabase interface.
 func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
+	return errors.New("table name resolution is not supported in distributed execution")
 }
 
 // Implements the tree.EvalPlanner interface.
 func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
-	return nil, errEvalPlanner
+	return nil, errors.New("column type parsing is not supported in distributed execution")
 }
 
 // Implements the tree.EvalPlanner interface.
 func (ep *dummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
-	return nil, errEvalPlanner
+	return nil, errors.New("subquery evaluation is not supported in distributed execution")
 }
-
-var errSequenceOperators = errors.New("cannot backfill such sequence operation")
 
 // Implements the tree.SequenceOperators interface by returning errors.
 type dummySequenceOperators struct {
@@ -582,13 +578,16 @@ type dummySequenceOperators struct {
 func (so *dummySequenceOperators) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	return nil, errSequenceOperators
+	return nil, errors.New("table name parsing is not supported in distributed execution")
 }
 
 // Implements the tree.EvalDatabase interface.
 func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
+	return errors.New("table name resolution is not supported in distributed execution")
 }
+
+var errSequenceOperators = errors.New(
+	"sequence operators are not supported in distributed execution")
 
 // Implements the tree.SequenceOperators interface.
 func (so *dummySequenceOperators) IncrementSequence(
