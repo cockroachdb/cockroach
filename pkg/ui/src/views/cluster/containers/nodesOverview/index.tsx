@@ -379,16 +379,4 @@ const NodesMainConnected = connect(
   },
 )(NodesMain);
 
-/**
- * Renders the main content of the nodes page, which is primarily a data table
- * of all nodes.
- */
-function NodesPage() {
-  return (
-    <div>
-      <NodesMainConnected />
-    </div>
-  );
-}
-
-export { NodesPage as default, NodesMainConnected as NodesOverview };
+export { NodesMainConnected as NodesOverview };
