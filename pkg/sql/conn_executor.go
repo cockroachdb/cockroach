@@ -421,9 +421,13 @@ func (sp sessionParams) sessionData(
 	if sp.data != nil {
 		return *sp.data
 	}
+	curDb := sp.args.Database
+	if curDb == "" {
+		curDb = sessiondata.DefaultDatabaseName
+	}
 	sd := sessiondata.SessionData{
 		ApplicationName: sp.args.ApplicationName,
-		Database:        sp.args.Database,
+		Database:        curDb,
 		DistSQLMode:     sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
 		SearchPath:      sqlbase.DefaultSearchPath,
 		Location:        time.UTC,

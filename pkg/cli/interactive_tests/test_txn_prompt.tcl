@@ -47,10 +47,15 @@ send "SET DATABASE = testdb;\r"
 eexpect "\nSET\r\n"
 eexpect root@
 eexpect "/testdb>"
-send "SET DATABASE = '';\r"
+send "SET sql_safe_updates = false;\r"
+eexpect "\nSET\r\n"
+send "SET database = '';\r"
 eexpect "\nSET\r\n"
 eexpect root@
 eexpect "/>"
+send "SET database = 'defaultdb';\r"
+eexpect "\nSET\r\n"
+eexpect root@
 end_test
 
 start_test "Test that prompt becomes OPEN when txn is opened."

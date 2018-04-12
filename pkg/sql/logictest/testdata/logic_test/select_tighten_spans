@@ -153,8 +153,8 @@ SHOW TESTING_RANGES FROM TABLE p1
 ----
 Start Key    End Key      Range ID  Replicas  Lease Holder
 NULL         /2           1         {1}       1
-/2           /2/1/#/52/1  2         {2}       2
-/2/1/#/52/1  NULL         3         {3}       3
+/2           /2/1/#/54/1  2         {2}       2
+/2/1/#/54/1  NULL         3         {3}       3
 
 # Indexes
 
@@ -174,8 +174,8 @@ SHOW TESTING_RANGES FROM TABLE p2
 Start Key  End Key    Range ID  Replicas  Lease Holder
 NULL       /0         5         {5}       5
 /0         /2         6         {1}       1
-/2         /2/#/53/2  7         {2}       2
-/2/#/53/2  NULL       8         {3}       3
+/2         /2/#/55/2  7         {2}       2
+/2/#/55/2  NULL       8         {3}       3
 
 ###############
 # Query tests #
@@ -310,7 +310,7 @@ EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
 scan  ·      ·
 ·     table  c1@primary
-·     spans  -/3/3/#/52/1/#
+·     spans  -/3/3/#/54/1/#
 
 query II rowsort
 SELECT * FROM c1 WHERE a <= 3 AND b <= 3
@@ -368,7 +368,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
 ----
 scan  ·      ·
 ·     table  p2@p2_id
-·     spans  /1/#/53/2/2-
+·     spans  /1/#/55/2/2-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d >= 2
@@ -385,7 +385,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
 scan  ·      ·
 ·     table  p2@p2_id
-·     spans  -/6/#/53/2/6
+·     spans  -/6/#/55/2/6
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
@@ -400,7 +400,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
 scan  ·      ·
 ·     table  p2@p2_id
-·     spans  /1/#/53/2/NULL-
+·     spans  /1/#/55/2/NULL-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
@@ -416,7 +416,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
 scan  ·      ·
 ·     table  p2@p2_id
-·     spans  /1/#/53/2/!NULL-
+·     spans  /1/#/55/2/!NULL-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NOT NULL

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -105,7 +106,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name: "create system.table_statistics table",
+		name:             "create system.table_statistics table",
+		newDescriptorIDs: staticIDs(keys.TableStatisticsTableID),
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
@@ -114,7 +116,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name: "create system.locations table",
+		name:             "create system.locations table",
+		newDescriptorIDs: staticIDs(keys.LocationsTableID),
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
@@ -122,7 +125,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name: "create system.role_members table",
+		name:             "create system.role_members table",
+		newDescriptorIDs: staticIDs(keys.RoleMembersTableID),
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
@@ -175,6 +179,31 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "disallow public user or role name",
 		workFn: disallowPublicUserOrRole,
 	},
+	{
+		// Introduced in v2.1.
+		// TODO(knz): bake this migration into v2.2.
+		name:             "create default databases",
+		workFn:           createDefaultDbs,
+		newDescriptorIDs: databaseIDs(sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName),
+	},
+}
+
+func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
+	return func(ctx context.Context, db db) ([]sqlbase.ID, error) { return ids, nil }
+}
+
+func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
+	return func(ctx context.Context, db db) ([]sqlbase.ID, error) {
+		var ids []sqlbase.ID
+		for _, name := range names {
+			kv, err := db.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, name))
+			if err != nil {
+				return nil, err
+			}
+			ids = append(ids, sqlbase.ID(kv.ValueInt()))
+		}
+		return ids, nil
+	}
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -188,10 +217,11 @@ type migrationDescriptor struct {
 	workFn func(context.Context, runner) error
 	// doesBackfill should be set to true if the migration triggers a backfill.
 	doesBackfill bool
-	// newDescriptorIDs lists the IDs of any additional descriptors added by this
-	// migration. This is needed to automate certain tests, which check the number
-	// of ranges/descriptors present on server bootup.
-	newDescriptorIDs sqlbase.IDs
+	// newDescriptorIDs is a function that returns the IDs of any additional
+	// descriptors that were added by this migration. This is needed to automate
+	// certain tests, which check the number of ranges/descriptors present on
+	// server bootup.
+	newDescriptorIDs func(ctx context.Context, db db) ([]sqlbase.ID, error)
 }
 
 func init() {
@@ -224,6 +254,7 @@ type leaseManager interface {
 // package.
 type db interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]client.KeyValue, error)
+	Get(ctx context.Context, key interface{}) (client.KeyValue, error)
 	Put(ctx context.Context, key, value interface{}) error
 	Txn(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error
 }
@@ -274,8 +305,15 @@ func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
 	}
 	descriptorIDs := sqlbase.MakeMetadataSchema().DescriptorIDs()
 	for _, migration := range backwardCompatibleMigrations {
+		if migration.newDescriptorIDs == nil {
+			continue
+		}
 		if _, ok := completedMigrations[string(migrationKey(migration))]; ok {
-			descriptorIDs = append(descriptorIDs, migration.newDescriptorIDs...)
+			newIDs, err := migration.newDescriptorIDs(ctx, db)
+			if err != nil {
+				return nil, err
+			}
+			descriptorIDs = append(descriptorIDs, newIDs...)
 		}
 	}
 	sort.Sort(descriptorIDs)
@@ -725,4 +763,27 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 			sqlbase.PublicRole, sqlbase.PublicRole)
 	}
 	return nil
+}
+
+func createDefaultDbs(ctx context.Context, r runner) error {
+	// Create the default databases. These are plain databases with
+	// default permissions. Nothing special happens if they exist
+	// already.
+	const createDbStmt = `CREATE DATABASE IF NOT EXISTS "%s"`
+
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		for _, dbName := range []string{sessiondata.DefaultDatabaseName, sessiondata.PgDatabaseName} {
+			stmt := fmt.Sprintf(createDbStmt, dbName)
+			_, err = r.sqlExecutor.Exec(ctx, "create-default-db", nil /* txn */, stmt)
+			if err != nil {
+				log.Warningf(ctx, "failed attempt to add database %q: %s", dbName, err)
+				break
+			}
+		}
+		if err == nil {
+			break
+		}
+	}
+	return err
 }

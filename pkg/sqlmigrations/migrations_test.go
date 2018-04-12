@@ -114,6 +114,10 @@ func (f *fakeDB) Scan(
 	return results, nil
 }
 
+func (f *fakeDB) Get(ctx context.Context, key interface{}) (client.KeyValue, error) {
+	return client.KeyValue{}, errors.New("unimplemented")
+}
+
 func (f *fakeDB) Put(ctx context.Context, key, value interface{}) error {
 	if f.putErr != nil {
 		return f.putErr

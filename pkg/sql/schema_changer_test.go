@@ -71,6 +71,7 @@ func TestSchemaChangeLease(t *testing.T) {
 		sql.MinSchemaChangeLeaseDuration = minLeaseDuration
 	}()
 
+	const dbDescID = keys.MinNonPredefinedUserDescID
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
@@ -79,7 +80,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
+	var id = sqlbase.ID(dbDescID + 1)
 	var node = roachpb.NodeID(2)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	changer := sql.NewSchemaChangerForTesting(
@@ -178,7 +179,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
+	var id = sqlbase.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()

@@ -6,7 +6,9 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
+defaultdb
 foo-bar
+postgres
 system
 test
 
@@ -22,11 +24,13 @@ DROP DATABASE "foo-bar" CASCADE
 query TTT
 SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
-t  [51]  DROP
+t  [53]  DROP
 
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -36,7 +40,9 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
+defaultdb
 foo bar
+postgres
 system
 test
 
@@ -46,6 +52,8 @@ DROP DATABASE "foo bar" CASCADE
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -130,6 +138,8 @@ SHOW DATABASES
 ----
 d1
 d2
+defaultdb
+postgres
 system
 test
 
@@ -140,6 +150,8 @@ query T
 SHOW DATABASES
 ----
 d2
+defaultdb
+postgres
 system
 test
 
@@ -165,6 +177,8 @@ DROP DATABASE d2 CASCADE
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -196,6 +210,8 @@ DROP DATABASE constraint_db CASCADE
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -218,3 +234,10 @@ DROP DATABASE foo
 
 statement ok
 SET sql_safe_updates = FALSE; DROP DATABASE foo
+
+# Check that the default databases can be dropped and re-created like any other.
+statement OK
+DROP DATABASE defaultdb; DROP DATABASE postgres
+
+statement ok
+CREATE DATABASE defaultdb; CREATE DATABASE postgres

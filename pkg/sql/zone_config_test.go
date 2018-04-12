@@ -92,7 +92,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
 
-	expectedCounter := uint32(keys.MaxReservedDescID)
+	expectedCounter := uint32(keys.MinNonPredefinedUserDescID)
 
 	defaultZoneConfig := config.DefaultZoneConfig()
 	defaultZoneConfig.RangeMinBytes = 1 << 20
@@ -159,7 +159,6 @@ func TestGetZoneConfig(t *testing.T) {
 	// db1 has tables tb11 and tb12
 	// db2 has tables tb21 and tb22
 
-	expectedCounter++
 	db1 := expectedCounter
 	if _, err := sqlDB.Exec(`CREATE DATABASE db1`); err != nil {
 		t.Fatal(err)
@@ -321,7 +320,7 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := cfg.GetZoneConfigForKey(keys.MakeTablePrefix(keys.MaxReservedDescID + 1))
+		_, err := cfg.GetZoneConfigForKey(keys.MakeTablePrefix(keys.MinUserDescID))
 		if err != nil {
 			b.Fatal(err)
 		}

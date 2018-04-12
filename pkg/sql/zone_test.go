@@ -68,18 +68,19 @@ func TestValidSetShowZones(t *testing.T) {
 		CLISpecifier: "system.jobs",
 		Config:       zoneOverride,
 	}
+	dbDescID := uint32(keys.MinNonPredefinedUserDescID)
 	dbRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 1,
+		ID:           dbDescID,
 		CLISpecifier: "d",
 		Config:       zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
 	tableDroppedRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "NULL",
 		Config:       zoneOverride,
 	}

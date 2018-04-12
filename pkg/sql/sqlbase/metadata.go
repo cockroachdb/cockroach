@@ -123,7 +123,7 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 	// Save the ID generator value, which will generate descriptor IDs for user
 	// objects.
 	value := roachpb.Value{}
-	value.SetInt(int64(keys.MaxReservedDescID + 1))
+	value.SetInt(int64(keys.MinUserDescID))
 	ret = append(ret, roachpb.KeyValue{
 		Key:   keys.DescIDGenerator,
 		Value: value,

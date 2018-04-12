@@ -536,7 +536,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 							if !ok {
 								return nil
 							}
-							if !strings.HasPrefix(scanReq.Span.Key.String(), "/Table/51/1") {
+							if !strings.HasPrefix(scanReq.Span.Key.String(), "/Table/53/1") {
 								return nil
 							}
 
