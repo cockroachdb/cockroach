@@ -172,9 +172,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0.
-		// TODO(mberhault): bake this migration into v2.1, but create a new migration
-		// with the same function to catch any tables written in a mixed-version setting.
-		name:   "ensure admin role privileges in all descriptors",
+		name: "ensure admin role privileges in all descriptors",
+	},
+	{
+		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
+		// TODO(mberhault): bake into v2.2.
+		name:   "ensure admin role privileges in all descriptors, again",
 		workFn: ensureMaxPrivileges,
 	},
 }
