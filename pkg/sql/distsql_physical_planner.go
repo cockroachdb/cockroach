@@ -968,7 +968,11 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, planToStreamColMap))
 	}
-	p.SetLastStagePost(post, getTypesForPlanResult(n, planToStreamColMap))
+	types, err := getTypesForPlanResult(n, planToStreamColMap)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+	p.SetLastStagePost(post, types)
 
 	outCols := overrideResultColumns
 	if outCols == nil {
@@ -995,7 +999,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 // render node has any expressions which are not just simple column references.
 func (dsp *DistSQLPlanner) selectRenders(
 	p *physicalPlan, n *renderNode, evalCtx *tree.EvalContext,
-) {
+) error {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
 	renders := make([]tree.TypedExpr, 0, len(n.render))
@@ -1006,8 +1010,13 @@ func (dsp *DistSQLPlanner) selectRenders(
 		}
 	}
 
-	p.AddRendering(renders, evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
+	types, err := getTypesForPlanResult(n, planToStreamColMap)
+	if err != nil {
+		return err
+	}
+	p.AddRendering(renders, evalCtx, p.planToStreamColMap, types)
 	p.planToStreamColMap = planToStreamColMap
+	return nil
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
@@ -1602,12 +1611,16 @@ ColLoop:
 		plan.planToStreamColMap[col] = i
 	}
 
+	types, err := getTypesForPlanResult(n, plan.planToStreamColMap)
+	if err != nil {
+		return physicalPlan{}, err
+	}
 	if distributeIndexJoin.Get(&dsp.st.SV) && len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
 		plan.AddNoGroupingStage(
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
-			getTypesForPlanResult(n, plan.planToStreamColMap),
+			types,
 			dsp.convertOrdering(planPhysicalProps(n), plan.planToStreamColMap),
 		)
 	} else {
@@ -1621,7 +1634,7 @@ ColLoop:
 			node,
 			distsqlrun.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			post,
-			getTypesForPlanResult(n, plan.planToStreamColMap),
+			types,
 		)
 	}
 	return plan, nil
@@ -1630,7 +1643,7 @@ ColLoop:
 // getTypesForPlanResult returns the types of the elements in the result streams
 // of a plan that corresponds to a given planNode. If planToSreamColMap is nil,
 // a 1-1 mapping is assumed.
-func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.ColumnType {
+func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]sqlbase.ColumnType, error) {
 	nodeColumns := planColumns(node)
 	if planToStreamColMap == nil {
 		// No remapping.
@@ -1638,12 +1651,11 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 		for i := range nodeColumns {
 			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
 			if err != nil {
-				// TODO(radu): propagate this instead of panicking
-				panic(err)
+				return nil, err
 			}
 			types[i] = colTyp
 		}
-		return types
+		return types, nil
 	}
 	numCols := 0
 	for _, streamCol := range planToStreamColMap {
@@ -1656,13 +1668,12 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 		if streamCol != -1 {
 			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[nodeCol].Typ)
 			if err != nil {
-				// TODO(radu): propagate this instead of panicking
-				panic(err)
+				return nil, err
 			}
 			types[streamCol] = colTyp
 		}
 	}
-	return types
+	return types, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForJoin(
@@ -1858,7 +1869,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	)
 
 	p.planToStreamColMap = joinToStreamColMap
-	p.ResultTypes = getTypesForPlanResult(n, joinToStreamColMap)
+	p.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
+	if err != nil {
+		return physicalPlan{}, err
+	}
 
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
@@ -1961,7 +1975,10 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		dsp.selectRenders(&plan, n, planCtx.EvalContext())
+		err = dsp.selectRenders(&plan, n, planCtx.EvalContext())
+		if err != nil {
+			return physicalPlan{}, err
+		}
 
 	case *groupNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
@@ -2320,8 +2337,12 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 
 		var childResultTypes [2][]sqlbase.ColumnType
 		for side, plan := range childPhysicalPlans {
-			childResultTypes[side] =
-				getTypesForPlanResult(childLogicalPlans[side], plan.planToStreamColMap)
+			childResultTypes[side], err = getTypesForPlanResult(
+				childLogicalPlans[side], plan.planToStreamColMap,
+			)
+			if err != nil {
+				return physicalPlan{}, err
+			}
 		}
 		resultTypes, err = distsqlplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
 		if err != nil {
