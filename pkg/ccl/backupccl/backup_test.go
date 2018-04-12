@@ -2857,7 +2857,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 
 		if _, err := newDB.DB.Exec(
 			`RESTORE TABLE t FROM $1`, localFoo,
-		); !testutils.IsError(err, "pq: cannot restore table \"t\" without referenced sequence 52 \\(or \"skip_missing_sequences\" option\\)") {
+		); !testutils.IsError(err, "pq: cannot restore table \"t\" without referenced sequence 54 \\(or \"skip_missing_sequences\" option\\)") {
 			t.Fatal(err)
 		}
 

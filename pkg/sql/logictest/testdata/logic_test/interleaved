@@ -312,7 +312,7 @@ EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
 ----
 scan  ·      ·
 ·     table  orders@primary
-·     spans  /1/#/66/1/1000-/1/#/66/1/1000/#
+·     spans  /1/#/68/1/1000-/1/#/68/1/1000/#
 
 # Check that interleaving can occur across databases
 statement ok

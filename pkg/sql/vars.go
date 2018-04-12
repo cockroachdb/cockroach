@@ -129,8 +129,6 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	// TODO(knz): may need to be replaced by 1st element of search_path for
-	// pg compatibility.
 	`database`: {
 		Set: func(
 			ctx context.Context, m *sessionDataMutator,
@@ -139,6 +137,10 @@ var varGen = map[string]sessionVar{
 			dbName, err := getStringVal(&evalCtx.EvalContext, `database`, values)
 			if err != nil {
 				return err
+			}
+
+			if len(dbName) == 0 && evalCtx.SessionData.SafeUpdates {
+				return pgerror.NewDangerousStatementErrorf("SET database to empty string")
 			}
 
 			if len(dbName) != 0 {

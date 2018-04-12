@@ -107,7 +107,7 @@ expect {
     }
     root@ {}
 }
-eexpect "/> "
+eexpect "/default> "
 # restore
 send "\\set show_times\r"
 end_test

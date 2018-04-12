@@ -499,7 +499,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+3, "kv")
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -582,7 +582,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
+	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+3, "kv")
 	gr, err := kvDB.Get(ctx, nameKey)
 	if err != nil {
 		t.Fatal(err)

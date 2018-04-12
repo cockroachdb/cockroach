@@ -157,7 +157,7 @@ distinct               ·          ·
       │                order      +"Database"
       └── render       ·          ·
            └── values  ·          ·
-·                      size       4 columns, 12 rows
+·                      size       4 columns, 20 rows
 
 query TTT
 EXPLAIN SHOW TABLES

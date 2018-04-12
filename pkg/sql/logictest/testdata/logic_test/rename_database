@@ -3,6 +3,8 @@
 query T
 SHOW DATABASES
 ----
+default
+postgres
 system
 test
 
@@ -54,6 +56,8 @@ SHOW GRANTS ON DATABASE test
 query T
 SHOW DATABASES
 ----
+default
+postgres
 system
 u
 
