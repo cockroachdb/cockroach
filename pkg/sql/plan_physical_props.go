@@ -42,8 +42,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return n.props
 
 	case *groupNode:
-		// TODO(dt,knz,radu): aggregate buckets can be ordered if the source is
-		// ordered on the aggregating column already.
+		return n.props
+
 	case *windowNode:
 		// TODO: window partitions can be ordered if the source is ordered
 		// appropriately.

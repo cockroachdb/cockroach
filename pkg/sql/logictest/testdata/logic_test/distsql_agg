@@ -654,3 +654,151 @@ query T
 SELECT JSONB_AGG(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+# Test that orderings on GROUP BY columns are propagated through aggregations.
+statement ok
+CREATE TABLE sorted_data (a INT PRIMARY KEY, b INT, c FLOAT, INDEX foo(b))
+
+statement ok
+INSERT INTO sorted_data VALUES
+(1, 4, 5.0),
+(2, 3, 3.4),
+(3, 9, 2.2),
+(4, 13, 1.99),
+(5, 2, 5.7),
+(6, 7, 6.2),
+(7, 9, 8.9),
+(8, 1, 1.22),
+(9, -2, 23.0),
+(10, 100, -3.1)
+
+# Split into ten parts.
+statement ok
+ALTER TABLE sorted_data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE sorted_data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# The ordering is on all the GROUP BY columns, and isn't preserved after the
+# aggregation.
+query II rowsort
+SELECT a, max(b) FROM sorted_data GROUP BY a
+----
+6   7
+7   9
+10  100
+1   4
+2   3
+3   9
+4   13
+5   2
+8   1
+9   -2
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlk1r20AQhu_9FWFOCd1CVpLdRCcF2oMPtUvIoVBE2XgHxeBoxe4KGoL_e5H3oER2Z2yWYOuoj2fe2TzijV-hNhrn6hkd5L9BgoAEBKQgIAMBEygFNNYs0Tlju1cCMNN_Ib8WsKqb1ne3SwFLYxHyV_Arv0bI4UE9rvEelUYLAjR6tVpvQxq7elb2pXDGetR_tPIKBCxan18UUhQJlBsBpvX9aOdVhZDLjTg8_q6qLFbKm0F60Z1xYTVa1F0gCJh9-z5_uCzkFQj4cffrskiuBjv0Yx9fLp6Ue9qZWW76PZP_7tnPMWGD4ZzPYdCHHqZfND1g0bbet-reLefmi2kGr-0Pzt4Fy9N-SEz82XxIciwfUnJan0z82fhMxuIzPa1PJv5sfKZj8Zmd1icTfzY-s7H4ZH4J3aNrTO3woP_M190pUFcYTu1Ma5f405rlNiZcLrbc9oZG58NTGS5mdXjULfgWlkNYvoWTd7A8Dp7GwLcxsIzaW05oOiH_3ikNp7SsKW0rI-kJDU9iVNMwo5qGGdU0zKlmaEb1NEb1VxK-oWXdxMiiYUYWDTOyaJiTxdCMrNsYWZJpUa5G43o0rkjjmjSySuO6VEaVqWTaNGOk7dTpUdJompNG05w0mmalMTgnbadUSWnl5tO_AAAA__97mx2P
+
+# The ordering is on all the GROUP BY columns, and is preserved after the
+# aggregation.
+query II
+SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
+----
+1   4
+2   3
+3   9
+4   13
+5   2
+6   7
+7   9
+8   1
+9   -2
+10  100
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlk1r20AQhu_9FWFOCd1CdiW7iU4KtAcfapeQQ6GIsvEOisHxit01NAT_9yLvQbFNZhK2QdJRH8-8s3nEGz_Dxhqc60f0UPwGCQIUCMhAQA4CJlAJaJxdovfWta9EYGb-QnEpYLVptqG9XQlYWodQPENYhTVCAXf6fo23qA06EGAw6NV6H9K41aN2T6W3LqD5Y3TQIGCxDcVZKUWpoNoJsNvQjfZB1wiF3Im3x9_UtcNaB3uUXrZnXDiDDk0bCAJm377P785LeQECftz8Oi_VxdEO3dj7p7MH7R9OZla7bk_16p7dHBs3OJ7zOQ760MN0i2b_fdG5_WKbg3dfy84PsmW_3xITP5hvSY7lW1L9-mTiB-NTjcVn1q9PJn4wPrOx-Mz79cnED8ZnPhafzI-hW_SN3Xh803_my_YUaGqMp_Z265b409nlPiZeLvbc_oZBH-JTGS9mm_ioXfAlLI9h-RJWB7B8HzxNga9TYJm0t5zQtCL_3hkNZ7SsKW0rJ-kJDU9SVNMwo5qGGdU0zKlmaEb1NEX1VxK-omVdpciiYUYWDTOyaJiTxdCMrOsUWZJpUa5G03o0rUjTmjSxStO6VCaVqWTaNGekndTpu6TRNCeNpjlpNM1KY3BO2kmpktKq3ad_AQAA__9Z3R2M
+
+# The ordering is on some of the GROUP BY columns, and isn't preserved after
+# the aggregation.
+query RII rowsort
+SELECT c, min(b), a FROM sorted_data GROUP BY a, c
+----
+8.9   9    7
+1.99  13   4
+1.22  1    8
+3.4   3    2
+2.2   9    3
+-3.1  100  10
+23    -2   9
+5     4    1
+5.7   2    5
+6.2   7    6
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlkFr2zAUx-_7FOWdGqZBZTlZ65MH2yGHJaP0NsxQo4cbSC0jybBS8t2H7YETN30vRYckR8v-6f2ff-KhV6iswYV-Rg_Zb5AgIAEBCgSkIGAKhYDa2RV6b137SQ_MzV_IbgSsq7oJ7XIhYGUdQvYKYR02CBk86McN3qM26ECAwaDXm65I7dbP2r3k3rqA5o_RQYOAZROyq1yKXIk8gWIrwDZh2N0HXSJkciuOT_CtLB2WOthRgLZK2-XSGXRo2rIgYP79x-LhOk8mIODnfHGdq8mwKiejSEOVx5erJ-2fRiWUyCUU2yF58m7yYSvbBxpv9bnf6Oj2utq77am9Rv63l-y0p8btDbnVEbmb6lDyg6EX9outR58dLpzuFZYnP2xMgjM-bPJCD1tycudMgjN2nlyoc3Vy50yCM3auLtR5enLnTIIzdp5eqHPm6naPvraVx6NuCjdtU2hK7H-Ct41b4S9nV12Z_nHZcd2CQR_6t7J_mFf9qzbgLizHsNyFkz1YfgyexcB3MbCMyi2nNJ2Q_1vRsKJlzWhbKUlPaXgao5qGGdU0zKimYU41QzOqZzGqv5LwLS3rNkYWDTOyaJiRRcOcLIZmZN3FyJLMFOXGaNwcjRukcZM0cpTGzVIZNUwlM01TRtqbcfohaTTNSaNpThpNs9IYnJP2ZqiS0ortp38BAAD__3TnRIY=
+
+# The ordering is on some of the GROUP BY columns, and is preserved after
+# the aggregation.
+query RII
+SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
+----
+5     4    1
+3.4   3    2
+2.2   9    3
+1.99  13   4
+5.7   2    5
+6.2   7    6
+8.9   9    7
+1.22  1    8
+23    -2   9
+-3.1  100  10
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlkFr2zAUx-_7FOWdGqZBJTlZ65MH2yGHJaP0NsxQo4cbSCMjKbBS8t2H7YETl76XoEKSo2X_9P7PP_HQK6ydxZl5xgD5b5AgQIEADQIyEDCGUkDt3QJDcL75pAOm9i_kNwKW63oTm-VSwMJ5hPwV4jKuEHJ4MI8rvEdj0YMAi9EsV22R2i-fjX8pgvMR7R9rogEB803MrwopCi0KBeVWgNvEfvcQTYWQy604PMG3qvJYmegGAZoqTZdzb9GjbcqCgOn3H7OH60KNQMDP6ey60KN-VY4Gkfoqjy9XTyY8DUpoUUgot31y9W7yfivXBRpu9bnb6OD22tq77em9Rv63p3ba08P2-tz6w3PP3BdX7337Xu1sr7Y8-XljEpzxeZMXet7UyZ0zCc7YubpQ5_rkzpkEZ-xcX6jz7OTOmQRn7Dy7UOfM7e0eQ-3WAQ-6Kdw0TaGtsPsJwW38An95t2jLdI_zlmsXLIbYvZXdw3TdvWoC7sJyCMtdWO3B8jh4kgLfpcAyKbcc07Qi_7emYU3LmtC2MpIe0_A4RTUNM6ppmFFNw5xqhmZUT1JUfyXhW1rWbYosGmZk0TAji4Y5WQzNyLpLkSWZKcqN0bQ5mjZI0yZp4ihNm6UyaZhKZppmjLQ34_QoaTTNSaNpThpNs9IYnJP2ZqiS0srtp38BAAD__4suRIU=
+
+# If the underlying ordering isn't from the primary index, it needs to be hinted
+# for now.
+query IR rowsort
+SELECT b, max(c) FROM sorted_data@foo GROUP BY b
+----
+-2   23
+1    1.22
+2    5.7
+3    3.4
+4    5
+7    6.2
+9    8.9
+13   1.99
+100  -3.1
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT b, max(c) FROM sorted_data@foo GROUP BY b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUks9Kw0AQh-8-hfxOLYzQJPWSUwp6qGArpQdBgqzZMQTaTJjdgFLy7pLkYFuaaI_z55tvltkDSrG8Mnt2iN8QgHCPlFCpZOycaJvum5b2C_GMUJRV7dt0SshEGfEBvvA7RoyV3EkFgmVvil3X1BCk9r-I8yZnxPOGjsYG42O35mPHGzaW9WQ4PkUSJ-rZvlvjDQjr2se3SYAhb3CN90mK8pK20mJv9PuiOqQkGrSH19gXea6cGy9n9qS90lotK9vurYTlw-NqO0mCKQjPi9dJEk4Hd4hOdvjjoBt2lZSO_3XTWZMS2ObcfxontWb8opJ1mj5cd1yXsOx8X533wbLsS-2Cx3AwCofjcDgKR-NwNArPzuC0ufkJAAD__8kgFeM=
+
+# Test that a merge join is used on two aggregate subqueries with orderings on
+# the GROUP BY columns. Note that an ORDER BY is not necessary on the
+# subqueries.
+query IRIR rowsort
+SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b
+----
+1  5     1  1.22
+2  3.4   2  5.7
+3  2.2   3  3.4
+4  1.99  4  5
+9  23    9  2.2
+7  8.9   7  6.2
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzcl0Fr2zAUx-_7FOWdWqpBJTtpGhi4sB0yaDpKD4MRhhurriG1gqzASsl3H44Paez0_asJFpNbE_unp1f9Xv7olUqT6Wn6rCsa_yJJghQJikhQTIIGNBO0tGauq8rY-pUGmGR_aHwhqCiXK1d_PRM0N1bT-JVc4RaaxnSfPiz0nU4zbUlQpl1aLDZFlrZ4Tu1LUhnrdPY7S11Kgm5XbnySSJFENFsLMiu3Xbpyaa5pLNfi4-Wv89zqPHWmVT2pe7y1mbY6qwuSoMnXb9P700SekaCb65-niTpr7WG77MPLyVNaPXXWnK23-1Tv7nO7jml20F7nvFmoR81EYc2I7Vurct97e_u90TbX301Rtt1Z6Ed3msjzsy-2yJ-aP9_Ko0QSiSR-V6HLD3Tjsc-p-WyWrdf2Fx7tFJaHHR1QvjejI49pdLyb6fXoqMMaDMr3xmB1TAZ7N9Nrg6PDGgzK98bg6JgM9m6m1wbHhzUYlO-NwfExGfyvZ_5ozP7zfvewY5-6tey-qilOtcH_UG0yDT6dYZhqvf59ATfsO10tTVnpD91_Luo-dJbr5l9TmZWd6x_WzDdlmo-3G27zRaYr1zyVzYdJ2TyqN_gWlm1YvoXVDiz94MsQWMogehBEX_G0YukoBB6FwBIcF6CHIbQCbUespDEPxyysYl7xAUsPeXgYMh88DOaDh9F8ABrMB6DBfFyGzAcPg_ngYTQfgAbzwdNoPkYh83HFJ8AFiIBOgHhlAE-jEOBpmAIARzEAcOC55GMEnDiggemARqojHLgOcCS77GSJj-2SzxIJ4kB20sRLd55GuvM01B3gSHeAI907QeqlO08j3Xka6g5wpDuPQ907ceqleydYdnUfAd07yeKlO08j3Xka6g5wpDvAke6dVPXSnaeR7jwNdQc40p3Hke6Kv5AqcCNVnWzZxRXAfW5nypMeBdGtY_PGh0G4Qq37XdFm609_AwAA___zpcPr

@@ -493,10 +493,6 @@ type physicalPlan struct {
 	planToStreamColMap []int
 }
 
-// orderingTerminated is used when streams can be joined without needing to be
-// merged with respect to a particular ordering.
-var orderingTerminated = distsqlrun.Ordering{}
-
 // makePlanToStreamColMap initializes a new physicalPlan.planToStreamColMap. The
 // columns that are present in the result stream(s) should be set in the map.
 func makePlanToStreamColMap(numCols int) []int {
@@ -1117,6 +1113,12 @@ func (dsp *DistSQLPlanner) addAggregators(
 	for i, idx := range n.groupCols {
 		groupCols[i] = uint32(p.planToStreamColMap[idx])
 	}
+	orderedGroupCols := make([]uint32, len(n.orderedGroupCols))
+	var orderedGroupColSet util.FastIntSet
+	for i, idx := range n.orderedGroupCols {
+		orderedGroupCols[i] = uint32(p.planToStreamColMap[idx])
+		orderedGroupColSet.Add(i)
+	}
 
 	// We either have a local stage on each stream followed by a final stage, or
 	// just a final stage. We only use a local stage if:
@@ -1213,8 +1215,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 	planToStreamMapSet := false
 	if !multiStage {
 		finalAggsSpec = distsqlrun.AggregatorSpec{
-			Aggregations: aggregations,
-			GroupCols:    groupCols,
+			Aggregations:     aggregations,
+			GroupCols:        groupCols,
+			OrderedGroupCols: orderedGroupCols,
 		}
 	} else {
 		// Some aggregations might need multiple aggregation as part of
@@ -1247,7 +1250,6 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// respect to the i-th final aggregation out of all final
 		// aggregations) to its index in the finalAggs slice.
 		finalIdxMap := make([]uint32, nFinalAgg)
-		finalGroupCols := make([]uint32, len(groupCols))
 
 		// finalPreRenderTypes is passed to an IndexVarHelper which
 		// helps type-check the indexed variables passed into
@@ -1379,9 +1381,11 @@ func (dsp *DistSQLPlanner) addAggregators(
 			}
 		}
 
-		// Add IDENT expressions for the group columns; these need to
-		// be part of the output of the local stage because the final
-		// stage needs them.
+		// In queries like SELECT min(v) FROM kv GROUP BY k, not all group columns
+		// appear in the rendering. Add IDENT expressions for them, as they need to
+		// be part of the output of the local stage for the final stage to know
+		// about them.
+		finalGroupCols := make([]uint32, len(groupCols))
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_IDENT,
@@ -1405,21 +1409,50 @@ func (dsp *DistSQLPlanner) addAggregators(
 			finalGroupCols[i] = uint32(idx)
 		}
 
+		finalOrderedGroupCols := make([]uint32, len(orderedGroupCols))
+		for i, c := range orderedGroupCols {
+			finalOrderedGroupCols[i] = finalGroupCols[c]
+		}
+
+		// Create the merge ordering for the local stage.
+		groupColProps := planPhysicalProps(n.plan)
+		groupColProps = groupColProps.project(n.groupCols)
+		ordCols := make([]distsqlrun.Ordering_Column, 0, len(groupColProps.ordering))
+	OrderingLoop:
+		for _, o := range groupColProps.ordering {
+			for i, c := range finalGroupCols {
+				if o.ColIdx == n.groupCols[i] {
+					dir := distsqlrun.Ordering_Column_ASC
+					if o.Direction == encoding.Descending {
+						dir = distsqlrun.Ordering_Column_DESC
+					}
+					ordCols = append(ordCols, distsqlrun.Ordering_Column{
+						ColIdx:    c,
+						Direction: dir,
+					})
+					continue OrderingLoop
+				}
+			}
+			panic("missing IDENT from local aggregations")
+		}
+
 		localAggsSpec := distsqlrun.AggregatorSpec{
-			Aggregations: localAggs,
-			GroupCols:    groupCols,
+			Aggregations:     localAggs,
+			GroupCols:        groupCols,
+			OrderedGroupCols: orderedGroupCols,
 		}
 
 		p.AddNoGroupingStage(
 			distsqlrun.ProcessorCoreUnion{Aggregator: &localAggsSpec},
 			distsqlrun.PostProcessSpec{},
 			intermediateTypes,
-			orderingTerminated, // The local aggregators don't guarantee any output ordering.
+			distsqlrun.Ordering{Columns: ordCols},
 		)
 
 		finalAggsSpec = distsqlrun.AggregatorSpec{
-			Aggregations: finalAggs,
-			GroupCols:    finalGroupCols,
+			Aggregations:     finalAggs,
+			GroupCols:        finalGroupCols,
+			OrderedGroupCols: finalOrderedGroupCols,
 		}
 
 		if needRender {
@@ -1496,6 +1529,13 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 	}
 
+	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
+	// planNode columns to stream columns because the aggregator
+	// has been programmed to produce the same columns as the groupNode.
+	if !planToStreamMapSet {
+		p.planToStreamColMap = identityMap(p.planToStreamColMap, len(aggregations))
+	}
+
 	if len(finalAggsSpec.GroupCols) == 0 || len(p.ResultRouters) == 1 {
 		// No GROUP BY, or we have a single stream. Use a single final aggregator.
 		// If the previous stage was all on a single node, put the final
@@ -1549,23 +1589,18 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// Connect the streams.
 		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
 			pIdx := pIdxStart + distsqlplan.ProcessorIdx(bucket)
-			p.MergeResultStreams(p.ResultRouters, bucket, distsqlrun.Ordering{}, pIdx, 0)
+			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0)
 		}
 
 		// Set the new result routers.
 		for i := 0; i < len(p.ResultRouters); i++ {
 			p.ResultRouters[i] = pIdxStart + distsqlplan.ProcessorIdx(i)
 		}
+
 		p.ResultTypes = finalOutTypes
-		p.SetMergeOrdering(orderingTerminated)
+		p.SetMergeOrdering(dsp.convertOrdering(n.props, p.planToStreamColMap))
 	}
 
-	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
-	// planNode columns to stream columns because the aggregator
-	// has been programmed to produce the same columns as the groupNode.
-	if !planToStreamMapSet {
-		p.planToStreamColMap = identityMap(p.planToStreamColMap, len(aggregations))
-	}
 	return nil
 }
 
