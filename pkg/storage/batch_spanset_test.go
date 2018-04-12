@@ -78,7 +78,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Errorf("ClearRange: unexpected error %v", err)
 	}
 	{
-		iter := batch.NewIterator(false)
+		iter := batch.NewIterator(engine.IterOptions{})
 		err := batch.ClearIterRange(iter, outsideKey, outsideKey2)
 		iter.Close()
 		if !isWriteSpanErr(err) {
@@ -118,7 +118,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 
 	func() {
-		iter := batch.NewIterator(false)
+		iter := batch.NewIterator(engine.IterOptions{})
 		defer iter.Close()
 
 		// Iterators check boundaries on seek and next/prev
@@ -157,7 +157,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := spanset.NewIterator(eng.NewIterator(false), &ss)
+	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{}), &ss)
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
 	if _, err := iter.Valid(); !isReadSpanErr(err) {

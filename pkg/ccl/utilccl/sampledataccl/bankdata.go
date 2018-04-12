@@ -135,7 +135,7 @@ func (b *Backup) NextKeyValues(
 			return nil, roachpb.Span{}, err
 		}
 
-		it := sst.NewIterator(false)
+		it := sst.NewIterator(engine.IterOptions{})
 		defer it.Close()
 		it.Seek(engine.MVCCKey{Key: file.Span.Key})
 

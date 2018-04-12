@@ -133,7 +133,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		{
 			batch := eng.NewBatch()
 			defer batch.Close()
-			iter := batch.NewIterator(false)
+			iter := batch.NewIterator(IterOptions{})
 			key := MVCCKey{Key: roachpb.Key("b")}
 
 			if err := batch.Put(key, []byte("foo")); err != nil {
@@ -296,7 +296,7 @@ func TestEngineBatch(t *testing.T) {
 				t.Errorf("%d: expected %s, but got %s", i, expectedValue, actualValue)
 			}
 			// Try using an iterator to get the value from the batch.
-			iter := b.NewIterator(false)
+			iter := b.NewIterator(IterOptions{})
 			iter.Seek(key)
 			if ok, err := iter.Valid(); !ok {
 				if currentBatch[len(currentBatch)-1].value != nil {
@@ -629,7 +629,7 @@ func TestEngineDeleteRangeBatch(t *testing.T) {
 func TestEngineDeleteIterRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testEngineDeleteRange(t, func(engine Engine, start, end MVCCKey) error {
-		iter := engine.NewIterator(false)
+		iter := engine.NewIterator(IterOptions{})
 		defer iter.Close()
 		return engine.ClearIterRange(iter, start, end)
 	})
@@ -760,7 +760,7 @@ func TestSnapshotMethods(t *testing.T) {
 		}
 
 		// Verify NewIterator still iterates over original snapshot.
-		iter := snap.NewIterator(false)
+		iter := snap.NewIterator(IterOptions{})
 		iter.Seek(newKey)
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)

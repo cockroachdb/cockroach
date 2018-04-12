@@ -84,7 +84,7 @@ func (tsdb *DB) findTimeSeries(
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
-	iter := snapshot.NewIterator(false)
+	iter := snapshot.NewIterator(engine.IterOptions{})
 	defer iter.Close()
 
 	// Set start boundary for the search, which is the lesser of the range start

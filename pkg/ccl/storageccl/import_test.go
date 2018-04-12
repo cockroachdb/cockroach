@@ -102,7 +102,7 @@ func slurpSSTablesLatestKey(
 	}
 
 	var kvs []engine.MVCCKeyValue
-	it := batch.NewIterator(false)
+	it := batch.NewIterator(engine.IterOptions{})
 	defer it.Close()
 	for it.Seek(start); ; it.NextKey() {
 		if ok, err := it.Valid(); err != nil {
