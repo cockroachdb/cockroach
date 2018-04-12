@@ -68,29 +68,29 @@ func (_f *Factory) ConstructFuncCall(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_funcCallExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// NotOp
-	dynConstructLookup[opt.NotOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.NotOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructNot(memo.GroupID(operands[0]))
 	}
 
 	// FuncCallOp
-	dynConstructLookup[opt.FuncCallOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.FuncCallOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructFuncCall(memo.GroupID(operands[0]), operands[1].ListID(), memo.PrivateID(operands[2]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -148,24 +148,24 @@ func (_f *Factory) ConstructInnerJoin(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_innerJoinExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// InnerJoinOp
-	dynConstructLookup[opt.InnerJoinOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.InnerJoinOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructInnerJoin(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -358,44 +358,44 @@ func (_f *Factory) ConstructConst(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_constExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// EqOp
-	dynConstructLookup[opt.EqOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.EqOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructEq(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// LtOp
-	dynConstructLookup[opt.LtOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.LtOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructLt(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// PlusOp
-	dynConstructLookup[opt.PlusOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.PlusOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructPlus(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// MinusOp
-	dynConstructLookup[opt.MinusOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.MinusOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructMinus(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// ConstOp
-	dynConstructLookup[opt.ConstOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.ConstOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructConst(memo.PrivateID(operands[0]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -497,29 +497,29 @@ func (_f *Factory) ConstructVariable(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_variableExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// FuncOp
-	dynConstructLookup[opt.FuncOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.FuncOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructFunc(memo.GroupID(operands[0]), operands[1].ListID(), memo.PrivateID(operands[2]))
 	}
 
 	// VariableOp
-	dynConstructLookup[opt.VariableOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.VariableOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructVariable(memo.PrivateID(operands[0]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -610,12 +610,12 @@ func (_f *Factory) ConstructSelect(
 					if _f.onRuleMatch == nil || _f.onRuleMatch(opt.Test) {
 						_group = _f.DynamicConstruct(
 							_f.mem.NormExpr(item).Operator(),
-							DynamicOperands{
-								DynamicID(_f.ConstructSelect(
+							memo.DynamicOperands{
+								memo.DynamicID(_f.ConstructSelect(
 									t,
 									u,
 								)),
-								DynamicID(_f.custom(item, opt.SelectOp)),
+								memo.DynamicID(_f.custom(item, opt.SelectOp)),
 							},
 						)
 						_f.mem.AddAltFingerprint(_selectExpr.Fingerprint(), _group)
@@ -685,44 +685,44 @@ func (_f *Factory) ConstructAnd(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_andExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// SelectOp
-	dynConstructLookup[opt.SelectOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.SelectOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructSelect(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// InnerJoinOp
-	dynConstructLookup[opt.InnerJoinOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.InnerJoinOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructInnerJoin(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// FullJoinOp
-	dynConstructLookup[opt.FullJoinOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.FullJoinOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructFullJoin(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// UnionOp
-	dynConstructLookup[opt.UnionOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnionOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructUnion(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// AndOp
-	dynConstructLookup[opt.AndOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.AndOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructAnd(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -817,24 +817,24 @@ func (_f *Factory) ConstructList(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_listExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// ListOp
-	dynConstructLookup[opt.ListOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.ListOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructList(operands[0].ListID())
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -891,24 +891,24 @@ func (_f *Factory) ConstructJoin(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_joinExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// JoinOp
-	dynConstructLookup[opt.JoinOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.JoinOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructJoin(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.GroupID(operands[2]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -995,29 +995,29 @@ func (_f *Factory) ConstructOp(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_opExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// ListOp
-	dynConstructLookup[opt.ListOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.ListOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructList(operands[0].ListID())
 	}
 
 	// OpOp
-	dynConstructLookup[opt.OpOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.OpOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructOp(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -1158,29 +1158,29 @@ func (_f *Factory) ConstructNe(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_neExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// EqOp
-	dynConstructLookup[opt.EqOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.EqOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructEq(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// NeOp
-	dynConstructLookup[opt.NeOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.NeOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructNe(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -1291,34 +1291,34 @@ func (_f *Factory) ConstructNull() memo.GroupID {
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_nullExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// PlusOp
-	dynConstructLookup[opt.PlusOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.PlusOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructPlus(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// MinusOp
-	dynConstructLookup[opt.MinusOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.MinusOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructMinus(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// NullOp
-	dynConstructLookup[opt.NullOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.NullOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructNull()
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
@@ -1441,39 +1441,39 @@ func (_f *Factory) ConstructNot(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_notExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, operands DynamicOperands) memo.GroupID
+type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
 
-var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		panic("op type not initialized")
 	}
 
 	// LtOp
-	dynConstructLookup[opt.LtOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.LtOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructLt(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// GtOp
-	dynConstructLookup[opt.GtOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.GtOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructGt(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// ContainsOp
-	dynConstructLookup[opt.ContainsOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.ContainsOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructContains(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
 	}
 
 	// NotOp
-	dynConstructLookup[opt.NotOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+	dynConstructLookup[opt.NotOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
 		return f.ConstructNot(memo.GroupID(operands[0]))
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op opt.Operator, operands DynamicOperands) memo.GroupID {
+func (f *Factory) DynamicConstruct(op opt.Operator, operands memo.DynamicOperands) memo.GroupID {
 	return dynConstructLookup[op](f, operands)
 }
 ----
