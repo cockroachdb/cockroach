@@ -78,6 +78,8 @@ const (
 	recommendedNetworkFileDescriptors = 5000
 
 	defaultConnResultsBufferBytes = 16 << 10 // 16 KiB
+
+	defaultSQLTableStatCacheSize = 256
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
@@ -167,6 +169,10 @@ type Config struct {
 
 	// SQLAuditLogDirName is the target directory name for SQL audit logs.
 	SQLAuditLogDirName *log.DirName
+
+	// SQLTableStatCacheSize is the size (number of tables) of the table
+	// statistics cache.
+	SQLTableStatCacheSize int
 
 	// Parsed values.
 
@@ -376,6 +382,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		Settings:                       st,
 		CacheSize:                      DefaultCacheSize,
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
+		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,

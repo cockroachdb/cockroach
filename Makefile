@@ -1062,7 +1062,7 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 ui-generate: $(UI_ROOT)/distccl/bindata.go
 
 .PHONY: ui-lint
-ui-lint: $(UI_PROTOS)
+ui-lint: $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
