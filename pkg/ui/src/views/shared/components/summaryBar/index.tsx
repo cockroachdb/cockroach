@@ -6,7 +6,7 @@ import "./summarybar.styl";
 
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
-import {ToolTipWrapper} from "oss/src/views/shared/components/toolTip";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 interface SummaryValueProps {
   title: React.ReactNode;
