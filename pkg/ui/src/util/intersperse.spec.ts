@@ -1,6 +1,6 @@
 import { assert } from "chai";
 
-import { intersperse } from "oss/src/util/intersperse";
+import { intersperse } from "src/util/intersperse";
 
 describe("intersperse", () => {
 
