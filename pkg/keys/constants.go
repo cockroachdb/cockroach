@@ -256,7 +256,7 @@ var (
 	SystemConfigTableDataMax = roachpb.Key(MakeTablePrefix(MaxSystemConfigDescID + 1))
 
 	// UserTableDataMin is the start key of user structured data.
-	UserTableDataMin = roachpb.Key(MakeTablePrefix(MaxReservedDescID + 1))
+	UserTableDataMin = roachpb.Key(MakeTablePrefix(MinUserDescID))
 
 	// MaxKey is the infinity marker which is larger than any other key.
 	MaxKey = roachpb.KeyMax
@@ -276,6 +276,15 @@ const (
 	// IDs. Reserved IDs are used by namespaces and tables used internally by
 	// cockroach.
 	MaxReservedDescID = 49
+
+	// MinUserDescID is the first descriptor ID available for user
+	// structured data.
+	MinUserDescID = MaxReservedDescID + 1
+
+	// MinNonPredefinedUserDescID is the first descriptor ID used by
+	// user-level objects that are not created automatically on empty
+	// clusters (default databases).
+	MinNonPredefinedUserDescID = MinUserDescID + 2
 
 	// VirtualDescriptorID is the ID used by all virtual descriptors.
 	VirtualDescriptorID = math.MaxUint32

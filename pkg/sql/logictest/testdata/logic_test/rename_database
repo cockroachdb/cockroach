@@ -3,6 +3,8 @@
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -54,6 +56,8 @@ SHOW GRANTS ON DATABASE test
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 u
 
@@ -136,3 +140,10 @@ CREATE VIEW v.v AS SELECT k,v FROM v.kv
 
 statement error cannot rename database because view "v" depends on table "kv"
 ALTER DATABASE v RENAME TO u
+
+# Check that the default databases can be renamed like any other.
+statement ok
+ALTER DATABASE defaultdb RENAME TO w;
+  ALTER DATABASE postgres RENAME TO defaultdb;
+  ALTER DATABASE w RENAME TO postgres
+

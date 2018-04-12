@@ -47,7 +47,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MaxReservedDescID + 1)
+			id := sqlbase.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -105,7 +105,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MaxReservedDescID + 1)
+			id := sqlbase.ID(keys.MinUserDescID)
 			var batch engine.RocksDBBatchBuilder
 
 			var totalLen int64
@@ -161,7 +161,7 @@ func BenchmarkImport(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MaxReservedDescID + 1)
+			id := sqlbase.ID(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
