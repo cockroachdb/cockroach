@@ -257,9 +257,6 @@ func (c *Container) Remove(ctx context.Context) error {
 
 // Kill stops a running container, without removing it.
 func (c *Container) Kill(ctx context.Context) error {
-	// Paused containers cannot be killed. Attempt to unpause it first
-	// (which might fail) before killing.
-	_ = c.Unpause(ctx)
 	if err := c.cluster.client.ContainerKill(ctx, c.id, "9"); err != nil && !strings.Contains(err.Error(), "is not running") {
 		return err
 	}
@@ -272,20 +269,6 @@ func (c *Container) Kill(ctx context.Context) error {
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start(ctx context.Context) error {
 	return c.cluster.client.ContainerStart(ctx, c.id, types.ContainerStartOptions{})
-}
-
-// Pause pauses a running container.
-func (c *Container) Pause(ctx context.Context) error {
-	return c.cluster.client.ContainerPause(ctx, c.id)
-}
-
-// TODO(pmattis): Container.Pause is neither used or tested. Silence unused
-// warning.
-var _ = (*Container).Pause
-
-// Unpause resumes a paused container.
-func (c *Container) Unpause(ctx context.Context) error {
-	return c.cluster.client.ContainerUnpause(ctx, c.id)
 }
 
 // Restart restarts a running container.
@@ -303,19 +286,6 @@ func (c *Container) Restart(ctx context.Context, timeout *time.Duration) error {
 	c.cluster.expectEvent(c, append(exp, eventRestart)...)
 	return nil
 }
-
-// Stop a running container.
-func (c *Container) Stop(ctx context.Context, timeout *time.Duration) error {
-	if err := c.cluster.client.ContainerStop(ctx, c.id, timeout); err != nil {
-		return err
-	}
-	c.cluster.expectEvent(c, eventDie)
-	return nil
-}
-
-// TODO(pmattis): Container.Stop is neither used or tested. Silence unused
-// warning.
-var _ = (*Container).Stop
 
 // Wait waits for a running container to exit.
 func (c *Container) Wait(ctx context.Context, condition container.WaitCondition) error {
