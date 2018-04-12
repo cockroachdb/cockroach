@@ -215,12 +215,6 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react-sticky@^5.0.1":
-  version "5.0.6"
-  resolved "https://registry.yarnpkg.com/@types/react-sticky/-/react-sticky-5.0.6.tgz#eb65a40a0f3f46cd02ea21983c9816e99d84e754"
-  dependencies:
-    "@types/react" "*"
-
 "@types/react@*", "@types/react@^16.3.6":
   version "16.3.7"
   resolved "https://registry.yarnpkg.com/@types/react/-/react-16.3.7.tgz#3b90fc4c8382fc55f4d18a8d487dbd314eb6ec4c"
@@ -5070,12 +5064,6 @@ react-side-effect@^1.1.0:
   dependencies:
     exenv "^1.2.1"
     shallowequal "^1.0.1"
-
-react-sticky@^5.0.5:
-  version "5.0.8"
-  resolved "https://registry.yarnpkg.com/react-sticky/-/react-sticky-5.0.8.tgz#d5f85f96977f410081d792ab81886c622c5d8b14"
-  dependencies:
-    prop-types "^15.5.8"
 
 react-test-renderer@^16.0.0-0:
   version "16.3.1"
