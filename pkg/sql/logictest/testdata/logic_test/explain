@@ -178,7 +178,7 @@ distinct               ·          ·
       │                order      +"Database"
       └── render       ·          ·
            └── values  ·          ·
-·                      size       4 columns, 12 rows
+·                      size       4 columns, 20 rows
 
 query TTT
 EXPLAIN SHOW TABLES
@@ -265,7 +265,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 376 rows
+·                      size   8 columns, 540 rows
 
 
 query TTT

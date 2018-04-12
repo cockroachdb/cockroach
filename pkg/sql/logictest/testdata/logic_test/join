@@ -839,7 +839,7 @@ SELECT "Level", "Type", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT
 10  ·          type       inner
 10  ·          equality   (refobjid) = (oid)
 11  filter     ·          ·
-11  ·          filter     (dep.classid = 4061301040) AND (dep.refclassid = 2431470471)
+11  ·          filter     (dep.classid = 139623798) AND (dep.refclassid = 1411792157)
 11  filter     ·          ·
 11  ·          filter     pkic.relkind = 'i'
 

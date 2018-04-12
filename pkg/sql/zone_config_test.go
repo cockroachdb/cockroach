@@ -92,7 +92,7 @@ func TestGetZoneConfig(t *testing.T) {
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
 
-	expectedCounter := uint32(keys.MaxReservedDescID)
+	expectedCounter := uint32(keys.MaxReservedDescID + 2)
 
 	defaultZoneConfig := config.DefaultZoneConfig()
 	defaultZoneConfig.RangeMinBytes = 1 << 20

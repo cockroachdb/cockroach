@@ -111,7 +111,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
 ----
 scan  ·      ·
 ·     table  level4@primary
-·     spans  /2/#/52/1/#/53/1-/2/#/52/1/#/53/2
+·     spans  /2/#/54/1/#/55/1-/2/#/54/1/#/55/2
 
 query III rowsort
 SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
@@ -131,7 +131,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
 ----
 scan  ·      ·
 ·     table  level4@primary
-·     spans  /2/#/52/1/#/53/1/11-/2/#/52/1/#/53/1/30
+·     spans  /2/#/54/1/#/55/1/11-/2/#/54/1/#/55/1/30
 
 query III rowsort
 SELECT * FROM level4 WHERE k1 = 2 AND k2 > 10 AND k2 < 30
@@ -145,7 +145,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
 ----
 scan  ·      ·
 ·     table  level4@primary
-·     spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/299/#/54/1/#
+·     spans  /2/#/54/1/#/55/1/20/101/#/56/1-/2/#/54/1/#/55/1/20/299/#/56/1/#
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
@@ -157,7 +157,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
 ----
 scan  ·      ·
 ·     table  level4@primary
-·     spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/200/#/54/1/#
+·     spans  /2/#/54/1/#/55/1/20/200/#/56/1-/2/#/54/1/#/55/1/20/200/#/56/1/#
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
