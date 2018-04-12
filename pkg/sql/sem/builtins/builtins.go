@@ -2196,6 +2196,7 @@ CockroachDB supports the following flags:
 
 	// Metadata functions.
 
+	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"version": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
@@ -2208,6 +2209,7 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_database": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
@@ -2223,52 +2225,77 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// https://www.postgresql.org/docs/10/static/functions-info.html
+	//
+	// Note that in addition to what the pg doc says ("current_schema =
+	// first item in search path"), the pg server actually skips over
+	// non-existent schemas in the search path to determine
+	// current_schema. This is not documented but can be verified by a
+	// SQL client against a pg server.
 	"current_schema": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				hasFirst, first := ctx.SessionData.SearchPath.FirstSpecified()
-				if !hasFirst {
-					return tree.DNull, nil
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ctx := evalCtx.Ctx()
+				curDb := evalCtx.SessionData.Database
+				iter := evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
+				for scName, ok := iter(); ok; scName, ok = iter() {
+					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {
+						if err != nil {
+							return nil, err
+						}
+						return tree.NewDString(scName), nil
+					}
 				}
-				return tree.NewDString(first), nil
+				return tree.DNull, nil
 			},
-			Info: "Returns the current schema. This function is provided for " +
-				"compatibility with PostgreSQL. For a new CockroachDB application, " +
-				"consider using current_database() instead.",
+			Info: "Returns the current schema.",
 		},
 	},
 
-	// For now, schemas are the same as databases. So, current_schemas
-	// returns the current database (if one has been set by the user)
-	// and the session's database search path.
+	// https://www.postgresql.org/docs/10/static/functions-info.html
+	//
+	// Note that in addition to what the pg doc says ("current_schemas =
+	// items in search path with or without pg_catalog depending on
+	// argument"), the pg server actually skips over non-existent
+	// schemas in the search path to compute current_schemas. This is
+	// not documented but can be verified by a SQL client against a pg
+	// server.
 	"current_schemas": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
 			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ctx := evalCtx.Ctx()
+				curDb := evalCtx.SessionData.Database
 				includePgCatalog := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
 				var iter func() (string, bool)
 				if includePgCatalog {
-					iter = ctx.SessionData.SearchPath.Iter()
+					iter = evalCtx.SessionData.SearchPath.Iter()
 				} else {
-					iter = ctx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
+					iter = evalCtx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 				}
-				for p, ok := iter(); ok; p, ok = iter() {
-					if err := schemas.Append(tree.NewDString(p)); err != nil {
-						return nil, err
+				for scName, ok := iter(); ok; scName, ok = iter() {
+					if found, _, err := evalCtx.Planner.LookupSchema(ctx, curDb, scName); found || err != nil {
+						if err != nil {
+							return nil, err
+						}
+						if err := schemas.Append(tree.NewDString(scName)); err != nil {
+							return nil, err
+						}
 					}
 				}
 				return schemas, nil
 			},
-			Info: "Returns the current search path for unqualified names.",
+			Info: "Returns the valid schemas in the search path.",
 		},
 	},
 
+	// https://www.postgresql.org/docs/10/static/functions-info.html
 	"current_user": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},

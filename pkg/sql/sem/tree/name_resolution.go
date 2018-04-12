@@ -332,14 +332,16 @@ func (t *TableName) ResolveTarget(
 		return false, nil, nil
 	}
 
-	// This is a naked table name. Use the current schema = the first item in the search path.
-	hasFirst, firstSchema := searchPath.FirstSpecified()
-	if hasFirst {
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, firstSchema); found || err != nil {
+	// This is a naked table name. Use the current schema = the first
+	// valid item in the search path.
+	iter := searchPath.IterWithoutImplicitPGCatalog()
+	for scName, ok := iter(); ok; scName, ok = iter() {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
-				t.SchemaName = Name(firstSchema)
+				t.SchemaName = Name(scName)
 			}
+			break
 		}
 	}
 	return found, scMeta, err
@@ -376,14 +378,16 @@ func (tp *TableNamePrefix) Resolve(
 		// No luck.
 		return false, nil, nil
 	}
-	// This is a naked table name. Use the current schema = the first item in the search path.
-	hasFirst, firstSchema := searchPath.FirstSpecified()
-	if hasFirst {
-		if found, scMeta, err = r.LookupSchema(ctx, curDb, firstSchema); found || err != nil {
+	// This is a naked table name. Use the current schema = the first
+	// valid item in the search path.
+	iter := searchPath.IterWithoutImplicitPGCatalog()
+	for scName, ok := iter(); ok; scName, ok = iter() {
+		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
-				tp.SchemaName = Name(firstSchema)
+				tp.SchemaName = Name(scName)
 			}
+			break
 		}
 	}
 	return found, scMeta, err
