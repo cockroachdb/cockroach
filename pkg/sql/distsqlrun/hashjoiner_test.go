@@ -1439,7 +1439,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 					rows := makeIntRows(numRows, numCols)
 					leftInput := NewRepeatableRowSource(oneIntCol, rows)
 					rightInput := NewRepeatableRowSource(oneIntCol, rows)
-					b.SetBytes(int64(8 * numRows * numCols))
+					b.SetBytes(int64(8 * numRows * numCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						// TODO(asubiotto): Get rid of uncleared state between
