@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var jepsenTests = []string{
@@ -58,6 +60,24 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	controller := c.Node(c.nodes)
 	workers := c.Range(1, c.nodes-1)
+
+	// Wrap roachtest's primitive logging in something more like util/log
+	logf := func(f string, args ...interface{}) {
+		// This log prefix matches the one (sometimes) used in roachprod
+		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
+		c.l.printf(f, args...)
+		c.l.printf("\n")
+	}
+
+	// Run a command with output redirected to the logs instead of to
+	// os.Stdout (which doesn't go anywhere I've been able to find)
+	// Don't use this if you're going to call cmd.CombinedOutput.
+	loggedCommand := func(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, arg0, args...)
+		cmd.Stdout = c.l.stdout
+		cmd.Stderr = c.l.stderr
+		return cmd
+	}
 
 	// TODO(bdarnell): Does this blanket apt update matter? I just
 	// copied it from the old jepsen scripts. It's slow, so we should
@@ -116,7 +136,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd = exec.CommandContext(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +157,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 			testIdx++
 			testCfg := fmt.Sprintf("%s %s", testName, nemesis)
 			t.Status(fmt.Sprintf("%d/%d: %s (%d failures)", testIdx, numTests, testCfg, len(failures)))
-			c.l.printf("%s: running\n", testCfg)
+			logf("%s: running", testCfg)
 
 			// Reset the "latest" alias for the next run.
 			c.Run(ctx, controller, "rm -f jepsen/cockroachdb/store/latest")
@@ -168,29 +188,43 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 					t.Fatal(err)
 				}
 				if testErr == nil {
-					c.l.printf("%s: passed, grabbing minimal logs\n", testCfg)
+					logf("%s: passed, grabbing minimal logs", testCfg)
 
 					collectFiles := []string{
 						"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
 					}
+					anyFailed := false
 					for _, file := range collectFiles {
-						cmd = exec.CommandContext(ctx, "roachprod", "get", c.makeNodes(controller),
+						cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
 							"jepsen/cockroachdb/store/latest/"+file,
 							filepath.Join(outputDir, file))
+						cmd.Stdout = c.l.stdout
+						cmd.Stderr = c.l.stderr
 						if err := cmd.Run(); err != nil {
-							c.l.printf("failed to retrieve %s: %s", file, err)
+							logf("failed to retrieve %s: %s", file, err)
+						}
+					}
+					if anyFailed {
+						// Try to figure out why this is so common.
+						cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+							"jepsen/cockroachdb/invoke.log",
+							filepath.Join(outputDir, "invoke.log"))
+						cmd.Stdout = c.l.stdout
+						cmd.Stderr = c.l.stderr
+						if err := cmd.Run(); err != nil {
+							logf("failed to retrieve invoke.log: %s", err)
 						}
 					}
 				} else {
-					c.l.printf("%s: failed: %s\n", testCfg, testErr)
+					logf("%s: failed: %s", testCfg, testErr)
 					failures = append(failures, testCfg)
 					// collect the systemd log on failure to diagnose #20492.
 					// TODO(bdarnell): remove the next two lines when that's resolved.
-					c.l.printf("%s: systemd log:", testCfg)
+					logf("%s: systemd log:", testCfg)
 					c.Run(ctx, controller, "journalctl -x --no-pager")
-					c.l.printf("%s: grabbing artifacts from controller. Tail of controller log:\n", testCfg)
+					logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 					c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
-					cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
+					cmd = loggedCommand(ctx, "roachprod", "run", c.makeNodes(controller),
 						// -h causes tar to follow symlinks; needed by the "latest" symlink.
 						// -f- sends the output to stdout, we read it and save it to a local file.
 						"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
@@ -215,12 +249,13 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 				c.Run(ctx, controller, "pkill -QUIT java")
 				time.Sleep(10 * time.Second)
 				c.Run(ctx, controller, "pkill java")
-				c.l.printf("%s: timed out", testCfg)
+				logf("%s: timed out", testCfg)
 				failures = append(failures, testCfg)
 			}
 		}
 	}
 	if len(failures) > 0 {
+		logf("jepsen tests failed: %v", failures)
 		t.Fatalf("jepsen tests failed: %v", failures)
 	}
 }

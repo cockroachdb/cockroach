@@ -470,7 +470,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   EXISTS EXPERIMENTAL_CHANGEFEED EXECUTE EXPERIMENTAL
 %token <str>   EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str>   EXPERIMENTAL_AUDIT
-%token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
+%token <str>   EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
 %token <str>   FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
@@ -650,6 +650,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
 %type <tree.Statement> explainable_stmt
+%type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
 %type <tree.Statement> grant_stmt
@@ -1036,6 +1037,7 @@ stmt:
 | drop_stmt       // help texts in sub-rule
 | execute_stmt    // EXTEND WITH HELP: EXECUTE
 | explain_stmt    // EXTEND WITH HELP: EXPLAIN
+| export_stmt     // EXTEND WITH HELP: EXPORT
 | grant_stmt      // EXTEND WITH HELP: GRANT
 | insert_stmt     // EXTEND WITH HELP: INSERT
 | import_stmt     // EXTEND WITH HELP: IMPORT
@@ -1586,7 +1588,7 @@ import_data_format:
 //    distributed = '...'
 //    sstsize = '...'
 //    temp = '...'
-//    comma = '...'          [CSV-specific]
+//    delimiter = '...'      [CSV-specific]
 //    comment = '...'        [CSV-specific]
 //    nullif = '...'         [CSV-specific]
 //
@@ -1601,6 +1603,26 @@ import_stmt:
     $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
+
+
+// %Help: EXPORT - export data to file in a distributed manner
+// %Category: CCL
+// %Text:
+// EXPORT <format> (<datafile> [WITH <option> [= value] [,...]]) <query>
+//
+// Formats:
+//    CSV
+//
+// Options:
+//    delimiter = '...'   [CSV-specific]
+//
+// %SeeAlso: SELECT
+export_stmt:
+  EXPORT INTO import_data_format string_or_placeholder opt_with_options FROM select_stmt
+  {
+    $$.val = &tree.Export{Query: $7.slct(), FileFormat: $3, File: $4.expr(), Options: $5.kvOptions()}
+  }
+| EXPORT error // SHOW HELP: EXPORT
 
 string_or_placeholder:
   non_reserved_word_or_sconst
@@ -7734,6 +7756,7 @@ unreserved_keyword:
 | EXPERIMENTAL_RELOCATE
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
+| EXPORT
 | FILTER
 | FIRST
 | FLOAT4

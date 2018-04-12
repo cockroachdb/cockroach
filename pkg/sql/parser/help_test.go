@@ -359,6 +359,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`IMPORT TABLE foo CREATE USING 'foo.sql' CSV DATA ('foo') ??`, `IMPORT`},
 		{`IMPORT TABLE ??`, `IMPORT`},
+
+		{`EXPORT ??`, `EXPORT`},
+		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
+		{`EXPORT INTO CSV 'a' FROM SELECT a ??`, `SELECT`},
 	}
 
 	// The following checks that the test definition above exercises all

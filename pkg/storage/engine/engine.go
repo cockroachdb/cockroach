@@ -118,6 +118,15 @@ type Iterator interface {
 	) (kvs []byte, numKvs int64, intents []byte, err error)
 }
 
+// IterOptions contains options used to create an Iterator.
+type IterOptions struct {
+	// If Prefix is true, Seek will use the user-key prefix of
+	// the supplied MVCC key to restrict which sstables are searched,
+	// but iteration (using Next) over keys without the same user-key
+	// prefix will not work correctly (keys may be skipped)
+	Prefix bool
+}
+
 // Reader is the read interface to an engine's data.
 type Reader interface {
 	// Close closes the reader, freeing up any outstanding resources. Note that
@@ -143,13 +152,10 @@ type Reader interface {
 	// an error, the iteration will stop and return the error.
 	// If the first result of f is true, the iteration stops.
 	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
-	// NewIterator returns a new instance of an Iterator over this engine. When
-	// prefix is true, Seek will use the user-key prefix of the supplied MVCC key
-	// to restrict which sstables are searched, but iteration (using Next) over
-	// keys without the same user-key prefix will not work correctly (keys may be
-	// skipped). The caller must invoke Iterator.Close() when finished with the
-	// iterator to free resources.
-	NewIterator(prefix bool) Iterator
+	// NewIterator returns a new instance of an Iterator over this
+	// engine. The caller must invoke Iterator.Close() when finished
+	// with the iterator to free resources.
+	NewIterator(opts IterOptions) Iterator
 	// NewTimeBoundIterator is like NewIterator, but the underlying iterator will
 	// efficiently skip over SSTs that contain no MVCC keys in the time range
 	// [start, end].

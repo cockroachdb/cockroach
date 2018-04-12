@@ -228,8 +228,8 @@ func (s spanSetReader) Iterate(
 	return s.r.Iterate(start, end, f)
 }
 
-func (s spanSetReader) NewIterator(prefix bool) engine.Iterator {
-	return &Iterator{s.r.NewIterator(prefix), s.spans, nil, false}
+func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
+	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
 }
 
 func (s spanSetReader) NewTimeBoundIterator(start, end hlc.Timestamp) engine.Iterator {
