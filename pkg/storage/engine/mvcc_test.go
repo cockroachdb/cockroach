@@ -3438,7 +3438,7 @@ func TestFindSplitKey(t *testing.T) {
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const userID = keys.MaxReservedDescID + 1
+	const userID = keys.MinUserDescID
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
 	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
@@ -3602,7 +3602,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 				addColFam(tablePrefix(userID, "b"), 1),
 				addColFam(tablePrefix(userID, "c"), 1),
 			},
-			rangeStart: keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
+			rangeStart: keys.MakeTablePrefix(keys.MinUserDescID),
 			expSplit:   tablePrefix(userID, "b"),
 			expError:   false,
 		},

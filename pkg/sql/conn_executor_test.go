@@ -284,7 +284,7 @@ func TestNonRetriableErrorOnAutoCommit(t *testing.T) {
 func TestErrorOnRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const targetKeyString string = "/Table/51/1/1/0"
+	const targetKeyString string = "/Table/53/1/1/0"
 	var injectedErr int64
 
 	// We're going to inject an error into our EndTransaction.

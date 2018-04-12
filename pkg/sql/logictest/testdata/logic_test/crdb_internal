@@ -202,8 +202,8 @@ statement ok
 INSERT INTO system.zones (id, config) VALUES
   (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (51, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (52, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0))
+  (53, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
+  (54, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0))
 
 query IT
 SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
@@ -214,8 +214,8 @@ SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
 17  .system
 18  .timeseries
 22  .liveness
-51  testdb
-52  testdb.foo
+53  testdb
+54  testdb.foo
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')
