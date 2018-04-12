@@ -690,13 +690,13 @@ func (b *getBuffer) release() {
 // the previous value (if any) is read instead.
 func MVCCGet(
 	ctx context.Context,
-	engine Reader,
+	eng Reader,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(true)
+	iter := eng.NewIterator(IterOptions{Prefix: true})
 	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, false /* tombstones */)
 	iter.Close()
 	return value, intents, err
@@ -707,13 +707,13 @@ func MVCCGet(
 // set to nil for tombstones.
 func MVCCGetWithTombstone(
 	ctx context.Context,
-	engine Reader,
+	eng Reader,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
-	iter := engine.NewIterator(true)
+	iter := eng.NewIterator(IterOptions{Prefix: true})
 	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, true /* tombstones */)
 	iter.Close()
 	return value, intents, err
@@ -1025,7 +1025,7 @@ func (b *putBuffer) putMeta(
 // the value. In addition, zero timestamp values may be merged.
 func MVCCPut(
 	ctx context.Context,
-	engine ReadWriter,
+	eng ReadWriter,
 	ms *enginepb.MVCCStats,
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
@@ -1037,10 +1037,10 @@ func MVCCPut(
 	var iter Iterator
 	blind := ms == nil && timestamp == (hlc.Timestamp{})
 	if !blind {
-		iter = engine.NewIterator(true)
+		iter = eng.NewIterator(IterOptions{Prefix: true})
 		defer iter.Close()
 	}
-	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
+	return mvccPutUsingIter(ctx, eng, iter, ms, key, timestamp, value, txn, nil /* valueFn */)
 }
 
 // MVCCBlindPut is a fast-path of MVCCPut. See the MVCCPut comments for details
@@ -1071,7 +1071,7 @@ func MVCCDelete(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccPutUsingIter(ctx, engine, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
@@ -1370,7 +1370,7 @@ func MVCCIncrement(
 	txn *roachpb.Transaction,
 	inc int64,
 ) (int64, error) {
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var int64Val int64
@@ -1420,7 +1420,7 @@ func MVCCConditionalPut(
 	expVal *roachpb.Value,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	return mvccConditionalPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, expVal, txn)
@@ -1491,7 +1491,7 @@ func MVCCInitPut(
 	failOnTombstones bool,
 	txn *roachpb.Transaction,
 ) error {
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 	return mvccInitPutUsingIter(ctx, engine, iter, ms, key, timestamp, value, failOnTombstones, txn)
 }
@@ -1616,7 +1616,7 @@ func MVCCDeleteRange(
 	}
 
 	buf := newPutBuffer()
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 
 	for i := range kvs {
 		err = mvccPutInternal(
@@ -1662,11 +1662,12 @@ func mvccScanInternal(
 
 	var ownIter bool
 	if iter == nil {
-		iter = engine.NewIterator(false)
+		iter = engine.NewIterator(IterOptions{})
 		ownIter = true
 	}
 	kvData, numKvs, intentData, err := iter.MVCCScan(
 		key, endKey, max, timestamp, txn, consistent, reverse, tombstones)
+
 	if ownIter {
 		iter.Close()
 	}
@@ -1859,7 +1860,7 @@ func MVCCIterate(
 	f func(roachpb.KeyValue) (bool, error),
 ) ([]roachpb.Intent, error) {
 	// Get a new iterator.
-	iter := engine.NewIterator(false)
+	iter := engine.NewIterator(IterOptions{})
 	defer iter.Close()
 
 	return MVCCIterateUsingIter(
@@ -1965,7 +1966,7 @@ func MVCCIterateUsingIter(
 func MVCCResolveWriteIntent(
 	ctx context.Context, engine ReadWriter, ms *enginepb.MVCCStats, intent roachpb.Intent,
 ) error {
-	iterAndBuf := GetBufUsingIter(engine.NewIterator(true))
+	iterAndBuf := GetBufUsingIter(engine.NewIterator(IterOptions{Prefix: true}))
 	err := MVCCResolveWriteIntentUsingIter(ctx, engine, iterAndBuf, ms, intent)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
@@ -2277,7 +2278,7 @@ type IterAndBuf struct {
 
 // GetIterAndBuf returns an IterAndBuf for passing into various MVCC* methods.
 func GetIterAndBuf(engine Reader) IterAndBuf {
-	return GetBufUsingIter(engine.NewIterator(false))
+	return GetBufUsingIter(engine.NewIterator(IterOptions{}))
 }
 
 // GetBufUsingIter returns an IterAndBuf using the supplied iterator.
@@ -2387,7 +2388,7 @@ func MVCCGarbageCollect(
 ) error {
 	// We're allowed to use a prefix iterator because we always Seek() the
 	// iterator when handling a new user key.
-	iter := engine.NewIterator(true)
+	iter := engine.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	var count int64
@@ -2518,7 +2519,7 @@ func MVCCFindSplitKey(
 		key = roachpb.RKey(keys.LocalMax)
 	}
 
-	it := engine.NewIterator(false /* prefix */)
+	it := engine.NewIterator(IterOptions{})
 	defer it.Close()
 
 	minSplitKey := key

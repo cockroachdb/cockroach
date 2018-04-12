@@ -90,7 +90,7 @@ func makeReplicaKeyRanges(
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
 ) *ReplicaDataIterator {
-	return WrapWithReplicaDataIterator(d, e.NewIterator(false), replicatedOnly)
+	return WrapWithReplicaDataIterator(d, e.NewIterator(engine.IterOptions{}), replicatedOnly)
 }
 
 // WrapWithReplicaDataIterator creates a ReplicaDataIterator for the given

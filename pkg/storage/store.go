@@ -1109,7 +1109,7 @@ func IterateIDPrefixKeys(
 	f func(_ roachpb.RangeID) (more bool, _ error),
 ) error {
 	rangeID := roachpb.RangeID(1)
-	iter := eng.NewIterator(false /* prefix */)
+	iter := eng.NewIterator(engine.IterOptions{})
 	defer iter.Close()
 
 	for {

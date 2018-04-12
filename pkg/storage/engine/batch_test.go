@@ -174,7 +174,7 @@ func TestReadOnlyBasics(t *testing.T) {
 		func() { _, _ = b.Get(a) },
 		func() { _, _, _, _ = b.GetProto(a, getVal) },
 		func() { _ = b.Iterate(a, a, func(MVCCKeyValue) (bool, error) { return true, nil }) },
-		func() { b.NewIterator(false).Close() },
+		func() { b.NewIterator(IterOptions{}).Close() },
 		func() { b.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{}).Close() },
 	}
 	defer func() {
@@ -873,7 +873,7 @@ func TestBatchDistinct(t *testing.T) {
 
 	// Similarly, for distinct batch iterators we will see previous writes to the
 	// batch.
-	iter := distinct.NewIterator(false)
+	iter := distinct.NewIterator(IterOptions{})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid; err=%v", err)
@@ -924,7 +924,7 @@ func TestWriteOnlyBatchDistinct(t *testing.T) {
 
 	// Verify that reads on the distinct batch go to the underlying engine, not
 	// to the write-only batch.
-	iter := distinct.NewIterator(false)
+	iter := distinct.NewIterator(IterOptions{})
 	iter.Seek(mvccKey("a"))
 	if ok, err := iter.Valid(); !ok {
 		t.Fatalf("expected iterator to be valid, err=%v", err)
@@ -970,7 +970,7 @@ func TestBatchDistinctPanics(t *testing.T) {
 		func() { _, _ = batch.Get(a) },
 		func() { _, _, _, _ = batch.GetProto(a, nil) },
 		func() { _ = batch.Iterate(a, a, nil) },
-		func() { _ = batch.NewIterator(false) },
+		func() { _ = batch.NewIterator(IterOptions{}) },
 	}
 	for i, f := range testCases {
 		func() {
@@ -1009,7 +1009,7 @@ func TestBatchIteration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := b.NewIterator(false)
+	iter := b.NewIterator(IterOptions{})
 	defer iter.Close()
 
 	// Forward iteration

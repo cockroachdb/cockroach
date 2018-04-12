@@ -908,8 +908,8 @@ func (r *RocksDB) Flush() error {
 }
 
 // NewIterator returns an iterator over this rocksdb engine.
-func (r *RocksDB) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.rdb, prefix, r, r)
+func (r *RocksDB) NewIterator(opts IterOptions) Iterator {
+	return newRocksDBIterator(r.rdb, opts, r, r)
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
@@ -991,16 +991,16 @@ func (r *rocksDBReadOnly) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool
 // that the returned iterator is cached and re-used for the lifetime of the
 // rocksDBReadOnly. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same rocksDBReadOnly.
-func (r *rocksDBReadOnly) NewIterator(prefix bool) Iterator {
+func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
 	iter := &r.normalIter
-	if prefix {
+	if opts.Prefix {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.parent.rdb, prefix, r, r.parent)
+		iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1174,8 +1174,8 @@ func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool
 
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
-func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.handle, prefix, r, r.parent)
+func (r *rocksDBSnapshot) NewIterator(opts IterOptions) Iterator {
+	return newRocksDBIterator(r.handle, opts, r, r.parent)
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
@@ -1216,18 +1216,18 @@ func (r *distinctBatch) Close() {
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
-func (r *distinctBatch) NewIterator(prefix bool) Iterator {
+func (r *distinctBatch) NewIterator(opts IterOptions) Iterator {
 	// Used the cached iterator, creating it on first access.
 	iter := &r.normalIter
-	if prefix {
+	if opts.Prefix {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
 		if r.writeOnly {
-			iter.rocksDBIterator.init(r.parent.rdb, prefix, r, r.parent)
+			iter.rocksDBIterator.init(r.parent.rdb, opts, r, r.parent)
 		} else {
 			r.ensureBatch()
-			iter.rocksDBIterator.init(r.batch, prefix, r, r.parent)
+			iter.rocksDBIterator.init(r.batch, opts, r, r.parent)
 		}
 	}
 	if iter.inuse {
@@ -1592,7 +1592,7 @@ func (r *rocksDBBatch) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 // that the returned iterator is cached and re-used for the lifetime of the
 // batch. A panic will be thrown if multiple prefix or normal (non-prefix)
 // iterators are used simultaneously on the same batch.
-func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
+func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -1601,12 +1601,12 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	}
 	// Used the cached iterator, creating it on first access.
 	iter := &r.normalIter
-	if prefix {
+	if opts.Prefix {
 		iter = &r.prefixIter
 	}
 	if iter.iter.iter == nil {
 		r.ensureBatch()
-		iter.iter.init(r.batch, prefix, r, r.parent)
+		iter.iter.init(r.batch, opts, r, r.parent)
 	}
 	if iter.batch != nil {
 		panic("iterator already in use")
@@ -1847,13 +1847,13 @@ var iterPool = sync.Pool{
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Reader, parent *RocksDB) Iterator {
+func newRocksDBIterator(rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB) Iterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	r := iterPool.Get().(*rocksDBIterator)
-	r.init(rdb, prefix, engine, parent)
+	r.init(rdb, opts, engine, parent)
 	return r
 }
 
@@ -1861,7 +1861,7 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 	return r.iter
 }
 
-func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader, parent *RocksDB) {
+func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader, parent *RocksDB) {
 	r.parent = parent
 	if debugIteratorLeak && r.parent != nil {
 		r.parent.iters.Lock()
@@ -1869,7 +1869,7 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader, pare
 		r.parent.iters.Unlock()
 	}
 
-	r.iter = C.DBNewIter(rdb, C.bool(prefix))
+	r.iter = C.DBNewIter(rdb, C.bool(opts.Prefix))
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
@@ -1901,6 +1901,7 @@ func (r *rocksDBIterator) destroy() {
 }
 
 // The following methods implement the Iterator interface.
+
 func (r *rocksDBIterator) Close() {
 	r.destroy()
 	iterPool.Put(r)
@@ -2400,7 +2401,7 @@ func dbIterate(
 	if !start.Less(end) {
 		return nil
 	}
-	it := newRocksDBIterator(rdb, false, engine, nil)
+	it := newRocksDBIterator(rdb, IterOptions{}, engine, nil)
 	defer it.Close()
 
 	it.Seek(start)
@@ -2471,8 +2472,8 @@ func (fr *RocksDBSstFileReader) Iterate(
 }
 
 // NewIterator returns an iterator over this sst reader.
-func (fr *RocksDBSstFileReader) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(fr.rocksDB.rdb, prefix, fr.rocksDB, fr.rocksDB.RocksDB)
+func (fr *RocksDBSstFileReader) NewIterator(opts IterOptions) Iterator {
+	return newRocksDBIterator(fr.rocksDB.rdb, opts, fr.rocksDB, fr.rocksDB.RocksDB)
 }
 
 // Close finishes the reader.
