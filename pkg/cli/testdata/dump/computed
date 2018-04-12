@@ -1,0 +1,25 @@
+sql
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	a INT PRIMARY KEY,
+	b INT AS (a + 1) STORED
+);
+
+INSERT INTO d.t VALUES (1);
+----
+INSERT 1
+
+dump d t
+----
+----
+CREATE TABLE t (
+	a INT NOT NULL,
+	b INT NULL AS (a + 1) STORED,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+INSERT INTO t (a) VALUES
+	(1);
+----
+----
