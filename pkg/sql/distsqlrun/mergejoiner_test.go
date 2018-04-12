@@ -858,7 +858,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			rows := makeIntRows(inputSize, numCols)
 			leftInput := NewRepeatableRowSource(oneIntCol, rows)
 			rightInput := NewRepeatableRowSource(oneIntCol, rows)
-			b.SetBytes(int64(8 * inputSize * numCols))
+			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				m, err := newMergeJoiner(flowCtx, spec, leftInput, rightInput, post, disposer)
