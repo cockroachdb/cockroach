@@ -39,8 +39,7 @@ func TestGossipInvalidation(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	sc := stats.NewTableStatisticsCache(
-		10, /* statsCacheSize */
-		10, /* histogramCacheSize */
+		10, /* cacheSize */
 		tc.Server(0).Gossip(),
 		tc.Server(0).DB(),
 		tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
