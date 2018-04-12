@@ -12,11 +12,10 @@ import databasesIcon from "!!raw-loader!assets/databases.svg";
 import jobsIcon from "!!raw-loader!assets/jobs.svg";
 
 interface IconLinkProps {
-  icon?: string;
+  icon: string;
   title?: string;
   to: string;
   activeFor?: string | string[];
-  onlyActiveOnIndex?: boolean;
   className?: string;
 }
 
@@ -27,7 +26,6 @@ interface IconLinkProps {
 class IconLink extends React.Component<IconLinkProps, {}> {
   static defaultProps = {
     className: "normal",
-    onlyActiveOnIndex: false,
   };
 
   static contextTypes = {
@@ -35,13 +33,13 @@ class IconLink extends React.Component<IconLinkProps, {}> {
   };
 
   render() {
-    const { icon, title, to, activeFor, onlyActiveOnIndex, className } = this.props;
+    const { icon, title, to, activeFor, className } = this.props;
 
     let isActive = false;
     if (!_.isNil(activeFor)) {
       const router = this.context.router;
       const options = typeof activeFor === "string" ? [activeFor] : activeFor;
-      isActive = _.some(options, (opt) => router.isActive(opt, onlyActiveOnIndex));
+      isActive = _.some(options, (opt) => router.isActive(opt, false));
     }
     const classOverrides = classNames({ active: isActive });
 
@@ -50,7 +48,6 @@ class IconLink extends React.Component<IconLinkProps, {}> {
         <Link
           to={to}
           activeClassName="active"
-          onlyActiveOnIndex={onlyActiveOnIndex}
           className={classOverrides}
         >
           <div className="image-container"
