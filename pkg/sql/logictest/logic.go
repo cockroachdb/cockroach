@@ -329,10 +329,6 @@ var (
 		"flex-types", false,
 		"do not fail when a test expects a column of a numeric type but the query provides another type",
 	)
-	metadataTestOff = flag.Bool(
-		"metadata-test-off", false,
-		"disable DistSQL metadata propagation tests",
-	)
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
@@ -364,6 +360,8 @@ type testClusterConfig struct {
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
+	// if set, enables DistSQL metadata propagation tests.
+	distSQLMetadataTestEnabled bool
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -863,13 +861,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 
 	distSQLKnobs := &distsqlrun.TestingKnobs{
-		MetadataTestLevel: distsqlrun.NoExplain,
+		MetadataTestLevel: distsqlrun.Off,
 	}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
-	if *metadataTestOff {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.Off
+	if cfg.distSQLMetadataTestEnabled {
+		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
@@ -1920,42 +1918,61 @@ func RunLogicTest(t *testing.T) {
 			if logicTestsConfigFilter != "" && cfg.name != logicTestsConfigFilter {
 				t.Skip("config does not match env var")
 			}
-			for _, path := range paths {
-				path := path // Rebind range variable.
-				// Inner test: one per file path.
-				t.Run(filepath.Base(path), func(t *testing.T) {
-					if !*showSQL && !*rewriteResultsInTestfiles {
-						// If we're not printing out all of the SQL interactions and we're
-						// not generating testfiles, run the tests in parallel.
-						// Skip parallelizing tests that use the kv-batch-size directive since
-						// the batch size is a global variable.
-						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
-						if filepath.Base(path) != "select_index_span_ranges" {
-							t.Parallel()
+			runFiles := func(t *testing.T, cfg testClusterConfig) {
+				for _, path := range paths {
+					path := path // Rebind range variable.
+					// Inner test: one per file path.
+					t.Run(filepath.Base(path), func(t *testing.T) {
+						if !*showSQL && !*rewriteResultsInTestfiles {
+							// If we're not printing out all of the SQL interactions and we're
+							// not generating testfiles, run the tests in parallel.
+							// Skip parallelizing tests that use the kv-batch-size directive since
+							// the batch size is a global variable.
+							// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
+							if filepath.Base(path) != "select_index_span_ranges" {
+								t.Parallel()
+							}
 						}
-					}
-					lt := logicTest{
-						t:               t,
-						verbose:         verbose,
-						perErrorSummary: make(map[string][]string),
-					}
-					if *printErrorSummary {
-						defer lt.printErrorSummary()
-					}
-					lt.setup(cfg)
-					lt.runFile(path, cfg)
+						lt := logicTest{
+							t:               t,
+							verbose:         verbose,
+							perErrorSummary: make(map[string][]string),
+						}
+						if *printErrorSummary {
+							defer lt.printErrorSummary()
+						}
+						lt.setup(cfg)
+						lt.runFile(path, cfg)
 
-					progress.Lock()
-					defer progress.Unlock()
-					progress.total += lt.progress
-					progress.totalFail += lt.failures
-					progress.totalUnsupported += lt.unsupported
-					now := timeutil.Now()
-					if now.Sub(progress.lastProgress) >= 2*time.Second {
-						progress.lastProgress = now
-						lt.outf("--- total progress: %d statements/queries", progress.total)
-					}
-				})
+						progress.Lock()
+						defer progress.Unlock()
+						progress.total += lt.progress
+						progress.totalFail += lt.failures
+						progress.totalUnsupported += lt.unsupported
+						now := timeutil.Now()
+						if now.Sub(progress.lastProgress) >= 2*time.Second {
+							progress.lastProgress = now
+							lt.outf("--- total progress: %d statements/queries", progress.total)
+						}
+					})
+				}
+			}
+			if strings.ToLower(cfg.overrideDistSQLMode) != "off" {
+				for _, mode := range []struct {
+					name                string
+					testDistSQLMetadata bool
+				}{
+					{name: "metadata-test-on", testDistSQLMetadata: true},
+					{name: "metadata-test-off", testDistSQLMetadata: false},
+				} {
+					cfg := cfg // copy cfg
+					cfg.distSQLMetadataTestEnabled = mode.testDistSQLMetadata
+					t.Run(mode.name, func(t *testing.T) {
+						runFiles(t, cfg)
+					})
+				}
+			} else {
+				runFiles(t, cfg)
 			}
 		})
 	}
