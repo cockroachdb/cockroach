@@ -100,7 +100,7 @@ func TestMultiIterator(t *testing.T) {
 						t.Fatalf("%+v", err)
 					}
 				}
-				iter := batch.NewIterator(false)
+				iter := batch.NewIterator(engine.IterOptions{})
 				defer iter.Close()
 				iters = append(iters, iter)
 			}

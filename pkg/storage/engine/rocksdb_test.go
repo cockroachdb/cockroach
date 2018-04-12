@@ -107,10 +107,10 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 	k := MakeMVCCMetadataKey(testKey1)
 
-	before := b.NewIterator(false)
+	before := b.NewIterator(IterOptions{})
 	defer before.Close()
 
-	nonBatchBefore := db.NewIterator(false)
+	nonBatchBefore := db.NewIterator(IterOptions{})
 	defer nonBatchBefore.Close()
 
 	if err := b.Put(k, []byte("abc")); err != nil {
@@ -120,7 +120,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 	// We use a prefix iterator for after in order to workaround the restriction
 	// on concurrent use of more than 1 prefix or normal (non-prefix) iterator on
 	// a batch.
-	after := b.NewIterator(true /* prefix */)
+	after := b.NewIterator(IterOptions{Prefix: true})
 	defer after.Close()
 
 	after.Seek(k)
@@ -142,7 +142,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nonBatchAfter := db.NewIterator(false)
+	nonBatchAfter := db.NewIterator(IterOptions{})
 	defer nonBatchAfter.Close()
 
 	nonBatchBefore.Seek(k)
@@ -192,7 +192,7 @@ func TestBatchPrefixIter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := b.NewIterator(true /* prefix */)
+	iter := b.NewIterator(IterOptions{Prefix: true})
 	defer iter.Close()
 
 	iter.Seek(mvccKey("b"))
@@ -235,7 +235,7 @@ func benchmarkIterOnBatch(b *testing.B, writes int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := batch.NewIterator(true)
+		iter := batch.NewIterator(IterOptions{Prefix: true})
 		iter.Seek(key)
 		iter.Close()
 	}
@@ -263,7 +263,7 @@ func benchmarkIterOnReadWriter(
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := makeKey(r.Intn(writes))
-		iter := readWriter.NewIterator(true)
+		iter := readWriter.NewIterator(IterOptions{Prefix: true})
 		iter.Seek(key)
 		iter.Close()
 	}
@@ -787,7 +787,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	// Make a regular iterator. Before #21721, this would accidentally pick up the
 	// time bounded iterator instead.
-	iter := batch.NewIterator(false)
+	iter := batch.NewIterator(IterOptions{})
 	defer iter.Close()
 	iter.Seek(NilKey)
 
@@ -863,7 +863,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := db.NewIterator(false)
+	iter := db.NewIterator(IterOptions{})
 	iter.Seek(key("a"))
 	if ok, _ := iter.Valid(); ok {
 		t.Fatalf("unexpected key: %s", iter.Key())

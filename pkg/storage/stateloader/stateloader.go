@@ -499,7 +499,7 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) (uint64, error) {
-	iter := reader.NewIterator(false)
+	iter := reader.NewIterator(engine.IterOptions{})
 	defer iter.Close()
 
 	var lastIndex uint64
