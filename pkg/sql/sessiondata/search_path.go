@@ -43,16 +43,6 @@ func MakeSearchPath(paths []string) SearchPath {
 	}
 }
 
-// FirstSpecified returns true and the first element if the list of
-// specified items is non-empty, or false and an empty string
-// otherwise.  Used by current_schema().
-func (s SearchPath) FirstSpecified() (bool, string) {
-	if len(s.paths) == 0 {
-		return false, ""
-	}
-	return true, s.paths[0]
-}
-
 // Iter returns an iterator through the search path. We must include the
 // implicit pg_catalog at the beginning of the search path, unless it has been
 // explicitly set later by the user.

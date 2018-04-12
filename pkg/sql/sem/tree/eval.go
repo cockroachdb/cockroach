@@ -2201,6 +2201,10 @@ type EvalDatabase interface {
 	// sets it on the returned TableName.
 	// It returns an error if the table doesn't exist.
 	ResolveTableName(ctx context.Context, tn *TableName) error
+
+	// LookupSchema looks up the schema with the given name in the given
+	// database.
+	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
