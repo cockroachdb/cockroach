@@ -693,7 +693,8 @@ func TestResolveTablePatternOrName(t *testing.T) {
 		{`pg_tables`, ``, mpath("public", "pg_catalog"), true, `pg_tables`, `"".pg_catalog.pg_tables`, `.pg_catalog[0]`, ``},
 		{`pg_tables`, ``, mpath(), true, `pg_tables`, `"".pg_catalog.pg_tables`, `.pg_catalog[0]`, ``},
 
-		{`blix`, ``, mpath("public", "pg_catalog"), false, ``, ``, ``, `prefix or object not found`},
+		{`blix`, ``, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+		{`blix`, ``, mpath("public", "pg_catalog"), false, `blix`, `"".pg_catalog.blix`, `.pg_catalog`, ``},
 
 		// Names of length 2.
 
@@ -747,7 +748,8 @@ func TestResolveTablePatternOrName(t *testing.T) {
 
 		// Patterns of length 1.
 
-		{`*`, ``, mpath("public", "pg_catalog"), false, ``, ``, ``, `prefix or object not found`},
+		{`*`, ``, mpath("public"), false, ``, ``, ``, `prefix or object not found`},
+		{`*`, ``, mpath("public", "pg_catalog"), false, `*`, `"".pg_catalog.*`, `.pg_catalog`, ``},
 
 		// Patterns of length 2.
 

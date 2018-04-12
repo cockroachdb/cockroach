@@ -558,6 +558,13 @@ func (ep *dummyEvalPlanner) ParseQualifiedTableName(
 }
 
 // Implements the tree.EvalDatabase interface.
+func (ep *dummyEvalPlanner) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (bool, tree.SchemaMeta, error) {
+	return false, nil, errEvalPlanner
+}
+
+// Implements the tree.EvalDatabase interface.
 func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
 	return errEvalPlanner
 }
@@ -587,7 +594,14 @@ func (so *dummySequenceOperators) ParseQualifiedTableName(
 
 // Implements the tree.EvalDatabase interface.
 func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
+	return errSequenceOperators
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *dummySequenceOperators) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (bool, tree.SchemaMeta, error) {
+	return false, nil, errSequenceOperators
 }
 
 // Implements the tree.SequenceOperators interface.
