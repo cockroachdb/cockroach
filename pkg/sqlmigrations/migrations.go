@@ -146,10 +146,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootToAdminRole,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "upgrade table descs to interleaved format version",
-		workFn: upgradeTableDescsToInterleavedFormatVersion,
+		// Introduced in v2.0. Repeated in v2.1 below.
+		name: "upgrade table descs to interleaved format version",
 	},
 	{
 		// Introduced in v2.0 alphas then folded into `retiredSettings`.
@@ -171,13 +169,19 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: initializeClusterSecret,
 	},
 	{
-		// Introduced in v2.0.
+		// Introduced in v2.0. Repeated in v2.1 below.
 		name: "ensure admin role privileges in all descriptors",
 	},
 	{
 		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
 		// TODO(mberhault): bake into v2.2.
-		name:   "ensure admin role privileges in all descriptors, again",
+		name:   "repeat: upgrade table descs to interleaved format version",
+		workFn: upgradeTableDescsToInterleavedFormatVersion,
+	},
+	{
+		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
+		// TODO(mberhault): bake into v2.2.
+		name:   "repeat: ensure admin role privileges in all descriptors",
 		workFn: ensureMaxPrivileges,
 	},
 }
