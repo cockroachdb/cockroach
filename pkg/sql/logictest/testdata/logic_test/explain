@@ -120,7 +120,7 @@ EXPLAIN SHOW JOBS
 ----
 render       ·     ·
  └── values  ·     ·
-·            size  13 columns, 1 row
+·            size  13 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
