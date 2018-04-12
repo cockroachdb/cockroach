@@ -77,11 +77,14 @@ func runDemo(_ *cobra.Command, _ []string) error {
 	}
 	cliCtx.isInteractive = true
 
-	fmt.Println(`#
+	fmt.Printf(`#
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB instance. Your changes
 # will not be saved.
-#`)
+#
+# Admin UI: %s
+#
+`, server.AdminURL())
 	return runInteractive(conn)
 }
