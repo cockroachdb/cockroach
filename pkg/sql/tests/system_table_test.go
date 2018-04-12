@@ -34,7 +34,7 @@ func TestInitialKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const keysPerDesc = 2
-	const nonDescKeys = 2
+	const nonDescKeys = 5
 
 	ms := sqlbase.MakeMetadataSchema()
 	kv := ms.GetInitialValues()
@@ -103,26 +103,23 @@ func TestSystemTableLiterals(t *testing.T) {
 		id     sqlbase.ID
 		schema string
 		pkg    sqlbase.TableDescriptor
-		// Starting with the RoleMembers table, all newly created tables have two sets of privileges:
-		// one for "root", another for "admin". Previous tables get them through a migration.
-		hasAdmin bool
 	}
 
 	for _, test := range []testcase{
-		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable, false},
-		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable, false},
-		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable, false},
-		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable, false},
-		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable, false},
-		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable, false},
-		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable, false},
-		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable, false},
-		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable, false},
-		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable, false},
-		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable, false},
-		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable, false},
-		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable, false},
-		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable, true},
+		{keys.NamespaceTableID, sqlbase.NamespaceTableSchema, sqlbase.NamespaceTable},
+		{keys.DescriptorTableID, sqlbase.DescriptorTableSchema, sqlbase.DescriptorTable},
+		{keys.UsersTableID, sqlbase.UsersTableSchema, sqlbase.UsersTable},
+		{keys.ZonesTableID, sqlbase.ZonesTableSchema, sqlbase.ZonesTable},
+		{keys.LeaseTableID, sqlbase.LeaseTableSchema, sqlbase.LeaseTable},
+		{keys.EventLogTableID, sqlbase.EventLogTableSchema, sqlbase.EventLogTable},
+		{keys.RangeEventTableID, sqlbase.RangeEventTableSchema, sqlbase.RangeEventTable},
+		{keys.UITableID, sqlbase.UITableSchema, sqlbase.UITable},
+		{keys.JobsTableID, sqlbase.JobsTableSchema, sqlbase.JobsTable},
+		{keys.SettingsTableID, sqlbase.SettingsTableSchema, sqlbase.SettingsTable},
+		{keys.WebSessionsTableID, sqlbase.WebSessionsTableSchema, sqlbase.WebSessionsTable},
+		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable},
+		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable},
+		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable},
 	} {
 		// Always create tables with "admin" privileges included, or CreateTestTableDescriptor fails.
 		privs := sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemAllowedPrivileges[test.id])
@@ -135,11 +132,6 @@ func TestSystemTableLiterals(t *testing.T) {
 		)
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
-		}
-		// Privileges for the admin user get automatically added in CreateTestTableDescriptor,
-		// we need to remove them for tables that only get it through migrations.
-		if !test.hasAdmin {
-			gen.Privileges = sqlbase.NewCustomRootPrivilegeDescriptor(sqlbase.SystemAllowedPrivileges[test.id])
 		}
 
 		if !proto.Equal(&test.pkg, &gen) {
