@@ -347,6 +347,12 @@ func doExpandPlan(
 	case *zeroNode:
 	case *unaryNode:
 	case *hookFnNode:
+		for i := range n.subplans {
+			n.subplans[i], err = doExpandPlan(ctx, p, noParams, n.subplans[i])
+			if err != nil {
+				break
+			}
+		}
 	case *valueGenerator:
 	case *sequenceSelectNode:
 	case *setVarNode:
