@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -260,14 +259,12 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 	for {
 		row, meta := tr.input.Next()
-		var err error
+
 		if meta != nil {
-			err = meta.Err
+			return nil, meta
 		}
-		if row == nil || err != nil {
-			// This was the last-row or an error was encountered, annotate the
-			// metadata with misplanned ranges and trace data.
-			return nil, tr.producerMeta(scrub.UnwrapScrubError(err))
+		if row == nil {
+			return nil, tr.producerMeta(nil /* err */)
 		}
 
 		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
