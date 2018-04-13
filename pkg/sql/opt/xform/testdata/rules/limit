@@ -116,7 +116,7 @@ memo (optimized)
  ├── G2: (select G4 G5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,constrained)
- │         └── cost: 100.00
+ │         └── cost: 333.00
  ├── G3: (const 1)
  ├── G4: (scan a) (scan a@s_idx) (scan a@si_idx)
  │    └── ""

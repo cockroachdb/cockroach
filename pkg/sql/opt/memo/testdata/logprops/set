@@ -47,7 +47,7 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
  ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]
@@ -61,11 +61,11 @@ intersect
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=333]
       ├── keys: (5)
       ├── select
       │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=333, distinct(3)=1]
       │    ├── keys: (5)
       │    ├── scan b
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
@@ -100,13 +100,13 @@ except
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=333]
       ├── project
       │    ├── columns: b.x:3(int) b.z:4(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=333]
       │    ├── select
       │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
-      │    │    ├── stats: [rows=100]
+      │    │    ├── stats: [rows=333, distinct(3)=1]
       │    │    ├── keys: (5)
       │    │    ├── scan b
       │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)

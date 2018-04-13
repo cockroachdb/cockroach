@@ -22,7 +22,7 @@ SELECT * FROM a WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=1]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
@@ -37,10 +37,10 @@ SELECT * FROM a,b WHERE a.x=b.x
 ----
 project
  ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int!null)
- ├── stats: [rows=100000]
+ ├── stats: [rows=333333]
  ├── select
  │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    ├── stats: [rows=100000]
+ │    ├── stats: [rows=333333]
  │    ├── inner-join
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    │    ├── stats: [rows=1000000]

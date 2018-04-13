@@ -18,12 +18,12 @@ SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
 ----
 project
  ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── keys: (1)
  ├── group-by
  │    ├── columns: a.x:1(int!null) a.y:2(int) column5:5(float)
  │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: (1)
  │    ├── project
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
@@ -77,11 +77,11 @@ SELECT s FROM a GROUP BY z, s
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: a.z:3(float!null) a.s:4(string)
  │    ├── grouping columns: a.z:3(float!null) a.s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: weak(3,4)
  │    ├── project
  │    │    ├── columns: a.z:3(float!null) a.s:4(string)
@@ -104,11 +104,11 @@ SELECT y, SUM(z) FROM a GROUP BY z, y
 ----
 project
  ├── columns: y:2(int) column5:5(float)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: a.y:2(int) a.z:3(float!null) column5:5(float)
  │    ├── grouping columns: a.y:2(int) a.z:3(float!null)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: weak(2,3)
  │    ├── project
  │    │    ├── columns: a.z:3(float!null) a.y:2(int)
@@ -134,7 +134,7 @@ SELECT z, MAX(s) FROM a GROUP BY z
 group-by
  ├── columns: z:3(float!null) column5:5(string)
  ├── grouping columns: a.z:3(float!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── keys: (3)
  ├── project
  │    ├── columns: a.z:3(float!null) a.s:4(string)
@@ -157,11 +157,11 @@ SELECT s FROM a GROUP BY a.*
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
  │    ├── grouping columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: (1) weak(3,4)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)

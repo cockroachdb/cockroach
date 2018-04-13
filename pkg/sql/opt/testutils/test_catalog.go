@@ -61,7 +61,7 @@ type TestTable struct {
 	Name    string
 	Columns []*TestColumn
 	Indexes []*TestIndex
-	Stats   []*TestTableStat
+	Stats   TestTableStats
 }
 
 var _ opt.Table = &TestTable{}
@@ -221,4 +221,21 @@ func (ts *TestTableStat) DistinctCount() uint64 {
 // NullCount is part of the opt.TableStatistic interface.
 func (ts *TestTableStat) NullCount() uint64 {
 	return ts.js.NullCount
+}
+
+// TestTableStats is a slice of TestTableStat pointers.
+type TestTableStats []*TestTableStat
+
+// Len is part of the Sorter interface.
+func (ts TestTableStats) Len() int { return len(ts) }
+
+// Less is part of the Sorter interface.
+func (ts TestTableStats) Less(i, j int) bool {
+	// Sort with most recent first.
+	return ts[i].CreatedAt().Unix() > ts[j].CreatedAt().Unix()
+}
+
+// Swap is part of the Sorter interface.
+func (ts TestTableStats) Swap(i, j int) {
+	ts[i], ts[j] = ts[j], ts[i]
 }

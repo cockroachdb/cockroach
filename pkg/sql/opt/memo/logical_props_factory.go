@@ -75,7 +75,7 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 		return f.constructLimitProps(ev)
 
 	case opt.OffsetOp:
-		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
+		return f.constructOffsetProps(ev)
 
 	case opt.Max1RowOp:
 		return f.constructMax1RowProps(ev)
@@ -108,7 +108,8 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.initScan(f.evalCtx, md, def, tab)
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initScan(def)
 
 	return props
 }
@@ -121,7 +122,8 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	// Inherit input properties as starting point.
 	*props.Relational = *inputProps
 
-	props.Relational.Stats.initSelect(f.evalCtx, ev.Child(1), &inputProps.Stats)
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initSelect(ev.Child(1), &inputProps.Stats)
 
 	return props
 }
@@ -146,7 +148,8 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = inputProps.WeakKeys
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.initProject(&inputProps.Stats, &props.Relational.OutputCols)
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initProject(&inputProps.Stats)
 
 	return props
 }
@@ -189,6 +192,7 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
+	props.Relational.Stats.init(ev, f.evalCtx)
 	props.Relational.Stats.initJoin(
 		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
 	)
@@ -231,9 +235,8 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	props.Relational.Stats.initGroupBy(
-		&inputProps.Stats, &groupingColSet, &props.Relational.OutputCols,
-	)
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initGroupBy(&inputProps.Stats, groupingColSet)
 
 	return props
 }
@@ -263,6 +266,7 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	props.Relational.Stats.init(ev, f.evalCtx)
 	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
@@ -274,7 +278,8 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
-	props.Relational.Stats.initValues(ev, &props.Relational.OutputCols)
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initValues()
 
 	return props
 }
@@ -288,7 +293,23 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
+	props.Relational.Stats.init(ev, f.evalCtx)
 	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
+
+	return props
+}
+
+func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	offset := ev.Child(1)
+
+	// Start with pass-through props from input.
+	*props.Relational = *inputProps
+
+	props.Relational.Stats.init(ev, f.evalCtx)
+	props.Relational.Stats.initOffset(offset, &inputProps.Stats)
 
 	return props
 }
@@ -301,17 +322,10 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
+	props.Relational.Stats.init(ev, f.evalCtx)
 	props.Relational.Stats.initMax1Row(&inputProps.Stats)
 
 	return props
-}
-
-// passThroughRelationalProps returns the relational properties of the given
-// child group.
-func (f logicalPropsFactory) passThroughRelationalProps(ev ExprView, childIdx int) LogicalProps {
-	// Properties are immutable after construction, so just inherit relational
-	// props pointer from child.
-	return LogicalProps{Relational: ev.childGroup(childIdx).logical.Relational}
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
