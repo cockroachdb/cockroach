@@ -28,7 +28,7 @@ SELECT * FROM xyzs WHERE (SELECT v FROM kuv) = 'foo'
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
