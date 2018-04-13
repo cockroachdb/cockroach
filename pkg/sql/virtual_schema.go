@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -93,6 +94,10 @@ type virtualTableEntry struct {
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
 
+var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
+	"cannot access virtual schema in anonymous database",
+).SetHintf("verify that the current database is set")
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
@@ -119,7 +124,7 @@ func (e virtualTableEntry) getPlanInfo(
 			}
 		} else {
 			if !e.validWithNoDatabaseContext {
-				return nil, errNoDatabase
+				return nil, errInvalidDbPrefix
 			}
 		}
 

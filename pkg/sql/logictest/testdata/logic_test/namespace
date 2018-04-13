@@ -52,7 +52,7 @@ SELECT x FROM pg_type
 
 # Leave database, check name resolves to default.
 # The expected error can only occur on the virtual pg_type, not the physical one.
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SET DATABASE = ''; SELECT * FROM pg_type
 
 # Go to different database, check name still resolves to default.
