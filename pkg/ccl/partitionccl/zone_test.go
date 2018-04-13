@@ -220,11 +220,11 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 	}{
 		{
 			"ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
-			`no database specified: "foo"`,
+			`no schema has been selected to search index: "foo"`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
-			`no database specified: "foo"`,
+			`no schema has been selected to search index: "foo"`,
 		},
 		{
 			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
