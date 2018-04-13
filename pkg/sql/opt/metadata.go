@@ -17,6 +17,9 @@ package opt
 import (
 	"fmt"
 
+	"bytes"
+	"encoding/binary"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -71,6 +74,10 @@ type mdTable struct {
 	// weakKeys is a cache of the weak key column combinations on this table.
 	// See RelationalProps.WeakKeys for more details.
 	weakKeys WeakKeys
+
+	// statistics contains the available statistics for this table. See
+	// RelationalProps.Statistics for more details.
+	statistics *Statistics
 }
 
 // mdColumn stores information about one of the columns stored in the metadata,
@@ -177,4 +184,97 @@ func (md *Metadata) TableWeakKeys(tabID TableID) WeakKeys {
 		}
 	}
 	return mdTab.weakKeys
+}
+
+// TableStatistics returns the available statistics for the given table.
+// Statistics are derived lazily and are cached in the metadata, since they may
+// be accessed multiple times during query optimization. For more details, see
+// RelationalProps.Statistics.
+func (md *Metadata) TableStatistics(tabID TableID) *Statistics {
+	mdTab := md.tables[tabID]
+	if mdTab.statistics == nil {
+		mdTab.statistics = &Statistics{}
+		if mdTab.tab.StatisticCount() == 0 {
+			// No statistics.
+			mdTab.statistics.RowCount = 1000
+		} else {
+			// Get the RowCount from the most recent statistic. Stats are ordered
+			// with most recent first.
+			mdTab.statistics.RowCount = mdTab.tab.Statistic(0).RowCount()
+
+			// Add all the column statistics, using the most recent statistic for each
+			// column set. Stats are ordered with most recent first.
+			mdTab.statistics.ColStats = make(map[ColumnID]*ColumnStatistic)
+			mdTab.statistics.MultiColStats = make(map[string]*ColumnStatistic)
+			for i := 0; i < mdTab.tab.StatisticCount(); i++ {
+				stat := mdTab.tab.Statistic(i)
+				cols := md.colSetFromTableStatistic(stat, tabID)
+
+				if cols.Len() == 1 {
+					col, _ := cols.Next(0)
+					key := ColumnID(col)
+
+					if _, ok := mdTab.statistics.ColStats[key]; !ok {
+						mdTab.statistics.ColStats[key] = &ColumnStatistic{Cols: cols, DistinctCount: stat.DistinctCount()}
+					}
+				} else {
+					// Get a unique key for this column set.
+					key := writeColSet(cols)
+
+					if _, ok := mdTab.statistics.MultiColStats[key]; !ok {
+						mdTab.statistics.MultiColStats[key] = &ColumnStatistic{Cols: cols, DistinctCount: stat.DistinctCount()}
+					}
+				}
+			}
+		}
+	}
+	return mdTab.statistics
+}
+
+func (md *Metadata) colSetFromTableStatistic(stat TableStatistic, tableID TableID) (cols ColSet) {
+	for i := 0; i < stat.ColumnCount(); i++ {
+		cols.Add(int(md.TableColumn(tableID, stat.ColumnOrdinal(i))))
+	}
+	return cols
+}
+
+// writeColSet writes a series of varints, one for each column in the set, in
+// column id order. Can be used as a key in a map.
+func writeColSet(colSet ColSet) string {
+	var buf [10]byte
+	var res bytes.Buffer
+	colSet.ForEach(func(i int) {
+		cnt := binary.PutUvarint(buf[:], uint64(i))
+		res.Write(buf[:cnt])
+	})
+	return res.String()
+}
+
+// Statistics is a collection of measurements and statistics that is used by
+// the coster to estimate the cost of expressions. Statistics are collected
+// for tables and indexes and are exposed to the optimizer via opt.Catalog
+// interfaces. As logical properties are derived bottom-up for each
+// expression, statistics are derived for each relational expression, based
+// on the characteristics of the expression's operator type, as well as the
+// properties of its operands. For example:
+//
+//   SELECT * FROM a WHERE a=1
+//
+// Table and column statistics can be used to estimate the number of rows
+// in table a, and then to determine the selectivity of the a=1 filter, in
+// order to derive the statistics of the Select expression.
+type Statistics struct {
+	// RowCount is the estimated number of rows returned by the expression.
+	RowCount uint64
+
+	// ColStats contains statistics that pertain to individual columns
+	// in an expression or table. It is keyed by column ID, and it is separated
+	// from the MultiColStats to minimize serialization costs and to efficiently
+	// iterate through all single-column stats.
+	ColStats map[ColumnID]*ColumnStatistic
+
+	// MultiColStats contains statistics that pertain to multi-column subsets
+	// of the columns in an expression or table. It is keyed by the column set,
+	// which has been serialized to a string to make it a legal map key.
+	MultiColStats map[string]*ColumnStatistic
 }

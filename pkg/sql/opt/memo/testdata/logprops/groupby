@@ -28,12 +28,12 @@ SELECT y, SUM(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
  ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── keys: (1)
  ├── group-by
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) column5:5(float)
  │    ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: (1)
  │    ├── project
  │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null)
@@ -87,11 +87,11 @@ SELECT s FROM xyzs GROUP BY z, s
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
  │    ├── grouping columns: xyzs.z:3(float!null) xyzs.s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: weak(3,4)
  │    ├── project
  │    │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
@@ -114,11 +114,11 @@ SELECT y, SUM(z) FROM xyzs GROUP BY z, y
 ----
 project
  ├── columns: y:2(int) column5:5(float)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: xyzs.y:2(int) xyzs.z:3(float!null) column5:5(float)
  │    ├── grouping columns: xyzs.y:2(int) xyzs.z:3(float!null)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: weak(2,3)
  │    ├── project
  │    │    ├── columns: xyzs.z:3(float!null) xyzs.y:2(int)
@@ -144,7 +144,7 @@ SELECT z, MAX(s) FROM xyzs GROUP BY z
 group-by
  ├── columns: z:3(float!null) column5:5(string)
  ├── grouping columns: xyzs.z:3(float!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── keys: (3)
  ├── project
  │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
@@ -167,11 +167,11 @@ SELECT s FROM xyzs GROUP BY xyzs.*
 ----
 project
  ├── columns: s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=1000]
  ├── group-by
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1000]
  │    ├── keys: (1) weak(3,4)
  │    ├── scan xyzs
  │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
@@ -187,7 +187,7 @@ SELECT * FROM xyzs WHERE (SELECT SUM(x) FROM (SELECT y, u FROM kuv) GROUP BY u) 
 ----
 select
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
@@ -202,12 +202,12 @@ select
       │    │    └── project
       │    │         ├── columns: column8:8(decimal)
       │    │         ├── outer: (1,2)
-      │    │         ├── stats: [rows=100]
+      │    │         ├── stats: [rows=1000]
       │    │         ├── group-by
       │    │         │    ├── columns: kuv.u:6(float) column8:8(decimal)
       │    │         │    ├── grouping columns: kuv.u:6(float)
       │    │         │    ├── outer: (1,2)
-      │    │         │    ├── stats: [rows=100]
+      │    │         │    ├── stats: [rows=1000]
       │    │         │    ├── keys: weak(6)
       │    │         │    ├── project
       │    │         │    │    ├── columns: kuv.u:6(float) xyzs.x:1(int)

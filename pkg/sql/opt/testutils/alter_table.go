@@ -18,6 +18,8 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -85,4 +87,7 @@ func injectTableStats(tt *TestTable, statsExpr tree.Expr) {
 			ts.ColumnOrdinal(i)
 		}
 	}
+
+	// Finally, sort the stats with most recent first.
+	sort.Sort(tt.Stats)
 }
