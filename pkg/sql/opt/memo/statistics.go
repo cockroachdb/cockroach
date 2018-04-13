@@ -17,8 +17,7 @@ package memo
 import (
 	"math"
 
-	"bytes"
-	"encoding/binary"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -28,44 +27,141 @@ import (
 )
 
 // Statistics is a collection of measurements and statistics that is used by
-// the coster to estimate the cost of expressions. Statistics are collected
-// for tables and indexes and are exposed to the optimizer via opt.Catalog
-// interfaces. As logical properties are derived bottom-up for each
-// expression, statistics are derived for each relational expression, based
-// on the characteristics of the expression's operator type, as well as the
-// properties of its operands. For example:
-//
-//   SELECT * FROM a WHERE a=1
-//
-// Table and column statistics can be used to estimate the number of rows
-// in table a, and then to determine the selectivity of the a=1 filter, in
-// order to derive the statistics of the Select expression.
+// the coster to estimate the cost of expressions. See the comment above
+// opt.Statistics in sql/opt/metadata.go for more details.
 type Statistics struct {
-	// RowCount is the estimated number of rows returned by the expression.
-	RowCount uint64
+	*opt.Statistics
 
-	// ColStats contains statistics that pertain to subsets of the columns
-	// in this expression.
-	ColStats ColumnStatistics
+	// ev is the ExprView for which these statistics are valid.
+	ev ExprView
+
+	// selectivity is used by the scan, select, and join operators to store
+	// the selectivity of the filter.
+	selectivity float64
+	evalCtx     *tree.EvalContext
 }
 
-// ColumnStatistic is a collection of statistics that applies to a particular
-// set of columns. In theory, a table could have a ColumnStatistic object
-// for every possible subset of columns. In practice, it is only worth
-// maintaining statistics on a few columns and column sets that are frequently
-// used in predicates, group by columns, etc.
-type ColumnStatistic struct {
-	// Cols is the set of columns whose data are summarized by this
-	// ColumnStatistic struct.
-	Cols opt.ColSet
+func (s *Statistics) init(ev ExprView, evalCtx *tree.EvalContext) {
+	s.Statistics = &opt.Statistics{}
+	s.ev = ev
+	s.selectivity = 1
+	s.evalCtx = evalCtx
+	s.ColStats = make(map[opt.ColumnID]*opt.ColumnStatistic)
+	s.MultiColStats = make(map[string]*opt.ColumnStatistic)
+}
 
-	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression.
-	DistinctCount uint64
+// colStat gets a column statistic for the given set of columns if it exists.
+// If the column statistic is not available in the current Statistics object,
+// colStat recursively tries to find it in the children of the expression,
+// lazily populating either s.ColStats or s.MultiColStats with the statistic
+// as it gets passed up the expression tree. If the statistic cannot be
+// determined from the children, colStat returns ok=false.
+func (s *Statistics) colStat(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	if colSet.Len() == 0 {
+		return nil, false
+	}
+
+	if colSet.Len() == 1 {
+		col, _ := colSet.Next(0)
+		return s.singleColStat(opt.ColumnID(col))
+	}
+	return s.multiColStat(colSet)
+}
+
+func (s *Statistics) singleColStat(col opt.ColumnID) (_ *opt.ColumnStatistic, ok bool) {
+	if stat, ok := s.ColStats[col]; ok {
+		return stat, true
+	}
+
+	return s.colStatFromChildren(util.MakeFastIntSet(int(col)))
+}
+
+func (s *Statistics) multiColStat(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	key := keyBuffer{}
+	key.writeColSet(colSet)
+	if stat, ok := s.MultiColStats[key.String()]; ok {
+		return stat, true
+	}
+
+	return s.colStatFromChildren(colSet)
+}
+
+func (s *Statistics) colStatFromChildren(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	switch s.ev.Operator() {
+	case opt.UnknownOp:
+		return nil, false
+
+	case opt.ScanOp:
+		return s.colStatScan(colSet)
+
+	case opt.SelectOp:
+		return s.colStatSelect(colSet)
+
+	case opt.ProjectOp:
+		return s.colStatProject(colSet)
+
+	case opt.ValuesOp:
+		return s.colStatValues(colSet)
+
+	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
+		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		return s.colStatJoin(colSet)
+
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
+		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
+		return s.colStatSetOp(colSet)
+
+	case opt.GroupByOp:
+		return s.colStatGroupBy(colSet)
+
+	case opt.LimitOp:
+		return s.colStatLimit(colSet)
+
+	case opt.OffsetOp:
+		return s.colStatOffset(colSet)
+
+	case opt.Max1RowOp:
+		return s.colStatMax1Row(colSet)
+	}
+
+	panic(fmt.Sprintf("unrecognized relational expression type: %v", s.ev.op))
+}
+
+// ensureColStat creates a column statistic for column "col" if it doesn't
+// already exist in s.ColStats, and sets the distinct count to the provided
+// value. If the statistic already exists, ensureColStat sets the distinct
+// count to the minimum of the existing value and the new value.
+func (s *Statistics) ensureColStat(col opt.ColumnID, distinctCount uint64) *opt.ColumnStatistic {
+	if colStat, ok := s.singleColStat(col); ok {
+		colStat.DistinctCount = min(colStat.DistinctCount, distinctCount)
+		return colStat
+	}
+
+	colStat := &opt.ColumnStatistic{DistinctCount: distinctCount}
+	colStat.Cols.Add(int(col))
+	s.ColStats[col] = colStat
+	return colStat
+}
+
+// makeColStat creates a column statistic for the given set of columns, and
+// returns a pointer to the newly created statistic.
+func (s *Statistics) makeColStat(colSet opt.ColSet) *opt.ColumnStatistic {
+	colStat := &opt.ColumnStatistic{Cols: colSet}
+	if colSet.Len() == 1 {
+		col, _ := colSet.Next(0)
+		s.ColStats[opt.ColumnID(col)] = colStat
+	} else {
+		key := keyBuffer{}
+		key.writeColSet(colSet)
+		s.MultiColStats[key.String()] = colStat
+	}
+
+	return colStat
 }
 
 // ColumnStatistics is a slice of ColumnStatistic values.
-type ColumnStatistics []ColumnStatistic
+type ColumnStatistics []opt.ColumnStatistic
 
 // Len returns the number of ColumnStatistic values.
 func (c ColumnStatistics) Len() int { return len(c) }
@@ -100,60 +196,64 @@ func (c ColumnStatistics) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
 }
 
-func (s *Statistics) applyFilterNoStats() {
-	// We don't have any info about the data distribution, so just make a rough
-	// estimate.
-	s.RowCount /= 10
-}
+const (
+	// This is the value used for inequality filters such as x < 1 in
+	// "Access Path Selection in a Relational Database Management System"
+	// by Pat Selinger et al.
+	unknownFilterSelectivity = 1.0 / 3.0
 
-func (s *Statistics) applyConstraint(evalCtx *tree.EvalContext, c *constraint.Constraint) {
+	// TODO(rytaft): Add other selectivities for other types of predicates.
+)
+
+func (s *Statistics) applyConstraint(
+	c *constraint.Constraint, inputStats *Statistics,
+) (selectivity float64) {
 	if c.IsUnconstrained() {
-		return
+		return 1 /* selectivity */
 	}
 
 	if c.IsContradiction() {
-		s.updateStatsFromContradiction()
-		return
+		// A contradiction results in 0 rows.
+		return 0 /* selectivity */
 	}
 
-	if len(s.ColStats) == 0 {
-		s.applyFilterNoStats()
-		return
+	if applied := s.updateDistinctCountsFromConstraint(c); !applied {
+		// If a constraint cannot be applied, it probably represents an
+		// inequality like x < 1. As a result, distinctCounts does not
+		// represent the selectivity of the constraint. Return a
+		// rough guess for the selectivity.
+		return unknownFilterSelectivity
 	}
 
-	distinctCounts := make(map[int]uint64, c.Columns.Count())
-	applied := s.updateDistinctCountsFromConstraint(evalCtx, c, distinctCounts)
-
-	// If applied is false, it means the distinct counts do not represent the
-	// selectivity of the filter.
-	s.updateFromDistinctCounts(distinctCounts, applied)
+	return s.selectivityFromDistinctCounts(inputStats)
 }
 
-func (s *Statistics) applyConstraintSet(evalCtx *tree.EvalContext, cs *constraint.Set, tight bool) {
-	if cs.IsUnconstrained() && tight {
-		return
+func (s *Statistics) applyConstraintSet(
+	cs *constraint.Set, inputStats *Statistics,
+) (selectivity float64) {
+	if cs.IsUnconstrained() {
+		return 1 /* selectivity */
 	}
 
 	if cs == constraint.Contradiction {
-		s.updateStatsFromContradiction()
-		return
+		// A contradiction results in 0 rows.
+		return 0 /* selectivity */
 	}
 
-	if len(s.ColStats) == 0 {
-		s.applyFilterNoStats()
-		return
-	}
-
-	distinctCounts := make(map[int]uint64, cs.Length())
+	adjustedSelectivity := 1.0
 	for i := 0; i < cs.Length(); i++ {
-		applied := s.updateDistinctCountsFromConstraint(evalCtx, cs.Constraint(i), distinctCounts)
-
-		// If a constraint could not be applied, it means the distinct counts do
-		// not fully represent the selectivity of the constraint set.
-		tight = tight && applied
+		applied := s.updateDistinctCountsFromConstraint(cs.Constraint(i))
+		if !applied {
+			// If a constraint cannot be applied, it probably represents an
+			// inequality like x < 1. As a result, distinctCounts does not fully
+			// represent the selectivity of the constraint set. Adjust the
+			// selectivity to account for this constraint.
+			adjustedSelectivity *= unknownFilterSelectivity
+		}
 	}
 
-	s.updateFromDistinctCounts(distinctCounts, tight)
+	selectivity = s.selectivityFromDistinctCounts(inputStats)
+	return selectivity * adjustedSelectivity
 }
 
 // updateStatsFromContradiction sets the row count and distinct count to zero,
@@ -163,150 +263,125 @@ func (s *Statistics) updateStatsFromContradiction() {
 	for i := range s.ColStats {
 		s.ColStats[i].DistinctCount = 0
 	}
+	for i := range s.MultiColStats {
+		s.MultiColStats[i].DistinctCount = 0
+	}
 }
 
-// updateFromDistinctCounts updates the column statistics given a map from
-// column ID to distinct count.
-func (s *Statistics) updateFromDistinctCounts(distinctCounts map[int]uint64, tight bool) {
-	var constrainedCols opt.ColSet
-	for k := range distinctCounts {
-		constrainedCols.Add(k)
-	}
-
-	// Use the new stats to update the old stats as follows:
-	//
-	// For each column statistic containing a subset of the columns constrained
-	// by the filter, update the distinct count to be the product of the distinct
-	// counts of each of its columns (if less than the existing distinct count).
-	//
-	// For example, consider the following query:
-	//
-	//   SELECT * FROM t WHERE x BETWEEN 5 AND 10 AND y BETWEEN 10 AND 20
-	//
-	// From this query we can determine that distinct(x)<=5, distinct(y)<=10,
-	// and distinct(x,y)<=50. All three corresponding statistics (if they exist)
-	// will be updated with these values, unless doing so would overwrite a
-	// lower value.
-	//
-	// We also calculate the selectivity of the entire constraint set by taking
-	// the product of selectivities of each constrained column. This can be
-	// represented by the formula:
-	//
-	//                  ┬-┬ ⎛ new distinct(i) ⎞
-	//   selectivity =  │ │ ⎜ --------------- ⎟
-	//                  ┴ ┴ ⎝ old distinct(i) ⎠
-	//                 i in
-	//              {constrained
-	//                columns}
-	//
-	// If the constraint is not tight, we also multiply by a "fudge factor"
-	// of 1/3.
-	//
-	// This selectivity will be used to update the row count and the distinct
-	// count for the unconstrained columns in applySelectivity.
-	selectivity := 1.0
-	for i := range s.ColStats {
-		colStat := &s.ColStats[i]
-		if colStat.Cols.SubsetOf(constrainedCols) {
-			distinctCount := uint64(1)
-			colStat.Cols.ForEach(func(i int) {
-				distinctCount *= distinctCounts[i]
-			})
-			distinctCount = min(distinctCount, colStat.DistinctCount)
-
-			// Update selectivity for single column stats.
-			if colStat.Cols.Len() == 1 {
-				selectivity *= float64(distinctCount) / float64(colStat.DistinctCount)
+// selectivityFromDistinctCounts calculates the selectivity of a filter by
+// taking the product of selectivities of each constrained column. This can be
+// represented by the formula:
+//
+//                  ┬-┬ ⎛ new distinct(i) ⎞
+//   selectivity =  │ │ ⎜ --------------- ⎟
+//                  ┴ ┴ ⎝ old distinct(i) ⎠
+//                 i in
+//              {constrained
+//                columns}
+//
+// If we do not have a value for the old distinct count of a column, we instead
+// estimate the selectivity of the constrained column as 1/3.
+//
+// This selectivity will be used later to update the row count and the
+// distinct count for the unconstrained columns in applySelectivityToColStat.
+//
+// TODO(rytaft): This formula assumes that the columns are completely
+// independent. Improve this estimate to take functional dependencies and/or
+// column correlations into account.
+func (s *Statistics) selectivityFromDistinctCounts(inputStats *Statistics) (selectivity float64) {
+	selectivity = 1.0
+	for col, colStat := range s.ColStats {
+		if inputStat, ok := inputStats.singleColStat(col); ok {
+			if inputStat.DistinctCount != 0 {
+				selectivity *= float64(colStat.DistinctCount) / float64(inputStat.DistinctCount)
 			}
-			colStat.DistinctCount = distinctCount
+		} else {
+			// TODO(rytaft): improve this estimate.
+			selectivity *= unknownFilterSelectivity
 		}
 	}
 
-	// If the constraints are not tight, our calculations are pessimistic (they
-	// are based only on part of the filter). Adjust the selectivity to account
-	// for the remaining filter.
-	if !tight {
-		// TODO(rytaft): This is arbitrary, but is similar to what other optimizers
-		// have done (e.g., Spark Catalyst). See if we can improve this estimate.
-		selectivity /= 3
-	}
-
-	// Using the newly calculated selectivity, update the row count and
-	// other distinct counts.
-	s.applySelectivity(selectivity, constrainedCols)
+	return selectivity
 }
 
-// applySelectivity updates the row and column statistics given a filter
-// selectivity. It skips over the column statistics for constrainedCols, since
-// those columns are constrained by the filter and their statistics were
-// already updated.
-func (s *Statistics) applySelectivity(selectivity float64, constrainedCols opt.ColSet) {
-	n := float64(s.RowCount)
+// applySelectivityToColStat updates the given column statistics according to
+// the filter selectivity.
+func (s *Statistics) applySelectivityToColStat(colStat *opt.ColumnStatistic, inputRows uint64) {
+	if s.selectivity == 0 {
+		colStat.DistinctCount = 0
+		return
+	}
+
+	n := float64(inputRows)
+	d := float64(colStat.DistinctCount)
+
+	// If each distinct value appears n/d times, and the probability of a
+	// row being filtered out is (1 - selectivity), the probability that all
+	// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
+	// number of values that are filtered out is d*(1 - selectivity)^(n/d).
+	//
+	// This formula returns d * selectivity when d=n but is closer to d
+	// when d << n.
+	d = d - d*math.Pow(1-s.selectivity, n/d)
 
 	// Cast to int64 and then to uint64 to make the linter happy.
-	s.RowCount = max(1, uint64(int64(n*selectivity)))
-	for i := range s.ColStats {
-		colStat := &s.ColStats[i]
+	colStat.DistinctCount = max(1, uint64(int64(d)))
+}
 
-		// Only update the stats that weren't already updated.
-		if colStat.DistinctCount != 0 && !colStat.Cols.SubsetOf(constrainedCols) {
-			d := float64(colStat.DistinctCount)
+// applySelectivity updates the row count according to the filter selectivity,
+// and ensures that no distinct counts are larger than the row count.
+func (s *Statistics) applySelectivity(inputRows uint64) {
+	if s.selectivity == 0 {
+		s.updateStatsFromContradiction()
+		return
+	}
 
-			// If each distinct value appears n/d times, and the probability of a
-			// row being filtered out is (1 - selectivity), the probability that all
-			// n/d rows are filtered out is (1 - selectivity)^(n/d). So the expected
-			// number of values that are filtered out is d*(1 - selectivity)^(n/d).
-			//
-			// This formula returns d * selectivity when d=n but is closer to d
-			// when d << n.
-			d = d - d*math.Pow(1-selectivity, n/d)
-			colStat.DistinctCount = max(1, uint64(int64(d)))
-		}
+	s.RowCount = max(1, uint64(int64(float64(inputRows)*s.selectivity)))
+
+	// At this point we only have single-column stats on columns that were
+	// constrained by the filter. Make sure none of the distinct counts are
+	// larger than the row count.
+	for _, colStat := range s.ColStats {
+		colStat.DistinctCount = min(colStat.DistinctCount, s.RowCount)
 	}
 }
 
-// updateDistinctCountsFromConstraint gets the distinct count for each column
-// in a constraint that can be determined to have a finite number of possible
-// values. It updates distinctCounts, which is a map from column ID to distinct
-// count, and returns a boolean indicating if the constraint was applied to the
-// map (i.e., the distinctCount for at least one column could be inferred from
-// the constraint). distinctCounts may be reused across multiple calls to
-// updateDistinctCountsFromConstraint in order to determine distinct counts
-// from a constraint set. If the same column appears in multiple constraints,
-// the returned distinct count is the minimum for that column across all
-// constraints.
+// updateDistinctCountsFromConstraint updates the distinct count for each
+// column in a constraint that can be determined to have a finite number of
+// possible values. It returns a boolean indicating if the constraint was
+// applied (i.e., the distinct count for at least one column could be inferred
+// from the constraint). If the same column appears in multiple constraints,
+// the distinct count is the minimum for that column across all constraints.
 //
 // For example, consider the following constraint set:
 //
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
 //   /c: [/6 - /6]
 //
-// After the first constraint is processed, distinctCounts contains the
+// After the first constraint is processed, s.ColStats contains the
 // following:
-//   [a] -> 1
-//   [b] -> 1
-//   [c] -> 5
+//   [a] -> { ... DistinctCount: 1 ... }
+//   [b] -> { ... DistinctCount: 1 ... }
+//   [c] -> { ... DistinctCount: 5 ... }
 //
 // After the second constraint is processed, column c is further constrained,
-// so distinctCounts contains the following:
-//   [a] -> 1
-//   [b] -> 1
-//   [c] -> 1
+// so s.ColStats contains the following:
+//   [a] -> { ... DistinctCount: 1 ... }
+//   [b] -> { ... DistinctCount: 1 ... }
+//   [c] -> { ... DistinctCount: 1 ... }
 //
 // Note that updateDistinctCountsFromConstraint is pessimistic, and assumes
 // that there is at least one row for every possible value provided by the
-// constraint. For example, /a: [/1 - /1000000] would return [a] -> 1000000
-// even if there are only 10 rows in the table. This discrepancy must be
-// resolved by the calling function.
-func (s *Statistics) updateDistinctCountsFromConstraint(
-	evalCtx *tree.EvalContext, c *constraint.Constraint, distinctCounts map[int]uint64,
-) (applied bool) {
+// constraint. For example, /a: [/1 - /1000000] would find a distinct count of
+// 1000000 for column "a" even if there are only 10 rows in the table. This
+// discrepancy must be resolved by the calling function.
+func (s *Statistics) updateDistinctCountsFromConstraint(c *constraint.Constraint) (applied bool) {
 	// All of the columns that are part of the exact prefix have exactly one
 	// distinct value.
-	exactPrefix := c.ExactPrefix(evalCtx)
+	exactPrefix := c.ExactPrefix(s.evalCtx)
 	for i := 0; i < exactPrefix; i++ {
-		id := int(c.Columns.Get(i).ID())
-		distinctCounts[id], applied = 1, true
+		s.ensureColStat(c.Columns.Get(i).ID(), 1 /* distinctCount */)
+		applied = true
 	}
 
 	// If there are no other columns beyond the exact prefix, we are done.
@@ -333,7 +408,7 @@ func (s *Statistics) updateDistinctCountsFromConstraint(
 			return applied
 		}
 		startVal := sp.StartKey().Value(col)
-		if startVal.Compare(evalCtx, sp.EndKey().Value(col)) != 0 {
+		if startVal.Compare(s.evalCtx, sp.EndKey().Value(col)) != 0 {
 			// TODO(rytaft): are there other types we should handle here
 			// besides int?
 			if startVal.ResolvedType() == types.Int {
@@ -356,127 +431,140 @@ func (s *Statistics) updateDistinctCountsFromConstraint(
 		}
 		if i == 0 {
 			val = startVal
-		} else if startVal.Compare(evalCtx, val) != 0 {
+		} else if startVal.Compare(s.evalCtx, val) != 0 {
 			// This check is needed to ensure that we calculate the correct distinct
 			// value count for constraints such as:
 			//   /a/b: [/1/2 - /1/2] [/1/4 - /1/4] [/2 - /2]
-			// We should only increment the distinct count for column a once we reach
-			// the third span.
+			// We should only increment the distinct count for column "a" once we
+			// reach the third span.
 			distinctCount++
 		}
 	}
 
-	id := int(c.Columns.Get(col).ID())
-	if v, ok := distinctCounts[id]; ok {
-		distinctCounts[id] = min(v, distinctCount)
-	} else {
-		distinctCounts[id] = distinctCount
-	}
-
+	s.ensureColStat(c.Columns.Get(col).ID(), distinctCount)
 	return true /* applied */
 }
 
-// writeColSet writes a series of varints, one for each column in the set, in
-// column id order. Can be used as a key in a map.
-func writeColSet(colSet opt.ColSet) string {
-	var buf [10]byte
-	var res bytes.Buffer
-	colSet.ForEach(func(i int) {
-		cnt := binary.PutUvarint(buf[:], uint64(i))
-		res.Write(buf[:cnt])
-	})
-	return res.String()
-}
-
-func (s *Statistics) colSetFromTableStatistic(
-	md *opt.Metadata, stat opt.TableStatistic, tableID opt.TableID,
-) (cols opt.ColSet) {
-	for i := 0; i < stat.ColumnCount(); i++ {
-		cols.Add(int(md.TableColumn(tableID, stat.ColumnOrdinal(i))))
-	}
-	return cols
-}
-
-func (s *Statistics) initScan(
-	evalCtx *tree.EvalContext, md *opt.Metadata, def *ScanOpDef, tab opt.Table,
-) {
-	if tab.StatisticCount() == 0 {
-		// No statistics.
-		s.RowCount = 1000
-	} else {
-		// Get the RowCount from the most recent statistic.
-		mostRecent, mostRecentTime := 0, tab.Statistic(0).CreatedAt()
-		for i := 1; i < tab.StatisticCount(); i++ {
-			if t := tab.Statistic(i).CreatedAt(); mostRecentTime.Before(t) {
-				mostRecent, mostRecentTime = i, t
-			}
-		}
-		s.RowCount = tab.Statistic(mostRecent).RowCount()
-
-		// Add all the column statistics, using the most recent statistic for each
-		// column set.
-		mostRecentColStats := make(map[string]opt.TableStatistic, tab.StatisticCount())
-		for i := 0; i < tab.StatisticCount(); i++ {
-			stat := tab.Statistic(i)
-			cols := s.colSetFromTableStatistic(md, stat, def.Table)
-
-			// Get a unique key for this column set.
-			key := writeColSet(cols)
-
-			if val, ok := mostRecentColStats[key]; !ok || val.CreatedAt().Before(stat.CreatedAt()) {
-				mostRecentColStats[key] = stat
-			}
-		}
-
-		s.ColStats = make(ColumnStatistics, 0, len(mostRecentColStats))
-		for _, stat := range mostRecentColStats {
-			// TODO(rytaft): for columns that are keys, get the distinct count from
-			// the row count.
-			cols := s.colSetFromTableStatistic(md, stat, def.Table)
-			s.ColStats = append(s.ColStats, ColumnStatistic{Cols: cols, DistinctCount: stat.DistinctCount()})
-		}
-
-		s.filterColumnStats(s.ColStats, &def.Cols)
-	}
+func (s *Statistics) initScan(def *ScanOpDef) {
+	inputStats := Statistics{Statistics: s.ev.Metadata().TableStatistics(def.Table)}
 
 	if def.Constraint != nil {
-		s.applyConstraint(evalCtx, def.Constraint)
+		s.selectivity = s.applyConstraint(def.Constraint, &inputStats)
 	}
+
+	s.applySelectivity(inputStats.RowCount)
 
 	// Cap number of rows at limit, if it exists.
 	if def.HardLimit > 0 && uint64(def.HardLimit) < s.RowCount {
 		s.RowCount = uint64(def.HardLimit)
 
-		for i := range s.ColStats {
-			colStat := &s.ColStats[i]
+		// At this point we only have single-column stats on columns that were
+		// constrained by the filter.
+		for _, colStat := range s.ColStats {
 			colStat.DistinctCount = min(colStat.DistinctCount, uint64(def.HardLimit))
 		}
 	}
 }
 
-func (s *Statistics) initSelect(
-	evalCtx *tree.EvalContext, filter ExprView, inputStats *Statistics,
-) {
-	// Copy stats from input.
-	s.copyColStats(inputStats)
+func (s *Statistics) colStatScan(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	def := s.ev.Private().(*ScanOpDef)
 
-	// Update stats based on filter conditions.
-	constraintSet := filter.Logical().Scalar.Constraints
-	if constraintSet != nil {
-		s.applyConstraintSet(evalCtx, constraintSet, filter.Logical().Scalar.TightConstraints)
-	} else {
-		// TODO: Need better estimate based on actual filter conditions.
-		selectivity := 1.0 / 10.0
-		s.applySelectivity(selectivity, opt.ColSet{} /* constrainedCols */)
+	inputStats := Statistics{Statistics: s.ev.Metadata().TableStatistics(def.Table)}
+	colStat, ok := s.copyColStat(&inputStats, colSet)
+	if !ok {
+		return nil, false
 	}
+
+	s.applySelectivityToColStat(colStat, inputStats.RowCount)
+
+	// Cap distinct count at limit, if it exists.
+	if def.HardLimit > 0 && uint64(def.HardLimit) < s.RowCount {
+		colStat.DistinctCount = min(colStat.DistinctCount, uint64(def.HardLimit))
+	}
+
+	return colStat, true
 }
 
-func (s *Statistics) initProject(inputStats *Statistics, outputCols *opt.ColSet) {
-	s.RowCount = inputStats.RowCount
+func (s *Statistics) initSelect(filter ExprView, inputStats *Statistics) {
+	// Update stats based on filter conditions.
+	//
+	// Some stats can be determined directly from the constraint set. For
+	// example, the constraint `/a: [/1 - /1]` indicates that column `a` has
+	// exactly one distinct value. Other stats, such as the row count, must be
+	// updated based on the selectivity of the filter.
+	//
+	// The selectivity of the filter can be calculated as the product of the
+	// selectivities of the conjuncts in the filter. For example, the selectivity
+	// of <pred1> AND <pred2> is selectivity(pred1) * selectivity(pred2).
+	// The selectivity for each conjunct can be calculated in one of three ways:
+	//
+	// (1) If the predicate can be converted to a tight constraint set,
+	//     applyConstraintSet calculates the selectivity of the constraint.
+	//     See comments in applyConstraintSet and updateFromDistinctCounts
+	//     for more details.
+	//
+	// (2) If only part of the predicate can be converted to a constraint set
+	//     (i.e., it's not tight), the selectivity is calculated as:
+	//     min(selectivity from applyConstraintSet, 1/3).
+	//
+	// (3) If we can't convert the predicate to a constraint set, the predicate
+	//     is too complex to easily determine the selectivity, so use 1/3.
+	//
+	//     TODO(rytaft): we may be able to get a more precise estimate than
+	//     1/3 for certain types of filters. For example, the selectivity of
+	//     x=y can be estimated as 1/(max(distinct(x), distinct(y)).
+	s.selectivity = 1
+	sel := func(constraintSet *constraint.Set, tight bool) {
+		if constraintSet != nil {
+			childSelectivity := s.applyConstraintSet(constraintSet, inputStats)
+			if !tight && childSelectivity > unknownFilterSelectivity {
+				childSelectivity = unknownFilterSelectivity
+			}
+			s.selectivity *= childSelectivity
+		} else {
+			s.selectivity *= unknownFilterSelectivity
+		}
+	}
 
-	// Inherit column statistics from input, but only for columns that are also
-	// output columns.
-	s.filterColumnStats(inputStats.ColStats, outputCols)
+	constraintSet := filter.Logical().Scalar.Constraints
+	tight := filter.Logical().Scalar.TightConstraints
+	if (constraintSet != nil && tight) || (filter.op != opt.FiltersOp && filter.op != opt.AndOp) {
+		// Shortcut if the top level constraint is tight or if we only have one
+		// conjunct.
+		sel(constraintSet, tight)
+	} else {
+		for i := 0; i < filter.ChildCount(); i++ {
+			child := filter.Child(i)
+			constraintSet = child.Logical().Scalar.Constraints
+			tight = child.Logical().Scalar.TightConstraints
+			sel(constraintSet, tight)
+		}
+	}
+
+	s.applySelectivity(inputStats.RowCount)
+}
+
+func (s *Statistics) colStatSelect(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	inputStats := &s.ev.childGroup(0).logical.Relational.Stats
+
+	colStat, ok := s.copyColStat(inputStats, colSet)
+	if !ok {
+		return nil, false
+	}
+
+	s.applySelectivityToColStat(colStat, inputStats.RowCount)
+	return colStat, true
+}
+
+func (s *Statistics) initProject(inputStats *Statistics) {
+	s.RowCount = inputStats.RowCount
+}
+
+func (s *Statistics) colStatProject(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	inputStats := &s.ev.childGroup(0).logical.Relational.Stats
+
+	// Inherit column statistics from input.
+	return s.copyColStat(inputStats, colSet)
 
 	// TODO(rytaft): Try to update the distinct count for computed columns based
 	// on the distinct count of the input columns.
@@ -488,62 +576,97 @@ func (s *Statistics) initJoin(op opt.Operator, leftStats, rightStats *Statistics
 	if on.Operator() != opt.TrueOp {
 		s.RowCount /= 10
 	}
+}
+
+func (s *Statistics) colStatJoin(colSet opt.ColSet) (colStat *opt.ColumnStatistic, ok bool) {
+	leftStats := &s.ev.childGroup(0).logical.Relational.Stats
+	rightStats := &s.ev.childGroup(1).logical.Relational.Stats
 
 	// The number of distinct values for the column subsets doesn't change
 	// significantly unless the column subsets are part of the ON conditions.
 	// For now, add them all unchanged.
-	switch op {
+	switch s.ev.Operator() {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		// Inherit column stats from left side of join.
-		s.ColStats = make(ColumnStatistics, len(leftStats.ColStats))
-		copy(s.ColStats, leftStats.ColStats)
+		// Column stats come from left side of join.
+		return s.copyColStat(leftStats, colSet)
 
 	default:
-		// Union column stats from both sides of join.
-		cs := len(leftStats.ColStats)
-		s.ColStats = append(leftStats.ColStats[:cs:cs], rightStats.ColStats...)
+		// Column stats come from both sides of join.
+		leftCols := s.ev.Child(0).Logical().Relational.OutputCols
+		leftCols.IntersectionWith(colSet)
+		rightCols := s.ev.Child(1).Logical().Relational.OutputCols
+		rightCols.IntersectionWith(colSet)
+
+		if rightCols.Len() == 0 {
+			return s.copyColStat(leftStats, leftCols)
+		}
+
+		if leftCols.Len() == 0 {
+			return s.copyColStat(rightStats, rightCols)
+		}
+
+		if leftColStat, leftOk := leftStats.colStat(leftCols); leftOk {
+			if rightColStat, rightOk := rightStats.colStat(rightCols); rightOk {
+				colStat = s.makeColStat(colSet)
+				colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
+				return colStat, true
+			}
+		}
 	}
+
+	// TODO(rytaft): Apply selectivity to the distinct counts based on the join
+	// condition.
+
+	return nil, false
 }
 
-func (s *Statistics) initGroupBy(inputStats *Statistics, groupingColSet, outputCols *opt.ColSet) {
+func (s *Statistics) initGroupBy(inputStats *Statistics, groupingColSet opt.ColSet) {
 	if groupingColSet.Empty() {
 		// Scalar group by.
 		s.RowCount = 1
 	} else {
-		// Inherit column statistics from input, but only for columns that are also
-		// output columns.
-		s.filterColumnStats(inputStats.ColStats, outputCols)
-
 		// See if we can determine the number of rows from the distinct counts.
-		var distinctRows, maxDistinct uint64
-		for _, colStats := range s.ColStats {
-			if colStats.Cols.Equals(*groupingColSet) {
-				distinctRows = colStats.DistinctCount
-			} else if colStats.DistinctCount > maxDistinct {
-				maxDistinct = colStats.DistinctCount
-			}
+		distinctRows := uint64(1)
+		allCols := true
+		if colStat, ok := s.copyColStat(inputStats, groupingColSet); ok {
+			distinctRows = colStat.DistinctCount
+		} else {
+			groupingColSet.ForEach(func(i int) {
+				if colStat, ok := s.copyColStat(inputStats, util.MakeFastIntSet(i)); ok {
+					distinctRows *= colStat.DistinctCount
+				} else {
+					allCols = false
+				}
+			})
 		}
 
-		if distinctRows > 0 {
+		if allCols {
 			// We can estimate the row count based on the distinct count of the
 			// grouping columns.
-			s.RowCount = distinctRows
+			s.RowCount = min(distinctRows, inputStats.RowCount)
 		} else {
-			// We can't determine the row count exactly based on the distinct count
-			// of the grouping columns, so make a rough guess.
-			// TODO: Need better estimate.
-			s.RowCount = max(maxDistinct, inputStats.RowCount/10)
+			s.RowCount = inputStats.RowCount
 		}
 	}
+}
+
+func (s *Statistics) colStatGroupBy(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	inputStats := &s.ev.childGroup(0).logical.Relational.Stats
+	groupingColSet := s.ev.Private().(opt.ColSet)
+
+	if groupingColSet.Empty() {
+		// Scalar group by.
+		colStat := s.makeColStat(colSet)
+		colStat.DistinctCount = 1
+		return colStat, true
+	}
+
+	return s.copyColStat(inputStats, colSet)
 }
 
 func (s *Statistics) initSetOp(
 	op opt.Operator, leftStats, rightStats *Statistics, colMap *SetOpColMap,
 ) {
-	//
-	// Update row statistics.
-	//
-
 	// These calculations are an upper bound on the row count. It's likely that
 	// there is some overlap between the two sets, but not full overlap.
 	switch op {
@@ -557,124 +680,71 @@ func (s *Statistics) initSetOp(
 		s.RowCount = leftStats.RowCount
 	}
 
-	//
-	// Update column statistics.
-	//
-
-	// Determine which of the two input relations has the larger set of column
-	// statistics.
-	var lgStats, smStats ColumnStatistics
-	var lgColList, smColList opt.ColList
-	leftIsLarger := len(leftStats.ColStats) > len(rightStats.ColStats)
-	if leftIsLarger {
-		lgStats, smStats = leftStats.ColStats, rightStats.ColStats
-		lgColList, smColList = colMap.Left, colMap.Right
-	} else {
-		lgStats, smStats = rightStats.ColStats, leftStats.ColStats
-		lgColList, smColList = colMap.Right, colMap.Left
-	}
-
-	// Build a map on the smaller of the two sets of statistics, keyed by
-	// column ID.
-	colStatsMap := make(map[opt.ColumnID][]*ColumnStatistic, len(smStats))
-	for i := range smStats {
-		smColStat := &smStats[i]
-
-		// Only use single-column statistics.
-		if smColStat.Cols.Len() != 1 {
-			continue
-		}
-
-		// Create key(s) using column IDs from the relation with the larger set
-		// of statistics.
-		key := translateColSet(smColStat.Cols, smColList, lgColList)
-		key.ForEach(func(i int) {
-			colStatsMap[opt.ColumnID(i)] = append(colStatsMap[opt.ColumnID(i)], smColStat)
-		})
-	}
-
-	// Iterate through the larger set of statistics, probing into the map to
-	// see if there is a match with the smaller set.
-	distinctCounts := make(map[opt.ColumnID]uint64, len(colStatsMap))
-	for i := range lgStats {
-		lgColStat := &lgStats[i]
-
-		// Only use single-column statistics.
-		if lgColStat.Cols.Len() != 1 {
-			continue
-		}
-		val, _ := lgColStat.Cols.Next(0)
-
-		if smColStats, ok := colStatsMap[opt.ColumnID(val)]; ok {
-			for _, smColStat := range smColStats {
-				// We found a match! Update the distinct counts for the output relation.
-				var leftStat, rightStat *ColumnStatistic
-				if leftIsLarger {
-					leftStat, rightStat = lgColStat, smColStat
-				} else {
-					leftStat, rightStat = smColStat, lgColStat
-				}
-
-				s.updateDistinctCountsForSetOp(op, leftStat, rightStat, colMap, distinctCounts)
-			}
-		}
-	}
-
-	// Update the column stats based on the distinct counts.
-	s.ColStats = make(ColumnStatistics, 0, len(distinctCounts))
-	for col, distinctCount := range distinctCounts {
-		s.ColStats = append(s.ColStats, ColumnStatistic{DistinctCount: distinctCount})
-		s.ColStats[len(s.ColStats)-1].Cols.Add(int(col))
-	}
-
 	switch op {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
 		// Since UNION, INTERSECT and EXCEPT eliminate duplicate rows, the row
 		// count will equal the distinct count of the set of output columns.
-		// This is approximately equal to the product of the distinct counts
-		// of the individual columns.
-		if len(s.ColStats) != 0 {
-			distinctCount := uint64(1)
-			for _, c := range s.ColStats {
-				distinctCount *= c.DistinctCount
+		outputCols := opt.ColListToSet(colMap.Out)
+		if colStat, ok := s.colStatSetOpImpl(op, leftStats, rightStats, colMap, outputCols); ok {
+			s.RowCount = min(s.RowCount, colStat.DistinctCount)
+			return
+		}
+
+		// If we cannot get the column stats for the set of output columns, estimate
+		// the row count as the product of the distinct counts of the individual
+		// columns.
+		// TODO(rytaft): This is a pessimistic estimate. See if it can be improved.
+		distinctCount := uint64(1)
+		allCols := true
+		outputCols.ForEach(func(i int) {
+			colSet := util.MakeFastIntSet(i)
+			if colStat, ok := s.colStatSetOpImpl(op, leftStats, rightStats, colMap, colSet); ok {
+				distinctCount *= colStat.DistinctCount
+			} else {
+				allCols = false
 			}
+		})
+
+		if allCols {
 			s.RowCount = min(s.RowCount, distinctCount)
 		}
 	}
 }
 
-// updateDistinctCountsForSetOp updates the distinct counts for the set of
-// output columns produced by merging the columns from leftStats and
-// rightStats.
-func (s *Statistics) updateDistinctCountsForSetOp(
-	op opt.Operator,
-	leftStat, rightStat *ColumnStatistic,
-	colMap *SetOpColMap,
-	distinctCounts map[opt.ColumnID]uint64,
-) {
-	var distinctCount uint64
-	// These calculations are an upper bound on the distinct count. It's likely
-	// that there is some overlap between the two sets, but not full overlap.
-	switch op {
-	case opt.UnionOp, opt.UnionAllOp:
-		distinctCount = leftStat.DistinctCount + rightStat.DistinctCount
+func (s *Statistics) colStatSetOp(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	leftStats := s.ev.childGroup(0).logical.Relational.Stats
+	rightStats := s.ev.childGroup(1).logical.Relational.Stats
+	colMap := s.ev.Private().(*SetOpColMap)
+	return s.colStatSetOpImpl(s.ev.Operator(), &leftStats, &rightStats, colMap, colSet)
+}
 
-	case opt.IntersectOp, opt.IntersectAllOp:
-		distinctCount = min(leftStat.DistinctCount, rightStat.DistinctCount)
+func (s *Statistics) colStatSetOpImpl(
+	op opt.Operator, leftStats, rightStats *Statistics, colMap *SetOpColMap, outputCols opt.ColSet,
+) (_ *opt.ColumnStatistic, ok bool) {
+	leftCols := translateColSet(outputCols, colMap.Out, colMap.Left)
+	rightCols := translateColSet(outputCols, colMap.Out, colMap.Right)
+	if leftColStat, ok := leftStats.colStat(leftCols); ok {
+		if rightColStat, ok := rightStats.colStat(rightCols); ok {
+			colStat := s.makeColStat(outputCols)
 
-	case opt.ExceptOp, opt.ExceptAllOp:
-		distinctCount = leftStat.DistinctCount
+			// These calculations are an upper bound on the distinct count. It's likely
+			// that there is some overlap between the two sets, but not full overlap.
+			switch op {
+			case opt.UnionOp, opt.UnionAllOp:
+				colStat.DistinctCount = leftColStat.DistinctCount + rightColStat.DistinctCount
+
+			case opt.IntersectOp, opt.IntersectAllOp:
+				colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
+
+			case opt.ExceptOp, opt.ExceptAllOp:
+				colStat.DistinctCount = leftColStat.DistinctCount
+			}
+
+			return colStat, true
+		}
 	}
 
-	// Translate the column set to use the column IDs of the output relation.
-	cols := translateColSet(leftStat.Cols, colMap.Left, colMap.Out)
-	cols.IntersectionWith(translateColSet(rightStat.Cols, colMap.Right, colMap.Out))
-	cols.ForEach(func(i int) {
-		// Use the maximum distinct count for the output column.
-		if val, ok := distinctCounts[opt.ColumnID(i)]; !ok || val < distinctCount {
-			distinctCounts[opt.ColumnID(i)] = distinctCount
-		}
-	})
+	return nil, false
 }
 
 func min(a uint64, b uint64) uint64 {
@@ -732,85 +802,116 @@ func translateColSet(colSetIn opt.ColSet, from opt.ColList, to opt.ColList) opt.
 }
 
 // initValues initializes the statistics for a VALUES expression.
-func (s *Statistics) initValues(ev ExprView, outputCols *opt.ColSet) {
-	s.RowCount = uint64(ev.ChildCount())
+func (s *Statistics) initValues() {
+	s.RowCount = uint64(s.ev.ChildCount())
+}
 
-	// Determine distinct count from the number of distinct memo groups.
-	// Get the distinct count per column and for all columns.
-	if ev.ChildCount() > 0 {
-		multiCol := ev.Child(0).ChildCount() > 1
-		multiColRowGroups := util.FastIntSet{}
-
-		// Use array of sets to find the exact count of distinct values.
-		distinct := make([]util.FastIntSet, ev.Child(0).ChildCount())
-		for i := 0; i < ev.ChildCount(); i++ {
-			for j := 0; j < ev.Child(i).ChildCount(); j++ {
-				distinct[j].Add(int(ev.Child(i).ChildGroup(j)))
-			}
-
-			if multiCol {
-				multiColRowGroups.Add(int(ev.ChildGroup(i)))
-			}
-		}
-
-		// Update the column statistics.
-		s.ColStats = make(ColumnStatistics, 0, ev.Child(0).ChildCount()+1)
-		colList := ev.Private().(opt.ColList)
-		for i := 0; i < len(colList); i++ {
-			s.ColStats = append(s.ColStats, ColumnStatistic{DistinctCount: uint64(distinct[i].Len())})
-			s.ColStats[i].Cols.Add(int(colList[i]))
-		}
-
-		if multiCol {
-			s.ColStats = append(s.ColStats, ColumnStatistic{
-				Cols:          *outputCols,
-				DistinctCount: uint64(multiColRowGroups.Len()),
-			})
-		}
+func (s *Statistics) colStatValues(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	if s.ev.ChildCount() == 0 {
+		return nil, false
 	}
+
+	colList := s.ev.Private().(opt.ColList)
+
+	// Determine distinct count from the number of distinct memo groups. Use a
+	// map to find the exact count of distinct values for the columns in colSet.
+	distinct := make(map[string]struct{}, s.ev.Child(0).ChildCount())
+	key := keyBuffer{}
+	for i := 0; i < s.ev.ChildCount(); i++ {
+		groups := make([]GroupID, 0, colSet.Len())
+		for j := 0; j < s.ev.Child(i).ChildCount(); j++ {
+			if colSet.Contains(int(colList[j])) {
+				groups = append(groups, s.ev.Child(i).ChildGroup(j))
+			}
+		}
+		key.Reset()
+		key.writeGroupList(groups)
+		distinct[key.String()] = struct{}{}
+	}
+
+	// Update the column statistics.
+	colStat := s.makeColStat(colSet)
+	colStat.DistinctCount = uint64(len(distinct))
+	return colStat, true
 }
 
 func (s *Statistics) initLimit(limit ExprView, inputStats *Statistics) {
-	// Copy stats from input.
-	s.copyColStats(inputStats)
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
 
-	// Update row count and distinct count if limit is a constant.
+	// Update row count if limit is a constant.
 	if limit.Operator() == opt.ConstOp {
 		hardLimit := *limit.Private().(*tree.DInt)
 		if hardLimit > 0 {
 			s.RowCount = min(uint64(hardLimit), inputStats.RowCount)
-
-			for i := range s.ColStats {
-				colStats := &s.ColStats[i]
-				colStats.DistinctCount = min(uint64(hardLimit), colStats.DistinctCount)
-			}
 		}
 	}
+}
+
+func (s *Statistics) colStatLimit(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	inputStats := &s.ev.childGroup(0).logical.Relational.Stats
+	limit := s.ev.Child(1)
+
+	colStat, ok := s.copyColStat(inputStats, colSet)
+	if !ok {
+		return nil, false
+	}
+
+	// Update distinct count if limit is a constant.
+	if limit.Operator() == opt.ConstOp {
+		hardLimit := *limit.Private().(*tree.DInt)
+		if hardLimit > 0 {
+			colStat.DistinctCount = min(uint64(hardLimit), colStat.DistinctCount)
+		}
+	}
+
+	return colStat, true
+}
+
+func (s *Statistics) initOffset(offset ExprView, inputStats *Statistics) {
+	// Copy row count from input.
+	s.RowCount = inputStats.RowCount
+
+	// Update row count if offset is a constant.
+	if offset.Operator() == opt.ConstOp {
+		hardOffset := *offset.Private().(*tree.DInt)
+		if hardOffset > 0 {
+			s.RowCount = max(0, inputStats.RowCount-uint64(hardOffset))
+		}
+	}
+}
+
+func (s *Statistics) colStatOffset(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	inputStats := &s.ev.childGroup(0).logical.Relational.Stats
+
+	colStat, ok := s.copyColStat(inputStats, colSet)
+	if !ok {
+		return nil, false
+	}
+
+	colStat.DistinctCount = min(s.RowCount, colStat.DistinctCount)
+	return colStat, true
 }
 
 func (s *Statistics) initMax1Row(inputStats *Statistics) {
 	// Update row count.
 	s.RowCount = 1
-	s.ColStats = nil
 }
 
-// filterColumnStats adds column statistics from inputColStats to s.ColStats,
-// but only for column sets that are fully contained in outputCols.
-func (s *Statistics) filterColumnStats(inputColStats ColumnStatistics, outputCols *opt.ColSet) {
-	s.ColStats = nil
-	for i := range inputColStats {
-		colStats := &inputColStats[i]
-		if colStats.Cols.SubsetOf(*outputCols) {
-			if s.ColStats == nil {
-				s.ColStats = make(ColumnStatistics, 0, len(inputColStats)-i)
-			}
-			s.ColStats = append(s.ColStats, *colStats)
-		}
+func (s *Statistics) colStatMax1Row(colSet opt.ColSet) (_ *opt.ColumnStatistic, ok bool) {
+	colStat := s.makeColStat(colSet)
+	colStat.DistinctCount = 1
+	return colStat, true
+}
+
+func (s *Statistics) copyColStat(
+	inputStats *Statistics, colSet opt.ColSet,
+) (_ *opt.ColumnStatistic, ok bool) {
+	if inputColStat, ok := inputStats.colStat(colSet); ok {
+		colStat := s.makeColStat(colSet)
+		*colStat = *inputColStat
+		return colStat, true
 	}
-}
 
-func (s *Statistics) copyColStats(inputStats *Statistics) {
-	s.RowCount = inputStats.RowCount
-	s.ColStats = make(ColumnStatistics, len(inputStats.ColStats))
-	copy(s.ColStats, inputStats.ColStats)
+	return nil, false
 }

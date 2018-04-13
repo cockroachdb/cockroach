@@ -47,7 +47,7 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: xy.x:1(int!null) xy.y:2(int) xy.x:1(int!null)
  ├── right columns: uv.v:4(int) uv.u:3(int) uv.rowid:5(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── stats: [rows=1000]
@@ -61,11 +61,11 @@ intersect
  │         └── variable: xy.y [type=int, outer=(2)]
  └── project
       ├── columns: uv.v:4(int!null) uv.u:3(int) uv.rowid:5(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=333]
       ├── keys: (5)
       ├── select
       │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=333, distinct(3)=1]
       │    ├── keys: (5)
       │    ├── scan uv
       │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
@@ -100,13 +100,13 @@ except
  │         └── variable: xy.y [type=int, outer=(2)]
  └── project
       ├── columns: uv.u:3(int) uv.v:4(int!null)
-      ├── stats: [rows=100]
+      ├── stats: [rows=333]
       ├── project
       │    ├── columns: uv.u:3(int) uv.v:4(int!null)
-      │    ├── stats: [rows=100]
+      │    ├── stats: [rows=333]
       │    ├── select
       │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
-      │    │    ├── stats: [rows=100]
+      │    │    ├── stats: [rows=333, distinct(3)=1]
       │    │    ├── keys: (5)
       │    │    ├── scan uv
       │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
@@ -128,7 +128,7 @@ SELECT * FROM xy WHERE (SELECT x, u FROM uv UNION SELECT y, v FROM uv) = (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)

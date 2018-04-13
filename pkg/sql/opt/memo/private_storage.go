@@ -331,3 +331,13 @@ func (kb *keyBuffer) writeColList(colList opt.ColList) {
 		kb.Write(buf[:cnt])
 	}
 }
+
+// writeGroupList writes a series of varints, one for each column in the list,
+// in list order.
+func (kb *keyBuffer) writeGroupList(groupList []GroupID) {
+	var buf [10]byte
+	for _, col := range groupList {
+		cnt := binary.PutUvarint(buf[:], uint64(col))
+		kb.Write(buf[:cnt])
+	}
+}

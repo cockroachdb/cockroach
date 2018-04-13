@@ -39,33 +39,62 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 	// Test that applyConstraintSet correctly updates the statistics for integer
 	// columns 1, 2, and 3 from constraint set cs.
-	statsFunc123 := func(cs *constraint.Set, expected string) {
+	statsFunc123 := func(cs *constraint.Set, expectedStats string, expectedSelectivity float64) {
 		t.Helper()
 
-		colStats := ColumnStatistics{
-			{Cols: util.MakeFastIntSet(1), DistinctCount: 500},
-			{Cols: util.MakeFastIntSet(2), DistinctCount: 500},
-			{Cols: util.MakeFastIntSet(3), DistinctCount: 500},
-			{Cols: util.MakeFastIntSet(1, 2, 3), DistinctCount: 9900},
-		}
-		s := &Statistics{ColStats: colStats, RowCount: 10000}
-		s.applyConstraintSet(&evalCtx, cs, true /* tight */)
-		testStats(t, s, expected)
+		// Single column stats.
+		singleColStats := make(map[opt.ColumnID]*opt.ColumnStatistic, 3)
+		cols := util.MakeFastIntSet(1)
+		singleColStats[opt.ColumnID(1)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+		cols = util.MakeFastIntSet(2)
+		singleColStats[opt.ColumnID(2)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+		cols = util.MakeFastIntSet(3)
+		singleColStats[opt.ColumnID(3)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 500}
+
+		// Multi column stats.
+		multiColStats := make(map[string]*opt.ColumnStatistic, 1)
+		cols = util.MakeFastIntSet(1, 2, 3)
+		key := keyBuffer{}
+		key.writeColSet(cols)
+		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 9900}
+
+		inputStats := Statistics{Statistics: &opt.Statistics{
+			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
+		}}
+		s := &Statistics{}
+		s.init(ExprView{}, &evalCtx)
+		s.selectivity = s.applyConstraintSet(cs, &inputStats)
+		s.applySelectivity(inputStats.RowCount)
+		testStats(t, s, s.selectivity, expectedStats, expectedSelectivity)
 	}
 
 	// Test that applyConstraintSet correctly updates the statistics for string
 	// columns 4 and 5 from constraint set cs.
-	statsFunc45 := func(cs *constraint.Set, expected string) {
+	statsFunc45 := func(cs *constraint.Set, expectedStats string, expectedSelectivity float64) {
 		t.Helper()
 
-		colStats := ColumnStatistics{
-			{Cols: util.MakeFastIntSet(4), DistinctCount: 10},
-			{Cols: util.MakeFastIntSet(5), DistinctCount: 10},
-			{Cols: util.MakeFastIntSet(4, 5), DistinctCount: 100},
-		}
-		s := &Statistics{ColStats: colStats, RowCount: 10000}
-		s.applyConstraintSet(&evalCtx, cs, true /* tight */)
-		testStats(t, s, expected)
+		// Single column stats.
+		singleColStats := make(map[opt.ColumnID]*opt.ColumnStatistic, 2)
+		cols := util.MakeFastIntSet(4)
+		singleColStats[opt.ColumnID(4)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 10}
+		cols = util.MakeFastIntSet(5)
+		singleColStats[opt.ColumnID(5)] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 10}
+
+		// Multi column stats.
+		multiColStats := make(map[string]*opt.ColumnStatistic, 1)
+		cols = util.MakeFastIntSet(4, 5)
+		key := keyBuffer{}
+		key.writeColSet(cols)
+		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 100}
+
+		inputStats := Statistics{Statistics: &opt.Statistics{
+			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
+		}}
+		s := &Statistics{}
+		s.init(ExprView{}, &evalCtx)
+		s.selectivity = s.applyConstraintSet(cs, &inputStats)
+		s.applySelectivity(inputStats.RowCount)
+		testStats(t, s, s.selectivity, expectedStats, expectedSelectivity)
 	}
 
 	c1 := constraint.ParseConstraint(&evalCtx, "/1: [/2 - /5] [/8 - /10]")
@@ -88,55 +117,64 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	cs1 := constraint.SingleConstraint(&c1)
 	statsFunc123(
 		cs1,
-		"stats: [rows=140, distinct(1)=7, distinct(2)=122, distinct(3)=122, distinct(1-3)=139]",
+		"stats: [rows=140000000, distinct(1)=7]",
+		7.0/500,
 	)
 
 	cs2 := constraint.SingleConstraint(&c2)
 	statsFunc123(
 		cs2,
-		"stats: [rows=3333, distinct(1)=499, distinct(2)=499, distinct(3)=499, distinct(1-3)=3326]",
+		"stats: [rows=3333333333]",
+		1.0/3,
 	)
 
 	cs3 := constraint.SingleConstraint(&c3)
 	statsFunc123(
 		cs3,
-		"stats: [rows=20, distinct(1)=19, distinct(2)=19, distinct(3)=1, distinct(1-3)=19]",
+		"stats: [rows=20000000, distinct(3)=1]",
+		1.0/500,
 	)
 
 	cs12 := constraint.SingleConstraint(&c12)
 	statsFunc123(
 		cs12,
-		"stats: [rows=20, distinct(1)=1, distinct(2)=19, distinct(3)=19, distinct(1-3)=19]",
+		"stats: [rows=20000000, distinct(1)=1]",
+		1.0/500,
 	)
 
 	cs123 := constraint.SingleConstraint(&c123)
 	statsFunc123(
 		cs123,
-		"stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=5, distinct(1-3)=5]",
+		"stats: [rows=400, distinct(1)=1, distinct(2)=1, distinct(3)=5]",
+		5.0/125000000,
 	)
 
 	cs32 := constraint.SingleConstraint(&c32)
 	statsFunc123(
 		cs32,
-		"stats: [rows=1, distinct(1)=1, distinct(2)=2, distinct(3)=1, distinct(1-3)=1]",
+		"stats: [rows=80000, distinct(2)=2, distinct(3)=1]",
+		2.0/250000,
 	)
 
 	cs := cs3.Intersect(&evalCtx, cs123)
 	statsFunc123(
 		cs,
-		"stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1, distinct(1-3)=1]",
+		"stats: [rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
+		1.0/125000000,
 	)
 
 	cs = cs32.Intersect(&evalCtx, cs123)
 	statsFunc123(
 		cs,
-		"stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1, distinct(1-3)=1]",
+		"stats: [rows=80, distinct(1)=1, distinct(2)=1, distinct(3)=1]",
+		1.0/125000000,
 	)
 
 	cs45 := constraint.SingleSpanConstraint(&keyCtx45, &sp45)
 	statsFunc45(
 		cs45,
-		"stats: [rows=1000, distinct(4)=1, distinct(5)=10, distinct(4,5)=99]",
+		"stats: [rows=1000000000, distinct(4)=1]",
+		1.0/10,
 	)
 }
 
@@ -167,7 +205,13 @@ func TestTranslateColSet(t *testing.T) {
 	test(t, colSetIn, from, to, util.MakeFastIntSet(5, 6))
 }
 
-func testStats(t *testing.T, s *Statistics, expected string) {
+func testStats(
+	t *testing.T,
+	s *Statistics,
+	selectivity float64,
+	expectedStats string,
+	expectedSelectivity float64,
+) {
 	t.Helper()
 
 	ev := ExprView{}
@@ -176,7 +220,11 @@ func testStats(t *testing.T, s *Statistics, expected string) {
 	ev.formatStats(tp, s)
 	actual := strings.TrimSpace(tp.String())
 
-	if actual != expected {
-		t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
+	if actual != expectedStats {
+		t.Fatalf("\nexpected: %s\nactual  : %s", expectedStats, actual)
+	}
+
+	if selectivity != expectedSelectivity {
+		t.Fatalf("\nexpected: %f\nactual  : %f", expectedSelectivity, selectivity)
 	}
 }

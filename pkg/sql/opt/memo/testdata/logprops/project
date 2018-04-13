@@ -61,7 +61,7 @@ SELECT * FROM xysd WHERE (SELECT (SELECT y) FROM kuv WHERE k=x) > 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
@@ -77,11 +77,11 @@ select
       │    │    └── project
       │    │         ├── columns: column8:8(int)
       │    │         ├── outer: (1,2)
-      │    │         ├── stats: [rows=100]
+      │    │         ├── stats: [rows=333]
       │    │         ├── select
       │    │         │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
       │    │         │    ├── outer: (1)
-      │    │         │    ├── stats: [rows=100]
+      │    │         │    ├── stats: [rows=333]
       │    │         │    ├── keys: (5)
       │    │         │    ├── scan kuv
       │    │         │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
