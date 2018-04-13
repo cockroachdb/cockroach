@@ -5267,15 +5267,19 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
+| LATERAL func_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
 | func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFuncRefFromName()) }
+| LATERAL func_name '(' error { return helpWithFunction(sqllex, $2.resolvableFuncRefFromName()) }
 | special_function opt_ordinality opt_alias_clause
   {
       $$.val = &tree.AliasedTableExpr{Expr: $1.expr().(tree.TableExpr), Ordinality: $2.bool(), As: $3.aliasClause() }
   }
+| LATERAL special_function opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
   }
+| LATERAL select_with_parens opt_ordinality opt_alias_clause { return unimplementedWithIssue(sqllex, 24560) }
 | joined_table
   {
     $$.val = $1.tblExpr()
