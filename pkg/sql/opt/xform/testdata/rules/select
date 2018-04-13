@@ -38,22 +38,18 @@ scan a
 memo
 SELECT k FROM a WHERE k = 1
 ----
-[9: "p:k:1"]
+[presentation: k:1]
 memo
- ├── 10: (true)
- ├── 9: (select 8 5) (scan a,constrained)
- │    └── "p:k:1" [cost=100.00]
+ ├── G1: (select G2 G3) (scan a,constrained)
+ │    └── "[presentation: k:1]" [cost=100.00]
  │         └── best: (scan a,constrained)
- ├── 8: (scan a) (scan a@u) (scan a@v)
+ ├── G2: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 7: (projections 2)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (eq 2 3)
- ├── 3: (const 1)
- ├── 2: (variable a.k)
- └── 1: (scan a)
+ ├── G3: (filters G4)
+ ├── G4: (eq G5 G6)
+ ├── G5: (variable a.k)
+ └── G6: (const 1)
 
 opt
 SELECT k FROM a WHERE v > 1
@@ -71,26 +67,23 @@ project
 memo
 SELECT k FROM a WHERE v > 1
 ----
-[11: "p:k:1"]
+[presentation: k:1]
 memo
- ├── 12: (true)
- ├── 11: (project 10 8)
- │    └── "p:k:1" [cost=100.00]
- │         └── best: (project 10 8)
- ├── 10: (select 9 5) (scan a@v,constrained)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: k:1]" [cost=100.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (scan a@v,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@v,constrained)
- ├── 9: (scan a) (scan a@u) (scan a@v)
+ ├── G3: (projections G6)
+ ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 8: (projections 7)
- ├── 7: (variable a.k)
- ├── 6: (select 1 5)
- ├── 5: (filters 4)
- ├── 4: (gt 2 3)
- ├── 3: (const 1)
- ├── 2: (variable a.v)
- └── 1: (scan a)
+ ├── G5: (filters G7)
+ ├── G6: (variable a.k)
+ ├── G7: (gt G8 G9)
+ ├── G8: (variable a.v)
+ └── G9: (const 1)
 
 opt
 SELECT k FROM a WHERE u = 1 AND k = 5
@@ -108,33 +101,29 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
 ----
-[14: "p:k:1"]
+[presentation: k:1]
 memo
- ├── 17: (scan a,constrained)
- │    └── "" [cost=100.00]
- │         └── best: (scan a,constrained)
- ├── 16: (filters 4)
- ├── 15: (true)
- ├── 14: (project 13 11)
- │    └── "p:k:1" [cost=100.00]
- │         └── best: (project 13 11)
- ├── 13: (select 12 9) (select 17 16) (scan a@u,constrained)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: k:1]" [cost=100.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (select G6 G7) (scan a@u,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@u,constrained)
- ├── 12: (scan a) (scan a@u) (scan a@v)
+ ├── G3: (projections G10)
+ ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 11: (projections 5)
- ├── 10: (select 1 9)
- ├── 9: (filters 4 7)
- ├── 8: (and 4 7)
- ├── 7: (eq 5 6)
- ├── 6: (const 5)
- ├── 5: (variable a.k)
- ├── 4: (eq 2 3)
- ├── 3: (const 1)
- ├── 2: (variable a.u)
- └── 1: (scan a)
+ ├── G5: (filters G9 G8)
+ ├── G6: (scan a,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a,constrained)
+ ├── G7: (filters G9)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G13)
+ ├── G10: (variable a.k)
+ ├── G11: (const 5)
+ ├── G12: (variable a.u)
+ └── G13: (const 1)
 
 # Constraint + remaining filter.
 opt
@@ -162,33 +151,29 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-[14: "p:k:1"]
+[presentation: k:1]
 memo
- ├── 17: (scan a@u,constrained)
- │    └── "" [cost=100.00]
- │         └── best: (scan a@u,constrained)
- ├── 16: (filters 7)
- ├── 15: (true)
- ├── 14: (project 13 11)
- │    └── "p:k:1" [cost=110.00]
- │         └── best: (project 13 11)
- ├── 13: (select 12 9) (select 17 16)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: k:1]" [cost=110.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (select G6 G7)
  │    └── "" [cost=110.00]
- │         └── best: (select 17 16)
- ├── 12: (scan a) (scan a@u) (scan a@v)
+ │         └── best: (select G6 G7)
+ ├── G3: (projections G12)
+ ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── "" [cost=1000.00]
  │         └── best: (scan a)
- ├── 11: (projections 5)
- ├── 10: (select 1 9)
- ├── 9: (filters 4 7)
- ├── 8: (and 4 7)
- ├── 7: (eq 6 3)
- ├── 6: (plus 5 2)
- ├── 5: (variable a.k)
- ├── 4: (eq 2 3)
- ├── 3: (const 1)
- ├── 2: (variable a.u)
- └── 1: (scan a)
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan a@u,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@u,constrained)
+ ├── G7: (filters G9)
+ ├── G8: (eq G13 G11)
+ ├── G9: (eq G10 G11)
+ ├── G10: (plus G12 G13)
+ ├── G11: (const 1)
+ ├── G12: (variable a.k)
+ └── G13: (variable a.u)
 
 opt
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -213,36 +198,34 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-[13: "p:k:1"]
+[presentation: k:1]
 memo
- ├── 18: (scan a@v,constrained)
- │    └── "" [cost=100.00]
- │         └── best: (scan a@v,constrained)
- ├── 17: (filters 4)
- ├── 16: (scan a@u,constrained)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: k:1]" [cost=110.00]
+ │         └── best: (project G2 G3)
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
+ │    └── "" [cost=110.00]
+ │         └── best: (select G6 G7)
+ ├── G3: (projections G10)
+ ├── G4: (scan a) (scan a@u) (scan a@v)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── G5: (filters G12 G11)
+ ├── G6: (scan a@u,constrained)
  │    └── "" [cost=100.00]
  │         └── best: (scan a@u,constrained)
- ├── 15: (filters 7)
- ├── 14: (true)
- ├── 13: (project 10 12)
- │    └── "p:k:1" [cost=110.00]
- │         └── best: (project 10 12)
- ├── 12: (projections 11)
- ├── 11: (variable a.k)
- ├── 10: (select 1 9) (select 16 15) (select 18 17)
- │    └── "" [cost=110.00]
- │         └── best: (select 16 15)
- ├── 9: (filters 4 7)
- ├── 8: (and 4 7)
- ├── 7: (eq 5 6)
- ├── 6: (const 5)
- ├── 5: (variable a.v)
- ├── 4: (eq 2 3)
- ├── 3: (const 1)
- ├── 2: (variable a.u)
- └── 1: (scan a) (scan a@u) (scan a@v)
-      └── "" [cost=1000.00]
-           └── best: (scan a)
+ ├── G7: (filters G11)
+ ├── G8: (scan a@v,constrained)
+ │    └── "" [cost=100.00]
+ │         └── best: (scan a@v,constrained)
+ ├── G9: (filters G12)
+ ├── G10: (variable a.k)
+ ├── G11: (eq G13 G14)
+ ├── G12: (eq G15 G16)
+ ├── G13: (variable a.v)
+ ├── G14: (const 5)
+ ├── G15: (variable a.u)
+ └── G16: (const 1)
 
 # No constraint can be derived from filter (nothing should be pushed down).
 opt
