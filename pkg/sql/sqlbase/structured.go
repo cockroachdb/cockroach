@@ -1552,6 +1552,9 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 // FindIndexByName finds the index with the specified name in the active
 // list or the mutations list. It returns true if the index is being dropped.
 func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool, error) {
+	if desc.PrimaryIndex.Name == name {
+		return desc.PrimaryIndex, false, nil
+	}
 	for i, idx := range desc.Indexes {
 		if idx.Name == name {
 			return desc.Indexes[i], false, nil
@@ -1568,21 +1571,25 @@ func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool
 }
 
 // RenameIndexDescriptor renames an index descriptor.
-func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) {
+func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) error {
 	id := index.ID
+	if id == desc.PrimaryIndex.ID {
+		desc.PrimaryIndex.Name = name
+		return nil
+	}
 	for i := range desc.Indexes {
 		if desc.Indexes[i].ID == id {
 			desc.Indexes[i].Name = name
-			return
+			return nil
 		}
 	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil && idx.ID == id {
 			idx.Name = name
-			return
+			return nil
 		}
 	}
-	panic(fmt.Sprintf("index with id = %d does not exist", id))
+	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.
