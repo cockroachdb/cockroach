@@ -5,6 +5,11 @@
 - RFC PR: #24194
 - Cockroach Issue: TBD
 
+# TODO
+
+- rip out ranged intent request
+- discuss integration with #16026
+
 # Summary
 
 Cut the commit latency for the final batch of a transaction in half, from two rounds of consensus down to one, by addressing a shortcoming of the transactional model which does not allow `EndTransaction` to be sent in parallel with other writes.
@@ -84,7 +89,7 @@ EndTransaction(1)
 
 This effectively doubles the latency (ignoring the client<->gateway latency).
 
-This RFC should be considered in conjunction with #16026, which proposes a mechanism that "flattens" (writing) SQL transactions so that they (morally) perform their writes together with the commit. In combination, these changes aim to reduce the latency for "simple" OLTP-style transactions to the minimum possible: one consensus latency plus the sum of the read latencies.
+This RFC should be considered in conjunction with #16026, which avoids write latencies until commit time (incurring only read latencies until then). With #16026 alone, transaction latencies would roughly equal the sum of read latencies, plus *two* rounds of consensus. This proposal reduces it to the minimum possible: the sum of read latencies, plus *one* round of consensus.
 
 # Guide-level explanation
 
@@ -96,7 +101,8 @@ Omitting error handling for now, we want the coordinator to be able to
 
 1. send `EndTransaction` with status `STAGED` in parallel with the last batch
 1. on success of all writes, return to the client,
-1. asynchronously send `EndTransaction` with status `COMMITTED`.
+1. asynchronously send `EndTransaction` with status `COMMITTED`, which as a side effect
+1. resolves the intents.
 
 To achieve this, the semantics of what it means for a transaction to commit change. As it stands, they are
 
@@ -186,7 +192,7 @@ Abort(k1) ok|
             |Resolve(k3)
 ```
 
-But it has to stop using it for the current epoch, as doing so would allow anomalies: new intents written would not be reflected in the staged transaction record, and thus the *commit condition*.
+The client has to stop using the transaction for the current epoch (i.e. it has to restart the txn), as doing so would allow anomalies: new intents written would not be reflected in the staged transaction record, and thus the *commit condition*.
 
 #### Retryable
 
@@ -255,7 +261,7 @@ In the happy case, all requests come back successfully. Errors (from above the r
 
 Note that RPC-level errors from the final batch will be turned into ambiguous commit errors as they are today (this happens at the RPC layer and wont be affected by the changes proposed here).
 
-If the writes come back, it is checked whether they require a transaction restart. This is the case if the returned transaction has had its timestamp pushed, or if it has the `WriteTooOld` flag set. If this is the case, a transaction retry error is synthesized and sent to the client (it shares this code with `TxnCoordSender` for robustness).
+If the writes come back, it is checked whether they require a transaction restart. This is the case if the returned transaction has had its timestamp pushed, or if it has the `WriteTooOld` flag set. If this is the case, a transaction retry error is synthesized and sent back to the (SQL) client .
 
 If the transaction *can* commit, it returns the final transaction to the client and asynchronously sends an `EndTransactionRequest` that finalizes the transaction record (and as a side effect, eagerly resolves the intents). Expected responses to the `EndTransactionRequest` are RPC errors (timeouts, etc) and success. In particular, we can assert that the commit is not rejected.
 
@@ -267,13 +273,13 @@ Its goal is to either abort the transaction or to determine that it is in fact c
 
 The status resolution process is triggered by a reader or writer which encounters an intent, or by the GC queue as it tries to remove old transaction records. In today's code, they issue a `PushTxnRequest` which may be held up by the txn wait queue.
 
-With the introduction of the `STAGED` transaction status, push requests may fail even though the pushee is abandoned, and so the txn wait queue triggers the *status resolution process* when a transaction record is discovered as `STAGED` and abandoned, making sure to have only one such process in flight per transaction record.
+With the introduction of the `STAGED` transaction status, push requests may fail even though the pushee is abandoned, and so the txn wait queue (on the leaseholder of the range to which the `STAGED` transaction is anchored) triggers the *status resolution process* when a transaction record is discovered as `STAGED` and abandoned, making sure to have only one such process in flight per transaction record.
 
 #### PushTxn
 
 `PushTxn` can't simply change the status of a `STAGED` transaction. Instead, it returns such transactions verbatim. All consumers of `PushTxnResult` are updated to deal with this outcome, and must call into the status resolution machinery instead.
 
-An alternative to be considered is to return an error instead. This doesn't work well for batches of push requests, though.
+An alternative to be considered is to return an error instead. This doesn't work well for batches of push requests, though. If during implementation we decide for the first option, we may also consider removing `TransactionPushError` in the process.
 
 #### PreventIntentRequest
 
@@ -295,9 +301,9 @@ As an optimization, we might return a structured error when an intent was preven
 
 The status resolution mechanism in conjunction with the eager transaction GC path can lead to transaction entries being recreated in the wrong status.
 
-For example, take an *implicitly committed* transaction. While a status resolution is in process and has failed to prevent any of the intents, a concurrent writer discovers one of the intents and prepares to push the transaction. Before it does that, the status resolution succeeds, the transaction is committed, the intents resolved, and the transaction record removed. When the push is invoked, it recreates the transaction record as `ABORTED`. This is not an anomaly because the intent is at this point already committed, but it invites follow-up anomalies if the writer is actually the transaction itself and it uses it to determine that it can avoid an ambiguous result (see a later section).
+For example, take an *implicitly committed* transaction. While a status resolution is in process and has failed to prevent any of the intents, a concurrent writer discovers one of the intents and prepares to push the transaction. Before it does that, the status resolution succeeds, the transaction is committed, the intents resolved, and the transaction record removed. When the push is invoked, it recreates the transaction record as `ABORTED`. This is not an anomaly because the intent is at this point already committed, but it's on dangerously thin ice because the aborter is now likely to assume that they have actually aborted the competing transaction. In the [improving ambiguous results][#improving-ambiguous-results] section, a transaction tries to abort its own record to avoid having to return an ambiguous result to the SQL client. With the above race, it could erroneously return a transaction aborted error even though the transaction actually committed.
 
-The same race is already present in today's code, though the eager GC path is only invoked by the client itself and so that last point is less of an issue. Since the status resolution process is rare, it could simply not invoke the eager GC path. This does not preclude the race, but requires the slow GC path to participate, in which the race is present today as well. However, it's equally possible to make the "ambiguous result avoidance logic" a little more complicated to deal with this properly.
+This kind of race is already present in today's code, though only the txn coordinator itself will invoke `EndTransaction`, and so the ambiguous commit scenario is less of an issue. Since the status resolution process is rare, it could simply not invoke the eager GC path. This does not preclude the race, but requires the slow GC to participate, in which the race is present today as well. However, it's equally possible to make the "ambiguous result avoidance logic" a little more complicated to deal with this properly.
 
 #### Examples
 
@@ -306,23 +312,23 @@ Assume that the transaction promised writes at `k1`, `k2`, and `k3` and is ancho
 ##### Missing intent (at k2)
 
 ```
-PreventIntent(k1, t1)     no|Abort(k1, t1) ok GC(k1) ok
-PreventIntent(k2, t1)   yes |
-PreventIntent(k3, t1)  no   |
+PreventIntent(k1, t1)      found|Abort(k1, t1) ok GC(k1) ok
+PreventIntent(k2, t1) prevented |
+PreventIntent(k3, t1)  found    |
 ```
 
 ##### Missing intent racing with restart
 
-An intent at t1 is prevented, but before the transaction record can be aborted, the transaction restarts and manages to (implicitly) commit. As the abort fails, the resolution process observes a transaction record with new activity and waits, observing the commit shortly thereafter. Note that the transaction would be heartbeat throughout this process, so that status resolution would not be kicked off in the first place.
+An intent at t1 is prevented, but before the transaction record can be aborted, the transaction restarts and manages to (implicitly) commit. As the abort fails, the resolution process observes a transaction record with new activity and waits, observing the commit shortly thereafter. Note that the transaction would be heartbeat throughout this process, so that status resolution would not be kicked off in the first place under normal conditions.
 
 ```
-PreventIntent(k1, t1)     no| Write(k1, t2)          ok     |
-PreventIntent(k2, t1)   yes |{Write,Stage}(k2, t2) ok|      |Commit(k1) ok GC(k1) ok
-PreventIntent(k3, t1)  no   | Write(k3, t2)          |    ok|
-                            |Abort(k1, t1)           |fail  |Wait       ok
-                                                                    ↑
-                                          sees either no txn record or committed
-                                          one; either way, not `STAGED` any more
+PreventIntent(k1, t1)  found  | Write(k1, t2)          ok     |
+PreventIntent(k2, t1)prevented|{Write,Stage}(k2, t2) ok|      |Commit(k2) ok GC(k2) ok
+PreventIntent(k3, t1)  found  | Write(k3, t2)          |    ok|
+                              |Abort(k1, t1)           |fail  |Wait       ok
+                                                                 ↑
+                                            sees either no txn record or committed
+                                            one; either way, not `STAGED` any more
 ```
 
 In the other scenario, the abort would have beaten the `Stage(k2)` and the transaction would be aborted.
@@ -334,8 +340,8 @@ Status resolution only writes a single key (the transaction record) and does so 
 In the history below, two status resolutions race so that the second `PreventIntent` sees the commit version (and concludes that it has prevented the write). As it tries to update the transaction record, it fails and realizes that the transaction is now committed.
 
 ```
-PreventIntent(k1, t1) no Commit(k1, t1) Resolve(k1)ok|
-PreventIntent'(k1,t2)                                |no Abort(k1, t1) fail
+PreventIntent(k1, t1) found Commit(k1, t1) Resolve(k1)ok|
+PreventIntent'(k1,t1)                                   |prevented Abort(k1, t1) fail
 ```
 
 ### Performance Implications
