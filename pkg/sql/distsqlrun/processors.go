@@ -349,6 +349,15 @@ func (h *ProcOutputHelper) ProcessRow(
 	return outRow, NeedMoreRows, nil
 }
 
+// LimitSatisfied returns true if sufficient rows have been processed (and have
+// passed the filter).
+//
+// TODO(andrei): This method should go away once we make ProcessRow able to
+// return a row and a status at the same time.
+func (h *ProcOutputHelper) LimitSatisfied() bool {
+	return h.rowIdx >= h.maxRowIdx
+}
+
 // Close signals to the output that there will be no more rows.
 func (h *ProcOutputHelper) Close() {
 	h.output.ProducerDone()
