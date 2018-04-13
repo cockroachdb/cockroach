@@ -23,7 +23,7 @@ SELECT * FROM a WHERE x > 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -37,7 +37,7 @@ SELECT * FROM a WHERE x >= 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -51,7 +51,7 @@ SELECT * FROM a WHERE x < 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -65,7 +65,7 @@ SELECT * FROM a WHERE x <= 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -79,7 +79,7 @@ SELECT * FROM a WHERE x = 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -93,7 +93,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -110,7 +110,7 @@ SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=111, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -127,7 +127,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=111, distinct(1)=3, distinct(2)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -151,7 +151,7 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -173,7 +173,7 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -198,7 +198,7 @@ SELECT * FROM a WHERE x > 1.5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -212,7 +212,7 @@ SELECT * FROM kuv WHERE u > 1::INT
 ----
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan kuv
  │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
@@ -228,7 +228,7 @@ SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
 ----
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan kuv
  │    ├── columns: kuv.k:1(int!null) kuv.u:2(float) kuv.v:3(string)
@@ -248,7 +248,7 @@ SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -267,7 +267,7 @@ SELECT * FROM a WHERE x IN (NULL)
 scan a
  ├── columns: x:1(int) y:2(int)
  ├── constraint: /3: contradiction
- └── stats: [rows=100]
+ └── stats: [rows=333]
 
 # Test IN in combination with another condition on the same column (which rules
 # out some of the entries in the IN condition).
@@ -276,7 +276,7 @@ SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333, distinct(1)=2]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -299,7 +299,7 @@ SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=111, distinct(1)=2]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -319,7 +319,7 @@ SELECT * FROM a WHERE (x, y) > (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -337,7 +337,7 @@ SELECT * FROM a WHERE (x, y) >= (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -355,7 +355,7 @@ SELECT * FROM a WHERE (x, y) < (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -373,7 +373,7 @@ SELECT * FROM a WHERE (x, y) <= (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -392,7 +392,7 @@ SELECT * FROM a WHERE (x, y) >= (1, 2.5)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -411,7 +411,7 @@ SELECT * FROM a WHERE (x, y) >= (1, NULL)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
@@ -431,7 +431,7 @@ SELECT * FROM a WHERE (x, 1) >= (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
  │    └── stats: [rows=1000]
