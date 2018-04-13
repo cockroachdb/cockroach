@@ -198,6 +198,13 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
+		// Check whether calling input.Next() is necessary. Nobody else does this,
+		// but in the case of the TableReader calling Next() on a RowFetcher and one
+		// too many times and causing it run do another Scan is real bad.
+		if tr.out.LimitSatisfied() {
+			return nil, tr.producerMeta(nil /* err */)
+		}
+
 		var row sqlbase.EncDatumRow
 		var err error
 		row, _, _, err = tr.fetcher.NextRow(tr.ctx)
