@@ -161,7 +161,7 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// String values that are neither timestamps nor decimals are an error.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 'xxx'"); !testutils.IsError(err, "value is neither timestamp nor decimal") {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 'xxx'"); !testutils.IsError(err, "value is neither timestamp, decimal, nor interval") {
 		t.Fatal(err)
 	}
 
