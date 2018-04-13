@@ -17,8 +17,11 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"testing"
+
+	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestTableReader(t *testing.T) {
@@ -277,6 +281,98 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 				t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
 			}
 		})
+	}
+}
+
+// Test that a scan with a limit doesn't touch more ranges than necessary (i.e.
+// we properly set the limit on the underlying RowFetcher/KVFetcher).
+func TestLimitScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "test",
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(t, sqlDB, "t",
+		"num INT PRIMARY KEY",
+		100, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	if _, err := sqlDB.Exec("ALTER TABLE t SPLIT AT VALUES (5)"); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		EvalCtx:  evalCtx,
+		Settings: s.ClusterSettings(),
+		txn:      client.NewTxn(kvDB, s.NodeID(), client.RootTxn),
+		nodeID:   s.NodeID(),
+	}
+	spec := TableReaderSpec{
+		Table: *tableDesc,
+		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+	}
+	// We're going to ask for 3 rows, all contained in the first range.
+	post := PostProcessSpec{Limit: 3}
+
+	tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now we're going to run the tableReader and trace it.
+	tracer := tracing.NewTracer()
+	sp := tracer.StartSpan("root", tracing.Recordable)
+	tracing.StartRecording(sp, tracing.SnowballRecording)
+	flowCtx.Ctx = opentracing.ContextWithSpan(context.Background(), sp)
+
+	rows := 0
+	for {
+		row, meta := tr.Next()
+		if row != nil {
+			rows++
+		}
+
+		// Simulate what the DistSQLReceiver does and ingest the trace.
+		if meta != nil && len(meta.TraceData) > 0 {
+			if err := tracing.ImportRemoteSpans(sp, meta.TraceData); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if row == nil && meta == nil {
+			break
+		}
+	}
+	if rows != 3 {
+		t.Fatalf("expected 3 rows, got: %d", rows)
+	}
+
+	// We're now going to count how many distinct scans we've done. This regex is
+	// specific so that we don't count range resolving requests, and we dedupe
+	// scans from the same key as the DistSender retries scans when it detects
+	// splits.
+	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.ID))
+	spans := tracing.GetRecording(sp)
+	ranges := make(map[string]struct{})
+	for _, span := range spans {
+		for _, l := range span.Logs {
+			for _, f := range l.Fields {
+				match := re.FindStringSubmatch(f.Value)
+				if match == nil {
+					continue
+				}
+				ranges[match[1]] = struct{}{}
+			}
+		}
+	}
+	if len(ranges) != 1 {
+		t.Fatalf("expected one ranges scanned, got: %d (%+v)", len(ranges), ranges)
 	}
 }
 
