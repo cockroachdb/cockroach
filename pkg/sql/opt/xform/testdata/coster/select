@@ -14,7 +14,7 @@ SELECT k, s FROM a WHERE s >= 'foo'
 ----
 select
  ├── columns: k:1(int!null) s:3(string)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── cost: 1100.00
  ├── keys: (1)
  ├── scan a
