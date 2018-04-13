@@ -1,49 +1,49 @@
-# Tests that verify we retrieve the stats correctly.
+# # Tests that verify we retrieve the stats correctly.
 
-exec-raw
-CREATE DATABASE t
-----
+# exec-raw
+# CREATE DATABASE t
+# ----
 
-exec-raw
-CREATE TABLE t.a (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
-INSERT INTO t.a VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
-----
+# exec-raw
+# CREATE TABLE t.a (u INT, v INT, INDEX (u) STORING (v), INDEX (v) STORING (u));
+# INSERT INTO t.a VALUES (1, 1), (1, 2), (1, 3), (1, 4), (2, 4), (2, 5), (2, 6), (2, 7)
+# ----
 
-build
-SELECT * FROM t.a
-----
-project
- ├── columns: u:1(int) v:2(int)
- ├── stats: [rows=1000]
- ├── cost: 1000.00
- ├── scan a
- │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
- │    ├── stats: [rows=1000]
- │    ├── cost: 1000.00
- │    └── keys: (3)
- └── projections [outer=(1,2)]
-      ├── variable: a.u [type=int, outer=(1)]
-      └── variable: a.v [type=int, outer=(2)]
+# build
+# SELECT * FROM t.a
+# ----
+# project
+#  ├── columns: u:1(int) v:2(int)
+#  ├── stats: [rows=1000]
+#  ├── cost: 1000.00
+#  ├── scan a
+#  │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
+#  │    ├── stats: [rows=1000]
+#  │    ├── cost: 1000.00
+#  │    └── keys: (3)
+#  └── projections [outer=(1,2)]
+#       ├── variable: a.u [type=int, outer=(1)]
+#       └── variable: a.v [type=int, outer=(2)]
 
-exec-raw
-CREATE STATISTICS u ON u FROM t.a
-----
+# exec-raw
+# CREATE STATISTICS u ON u FROM t.a
+# ----
 
-build
-SELECT * FROM t.a
-----
-project
- ├── columns: u:1(int) v:2(int)
- ├── stats: [rows=8]
- ├── cost: 8.00
- ├── scan a
- │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
- │    ├── stats: [rows=8]
- │    ├── cost: 8.00
- │    └── keys: (3)
- └── projections [outer=(1,2)]
-      ├── variable: a.u [type=int, outer=(1)]
-      └── variable: a.v [type=int, outer=(2)]
+# build
+# SELECT * FROM t.a
+# ----
+# project
+#  ├── columns: u:1(int) v:2(int)
+#  ├── stats: [rows=8]
+#  ├── cost: 8.00
+#  ├── scan a
+#  │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
+#  │    ├── stats: [rows=8]
+#  │    ├── cost: 8.00
+#  │    └── keys: (3)
+#  └── projections [outer=(1,2)]
+#       ├── variable: a.u [type=int, outer=(1)]
+#       └── variable: a.v [type=int, outer=(2)]
 
-# TODO(radu): once we use cardinality, verify we choose the index with the
-# smaller cardinality (for a WHERE condition on both columns).
+# # TODO(radu): once we use cardinality, verify we choose the index with the
+# # smaller cardinality (for a WHERE condition on both columns).
