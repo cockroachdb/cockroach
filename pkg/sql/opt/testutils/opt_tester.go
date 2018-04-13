@@ -69,6 +69,10 @@ type OptTesterFlags struct {
 	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
 	// the old planning code.
 	AllowUnsupportedExpr bool
+
+	// RawMemo if set: when displaying a memo, won't attempt to hide unimportant
+	// groups or reorder the groups.
+	RawMemo bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -197,6 +201,9 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 	case "allow-unsupported":
 		f.AllowUnsupportedExpr = true
 
+	case "raw-memo":
+		f.RawMemo = true
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
 	}
@@ -226,7 +233,20 @@ func (e *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	o.Optimize(root, required)
-	return fmt.Sprintf("[%d: \"%s\"]\n%s", root, required, o.Memo().String()), nil
+	if e.Flags.RawMemo {
+		return fmt.Sprintf(
+			"root: G%d, %s\n%s",
+			root,
+			required,
+			o.Memo().FormatString(0),
+		), nil
+	}
+
+	return fmt.Sprintf(
+		"%s\n%s",
+		required,
+		o.Memo().FormatString(root),
+	), nil
 }
 
 // OptSteps returns a string that shows each optimization step using the
