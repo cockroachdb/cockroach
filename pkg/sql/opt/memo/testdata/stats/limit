@@ -1,0 +1,95 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["s","y"],
+    "created_at": "2018-01-01 1:40:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  }
+]'
+----
+
+build
+SELECT * FROM a WHERE s = 'foo' LIMIT 5
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=5, distinct(1)=5, distinct(3)=1, distinct(1,2)=5, distinct(2,3)=5]
+ ├── keys: (1) weak(3,4)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(1,2)=200, distinct(2,3)=87]
+ │    ├── keys: (1) weak(3,4)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, distinct(3)=10, distinct(1,2)=2000, distinct(2,3)=100]
+ │    │    └── keys: (1) weak(3,4)
+ │    └── eq [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
+ │         ├── variable: a.s [type=string, outer=(3)]
+ │         └── const: 'foo' [type=string]
+ └── const: 5 [type=int]
+
+build
+SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5)
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(1,2)=200, distinct(2,3)=87]
+ ├── keys: (1) weak(3,4)
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(1,2)=200, distinct(2,3)=87]
+ │    ├── keys: (1) weak(3,4)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, distinct(3)=10, distinct(1,2)=2000, distinct(2,3)=100]
+ │    │    └── keys: (1) weak(3,4)
+ │    └── eq [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
+ │         ├── variable: a.s [type=string, outer=(3)]
+ │         └── const: 'foo' [type=string]
+ └── subquery [type=int, outer=(5)]
+      ├── max1-row
+      │    ├── columns: column5:5(int)
+      │    ├── stats: [rows=1]
+      │    └── project
+      │         ├── columns: column5:5(int)
+      │         ├── stats: [rows=1]
+      │         ├── values
+      │         │    ├── stats: [rows=1]
+      │         │    └── tuple [type=tuple{}]
+      │         └── projections
+      │              └── const: 5 [type=int]
+      └── variable: column5 [type=int, outer=(5)]
