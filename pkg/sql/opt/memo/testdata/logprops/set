@@ -47,7 +47,7 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
  ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
- ├── stats: [rows=550]
+ ├── stats: [rows=100]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]
@@ -86,7 +86,7 @@ except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
  ├── right columns: b.x:3(int) b.z:4(int) b.z:4(int)
- ├── stats: [rows=550]
+ ├── stats: [rows=1000]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    ├── stats: [rows=1000]

@@ -1,0 +1,71 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["s","y"],
+    "created_at": "2018-01-01 1:40:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  }
+]'
+----
+
+build
+SELECT x FROM a
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=2000, distinct(1)=2000]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── stats: [rows=2000, distinct(1)=2000, distinct(3)=10, distinct(1,2)=2000, distinct(2,3)=100]
+ │    └── keys: (1) weak(3,4)
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+build
+SELECT y, s FROM a
+----
+project
+ ├── columns: y:2(int) s:3(string)
+ ├── stats: [rows=2000, distinct(3)=10, distinct(2,3)=100]
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── stats: [rows=2000, distinct(1)=2000, distinct(3)=10, distinct(1,2)=2000, distinct(2,3)=100]
+ │    └── keys: (1) weak(3,4)
+ └── projections [outer=(2,3)]
+      ├── variable: a.y [type=int, outer=(2)]
+      └── variable: a.s [type=string, outer=(3)]
