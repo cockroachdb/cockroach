@@ -200,7 +200,7 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		// If stats have been collected, output a summary to the trace.
 		if len(tr.stats) != 0 {
 			for _, stat := range tr.stats {
-				log.Info(tr.ctx, stat.SummarizeStats())
+				log.VEventf(tr.ctx, 2, stat.SummarizeStats())
 			}
 		}
 		traceData := getTraceData(tr.ctx)
