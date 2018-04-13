@@ -1176,12 +1176,12 @@ SET SEARCH_PATH=test,pg_catalog
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
-{"test","pg_catalog"}
+{"pg_catalog"}
 
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{"test","pg_catalog"}
+{"pg_catalog"}
 
 statement ok
 RESET SEARCH_PATH
