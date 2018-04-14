@@ -1315,6 +1315,9 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 
 func TestAdminAPIReplicaMatrix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("#24802")
+
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
