@@ -39,7 +39,7 @@ func XHTMLtoHTML(r io.Reader) (string, error) {
 		t := z.Token()
 		switch t.Type {
 		case html.StartTagToken, html.EndTagToken, html.SelfClosingTagToken:
-			idx := strings.Index(t.Data, ":")
+			idx := strings.IndexByte(t.Data, ':')
 			t.Data = t.Data[idx+1:]
 		}
 		var na []html.Attribute

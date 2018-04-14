@@ -145,7 +145,7 @@ func init() {
 // shortHostname returns its argument, truncating at the first period.
 // For instance, given "www.google.com" it returns "www".
 func shortHostname(hostname string) string {
-	if i := strings.Index(hostname, "."); i >= 0 {
+	if i := strings.IndexByte(hostname, '.'); i >= 0 {
 		return hostname[:i]
 	}
 	return hostname

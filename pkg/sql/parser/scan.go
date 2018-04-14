@@ -174,7 +174,7 @@ func (s *Scanner) Error(e string) {
 	}
 	// Find the beginning of the line containing the last token. Note that
 	// LastIndex returns -1 if "\n" could not be found.
-	j := strings.LastIndex(s.in[:s.lastTok.pos], "\n") + 1
+	j := strings.LastIndexByte(s.in[:s.lastTok.pos], '\n') + 1
 	// Output everything up to and including the line containing the last token.
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "source SQL:\n%s\n", s.in[:i])
