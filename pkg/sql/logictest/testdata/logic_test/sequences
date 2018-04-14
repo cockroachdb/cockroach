@@ -118,11 +118,11 @@ CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
 statement ok
 CREATE SEQUENCE show_create_test
 
-query ITTITTTT colnames
+query ITTITTTTTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state
-50           test           public       64             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state   create_nofks                                                                                  alter_statements  validate_statements
+50           test           public       64             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  {}                {}
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test

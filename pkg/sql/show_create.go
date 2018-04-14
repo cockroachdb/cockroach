@@ -185,6 +185,7 @@ func (p *planner) showCreateTable(
 	dbPrefix string,
 	desc *sqlbase.TableDescriptor,
 	lCtx *internalLookupCtx,
+	ignoreFKs bool,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -214,7 +215,7 @@ func (p *planner) showCreateTable(
 	allIdx := append(desc.Indexes, desc.PrimaryIndex)
 	for i := range allIdx {
 		idx := &allIdx[i]
-		if fk := &idx.ForeignKey; fk.IsSet() {
+		if fk := &idx.ForeignKey; fk.IsSet() && !ignoreFKs {
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")

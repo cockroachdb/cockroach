@@ -902,14 +902,17 @@ CREATE TABLE crdb_internal.builtin_functions (
 var crdbInternalCreateStmtsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.create_statements (
-  database_id      INT,
-  database_name    STRING,
-  schema_name      STRING NOT NULL,
-  descriptor_id    INT,
-  descriptor_type  STRING NOT NULL,
-  descriptor_name  STRING NOT NULL,
-  create_statement STRING NOT NULL,
-  state            STRING NOT NULL
+  database_id         INT,
+  database_name       STRING,
+  schema_name         STRING NOT NULL,
+  descriptor_id       INT,
+  descriptor_type     STRING NOT NULL,
+  descriptor_name     STRING NOT NULL,
+  create_statement    STRING NOT NULL,
+  state               STRING NOT NULL,
+  create_nofks        STRING NOT NULL,
+  alter_statements    STRING[] NOT NULL,
+  validate_statements STRING[] NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -932,7 +935,9 @@ CREATE TABLE crdb_internal.create_statements (
 				scNameStr := tree.NewDString(scName)
 
 				var descType tree.Datum
-				var stmt string
+				var stmt, createNofk string
+				alterStmts := tree.NewDArray(types.String)
+				validateStmts := tree.NewDArray(types.String)
 				var err error
 				if table.IsView() {
 					descType = typeView
@@ -942,7 +947,40 @@ CREATE TABLE crdb_internal.create_statements (
 					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = typeTable
-					stmt, err = p.showCreateTable(ctx, (*tree.Name)(&table.Name), contextName, table, lCtx)
+					tn := (*tree.Name)(&table.Name)
+					createNofk, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					if err != nil {
+						return err
+					}
+					allIdx := append(table.Indexes, table.PrimaryIndex)
+					for i := range allIdx {
+						idx := &allIdx[i]
+						if fk := &idx.ForeignKey; fk.IsSet() {
+							f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+							f.WriteString("ALTER TABLE ")
+							f.FormatNode(tn)
+							f.WriteString(" ADD CONSTRAINT ")
+							f.FormatNameP(&fk.Name)
+							f.WriteByte(' ')
+							if err := p.printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
+								return err
+							}
+							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+								return err
+							}
+
+							f = tree.NewFmtCtxWithBuf(tree.FmtSimple)
+							f.WriteString("ALTER TABLE ")
+							f.FormatNode(tn)
+							f.WriteString(" VALIDATE CONSTRAINT ")
+							f.FormatNameP(&fk.Name)
+
+							if err := validateStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
+								return err
+							}
+						}
+					}
+					stmt, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
 				}
 				if err != nil {
 					return err
@@ -956,6 +994,9 @@ CREATE TABLE crdb_internal.create_statements (
 				if table.GetParentID() != keys.VirtualDescriptorID {
 					dbDescID = tree.NewDInt(tree.DInt(table.GetParentID()))
 				}
+				if createNofk == "" {
+					createNofk = stmt
+				}
 				return addRow(
 					dbDescID,
 					parentNameStr,
@@ -965,6 +1006,9 @@ CREATE TABLE crdb_internal.create_statements (
 					tree.NewDString(table.Name),
 					tree.NewDString(stmt),
 					tree.NewDString(table.State.String()),
+					tree.NewDString(createNofk),
+					alterStmts,
+					validateStmts,
 				)
 			})
 	},
