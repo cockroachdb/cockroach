@@ -70,6 +70,12 @@ func makeMemoGroup(id GroupID, norm Expr) group {
 	return group{id: id, normExpr: norm}
 }
 
+// isScalarGroup returns true if this group contains scalar expressions and not
+// relational expressions.
+func (g *group) isScalarGroup() bool {
+	return isScalarLookup[g.normExpr.op]
+}
+
 // exprCount returns the number of logically-equivalent expressions in the
 // group.
 func (g *group) exprCount() int {

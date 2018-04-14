@@ -186,24 +186,29 @@ project
 memo
 SELECT y, x-1 FROM a WHERE x>y ORDER BY x, y DESC
 ----
-[presentation: y:2,column5:5] [ordering: +1,-2]
-memo
+memo (optimized)
  ├── G1: (project G2 G3)
- │    ├── "" [cost=1100.00]
- │    │    └── best: (project G2 G3)
- │    └── "[presentation: y:2,column5:5] [ordering: +1,-2]" [cost=1100.00]
- │         └── best: (project G2="o:+1,-2" G3)
+ │    ├── "[presentation: y:2,column5:5] [ordering: +1,-2]"
+ │    │    ├── best: (project G2="[ordering: +1,-2]" G3)
+ │    │    └── cost: 1100.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1100.00
  ├── G2: (select G4 G5)
- │    ├── "" [cost=1100.00]
- │    │    └── best: (select G4 G5)
- │    └── "[ordering: +1,-2]" [cost=1100.00]
- │         └── best: (select G4="o:+1,-2" G5)
+ │    ├── ""
+ │    │    ├── best: (select G4 G5)
+ │    │    └── cost: 1100.00
+ │    └── "[ordering: +1,-2]"
+ │         ├── best: (select G4="[ordering: +1,-2]" G5)
+ │         └── cost: 1100.00
  ├── G3: (projections G10 G6 G9)
  ├── G4: (scan a)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "[ordering: +1,-2]" [cost=1000.00]
- │         └── best: (scan a)
+ │    ├── ""
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +1,-2]"
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
  ├── G5: (filters G7)
  ├── G6: (minus G9 G8)
  ├── G7: (gt G9 G10)
@@ -235,24 +240,29 @@ sort
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-[presentation: y:2,z:3] [ordering: +2]
-memo
+memo (optimized)
  ├── G1: (project G2 G3)
- │    ├── "" [cost=1100.00]
- │    │    └── best: (project G2 G3)
- │    └── "[presentation: y:2,z:3] [ordering: +2]" [cost=1125.00]
- │         └── best: (sort G1)
+ │    ├── "[presentation: y:2,z:3] [ordering: +2]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1125.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1100.00
  ├── G2: (select G4 G5)
- │    ├── "" [cost=1100.00]
- │    │    └── best: (select G4 G5)
- │    └── "[ordering: +2]" [cost=1125.00]
- │         └── best: (sort G2)
+ │    ├── ""
+ │    │    ├── best: (select G4 G5)
+ │    │    └── cost: 1100.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G2)
+ │         └── cost: 1125.00
  ├── G3: (projections G9 G6)
  ├── G4: (scan a)
- │    ├── "" [cost=1000.00]
- │    │    └── best: (scan a)
- │    └── "[ordering: +2]" [cost=1250.00]
- │         └── best: (sort G4)
+ │    ├── ""
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G4)
+ │         └── cost: 1250.00
  ├── G5: (filters G7)
  ├── G6: (variable a.z)
  ├── G7: (gt G8 G9)

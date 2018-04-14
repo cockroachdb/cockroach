@@ -60,19 +60,18 @@ type OptTester struct {
 // OptTesterFlags are control knobs for tests. Note that specific testcases can
 // override these defaults.
 type OptTesterFlags struct {
-	// Format controls the output detail of build / opt/ optsteps
+	// Format controls the output detail of build / opt/ optsteps command
 	// directives.
-	Format memo.ExprFmtFlags
+	ExprFormat memo.ExprFmtFlags
+
+	// MemoFormat controls the output detail of memo command directives.
+	MemoFormat memo.FmtFlags
 
 	// AllowUnsupportedExpr if set: when building a scalar, the optbuilder takes
 	// any TypedExpr node that it doesn't recognize and wraps that expression in
 	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
 	// the old planning code.
 	AllowUnsupportedExpr bool
-
-	// RawMemo if set: when displaying a memo, won't attempt to hide unimportant
-	// groups or reorder the groups.
-	RawMemo bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -145,14 +144,14 @@ func (e *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err != nil {
 			return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 		}
-		return ev.FormatString(e.Flags.Format)
+		return ev.FormatString(e.Flags.ExprFormat)
 
 	case "opt":
 		ev, err := e.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		return ev.FormatString(e.Flags.Format)
+		return ev.FormatString(e.Flags.ExprFormat)
 
 	case "optsteps":
 		result, err := e.OptSteps(testing.Verbose())
@@ -179,7 +178,7 @@ func (e *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 	switch arg.Key {
 	case "format":
-		f.Format = 0
+		f.ExprFormat = 0
 		if len(arg.Vals) == 0 {
 			return fmt.Errorf("format flag requires value(s)")
 		}
@@ -192,7 +191,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 				"hide-constraints": memo.ExprFmtHideConstraints,
 			}
 			if val, ok := m[v]; ok {
-				f.Format |= val
+				f.ExprFormat |= val
 			} else {
 				return fmt.Errorf("unknown format value %s", v)
 			}
@@ -202,7 +201,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 		f.AllowUnsupportedExpr = true
 
 	case "raw-memo":
-		f.RawMemo = true
+		f.MemoFormat = memo.FmtRaw
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -233,20 +232,7 @@ func (e *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	o.Optimize(root, required)
-	if e.Flags.RawMemo {
-		return fmt.Sprintf(
-			"root: G%d, %s\n%s",
-			root,
-			required,
-			o.Memo().FormatString(0),
-		), nil
-	}
-
-	return fmt.Sprintf(
-		"%s\n%s",
-		required,
-		o.Memo().FormatString(root),
-	), nil
+	return o.Memo().FormatString(e.Flags.MemoFormat), nil
 }
 
 // OptSteps returns a string that shows each optimization step using the
@@ -291,7 +277,7 @@ func (e *OptTester) OptSteps(verbose bool) (string, error) {
 			return "", err
 		}
 
-		next = o.Optimize(root, required).FormatString(e.Flags.Format)
+		next = o.Optimize(root, required).FormatString(e.Flags.ExprFormat)
 		if steps != 0 {
 			// All steps were not used, so must be done.
 			break
