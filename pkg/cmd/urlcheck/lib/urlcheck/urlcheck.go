@@ -197,7 +197,7 @@ func getURLs(filter stream.Filter) (map[string][]string, error) {
 			// Remove punctuation after the URL.
 			match = strings.TrimRight(match, ".,;\\\">`]")
 			// Remove the HTML target.
-			n := strings.LastIndex(match, "#")
+			n := strings.LastIndexByte(match, '#')
 			if n != -1 {
 				match = match[:n]
 			}
