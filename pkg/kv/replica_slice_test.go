@@ -72,7 +72,7 @@ func addr(nid roachpb.NodeID, sid roachpb.StoreID) util.UnresolvedAddr {
 func locality(t *testing.T, locStrs []string) roachpb.Locality {
 	var locality roachpb.Locality
 	for _, l := range locStrs {
-		idx := strings.Index(l, "=")
+		idx := strings.IndexByte(l, '=')
 		if idx == -1 {
 			t.Fatalf("locality %s not specified as <key>=<value>", l)
 		}

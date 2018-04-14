@@ -217,7 +217,7 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 			return
 		}
 	}
-	slashPos := strings.Index(input[1:], "/")
+	slashPos := strings.IndexByte(input[1:], '/')
 	if slashPos < 0 {
 		slashPos = len(input)
 	}
@@ -270,7 +270,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	var rangeID int64
 	var err error
 	input = mustShiftSlash(input)
-	if endPos := strings.Index(input, "/"); endPos > 0 {
+	if endPos := strings.IndexByte(input, '/'); endPos > 0 {
 		rangeID, err = strconv.ParseInt(input[:endPos], 10, 64)
 		if err != nil {
 			panic(err)
