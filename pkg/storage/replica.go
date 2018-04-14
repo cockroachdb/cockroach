@@ -32,7 +32,7 @@ import (
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
