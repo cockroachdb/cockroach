@@ -783,6 +783,24 @@ func TestAdminAPIEvents(t *testing.T) {
 	}
 }
 
+func TestAdminAPIDiagsnotics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	var resp serverpb.DiagnosticsResponse
+	if err := getAdminJSONProto(s, "diagnostics", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// The endpoint just serializes result of getReportingInfo() which is already
+	// tested elsewhere, so simply verify that we have a non-empty reply.
+	if expected, actual := s.NodeID(), resp.Report.Node.NodeID; expected != actual {
+		t.Fatalf("expected %v got %v", expected, actual)
+	}
+}
+
 func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
