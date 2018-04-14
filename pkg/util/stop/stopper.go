@@ -23,13 +23,14 @@ import (
 	"strings"
 	"sync"
 
+	opentracing "github.com/opentracing/opentracing-go"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 const asyncTaskNamePrefix = "[async] "

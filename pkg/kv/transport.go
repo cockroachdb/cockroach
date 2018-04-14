@@ -21,6 +21,9 @@ import (
 	"sync"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -29,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
