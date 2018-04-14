@@ -31,6 +31,7 @@ type exprFormatter struct {
 
 type memoFormatter struct {
 	exprFormatter
+	flags     FmtFlags
 	ordering  []GroupID
 	numbering []GroupID
 }
@@ -42,41 +43,45 @@ func (m *Memo) makeExprFormatter(buf *bytes.Buffer) exprFormatter {
 	}
 }
 
-func (m *Memo) makeMemoFormatter(root GroupID) memoFormatter {
-	f := memoFormatter{
+func (m *Memo) makeMemoFormatter(flags FmtFlags) memoFormatter {
+	return memoFormatter{
 		exprFormatter: exprFormatter{
 			mem: m,
 			buf: &bytes.Buffer{},
 		},
+		flags: flags,
 	}
+}
 
-	// If a root was specified, we topological sort from it.  Otherwise, we
-	// simply print out all the groups in the order and with the names they're
-	// referred to physically. We can do this because the GroupID 0 never refers
-	// to a valid group.
-	if root != 0 {
-		f.ordering = f.sortGroups(root)
-	} else {
+func (f *memoFormatter) format() string {
+	// If requested, we topological sort the memo with respect to its root group.
+	// Otherwise, we simply print out all the groups in the order and with the
+	// names they're referred to physically.
+	if f.flags.HasFlags(FmtRaw) || !f.mem.isOptimized() {
 		// In this case we renumber with the identity mapping, so the groups have
 		// the same numbers as they're represented with internally.
-		f.ordering = make([]GroupID, len(m.groups)-1)
-		for i := range m.groups[1:] {
+		f.ordering = make([]GroupID, len(f.mem.groups)-1)
+		for i := range f.mem.groups[1:] {
 			f.ordering[i] = GroupID(i + 1)
 		}
+	} else {
+		f.ordering = f.sortGroups(f.mem.root.group)
 	}
 
 	// We renumber the groups so that they're still printed in order from 1..N.
-	f.numbering = make([]GroupID, len(m.groups))
+	f.numbering = make([]GroupID, len(f.mem.groups))
 	for i := range f.ordering {
 		f.numbering[f.ordering[i]] = GroupID(i + 1)
 	}
 
-	return f
-}
-
-func (f memoFormatter) Format() string {
 	tp := treeprinter.New()
-	root := tp.Child("memo")
+
+	var root treeprinter.Node
+	if f.mem.isOptimized() {
+		root = tp.Child("memo (optimized)")
+	} else {
+		root = tp.Child("memo (not optimized)")
+	}
 
 	for i := range f.ordering {
 		mgrp := &f.mem.groups[f.ordering[i]]
@@ -92,6 +97,12 @@ func (f memoFormatter) Format() string {
 		f.formatBestExprSet(child, mgrp)
 	}
 
+	// If showing raw memo, then add header text to point to root expression if
+	// it's available.
+	if f.flags.HasFlags(FmtRaw) && f.mem.isOptimized() {
+		ev := f.mem.Root()
+		return fmt.Sprintf("root: G%d, %s\n%s", f.numbering[ev.Group()], ev.Physical(), tp.String())
+	}
 	return tp.String()
 }
 
@@ -111,8 +122,19 @@ type bestExprSort struct {
 }
 
 func (f *memoFormatter) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
-	// Sort the bestExprs by required properties.
+	// Don't show best expressions for scalar groups because they're not too
+	// interesting.
+	if mgrp.isScalarGroup() {
+		return
+	}
+
 	cnt := mgrp.bestExprCount()
+	if cnt == 0 {
+		// No best expressions to show.
+		return
+	}
+
+	// Sort the bestExprs by required properties.
 	beSort := make([]bestExprSort, 0, cnt)
 	for i := 0; i < cnt; i++ {
 		best := mgrp.bestExpr(bestOrdinal(i))
@@ -124,19 +146,21 @@ func (f *memoFormatter) formatBestExprSet(tp treeprinter.Node, mgrp *group) {
 	}
 
 	sort.Slice(beSort, func(i, j int) bool {
+		// Always order the root required properties first.
+		if mgrp.id == f.mem.root.group {
+			if beSort[i].required == beSort[i].best.required {
+				return true
+			}
+		}
 		return strings.Compare(beSort[i].display, beSort[j].display) < 0
 	})
 
 	for _, sort := range beSort {
 		f.buf.Reset()
-
-		// Don't show best expressions for scalar groups because they're not too
-		// interesting.
-		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=%.2f]", sort.display, sort.best.cost)
-			f.formatBestExpr(sort.best)
-			child.Childf("best: %s", f.buf.String())
-		}
+		child := tp.Childf("\"%s\"", sort.display)
+		f.formatBestExpr(sort.best)
+		child.Childf("best: %s", f.buf.String())
+		child.Childf("cost: %.2f", sort.best.cost)
 	}
 }
 
@@ -150,7 +174,7 @@ func (f *memoFormatter) formatBestExpr(be *BestExpr) {
 		// Print properties required of the child if they are interesting.
 		required := f.mem.bestExpr(bestChild).required
 		if required != MinPhysPropsID {
-			fmt.Fprintf(f.buf, "=\"%s\"", f.mem.LookupPhysicalProps(required).Fingerprint())
+			fmt.Fprintf(f.buf, "=\"%s\"", f.mem.LookupPhysicalProps(required).String())
 		}
 	}
 
@@ -158,48 +182,8 @@ func (f *memoFormatter) formatBestExpr(be *BestExpr) {
 	f.buf.WriteString(")")
 }
 
-func (f *exprFormatter) formatPrivate(private interface{}) {
-	if private != nil {
-		switch t := private.(type) {
-		case nil:
-
-		case *ScanOpDef:
-			f.formatScanPrivate(t, false /* short */)
-
-		case opt.ColumnID:
-			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
-
-		case opt.ColSet, opt.ColList:
-			// Don't show anything, because it's mostly redundant.
-
-		default:
-			fmt.Fprintf(f.buf, " %s", private)
-		}
-	}
-}
-
-func (f *exprFormatter) formatScanPrivate(def *ScanOpDef, short bool) {
-	// Don't output name of index if it's the primary index.
-	tab := f.mem.metadata.Table(def.Table)
-	if def.Index == opt.PrimaryIndex {
-		fmt.Fprintf(f.buf, " %s", tab.TabName())
-	} else {
-		fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
-	}
-
-	// Add additional fields when short=false.
-	if !short {
-		if def.Constraint != nil {
-			fmt.Fprintf(f.buf, ",constrained")
-		}
-		if def.HardLimit > 0 {
-			fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
-		}
-	}
-}
-
-// iterDeps runs f for each child group of g.
-func (f *memoFormatter) iterDeps(g *group, fn func(GroupID)) {
+// forEachDependency runs f for each child group of g.
+func (f *memoFormatter) forEachDependency(g *group, fn func(GroupID)) {
 	for i := 0; i < g.exprCount(); i++ {
 		e := g.expr(ExprOrdinal(i))
 		for c := 0; c < e.ChildCount(); c++ {
@@ -225,7 +209,7 @@ func (f *memoFormatter) sortGroups(root GroupID) (groups []GroupID) {
 		// graph, so all of its dependencies have their indegree reduced by one.
 		// Any dependencies which have no more dependents can now be visited and
 		// are added to the queue.
-		f.iterDeps(&f.mem.groups[next], func(dep GroupID) {
+		f.forEachDependency(&f.mem.groups[next], func(dep GroupID) {
 			indegrees[dep]--
 			if indegrees[dep] == 0 {
 				queue = append(queue, dep)
@@ -262,8 +246,48 @@ func (f *memoFormatter) computeIndegrees(id GroupID, reachable []bool, indegrees
 	}
 	reachable[id] = true
 
-	f.iterDeps(&f.mem.groups[id], func(dep GroupID) {
+	f.forEachDependency(&f.mem.groups[id], func(dep GroupID) {
 		indegrees[dep]++
 		f.computeIndegrees(dep, reachable, indegrees)
 	})
+}
+
+func (f exprFormatter) formatPrivate(private interface{}) {
+	if private != nil {
+		switch t := private.(type) {
+		case nil:
+
+		case *ScanOpDef:
+			f.formatScanPrivate(t, false /* short */)
+
+		case opt.ColumnID:
+			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
+
+		case opt.ColSet, opt.ColList:
+			// Don't show anything, because it's mostly redundant.
+
+		default:
+			fmt.Fprintf(f.buf, " %s", private)
+		}
+	}
+}
+
+func (f exprFormatter) formatScanPrivate(def *ScanOpDef, short bool) {
+	// Don't output name of index if it's the primary index.
+	tab := f.mem.metadata.Table(def.Table)
+	if def.Index == opt.PrimaryIndex {
+		fmt.Fprintf(f.buf, " %s", tab.TabName())
+	} else {
+		fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
+	}
+
+	// Add additional fields when short=false.
+	if !short {
+		if def.Constraint != nil {
+			fmt.Fprintf(f.buf, ",constrained")
+		}
+		if def.HardLimit > 0 {
+			fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
+		}
+	}
 }
