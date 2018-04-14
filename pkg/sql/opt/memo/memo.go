@@ -118,6 +118,10 @@ type Memo struct {
 	// Intern the set of unique privates used by expressions in the memo, since
 	// there are so many duplicates.
 	privateStorage privateStorage
+
+	// root is the root of the lowest cost expression tree in the memo. It is
+	// set once after optimization is complete.
+	root BestExprID
 }
 
 // New constructs a new empty memo instance.
@@ -147,6 +151,32 @@ func New() *Memo {
 // Metadata returns the metadata instance associated with the memo.
 func (m *Memo) Metadata() *opt.Metadata {
 	return m.metadata
+}
+
+// Root returns the root of the memo's lowest cost expression tree. It can only
+// be accessed once the memo has been fully optimized.
+func (m *Memo) Root() ExprView {
+	if !m.isOptimized() {
+		panic("memo has not yet been optimized and had its root expression set")
+	}
+	return MakeExprView(m, m.root)
+}
+
+// SetRoot stores the root of the memo's lowest cost expression tree.
+func (m *Memo) SetRoot(root ExprView) {
+	if root.mem != m {
+		panic("the given root is in a different memo")
+	}
+	if root.best == normBestOrdinal {
+		panic("cannot set the memo root to be a normalized expression tree")
+	}
+	m.root = root.bestExprID()
+}
+
+// isOptimized returns true if the memo has been fully optimized.
+func (m *Memo) isOptimized() bool {
+	// The memo is optimized once a best expression has been set at the root.
+	return m.root.ordinal != normBestOrdinal
 }
 
 // --------------------------------------------------------------------
@@ -329,11 +359,37 @@ func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 	return m.privateStorage.lookup(id)
 }
 
-// FormatString writes a memo to a human-readable format.
-func (m *Memo) FormatString(rootGroup GroupID) string {
-	return m.makeMemoFormatter(rootGroup).Format()
+// --------------------------------------------------------------------
+// String representation.
+// --------------------------------------------------------------------
+
+// FmtFlags controls how the memo output is formatted.
+type FmtFlags int
+
+// HasFlags tests whether the given flags are all set.
+func (f FmtFlags) HasFlags(subset FmtFlags) bool {
+	return f&subset == subset
 }
 
+const (
+	// FmtPretty performs a breadth-first topological sort on the memo groups,
+	// and shows the root group at the top of the memo.
+	FmtPretty FmtFlags = 0
+
+	// FmtRaw shows the raw memo groups, in the order they were originally
+	// added, and including any "orphaned" groups.
+	FmtRaw FmtFlags = 1 << (iota - 1)
+)
+
+// String returns a human-readable string representation of this memo for
+// testing and debugging.
 func (m *Memo) String() string {
-	return m.FormatString(GroupID(0))
+	return m.FormatString(FmtPretty)
+}
+
+// FormatString returns a string representation of this memo for testing
+// and debugging. The given flags control which properties are shown.
+func (m *Memo) FormatString(flags FmtFlags) string {
+	formatter := m.makeMemoFormatter(flags)
+	return formatter.format()
 }

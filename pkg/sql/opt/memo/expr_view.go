@@ -83,6 +83,10 @@ type ExprView struct {
 // groups, and so on.
 func MakeExprView(mem *Memo, best BestExprID) ExprView {
 	mgrp := mem.group(best.group)
+	if best.ordinal == normBestOrdinal {
+		// Handle MakeNormExprView case.
+		return ExprView{mem: mem, group: best.group, op: mgrp.normExpr.op, best: best.ordinal}
+	}
 	be := mgrp.bestExpr(best.ordinal)
 	return ExprView{mem: mem, group: best.group, op: be.op, best: best.ordinal}
 }
@@ -95,8 +99,7 @@ func MakeExprView(mem *Memo, best BestExprID) ExprView {
 // bestExprs have been populated). See the struct comment in factory.go for
 // more details about the normalized expression tree.
 func MakeNormExprView(mem *Memo, group GroupID) ExprView {
-	op := mem.NormExpr(group).op
-	return ExprView{mem: mem, group: group, op: op, best: normBestOrdinal}
+	return MakeExprView(mem, BestExprID{group: group, ordinal: normBestOrdinal})
 }
 
 // Operator returns the type of the expression.
@@ -180,6 +183,10 @@ func (ev ExprView) lookupBestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
+func (ev ExprView) bestExprID() BestExprID {
+	return BestExprID{group: ev.group, ordinal: ev.best}
+}
+
 // --------------------------------------------------------------------
 // String representation.
 // --------------------------------------------------------------------
@@ -198,7 +205,7 @@ const (
 	ExprFmtShowAll ExprFmtFlags = 0
 
 	// ExprFmtHideOuterCols does not show outer columns in the output.
-	ExprFmtHideOuterCols ExprFmtFlags = 1 << iota
+	ExprFmtHideOuterCols ExprFmtFlags = 1 << (iota - 1)
 
 	// ExprFmtHideStats does not show statistics in the output.
 	ExprFmtHideStats

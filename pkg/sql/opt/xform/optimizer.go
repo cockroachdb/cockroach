@@ -106,7 +106,9 @@ func (o *Optimizer) Memo() *memo.Memo {
 func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *memo.PhysicalProps) memo.ExprView {
 	required := o.mem.InternPhysicalProps(requiredProps)
 	state := o.optimizeGroup(root, required)
-	return memo.MakeExprView(o.mem, state.best)
+	ev := memo.MakeExprView(o.mem, state.best)
+	o.mem.SetRoot(ev)
+	return ev
 }
 
 // optimizeGroup enumerates expression trees rooted in the given memo group and

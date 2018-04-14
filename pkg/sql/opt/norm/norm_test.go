@@ -46,7 +46,7 @@ func TestNormRules(t *testing.T) {
 		catalog := testutils.NewTestCatalog()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.Format = fmtFlags
+			tester.Flags.ExprFormat = fmtFlags
 			return tester.RunCommand(t, d)
 		})
 	})
