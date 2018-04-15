@@ -35,10 +35,9 @@ import (
 func TestSorter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = intEncDatum(i)
 	}
 
 	asc := encoding.Ascending
@@ -358,8 +357,15 @@ func TestSorter(t *testing.T) {
 	}
 }
 
+var twoColOrdering = convertToSpecOrdering(sqlbase.ColumnOrdering{
+	{ColIdx: 0, Direction: encoding.Ascending},
+	{ColIdx: 1, Direction: encoding.Ascending},
+})
+
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
+	const numCols = 2
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -369,34 +375,22 @@ func BenchmarkSortAll(b *testing.B) {
 		EvalCtx:  evalCtx,
 	}
 
-	// One column integer rows.
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	types := []sqlbase.ColumnType{columnTypeInt}
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-
-	spec := SorterSpec{
-		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
-	}
+	spec := SorterSpec{OutputOrdering: twoColOrdering}
 	post := PostProcessSpec{}
 
-	for _, inputSize := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
-			input := make(sqlbase.EncDatumRows, inputSize)
-			for i := range input {
-				input[i] = sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(rng.Int()))),
-				}
-			}
-			rowSource := NewRepeatableRowSource(types, input)
-			b.SetBytes(int64(inputSize * 8))
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			input := NewRepeatableRowSource(twoIntCols, makeRandIntRows(rng, numRows, numCols))
+			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s, err := newSorter(context.Background(), &flowCtx, &spec, rowSource, &post, &RowDisposer{})
+				s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
 				if err != nil {
 					b.Fatal(err)
 				}
 				s.Run(context.Background(), nil /* wg */)
-				rowSource.Reset()
+				input.Reset()
 			}
 		})
 	}
@@ -405,6 +399,8 @@ func BenchmarkSortAll(b *testing.B) {
 // BenchmarkSortLimit times how long it takes to sort a fixed size input with
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
+	const numCols = 2
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -414,46 +410,71 @@ func BenchmarkSortLimit(b *testing.B) {
 		EvalCtx:  evalCtx,
 	}
 
-	// One column integer rows.
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	types := []sqlbase.ColumnType{columnTypeInt}
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	spec := SorterSpec{OutputOrdering: twoColOrdering}
 
-	spec := SorterSpec{
-		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
-	}
-
-	const inputSize = 1 << 16
-	b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
-		input := make(sqlbase.EncDatumRows, inputSize)
-		for i := range input {
-			input[i] = sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(rng.Int()))),
-			}
-		}
-		rowSource := NewRepeatableRowSource(types, input)
-
+	const numRows = 1 << 16
+	b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+		input := NewRepeatableRowSource(twoIntCols, makeRandIntRows(rng, numRows, numCols))
 		for _, limit := range []uint64{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+			post := PostProcessSpec{Limit: limit}
 			b.Run(fmt.Sprintf("Limit=%d", limit), func(b *testing.B) {
-				b.SetBytes(int64(inputSize * 8))
+				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					s, err := newSorter(
-						context.Background(),
-						&flowCtx,
-						&spec,
-						rowSource,
-						&PostProcessSpec{Limit: limit},
-						&RowDisposer{},
-					)
+					s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
 					if err != nil {
 						b.Fatal(err)
 					}
 					s.Run(context.Background(), nil /* wg */)
-					rowSource.Reset()
+					input.Reset()
 				}
 			})
 
 		}
 	})
+}
+
+// BenchmarkSortChunks times how long it takes to sort an input which is already
+// sorted on a prefix.
+func BenchmarkSortChunks(b *testing.B) {
+	const numCols = 2
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	flowCtx := FlowCtx{
+		Settings: st,
+		EvalCtx:  evalCtx,
+	}
+
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	spec := SorterSpec{
+		OutputOrdering:   twoColOrdering,
+		OrderingMatchLen: 1,
+	}
+	post := PostProcessSpec{}
+
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		for chunkSize := 1; chunkSize <= numRows; chunkSize *= 4 {
+			b.Run(fmt.Sprintf("rows=%d,ChunkSize=%d", numRows, chunkSize), func(b *testing.B) {
+				rows := makeRandIntRows(rng, numRows, numCols)
+				for i, row := range rows {
+					row[0] = intEncDatum(i / chunkSize)
+				}
+				input := NewRepeatableRowSource(twoIntCols, rows)
+				b.SetBytes(int64(numRows * numCols * 8))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
+					if err != nil {
+						b.Fatal(err)
+					}
+					s.Run(context.Background(), nil /* wg */)
+					input.Reset()
+				}
+			})
+		}
+	}
 }
