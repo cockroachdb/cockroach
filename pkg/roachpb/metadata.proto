@@ -104,6 +104,7 @@ message Percentiles {
   optional double p50 = 3 [(gogoproto.nullable) = false];
   optional double p75 = 4 [(gogoproto.nullable) = false];
   optional double p90 = 5 [(gogoproto.nullable) = false];
+  optional double pMax = 6 [(gogoproto.nullable) = false];
 }
 
 // StoreCapacity contains capacity information for a storage device.
