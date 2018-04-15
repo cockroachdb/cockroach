@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -63,7 +62,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].Init([]sqlbase.ColumnType{columnTypeInt})
+				rc[i].Init(oneIntCol)
 
 				go func(i int) {
 					defer wg.Done()
@@ -90,12 +89,46 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			row := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1))),
 			}
-			b.SetBytes(int64(unsafe.Sizeof(tree.DInt(1))))
+			b.SetBytes(int64(8 * 1 * 1))
 			for i := 0; i < b.N; i++ {
 				_ = rc[0].Push(row, nil /* meta */)
 			}
 			rc[0].ProducerDone()
 			wg.Wait()
+		})
+	}
+}
+
+func BenchmarkMultiplexedRowChannel(b *testing.B) {
+	numRows := 1 << 16
+	row := sqlbase.EncDatumRow{intEncDatum(0)}
+	for _, senders := range []int{2, 4, 8} {
+		b.Run(fmt.Sprintf("senders=%d", senders), func(b *testing.B) {
+			b.SetBytes(int64(senders * numRows * 8))
+			for i := 0; i < b.N; i++ {
+				var wg sync.WaitGroup
+				wg.Add(senders + 1)
+				mrc := &MultiplexedRowChannel{}
+				mrc.Init(senders, oneIntCol)
+				go func() {
+					for {
+						if r, _ := mrc.Next(); r == nil {
+							break
+						}
+					}
+					wg.Done()
+				}()
+				for j := 0; j < senders; j++ {
+					go func() {
+						for k := 0; k < numRows; k++ {
+							mrc.Push(row, nil /* meta */)
+						}
+						mrc.ProducerDone()
+						wg.Done()
+					}()
+				}
+				wg.Wait()
+			}
 		})
 	}
 }
