@@ -1324,29 +1324,29 @@ user root
 statement ok
 SET DATABASE = ''
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY 1
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SELECT viewname FROM pg_catalog.pg_views WHERE schemaname='public' ORDER BY 1
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SELECT relname FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE nspname='public'
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SELECT conname FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 SELECT COUNT(*) FROM pg_catalog.pg_depend
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 select 'upper'::REGPROC;
 
-query error no database specified
+query error cannot access virtual schema in anonymous database
 select 'system.namespace'::regclass
 
 statement ok
