@@ -151,8 +151,9 @@ func ResolveTargetObject(
 		return nil, err
 	}
 	if !found {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"invalid target name: %q", tree.ErrString(tn))
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+			"no schema has been selected to create %q in",
+			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid")
 	}
 	if tn.Schema() != tree.PublicSchema {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
