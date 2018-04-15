@@ -129,7 +129,11 @@ func NewCompactor(
 // compactionMinInterval, but only if there are compactions pending.
 func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stopper *stop.Stopper) {
 	// Wake up immediately to examine the queue and set the bytes queued metric.
-	c.ch <- struct{}{}
+	select {
+	// The compactor can already have compactions waiting on it, so don't try to block here.
+	case c.ch <- struct{}{}:
+	default:
+	}
 
 	stopper.RunWorker(ctx, func(ctx context.Context) {
 		var timer timeutil.Timer
