@@ -134,7 +134,7 @@ Some examples in the second group:
 | The overall latency of a query is solely decided by the number of rows processed in memory and the number of page accesses on disk. | Network effects and implicit retries dominate. |
 | The costing estimates use a fixed ratio between disk and CPU performance. | Each node in a cluster can have a different CPU/disk performance ratio. Network performance evolves over time. |
 | Each area of contiguous storage contains data from at most one table or one index. Storage locality maps 1-to-1 to query locality. | [Interleaved tables.](../RFCS/20160624_sql_interleaved_tables.md) |
-| A logical range of values, in a SQL query, corresponds to a contiguous area of storage when the columns are indexed. | Partitioned tables. (soon) |
+| A logical range of values, in a SQL query, corresponds to a contiguous area of storage when the columns are indexed. | [Partitioned tables.](../RFCS/20170921_sql_partitioning.md) |
 
 For this second group, original research will be needed to construct,
 from the ground up, CockroachDB-specific replacements to the best
