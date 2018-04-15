@@ -511,7 +511,7 @@ INSERT INTO return AS r VALUES (5, 6)
 statement ok
 INSERT INTO return VALUES (5, 6) RETURNING test.return.a
 
-statement error no data source named "x"
+statement error no data source matches pattern: x.\*
 INSERT INTO return VALUES (1, 2) RETURNING x.*[1]
 
 statement error column name "x" not found
