@@ -139,7 +139,28 @@ SELECT kv.* FROM kv
 ----
 a NULL
 
-query error no data source named "foo"
+# Regression tests for #24169
+query TT
+SELECT test.kv.* FROM kv
+----
+a NULL
+
+query TT
+SELECT test.public.kv.* FROM kv
+----
+a NULL
+
+query TT
+SELECT test.public.kv.* FROM test.kv
+----
+a NULL
+
+query TT
+SELECT test.kv.* FROM test.public.kv
+----
+a NULL
+
+query error no data source matches pattern: foo.\*
 SELECT foo.* FROM kv
 
 query error cannot use "\*" without a FROM clause
@@ -156,7 +177,7 @@ SELECT 1, * FROM nocols
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 
-query error no data source named "bar.kv"
+query error no data source matches pattern: bar.kv.\*
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
