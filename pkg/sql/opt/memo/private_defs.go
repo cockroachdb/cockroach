@@ -133,3 +133,11 @@ type SetOpColMap struct {
 	Right opt.ColList
 	Out   opt.ColList
 }
+
+// GroupByDef defines the set of columns being grouped, and also the required
+// ordering of inputs (if any). The ordering of inputs is only significant in
+// the presence of a non-cummutative aggregate, such as ARRAY_AGG.
+type GroupByDef struct {
+	GroupingCols  opt.ColSet
+	InputOrdering Ordering
+}

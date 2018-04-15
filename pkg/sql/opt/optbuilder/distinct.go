@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
 // buildDistinct builds a set of memo groups that represent a DISTINCT
@@ -54,7 +55,12 @@ func (b *Builder) buildDistinct(distinct bool, inScope *scope) (outScope *scope)
 
 	aggList := b.constructList(opt.AggregationsOp, nil)
 	outScope.group = b.factory.ConstructGroupBy(
-		inScope.group, aggList, b.factory.InternColSet(groupCols),
+		inScope.group,
+		aggList,
+		b.factory.InternGroupByDef(&memo.GroupByDef{
+			GroupingCols:  groupCols,
+			InputOrdering: inScope.physicalProps.Ordering,
+		}),
 	)
 	return outScope
 }

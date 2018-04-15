@@ -220,6 +220,38 @@ memo
  ├── G15: (const 'foo')
  └── G16: (variable b.x)
 
+memo
+SELECT ARRAY_AGG(x) FROM (SELECT * FROM a)
+----
+[presentation: column3:3]
+memo
+ ├── G1: (group-by G2 G3)
+ │    └── "[presentation: column3:3]" [cost=1000.00]
+ │         └── best: (group-by G2 G3)
+ ├── G2: (scan a)
+ │    └── "" [cost=1000.00]
+ │         └── best: (scan a)
+ ├── G3: (aggregations G4)
+ ├── G4: (function G5 array_agg)
+ └── G5: (variable a.x)
+
+memo
+SELECT ARRAY_AGG(x) FROM (SELECT * FROM a ORDER BY y)
+----
+[presentation: column3:3]
+memo
+ ├── G1: (group-by G2 G3 +2)
+ │    └── "[presentation: column3:3]" [cost=1250.00]
+ │         └── best: (group-by G2="o:+2" G3 +2)
+ ├── G2: (scan a)
+ │    ├── "" [cost=1000.00]
+ │    │    └── best: (scan a)
+ │    └── "[ordering: +2]" [cost=1250.00]
+ │         └── best: (sort G2)
+ ├── G3: (aggregations G4)
+ ├── G4: (function G5 array_agg)
+ └── G5: (variable a.x)
+
 # Test topological sorting
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1

@@ -166,6 +166,9 @@ func (f *exprFormatter) formatPrivate(private interface{}) {
 		case *ScanOpDef:
 			f.formatScanPrivate(t, false /* short */)
 
+		case *GroupByDef:
+			f.formatGroupByPrivate(t, false /* short */)
+
 		case opt.ColumnID:
 			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
@@ -195,6 +198,12 @@ func (f *exprFormatter) formatScanPrivate(def *ScanOpDef, short bool) {
 		if def.HardLimit > 0 {
 			fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
 		}
+	}
+}
+
+func (f *exprFormatter) formatGroupByPrivate(def *GroupByDef, short bool) {
+	if def.InputOrdering.Defined() {
+		fmt.Fprintf(f.buf, " %s", def.InputOrdering)
 	}
 }
 

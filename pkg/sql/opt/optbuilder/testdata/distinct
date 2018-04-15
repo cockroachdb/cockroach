@@ -80,6 +80,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── input ordering: +3
       ├── project
       │    ├── columns: xyz.y:2(int) xyz.z:3(float)
       │    ├── scan xyz
@@ -98,6 +99,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── input ordering: +2
       ├── project
       │    ├── columns: xyz.y:2(int) xyz.z:3(float)
       │    ├── scan xyz
@@ -116,6 +118,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── input ordering: +2,+3
       ├── project
       │    ├── columns: xyz.y:2(int) xyz.z:3(float)
       │    ├── scan xyz
@@ -134,6 +137,7 @@ sort
  └── group-by
       ├── columns: column4:4(int)
       ├── grouping columns: column4:4(int)
+      ├── input ordering: +4
       ├── project
       │    ├── columns: column4:4(int)
       │    ├── scan xyz
@@ -153,6 +157,7 @@ sort
  └── group-by
       ├── columns: column4:4(int)
       ├── grouping columns: column4:4(int)
+      ├── input ordering: +4
       ├── project
       │    ├── columns: column4:4(int)
       │    ├── scan xyz
@@ -186,6 +191,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int)
       ├── grouping columns: xyz.y:2(int)
+      ├── input ordering: +2
       ├── project
       │    ├── columns: xyz.y:2(int)
       │    ├── scan xyz
@@ -399,6 +405,7 @@ sort
  └── group-by
       ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
       ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
+      ├── input ordering: +4,+2
       ├── project
       │    ├── columns: column5:5(int) abcd.d:4(int!null) abcd.b:2(int!null)
       │    ├── scan abcd

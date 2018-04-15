@@ -1068,10 +1068,13 @@ SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: column5:5(int[]) column6:6(string[])
+ ├── input ordering: +1
  ├── project
  │    ├── columns: kv.k:1(int!null) kv.s:4(string)
+ │    ├── ordering: +1
  │    ├── scan kv
- │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── ordering: +1
  │    └── projections
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.s [type=string]
@@ -1936,10 +1939,13 @@ SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: column5:5(string)
+ ├── input ordering: +1
  ├── project
  │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── ordering: +1
  │    ├── scan kv
- │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── ordering: +1
  │    └── projections
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
@@ -1952,10 +1958,13 @@ SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: column5:5(jsonb)
+ ├── input ordering: +1
  ├── project
  │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── ordering: +1
  │    ├── scan kv
- │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── ordering: +1
  │    └── projections
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
@@ -1968,10 +1977,13 @@ SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 group-by
  ├── columns: column5:5(jsonb)
+ ├── input ordering: +1
  ├── project
  │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── ordering: +1
  │    ├── scan kv
- │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── ordering: +1
  │    └── projections
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
@@ -2690,3 +2702,22 @@ project
  │              └── variable: abc.d [type=decimal]
  └── projections
       └── variable: column9 [type=decimal]
+
+build
+SELECT ARRAY_AGG(v) FROM (SELECT * FROM t.kv ORDER BY v)
+----
+group-by
+ ├── columns: column5:5(int[])
+ ├── input ordering: +2
+ ├── sort
+ │    ├── columns: kv.v:2(int)
+ │    ├── ordering: +2
+ │    └── project
+ │         ├── columns: kv.v:2(int)
+ │         ├── scan kv
+ │         │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │         └── projections
+ │              └── variable: kv.v [type=int]
+ └── aggregations
+      └── function: array_agg [type=int[]]
+           └── variable: kv.v [type=int]

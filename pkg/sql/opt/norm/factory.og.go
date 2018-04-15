@@ -23,11 +23,11 @@ func (_f *Factory) InternColList(val opt.ColList) memo.PrivateID {
 	return _f.mem.InternColList(val)
 }
 
-// InternColSet adds the given value to the memo and returns an ID that
+// InternGroupByDef adds the given value to the memo and returns an ID that
 // can be used for later lookup. If the same value was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (_f *Factory) InternColSet(val opt.ColSet) memo.PrivateID {
-	return _f.mem.InternColSet(val)
+func (_f *Factory) InternGroupByDef(val *memo.GroupByDef) memo.PrivateID {
+	return _f.mem.InternGroupByDef(val)
 }
 
 // InternSetOpColMap adds the given value to the memo and returns an ID that
@@ -343,7 +343,7 @@ func (_f *Factory) ConstructSelect(
 		if _groupByExpr != nil {
 			input := _groupByExpr.Input()
 			aggregations := _groupByExpr.Aggregations()
-			groupingCols := _groupByExpr.GroupingCols()
+			groupingCols := _groupByExpr.Def()
 			if !_f.emptyGroupingCols(groupingCols) {
 				_filtersExpr := _f.mem.NormExpr(filter).AsFilters()
 				if _filtersExpr != nil {
@@ -592,7 +592,7 @@ func (_f *Factory) ConstructProject(
 		if _groupByExpr != nil {
 			innerInput := _groupByExpr.Input()
 			aggregations := _groupByExpr.Aggregations()
-			groupingCols := _groupByExpr.GroupingCols()
+			groupingCols := _groupByExpr.Def()
 			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
 				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedAggCols) {
 					_group = _f.ConstructProject(
@@ -1515,9 +1515,9 @@ func (_f *Factory) ConstructAntiJoinApply(
 func (_f *Factory) ConstructGroupBy(
 	input memo.GroupID,
 	aggregations memo.GroupID,
-	groupingCols memo.PrivateID,
+	def memo.PrivateID,
 ) memo.GroupID {
-	_groupByExpr := memo.MakeGroupByExpr(input, aggregations, groupingCols)
+	_groupByExpr := memo.MakeGroupByExpr(input, aggregations, def)
 	_group := _f.mem.GroupByFingerprint(_groupByExpr.Fingerprint())
 	if _group != 0 {
 		return _group
@@ -1526,6 +1526,7 @@ func (_f *Factory) ConstructGroupBy(
 	// [EliminateDistinct]
 	{
 		if _f.hasNoCols(aggregations) {
+			groupingCols := def
 			if _f.colsAreKey(groupingCols, input) {
 				if _f.onRuleMatch == nil || _f.onRuleMatch(opt.EliminateDistinct) {
 					_group = input
@@ -1538,6 +1539,7 @@ func (_f *Factory) ConstructGroupBy(
 
 	// [FilterUnusedGroupByCols]
 	{
+		groupingCols := def
 		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
 			if _f.onRuleMatch == nil || _f.onRuleMatch(opt.FilterUnusedGroupByCols) {
 				_group = _f.ConstructGroupBy(

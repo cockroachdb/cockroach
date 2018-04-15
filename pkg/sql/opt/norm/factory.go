@@ -377,7 +377,7 @@ func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
 func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.PrivateID) opt.ColSet {
-	colSet := f.mem.LookupPrivate(groupingCols).(opt.ColSet)
+	colSet := f.mem.LookupPrivate(groupingCols).(*memo.GroupByDef).GroupingCols
 	return f.outerCols(aggs).Union(colSet)
 }
 
@@ -557,7 +557,7 @@ func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.Private
 // emptyGroupingCols returns true if the given grouping columns for a GroupBy
 // operator are empty.
 func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(cols).(opt.ColSet).Empty()
+	return f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols.Empty()
 }
 
 // isCorrelated returns true if variables in the source expression reference
@@ -679,7 +679,7 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 // rows of the given group. A strong key means that the set of given column
 // values are unique and not null.
 func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
-	colSet := f.mem.LookupPrivate(cols).(opt.ColSet)
+	colSet := f.mem.LookupPrivate(cols).(*memo.GroupByDef).GroupingCols
 	props := f.lookupLogical(group).Relational
 	for _, weakKey := range props.WeakKeys {
 		if weakKey.SubsetOf(colSet) && weakKey.SubsetOf(props.NotNullCols) {

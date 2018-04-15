@@ -236,7 +236,16 @@ func (b *Builder) buildAggregation(
 	for i := range groupings {
 		groupingColSet.Add(int(aggInScope.cols[i].id))
 	}
-	aggOutScope.group = b.factory.ConstructGroupBy(aggInScope.group, aggList, b.factory.InternColSet(groupingColSet))
+
+	aggOutScope.group = b.factory.ConstructGroupBy(
+		aggInScope.group,
+		aggList,
+		b.factory.InternGroupByDef(&memo.GroupByDef{
+			GroupingCols: groupingColSet,
+			// The ordering of the GROUP BY is inherited from the input.
+			InputOrdering: fromScope.physicalProps.Ordering,
+		}),
+	)
 
 	// Wrap with having filter if it exists.
 	if having != 0 {

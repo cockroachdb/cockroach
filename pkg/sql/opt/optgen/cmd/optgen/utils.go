@@ -56,6 +56,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.FuncOpDef"
 	case "ScanOpDef":
 		return "*memo.ScanOpDef"
+	case "GroupByDef":
+		return "*memo.GroupByDef"
 	case "SetOpColMap":
 		return "*memo.SetOpColMap"
 	case "Datum":

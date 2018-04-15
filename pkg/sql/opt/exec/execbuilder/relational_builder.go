@@ -290,7 +290,8 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	}
 	aggregations := ev.Child(1)
 	numAgg := aggregations.ChildCount()
-	groupingCols := ev.Private().(opt.ColSet)
+	def := ev.Private().(*memo.GroupByDef)
+	groupingCols := def.GroupingCols
 
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	var ep execPlan

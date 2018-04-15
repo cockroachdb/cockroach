@@ -1485,3 +1485,14 @@ render               0  render  ·            ·           (column6, column7)  �
            └── scan  3  scan    ·            ·           (x, y)              ·
 ·                    3  ·       table        xy@primary  ·                   ·
 ·                    3  ·       spans        ALL         ·                   ·
+
+exec-explain
+SELECT ARRAY_AGG(v) FROM (SELECT * FROM kv ORDER BY v)
+----
+group           0  group  ·            ·             (column5)  ·
+ │              0  ·      aggregate 0  array_agg(v)  ·          ·
+ └── sort       1  sort   ·            ·             (v)        +v
+      │         1  ·      order        +v            ·          ·
+      └── scan  2  scan   ·            ·             (v)        ·
+·               2  ·      table        kv@primary    ·          ·
+·               2  ·      spans        ALL           ·          ·

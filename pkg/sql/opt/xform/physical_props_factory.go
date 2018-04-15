@@ -151,6 +151,12 @@ func (f physicalPropsFactory) constructChildProps(
 			childProps.Ordering = parentProps.Ordering
 		}
 
+	case opt.GroupByOp:
+		if nth == 0 {
+			def := mexpr.Private(f.mem).(*memo.GroupByDef)
+			childProps.Ordering = def.InputOrdering
+		}
+
 	case opt.LimitOp, opt.OffsetOp:
 		// Limit/Offset require the ordering in their private.
 		if nth == 0 {
