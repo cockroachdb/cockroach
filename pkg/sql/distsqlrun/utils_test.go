@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -277,7 +278,19 @@ func makeIntRows(numRows, numCols int) sqlbase.EncDatumRows {
 	for i := range rows {
 		rows[i] = make(sqlbase.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
-			rows[i][j] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i+j)))
+			rows[i][j] = intEncDatum(i + j)
+		}
+	}
+	return rows
+}
+
+// mintIntRows constructs a numRows x numCols table where the values are random.
+func makeRandIntRows(rng *rand.Rand, numRows int, numCols int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = intEncDatum(rng.Int())
 		}
 	}
 	return rows
