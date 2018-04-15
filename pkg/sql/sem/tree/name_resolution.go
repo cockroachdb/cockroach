@@ -186,6 +186,36 @@ type ColumnResolutionResult interface {
 	ColumnResolutionResult()
 }
 
+// Resolve performs name resolution for a qualified star using a resolver.
+func (a *AllColumnsSelector) Resolve(
+	ctx context.Context, r ColumnItemResolver,
+) (srcName *TableName, srcMeta ColumnSourceMeta, err error) {
+	prefix := makeTableNameFromUnresolvedName(&a.TableName)
+
+	// Is there a data source with this prefix?
+	var res NumResolutionResults
+	res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
+	if err != nil {
+		return nil, nil, err
+	}
+	if res == NoResults && a.TableName.NumParts == 2 {
+		// No, but name of form db.tbl.*?
+		// Special rule for compatibility with CockroachDB v1.x:
+		// search name db.public.tbl.* instead.
+		prefix.ExplicitCatalog = true
+		prefix.CatalogName = prefix.SchemaName
+		prefix.SchemaName = PublicSchemaName
+		res, srcName, srcMeta, err = r.FindSourceMatchingName(ctx, prefix)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if res == NoResults {
+		return nil, nil, newSourceNotFoundError("no data source matches pattern: %s", a)
+	}
+	return srcName, srcMeta, nil
+}
+
 // Resolve performs name resolution for a column item using a resolver.
 func (c *ColumnItem) Resolve(
 	ctx context.Context, r ColumnItemResolver,

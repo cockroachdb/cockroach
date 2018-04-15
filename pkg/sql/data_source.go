@@ -506,18 +506,10 @@ func expandStar(
 			}
 		}
 	case *tree.AllColumnsSelector:
-		tn, err := tree.NormalizeTableName(&sel.TableName)
-		if err != nil {
-			return nil, nil, err
-		}
 		resolver := sqlbase.ColumnResolver{Sources: src}
-		numRes, _, _, err := resolver.FindSourceMatchingName(ctx, tn)
+		_, _, err := sel.Resolve(ctx, &resolver)
 		if err != nil {
 			return nil, nil, err
-		}
-		if numRes == tree.NoResults {
-			return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"no data source named %q", tree.ErrString(&tn))
 		}
 		ds := src[resolver.ResolverState.SrcIdx]
 		colSet := ds.SourceAliases[resolver.ResolverState.ColSetIdx].ColumnSet
