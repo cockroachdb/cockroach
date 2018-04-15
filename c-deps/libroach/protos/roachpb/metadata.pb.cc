@@ -1943,6 +1943,7 @@ const int Percentiles::kP25FieldNumber;
 const int Percentiles::kP50FieldNumber;
 const int Percentiles::kP75FieldNumber;
 const int Percentiles::kP90FieldNumber;
+const int Percentiles::kPMaxFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Percentiles::Percentiles()
@@ -1960,16 +1961,16 @@ Percentiles::Percentiles(const Percentiles& from)
       _cached_size_(0) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::memcpy(&p10_, &from.p10_,
-    static_cast<size_t>(reinterpret_cast<char*>(&p90_) -
-    reinterpret_cast<char*>(&p10_)) + sizeof(p90_));
+    static_cast<size_t>(reinterpret_cast<char*>(&pmax_) -
+    reinterpret_cast<char*>(&p10_)) + sizeof(pmax_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Percentiles)
 }
 
 void Percentiles::SharedCtor() {
   _cached_size_ = 0;
   ::memset(&p10_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&p90_) -
-      reinterpret_cast<char*>(&p10_)) + sizeof(p90_));
+      reinterpret_cast<char*>(&pmax_) -
+      reinterpret_cast<char*>(&p10_)) + sizeof(pmax_));
 }
 
 Percentiles::~Percentiles() {
@@ -2005,10 +2006,10 @@ void Percentiles::Clear() {
   (void) cached_has_bits;
 
   cached_has_bits = _has_bits_[0];
-  if (cached_has_bits & 31u) {
+  if (cached_has_bits & 63u) {
     ::memset(&p10_, 0, static_cast<size_t>(
-        reinterpret_cast<char*>(&p90_) -
-        reinterpret_cast<char*>(&p10_)) + sizeof(p90_));
+        reinterpret_cast<char*>(&pmax_) -
+        reinterpret_cast<char*>(&p10_)) + sizeof(pmax_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -2095,6 +2096,19 @@ bool Percentiles::MergePartialFromCodedStream(
         break;
       }
 
+      case 6: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(49u /* 49 & 0xFF */)) {
+          set_has_pmax();
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   double, ::google::protobuf::internal::WireFormatLite::TYPE_DOUBLE>(
+                 input, &pmax_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -2142,6 +2156,10 @@ void Percentiles::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteDouble(5, this->p90(), output);
   }
 
+  if (cached_has_bits & 0x00000020u) {
+    ::google::protobuf::internal::WireFormatLite::WriteDouble(6, this->pmax(), output);
+  }
+
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Percentiles)
@@ -2153,7 +2171,7 @@ size_t Percentiles::ByteSizeLong() const {
 
   total_size += _internal_metadata_.unknown_fields().size();
 
-  if (_has_bits_[0 / 32] & 31u) {
+  if (_has_bits_[0 / 32] & 63u) {
     if (has_p10()) {
       total_size += 1 + 8;
     }
@@ -2171,6 +2189,10 @@ size_t Percentiles::ByteSizeLong() const {
     }
 
     if (has_p90()) {
+      total_size += 1 + 8;
+    }
+
+    if (has_pmax()) {
       total_size += 1 + 8;
     }
 
@@ -2195,7 +2217,7 @@ void Percentiles::MergeFrom(const Percentiles& from) {
   (void) cached_has_bits;
 
   cached_has_bits = from._has_bits_[0];
-  if (cached_has_bits & 31u) {
+  if (cached_has_bits & 63u) {
     if (cached_has_bits & 0x00000001u) {
       p10_ = from.p10_;
     }
@@ -2210,6 +2232,9 @@ void Percentiles::MergeFrom(const Percentiles& from) {
     }
     if (cached_has_bits & 0x00000010u) {
       p90_ = from.p90_;
+    }
+    if (cached_has_bits & 0x00000020u) {
+      pmax_ = from.pmax_;
     }
     _has_bits_[0] |= cached_has_bits;
   }
@@ -2237,6 +2262,7 @@ void Percentiles::InternalSwap(Percentiles* other) {
   swap(p50_, other->p50_);
   swap(p75_, other->p75_);
   swap(p90_, other->p90_);
+  swap(pmax_, other->pmax_);
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   swap(_cached_size_, other->_cached_size_);
@@ -2362,6 +2388,29 @@ void Percentiles::set_p90(double value) {
   set_has_p90();
   p90_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p90)
+}
+
+bool Percentiles::has_pmax() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+void Percentiles::set_has_pmax() {
+  _has_bits_[0] |= 0x00000020u;
+}
+void Percentiles::clear_has_pmax() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+void Percentiles::clear_pmax() {
+  pmax_ = 0;
+  clear_has_pmax();
+}
+double Percentiles::pmax() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.pMax)
+  return pmax_;
+}
+void Percentiles::set_pmax(double value) {
+  set_has_pmax();
+  pmax_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.pMax)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS
