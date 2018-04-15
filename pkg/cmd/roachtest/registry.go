@@ -29,6 +29,7 @@ func registerTests(r *registry) {
 	registerImportTPCC(r)
 	registerImportTPCH(r)
 	registerJepsen(r)
+	registerHotSpotSplits(r)
 	registerKV(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
