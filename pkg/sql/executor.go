@@ -2480,20 +2480,24 @@ func EvalAsOfTimestamp(
 			break
 		}
 		// Attempt to parse as a decimal.
-		if dec, _, err := apd.NewFromString(s); err != nil {
-			// Override the error. It would be misleading to fail with a
-			// DECIMAL conversion error if a user was attempting to use a
-			// timestamp string and the conversion above failed.
-			convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither timestamp nor decimal")
-		} else {
+		if dec, _, err := apd.NewFromString(s); err == nil {
 			ts, convErr = decimalToHLC(dec)
+			break
 		}
+		// Attempt to parse as an interval.
+		if iv, err := tree.ParseDInterval(s); err == nil {
+			ts.WallTime = duration.Add(evalCtx.GetStmtTimestamp(), iv.Duration).UnixNano()
+			break
+		}
+		convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither timestamp, decimal, nor interval")
 	case *tree.DInt:
 		ts.WallTime = int64(*d)
 	case *tree.DDecimal:
 		ts, convErr = decimalToHLC(&d.Decimal)
+	case *tree.DInterval:
+		ts.WallTime = duration.Add(evalCtx.GetStmtTimestamp(), d.Duration).UnixNano()
 	default:
-		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, got %s (%T)", d.ResolvedType(), d)
+		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
 	}
 	if convErr != nil {
 		return ts, convErr
