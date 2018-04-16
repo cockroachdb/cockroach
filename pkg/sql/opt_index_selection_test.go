@@ -104,7 +104,7 @@ func makeSpans(
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterExpr := o.Optimize(filterGroup, &memo.PhysicalProps{})
+	filterExpr := memo.MakeNormExprView(o.Memo(), filterGroup)
 	err = c.makeIndexConstraints(o, filterExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)

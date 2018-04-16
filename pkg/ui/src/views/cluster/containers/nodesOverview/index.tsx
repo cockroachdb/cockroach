@@ -112,9 +112,9 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
-            // Bytes - displays the total persisted bytes maintained by the node.
+            // Used Capacity - displays the total persisted bytes maintained by the node.
             {
-              title: "Bytes",
+              title: "Used Capacity",
               cell: (ns) => Bytes(BytesUsed(ns)),
               sort: (ns) => BytesUsed(ns),
             },
