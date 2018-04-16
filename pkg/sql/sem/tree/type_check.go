@@ -72,7 +72,7 @@ func (sc *SemaContext) isUnresolvedPlaceholder(expr Expr) bool {
 }
 
 // GetLocation returns the session timezone.
-func (sc *SemaContext) getLocation() *time.Location {
+func (sc *SemaContext) GetLocation() *time.Location {
 	if sc == nil || sc.Location == nil || *sc.Location == nil {
 		return time.UTC
 	}

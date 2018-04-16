@@ -132,6 +132,27 @@ d
 				`SELECT count(*) from d.t`: {{"1"}},
 			},
 		},
+		{
+			name:   "good bytes encoding",
+			create: `b bytes`,
+			csv: `\x0143
+0143`,
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"\x01C"}, {"0143"}},
+			},
+		},
+		{
+			name:   "invalid byte",
+			create: `b bytes`,
+			csv:    `\x0g`,
+			err:    "invalid byte",
+		},
+		{
+			name:   "bad bytes length",
+			create: `b bytes`,
+			csv:    `\x0`,
+			err:    "odd length hex string",
+		},
 	}
 
 	var csvString string

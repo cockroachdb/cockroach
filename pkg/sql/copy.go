@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,9 +74,6 @@ type copyMachine struct {
 	// parsing. Is it not correcly initialized with timestamps, transactions and
 	// other things that statements more generally need.
 	parsingEvalCtx *tree.EvalContext
-	// collationEnv is needed only when creating collated strings. Using a common
-	// environment allows for some expensive work to only be done once.
-	collationEnv tree.CollationEnvironment
 }
 
 // newCopyMachine creates a new copyMachine.
@@ -360,7 +356,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		d, err := parser.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx, &c.collationEnv)
+		d, err := tree.ParseStringAs(c.resultColumns[i].Typ, s, c.parsingEvalCtx)
 		if err != nil {
 			return err
 		}
