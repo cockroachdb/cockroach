@@ -529,38 +529,26 @@ func (ctx *Context) NewBreaker() *circuit.Breaker {
 	return newBreaker(&ctx.breakerClock)
 }
 
-// ErrNotConnected is returned by ConnHealth when there is no connection to the
-// host (e.g. GRPCDial was never called for that address, or a connection has
-// been closed and not reconnected).
-var ErrNotConnected = errors.New("not connected")
-
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
 // the first heartbeat.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
 
-// ConnHealth returns whether the most recent heartbeat succeeded or not.
-// This should not be used as a definite status of a node's health and just used
-// to prioritize healthy nodes over unhealthy ones.
-//
-// NB: as of #22658, this does not work as you think. We kick
-// connections out of the connection pool as soon as they run into an
-// error, at which point their ConnHealth will reset to
-// ErrNotConnected. ConnHealth does no more return a sane notion of
-// "recent connection health". When it returns nil all seems well, but
-// if it doesn't then this may mean that the node is simply refusing
-// connections (and is thus unconnected most of the time), or that the
-// node hasn't been connected to but is perfectly healthy.
-//
-// See #23829.
+// ConnHealth returns nil if we have an open connection to the given
+// target that succeeded on its most recent heartbeat. Otherwise, it
+// kicks off a connection attempt (unless one is already in progress
+// or we are in a backoff state) and returns an error (typically
+// ErrNotHeartbeated). This is a conservative/pessimistic indicator:
+// if we have not attempted to talk to the target node recently, an
+// error will be returned. This method should therefore be used to
+// prioritize among a list of candidate nodes, but not to filter out
+// "unhealthy" nodes.
 func (ctx *Context) ConnHealth(target string) error {
 	if ctx.GetLocalInternalServerForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
-	if value, ok := ctx.conns.Load(target); ok {
-		return value.(*Connection).heartbeatResult.Load().(heartbeatResult).err
-	}
-	return ErrNotConnected
+	conn := ctx.GRPCDial(target)
+	return conn.heartbeatResult.Load().(heartbeatResult).err
 }
 
 func (ctx *Context) runHeartbeat(
