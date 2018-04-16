@@ -298,7 +298,7 @@ project
 build
 SELECT COUNT(*), k FROM t.kv
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*) FROM t.kv GROUP BY s < 5
@@ -601,7 +601,7 @@ project
 build
 SELECT COUNT(*), s FROM t.kv GROUP BY UPPER(s)
 ----
-error: column "t.kv.s" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.s" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Selecting and grouping on a more complex expression works.
 build
@@ -656,17 +656,17 @@ project
 build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k
 ----
-error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY v
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT COUNT(*), v/(k+v) FROM t.kv GROUP BY k+v
 ----
-error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k FROM t.kv WHERE AVG(k) > 1
