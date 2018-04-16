@@ -225,13 +225,13 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 
 // Start is part of the RowSource interface.
 func (tr *tableReader) Start(ctx context.Context) context.Context {
-	ctx = tr.startInternal(ctx, tableReaderProcName)
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		isc := NewInputStatCollector(tr.input, "tableReader input")
 		tr.stats = append(tr.stats, isc)
 		tr.input = isc
 	}
-	return tr.input.Start(ctx)
+	tr.input.Start(ctx)
+	return tr.startInternal(ctx, tableReaderProcName)
 }
 
 // Next is part of the RowSource interface.
