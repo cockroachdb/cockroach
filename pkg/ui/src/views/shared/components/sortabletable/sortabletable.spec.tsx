@@ -4,6 +4,7 @@ import { assert } from "chai";
 import { shallow } from "enzyme";
 import * as sinon from "sinon";
 
+import "src/enzymeInit";
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
 
 const columns: SortableColumn[] = [

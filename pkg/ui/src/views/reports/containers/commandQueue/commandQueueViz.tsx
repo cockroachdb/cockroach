@@ -22,8 +22,8 @@ const COMMAND_DIAMETER = COMMAND_RADIUS * 2;
 
 export default class CommandQueueViz extends React.Component<QueueVizProps, QueueVizState> {
 
-  constructor() {
-    super();
+  constructor(props: QueueVizProps) {
+    super(props);
     this.state = {
       selectedNodeID: null,
     };
