@@ -20,7 +20,6 @@ import (
 	"go/token"
 	"math"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
@@ -463,37 +462,17 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			expr.resBytes = *s
 		}
 		return &expr.resBytes, err
-	case types.Bool:
-		return ParseDBool(expr.s)
-	case types.Int:
-		return ParseDInt(expr.s)
-	case types.Float:
-		return ParseDFloat(expr.s)
-	case types.Decimal:
-		return ParseDDecimal(expr.s)
-	case types.Date:
-		return ParseDDate(expr.s, ctx.getLocation())
-	case types.Time:
-		return ParseDTime(expr.s)
-	case types.INet:
-		return ParseDIPAddrFromINetString(expr.s)
-	case types.JSON:
-		return ParseDJSON(expr.s)
-	case types.Timestamp:
-		return ParseDTimestamp(expr.s, time.Microsecond)
-	case types.TimestampTZ:
-		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
-	case types.Interval:
-		return ParseDInterval(expr.s)
 	case types.UUID:
 		if expr.bytesEsc {
 			return ParseDUuidFromBytes([]byte(expr.s))
 		}
-		return ParseDUuidFromString(expr.s)
-	default:
+	}
+	datum, err := parseStringAs(typ, expr.s, ctx)
+	if datum == nil && err == nil {
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"could not resolve %T %v into a %T", expr, expr, typ)
 	}
+	return datum, err
 }
 
 type constantFolderVisitor struct{}

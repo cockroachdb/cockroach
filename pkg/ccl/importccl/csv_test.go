@@ -43,6 +43,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+func TestLoadCSVBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	tests := []struct {
+		name   string
+		create string
+		with   string
+		csv    string
+		err    string
+		query  map[string][][]string
+	}{
+		{
+			name:   "good bytes encoding",
+			create: `b bytes`,
+			csv: `\x0143
+0143`,
+			query: map[string][][]string{
+				`SELECT * from d.t`: {{"\x01C"}, {"0143"}},
+			},
+		},
+		{
+			name:   "invalid byte",
+			create: `b bytes`,
+			csv:    `\x0g`,
+			err:    "invalid byte",
+		},
+		{
+			name:   "bad bytes length",
+			create: `b bytes`,
+			csv:    `\x0`,
+			err:    "odd length hex string",
+		},
+	}
+
+	var csvString string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			fmt.Fprint(w, csvString)
+		}
+	}))
+	defer srv.Close()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS d.t`)
+			q := fmt.Sprintf(`IMPORT TABLE d.t (%s) CSV DATA ($1) %s`, tc.create, tc.with)
+			t.Log(q)
+			csvString = tc.csv
+			_, err := db.Exec(q, srv.URL)
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("unexpected: %v", err)
+			}
+			for query, res := range tc.query {
+				sqlDB.CheckQueryResults(t, query, res)
+			}
+		})
+	}
+}
+
 const testSSTMaxSize = 1024 * 1024 * 50
 const localFoo = "nodelocal:///foo" // matches the sqlccl_test symbol.
 
