@@ -378,7 +378,7 @@ func (t *test) decorate(s string) string {
 			break
 		}
 		file := frame.File
-		if index := strings.LastIndex(file, "/"); index >= 0 {
+		if index := strings.LastIndexByte(file, '/'); index >= 0 {
 			file = file[index+1:]
 		}
 		fmt.Fprintf(buf, "%s%s:%d", sep, file, frame.Line)
