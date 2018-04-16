@@ -1328,6 +1328,7 @@ bins := \
   bin/cockroach-oss \
   bin/cockroach-short \
   bin/docgen \
+  bin/fill_ballast \
   bin/generate-binary \
   bin/github-post \
   bin/github-pull-request-make \
