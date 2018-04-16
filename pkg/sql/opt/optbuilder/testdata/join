@@ -1344,7 +1344,7 @@ TABLE othertype
 build
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 ----
-error: JOIN/USING types int for left and string for right cannot be matched for column x
+error: JOIN/USING types int for left and string for right cannot be matched for column "x"
 
 build
 SELECT * FROM (onecolumn JOIN onecolumn USING(x))
@@ -1894,6 +1894,54 @@ project
 
 build
 SELECT * FROM t1 NATURAL JOIN t2
+----
+project
+ ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
+ ├── inner-join
+ │    ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+ │    ├── scan t1
+ │    │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+ │    ├── scan t2
+ │    │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+ │    └── and [type=bool]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: t1.x [type=int]
+ │         │    └── variable: t2.x [type=int]
+ │         └── eq [type=bool]
+ │              ├── variable: t1.y [type=int]
+ │              └── variable: t2.y [type=int]
+ └── projections
+      ├── variable: t1.x [type=int]
+      ├── variable: t1.y [type=int]
+      ├── variable: t1.col1 [type=int]
+      ├── variable: t1.col2 [type=int]
+      ├── variable: t2.col3 [type=int]
+      └── variable: t2.col4 [type=int]
+
+build
+SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
+----
+project
+ ├── columns: x:2(int) x:2(int) x:8(int)
+ ├── inner-join
+ │    ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+ │    ├── scan t1
+ │    │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+ │    ├── scan t2
+ │    │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+ │    └── and [type=bool]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: t1.x [type=int]
+ │         │    └── variable: t2.x [type=int]
+ │         └── eq [type=bool]
+ │              ├── variable: t1.y [type=int]
+ │              └── variable: t2.y [type=int]
+ └── projections
+      ├── variable: t1.x [type=int]
+      └── variable: t2.x [type=int]
+
+build
+SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
 ----
 project
  ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)

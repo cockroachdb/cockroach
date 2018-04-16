@@ -40,8 +40,11 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 		panic(fmt.Errorf("%s", err))
 	}
 
+	// Update the table name to include catalog and schema if not provided.
+	tc.qualifyTableName(tn)
+
 	// Add the columns and primary index (if there is one defined).
-	tab := &TestTable{Name: tn.Table()}
+	tab := &TestTable{Name: *tn}
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
@@ -81,6 +84,33 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 	tc.AddTable(tab)
 
 	return tab
+}
+
+// qualifyTableName updates the given table name to include catalog and schema
+// if not already included.
+func (tc *TestCatalog) qualifyTableName(name *tree.TableName) {
+	if name.ExplicitSchema {
+		if name.ExplicitCatalog {
+			// Already 3 parts: nothing to do.
+			return
+		}
+
+		if name.SchemaName == tree.PublicSchemaName {
+			// Use the current database.
+			name.CatalogName = testDB
+			return
+		}
+
+		// Compatibility with CockroachDB v1.1: use D.public.T.
+		name.CatalogName = name.SchemaName
+		name.SchemaName = tree.PublicSchemaName
+		name.ExplicitCatalog = true
+		return
+	}
+
+	// Use the current database.
+	name.CatalogName = testDB
+	name.SchemaName = tree.PublicSchemaName
 }
 
 func (tt *TestTable) addColumn(def *tree.ColumnTableDef) {

@@ -423,11 +423,11 @@ func sourceNameMatches(srcName tree.TableName, toFind tree.TableName) bool {
 		return false
 	}
 	if toFind.ExplicitSchema {
-		if !srcName.ExplicitSchema || srcName.SchemaName != toFind.SchemaName {
+		if srcName.SchemaName != toFind.SchemaName {
 			return false
 		}
 		if toFind.ExplicitCatalog {
-			if !srcName.ExplicitCatalog || srcName.CatalogName != toFind.CatalogName {
+			if srcName.CatalogName != toFind.CatalogName {
 				return false
 			}
 		}

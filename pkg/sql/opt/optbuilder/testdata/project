@@ -266,3 +266,27 @@ build
 SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
 ----
 error: column name "c" not found
+
+build
+SELECT t.kv.k FROM abc AS kv
+----
+error: no data source matches prefix: t.kv
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+build
+SELECT t.kv.k FROM kv
+----
+project
+ ├── columns: k:1(int!null)
+ ├── scan kv
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── projections
+      └── variable: kv.k [type=int]

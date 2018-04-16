@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -57,7 +58,8 @@ func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, 
 func (b *Builder) buildProjection(projection tree.Expr, label string, inScope, outScope *scope) {
 	exprs := b.expandStarAndResolveType(projection, inScope)
 	if len(exprs) > 1 && label != "" {
-		panic(errorf("\"%s\" cannot be aliased", projection))
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"%q cannot be aliased", tree.ErrString(projection))})
 	}
 
 	for _, e := range exprs {
