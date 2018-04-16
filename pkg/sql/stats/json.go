@@ -112,10 +112,9 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 		return nil, err
 	}
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
-	var collationEnv tree.CollationEnvironment
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := parser.ParseStringAs(datumType, hb.UpperBound, evalCtx, &collationEnv)
+		upperVal, err := tree.ParseStringAs(datumType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}

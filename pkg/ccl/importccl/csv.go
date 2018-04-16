@@ -367,7 +367,6 @@ func convertRecord(
 	const kvBatchSize = 1000
 	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
 	visibleCols := tableDesc.VisibleColumns()
-	cenv := &tree.CollationEnvironment{}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
 		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
@@ -417,7 +416,8 @@ func convertRecord(
 				if nullif != nil && v == *nullif {
 					datums[i] = tree.DNull
 				} else {
-					datums[i], err = parser.ParseStringAs(col.Type.ToDatumType(), v, &evalCtx, cenv)
+					var err error
+					datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, &evalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
 					}
