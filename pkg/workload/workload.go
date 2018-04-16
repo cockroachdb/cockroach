@@ -282,66 +282,11 @@ func Setup(
 
 	var size int64
 	for _, table := range tables {
-		if table.InitialRows.Batch == nil {
-			// Some workloads don't support initial table data.
-			continue
-		}
-		batchesPerWorker := table.InitialRows.NumBatches / concurrency
-		g, gCtx := errgroup.WithContext(ctx)
-		for i := 0; i < concurrency; i++ {
-			startIdx := i * batchesPerWorker
-			endIdx := startIdx + batchesPerWorker
-			if i == concurrency-1 {
-				// Account for any rounding error in batchesPerWorker.
-				endIdx = table.InitialRows.NumBatches
-			}
-			g.Go(func() error {
-				var insertStmtBuf bytes.Buffer
-				var params []interface{}
-				var numRows int
-				flush := func() error {
-					if len(params) > 0 {
-						insertStmt := insertStmtBuf.String()
-						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
-							return errors.Wrapf(err, "failed insert into %s", table.Name)
-						}
-					}
-					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
-					params = params[:0]
-					numRows = 0
-					return nil
-				}
-				_ = flush()
-
-				for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
-					for _, row := range table.InitialRows.Batch(rowBatchIdx) {
-						if len(params) != 0 {
-							insertStmtBuf.WriteString(`,`)
-						}
-						insertStmtBuf.WriteString(`(`)
-						for i, datum := range row {
-							atomic.AddInt64(&size, ApproxDatumSize(datum))
-							if i != 0 {
-								insertStmtBuf.WriteString(`,`)
-							}
-							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
-						}
-						params = append(params, row...)
-						insertStmtBuf.WriteString(`)`)
-						if numRows++; numRows >= batchSize {
-							if err := flush(); err != nil {
-								return err
-							}
-						}
-					}
-				}
-				return flush()
-			})
-		}
-		if err := g.Wait(); err != nil {
+		s, err := FillTable(ctx, db, table, batchSize, concurrency)
+		if err != nil {
 			return 0, err
 		}
+		size += s
 	}
 
 	if hooks.PostLoad != nil {
@@ -350,6 +295,72 @@ func Setup(
 		}
 	}
 
+	return size, nil
+}
+
+// FillTable loads the initial data for a given table.
+func FillTable(ctx context.Context, db *gosql.DB, table Table, batchSize, concurrency int) (int64, error) {
+	if table.InitialRows.Batch == nil {
+		// Some workloads don't support initial table data.
+		return 0, nil
+	}
+	var size int64
+	batchesPerWorker := table.InitialRows.NumBatches / concurrency
+	g, gCtx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		startIdx := i * batchesPerWorker
+		endIdx := startIdx + batchesPerWorker
+		if i == concurrency-1 {
+			// Account for any rounding error in batchesPerWorker.
+			endIdx = table.InitialRows.NumBatches
+		}
+		g.Go(func() error {
+			var insertStmtBuf bytes.Buffer
+			var params []interface{}
+			var numRows int
+			flush := func() error {
+				if len(params) > 0 {
+					insertStmt := insertStmtBuf.String()
+					if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
+						return errors.Wrapf(err, "failed insert into %s", table.Name)
+					}
+				}
+				insertStmtBuf.Reset()
+				fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+				params = params[:0]
+				numRows = 0
+				return nil
+			}
+			_ = flush()
+
+			for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
+				for _, row := range table.InitialRows.Batch(rowBatchIdx) {
+					if len(params) != 0 {
+						insertStmtBuf.WriteString(`,`)
+					}
+					insertStmtBuf.WriteString(`(`)
+					for i, datum := range row {
+						atomic.AddInt64(&size, ApproxDatumSize(datum))
+						if i != 0 {
+							insertStmtBuf.WriteString(`,`)
+						}
+						fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
+					}
+					params = append(params, row...)
+					insertStmtBuf.WriteString(`)`)
+					if numRows++; numRows >= batchSize {
+						if err := flush(); err != nil {
+							return err
+						}
+					}
+				}
+			}
+			return flush()
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return 0, err
+	}
 	return size, nil
 }
 
