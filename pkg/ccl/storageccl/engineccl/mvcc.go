@@ -66,7 +66,9 @@ func NewMVCCIncrementalIterator(
 		// interval into the fully-inclusive [start, end] interval that
 		// NewTimeBoundIterator expects. This is strictly a performance
 		// optimization; omitting the call would still return correct results.
-		iter:      e.NewTimeBoundIterator(startTime.Next(), endTime),
+		//
+		// TODO(tschottdorf): plumb withStats in when needed.
+		iter:      e.NewTimeBoundIterator(startTime.Next(), endTime, false /* withStats */),
 		startTime: startTime,
 		endTime:   endTime,
 	}

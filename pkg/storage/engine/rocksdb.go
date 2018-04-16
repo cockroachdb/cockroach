@@ -913,9 +913,9 @@ func (r *RocksDB) NewIterator(opts IterOptions) Iterator {
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *RocksDB) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+func (r *RocksDB) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
 	it := &rocksDBIterator{}
-	it.initTimeBound(r.rdb, start, end, r)
+	it.initTimeBound(r.rdb, start, end, withStats, r)
 	return it
 }
 
@@ -1009,12 +1009,12 @@ func (r *rocksDBReadOnly) NewIterator(opts IterOptions) Iterator {
 	return iter
 }
 
-func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+func (r *rocksDBReadOnly) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
 	if r.isClosed {
 		panic("using a closed rocksDBReadOnly")
 	}
 	it := &rocksDBIterator{}
-	it.initTimeBound(r.parent.rdb, start, end, r)
+	it.initTimeBound(r.parent.rdb, start, end, withStats, r)
 	return it
 }
 
@@ -1179,7 +1179,7 @@ func (r *rocksDBSnapshot) NewIterator(opts IterOptions) Iterator {
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *rocksDBSnapshot) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+func (r *rocksDBSnapshot) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
 	panic("not implemented")
 }
 
@@ -1311,6 +1311,10 @@ func (r *distinctBatch) close() {
 type batchIterator struct {
 	iter  rocksDBIterator
 	batch *rocksDBBatch
+}
+
+func (r *batchIterator) Stats() IteratorStats {
+	return r.iter.Stats()
 }
 
 func (r *batchIterator) Close() {
@@ -1616,7 +1620,7 @@ func (r *rocksDBBatch) NewIterator(opts IterOptions) Iterator {
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
-func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
+func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator {
 	if r.writeOnly {
 		panic("write-only batch")
 	}
@@ -1630,7 +1634,7 @@ func (r *rocksDBBatch) NewTimeBoundIterator(start, end hlc.Timestamp) Iterator {
 	iter := &batchIterator{
 		batch: r,
 	}
-	iter.iter.initTimeBound(r.batch, start, end, r)
+	iter.iter.initTimeBound(r.batch, start, end, withStats, r)
 	return iter
 }
 
@@ -1871,15 +1875,17 @@ func (r *rocksDBIterator) init(rdb *C.DBEngine, opts IterOptions, engine Reader,
 		r.parent.iters.Unlock()
 	}
 
-	r.iter = C.DBNewIter(rdb, C.bool(opts.Prefix))
+	r.iter = C.DBNewIter(rdb, C.bool(opts.Prefix), C.bool(opts.WithStats))
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
 	r.engine = engine
 }
 
-func (r *rocksDBIterator) initTimeBound(rdb *C.DBEngine, start, end hlc.Timestamp, engine Reader) {
-	r.iter = C.DBNewTimeBoundIter(rdb, goToCTimestamp(start), goToCTimestamp(end))
+func (r *rocksDBIterator) initTimeBound(
+	rdb *C.DBEngine, start, end hlc.Timestamp, withStats bool, engine Reader,
+) {
+	r.iter = C.DBNewTimeBoundIter(rdb, goToCTimestamp(start), goToCTimestamp(end), C.bool(withStats))
 	if r.iter == nil {
 		panic("unable to create iterator")
 	}
@@ -1903,6 +1909,14 @@ func (r *rocksDBIterator) destroy() {
 }
 
 // The following methods implement the Iterator interface.
+
+func (r *rocksDBIterator) Stats() IteratorStats {
+	stats := C.DBIterStats(r.iter)
+	return IteratorStats{
+		TimeBoundNumSSTs:           int(C.ulonglong(stats.timebound_num_ssts)),
+		InternalDeleteSkippedCount: int(C.ulonglong(stats.internal_delete_skipped_count)),
+	}
+}
 
 func (r *rocksDBIterator) Close() {
 	r.destroy()

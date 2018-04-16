@@ -29,4 +29,5 @@ struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
   std::unique_ptr<cockroach::chunkedBuffer> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
+  std::unique_ptr<IteratorStats> stats;
 };

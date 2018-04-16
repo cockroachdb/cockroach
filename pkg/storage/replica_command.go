@@ -495,7 +495,7 @@ func resolveLocalIntents(
 	}
 
 	min, max := txn.InclusiveTimeBounds()
-	iter := batch.NewTimeBoundIterator(min, max)
+	iter := batch.NewTimeBoundIterator(min, max, false)
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
