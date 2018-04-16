@@ -48,7 +48,8 @@ CREATE TABLE system.descriptor (
 	UsersTableSchema = `
 CREATE TABLE system.users (
   username         STRING PRIMARY KEY,
-  "hashedPassword" BYTES
+  "hashedPassword" BYTES,
+	"isRole"         BOOL NOT NULL DEFAULT false
 );`
 
 	// Zone settings per DB/Table.
@@ -304,6 +305,8 @@ var (
 		NextMutationID: 1,
 	}
 
+	falseBoolString = "false"
+
 	// UsersTable is the descriptor for the users table.
 	UsersTable = TableDescriptor{
 		Name:     "users",
@@ -313,14 +316,16 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: colTypeString},
 			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "isRole", ID: 3, Type: colTypeBool, DefaultExpr: &falseBoolString},
 		},
-		NextColumnID: 3,
+		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
 			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
 		PrimaryIndex:   pk("username"),
-		NextFamilyID:   3,
+		NextFamilyID:   4,
 		NextIndexID:    2,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
@@ -789,15 +794,14 @@ var (
 	}
 )
 
-// Create the key/value pair for the default zone config entry.
-func createDefaultZoneConfig() roachpb.KeyValue {
-	zoneConfig := config.DefaultZoneConfig()
+// Create a kv pair for the zone config for the given key and config value.
+func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(&zoneConfig); err != nil {
-		panic(fmt.Sprintf("could not marshal DefaultZoneConfig: %s", err))
+		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   config.MakeZoneKey(uint32(keys.RootNamespaceID)),
+		Key:   config.MakeZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }
@@ -838,7 +842,21 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// the metadata schema here. This ensures there's only ever one code path
 	// responsible for creating the table.
 
-	target.otherKV = append(target.otherKV, createDefaultZoneConfig())
+	// Default zone config entry.
+	zoneConf := config.DefaultZoneConfig()
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
+
+	// .meta zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+
+	// Jobs zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
