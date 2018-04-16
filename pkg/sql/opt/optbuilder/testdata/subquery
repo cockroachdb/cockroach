@@ -856,6 +856,20 @@ project
            │              └── variable: abc.a [type=int]
            └── variable: abc.a [type=int]
 
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+build
+SELECT (SELECT abc.k FROM abc) FROM kv AS abc
+----
+error: column name "abc.k" not found
+
 build
 VALUES (1, (SELECT (2)))
 ----

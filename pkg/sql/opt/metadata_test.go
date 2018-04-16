@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -72,7 +73,8 @@ func TestMetadataTables(t *testing.T) {
 	md := opt.NewMetadata()
 
 	// Add a table reference to the metadata.
-	a := &testutils.TestTable{Name: "a"}
+	a := &testutils.TestTable{}
+	a.Name = tree.MakeUnqualifiedTableName(tree.Name("a"))
 	x := &testutils.TestColumn{Name: "x"}
 	y := &testutils.TestColumn{Name: "y"}
 	a.Columns = append(a.Columns, x, y)

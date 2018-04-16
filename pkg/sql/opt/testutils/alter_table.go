@@ -35,9 +35,12 @@ func (tc *TestCatalog) AlterTable(stmt *tree.AlterTable) {
 		panic(err)
 	}
 
-	table, ok := tc.tables[tn.Table()]
+	// Update the table name to include catalog and schema if not provided.
+	tc.qualifyTableName(tn)
+
+	table, ok := tc.tables[tn.FQString()]
 	if !ok {
-		panic(fmt.Sprintf("cannot find table %s", tn.Table()))
+		panic(fmt.Sprintf("cannot find table %q", tree.ErrString(tn)))
 	}
 
 	for _, cmd := range stmt.Cmds {

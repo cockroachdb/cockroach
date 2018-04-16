@@ -38,27 +38,72 @@ func NewTestCatalog() *TestCatalog {
 	return &TestCatalog{tables: make(map[string]*TestTable)}
 }
 
+const (
+	// testDB is the default current database for testing purposes.
+	testDB = "t"
+)
+
 // FindTable is part of the opt.Catalog interface.
 func (tc *TestCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
-	if table, ok := tc.tables[name.Table()]; ok {
+	// This is a simplified version of tree.TableName.ResolveExisting() from
+	// sql/tree/name_resolution.go.
+	toFind := *name
+	if name.ExplicitSchema {
+		if name.ExplicitCatalog {
+			// Already 3 parts.
+			return tc.findTable(&toFind, name)
+		}
+
+		// Two parts: Try to use the current database, and be satisfied if it's
+		// sufficient to find the object.
+		toFind.CatalogName = testDB
+		if tab, err := tc.findTable(&toFind, name); err == nil {
+			return tab, nil
+		}
+
+		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T
+		// instead.
+		toFind.CatalogName = name.SchemaName
+		toFind.SchemaName = tree.PublicSchemaName
+		toFind.ExplicitCatalog = true
+		return tc.findTable(&toFind, name)
+	}
+
+	// This is a naked table name. Use the current database.
+	toFind.CatalogName = tree.Name(testDB)
+	toFind.SchemaName = tree.PublicSchemaName
+	return tc.findTable(&toFind, name)
+}
+
+// findTable checks if the table `toFind` exists among the tables in this
+// TestCatalog. If it does, findTable updates `name` to match `toFind`, and
+// returns the corresponding table. Otherwise, it returns an error.
+func (tc *TestCatalog) findTable(toFind, name *tree.TableName) (opt.Table, error) {
+	if table, ok := tc.tables[toFind.FQString()]; ok {
+		*name = *toFind
 		return table, nil
 	}
-	return nil, fmt.Errorf("table %q not found", name.String())
+	return nil, fmt.Errorf("table %q not found", tree.ErrString(name))
 }
 
 // Table returns the test table that was previously added with the given name.
 func (tc *TestCatalog) Table(name string) *TestTable {
-	return tc.tables[name]
+	tn := tree.MakeUnqualifiedTableName(tree.Name(name))
+	tab, err := tc.FindTable(context.TODO(), &tn)
+	if err != nil {
+		panic(fmt.Errorf("table %q is not in the test catalog", tree.ErrString((*tree.Name)(&name))))
+	}
+	return tab.(*TestTable)
 }
 
 // AddTable adds the given test table to the catalog.
 func (tc *TestCatalog) AddTable(tab *TestTable) {
-	tc.tables[tab.Name] = tab
+	tc.tables[tab.Name.FQString()] = tab
 }
 
 // TestTable implements the opt.Table interface for testing purposes.
 type TestTable struct {
-	Name    string
+	Name    tree.TableName
 	Columns []*TestColumn
 	Indexes []*TestIndex
 	Stats   []*TestTableStat
@@ -74,7 +119,7 @@ func (tt *TestTable) String() string {
 
 // TabName is part of the opt.Table interface.
 func (tt *TestTable) TabName() opt.TableName {
-	return opt.TableName(tt.Name)
+	return opt.TableName(tt.Name.TableName)
 }
 
 // ColumnCount is part of the opt.Table interface.
@@ -114,7 +159,11 @@ func (tt *TestTable) FindOrdinal(name string) int {
 			return i
 		}
 	}
-	panic(fmt.Sprintf("cannot find column %s in table %s", name, tt.Name))
+	panic(fmt.Sprintf(
+		"cannot find column %q in table %q",
+		tree.ErrString((*tree.Name)(&name)),
+		tree.ErrString(&tt.Name),
+	))
 }
 
 // TestIndex implements the opt.Index interface for testing purposes.
