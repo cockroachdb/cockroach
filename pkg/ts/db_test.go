@@ -60,10 +60,8 @@ import (
 // model to the actual data stored in the cockroach engine, ensuring that the
 // data matches.
 type testModel struct {
-	t           testing.TB
-	modelData   map[string]roachpb.Value
-	seenSources map[string]struct{}
-	model       *testmodel.ModelDB
+	t     testing.TB
+	model *testmodel.ModelDB
 	*localtestcluster.LocalTestCluster
 	DB                *DB
 	workerMemMonitor  *mon.BytesMonitor
@@ -95,8 +93,6 @@ func newTestModel(t *testing.T) testModel {
 	)
 	return testModel{
 		t:                 t,
-		modelData:         make(map[string]roachpb.Value),
-		seenSources:       make(map[string]struct{}),
 		model:             testmodel.NewModelDB(),
 		LocalTestCluster:  &localtestcluster.LocalTestCluster{},
 		workerMemMonitor:  &workerMonitor,
@@ -139,12 +135,6 @@ func (tm *testModel) getActualData() map[string]roachpb.Value {
 func (tm *testModel) assertModelCorrect() {
 	tm.t.Helper()
 	actualData := tm.getActualData()
-	if !reflect.DeepEqual(tm.modelData, actualData) {
-		for _, diff := range pretty.Diff(tm.modelData, actualData) {
-			tm.t.Error(diff)
-		}
-	}
-
 	modelDisk := tm.getNewModelDiskLayout()
 	if a, e := actualData, modelDisk; !reflect.DeepEqual(a, e) {
 		for _, diff := range pretty.Diff(a, e) {
@@ -197,11 +187,6 @@ func (tm *testModel) getNewModelDiskLayout() map[string]roachpb.Value {
 // This is used to ensure that data is actually being generated in the test
 // model.
 func (tm *testModel) assertKeyCount(expected int) {
-	if a, e := len(tm.modelData), expected; a != e {
-		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
-	}
-
-	// check key count from test model.
 	if a, e := len(tm.getNewModelDiskLayout()), expected; a != e {
 		tm.t.Errorf("model data key count did not match expected value: %d != %d", a, e)
 	}
@@ -213,7 +198,9 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	}
 
 	// Store in the new model. Record for both full-resolution data *and* a series
-	// for the specific resolution recorded.
+	// for the specific resolution recorded. The series-specific resolution is
+	// used to simulate the expected on-disk layout of series in CockroachDB, while
+	// the full-resolution data is used to verify query results.
 	tm.model.Record(data.Name, data.Source, data.Datapoints)
 	tm.model.Record(
 		resolutionModelKey(data.Name, r),
@@ -222,43 +209,6 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 			r.SampleDuration(), testmodel.AggregateLast,
 		),
 	)
-
-	// Note the source, used to construct keys for model queries.
-	tm.seenSources[data.Source] = struct{}{}
-
-	// Process and store data in the model.
-	internalData, err := data.ToInternal(r.SlabDuration(), r.SampleDuration())
-	if err != nil {
-		tm.t.Fatalf("test could not convert time series to internal format: %s", err)
-	}
-
-	for _, idata := range internalData {
-		key := MakeDataKey(data.Name, data.Source, r, idata.StartTimestampNanos)
-		keyStr := string(key)
-
-		existing, ok := tm.modelData[keyStr]
-		var newTs roachpb.InternalTimeSeriesData
-		if ok {
-			existingTs, err := existing.GetTimeseries()
-			if err != nil {
-				tm.t.Fatalf("test could not extract time series from existing model value: %s", err)
-			}
-			newTs, err = engine.MergeInternalTimeSeriesData(existingTs, idata)
-			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err)
-			}
-		} else {
-			newTs, err = engine.MergeInternalTimeSeriesData(idata)
-			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err)
-			}
-		}
-		var val roachpb.Value
-		if err := val.SetProto(&newTs); err != nil {
-			tm.t.Fatal(err)
-		}
-		tm.modelData[keyStr] = val
-	}
 }
 
 // resolutionModelKey returns a string to store resolution-specific data in
@@ -317,27 +267,9 @@ func (tm *testModel) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInf
 		tm.t.Fatalf("error pruning time series data: %s", err)
 	}
 
-	// Prune data from the model.
-	// TODO(mrtracy): delete.
-	thresholds := tm.DB.computeThresholds(nowNanos)
-	for k := range tm.modelData {
-		name, _, res, ts, err := DecodeDataKey(roachpb.Key(k))
-		if err != nil {
-			tm.t.Fatalf("corrupt key %s found in model data, error: %s", k, err)
-		}
-		for _, tsr := range timeSeries {
-			threshold, ok := thresholds[res]
-			if !ok {
-				threshold = nowNanos
-			}
-			if name == tsr.Name && res == tsr.Resolution && ts < threshold {
-				delete(tm.modelData, k)
-			}
-		}
-	}
-
 	// Prune the appropriate resolution-specific series from the test model using
 	// VisitSeries.
+	thresholds := tm.DB.computeThresholds(nowNanos)
 	for _, ts := range timeSeries {
 		tm.model.VisitSeries(
 			resolutionModelKey(ts.Name, ts.Resolution),
