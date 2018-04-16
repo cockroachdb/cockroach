@@ -3779,8 +3779,18 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-			// Cases like "something\%" are not optimized, but this does not affect correctness.
-			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+			// Patterns with even number of `\` preceding the ending `%` will have
+			// anyStart set to true. Otherwise anyStart will be set to false.
+			var anyEnd bool
+			if pattern[len(pattern)-1] == '%' {
+				var count int
+				idx := len(pattern) - 2
+				for idx >= 0 && pattern[idx] == '\\' {
+					count++
+					idx--
+				}
+				anyEnd = count%2 == 0
+			}
 			anyStart := pattern[0] == '%'
 
 			// singleAnyEnd and anyEnd are mutually exclusive

@@ -306,6 +306,7 @@ func TestEval(t *testing.T) {
 		// Escaped character cases.
 		{`'[' LIKE '\['`, `true`},
 		{`'.' LIKE '\.'`, `true`},
+		{`'\' LIKE '%\\%'`, `true`},
 		{`'\.*' LIKE '\\.*'`, `true`},
 		{`'\.*' LIKE '\\.\*'`, `true`},
 		{`'\.*' LIKE '\\\.\*'`, `true`},
