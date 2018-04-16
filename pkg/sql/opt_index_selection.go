@@ -145,7 +145,7 @@ func (p *planner) selectIndex(
 		if err != nil {
 			return nil, err
 		}
-		filterExpr := optimizer.Optimize(filterGroup, &memo.PhysicalProps{})
+		filterExpr := memo.MakeNormExprView(optimizer.Memo(), filterGroup)
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
 				optimizer, filterExpr, p.EvalContext(),
@@ -245,7 +245,7 @@ func (p *planner) selectIndex(
 	s.origFilter = s.filter
 	if s.filter != nil {
 		remGroup := c.ic.RemainingFilter()
-		remEv := optimizer.Optimize(remGroup, &memo.PhysicalProps{})
+		remEv := memo.MakeNormExprView(optimizer.Memo(), remGroup)
 		if remEv.Operator() == opt.TrueOp {
 			s.filter = nil
 		} else {

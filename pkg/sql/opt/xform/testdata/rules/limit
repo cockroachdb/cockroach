@@ -108,18 +108,20 @@ limit
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-[presentation: s:4]
-memo
+memo (optimized)
  ├── G1: (limit G2 G3 ) (scan a@s_idx,constrained,lim=1) (scan a@si_idx,constrained,lim=1)
- │    └── "[presentation: s:4]" [cost=1.00]
- │         └── best: (scan a@s_idx,constrained,lim=1)
+ │    └── "[presentation: s:4]"
+ │         ├── best: (scan a@s_idx,constrained,lim=1)
+ │         └── cost: 1.00
  ├── G2: (select G4 G5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
- │    └── "" [cost=100.00]
- │         └── best: (scan a@s_idx,constrained)
+ │    └── ""
+ │         ├── best: (scan a@s_idx,constrained)
+ │         └── cost: 100.00
  ├── G3: (const 1)
  ├── G4: (scan a) (scan a@s_idx) (scan a@si_idx)
- │    └── "" [cost=1000.00]
- │         └── best: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable a.s)
