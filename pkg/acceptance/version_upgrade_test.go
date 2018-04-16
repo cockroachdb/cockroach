@@ -220,11 +220,14 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		binaryVersionUpgrade("v1.1.0"),
 		clusterVersionUpgrade("1.0"),
 		clusterVersionUpgrade("1.0-3"),
+
 		binaryVersionUpgrade("v1.1.1"),
 		clusterVersionUpgrade("1.1"),
-		binaryVersionUpgrade(sourceVersion),
 		clusterVersionUpgrade("1.1-6"),
+
+		binaryVersionUpgrade("v2.0.0"),
 		clusterVersionUpgrade("2.0"),
+		binaryVersionUpgrade(sourceVersion),
 		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()),
 	}
 
