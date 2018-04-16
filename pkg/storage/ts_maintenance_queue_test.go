@@ -246,15 +246,15 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	sampleDuration := ts.Resolution10s.SampleDuration()
 	datapoints := []tspb.TimeSeriesDatapoint{
 		{
-			TimestampNanos: farPast - farPast%sampleDuration + sampleDuration/2,
+			TimestampNanos: farPast - farPast%sampleDuration,
 			Value:          100.0,
 		},
 		{
-			TimestampNanos: nearPast - (nearPast)%sampleDuration + sampleDuration/2,
+			TimestampNanos: nearPast - (nearPast)%sampleDuration,
 			Value:          200.0,
 		},
 		{
-			TimestampNanos: now - now%sampleDuration + sampleDuration/2,
+			TimestampNanos: now - now%sampleDuration,
 			Value:          300.0,
 		},
 	}
