@@ -250,7 +250,7 @@ project
 build
 SELECT foo.* FROM kv
 ----
-error: no data source named "foo"
+error: no data source matches pattern: foo.*
 
 build
 SELECT *
@@ -265,7 +265,7 @@ error: "kv.*" cannot be aliased
 build
 SELECT bar.kv.* FROM kv
 ----
-error: no data source named "bar.kv"
+error: no data source matches pattern: bar.kv.*
 
 # Don't panic with invalid names (#8024)
 build

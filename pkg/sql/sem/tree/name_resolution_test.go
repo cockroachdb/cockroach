@@ -390,6 +390,67 @@ func newFakeSource() *fakeSource {
 	}
 }
 
+func TestResolveQualifiedStar(t *testing.T) {
+	testCases := []struct {
+		in    string
+		tnout string
+		csout string
+		err   string
+	}{
+		{`a.*`, ``, ``, `no data source matches pattern: a.*`},
+		{`foo.*`, ``, ``, `ambiguous table name: foo`},
+		{`db1.public.foo.*`, `db1.public.foo`, `x`, ``},
+		{`db1.foo.*`, `db1.public.foo`, `x`, ``},
+		{`dbx.foo.*`, ``, ``, `no data source matches pattern: dbx.foo.*`},
+		{`kv.*`, `db1.public.kv`, `k, v`, ``},
+	}
+	fakeFrom := newFakeSource()
+	for _, tc := range testCases {
+		t.Run(tc.in, func(t *testing.T) {
+			fakeFrom.t = t
+			tnout, csout, err := func() (string, string, error) {
+				stmt, err := parser.ParseOne(fmt.Sprintf("SELECT %s", tc.in))
+				if err != nil {
+					return "", "", err
+				}
+				v := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(tree.VarName)
+				c, err := v.NormalizeVarName()
+				if err != nil {
+					return "", "", err
+				}
+				acs, ok := c.(*tree.AllColumnsSelector)
+				if !ok {
+					return "", "", fmt.Errorf("var name %s (%T) did not resolve to AllColumnsSelector, found %T instead",
+						v, v, c)
+				}
+				tn, res, err := acs.Resolve(context.Background(), fakeFrom)
+				if err != nil {
+					return "", "", err
+				}
+				cs, ok := res.(colsRes)
+				if !ok {
+					return "", "", fmt.Errorf("fake resolver did not return colsRes, found %T instead", res)
+				}
+				nl := tree.NameList(cs)
+				return tn.String(), nl.String(), nil
+			}()
+			if !testutils.IsError(err, tc.err) {
+				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
+			}
+			if tc.err != "" {
+				return
+			}
+
+			if tc.tnout != tnout {
+				t.Fatalf("%s: expected tn %s, but found %s", tc.in, tc.tnout, tnout)
+			}
+			if tc.csout != csout {
+				t.Fatalf("%s: expected cs %s, but found %s", tc.in, tc.csout, csout)
+			}
+		})
+	}
+}
+
 func TestResolveColumnItem(t *testing.T) {
 	testCases := []struct {
 		in  string

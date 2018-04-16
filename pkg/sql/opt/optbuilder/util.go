@@ -35,20 +35,10 @@ func (b *Builder) expandStar(expr tree.Expr, inScope *scope) (exprs []tree.Typed
 
 	switch t := expr.(type) {
 	case *tree.AllColumnsSelector:
-		tn, err := tree.NormalizeTableName(&t.TableName)
+		src, _, err := t.Resolve(b.ctx, inScope)
 		if err != nil {
 			panic(builderError{err})
 		}
-
-		numRes, src, _, err := inScope.FindSourceMatchingName(b.ctx, tn)
-		if err != nil {
-			panic(builderError{err})
-		}
-		if numRes == tree.NoResults {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"no data source named %q", tree.ErrString(&tn))})
-		}
-
 		for i := range inScope.cols {
 			col := inScope.cols[i]
 			if col.table == *src && !col.hidden {
