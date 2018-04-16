@@ -57,10 +57,19 @@ func (p *planner) ShowSyntax(ctx context.Context, n *tree.ShowSyntax) (planNode,
 }
 
 func runShowSyntax(
-	ctx context.Context, stmt string, report func(ctx context.Context, field, msg string) error,
+	ctx context.Context,
+	stmt string,
+	report func(ctx context.Context, field, msg string) error,
+	reportErr func(err error),
 ) error {
 	stmts, err := parser.Parse(stmt)
 	if err != nil {
+		// This error won't propagate to the client as an error, but as a
+		// result. This means that the usual code path to capture and
+		// record errors will not be triggered.  Trigger it manually here
+		// instead.
+		reportErr(err)
+
 		pqErr, ok := pgerror.GetPGCause(err)
 		if !ok {
 			return pgerror.NewErrorf(pgerror.CodeInternalError, "unknown parser error: %v", err)
