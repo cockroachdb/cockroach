@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 const testCompactionLatency = 1 * time.Millisecond
@@ -531,6 +532,29 @@ func TestCompactorThresholds(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestCompactorDeadlockOnStart prevents regression of an issue that
+// could cause nodes to lock up during the boot sequence. The
+// compactor may receive suggestions before starting the goroutine,
+// yet starting the goroutine could block on the suggestions channel,
+// deadlocking the call to (Compactor).Start and thus the main node
+// boot goroutine. This was observed in practice.
+func TestCompactorDeadlockOnStart(t *testing.T) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	eng := newWrappedEngine()
+	stopper.AddCloser(eng)
+	capFn := func() (roachpb.StoreCapacity, error) {
+		return roachpb.StoreCapacity{}, errors.New("never called")
+	}
+	doneFn := func(_ context.Context) {}
+	compactor := NewCompactor(eng, capFn, doneFn)
+
+	compactor.ch <- struct{}{}
+
+	compactor.Start(context.Background(), tracing.NewTracer(), stopper)
 }
 
 // TestCompactorProcessingInitialization verifies that a compactor gets

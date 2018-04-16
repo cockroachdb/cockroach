@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 query TITTTTT
 EXPLAIN (METADATA,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)

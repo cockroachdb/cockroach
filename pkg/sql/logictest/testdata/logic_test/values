@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 query III colnames
 VALUES (1, 2, 3), (4, 5, 6)

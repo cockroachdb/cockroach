@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-disk
+# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
 
 # English collation chart: http://www.unicode.org/cldr/charts/30/collation/en_US_POSIX.html
 

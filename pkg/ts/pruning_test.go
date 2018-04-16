@@ -311,12 +311,12 @@ func TestPruneTimeSeries(t *testing.T) {
 						Source: source,
 						Datapoints: []tspb.TimeSeriesDatapoint{
 							{
-								TimestampNanos: now,
-								Value:          1,
-							},
-							{
 								TimestampNanos: now - int64(365*24*time.Hour),
 								Value:          2,
+							},
+							{
+								TimestampNanos: now,
+								Value:          1,
 							},
 						},
 					},

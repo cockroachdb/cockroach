@@ -1,4 +1,4 @@
-# LogicTest: distsql
+# LogicTest: distsql distsql-metadata
 
 
 # Test that sequence functions work in DistSQL queries.

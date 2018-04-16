@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 # Test index selection for deeply interleaved tables.
 # These tests are in their own file because table IDs appear in the EXPLAIN output.

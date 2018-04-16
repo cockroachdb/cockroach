@@ -111,6 +111,14 @@ message SnapshotRequest {
     REBALANCE = 2;
   }
 
+  enum Strategy {
+    // KV_BATCH snapshots stream batches of KV pairs for all keys in a
+    // range from the sender the the receiver. These KV pairs are then
+    // combined into a large RocksDB WriteBatch that is atomically
+    // applied.
+    KV_BATCH = 0;
+  }
+
   message Header {
     reserved 1;
 
@@ -134,6 +142,9 @@ message SnapshotRequest {
 
     // The priority of the snapshot.
     optional Priority priority = 6 [(gogoproto.nullable) = false];
+
+    // The strategy of the snapshot.
+    optional Strategy strategy = 7 [(gogoproto.nullable) = false];
   }
 
   optional Header header = 1;
