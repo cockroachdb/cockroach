@@ -1032,6 +1032,14 @@ func (s *adminServer) Settings(
 	return &resp, nil
 }
 
+// Diagnostics returns an anonymized diagnostics report.
+func (s *adminServer) Diagnostics(
+	ctx context.Context, req *serverpb.DiagnosticsRequest,
+) (*serverpb.DiagnosticsResponse, error) {
+	report := s.server.getReportingInfo(ctx)
+	return &serverpb.DiagnosticsResponse{Report: *report}, nil
+}
+
 // Cluster returns cluster metadata.
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,

@@ -17,6 +17,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
+import "server/diagnosticspb/diagnostics.proto";
 import "sql/jobs/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -400,6 +401,15 @@ message SettingsResponse {
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
 
+// DiagnosticsRequest requests a diagnostics report.
+message DiagnosticsRequest {
+}
+
+// DiagnosticsResponse returns a diagnostics report.
+message DiagnosticsResponse {
+  cockroach.server.diagnosticspb.DiagnosticReport report = 1 [(gogoproto.nullable) = false];
+}
+
 // HealthRequest inquires whether the addressed node is healthy.
 message HealthRequest {
 }
@@ -654,6 +664,13 @@ service Admin {
   rpc Settings(SettingsRequest) returns (SettingsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/settings"
+    };
+  }
+
+  // Diagnostics returns the cluster-wide settings for the cluster.
+  rpc Diagnostics(DiagnosticsRequest) returns (DiagnosticsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/diagnostics"
     };
   }
 
