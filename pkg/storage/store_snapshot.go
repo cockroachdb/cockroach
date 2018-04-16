@@ -15,7 +15,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -25,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -53,12 +51,251 @@ const (
 	IntersectingSnapshotMsg = "snapshot intersects existing range"
 )
 
-// IncomingSnapshotStream is the minimal interface on a GRPC stream required
+// incomingSnapshotStream is the minimal interface on a GRPC stream required
 // to receive a snapshot over the network.
-type IncomingSnapshotStream interface {
+type incomingSnapshotStream interface {
 	Send(*SnapshotResponse) error
 	Recv() (*SnapshotRequest, error)
 }
+
+// outgoingSnapshotStream is the minimal interface on a GRPC stream required
+// to send a snapshot over the network.
+type outgoingSnapshotStream interface {
+	Send(*SnapshotRequest) error
+	Recv() (*SnapshotResponse, error)
+}
+
+// snapshotStrategy is an approach to sending and receiving Range snapshots.
+// Each implementation corresponds to a SnapshotRequest_Strategy, and it is
+// expected that the implementation that matches the Strategy specified in the
+// snapshot header will always be used.
+type snapshotStrategy interface {
+	// Receive streams SnapshotRequests in from the provided stream and
+	// constructs an IncomingSnapshot.
+	Receive(
+		context.Context, incomingSnapshotStream, SnapshotRequest_Header,
+	) (IncomingSnapshot, error)
+
+	// Send streams SnapshotRequests created from the OutgoingSnapshot in to the
+	// provided stream.
+	Send(
+		context.Context, outgoingSnapshotStream, SnapshotRequest_Header, *OutgoingSnapshot,
+	) error
+
+	// Status provides a status report on the work performed during the
+	// snapshot. Only valid if the strategy succeeded.
+	Status() string
+}
+
+func assertStrategy(
+	ctx context.Context, header SnapshotRequest_Header, expect SnapshotRequest_Strategy,
+) {
+	if header.Strategy != expect {
+		log.Fatalf(ctx, "expected strategy %s, found strategy %s", expect, header.Strategy)
+	}
+}
+
+// kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
+// batches of KV pairs in the BatchRepr format.
+type kvBatchSnapshotStrategy struct {
+	status string
+
+	// Fields used when sending snapshots.
+	batchSize int64
+	limiter   *rate.Limiter
+	newBatch  func() engine.Batch
+}
+
+// Send implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Receive(
+	ctx context.Context, stream incomingSnapshotStream, header SnapshotRequest_Header,
+) (IncomingSnapshot, error) {
+	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
+
+	var batches [][]byte
+	var logEntries [][]byte
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			return IncomingSnapshot{}, err
+		}
+		if req.Header != nil {
+			err := errors.New("client error: provided a header mid-stream")
+			return IncomingSnapshot{}, sendSnapshotError(stream, err)
+		}
+
+		if req.KVBatch != nil {
+			batches = append(batches, req.KVBatch)
+		}
+		if req.LogEntries != nil {
+			logEntries = append(logEntries, req.LogEntries...)
+		}
+		if req.Final {
+			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+			if err != nil {
+				err = errors.Wrap(err, "invalid snapshot")
+				return IncomingSnapshot{}, sendSnapshotError(stream, err)
+			}
+
+			inSnap := IncomingSnapshot{
+				SnapUUID:   snapUUID,
+				Batches:    batches,
+				LogEntries: logEntries,
+				State:      &header.State,
+				snapType:   snapTypeRaft,
+			}
+			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
+				inSnap.snapType = snapTypePreemptive
+			}
+			kvSS.status = fmt.Sprintf("kv batches: %d, log entries: %d", len(batches), len(logEntries))
+			return inSnap, nil
+		}
+	}
+}
+
+// Send implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Send(
+	ctx context.Context,
+	stream outgoingSnapshotStream,
+	header SnapshotRequest_Header,
+	snap *OutgoingSnapshot,
+) error {
+	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
+
+	// Iterate over all keys using the provided iterator and stream out batches
+	// of key-values.
+	n := 0
+	var b engine.Batch
+	for iter := snap.Iter; ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		key := iter.Key()
+		value := iter.Value()
+		n++
+		if b == nil {
+			b = kvSS.newBatch()
+		}
+		if err := b.Put(key, value); err != nil {
+			b.Close()
+			return err
+		}
+
+		if int64(len(b.Repr())) >= kvSS.batchSize {
+			if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+				return err
+			}
+			if err := kvSS.sendBatch(stream, b); err != nil {
+				return err
+			}
+			b = nil
+			// We no longer need the keys and values in the batch we just sent,
+			// so reset ReplicaDataIterator's allocator and allow its data to
+			// be garbage collected.
+			iter.ResetAllocator()
+		}
+	}
+	if b != nil {
+		if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
+			return err
+		}
+		if err := kvSS.sendBatch(stream, b); err != nil {
+			return err
+		}
+	}
+
+	// Iterate over the specified range of Raft entries and send them all out
+	// together.
+	firstIndex := header.State.TruncatedState.Index + 1
+	endIndex := snap.RaftSnap.Metadata.Index + 1
+	logEntries := make([][]byte, 0, endIndex-firstIndex)
+
+	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
+		bytes, err := kv.Value.GetBytes()
+		if err == nil {
+			logEntries = append(logEntries, bytes)
+		}
+		return false, err
+	}
+
+	rangeID := header.State.Desc.RangeID
+
+	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+		return err
+	}
+
+	// Inline the payloads for all sideloaded proposals.
+	//
+	// TODO(tschottdorf): could also send slim proposals and attach sideloaded
+	// SSTables directly to the snapshot. Probably the better long-term
+	// solution, but let's see if it ever becomes relevant. Snapshots with
+	// inlined proposals are hopefully the exception.
+	{
+		var ent raftpb.Entry
+		for i := range logEntries {
+			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
+				return err
+			}
+			if !sniffSideloadedRaftCommand(ent.Data) {
+				continue
+			}
+			if err := snap.WithSideloaded(func(ss sideloadStorage) error {
+				newEnt, err := maybeInlineSideloadedRaftCommand(
+					ctx, rangeID, ent, ss, snap.RaftEntryCache,
+				)
+				if err != nil {
+					return err
+				}
+				if newEnt != nil {
+					ent = *newEnt
+				}
+				return nil
+			}); err != nil {
+				if errors.Cause(err) == errSideloadedFileNotFound {
+					// We're creating the Raft snapshot based on a snapshot of
+					// the engine, but the Raft log may since have been
+					// truncated and corresponding on-disk sideloaded payloads
+					// unlinked. Luckily, we can just abort this snapshot; the
+					// caller can retry.
+					//
+					// TODO(tschottdorf): check how callers handle this. They
+					// should simply retry. In some scenarios, perhaps this can
+					// happen repeatedly and prevent a snapshot; not sending the
+					// log entries wouldn't help, though, and so we'd really
+					// need to make sure the entries are always here, for
+					// instance by pre-loading them into memory. Or we can make
+					// log truncation less aggressive about removing sideloaded
+					// files, by delaying trailing file deletion for a bit.
+					return &errMustRetrySnapshotDueToTruncation{
+						index: ent.Index,
+						term:  ent.Term,
+					}
+				}
+				return err
+			}
+			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
+			var err error
+			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
+				return err
+			}
+		}
+	}
+	kvSS.status = fmt.Sprintf("kv pairs: %d, log entries: %d", n, len(logEntries))
+	return stream.Send(&SnapshotRequest{LogEntries: logEntries})
+}
+
+func (kvSS *kvBatchSnapshotStrategy) sendBatch(
+	stream outgoingSnapshotStream, batch engine.Batch,
+) error {
+	repr := batch.Repr()
+	batch.Close()
+	return stream.Send(&SnapshotRequest{KVBatch: repr})
+}
+
+// Status implements the snapshotStrategy interface.
+func (kvSS *kvBatchSnapshotStrategy) Status() string { return kvSS.status }
 
 // reserveSnapshot throttles incoming snapshots. The returned closure is used
 // to cleanup the reservation and release its resources. A nil cleanup function
@@ -174,7 +411,7 @@ func (s *Store) canApplySnapshotLocked(
 
 // receiveSnapshot receives an incoming snapshot via a pre-opened GRPC stream.
 func (s *Store) receiveSnapshot(
-	ctx context.Context, header *SnapshotRequest_Header, stream IncomingSnapshotStream,
+	ctx context.Context, header *SnapshotRequest_Header, stream incomingSnapshotStream,
 ) error {
 	cleanup, rejectionMsg, err := s.reserveSnapshot(ctx, header)
 	if err != nil {
@@ -188,21 +425,28 @@ func (s *Store) receiveSnapshot(
 	}
 	defer cleanup()
 
-	sendSnapError := func(err error) error {
-		return stream.Send(&SnapshotResponse{
-			Status:  SnapshotResponse_ERROR,
-			Message: err.Error(),
-		})
-	}
-
 	// Check to see if the snapshot can be applied but don't attempt to add
 	// a placeholder here, because we're not holding the replica's raftMu.
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
 	if _, err := s.canApplySnapshot(ctx, header.State.Desc); err != nil {
-		return sendSnapError(
+		return sendSnapshotError(stream,
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
+		)
+	}
+
+	// Determine which snapshot strategy the sender is using to send this
+	// snapshot. If we don't know how to handle the specified strategy, return
+	// an error.
+	var ss snapshotStrategy
+	switch header.Strategy {
+	case SnapshotRequest_KV_BATCH:
+		ss = &kvBatchSnapshotStrategy{}
+	default:
+		return sendSnapshotError(stream,
+			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
+				s, header.State.Desc.RangeID, header.Strategy),
 		)
 	}
 
@@ -213,52 +457,22 @@ func (s *Store) receiveSnapshot(
 		log.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
-	var batches [][]byte
-	var logEntries [][]byte
-	for {
-		req, err := stream.Recv()
-		if err != nil {
-			return err
-		}
-		if req.Header != nil {
-			return sendSnapError(errors.New("client error: provided a header mid-stream"))
-		}
-
-		if req.KVBatch != nil {
-			batches = append(batches, req.KVBatch)
-		}
-		if req.LogEntries != nil {
-			logEntries = append(logEntries, req.LogEntries...)
-		}
-		if req.Final {
-			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
-			if err != nil {
-				return sendSnapError(errors.Wrap(err, "invalid snapshot"))
-			}
-
-			inSnap := IncomingSnapshot{
-				SnapUUID:   snapUUID,
-				Batches:    batches,
-				LogEntries: logEntries,
-				State:      &header.State,
-				snapType:   snapTypeRaft,
-			}
-			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
-				inSnap.snapType = snapTypePreemptive
-			}
-			if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
-				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
-			}
-			return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
-		}
+	inSnap, err := ss.Receive(ctx, stream, *header)
+	if err != nil {
+		return err
 	}
+	if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
+		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+	}
+
+	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})
 }
 
-// OutgoingSnapshotStream is the minimal interface on a GRPC stream required
-// to send a snapshot over the network.
-type OutgoingSnapshotStream interface {
-	Send(*SnapshotRequest) error
-	Recv() (*SnapshotResponse, error)
+func sendSnapshotError(stream incomingSnapshotStream, err error) error {
+	return stream.Send(&SnapshotResponse{
+		Status:  SnapshotResponse_ERROR,
+		Message: err.Error(),
+	})
 }
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
@@ -305,7 +519,7 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 func sendSnapshot(
 	ctx context.Context,
 	st *cluster.Settings,
-	stream OutgoingSnapshotStream,
+	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -364,148 +578,32 @@ func sendSnapshot(
 	// nice to figure this out, but the batches/sec rate limit works for now.
 	limiter := rate.NewLimiter(targetRate/batchSize, 1 /* burst size */)
 
-	// Determine the unreplicated key prefix so we can drop any
-	// unreplicated keys from the snapshot.
-	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.State.Desc.RangeID)
-	n := 0
-	var b engine.Batch
-	for ; ; snap.Iter.Next() {
-		if ok, err := snap.Iter.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
+	// Create a snapshotStrategy based on the desired snapshot strategy.
+	var ss snapshotStrategy
+	switch header.Strategy {
+	case SnapshotRequest_KV_BATCH:
+		ss = &kvBatchSnapshotStrategy{
+			batchSize: batchSize,
+			limiter:   limiter,
+			newBatch:  newBatch,
 		}
-		key := snap.Iter.Key()
-		value := snap.Iter.Value()
-		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
-			// This should never happen because we're using a
-			// ReplicaDataIterator with replicatedOnly=true.
-			log.Fatalf(ctx, "found unreplicated rangeID key: %v", key)
-		}
-		n++
-		mvccKey := engine.MVCCKey{
-			Key:       key.Key,
-			Timestamp: key.Timestamp,
-		}
-		if b == nil {
-			b = newBatch()
-		}
-		if err := b.Put(mvccKey, value); err != nil {
-			b.Close()
-			return err
-		}
-
-		if len(b.Repr()) >= batchSize {
-			if err := limiter.WaitN(ctx, 1); err != nil {
-				return err
-			}
-			if err := sendBatch(stream, b); err != nil {
-				return err
-			}
-			b = nil
-			// We no longer need the keys and values in the batch we just sent,
-			// so reset ReplicaDataIterator's allocator and allow its data to
-			// be garbage collected.
-			snap.Iter.ResetAllocator()
-		}
-	}
-	if b != nil {
-		if err := limiter.WaitN(ctx, 1); err != nil {
-			return err
-		}
-		if err := sendBatch(stream, b); err != nil {
-			return err
-		}
+	default:
+		log.Fatalf(ctx, "unknown snapshot strategy: %s", header.Strategy)
 	}
 
-	firstIndex := header.State.TruncatedState.Index + 1
-	endIndex := snap.RaftSnap.Metadata.Index + 1
-	logEntries := make([][]byte, 0, endIndex-firstIndex)
-
-	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
-		bytes, err := kv.Value.GetBytes()
-		if err == nil {
-			logEntries = append(logEntries, bytes)
-		}
-		return false, err
-	}
-
-	rangeID := header.State.Desc.RangeID
-
-	if err := iterateEntries(ctx, snap.EngineSnap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
+	if err := ss.Send(ctx, stream, header, snap); err != nil {
 		return err
 	}
 
-	// Inline the payloads for all sideloaded proposals.
-	//
-	// TODO(tschottdorf): could also send slim proposals and attach sideloaded
-	// SSTables directly to the snapshot. Probably the better long-term
-	// solution, but let's see if it ever becomes relevant. Snapshots with
-	// inlined proposals are hopefully the exception.
-	{
-		var ent raftpb.Entry
-		for i := range logEntries {
-			if err := protoutil.Unmarshal(logEntries[i], &ent); err != nil {
-				return err
-			}
-			if !sniffSideloadedRaftCommand(ent.Data) {
-				continue
-			}
-			if err := snap.WithSideloaded(func(ss sideloadStorage) error {
-				newEnt, err := maybeInlineSideloadedRaftCommand(
-					ctx, rangeID, ent, ss, snap.RaftEntryCache,
-				)
-				if err != nil {
-					return err
-				}
-				if newEnt != nil {
-					ent = *newEnt
-				}
-				return nil
-			}); err != nil {
-				if errors.Cause(err) == errSideloadedFileNotFound {
-					// We're creating the Raft snapshot based on a snapshot of
-					// the engine, but the Raft log may since have been
-					// truncated and corresponding on-disk sideloaded payloads
-					// unlinked. Luckily, we can just abort this snapshot; the
-					// caller can retry.
-					//
-					// TODO(tschottdorf): check how callers handle this. They
-					// should simply retry. In some scenarios, perhaps this can
-					// happen repeatedly and prevent a snapshot; not sending the
-					// log entries wouldn't help, though, and so we'd really
-					// need to make sure the entries are always here, for
-					// instance by pre-loading them into memory. Or we can make
-					// log truncation less aggressive about removing sideloaded
-					// files, by delaying trailing file deletion for a bit.
-					return &errMustRetrySnapshotDueToTruncation{
-						index: ent.Index,
-						term:  ent.Term,
-					}
-				}
-				return err
-			}
-			// TODO(tschottdorf): it should be possible to reuse `logEntries[i]` here.
-			var err error
-			if logEntries[i], err = protoutil.Marshal(&ent); err != nil {
-				return err
-			}
-		}
-	}
-
-	req := &SnapshotRequest{
-		LogEntries: logEntries,
-		Final:      true,
-	}
 	// Notify the sent callback before the final snapshot request is sent so that
 	// the snapshots generated metric gets incremented before the snapshot is
 	// applied.
 	sent()
-	if err := stream.Send(req); err != nil {
+	if err := stream.Send(&SnapshotRequest{Final: true}); err != nil {
 		return err
 	}
-	log.Infof(ctx, "streamed snapshot to %s: kv pairs: %d, log entries: %d, rate-limit: %s/sec, %0.0fms",
-		to, n, len(logEntries), humanizeutil.IBytes(int64(targetRate)),
+	log.Infof(ctx, "streamed snapshot to %s: %s, rate-limit: %s/sec, %0.0fms",
+		to, ss.Status(), humanizeutil.IBytes(int64(targetRate)),
 		timeutil.Since(start).Seconds()*1000)
 
 	resp, err = stream.Recv()
@@ -527,10 +625,4 @@ func sendSnapshot(
 		return errors.Errorf("%s: server sent an invalid status during finalization: %s",
 			to, resp.Status)
 	}
-}
-
-func sendBatch(stream OutgoingSnapshotStream, batch engine.Batch) error {
-	repr := batch.Repr()
-	batch.Close()
-	return stream.Send(&SnapshotRequest{KVBatch: repr})
 }

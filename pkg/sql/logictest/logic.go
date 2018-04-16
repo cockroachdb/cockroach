@@ -329,10 +329,6 @@ var (
 		"flex-types", false,
 		"do not fail when a test expects a column of a numeric type but the query provides another type",
 	)
-	metadataTestOff = flag.Bool(
-		"metadata-test-off", false,
-		"disable DistSQL metadata propagation tests",
-	)
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
@@ -364,6 +360,8 @@ type testClusterConfig struct {
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
+	// if set, enables DistSQL metadata propagation tests.
+	distSQLMetadataTestEnabled bool
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -389,9 +387,11 @@ var logicTestConfigs = []testClusterConfig{
 	},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
 	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 	{name: "5node-distsql", numNodes: 5, overrideDistSQLMode: "On"},
+	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true},
 	{name: "5node-distsql-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
 }
 
@@ -862,14 +862,12 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	distSQLKnobs := &distsqlrun.TestingKnobs{
-		MetadataTestLevel: distsqlrun.NoExplain,
-	}
+	distSQLKnobs := &distsqlrun.TestingKnobs{MetadataTestLevel: distsqlrun.Off}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
-	if *metadataTestOff {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.Off
+	if cfg.distSQLMetadataTestEnabled {
+		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 

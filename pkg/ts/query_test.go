@@ -19,16 +19,17 @@ import (
 	"math"
 	"reflect"
 	"runtime"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -667,12 +668,6 @@ func TestAggregation(t *testing.T) {
 // assertQuery generates a query result from the local test model and compares
 // it against the query returned from the server.
 //
-// TODO(mrtracy): This verification model is showing its age, and likely needs
-// to be restructured in order to improve its trustworthiness. Currently, there
-// is just enough overlap in the functionality between the model and the real
-// system that it's difficult to be sure that you don't have a common error in
-// both systems.
-//
 // My suggestion is to break down the model query into multiple, independently
 // verificable steps. These steps will not be memory or computationally
 // efficient, but will be conceptually easy to verify; then we can compare its
@@ -709,9 +704,8 @@ func (tm *testModel) assertQuery(
 		&account,
 		tm.workerMemMonitor,
 		tm.queryMemoryBudget,
-		int64(len(tm.seenSources)),
+		tm.model.UniqueSourceCount(),
 	)
-
 	if err != nil {
 		tm.t.Fatal(err)
 	}
@@ -723,123 +717,20 @@ func (tm *testModel) assertQuery(
 		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 
-	// Construct an expected result for comparison.
-	var expectedDatapoints []tspb.TimeSeriesDatapoint
-	expectedSources := make([]string, 0)
-	dataSpans := make(map[string]*dataSpan)
-
-	// If no specific sources were provided, look for data from every source
-	// encountered by the test model.
-	var sourcesToCheck map[string]struct{}
-	if len(sources) == 0 {
-		sourcesToCheck = tm.seenSources
-	} else {
-		sourcesToCheck = make(map[string]struct{})
-		for _, s := range sources {
-			sourcesToCheck[s] = struct{}{}
+	// Query the testmodel.
+	modelDatapoints := tm.model.Query(
+		name,
+		sources,
+		q.GetDownsampler(),
+		q.GetSourceAggregator(),
+		q.GetDerivative(),
+		r.SlabDuration(),
+		sampleDuration, start, end, interpolationLimit,
+	)
+	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			tm.t.Error(diff)
 		}
-	}
-
-	// Iterate over all possible sources which may have data for this query.
-	for sourceName := range sourcesToCheck {
-		// Iterate over all possible key times at which query data may be present.
-		dataStart := start - interpolationLimit
-		dataEnd := end + interpolationLimit
-		for time := dataStart - (dataStart % r.SlabDuration()); time < dataEnd; time += r.SlabDuration() {
-			// Construct a key for this source/time and retrieve it from model.
-			key := MakeDataKey(name, sourceName, r, time)
-			value, ok := tm.modelData[string(key)]
-			if !ok {
-				continue
-			}
-
-			// Add data from the key to the correct dataSpan.
-			data, err := value.GetTimeseries()
-			if err != nil {
-				tm.t.Fatal(err)
-			}
-			ds, ok := dataSpans[sourceName]
-			if !ok {
-				ds = &dataSpan{
-					startNanos:  start - (start % r.SampleDuration()),
-					sampleNanos: r.SampleDuration(),
-				}
-				dataSpans[sourceName] = ds
-				expectedSources = append(expectedSources, sourceName)
-			}
-			if err := ds.addData(data); err != nil {
-				tm.t.Fatal(err)
-			}
-		}
-	}
-
-	// Verify that expected sources match actual sources.
-	sort.Strings(expectedSources)
-	sort.Strings(actualSources)
-	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Error(errors.Errorf("actual source list: %v, wanted: %v", actualSources, expectedSources))
-	}
-
-	// Iterate over data in all dataSpans and construct expected datapoints.
-	extractFn, err := getExtractionFunction(q.GetDownsampler())
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	downsampleFn, err := getDownsampleFunction(q.GetDownsampler())
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	maxDistance := int32(interpolationLimit / r.SampleDuration())
-	var iters aggregatingIterator
-	for _, ds := range dataSpans {
-		iters = append(
-			iters,
-			newInterpolatingIterator(
-				*ds, 0, sampleDuration, maxDistance, extractFn, downsampleFn, q.GetDerivative(),
-			),
-		)
-	}
-
-	iters.init()
-	if !iters.isValid() {
-		if a, e := 0, len(expectedDatapoints); a != e {
-			tm.t.Error(errors.Errorf("query had zero datapoints, wanted: %v", expectedDatapoints))
-		}
-		return
-	}
-	currentVal := func() (tspb.TimeSeriesDatapoint, bool) {
-		var value float64
-		var valid bool
-		switch q.GetSourceAggregator() {
-		case tspb.TimeSeriesQueryAggregator_SUM:
-			value, valid = iters.sum()
-		case tspb.TimeSeriesQueryAggregator_AVG:
-			value, valid = iters.avg()
-		case tspb.TimeSeriesQueryAggregator_MAX:
-			value, valid = iters.max()
-		case tspb.TimeSeriesQueryAggregator_MIN:
-			value, valid = iters.min()
-		default:
-			tm.t.Fatalf("unknown query aggregator %s", q.GetSourceAggregator())
-		}
-		return tspb.TimeSeriesDatapoint{
-			TimestampNanos: iters.timestamp(),
-			Value:          value,
-		}, valid
-	}
-
-	for iters.isValid() && iters.timestamp() <= end {
-		if result, valid := currentVal(); valid {
-			if q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
-				result.Value = result.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
-			}
-			expectedDatapoints = append(expectedDatapoints, result)
-		}
-		iters.advance()
-	}
-
-	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
-		tm.t.Error(errors.Errorf("actual datapoints: %v, wanted: %v", actualDatapoints, expectedDatapoints))
 	}
 }
 

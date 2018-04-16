@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-disk
+# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
 
 query TT
 SELECT (1, 2, 'hello', NULL, NULL), (true, NULL, (false, 6.6, false))
