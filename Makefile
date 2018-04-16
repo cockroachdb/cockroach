@@ -1321,7 +1321,8 @@ bins := \
   bin/teamcity-trigger \
   bin/urlcheck \
   bin/workload \
-  bin/zerosum
+  bin/zerosum \
+  bin/fill_ballast
 
 # Mappings for binaries that don't live in pkg/cmd.
 langgen-package := ./pkg/sql/opt/optgen/cmd/langgen
