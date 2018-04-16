@@ -181,60 +181,18 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 "`, nodesStr, testName, nemesis))
 			}()
 
+			outputDir := filepath.Join(artifacts, c.t.Name(), testCfg)
+			if err := os.MkdirAll(outputDir, 0777); err != nil {
+				t.Fatal(err)
+			}
+			var failed bool
 			select {
 			case testErr := <-errCh:
-				outputDir := filepath.Join(artifacts, c.t.Name(), testCfg)
-				if err := os.MkdirAll(outputDir, 0777); err != nil {
-					t.Fatal(err)
-				}
 				if testErr == nil {
 					logf("%s: passed, grabbing minimal logs", testCfg)
-
-					collectFiles := []string{
-						"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
-					}
-					anyFailed := false
-					for _, file := range collectFiles {
-						cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-							"jepsen/cockroachdb/store/latest/"+file,
-							filepath.Join(outputDir, file))
-						cmd.Stdout = c.l.stdout
-						cmd.Stderr = c.l.stderr
-						if err := cmd.Run(); err != nil {
-							logf("failed to retrieve %s: %s", file, err)
-						}
-					}
-					if anyFailed {
-						// Try to figure out why this is so common.
-						cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-							"jepsen/cockroachdb/invoke.log",
-							filepath.Join(outputDir, "invoke.log"))
-						cmd.Stdout = c.l.stdout
-						cmd.Stderr = c.l.stderr
-						if err := cmd.Run(); err != nil {
-							logf("failed to retrieve invoke.log: %s", err)
-						}
-					}
 				} else {
 					logf("%s: failed: %s", testCfg, testErr)
-					failures = append(failures, testCfg)
-					// collect the systemd log on failure to diagnose #20492.
-					// TODO(bdarnell): remove the next two lines when that's resolved.
-					logf("%s: systemd log:", testCfg)
-					c.Run(ctx, controller, "journalctl -x --no-pager")
-					logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
-					c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
-					cmd = loggedCommand(ctx, "roachprod", "run", c.makeNodes(controller),
-						// -h causes tar to follow symlinks; needed by the "latest" symlink.
-						// -f- sends the output to stdout, we read it and save it to a local file.
-						"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
-					output, err := cmd.Output()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
-						t.Fatal(err)
-					}
+					failed = true
 				}
 
 			case <-time.After(20 * time.Minute):
@@ -250,7 +208,54 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 				time.Sleep(10 * time.Second)
 				c.Run(ctx, controller, "pkill java")
 				logf("%s: timed out", testCfg)
+				failed = true
+			}
+
+			if failed {
 				failures = append(failures, testCfg)
+				// collect the systemd log on failure to diagnose #20492.
+				// TODO(bdarnell): remove the next two lines when that's resolved.
+				logf("%s: systemd log:", testCfg)
+				c.Run(ctx, controller, "journalctl -x --no-pager")
+				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
+				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
+				cmd = loggedCommand(ctx, "roachprod", "run", c.makeNodes(controller),
+					// -h causes tar to follow symlinks; needed by the "latest" symlink.
+					// -f- sends the output to stdout, we read it and save it to a local file.
+					"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
+				output, err := cmd.Output()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				collectFiles := []string{
+					"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
+				}
+				anyFailed := false
+				for _, file := range collectFiles {
+					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+						"jepsen/cockroachdb/store/latest/"+file,
+						filepath.Join(outputDir, file))
+					cmd.Stdout = c.l.stdout
+					cmd.Stderr = c.l.stderr
+					if err := cmd.Run(); err != nil {
+						logf("failed to retrieve %s: %s", file, err)
+					}
+				}
+				if anyFailed {
+					// Try to figure out why this is so common.
+					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+						"jepsen/cockroachdb/invoke.log",
+						filepath.Join(outputDir, "invoke.log"))
+					cmd.Stdout = c.l.stdout
+					cmd.Stderr = c.l.stderr
+					if err := cmd.Run(); err != nil {
+						logf("failed to retrieve invoke.log: %s", err)
+					}
+				}
 			}
 		}
 	}
