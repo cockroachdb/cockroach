@@ -1357,7 +1357,9 @@ func runObserverStatement(session *Session, res StatementResult, stmt Statement)
 		if err := runShowSyntax(session.Ctx(), sqlStmt.Statement,
 			func(ctx context.Context, field, msg string) error {
 				return res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
-			}); err != nil {
+			},
+			nil, /* reportErr */
+		); err != nil {
 			return err
 		}
 
