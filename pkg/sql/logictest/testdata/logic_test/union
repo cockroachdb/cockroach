@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 query I rowsort
 VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)

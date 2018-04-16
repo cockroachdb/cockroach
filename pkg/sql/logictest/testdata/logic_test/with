@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql
+# LogicTest: default parallel-stmts distsql distsql-metadata
 
 query error unsupported multiple use of CTE clause "a"
 WITH a AS (SELECT 1) SELECT * FROM a CROSS JOIN a

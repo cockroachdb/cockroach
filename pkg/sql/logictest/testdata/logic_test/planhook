@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 # The placeholder returns one row with one value: the string 'planhook'.
 query T
