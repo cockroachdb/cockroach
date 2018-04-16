@@ -267,6 +267,14 @@ message InputStats {
   optional int32 num_rows = 2 [(gogoproto.nullable) = false];
 }
 
+// BytesAccountStats represents the stats collected from a mon.BytesAccount,
+// which is usually used to monitor in-memory and disk usage.
+message BytesAccountStats {
+  optional string name = 1 [(gogoproto.nullable) = false];
+  // max_used is the maximum number of bytes used.
+  optional int32 max_used = 2 [(gogoproto.nullable) = false];
+}
+
 // DistSQLVersionGossipInfo represents the DistSQL server version information
 // that gets gossiped for each node. This is used by planners to avoid planning
 // on nodes with incompatible version during rolling cluster updates.
