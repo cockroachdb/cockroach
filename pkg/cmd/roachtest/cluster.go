@@ -41,6 +41,7 @@ import (
 
 	// "postgres" gosql driver
 	_ "github.com/lib/pq"
+	"strconv"
 )
 
 var (
@@ -772,6 +773,27 @@ func (c *cluster) makeNodes(opts ...option) string {
 
 func (c *cluster) isLocal() bool {
 	return c.name == "local"
+}
+
+func (c *cluster) getDiskUsageInByte(ctx context.Context, node nodeListOption) (int, error) {
+	out, err := c.RunWithBuffer(ctx, c.l, node, fmt.Sprint("du -sk 'data/' | grep -oE '^[0-9]+'"))
+	if err != nil {
+		return 0, err
+	}
+
+	str := string(out)
+	// We need this check because sometimes the first line of the roachprod output is a warning
+	// about adding an ip to a list of known hosts.
+	if strings.Contains(str, "Warning") {
+		str = strings.Split(str, "\n")[1]
+	}
+
+	size, err := strconv.Atoi(strings.TrimSpace(str))
+	if err != nil {
+		return 0, err
+	}
+
+	return size * 1024, nil
 }
 
 type monitor struct {
