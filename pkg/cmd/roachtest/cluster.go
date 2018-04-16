@@ -682,7 +682,7 @@ func (c *cluster) RunWithBuffer(
 	ctx context.Context, l *logger, node nodeListOption, args ...string,
 ) ([]byte, error) {
 	if err := c.preRunChecks(); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, strings.Join(args, " "))
 	}
 	return execCmdWithBuffer(ctx, l,
 		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
