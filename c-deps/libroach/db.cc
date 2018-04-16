@@ -15,6 +15,7 @@
 #include "db.h"
 #include <algorithm>
 #include <rocksdb/convenience.h>
+#include <rocksdb/perf_context.h>
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
 #include <stdarg.h>
@@ -57,6 +58,23 @@ DBKey ToDBKey(const rocksdb::Slice& s) {
   return key;
 }
 
+ScopedStats::ScopedStats(DBIterator* iter)
+    : iter_(iter),
+      internal_delete_skipped_count_base_(
+          rocksdb::get_perf_context()->internal_delete_skipped_count) {
+  if (iter_->stats != nullptr) {
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
+  }
+}
+ScopedStats::~ScopedStats() {
+  if (iter_->stats != nullptr) {
+    iter_->stats->internal_delete_skipped_count +=
+        (rocksdb::get_perf_context()->internal_delete_skipped_count -
+         internal_delete_skipped_count_base_);
+    rocksdb::SetPerfLevel(rocksdb::PerfLevel::kDisable);
+  }
+}
+
 }  // namespace cockroach
 
 namespace {
@@ -74,6 +92,7 @@ DBIterState DBIterGetState(DBIterator* iter) {
       state.value = ToDBSlice(iter->rep->value());
     }
   }
+
   return state;
 }
 
@@ -370,53 +389,94 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
   return db->EnvWriteFile(path, contents);
 }
 
-DBIterator* DBNewIter(DBEngine* db, bool prefix) {
+DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
   rocksdb::ReadOptions opts;
   opts.prefix_same_as_start = prefix;
   opts.total_order_seek = !prefix;
-  return db->NewIter(&opts);
+  auto db_iter = db->NewIter(&opts);
+
+  if (stats) {
+    db_iter->stats.reset(new IteratorStats);
+    *db_iter->stats = {};
+  }
+
+  return db_iter;
 }
 
-DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts) {
+DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts,
+                               bool with_stats) {
+  IteratorStats* stats = nullptr;
+  if (with_stats) {
+    stats = new IteratorStats;
+    *stats = {};
+  }
+
   const std::string min = EncodeTimestamp(min_ts);
   const std::string max = EncodeTimestamp(max_ts);
   rocksdb::ReadOptions opts;
   opts.total_order_seek = true;
-  opts.table_filter = [min, max](const rocksdb::TableProperties& props) {
+  opts.table_filter = [min, max, stats](const rocksdb::TableProperties& props) {
     auto userprops = props.user_collected_properties;
     auto tbl_min = userprops.find("crdb.ts.min");
     if (tbl_min == userprops.end() || tbl_min->second.empty()) {
+      if (stats != nullptr) {
+        ++stats->timebound_num_ssts;
+      }
       return true;
     }
     auto tbl_max = userprops.find("crdb.ts.max");
     if (tbl_max == userprops.end() || tbl_max->second.empty()) {
+      if (stats != nullptr) {
+        ++stats->timebound_num_ssts;
+      }
       return true;
     }
     // If the timestamp range of the table overlaps with the timestamp range we
     // want to iterate, the table might contain timestamps we care about.
-    return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
+    bool used = max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) <= 0;
+    if (used && stats != nullptr) {
+      ++stats->timebound_num_ssts;
+    }
+    return used;
   };
-  return db->NewIter(&opts);
+
+  auto db_iter = db->NewIter(&opts);
+  if (stats != nullptr) {
+    db_iter->stats.reset(stats);
+  }
+  return db_iter;
 }
 
 void DBIterDestroy(DBIterator* iter) { delete iter; }
 
+IteratorStats DBIterStats(DBIterator* iter) {
+  IteratorStats stats = {};
+  if (iter->stats != nullptr) {
+    stats = *iter->stats;
+  }
+  return stats;
+}
+
 DBIterState DBIterSeek(DBIterator* iter, DBKey key) {
+  ScopedStats stats(iter);
   iter->rep->Seek(EncodeKey(key));
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterSeekToFirst(DBIterator* iter) {
+  ScopedStats stats(iter);
   iter->rep->SeekToFirst();
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterSeekToLast(DBIterator* iter) {
+  ScopedStats stats(iter);
   iter->rep->SeekToLast();
   return DBIterGetState(iter);
 }
 
 DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
+  ScopedStats stats(iter);
   // If we're skipping the current key versions, remember the key the
   // iterator was pointing out.
   std::string old_key;
@@ -459,6 +519,7 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
 }
 
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions) {
+  ScopedStats stats(iter);
   // If we're skipping the current key versions, remember the key the
   // iterator was pointed out.
   std::string old_key;
