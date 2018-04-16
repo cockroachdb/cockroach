@@ -173,7 +173,7 @@ func BenchmarkTimeBoundIterate(b *testing.B) {
 			})
 			b.Run("TimeBoundIterator", func(b *testing.B) {
 				runIterate(b, loadFactor, func(e engine.Engine, startTime, endTime hlc.Timestamp) engine.Iterator {
-					return e.NewTimeBoundIterator(startTime, endTime)
+					return e.NewTimeBoundIterator(startTime, endTime, false)
 				})
 			})
 		})

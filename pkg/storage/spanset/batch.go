@@ -47,6 +47,11 @@ func NewIterator(iter engine.Iterator, spans *SpanSet) *Iterator {
 	}
 }
 
+// Stats is part of the engine.Iterator interface.
+func (s *Iterator) Stats() engine.IteratorStats {
+	return s.i.Stats()
+}
+
 // Close is part of the engine.Iterator interface.
 func (s *Iterator) Close() {
 	s.i.Close()
@@ -232,8 +237,10 @@ func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
 }
 
-func (s spanSetReader) NewTimeBoundIterator(start, end hlc.Timestamp) engine.Iterator {
-	return &Iterator{s.r.NewTimeBoundIterator(start, end), s.spans, nil, false}
+func (s spanSetReader) NewTimeBoundIterator(
+	start, end hlc.Timestamp, withStats bool,
+) engine.Iterator {
+	return &Iterator{s.r.NewTimeBoundIterator(start, end, withStats), s.spans, nil, false}
 }
 
 type spanSetWriter struct {
