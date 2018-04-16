@@ -1,4 +1,4 @@
-# LogicTest: 5node
+# LogicTest: 5node-distsql
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
