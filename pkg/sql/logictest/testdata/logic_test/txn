@@ -985,3 +985,57 @@ ROLLBACK
 # restore the default
 statement ok
 SET default_transaction_read_only = false
+
+subtest 24785
+
+statement ok
+BEGIN;
+
+statement ok
+SAVEPOINT cockroach_restart;
+
+statement ok
+CREATE TABLE users (
+id INTEGER DEFAULT unique_rowid() NOT NULL,
+uid VARCHAR,
+passwordhash VARCHAR,
+utype VARCHAR(7),
+description VARCHAR,
+is_remote BOOLEAN,
+PRIMARY KEY (id),
+UNIQUE (uid),
+CONSTRAINT usertype CHECK (utype IN ('regular', 'service'))
+);
+
+statement ok
+INSERT INTO users (uid, passwordhash, utype, description, is_remote) VALUES ('bootstrapuser', '$6$rounds=656000$Ddm1dA4kl0J7gsdN$wmBHwxTBCMHxgYDZ8hSFifdOyQWVmPxgAQPUojKC1uFdR3kVXFFLmXlxIhk.vlwrJ7KqHX5qHOSwOebP9VwBK/', 'regular', 'bootstrapuser', 'false') RETURNING users.id;
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart;
+
+statement ok
+CREATE TABLE users (
+id INTEGER DEFAULT unique_rowid() NOT NULL,
+uid VARCHAR,
+passwordhash VARCHAR,
+utype VARCHAR(7),
+description VARCHAR,
+is_remote BOOLEAN,
+PRIMARY KEY (id),
+UNIQUE (uid),
+CONSTRAINT usertype CHECK (utype IN ('regular', 'service'))
+);
+
+statement ok
+INSERT INTO users (uid, passwordhash, utype, description, is_remote) VALUES ('bootstrapuser', '$6$rounds=656000$Ddm1dA4kl0J7gsdN$wmBHwxTBCMHxgYDZ8hSFifdOyQWVmPxgAQPUojKC1uFdR3kVXFFLmXlxIhk.vlwrJ7KqHX5qHOSwOebP9VwBK/', 'regular', 'bootstrapuser', 'false') RETURNING users.id;
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart;
+
+statement ok
+COMMIT;
+
+query TTTTB
+select uid, passwordhash, utype, description, is_remote from users
+----
+bootstrapuser $6$rounds=656000$Ddm1dA4kl0J7gsdN$wmBHwxTBCMHxgYDZ8hSFifdOyQWVmPxgAQPUojKC1uFdR3kVXFFLmXlxIhk.vlwrJ7KqHX5qHOSwOebP9VwBK/ regular bootstrapuser false
