@@ -64,6 +64,9 @@ type SessionData struct {
 	// by the session.
 	SequenceState *SequenceState
 	RemoteAddr    net.Addr
+	// ZigzagJoinEnabled indicates whether the planner should try and plan a
+	// zigzag join. Will emit a warning if a zigzag join can't be planned.
+	ZigzagJoinEnabled bool
 
 	mu struct {
 		syncutil.Mutex
