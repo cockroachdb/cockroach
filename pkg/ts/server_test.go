@@ -120,15 +120,15 @@ func TestServerQuery(t *testing.T) {
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
-						TimestampNanos: 505 * 1e9,
+						TimestampNanos: 500 * 1e9,
 						Value:          400.0,
 					},
 					{
-						TimestampNanos: 515 * 1e9,
+						TimestampNanos: 510 * 1e9,
 						Value:          500.0,
 					},
 					{
-						TimestampNanos: 525 * 1e9,
+						TimestampNanos: 520 * 1e9,
 						Value:          600.0,
 					},
 				},
@@ -140,11 +140,11 @@ func TestServerQuery(t *testing.T) {
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
-						TimestampNanos: 505 * 1e9,
+						TimestampNanos: 500 * 1e9,
 						Value:          200.0,
 					},
 					{
-						TimestampNanos: 515 * 1e9,
+						TimestampNanos: 510 * 1e9,
 						Value:          250.0,
 					},
 				},
@@ -159,15 +159,15 @@ func TestServerQuery(t *testing.T) {
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
-						TimestampNanos: 505 * 1e9,
+						TimestampNanos: 500 * 1e9,
 						Value:          1.0,
 					},
 					{
-						TimestampNanos: 515 * 1e9,
+						TimestampNanos: 510 * 1e9,
 						Value:          5.0,
 					},
 					{
-						TimestampNanos: 525 * 1e9,
+						TimestampNanos: 520 * 1e9,
 						Value:          5.0,
 					},
 				},
@@ -220,11 +220,11 @@ func TestServerQuery(t *testing.T) {
 				},
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
-						TimestampNanos: 250 * 1e9,
+						TimestampNanos: 0,
 						Value:          200.0,
 					},
 					{
-						TimestampNanos: 750 * 1e9,
+						TimestampNanos: 500 * 1e9,
 						Value:          650.0,
 					},
 				},
