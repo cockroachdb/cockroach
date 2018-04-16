@@ -68,9 +68,8 @@ type RowContainer struct {
 	// and reset this back to zero.
 	deletedRows int
 
-	// memAcc tracks the current memory consumption of this
-	// RowContainer.
-	memAcc mon.BoundAccount
+	// memAcc tracks the current memory consumption of this RowContainer.
+	memAcc mon.BytesAccount
 
 	// We should not copy this structure around; each copy would have a different
 	// memAcc (among other things like aliasing chunks).
@@ -159,13 +158,13 @@ func makeColTypeInfo(
 // memory growth.
 func NewRowContainer(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) *RowContainer {
 	c := &RowContainer{}
-	c.Init(acc, ti, rowCapacity)
+	c.Init(&acc, ti, rowCapacity)
 	return c
 }
 
 // Init can be used instead of NewRowContainer if we have a RowContainer that is
 // already part of an on-heap structure.
-func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity int) {
+func (c *RowContainer) Init(acc mon.BytesAccount, ti ColTypeInfo, rowCapacity int) {
 	nCols := ti.NumColumns()
 
 	c.numCols = nCols
@@ -218,7 +217,9 @@ func (c *RowContainer) Clear(ctx context.Context) {
 func (c *RowContainer) Close(ctx context.Context) {
 	c.chunks = nil
 	c.varSizedColumns = nil
-	c.memAcc.Close(ctx)
+	if c.memAcc != nil {
+		c.memAcc.Close(ctx)
+	}
 }
 
 func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {

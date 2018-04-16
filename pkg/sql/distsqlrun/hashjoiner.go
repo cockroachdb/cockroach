@@ -201,10 +201,10 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		rowContainerMon = &limitedMon
 	}
 
-	h.rows[leftSide].initWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, rowContainerMon)
-	h.rows[rightSide].initWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rowContainerMon)
+	h.rows[leftSide].initWithBytesAccount(
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, rowContainerMon.NewBoundAccount())
+	h.rows[rightSide].initWithBytesAccount(
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rowContainerMon.NewBoundAccount())
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 

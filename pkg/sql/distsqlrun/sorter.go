@@ -214,7 +214,9 @@ func newSortAllProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	proc.rows.initWithBytesAccount(
+		ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon.NewBoundAccount(),
+	)
 	return proc, nil
 }
 
@@ -438,7 +440,9 @@ func newSortTopKProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	proc.rows.initWithBytesAccount(
+		ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon.NewBoundAccount(),
+	)
 	return proc, nil
 }
 
@@ -577,7 +581,9 @@ func newSortChunksProcessor(
 	); err != nil {
 		return nil, err
 	}
-	proc.rows.initWithMon(ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon)
+	proc.rows.initWithBytesAccount(
+		ordering, input.OutputTypes(), proc.evalCtx, rowContainerMon.NewBoundAccount(),
+	)
 	return proc, nil
 }
 
