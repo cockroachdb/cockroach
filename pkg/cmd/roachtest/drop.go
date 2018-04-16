@@ -19,8 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -74,7 +72,7 @@ func registerDrop(r *registry) {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInByte(ctx, c.Node(j), c)
+				size, err := getDiskUsageInByte(ctx, c, j)
 				if err != nil {
 					return err
 				}
@@ -114,7 +112,7 @@ gc:
 				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInByte(ctx, c.Node(j), c)
+					size, err := getDiskUsageInByte(ctx, c, j)
 					if err != nil {
 						return err
 					}
@@ -169,25 +167,4 @@ gc:
 			runDrop(ctx, t, c, warehouses, numNodes, initDiskSpace)
 		},
 	})
-}
-
-func getDiskUsageInByte(ctx context.Context, node nodeListOption, c *cluster) (int, error) {
-	out, err := c.RunWithBuffer(ctx, c.l, node, fmt.Sprintf("du -sk {store-dir} | grep -oE '^[0-9]+'"))
-	if err != nil {
-		return 0, err
-	}
-
-	str := string(out)
-	// We need this check because sometimes the first line of the roachprod output is a warning
-	// about adding an ip to a list of known hosts.
-	if strings.Contains(str, "Warning") {
-		str = strings.Split(str, "\n")[1]
-	}
-
-	size, err := strconv.Atoi(strings.TrimSpace(str))
-	if err != nil {
-		return 0, err
-	}
-
-	return size * 1024, nil
 }
