@@ -71,4 +71,17 @@ std::string EncodeKey(DBKey k);
 MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
                                          DBKey end, int64_t now_nanos);
 
+// ScopedStats wraps an iterator and, if that iterator has the stats
+// member populated, aggregates a subset of the RocksDB perf counters
+// into it (while the ScopedStats is live).
+class ScopedStats {
+ public:
+  ScopedStats(DBIterator*);
+  ~ScopedStats();
+
+ private:
+  DBIterator* const iter_;
+  uint64_t internal_delete_skipped_count_base_;
+};
+
 }  // namespace cockroach

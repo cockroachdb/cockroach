@@ -57,6 +57,12 @@ type SimpleIterator interface {
 	UnsafeValue() []byte
 }
 
+// IteratorStats is returned from (Iterator).Stats.
+type IteratorStats struct {
+	InternalDeleteSkippedCount int
+	TimeBoundNumSSTs           int
+}
+
 // Iterator is an interface for iterating over key/value pairs in an
 // engine. Iterator implementations are thread safe unless otherwise
 // noted.
@@ -116,6 +122,8 @@ type Iterator interface {
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
 	) (kvs []byte, numKvs int64, intents []byte, err error)
+
+	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
@@ -125,6 +133,9 @@ type IterOptions struct {
 	// but iteration (using Next) over keys without the same user-key
 	// prefix will not work correctly (keys may be skipped)
 	Prefix bool
+	// If WithStats is true, the iterator accumulates RocksDB performance
+	// counters over its lifetime which can be queried via `Stats()`.
+	WithStats bool
 }
 
 // Reader is the read interface to an engine's data.
@@ -164,7 +175,7 @@ type Reader interface {
 	// will frequently return keys outside of the [start, end] time range. If you
 	// must guarantee that you never see a key outside of the time bounds, perform
 	// your own filtering.
-	NewTimeBoundIterator(start, end hlc.Timestamp) Iterator
+	NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator
 }
 
 // Writer is the write interface to an engine's data.
