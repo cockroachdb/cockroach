@@ -3757,6 +3757,21 @@ func foldComparisonExpr(
 	return op, left, right, false, false
 }
 
+// ending returns true if the ending byte is end and pattern has even number
+// of `\` precedes end. Otherwise ending will return false.
+func ending(pattern string, end byte) bool {
+	if pattern[len(pattern)-1] == end {
+		var count int
+		idx := len(pattern) - 2
+		for idx >= 0 && pattern[idx] == '\\' {
+			count++
+			idx--
+		}
+		return count%2 == 0
+	}
+	return false
+}
+
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
@@ -3779,13 +3794,14 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-			// Cases like "something\%" are not optimized, but this does not affect correctness.
-			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+			// Patterns with even number of `\` preceding the ending `%` will have
+			// anyEnd set to true. Otherwise anyEnd will be set to false.
+			anyEnd := ending(pattern, '%')
 			anyStart := pattern[0] == '%'
 
-			// singleAnyEnd and anyEnd are mutually exclusive
-			// (similarly with Start).
-			singleAnyEnd := pattern[len(pattern)-1] == '_' && pattern[len(pattern)-2] != '\\'
+			// Patterns with even number of `\` preceding the ending `_` will have
+			// singleAnyEnd set to true. Otherwise singleAnyEnd will be set to false.
+			singleAnyEnd := ending(pattern, '_')
 			singleAnyStart := pattern[0] == '_'
 
 			// Since we've already checked for escaped characters
