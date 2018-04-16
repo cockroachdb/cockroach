@@ -172,10 +172,10 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		int32(n.dbDesc.ID),
 		int32(params.extendedEvalCtx.NodeID),
 		struct {
-			DatabaseName          string
-			Statement             string
-			User                  string
-			DroppedTablesAndViews []string
+			DatabaseName         string
+			Statement            string
+			User                 string
+			DroppedSchemaObjects []string
 		}{n.n.Name.String(), n.n.String(), p.SessionData().User, tbNameStrings},
 	)
 }
