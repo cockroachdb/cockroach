@@ -28,6 +28,7 @@ import (
 type ModelDB struct {
 	data                    map[string]DataSeries
 	metricNameToDataSources map[string]map[string]struct{}
+	seenDataSources         map[string]struct{}
 }
 
 // NewModelDB instantiates a new ModelDB instance.
@@ -35,10 +36,17 @@ func NewModelDB() *ModelDB {
 	return &ModelDB{
 		data: make(map[string]DataSeries),
 		metricNameToDataSources: make(map[string]map[string]struct{}),
+		seenDataSources:         make(map[string]struct{}),
 	}
 }
 
 type seriesVisitor func(string, string, DataSeries) (DataSeries, bool)
+
+// UniqueSourceCount returns the total number of unique data sources that have been
+// encountered by queries.
+func (mdb *ModelDB) UniqueSourceCount() int64 {
+	return int64(len(mdb.seenDataSources))
+}
 
 // VisitAllSeries calls the provided visitor function on every recorded
 // series. The visitor function can optionally return a DataSeries which will
@@ -79,6 +87,7 @@ func (mdb *ModelDB) Record(metricName, dataSource string, data DataSeries) {
 		mdb.metricNameToDataSources[metricName] = dataSources
 	}
 	dataSources[dataSource] = struct{}{}
+	mdb.seenDataSources[dataSource] = struct{}{}
 
 	seriesName := seriesName(metricName, dataSource)
 	mdb.data[seriesName] = append(mdb.data[seriesName], data...)
