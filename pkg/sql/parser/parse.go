@@ -26,12 +26,10 @@ package parser
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Parser wraps a scanner, parser and other utilities present in the parser
@@ -164,61 +162,4 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 	}
 
 	return cast.Type, nil
-}
-
-// ParseStringAs parses s as type t.
-func ParseStringAs(
-	t types.T, s string, evalCtx *tree.EvalContext, env *tree.CollationEnvironment,
-) (tree.Datum, error) {
-	var d tree.Datum
-	var err error
-	switch t {
-	case types.Bool:
-		d, err = tree.ParseDBool(s)
-	case types.Bytes:
-		d = tree.NewDBytes(tree.DBytes(s))
-	case types.Date:
-		d, err = tree.ParseDDate(s, evalCtx.GetLocation())
-	case types.Decimal:
-		d, err = tree.ParseDDecimal(s)
-	case types.Float:
-		d, err = tree.ParseDFloat(s)
-	case types.Int:
-		d, err = tree.ParseDInt(s)
-	case types.Interval:
-		d, err = tree.ParseDInterval(s)
-	case types.String:
-		d = tree.NewDString(s)
-	case types.Time:
-		d, err = tree.ParseDTime(s)
-	case types.TimeTZ:
-		d, err = tree.ParseDTimeTZ(s, evalCtx.GetLocation())
-	case types.Timestamp:
-		d, err = tree.ParseDTimestamp(s, time.Microsecond)
-	case types.TimestampTZ:
-		d, err = tree.ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
-	case types.UUID:
-		d, err = tree.ParseDUuidFromString(s)
-	case types.INet:
-		d, err = tree.ParseDIPAddrFromINetString(s)
-	case types.JSON:
-		d, err = tree.ParseDJSON(s)
-	default:
-		switch t := t.(type) {
-		case types.TArray:
-			typ, err := coltypes.DatumTypeToColumnType(t.Typ)
-			if err != nil {
-				return nil, err
-			}
-			d, err = tree.ParseDArrayFromString(evalCtx, s, typ)
-			if err != nil {
-				return nil, err
-			}
-		case types.TCollatedString:
-			d = tree.NewDCollatedString(s, t.Locale, env)
-		default:
-			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s (%T)", t, t)
-		}
-	}
-	return d, err
 }
