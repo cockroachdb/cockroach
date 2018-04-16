@@ -1935,6 +1935,10 @@ func (m *sessionDataMutator) SetLookupJoinEnabled(val bool) {
 	m.data.LookupJoinEnabled = val
 }
 
+func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
+	m.data.ZigzagJoinEnabled = val
+}
+
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
 	m.data.OptimizerMode = val
 }
