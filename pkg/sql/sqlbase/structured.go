@@ -1896,21 +1896,25 @@ func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool
 }
 
 // RenameIndexDescriptor renames an index descriptor.
-func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) {
+func (desc *TableDescriptor) RenameIndexDescriptor(index IndexDescriptor, name string) error {
 	id := index.ID
+	if id == desc.PrimaryIndex.ID {
+		desc.PrimaryIndex.Name = name
+		return nil
+	}
 	for i := range desc.Indexes {
 		if desc.Indexes[i].ID == id {
 			desc.Indexes[i].Name = name
-			return
+			return nil
 		}
 	}
 	for _, m := range desc.Mutations {
 		if idx := m.GetIndex(); idx != nil && idx.ID == id {
 			idx.Name = name
-			return
+			return nil
 		}
 	}
-	panic(fmt.Sprintf("index with id = %d does not exist", id))
+	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
 // FindIndexByID finds an index (active or inactive) with the specified ID.

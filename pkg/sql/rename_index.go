@@ -77,7 +77,9 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, fmt.Errorf("index name %q already exists", string(n.NewName))
 	}
 
-	tableDesc.RenameIndexDescriptor(idx, string(n.NewName))
+	if err := tableDesc.RenameIndexDescriptor(idx, string(n.NewName)); err != nil {
+		return nil, err
+	}
 
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
