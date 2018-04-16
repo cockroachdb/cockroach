@@ -17,6 +17,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -341,6 +342,14 @@ func Redact(r interface{}) string {
 			t = &cpy
 
 			t.Old, t.New = "<redacted>", "<redacted>"
+			return typAnd(t, t.Error())
+		case *net.OpError:
+			// It hardly matters, but avoid mutating the original.
+			cpy := *t
+			t = &cpy
+			t.Source = &util.UnresolvedAddr{NetworkField: "tcp", AddressField: "redacted"}
+			t.Addr = &util.UnresolvedAddr{NetworkField: "tcp", AddressField: "redacted"}
+			t.Err = errors.New(Redact(t.Err))
 			return typAnd(t, t.Error())
 		default:
 		}

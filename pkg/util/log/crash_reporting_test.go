@@ -17,11 +17,13 @@ package log
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -58,7 +60,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:60: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
+			expErr: "?:0: crash_reporting_test.go:62: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
 		},
 		{
 			// Special-casing switched off when format string present.
@@ -78,7 +80,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			format: "outer %+v", rs: []interface{}{
 				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
 			},
-			expErr: "?:0: outer %+v | crash_reporting_test.go:79: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			expErr: "?:0: outer %+v | crash_reporting_test.go:81: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
 		},
 		{
 			// Verify that the special case still scrubs inside of the error.
@@ -89,11 +91,15 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:42: caused by *errors.withMessage: caused by crash_reporting_test.go:42: caused by *errors.withMessage: caused by struct { error }",
+			expErr: "?:0: %s | crash_reporting_test.go:44: caused by *errors.withMessage: caused by crash_reporting_test.go:44: caused by *errors.withMessage: caused by struct { error }",
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:41: caused by *errors.withMessage: caused by crash_reporting_test.go:40: caused by *errors.withMessage: caused by crash_reporting_test.go:39: caused by *errors.withMessage: caused by crash_reporting_test.go:38",
+			expErr: "?:0: crash_reporting_test.go:43: caused by *errors.withMessage: caused by crash_reporting_test.go:42: caused by *errors.withMessage: caused by crash_reporting_test.go:41: caused by *errors.withMessage: caused by crash_reporting_test.go:40",
+		},
+		{
+			format: "", rs: []interface{}{&net.OpError{Op: "write", Net: "tcp", Source: &util.UnresolvedAddr{AddressField: "sensitive-source"}, Addr: &util.UnresolvedAddr{AddressField: "sensitive-addr"}, Err: errors.New("not safe")}},
+			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:101",
 		},
 	}
 }()
