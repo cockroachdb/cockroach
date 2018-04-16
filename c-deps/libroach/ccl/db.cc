@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "../db.h"
+#include "../encoding.h"
 #include <iostream>
 #include <libroachccl.h>
 #include <memory>

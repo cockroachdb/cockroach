@@ -158,13 +158,13 @@ std::string EncodeTimestamp(DBTimestamp ts) {
   return s;
 }
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
-// custom RocksDB comparator (DBComparator) is used to maintain the desired
-// ordering as these keys do not sort lexicographically correctly.
+// MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]. A custom RocksDB
+// comparator (DBComparator) is used to maintain the desired ordering as these
+// keys do not sort lexicographically correctly.
 std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logical) {
   std::string s;
   const bool ts = wall_time != 0 || logical != 0;
-  s.reserve(key.size() + 1 + (ts ? 1 + kMVCCVersionTimestampSize : 0));
+  s.reserve(key.size() + 1 + (ts ? kMVCCVersionTimestampSize : 0));
   s.append(key.data(), key.size());
   if (ts) {
     // Add a NUL prefix to the timestamp data. See DBPrefixExtractor.Transform
@@ -176,9 +176,9 @@ std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logi
   return s;
 }
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
-// custom RocksDB comparator (DBComparator) is used to maintain the desired
-// ordering as these keys do not sort lexicographically correctly.
+// MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]. A custom RocksDB
+// comparator (DBComparator) is used to maintain the desired ordering as these
+// keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k) { return EncodeKey(ToSlice(k.key), k.wall_time, k.logical); }
 
 WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
@@ -274,12 +274,9 @@ rocksdb::Slice KeyPrefix(const rocksdb::Slice& src) {
     return src;
   }
   // RocksDB requires that keys generated via Transform be comparable with
-  // normal encoded MVCC keys. Encoded MVCC keys have a suffix indicating the
-  // number of bytes of timestamp data. MVCC keys without a timestamp have a
-  // suffix of 0. We're careful in EncodeKey to make sure that the user-key
-  // always has a trailing 0. If there is no timestamp this falls out
-  // naturally. If there is a timestamp we prepend a 0 to the encoded
-  // timestamp data.
+  // normal encoded MVCC keys. The format for encoded MVCC keys is
+  // <key>\x00[<wall_time>[<logical>]]. We're careful in EncodeKey to make sure
+  // that the user-key always has a trailing \x00.
   assert(src.size() > key.size() && src[key.size()] == 0);
   return rocksdb::Slice(key.data(), key.size() + 1);
 }

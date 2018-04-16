@@ -61,11 +61,6 @@ inline std::string ToString(DBString s) { return std::string(s.data, s.len); }
 inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
 inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
-// custom RocksDB comparator (DBComparator) is used to maintain the desired
-// ordering as these keys do not sort lexicographically correctly.
-std::string EncodeKey(DBKey k);
-
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
 MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
