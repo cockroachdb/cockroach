@@ -129,7 +129,7 @@ func grpcTransportFactoryImpl(
 		})
 	}
 
-	// Put known-unhealthy clients last.
+	// Put known-healthy clients first.
 	splitHealthy(clients)
 
 	return &grpcTransport{
