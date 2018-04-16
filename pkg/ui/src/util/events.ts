@@ -11,7 +11,7 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Pr
 export function getEventDescription(e: Event$Properties): string {
   const info: {
     DatabaseName: string,
-    DroppedTables: string[],
+    DroppedSchemaObjects: string[],
     IndexName: string,
     MutationID: string,
     TableName: string,
@@ -27,14 +27,15 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.CREATE_DATABASE:
       return `Database Created: User ${info.User} created database ${info.DatabaseName}`;
     case eventTypes.DROP_DATABASE:
-      info.DroppedTables = info.DroppedTables || [];
-      let tableDropText: string = `${info.DroppedTables.length} tables were dropped: ${info.DroppedTables.join(", ")}`;
-      if (info.DroppedTables.length === 0) {
-        tableDropText = "No tables were dropped.";
-      } else if (info.DroppedTables.length === 1) {
-        tableDropText = `1 table was dropped: ${info.DroppedTables[0]}`;
+      info.DroppedSchemaObjects = info.DroppedSchemaObjects || [];
+      let tableDropText = `${info.DroppedSchemaObjects.length} schema objects ` +
+        `were dropped: ${info.DroppedSchemaObjects.join(", ")}`;
+      if (info.DroppedSchemaObjects.length === 0) {
+        tableDropText = "No schema objects were dropped.";
+      } else if (info.DroppedSchemaObjects.length === 1) {
+        tableDropText = `1 schema objects was dropped: ${info.DroppedSchemaObjects[0]}`;
       }
-      return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}.${tableDropText}`;
+      return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
