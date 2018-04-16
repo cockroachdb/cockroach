@@ -29,13 +29,7 @@ const decommissionedNodesSortSetting = new LocalSetting<AdminUIState, SortSettin
   "nodes/decommissioned_sort_setting", (s) => s.localSettings,
 );
 
-// Specialization of generic SortedTable component:
-//   https://github.com/Microsoft/TypeScript/issues/3960
-//
-// The variable name must start with a capital letter or JSX will not recognize
-// it as a component.
-// tslint:disable-next-line:variable-name
-const NodeSortedTable = SortedTable as new () => SortedTable<NodeStatus$Properties>;
+class NodeSortedTable extends SortedTable<NodeStatus$Properties> {}
 
 /**
  * NodeCategoryListProps are the properties shared by both LiveNodeList and

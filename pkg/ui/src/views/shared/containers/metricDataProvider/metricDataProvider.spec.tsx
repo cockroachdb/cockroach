@@ -5,6 +5,7 @@ import _ from "lodash";
 import Long from "long";
 import * as sinon from "sinon";
 
+import "src/enzymeInit";
 import * as protos from  "src/js/protos";
 import {
   Metric, Axis, MetricsDataComponentProps, QueryTimeInfo,
