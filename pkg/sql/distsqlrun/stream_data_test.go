@@ -188,3 +188,35 @@ func BenchmarkStreamEncoder(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkStreamDecoder(b *testing.B) {
+	ctx := context.Background()
+
+	for _, numCols := range []int{1, 4, 16, 64} {
+		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
+			b.SetBytes(int64(outboxBufRows * numCols * 8))
+			var se StreamEncoder
+			colTypes := makeIntCols(numCols)
+			se.init(colTypes)
+			row := makeIntRows(1, numCols)[0]
+			for i := 0; i < outboxBufRows; i++ {
+				se.AddRow(row)
+			}
+			msg := se.FormMessage(ctx)
+
+			for i := 0; i < b.N; i++ {
+				var sd StreamDecoder
+				sd.AddMessage(msg)
+				for {
+					row, meta, err := sd.GetRow(row)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if row == nil && meta == nil {
+						break
+					}
+				}
+			}
+		})
+	}
+}
