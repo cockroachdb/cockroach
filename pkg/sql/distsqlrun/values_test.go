@@ -122,3 +122,39 @@ func TestValues(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkValues(b *testing.B) {
+	const numCols = 2
+	const rowsPerChunk = 1
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := FlowCtx{
+		Settings: st,
+		EvalCtx:  evalCtx,
+	}
+	post := PostProcessSpec{}
+	output := RowDisposer{}
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			rows := makeIntRows(numRows, numCols)
+			spec, err := generateValuesSpec(twoIntCols, rows, rowsPerChunk)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.SetBytes(int64(8 * numRows * numCols))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				v, err := newValuesProcessor(&flowCtx, &spec, &post, &output)
+				if err != nil {
+					b.Fatal(err)
+				}
+				v.Run(context.Background(), nil /* wg */)
+			}
+		})
+	}
+}
