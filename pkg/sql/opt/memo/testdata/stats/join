@@ -162,7 +162,7 @@ project
       └── variable: b.z [type=int, outer=(6)]
 
 build
-SELECT * FROM a, a
+SELECT * FROM a, a AS a
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int!null) y:6(int) s:7(string) d:8(decimal!null)

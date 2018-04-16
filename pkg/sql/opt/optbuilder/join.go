@@ -34,24 +34,11 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	rightScope := b.buildTable(join.Right, inScope)
 
 	// Check that the same table name is not used on both sides.
-	leftTables := make(map[tree.TableName]struct{})
+	leftTables := make(map[string]struct{})
 	for _, leftCol := range leftScope.cols {
-		leftTables[leftCol.table] = exists
+		leftTables[leftCol.table.FQString()] = exists
 	}
-
-	for _, rightCol := range rightScope.cols {
-		t := rightCol.table
-		if t.TableName == "" {
-			// Allow joins of sources that define columns with no
-			// associated table name. At worst, the USING/NATURAL
-			// detection code or expression analysis for ON will detect an
-			// ambiguity later.
-			continue
-		}
-		if _, ok := leftTables[t]; ok {
-			panic(errorf("cannot join columns from the same source name %q (missing AS clause)", t.TableName))
-		}
-	}
+	b.validateJoinTableNames(leftTables, rightScope)
 
 	joinType := sqlbase.JoinTypeFromAstString(join.Join)
 
@@ -86,6 +73,30 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 	default:
 		panic(fmt.Sprintf("unsupported join condition %#v", cond))
+	}
+}
+
+// validateJoinTableNames checks that table names are not repeated between the
+// left and right sides of a join. leftTables contains a pre-built map of the
+// tables from the left side of the join, and rightScope contains the
+// scopeColumns (and corresponding table names) from the right side of the
+// join.
+func (b *Builder) validateJoinTableNames(leftTables map[string]struct{}, rightScope *scope) {
+	for _, rightCol := range rightScope.cols {
+		t := rightCol.table
+		if t.TableName == "" {
+			// Allow joins of sources that define columns with no
+			// associated table name. At worst, the USING/NATURAL
+			// detection code or expression analysis for ON will detect an
+			// ambiguity later.
+			continue
+		}
+		if _, ok := leftTables[t.FQString()]; ok {
+			panic(errorf(
+				"cannot join columns from the same source name %q (missing AS clause)",
+				tree.ErrString(&t.TableName),
+			))
+		}
 	}
 }
 
@@ -230,9 +241,9 @@ func (b *Builder) buildUsingJoinPredicate(
 	mergedCols = make(map[opt.ColumnID]memo.GroupID)
 	outScope = inScope.push()
 
-	for _, name := range names {
+	for i, name := range names {
 		if _, ok := joined[name]; ok {
-			panic(errorf("column %q appears more than once in USING clause", name))
+			panic(errorf("column %q appears more than once in USING clause", tree.ErrString(&names[i])))
 		}
 
 		// For every adjacent pair of tables, add an equality predicate.
@@ -243,8 +254,8 @@ func (b *Builder) buildUsingJoinPredicate(
 			// First, check if the comparison would even be valid.
 			if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
 				panic(errorf(
-					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
-					leftCol.typ, rightCol.typ, leftCol.name,
+					"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
+					leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name),
 				))
 			}
 		}
