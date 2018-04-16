@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 query error unknown statement type
 BACKUP DATABASE foo TO '/bar' INCREMENTAL FROM '/baz'

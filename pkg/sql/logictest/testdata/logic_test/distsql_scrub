@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql 5node-distsql-disk
+# LogicTest: 5node-distsql 5node-distsql-metadata 5node-distsql-disk
 
 # Verify the index check execution plan uses a merge join.
 

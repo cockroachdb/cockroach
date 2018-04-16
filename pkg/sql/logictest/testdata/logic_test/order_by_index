@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)

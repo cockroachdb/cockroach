@@ -1,4 +1,4 @@
-# LogicTest: default distsql
+# LogicTest: default distsql distsql-metadata
 
 statement ok
 CREATE TABLE a(a INT)

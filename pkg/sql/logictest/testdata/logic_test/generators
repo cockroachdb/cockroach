@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql
+# LogicTest: default parallel-stmts distsql distsql-metadata
 
 query I colnames
 SELECT * FROM GENERATE_SERIES(1, 3)

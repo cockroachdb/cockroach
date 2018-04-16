@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql
+# LogicTest: 5node-distsql 5node-distsql-metadata
 
 # The following tables form the interleaved hierarchy:
 #   name:             primary key:                # rows:   'a' = id mod X :

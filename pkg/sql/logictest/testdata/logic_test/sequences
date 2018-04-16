@@ -1,4 +1,4 @@
-# LogicTest: default distsql parallel-stmts
+# LogicTest: default distsql distsql-metadata parallel-stmts
 
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 

@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-disk
+# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
 
 # The join condition logic is tricky to get right with NULL
 # values. Simple implementations can deal well with NULLs on the first
