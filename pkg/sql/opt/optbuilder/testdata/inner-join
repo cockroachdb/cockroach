@@ -101,3 +101,69 @@ project
       ├── variable: b.y [type=float]
       ├── variable: a.x [type=int]
       └── variable: a.y [type=float]
+
+exec-ddl
+CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ ├── z string
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE db2.a (x INT PRIMARY KEY, y FLOAT)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT a.x FROM db1.a, db2.a
+----
+error: ambiguous source name: "a"
+
+build
+SELECT x FROM a, b
+----
+error: column reference "x" is ambiguous (candidates: a.x, b.x)
+
+build
+SELECT * FROM db1.a, db2.a
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(float) z:3(string) x:4(int!null) y:5(float)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(float) a.z:3(string)
+ ├── scan a
+ │    └── columns: a.x:4(int!null) a.y:5(float)
+ └── true [type=bool]
+
+build
+SELECT * FROM a, a
+----
+error: cannot join columns from the same source name "a" (missing AS clause)
+
+build
+SELECT * FROM t.a, a
+----
+error: cannot join columns from the same source name "a" (missing AS clause)
+
+build
+SELECT * FROM t.a, a AS a
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(float)
+ ├── scan a
+ │    └── columns: a.x:3(int!null) a.y:4(float)
+ └── true [type=bool]
+
+build
+SELECT a.* FROM t.a, a AS a
+----
+error: ambiguous source name: "a"
