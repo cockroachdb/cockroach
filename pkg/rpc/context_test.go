@@ -254,18 +254,18 @@ func TestHeartbeatHealth(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotConnected {
-		t.Errorf("wanted ErrConnected, not %v", err)
+	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotHeartbeated {
+		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
-	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotConnected {
-		t.Errorf("wanted ErrConnected, not %v", err)
+	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotHeartbeated {
+		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
 	clientCtx.SetLocalInternalServer(&internalServer{})
 
-	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotConnected {
-		t.Errorf("wanted ErrConnected, not %v", err)
+	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotHeartbeated {
+		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 	if err := clientCtx.ConnHealth(clientCtx.AdvertiseAddr); err != nil {
 		t.Error(err)
@@ -378,11 +378,10 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	isUnhealthy := func(err error) bool {
 		// Most of the time, an unhealthy connection will get
-		// ErrNotConnected, but there are brief periods during which we
-		// could get ErrNotHeartbeated (while we're trying to start a new
-		// connection) or one of the grpc errors below (while the old
+		// ErrNotHeartbeated, but there are brief periods during which we
+		// could get one of the grpc errors below (while the old
 		// connection is in the middle of closing).
-		if err == ErrNotConnected || err == ErrNotHeartbeated {
+		if err == ErrNotHeartbeated {
 			return true
 		}
 		// The expected code here is Unavailable, but at least on OSX you can also get

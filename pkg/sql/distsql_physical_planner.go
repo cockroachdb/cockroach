@@ -578,7 +578,7 @@ func checkNodeHealth(
 			err = connHealth(addr)
 		}
 
-		if err != nil && err != rpc.ErrNotConnected && err != rpc.ErrNotHeartbeated {
+		if err != nil && err != rpc.ErrNotHeartbeated {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which
 			// always has its address in the nodeMap).

@@ -292,7 +292,7 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 # verify event is there, and cascading table drops are logged.
 
 query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'DroppedTablesAndViews'
+SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
@@ -300,7 +300,7 @@ WHERE "eventType" = 'drop_database'
 53 1 ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
 
 query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'DroppedTablesAndViews'
+SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'

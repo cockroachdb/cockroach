@@ -9,32 +9,15 @@ type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.Event$Pr
  * getEventDescription returns a short summary of an event.
  */
 export function getEventDescription(e: Event$Properties): string {
-  const info: {
-    DatabaseName: string,
-    DroppedTables: string[],
-    IndexName: string,
-    MutationID: string,
-    TableName: string,
-    User: string,
-    ViewName: string,
-    SequenceName: string,
-    SettingName: string,
-    Value: string,
-  } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
+  const info: EventInfo = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
   const targetId: number = e.target_id ? e.target_id.toNumber() : null;
 
   switch (e.event_type) {
     case eventTypes.CREATE_DATABASE:
       return `Database Created: User ${info.User} created database ${info.DatabaseName}`;
     case eventTypes.DROP_DATABASE:
-      info.DroppedTables = info.DroppedTables || [];
-      let tableDropText: string = `${info.DroppedTables.length} tables were dropped: ${info.DroppedTables.join(", ")}`;
-      if (info.DroppedTables.length === 0) {
-        tableDropText = "No tables were dropped.";
-      } else if (info.DroppedTables.length === 1) {
-        tableDropText = `1 table was dropped: ${info.DroppedTables[0]}`;
-      }
-      return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}.${tableDropText}`;
+      const tableDropText = getDroppedObjectsText(info);
+      return `Database Dropped: User ${info.User} dropped database ${info.DatabaseName}. ${tableDropText}`;
     case eventTypes.CREATE_TABLE:
       return `Table Created: User ${info.User} created table ${info.TableName}`;
     case eventTypes.DROP_TABLE:
@@ -79,4 +62,37 @@ export function getEventDescription(e: Event$Properties): string {
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
+}
+
+// EventInfo corresponds to the `info` column of the `system.eventlog` table
+// and the `info` field of the `server.serverpb.EventsResponse.Event` proto.
+export interface EventInfo {
+  User: string;
+  DatabaseName?: string;
+  TableName?: string;
+  IndexName?: string;
+  MutationID?: string;
+  ViewName?: string;
+  SequenceName?: string;
+  SettingName?: string;
+  Value?: string;
+  // The following are three names for the same key (it was renamed twice).
+  // All ar included for backwards compatibility.
+  DroppedTables?: string[];
+  DroppedTablesAndViews?: string[];
+  DroppedSchemaObjects?: string[];
+}
+
+export function getDroppedObjectsText(eventInfo: EventInfo): string {
+  const droppedObjects =
+    eventInfo.DroppedSchemaObjects || eventInfo.DroppedTablesAndViews || eventInfo.DroppedTables;
+  if (!droppedObjects) {
+    return "";
+  }
+  if (droppedObjects.length === 0) {
+    return "No schema objects were dropped.";
+  } else if (droppedObjects.length === 1) {
+    return `1 schema object was dropped: ${droppedObjects[0]}`;
+  }
+  return `${droppedObjects.length} schema objects were dropped: ${droppedObjects.join(", ")}`;
 }
