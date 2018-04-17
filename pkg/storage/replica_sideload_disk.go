@@ -68,18 +68,10 @@ func (ss *diskSideloadStorage) Dir() string {
 	return ss.dir
 }
 
-func (ss *diskSideloadStorage) PutIfNotExists(
-	ctx context.Context, index, term uint64, contents []byte,
-) error {
+func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
 	filename := ss.filename(ctx, index, term)
-	if _, err := os.Stat(filename); err == nil {
-		// File exists.
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	// File does not exist yet. There's a chance the whole path is missing (for
-	// example after Clear()), in which case handle that transparently.
+	// There's a chance the whole path is missing (for example after Clear()),
+	// in which case handle that transparently.
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
