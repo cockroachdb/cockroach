@@ -188,8 +188,8 @@ func (m *Memo) GroupProperties(group GroupID) *LogicalProps {
 	return &m.groups[group].logical
 }
 
-// GroupByFingerprint returns the group of the expression that has the
-// given fingerprint.
+// GroupByFingerprint returns the group of the expression that has the given
+// fingerprint.
 func (m *Memo) GroupByFingerprint(f Fingerprint) GroupID {
 	return m.exprMap[f]
 }
@@ -252,7 +252,6 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	if m.exprMap[norm.Fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
-
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	logPropsFactory := logicalPropsFactory{evalCtx: evalCtx}

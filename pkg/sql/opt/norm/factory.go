@@ -24,6 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
+// event supported by the optimizer and factory. It is invoked each time an
+// optimization rule (Normalize or Explore) has been matched. The name of the
+// matched rule is passed as a parameter. If the function returns false, then
+// the rule is not applied (i.e. skipped).
+type MatchedRuleFunc func(ruleName opt.RuleName) bool
+
+// AppliedRuleFunc defines the callback function for the NotifyOnAppliedRule
+// event supported by the optimizer and factory. It is invoked each time an
+// optimization rule (Normalize or Explore) has been applied. The function is
+// called with the name of the rule and the memo group it affected. If the rule
+// was an exploration rule, then the added parameter gives the number of
+// expressions added to the group by the rule.
+type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
+
 //go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
@@ -57,10 +72,15 @@ type Factory struct {
 	// map, and will skip application of the rule.
 	ruleCycles map[memo.Fingerprint]bool
 
-	// onRuleMatch is the callback function that is invoked each time a normalize
+	// matchedRule is the callback function that is invoked each time a normalize
 	// rule has been matched by the factory. It can be set via a call to the
-	// SetOnRuleMatch method.
-	onRuleMatch func(ruleName opt.RuleName) bool
+	// NotifyOnMatchedRule method.
+	matchedRule MatchedRuleFunc
+
+	// appliedRule is the callback function which is invoked each time a normalize
+	// rule has been applied by the factory. It can be set via a call to the
+	// NotifyOnAppliedRule method.
+	appliedRule AppliedRuleFunc
 }
 
 // NewFactory returns a new Factory structure with a new, blank memo structure
@@ -77,17 +97,23 @@ func NewFactory(evalCtx *tree.EvalContext) *Factory {
 // expression tree becomes the output expression tree (because no transforms
 // are applied).
 func (f *Factory) DisableOptimizations() {
-	f.SetOnRuleMatch(func(opt.RuleName) bool { return false })
+	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
-// SetOnRuleMatch sets a callback function which is invoked each time a
-// normalize rule has been matched by the factory. If the function returns
-// false, then the rule is not applied. By default, all rules are applied, but
-// callers can set the callback function to override the default behavior. In
+// NotifyOnMatchedRule sets a callback function which is invoked each time a
+// normalize rule has been matched by the factory. If matchedRule is nil, then
+// no further notifications are sent, and all rules are applied by default. In
 // addition, callers can invoke the DisableOptimizations convenience method to
 // disable all rules.
-func (f *Factory) SetOnRuleMatch(onRuleMatch func(ruleName opt.RuleName) bool) {
-	f.onRuleMatch = onRuleMatch
+func (f *Factory) NotifyOnMatchedRule(matchedRule MatchedRuleFunc) {
+	f.matchedRule = matchedRule
+}
+
+// NotifyOnAppliedRule sets a callback function which is invoked each time a
+// normalize rule has been applied by the factory. If appliedRule is nil, then
+// no further notifications are sent.
+func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
+	f.appliedRule = appliedRule
 }
 
 // Memo returns the memo structure that the factory is operating upon.
