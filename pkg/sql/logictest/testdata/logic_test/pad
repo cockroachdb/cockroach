@@ -1,0 +1,120 @@
+# LogicTest: default parallel-stmts distsql distsql-metadata
+
+# lpad tests
+
+query T
+SELECT LPAD('abc', 1, 'xy')
+----
+a
+
+query T
+SELECT LPAD('abc', 2, 'xy')
+----
+ab
+
+query T
+SELECT LPAD('abc', 3, 'xy')
+----
+abc
+
+query T
+SELECT LPAD('abc', 5, 'xy')
+----
+xyabc
+
+query T
+SELECT LPAD('abc', 6, 'xy')
+----
+xyxabc
+
+query T
+SELECT LPAD('abc', 7, 'xy')
+----
+xyxyabc
+
+query T
+SELECT LPAD('abc', 1)
+----
+a
+
+query T
+SELECT LPAD('abc', 2)
+----
+ab
+
+query T
+SELECT LPAD('abc', 3)
+----
+abc
+
+query T
+SELECT LPAD('abc', 5)
+----
+  abc
+
+query T
+SELECT LPAD('Hello, 世界', 9)
+----
+Hello, 世界
+
+query T
+SELECT LPAD('Hello, 世界', 10)
+----
+ Hello, 世界
+
+query T
+SELECT LPAD('Hello', 8, '世界')
+----
+世界世Hello
+
+# rpad tests
+
+query T
+SELECT RPAD('abc', 1, 'xy')
+----
+a
+
+query T
+SELECT RPAD('abc', 2, 'xy')
+----
+ab
+
+query T
+SELECT RPAD('abc', 3, 'xy')
+----
+abc
+
+query T
+SELECT RPAD('abc', 5, 'xy')
+----
+abcxy
+
+query T
+SELECT RPAD('abc', 6, 'xy')
+----
+abcxyx
+
+query T
+SELECT RPAD('abc', 7, 'xy')
+----
+abcxyxy
+
+query T
+SELECT RPAD('abc', 1)
+----
+a
+
+query T
+SELECT RPAD('abc', 2)
+----
+ab
+
+query T
+SELECT RPAD('abc', 3)
+----
+abc
+
+query T
+SELECT RPAD('abc', 5)
+----
+abc  

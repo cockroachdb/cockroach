@@ -2446,6 +2446,61 @@ CockroachDB supports the following flags:
 				"Incorrect use can severely impact performance.",
 		},
 	},
+
+	"lpad": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				return tree.NewDString(lpad(s, length, " ")), nil
+			},
+			Category: categoryString,
+			Info: "Pads the string to length by adding ' ' to the left of string." +
+				"If string is longer than length it is truncated.",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				fill := string(tree.MustBeDString(args[2]))
+				return tree.NewDString(lpad(s, length, fill)), nil
+			},
+			Category: categoryString,
+			Info: "Pads the string by adding fill to the left of string to make it length. " +
+				"If string is longer than length it is truncated.",
+		},
+	},
+	"rpad": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				return tree.NewDString(rpad(s, length, " ")), nil
+			},
+			Category: categoryString,
+			Info: "Pads the string to length by adding ' ' to the right of string." +
+				"If string is longer than length it is truncated.",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				fill := string(tree.MustBeDString(args[2]))
+				return tree.NewDString(rpad(s, length, fill)), nil
+			},
+			Category: categoryString,
+			Info: "Pads the string to length by adding fill to the right of string. " +
+				"If string is longer than length it is truncated.",
+		},
+	},
 }
 
 var substringImpls = []tree.Builtin{
@@ -3742,4 +3797,49 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	default:
 		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSONObjectKey", d)
 	}
+}
+
+func lpad(s string, length int, fill string) string {
+	slen := utf8.RuneCountInString(s)
+	if length == slen {
+		return s
+	}
+
+	// If string is longer then length truncate it to the requested number
+	// of characters.
+	if length < slen {
+		return string([]rune(s)[:length])
+	}
+
+	padded := make([]rune, length)
+	fillRunes := []rune(fill)
+	for i := 0; i < length-slen; i++ {
+		padded[i] = fillRunes[i%len(fillRunes)]
+	}
+	copy(padded[length-slen:], []rune(s))
+
+	return string(padded)
+}
+
+func rpad(s string, length int, fill string) string {
+	slen := utf8.RuneCountInString(s)
+	if length == slen {
+		return s
+	}
+
+	// If string is longer then length truncate it to the requested number
+	// of characters.
+	if length < slen {
+		return string([]rune(s)[:length])
+	}
+
+	padded := make([]rune, length)
+	copy(padded, []rune(s))
+
+	fillRunes := []rune(fill)
+	for i := 0; i < length-slen; i++ {
+		padded[i+slen] = fillRunes[i%len(fillRunes)]
+	}
+
+	return string(padded)
 }
