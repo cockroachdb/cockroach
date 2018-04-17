@@ -1,16 +1,12 @@
 exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y INT);
-CREATE TABLE t.b (x INT PRIMARY KEY, z INT);
-INSERT INTO t.a VALUES (1, 10), (2, 20), (3, 30);
-INSERT INTO t.b VALUES (2, 200), (3, 300), (4, 400)
+CREATE TABLE a (x INT PRIMARY KEY, y INT);
+CREATE TABLE b (x INT PRIMARY KEY, z INT);
+INSERT INTO a VALUES (1, 10), (2, 20), (3, 30);
+INSERT INTO b VALUES (2, 200), (3, 300), (4, 400)
 ----
 
 exec-explain
-SELECT * FROM t.a, t.b
+SELECT * FROM a, b
 ----
 join       0  join  ·      ·          (x, y, x, z)  ·
  │         0  ·     type   cross      ·             ·
@@ -22,7 +18,7 @@ join       0  join  ·      ·          (x, y, x, z)  ·
 ·          1  ·     spans  ALL        ·             ·
 
 exec
-SELECT * FROM t.a, t.b
+SELECT * FROM a, b
 ----
 x:int  y:int  x:int  z:int
 1      10     2      200
@@ -36,7 +32,7 @@ x:int  y:int  x:int  z:int
 3      30     4      400
 
 exec-explain
-SELECT * FROM t.a, t.b WHERE a.x = b.x
+SELECT * FROM a, b WHERE a.x = b.x
 ----
 join       0  join  ·         ·          (x, y, x, z)  ·
  │         0  ·     type      inner      ·             ·
@@ -49,14 +45,14 @@ join       0  join  ·         ·          (x, y, x, z)  ·
 ·          1  ·     spans     ALL        ·             ·
 
 exec
-SELECT * FROM t.a, t.b WHERE a.x = b.x
+SELECT * FROM a, b WHERE a.x = b.x
 ----
 x:int  y:int  x:int  z:int
 2      20     2      200
 3      30     3      300
 
 exec-explain
-SELECT * FROM t.a INNER JOIN t.b ON a.x = b.x
+SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
 join       0  join  ·         ·          (x, y, x, z)  ·
  │         0  ·     type      inner      ·             ·
@@ -69,14 +65,14 @@ join       0  join  ·         ·          (x, y, x, z)  ·
 ·          1  ·     spans     ALL        ·             ·
 
 exec
-SELECT * FROM t.a INNER JOIN t.b ON a.x = b.x
+SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
 x:int  y:int  x:int  z:int
 2      20     2      200
 3      30     3      300
 
 exec-explain
-SELECT * FROM t.a NATURAL JOIN t.b
+SELECT * FROM a NATURAL JOIN b
 ----
 render          0  render  ·         ·          (x, y, z)     ·
  │              0  ·       render 0  x          ·             ·
@@ -93,14 +89,14 @@ render          0  render  ·         ·          (x, y, z)     ·
 ·               2  ·       spans     ALL        ·             ·
 
 exec
-SELECT * FROM t.a NATURAL JOIN t.b
+SELECT * FROM a NATURAL JOIN b
 ----
 x:int  y:int  z:int
 2      20     200
 3      30     300
 
 exec-explain
-SELECT * FROM t.a LEFT OUTER JOIN t.b ON a.x = b.x
+SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
 join       0  join  ·         ·           (x, y, x, z)  ·
  │         0  ·     type      left outer  ·             ·
@@ -113,7 +109,7 @@ join       0  join  ·         ·           (x, y, x, z)  ·
 ·          1  ·     spans     ALL         ·             ·
 
 exec
-SELECT * FROM t.a LEFT OUTER JOIN t.b ON a.x = b.x
+SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
 x:int  y:int  x:int  z:int
 1      10     NULL   NULL
@@ -121,7 +117,7 @@ x:int  y:int  x:int  z:int
 3      30     3      300
 
 exec-explain
-SELECT * FROM t.a NATURAL RIGHT OUTER JOIN t.b
+SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
 render          0  render  ·         ·            (x, y, z)     ·
  │              0  ·       render 0  x            ·             ·
@@ -138,7 +134,7 @@ render          0  render  ·         ·            (x, y, z)     ·
 ·               2  ·       spans     ALL          ·             ·
 
 exec
-SELECT * FROM t.a NATURAL RIGHT OUTER JOIN t.b
+SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
 x:int  y:int  z:int
 2      20     200
@@ -146,7 +142,7 @@ x:int  y:int  z:int
 4      NULL   400
 
 exec-explain
-SELECT * FROM t.a FULL OUTER JOIN t.b USING(x)
+SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
 render          0  render  ·         ·               (x, y, z)     ·
  │              0  ·       render 0  COALESCE(x, x)  ·             ·
@@ -163,7 +159,7 @@ render          0  render  ·         ·               (x, y, z)     ·
 ·               2  ·       spans     ALL             ·             ·
 
 exec
-SELECT * FROM t.a FULL OUTER JOIN t.b USING(x)
+SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
 x:int  y:int  z:int
 1      10     NULL
@@ -173,7 +169,7 @@ x:int  y:int  z:int
 
 # Select filters are pushed through join, down to scans.
 exec-explain
-SELECT * FROM t.a, t.b WHERE y > 10 AND z < 400
+SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
 join            0  join    ·       ·          (x, y, x, z)  ·
  │              0  ·       type    cross      ·             ·
@@ -189,7 +185,7 @@ join            0  join    ·       ·          (x, y, x, z)  ·
 ·               2  ·       spans   ALL        ·             ·
 
 exec
-SELECT * FROM t.a, t.b WHERE y > 10 AND z < 400
+SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
 x:int  y:int  x:int  z:int
 2      20     2      200
@@ -199,7 +195,7 @@ x:int  y:int  x:int  z:int
 
 # Join filter is pushed through join, down to scan.
 exec-explain
-SELECT * FROM t.a LEFT JOIN t.b ON a.x=b.x AND z < 300
+SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
 join            0  join    ·         ·           (x, y, x, z)  ·
  │              0  ·       type      left outer  ·             ·
@@ -214,7 +210,7 @@ join            0  join    ·         ·           (x, y, x, z)  ·
 ·               2  ·       spans     ALL         ·             ·
 
 exec
-SELECT * FROM t.a LEFT JOIN t.b ON a.x=b.x AND z < 300
+SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
 x:int  y:int  x:int  z:int
 1      10     NULL   NULL

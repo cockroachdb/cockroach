@@ -128,14 +128,25 @@ func (md *Metadata) ColumnType(id ColumnID) types.T {
 // references to the same table are assigned different table ids (e.g. in a
 // self-join query).
 func (md *Metadata) AddTable(tab Table) TableID {
+	return md.AddTableWithName(tab, "")
+}
+
+// AddTableWithName indexes a new reference to a table within the query.
+// Separate references to the same table are assigned different table ids
+// (e.g. in a self-join query). Optionally, include a table name tabName to
+// override the name in tab when creating column labels.
+func (md *Metadata) AddTableWithName(tab Table, tabName string) TableID {
 	tabID := TableID(md.NumColumns() + 1)
+	if tabName == "" {
+		tabName = string(tab.TabName())
+	}
 
 	for i := 0; i < tab.ColumnCount(); i++ {
 		col := tab.Column(i)
-		if tab.TabName() == "" {
+		if tabName == "" {
 			md.AddColumn(string(col.ColName()), col.DatumType())
 		} else {
-			md.AddColumn(fmt.Sprintf("%s.%s", tab.TabName(), col.ColName()), col.DatumType())
+			md.AddColumn(fmt.Sprintf("%s.%s", tabName, col.ColName()), col.DatumType())
 		}
 	}
 

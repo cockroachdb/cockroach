@@ -1,14 +1,10 @@
 exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
-CREATE TABLE t.t (k INT PRIMARY KEY, u INT, v INT);
-INSERT INTO t.t VALUES (1, 1, 1), (2, 4, 8), (3, 9, 27), (4, 16, 64)
+CREATE TABLE t (k INT PRIMARY KEY, u INT, v INT);
+INSERT INTO t VALUES (1, 1, 1), (2, 4, 8), (3, 9, 27), (4, 16, 64)
 ----
 
 opt
-SELECT EXISTS(SELECT * FROM t.t WHERE u = k*k)
+SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 project
  ├── columns: column4:4(bool)
@@ -38,7 +34,7 @@ project
                                └── variable: t.k [type=int, outer=(1)]
 
 exec-explain
-SELECT EXISTS(SELECT * FROM t.t WHERE u = k*k)
+SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 root                 0  root      ·          ·                 (column4)  ·
  ├── render          1  render    ·          ·                 (column4)  ·
@@ -56,19 +52,19 @@ root                 0  root      ·          ·                 (column4)  ·
 ·                    3  ·         spans      ALL               ·          ·
 
 exec
-SELECT EXISTS(SELECT * FROM t.t WHERE u = k*k)
+SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 column4:bool
 true
 
 exec
-SELECT EXISTS(SELECT * FROM t.t WHERE u != k*k)
+SELECT EXISTS(SELECT * FROM t WHERE u != k*k)
 ----
 column4:bool
 false
 
 exec-explain
-SELECT * FROM t.t WHERE u = (SELECT MAX(u) FROM t.t)
+SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 root                 0  root      ·            ·          (k, u, v)  ·
  ├── filter          1  filter    ·            ·          (k, u, v)  ·
@@ -87,13 +83,13 @@ root                 0  root      ·            ·          (k, u, v)  ·
 ·                    3  ·         spans        ALL        ·          ·
 
 exec
-SELECT * FROM t.t WHERE u = (SELECT MAX(u) FROM t.t)
+SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 k:int  u:int  v:int
 4      16     64
 
 exec-explain
-SELECT * FROM t.t WHERE u = (SELECT MAX(u) FROM t.t WHERE EXISTS(SELECT * FROM t.t WHERE u=k*k))
+SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 root                      0  root      ·            ·                 (k, u, v)  ·
  ├── filter               1  filter    ·            ·                 (k, u, v)  ·
@@ -123,7 +119,7 @@ root                      0  root      ·            ·                 (k, u, v
 ·                         4  ·         spans        ALL               ·          ·
 
 exec
-SELECT * FROM t.t WHERE u = (SELECT MAX(u) FROM t.t WHERE EXISTS(SELECT * FROM t.t WHERE u=k*k))
+SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 k:int  u:int  v:int
 4      16     64
