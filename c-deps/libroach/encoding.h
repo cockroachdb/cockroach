@@ -56,12 +56,12 @@ const int kMVCCVersionTimestampSize = 12;
 void EncodeTimestamp(std::string& s, int64_t wall_time, int32_t logical);
 std::string EncodeTimestamp(DBTimestamp ts);
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
+// MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(const rocksdb::Slice& key, int64_t wall_time, int32_t logical);
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
+// MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.
 std::string EncodeKey(DBKey k);
