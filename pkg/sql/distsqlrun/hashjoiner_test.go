@@ -1425,6 +1425,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	const numCols = 1
 	for _, spill := range []bool{true, false} {
+		flowCtx.testingKnobs.MemoryLimitBytes = 0
 		if spill {
 			flowCtx.testingKnobs.MemoryLimitBytes = 1
 		}
