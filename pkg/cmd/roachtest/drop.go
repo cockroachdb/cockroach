@@ -120,8 +120,11 @@ gc:
 			run(stmtZone)
 
 			var allNodesSpaceCleared bool
+			var sizeReport string
+			maxSizeBytes := 100 * 1024 * 1024
 			// We're waiting a maximum of 10 minutes to makes sure that the drop operations clear the disk.
 			for i := 0; i < 10; i++ {
+				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
 					size, err := getDiskUsageInByte(ctx, c.Node(j), c)
@@ -129,11 +132,13 @@ gc:
 						return err
 					}
 
-					c.l.printf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
+					nodeSpaceUsed := fmt.Sprintf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
+					c.l.printf(nodeSpaceUsed)
 
 					// Return if the size of the directory is less than 100mb
-					if size > 1E8 {
-						allNodesSpaceCleared = allNodesSpaceCleared && false
+					if size > maxSizeBytes {
+						allNodesSpaceCleared = false
+						sizeReport += nodeSpaceUsed
 					}
 				}
 
@@ -144,7 +149,9 @@ gc:
 			}
 
 			if !allNodesSpaceCleared {
-				t.Fatalf("Disk space has not been freed within 10 minutes of deletion.")
+				sizeReport += fmt.Sprintf("disk space usage has not dropped below %s on all nodes.",
+					humanizeutil.IBytes(int64(maxSizeBytes)))
+				t.Fatalf(sizeReport)
 			}
 
 			return nil
