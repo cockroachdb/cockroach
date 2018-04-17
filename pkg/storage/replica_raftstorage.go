@@ -671,12 +671,10 @@ func clearRangeData(
 }
 
 // applySnapshot updates the replica based on the given snapshot and associated
-// HardState (which may be empty, as Raft may apply some snapshots which don't
-// require an update to the HardState). All snapshots must pass through Raft
-// for correctness, i.e. the parameters to this method must be taken from
-// a raft.Ready. It is the caller's responsibility to call
-// r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
-// This method requires that r.raftMu is held.
+// HardState. All snapshots must pass through Raft for correctness, i.e. the
+// parameters to this method must be taken from a raft.Ready. It is the caller's
+// responsibility to call r.store.processRangeDescriptorUpdate(r) after a
+// successful applySnapshot. This method requires that r.raftMu is held.
 func (r *Replica) applySnapshot(
 	ctx context.Context, inSnap IncomingSnapshot, snap raftpb.Snapshot, hs raftpb.HardState,
 ) (err error) {
@@ -706,6 +704,12 @@ func (r *Replica) applySnapshot(
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
 		return nil
+	}
+	if raft.IsEmptyHardState(hs) {
+		// Raft will never provide an empty HardState if it is providing a
+		// nonempty snapshot because we discard snapshots that do not increase
+		// the commit index.
+		log.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", snap)
 	}
 
 	var stats struct {
@@ -841,20 +845,11 @@ func (r *Replica) applySnapshot(
 	}
 	stats.entries = timeutil.Now()
 
-	// Note that we don't require that Raft supply us with a nonempty HardState
-	// on a snapshot. We don't want to make that assumption because it's not
-	// guaranteed by the contract. Raft *must* send us a HardState when it
-	// increases the committed index as a result of the snapshot, but who is to
-	// say it isn't going to accept a snapshot which is identical to the current
-	// state?
-	//
 	// Note that since this snapshot comes from Raft, we don't have to synthesize
 	// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
 	// ways.
-	if !raft.IsEmptyHardState(hs) {
-		if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
-			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
-		}
+	if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
+		return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 	}
 
 	// We need to close the distinct batch and start using the normal batch for
