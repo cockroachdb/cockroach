@@ -7,7 +7,12 @@ import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 class NodesWrapper extends React.Component<{}, {}> {
   render() {
     return (
-      <div style={{ marginTop: 12 }}>
+      <div style={{
+        paddingTop: 12,
+        width: "100%",
+        height: "100%",
+        overflow: "auto",
+      }}>
         <NodesOverview />
       </div>
     );

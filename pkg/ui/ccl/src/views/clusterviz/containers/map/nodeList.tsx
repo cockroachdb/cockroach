@@ -28,11 +28,11 @@ export default class NodeList extends React.Component<RouterState & { router: In
       <div
         style={{
           width: "100%",
+          height: "100%",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
           background: "white",
-          paddingBottom: 24,
         }}
         className="clusterviz"
       >
@@ -52,7 +52,14 @@ export default class NodeList extends React.Component<RouterState & { router: In
             />
           </div>
         </div>
-        <NodesOverview />
+        <div style={{
+          paddingBottom: 24,
+          width: "100%",
+          height: "100%",
+          overflow: "auto",
+        }}>
+          <NodesOverview />
+        </div>
       </div>
     );
   }
