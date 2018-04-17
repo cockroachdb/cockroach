@@ -362,6 +362,8 @@ type testClusterConfig struct {
 	distSQLUseDisk bool
 	// if set, enables DistSQL metadata propagation tests.
 	distSQLMetadataTestEnabled bool
+	// if set and the -test.short flag is passed, skip this config.
+	skipShort bool
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -387,11 +389,11 @@ var logicTestConfigs = []testClusterConfig{
 	},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
-	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true},
+	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
 	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 	{name: "5node-distsql", numNodes: 5, overrideDistSQLMode: "On"},
-	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true},
+	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "5node-distsql-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
 }
 
@@ -1912,6 +1914,9 @@ func RunLogicTest(t *testing.T) {
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
+			if testing.Short() && cfg.skipShort {
+				t.Skip("config skipped by -test.short")
+			}
 			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
 				t.Skip("config excluded via env var")
 			}
