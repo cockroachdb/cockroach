@@ -34,8 +34,8 @@ type sideloadStorage interface {
 	// exist.
 	Dir() string
 	// Writes the given contents to the file specified by the given index and
-	// term. Does not perform the write if the file exists.
-	PutIfNotExists(_ context.Context, index, term uint64, contents []byte) error
+	// term. Overwrites the file if it already exists.
+	Put(_ context.Context, index, term uint64, contents []byte) error
 	// Load the file at the given index and term. Return errSideloadedFileNotFound when no
 	// such file is present.
 	Get(_ context.Context, index, term uint64) ([]byte, error)
@@ -151,7 +151,7 @@ func maybeSideloadEntriesImpl(
 
 			ent.Data = encodeRaftCommandV2(cmdID, data)
 			log.Eventf(ctx, "writing payload at index=%d term=%d", ent.Index, ent.Term)
-			if err = sideloaded.PutIfNotExists(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
+			if err = sideloaded.Put(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
 				return nil, 0, err
 			}
 			sideloadedEntriesSize += int64(len(dataToSideload))
