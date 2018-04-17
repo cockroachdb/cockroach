@@ -26,6 +26,11 @@ import (
 type Builder struct {
 	factory exec.Factory
 	ev      memo.ExprView
+
+	// subqueries accumulates information about subqueries that are part of scalar
+	// expressions we built. Each entry is associated with a tree.Subquery
+	// expression node.
+	subqueries []exec.Subquery
 }
 
 // New constructs an instance of the execution node builder using the
@@ -37,8 +42,12 @@ func New(factory exec.Factory, ev memo.ExprView) *Builder {
 
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
-func (b *Builder) Build() (exec.Node, error) {
-	return b.build(b.ev)
+func (b *Builder) Build() (exec.Plan, error) {
+	root, err := b.build(b.ev)
+	if err != nil {
+		return nil, err
+	}
+	return b.factory.ConstructPlan(root, b.subqueries)
 }
 
 func (b *Builder) build(ev memo.ExprView) (exec.Node, error) {

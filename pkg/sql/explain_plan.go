@@ -84,13 +84,19 @@ func (p *planner) makeExplainPlanNode(
 	if err != nil {
 		return nil, err
 	}
-	return p.makeExplainPlanNodeWithPlan(ctx, flags, expanded, optimized, plan)
+	return p.makeExplainPlanNodeWithPlan(
+		ctx, flags, expanded, optimized, plan, p.curPlan.subqueryPlans,
+	)
 }
 
-// newExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
+// makeExplainPlanNodeWithPlan instantiates a planNode that EXPLAINs an
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
-	ctx context.Context, flags explainFlags, expanded, optimized bool, plan planNode,
+	ctx context.Context,
+	flags explainFlags,
+	expanded, optimized bool,
+	plan planNode,
+	subqueryPlans []subquery,
 ) (planNode, error) {
 	columns := explainPlanColumns
 
@@ -125,7 +131,7 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 		expanded:      expanded,
 		optimized:     optimized,
 		plan:          plan,
-		subqueryPlans: p.curPlan.subqueryPlans,
+		subqueryPlans: subqueryPlans,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},

@@ -359,11 +359,12 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	ev := o.Optimize(root, props)
 
-	node, err := execbuilder.New(eng, ev).Build()
+	plan, err := execbuilder.New(eng, ev).Build()
 	if err != nil {
 		return err
 	}
-	p.curPlan.plan = node.(planNode)
+	p.curPlan = *plan.(*planTop)
+	p.curPlan.AST = stmt.AST
 	return nil
 }
 
