@@ -51,7 +51,8 @@ ignored = [
 
 [[constraint]]
   name = "github.com/coreos/etcd"
-  branch = "master"
+  source = "https://github.com/cockroachdb/etcd"
+  branch = "crdb-release-1.1"
 
 [[constraint]]
   name = "github.com/rlmcpherson/s3gof3r"
