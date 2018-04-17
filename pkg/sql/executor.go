@@ -1479,6 +1479,8 @@ func (e *Executor) execStmtInAbortedTxn(
 				false /* implicitTxn */, true, /* retryIntent */
 				curTs /* sqlTimestamp */, curIso /* isolation */, curPri /* priority */)
 		}
+		session.testingVerifyMetadataFn = nil
+		session.tables.releaseTables(session.Ctx())
 		// TODO(andrei/cdo): add a counter for user-directed retries.
 		return nil
 	default:
@@ -1752,6 +1754,8 @@ func (e *Executor) execStmtInOpenTxn(
 			txnState.mu.txn.Proto().Restart(
 				0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
 		}
+		session.testingVerifyMetadataFn = nil
+		session.tables.releaseTables(session.Ctx())
 		return nil
 
 	case *parser.Prepare:
