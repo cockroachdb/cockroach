@@ -18,8 +18,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type buildScalarCtx struct {
@@ -50,6 +52,9 @@ func init() {
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.ArrayOp:           (*Builder).buildArray,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
+
+		opt.ExistsOp:   (*Builder).buildExistsSubquery,
+		opt.SubqueryOp: (*Builder).buildSubquery,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -285,4 +290,53 @@ func (b *Builder) buildUnsupportedExpr(
 	ctx *buildScalarCtx, ev memo.ExprView,
 ) (tree.TypedExpr, error) {
 	return ev.Private().(tree.TypedExpr), nil
+}
+
+func (b *Builder) buildExistsSubquery(
+	ctx *buildScalarCtx, ev memo.ExprView,
+) (tree.TypedExpr, error) {
+	// Build the execution plan for the subquery. Note that the subquery could
+	// have subqueries of its own which are added to b.subqueries.
+	root, err := b.build(ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+
+	expr := &tree.Subquery{Exists: true}
+	expr.SetType(types.Bool)
+	b.addSubquery(expr, exec.SubqueryExists, root)
+	return expr, nil
+}
+
+func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input := ev.Child(0)
+	// Typically, the input is a Max1RowOp; it might be elided if the optimizer
+	// proves that more than 1 result is not possible.
+	if input.Operator() == opt.Max1RowOp {
+		input = input.Child(0)
+	}
+	// Build the execution plan for the subquery. Note that the subquery could
+	// have subqueries of its own which are added to b.subqueries.
+	root, err := b.build(input)
+	if err != nil {
+		return nil, err
+	}
+
+	expr := &tree.Subquery{}
+	expr.SetType(ev.Logical().Scalar.Type)
+	b.addSubquery(expr, exec.SubqueryOneRow, root)
+	return expr, nil
+}
+
+// addSubquery adds an entry to b.subqueries and associates exprNode with
+// that entry.
+func (b *Builder) addSubquery(exprNode *tree.Subquery, typ exec.SubqueryType, root exec.Node) {
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: exprNode,
+		Type:     typ,
+		Root:     root,
+	})
+	// Associate the tree.Subquery expression node with this subquery
+	// by index (1-based).
+	exprNode.Idx = len(b.subqueries)
 }
