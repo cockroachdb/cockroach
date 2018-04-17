@@ -3772,6 +3772,22 @@ func foldComparisonExpr(
 	return op, left, right, false, false
 }
 
+// hasUnescapedSuffix returns true if the ending byte is suffix and s has an
+// even number of escapeTokens preceding suffix. Otherwise hasUnescapedSuffix
+// will return false.
+func hasUnescapedSuffix(s string, suffix byte, escapeToken string) bool {
+	if s[len(s)-1] == suffix {
+		var count int
+		idx := len(s) - len(escapeToken) - 1
+		for idx >= 0 && s[idx:idx+len(escapeToken)] == escapeToken {
+			count++
+			idx -= len(escapeToken)
+		}
+		return count%2 == 0
+	}
+	return false
+}
+
 // Simplifies LIKE/ILIKE expressions that do not need full regular expressions to
 // evaluate the condition. For example, when the expression is just checking to see
 // if a string starts with a given pattern.
@@ -3794,13 +3810,14 @@ func optimizedLikeFunc(pattern string, caseInsensitive bool) (func(string) bool,
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
-			// Cases like "something\%" are not optimized, but this does not affect correctness.
-			anyEnd := pattern[len(pattern)-1] == '%' && pattern[len(pattern)-2] != '\\'
+			// Patterns with even number of `\` preceding the ending `%` will have
+			// anyEnd set to true. Otherwise anyEnd will be set to false.
+			anyEnd := hasUnescapedSuffix(pattern, '%', `\`)
 			anyStart := pattern[0] == '%'
 
-			// singleAnyEnd and anyEnd are mutually exclusive
-			// (similarly with Start).
-			singleAnyEnd := pattern[len(pattern)-1] == '_' && pattern[len(pattern)-2] != '\\'
+			// Patterns with even number of `\` preceding the ending `_` will have
+			// singleAnyEnd set to true. Otherwise singleAnyEnd will be set to false.
+			singleAnyEnd := hasUnescapedSuffix(pattern, '_', `\`)
 			singleAnyStart := pattern[0] == '_'
 
 			// Since we've already checked for escaped characters
