@@ -105,11 +105,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: disableNetTrace,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.table_statistics table",
-		workFn:           createTableStatisticsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.TableStatisticsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.table_statistics table",
 	},
 	{
 		// Introduced in v2.0.
@@ -118,11 +115,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootUser,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.locations table",
-		workFn:           createLocationsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.locations table",
 	},
 	{
 		// Introduced in v2.0.
@@ -131,11 +125,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addDefaultMetaAndLivenessZoneConfigs,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.role_members table",
-		workFn:           createRoleMembersTable,
-		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.role_members table",
 	},
 	{
 		// Introduced in v2.0.
@@ -155,10 +146,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootToAdminRole,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "upgrade table descs to interleaved format version",
-		workFn: upgradeTableDescsToInterleavedFormatVersion,
+		// Introduced in v2.0. Repeated in v2.1 below.
+		name: "upgrade table descs to interleaved format version",
 	},
 	{
 		// Introduced in v2.0 alphas then folded into `retiredSettings`.
@@ -180,10 +169,19 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: initializeClusterSecret,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(mberhault): bake this migration into v2.1, but create a new migration
-		// with the same function to catch any tables written in a mixed-version setting.
-		name:   "ensure admin role privileges in all descriptors",
+		// Introduced in v2.0. Repeated in v2.1 below.
+		name: "ensure admin role privileges in all descriptors",
+	},
+	{
+		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
+		// TODO(mberhault): bake into v2.2.
+		name:   "repeat: upgrade table descs to interleaved format version",
+		workFn: upgradeTableDescsToInterleavedFormatVersion,
+	},
+	{
+		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
+		// TODO(mberhault): bake into v2.2.
+		name:   "repeat: ensure admin role privileges in all descriptors",
 		workFn: ensureMaxPrivileges,
 	},
 }
@@ -465,18 +463,6 @@ func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, er
 
 func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
-}
-
-func createTableStatisticsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
-}
-
-func createLocationsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.LocationsTable)
-}
-
-func createRoleMembersTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {

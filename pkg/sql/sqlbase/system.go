@@ -247,7 +247,7 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -276,7 +276,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -285,7 +285,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -322,7 +322,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -352,7 +352,7 @@ var (
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -380,7 +380,7 @@ var (
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -418,7 +418,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -457,7 +457,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -498,7 +498,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -523,7 +523,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -565,7 +565,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -627,7 +627,7 @@ var (
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
@@ -678,7 +678,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -720,7 +720,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -787,13 +787,6 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
-
-//***************************************************************************
-// WARNING: any tables added after LocationsTable must use:
-//   Privileges: NewCustomSuperuserPrivilegeDescriptor(...)
-// instead of
-//   Privileges: NewCustomRootPrivilegeDescriptor(...)
-//***************************************************************************
 )
 
 // Create the key/value pair for the default zone config entry.
@@ -831,6 +824,11 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
+
+	// Tables introduced in 2.0, added here for 2.1.
+	target.AddDescriptor(keys.SystemDatabaseID, &TableStatisticsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &LocationsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &RoleMembersTable)
 
 	// Adding a new system table? Don't add it to the metadata schema yet!
 	//

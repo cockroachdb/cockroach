@@ -719,7 +719,7 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
-	migration := mt.pop(t, "upgrade table descs to interleaved format version")
+	migration := mt.pop(t, "repeat: upgrade table descs to interleaved format version")
 	mt.start(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
