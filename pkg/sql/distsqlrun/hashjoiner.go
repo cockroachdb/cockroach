@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -161,6 +162,11 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	pushTrailingMeta := func(ctx context.Context) {
+		if len(h.stats) != 0 {
+			for _, stat := range h.stats {
+				log.VEvent(h.ctx, 2, stat.SummarizeStats())
+			}
+		}
 		sendTraceData(ctx, h.out.output)
 	}
 
@@ -201,10 +207,27 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		rowContainerMon = &limitedMon
 	}
 
+	var leftBytesAccount, rightBytesAccount mon.BytesAccount
+	leftBytesAccount = rowContainerMon.NewBoundAccount()
+	rightBytesAccount = rowContainerMon.NewBoundAccount()
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		leftBytesAccountStatCollector := NewBytesAccountStatCollector(
+			leftBytesAccount, "hashJoiner left side memory",
+		)
+		rightBytesAccountStatCollector := NewBytesAccountStatCollector(
+			rightBytesAccount, "hashJoiner right side memory",
+		)
+		leftBytesAccount = leftBytesAccountStatCollector
+		rightBytesAccount = rightBytesAccountStatCollector
+		h.stats = append(h.stats, leftBytesAccountStatCollector, rightBytesAccountStatCollector)
+	}
+
 	h.rows[leftSide].initWithBytesAccount(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, rowContainerMon.NewBoundAccount())
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, leftBytesAccount,
+	)
 	h.rows[rightSide].initWithBytesAccount(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rowContainerMon.NewBoundAccount())
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rightBytesAccount,
+	)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
