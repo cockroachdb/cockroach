@@ -23,9 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-// Node represents a node in the execution tree (currently maps to a
-// sql.planNode).
+// Node represents a node in the execution tree
+// (currently maps to sql.planNode).
 type Node interface{}
+
+// Plan represents the plan for a query (currently maps to sql.planTop).
+// A Plan contains at least a Node tree, but it could contain more if there are
+// subqueries. See ConstructPlan.
+type Plan interface{}
 
 // Factory defines the interface for building an execution plan, which consists
 // of a tree of execution nodes (currently a sql.planNode tree).
@@ -97,7 +102,34 @@ type Factory interface {
 
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
+
+	// ConstructPlan creates a plan enclosing the given plan and (optionally)
+	// subqueries.
+	ConstructPlan(root Node, subqueries []Subquery) (Plan, error)
 }
+
+// Subquery encapsulates information about a subquery that is part of a plan.
+type Subquery struct {
+	// ExprNode is a reference to a tree.Subquery node that has been created for
+	// this query; it is part of a scalar expression inside some Node.
+	ExprNode *tree.Subquery
+	Mode     SubqueryMode
+	// Root is the root Node of the plan for this subquery. This Node returns
+	// results as required for the specific Type.
+	Root Node
+}
+
+// SubqueryMode indicates how the results of the subquery are to be processed.
+type SubqueryMode int
+
+const (
+	// SubqueryExists: the value of the subquery is a boolean: true if the
+	// subquery returns any rows, false otherwise.
+	SubqueryExists = iota
+	// SubqueryOneRow: the subquery expects at most one row; the result is that
+	// row (as a single value or a tuple), or NULL if there were no rows.
+	SubqueryOneRow
+)
 
 // ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
 type ColumnOrdinal int32

@@ -45,6 +45,17 @@ SELECT * FROM test.t UNION SELECT * FROM test.t
 statement ok
 INSERT INTO t VALUES (4, 40)
 
+query B
+SELECT EXISTS(SELECT * FROM t WHERE k > 2)
+----
+true
+
+query II
+SELECT * FROM test.t WHERE 2*v > (SELECT MAX(v) FROM test.t)
+----
+3  30
+4  40
+
 statement ok
 SET EXPERIMENTAL_OPT = ALWAYS
 

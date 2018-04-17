@@ -67,23 +67,25 @@ func (ee *execEngine) Catalog() opt.Catalog {
 }
 
 // Columns is part of the exec.TestEngine interface.
-func (ee *execEngine) Columns(n exec.Node) sqlbase.ResultColumns {
-	return planColumns(n.(planNode))
+func (ee *execEngine) Columns(p exec.Plan) sqlbase.ResultColumns {
+	return planColumns(p.(*planTop).plan)
 }
 
 // Execute is part of the exec.TestEngine interface.
-func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
-	plan := n.(planNode)
-
+func (ee *execEngine) Execute(p exec.Plan) ([]tree.Datums, error) {
+	// We have to use planner.curPlan because that is used to evaluate
+	// subqueries (via EvalSubquery upcall).
+	ee.planner.curPlan = *p.(*planTop)
 	params := runParams{
 		ctx:             context.TODO(),
 		extendedEvalCtx: &ee.planner.extendedEvalCtx,
 		p:               ee.planner,
 	}
-	if err := startPlan(params, plan); err != nil {
+	if err := ee.planner.curPlan.start(params); err != nil {
 		return nil, err
 	}
 	var res []tree.Datums
+	plan := ee.planner.curPlan.plan
 	for {
 		ok, err := plan.Next(params)
 		if err != nil {
@@ -94,14 +96,12 @@ func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
 		}
 		res = append(res, append(tree.Datums(nil), plan.Values()...))
 	}
-	plan.Close(context.TODO())
+	ee.planner.curPlan.close(context.TODO())
 	return res, nil
 }
 
 // Explain is part of the exec.TestEngine interface.
-func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
-	plan := n.(planNode)
-
+func (ee *execEngine) Explain(p exec.Plan) ([]tree.Datums, error) {
 	// Add an explain node to the plan and run that.
 	flags := explainFlags{
 		showMetadata: true,
@@ -109,14 +109,19 @@ func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
 		qualifyNames: true,
 	}
 	explainNode, err := ee.planner.makeExplainPlanNodeWithPlan(
-		context.TODO(), flags, false /* expanded */, false /* optimized */, plan,
+		context.TODO(),
+		flags,
+		false, /* expanded */
+		false, /* optimized */
+		p.(*planTop).plan,
+		p.(*planTop).subqueryPlans,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Execute the explain node.
-	return ee.Execute(explainNode)
+	return ee.Execute(&planTop{plan: explainNode})
 }
 
 // Close is part of the exec.TestEngine interface.
@@ -392,4 +397,30 @@ func (ee *execEngine) ConstructLimit(
 		countExpr:  limitVal,
 		offsetExpr: offsetVal,
 	}, nil
+}
+
+// ConstructPlan is part of the exec.Factory interface.
+func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) (exec.Plan, error) {
+	res := &planTop{
+		plan: root.(planNode),
+	}
+	if len(subqueries) > 0 {
+		res.subqueryPlans = make([]subquery, len(subqueries))
+		for i := range subqueries {
+			in := &subqueries[i]
+			out := &res.subqueryPlans[i]
+			out.subquery = in.ExprNode
+			switch in.Mode {
+			case exec.SubqueryExists:
+				out.execMode = execModeExists
+			case exec.SubqueryOneRow:
+				out.execMode = execModeOneRow
+			default:
+				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
+			}
+			out.expanded = true
+			out.plan = in.Root.(planNode)
+		}
+	}
+	return res, nil
 }
