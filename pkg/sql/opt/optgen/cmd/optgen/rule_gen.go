@@ -571,7 +571,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 		g.w.nest("if !_f.ruleCycles[%s.Fingerprint()] {\n", exprName)
 	}
 
-	g.w.nestIndent("if _f.onRuleMatch == nil || _f.onRuleMatch(opt.%s) {\n", rule.Name)
+	g.w.nestIndent("if _f.matchedRule == nil || _f.matchedRule(opt.%s) {\n", rule.Name)
 
 	if detectCycle {
 		g.w.writeIndent("_f.ruleCycles[%s.Fingerprint()] = true\n", exprName)
@@ -607,6 +607,11 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 		g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", exprName)
 	}
 
+	// Notify listeners that rule was applied.
+	g.w.nestIndent("if _f.appliedRule != nil {\n")
+	g.w.writeIndent("_f.appliedRule(opt.%s, _group, 0)\n", rule.Name)
+	g.w.unnest("}\n")
+
 	g.w.writeIndent("return _group\n")
 }
 
@@ -616,7 +621,7 @@ func (g *ruleGen) genNormalizeReplace(define *lang.DefineExpr, rule *lang.RuleEx
 // raw MakeXXXExpr method, and passes it to Memo.MemoizeDenormExpr, which adds
 // the expression to an existing group.
 func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr) {
-	g.w.nestIndent("if _e.o.onRuleMatch == nil || _e.o.onRuleMatch(opt.%s) {\n", rule.Name)
+	g.w.nestIndent("if _e.o.matchedRule == nil || _e.o.matchedRule(opt.%s) {\n", rule.Name)
 
 	switch t := rule.Replace.(type) {
 	case *lang.ConstructExpr:
@@ -631,21 +636,29 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 			g.w.write(",\n")
 		}
 		g.w.unnest(")\n")
+		g.w.writeIndent("_before := _e.mem.ExprCount(_root.Group)\n")
 		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))\n")
 
 	case *lang.CustomFuncExpr:
 		// Top-level custom function returns a memo.Expr slice, so iterate
 		// through that and memoize each expression.
-		g.w.writeIndent("exprs := ")
+		g.w.writeIndent("_exprs := ")
 		g.genNestedExpr(rule.Replace)
 		g.w.newline()
-		g.w.nestIndent("for i := range exprs {\n")
-		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, exprs[i])\n")
+		g.w.writeIndent("_before := _e.mem.ExprCount(_root.Group)\n")
+		g.w.nestIndent("for i := range _exprs {\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])\n")
 		g.w.unnest("}\n")
 
 	default:
 		panic(fmt.Sprintf("unsupported replace expression in explore rule: %s", rule.Replace))
 	}
+
+	// Notify listeners that rule was applied.
+	g.w.nestIndent("if _e.o.appliedRule != nil {\n")
+	g.w.writeIndent("_after := _e.mem.ExprCount(_root.Group)\n")
+	g.w.writeIndent("_e.o.appliedRule(opt.%s, _root.Group, _after-_before)\n", rule.Name)
+	g.w.unnest("}\n")
 
 	g.w.unnest("}\n")
 }

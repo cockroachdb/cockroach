@@ -116,7 +116,7 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := ev.lookupChildGroup(0).logical.Relational
+	inputProps := ev.childGroup(0).logical.Relational
 
 	// Inherit input properties as starting point.
 	*props.Relational = *inputProps
@@ -129,7 +129,7 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := ev.lookupChildGroup(0).logical.Relational
+	inputProps := ev.childGroup(0).logical.Relational
 
 	// Use output columns from projection list.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Child(1).Private().(opt.ColList))
@@ -154,8 +154,8 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := ev.lookupChildGroup(0).logical.Relational
-	rightProps := ev.lookupChildGroup(1).logical.Relational
+	leftProps := ev.childGroup(0).logical.Relational
+	rightProps := ev.childGroup(1).logical.Relational
 
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
@@ -199,7 +199,7 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := ev.lookupChildGroup(0).logical.Relational
+	inputProps := ev.childGroup(0).logical.Relational
 
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
@@ -241,8 +241,8 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := ev.lookupChildGroup(0).logical.Relational
-	rightProps := ev.lookupChildGroup(1).logical.Relational
+	leftProps := ev.childGroup(0).logical.Relational
+	rightProps := ev.childGroup(1).logical.Relational
 	colMap := *ev.Private().(*SetOpColMap)
 	if len(colMap.Out) != len(colMap.Left) || len(colMap.Out) != len(colMap.Right) {
 		panic(fmt.Errorf("lists in SetOpColMap are not all the same length. new:%d, left:%d, right:%d",
@@ -311,7 +311,7 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) passThroughRelationalProps(ev ExprView, childIdx int) LogicalProps {
 	// Properties are immutable after construction, so just inherit relational
 	// props pointer from child.
-	return LogicalProps{Relational: ev.lookupChildGroup(childIdx).logical.Relational}
+	return LogicalProps{Relational: ev.childGroup(childIdx).logical.Relational}
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
@@ -326,7 +326,7 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 
 	// By default, union outer cols from all children, both relational and scalar.
 	for i := 0; i < ev.ChildCount(); i++ {
-		logical := &ev.lookupChildGroup(i).logical
+		logical := &ev.childGroup(i).logical
 		if logical.Scalar != nil {
 			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
 		} else {

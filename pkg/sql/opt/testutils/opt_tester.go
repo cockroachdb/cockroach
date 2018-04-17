@@ -72,6 +72,10 @@ type OptTesterFlags struct {
 	// an UnsupportedExpr node. This is temporary; it is used for interfacing with
 	// the old planning code.
 	AllowUnsupportedExpr bool
+
+	// Verbose indicates whether verbose test debugging information will be
+	// output to stdout when commands run. Only certain commands support this.
+	Verbose bool
 }
 
 // NewOptTester constructs a new instance of the OptTester for the given SQL
@@ -123,45 +127,47 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
-func (e *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
+func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
-		if err := e.Flags.Set(a); err != nil {
+		if err := ot.Flags.Set(a); err != nil {
 			d.Fatalf(tb, "%s", err)
 		}
 	}
 
+	ot.Flags.Verbose = testing.Verbose()
+
 	switch d.Cmd {
 	case "exec-ddl":
-		testCatalog, ok := e.catalog.(*TestCatalog)
+		testCatalog, ok := ot.catalog.(*TestCatalog)
 		if !ok {
 			tb.Fatal("exec-ddl can only be used with TestCatalog")
 		}
 		return ExecuteTestDDL(tb, d.Input, testCatalog)
 
 	case "build":
-		ev, err := e.OptBuild()
+		ev, err := ot.OptBuild()
 		if err != nil {
 			return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 		}
-		return ev.FormatString(e.Flags.ExprFormat)
+		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "opt":
-		ev, err := e.Optimize()
+		ev, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		return ev.FormatString(e.Flags.ExprFormat)
+		return ev.FormatString(ot.Flags.ExprFormat)
 
 	case "optsteps":
-		result, err := e.OptSteps(testing.Verbose())
+		result, err := ot.OptSteps()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
 		return result
 
 	case "memo":
-		result, err := e.Memo()
+		result, err := ot.Memo()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
@@ -212,41 +218,63 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
-func (e *OptTester) OptBuild() (memo.ExprView, error) {
-	return e.optimizeExpr(false /* allowOptimizations */)
+func (ot *OptTester) OptBuild() (memo.ExprView, error) {
+	return ot.optimizeExpr(false /* allowOptimizations */)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
-func (e *OptTester) Optimize() (memo.ExprView, error) {
-	return e.optimizeExpr(true /* allowOptimizations */)
+func (ot *OptTester) Optimize() (memo.ExprView, error) {
+	return ot.optimizeExpr(true /* allowOptimizations */)
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
 // by the optimizer.
-func (e *OptTester) Memo() (string, error) {
-	o := xform.NewOptimizer(&e.evalCtx)
-	root, required, err := e.buildExpr(o.Factory())
+func (ot *OptTester) Memo() (string, error) {
+	o := xform.NewOptimizer(&ot.evalCtx)
+	root, required, err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return "", err
 	}
 	o.Optimize(root, required)
-	return o.Memo().FormatString(e.Flags.MemoFormat), nil
+	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
 }
 
-// OptSteps returns a string that shows each optimization step using the
-// standard unified diff format. It is used for debugging the optimizer.
-// If verbose is true, each step is also printed on stdout.
-func (e *OptTester) OptSteps(verbose bool) (string, error) {
+// OptSteps steps through the transformations performed by the optimizer on the
+// memo, one-by-one. The output of each step is the lowest cost expression tree
+// that also contains the expressions that were changed or added by the
+// transformation. The output of each step is diff'd against the output of a
+// previous step, using the standard unified diff format.
+//
+//   CREATE TABLE a (x INT PRIMARY KEY, y INT, UNIQUE INDEX (y))
+//
+//   SELECT x FROM a WHERE x=1
+//
+// At the time of this writing, this query triggers 6 rule applications:
+//   EnsureSelectFilters     Wrap Select predicate with Filters operator
+//   FilterUnusedSelectCols  Do not return unused "y" column from Scan
+//   EliminateProject        Remove unneeded Project operator
+//   GenerateIndexScans      Explore scanning "y" index to get "x" values
+//   ConstrainScan           Explore pushing "x=1" into "x" index Scan
+//   ConstrainScan           Explore pushing "x=1" into "y" index Scan
+//
+// Some steps produce better plans that have a lower execution cost. Other steps
+// don't. However, it's useful to see both kinds of steps. The optsteps output
+// distinguishes these two cases by using stronger "====" header delimiters when
+// a better plan has been found, and weaker "----" header delimiters when not.
+// In both cases, the output shows the expressions that were changed or added by
+// the rule, even if the total expression tree cost worsened.
+//
+func (ot *OptTester) OptSteps() (string, error) {
 	var buf bytes.Buffer
-	var prev, next string
-	if verbose {
+	var prevBest, prev, next string
+	if ot.Flags.Verbose {
 		fmt.Print("------ optsteps verbose output starts ------\n")
 	}
 	output := func(format string, args ...interface{}) {
 		fmt.Fprintf(&buf, format, args...)
-		if verbose {
+		if ot.Flags.Verbose {
 			fmt.Printf(format, args...)
 		}
 	}
@@ -257,66 +285,90 @@ func (e *OptTester) OptSteps(verbose bool) (string, error) {
 			output("  %s\n", line)
 		}
 	}
-	for i := 0; ; i++ {
-		o := xform.NewOptimizer(&e.evalCtx)
 
-		// Override SetOnRuleMatch to stop optimizing after the ith rule matches.
-		steps := i
-		lastRuleName := opt.InvalidRuleName
-		o.SetOnRuleMatch(func(ruleName opt.RuleName) bool {
-			if steps == 0 {
-				return false
-			}
-			steps--
-			lastRuleName = ruleName
-			return true
-		})
+	// bestHeader is used when the expression is an improvement over the previous
+	// expression.
+	bestHeader := func(ev memo.ExprView, format string, args ...interface{}) {
+		output("%s\n", strings.Repeat("=", 80))
+		output(format, args...)
+		output("  Cost: %.2f\n", ev.Cost())
+		output("%s\n", strings.Repeat("=", 80))
+	}
 
-		root, required, err := e.buildExpr(o.Factory())
+	// altHeader is used when the expression doesn't improve over the previous
+	// expression, but it's still desirable to see what changed.
+	altHeader := func(format string, args ...interface{}) {
+		output("%s\n", strings.Repeat("-", 80))
+		output(format, args...)
+		output("%s\n", strings.Repeat("-", 80))
+	}
+
+	os := newOptSteps(ot)
+	for {
+		err := os.next()
 		if err != nil {
 			return "", err
 		}
 
-		next = o.Optimize(root, required).FormatString(e.Flags.ExprFormat)
-		if steps != 0 {
-			// All steps were not used, so must be done.
+		next = os.exprView().FormatString(ot.Flags.ExprFormat)
+
+		// This call comes after setting "next", because we want to output the
+		// final expression, even though there were no diffs from the previous
+		// iteration.
+		if os.done() {
 			break
 		}
 
-		if i == 0 {
-			output("*** Initial expr:\n")
+		if prev == "" {
 			// Output starting tree.
+			bestHeader(os.exprView(), "Initial expression\n")
 			indent(next)
+			prevBest = next
+		} else if next == prev {
+			altHeader("%s (no changes)\n", os.lastRuleName())
 		} else {
-			output("\n*** %s applied; ", lastRuleName.String())
+			var diff difflib.UnifiedDiff
+			if os.isBetter() {
+				// New expression is better than the previous expression. Diff
+				// it against the previous *best* expression (might not be the
+				// previous expression).
+				bestHeader(os.exprView(), "%s\n", os.lastRuleName())
 
-			if prev == next {
-				// The expression can be unchanged if a part of the memo changed that
-				// does not affect the final best expression.
-				output("best expr unchanged.\n")
-			} else {
-				output("best expr changed:\n")
-				diff := difflib.UnifiedDiff{
-					A:       difflib.SplitLines(prev),
+				diff = difflib.UnifiedDiff{
+					A:       difflib.SplitLines(prevBest),
 					B:       difflib.SplitLines(next),
 					Context: 100,
 				}
 
-				text, _ := difflib.GetUnifiedDiffString(diff)
-				// Skip the "@@ ... @@" header (first line).
-				text = strings.SplitN(text, "\n", 2)[1]
-				indent(text)
+				prevBest = next
+			} else {
+				// New expression is not better than the previous expression, but
+				// still show the change. Diff it against the previous expression,
+				// regardless if it was a "best" expression or not.
+				altHeader("%s (higher cost)\n", os.lastRuleName())
+
+				next = os.exprView().FormatString(ot.Flags.ExprFormat)
+				diff = difflib.UnifiedDiff{
+					A:       difflib.SplitLines(prev),
+					B:       difflib.SplitLines(next),
+					Context: 100,
+				}
 			}
+
+			text, _ := difflib.GetUnifiedDiffString(diff)
+			// Skip the "@@ ... @@" header (first line).
+			text = strings.SplitN(text, "\n", 2)[1]
+			indent(text)
 		}
 
 		prev = next
 	}
 
 	// Output ending tree.
-	output("\n*** Final best expr:\n")
+	bestHeader(os.exprView(), "Final best expression\n")
 	indent(next)
 
-	if verbose {
+	if ot.Flags.Verbose {
 		fmt.Print("------ optsteps verbose output ends ------\n")
 	}
 
@@ -325,8 +377,8 @@ func (e *OptTester) OptSteps(verbose bool) (string, error) {
 
 // ExecBuild builds the exec node tree for the SQL query. This can be executed
 // by the exec engine.
-func (e *OptTester) ExecBuild(eng exec.TestEngine) (exec.Node, error) {
-	ev, err := e.Optimize()
+func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Node, error) {
+	ev, err := ot.Optimize()
 	if err != nil {
 		return nil, err
 	}
@@ -335,8 +387,8 @@ func (e *OptTester) ExecBuild(eng exec.TestEngine) (exec.Node, error) {
 
 // Explain builds the exec node tree for the SQL query and then runs the
 // explain command that describes the physical execution plan.
-func (e *OptTester) Explain(eng exec.TestEngine) ([]tree.Datums, error) {
-	node, err := e.ExecBuild(eng)
+func (ot *OptTester) Explain(eng exec.TestEngine) ([]tree.Datums, error) {
+	node, err := ot.ExecBuild(eng)
 	if err != nil {
 		return nil, err
 	}
@@ -344,8 +396,8 @@ func (e *OptTester) Explain(eng exec.TestEngine) ([]tree.Datums, error) {
 }
 
 // Exec builds the exec node tree for the SQL query and then executes it.
-func (e *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Datums, error) {
-	node, err := e.ExecBuild(eng)
+func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Datums, error) {
+	node, err := ot.ExecBuild(eng)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -360,25 +412,25 @@ func (e *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Dat
 	return columns, datums, err
 }
 
-func (e *OptTester) buildExpr(
+func (ot *OptTester) buildExpr(
 	factory *norm.Factory,
 ) (root memo.GroupID, required *memo.PhysicalProps, _ error) {
-	stmt, err := parser.ParseOne(e.sql)
+	stmt, err := parser.ParseOne(ot.sql)
 	if err != nil {
 		return 0, nil, err
 	}
 
-	b := optbuilder.New(e.ctx, &e.semaCtx, &e.evalCtx, e.catalog, factory, stmt)
-	b.AllowUnsupportedExpr = e.Flags.AllowUnsupportedExpr
+	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt)
+	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
 	return b.Build()
 }
 
-func (e *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error) {
-	o := xform.NewOptimizer(&e.evalCtx)
+func (ot *OptTester) optimizeExpr(allowOptimizations bool) (memo.ExprView, error) {
+	o := xform.NewOptimizer(&ot.evalCtx)
 	if !allowOptimizations {
 		o.DisableOptimizations()
 	}
-	root, required, err := e.buildExpr(o.Factory())
+	root, required, err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return memo.ExprView{}, err
 	}

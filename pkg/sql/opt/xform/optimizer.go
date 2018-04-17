@@ -24,6 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+// MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
+// event supported by the optimizer. See the comment in factory.go for more
+// details.
+type MatchedRuleFunc = norm.MatchedRuleFunc
+
+// AppliedRuleFunc defines the callback function for the NotifyOnAppliedRule
+// event supported by the optimizer. See the comment in factory.go for more
+// details.
+type AppliedRuleFunc = norm.AppliedRuleFunc
+
 // Optimizer transforms an input expression tree into the logically equivalent
 // output expression tree with the lowest possible execution cost.
 //
@@ -38,7 +48,7 @@ type Optimizer struct {
 	evalCtx  *tree.EvalContext
 	f        *norm.Factory
 	mem      *memo.Memo
-	coster   coster
+	coster   Coster
 	explorer explorer
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
@@ -46,10 +56,15 @@ type Optimizer struct {
 	stateMap   map[optStateKey]*optState
 	stateAlloc optStateAlloc
 
-	// onRuleMatch is the callback function that is invoked each time a normalize
-	// rule has been matched by the factory. It can be set via a call to the
-	// SetOnRuleMatch method.
-	onRuleMatch func(ruleName opt.RuleName) bool
+	// matchedRule is the callback function that is invoked each time an
+	// optimization rule (Normalize or Explore) has been matched by the optimizer.
+	// It can be set via a call to the NotifyOnMatchedRule method.
+	matchedRule MatchedRuleFunc
+
+	// appliedRule is the callback function which is invoked each time an
+	// optimization rule (Normalize or Explore) has been applied by the optimizer.
+	// It can be set via a call to the NotifyOnAppliedRule method.
+	appliedRule AppliedRuleFunc
 }
 
 // NewOptimizer constructs an instance of the optimizer.
@@ -59,9 +74,9 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 		evalCtx:  evalCtx,
 		f:        f,
 		mem:      f.Memo(),
+		coster:   newCoster(f.Memo()),
 		stateMap: make(map[optStateKey]*optState),
 	}
-	o.coster.init(o.mem)
 	o.explorer.init(o)
 	return o
 }
@@ -73,25 +88,49 @@ func (o *Optimizer) Factory() *norm.Factory {
 	return o.f
 }
 
+// Coster returns the coster instance that the optimizer is currently using to
+// estimate the cost of executing portions of the expression tree. When a new
+// optimizer is constructed, it creates a default coster that will be used
+// unless it is overridden with a call to SetCoster.
+func (o *Optimizer) Coster() Coster {
+	return o.coster
+}
+
+// SetCoster overrides the default coster. The optimizer will now use the given
+// coster to estimate the cost of expression execution.
+func (o *Optimizer) SetCoster(coster Coster) {
+	o.coster = coster
+}
+
 // DisableOptimizations disables all transformation rules, including normalize
 // and explore rules. The unaltered input expression tree becomes the output
 // expression tree (because no transforms are applied).
 func (o *Optimizer) DisableOptimizations() {
-	o.SetOnRuleMatch(func(opt.RuleName) bool { return false })
+	o.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
 }
 
-// SetOnRuleMatch sets a callback function which is invoked each time an
-// optimization rule (Normalize or Explore rule) has been matched by the
-// optimizer. If the function returns false, then the rule is not applied. By
-// default, all rules are applied, but callers can set the callback function to
-// override the default behavior. In addition, callers can invoke the
-// DisableOptimizations convenience method to disable all rules.
-func (o *Optimizer) SetOnRuleMatch(onRuleMatch func(ruleName opt.RuleName) bool) {
-	o.onRuleMatch = onRuleMatch
+// NotifyOnMatchedRule sets a callback function which is invoked each time an
+// optimization rule (Normalize or Explore) has been matched by the optimizer.
+// If matchedRule is nil, then no notifications are sent, and all rules are
+// applied by default. In addition, callers can invoke the DisableOptimizations
+// convenience method to disable all rules.
+func (o *Optimizer) NotifyOnMatchedRule(matchedRule MatchedRuleFunc) {
+	o.matchedRule = matchedRule
 
 	// Also pass through the call to the factory so that normalization rules
 	// make same callback.
-	o.f.SetOnRuleMatch(onRuleMatch)
+	o.f.NotifyOnMatchedRule(matchedRule)
+}
+
+// NotifyOnAppliedRule sets a callback function which is invoked each time an
+// optimization rule (Normalize or Explore) has been applied by the optimizer.
+// If appliedRule is nil, then no further notifications are sent.
+func (o *Optimizer) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
+	o.appliedRule = appliedRule
+
+	// Also pass through the call to the factory so that normalization rules
+	// make same callback.
+	o.f.NotifyOnAppliedRule(appliedRule)
 }
 
 // Memo returns the memo structure that the optimizer is using to optimize.
@@ -424,7 +463,8 @@ func (o *Optimizer) enforceProps(
 // group. If so, then the candidate becomes the new lowest cost expression.
 func (o *Optimizer) ratchetCost(candidate *memo.BestExpr) {
 	group := candidate.Group()
-	o.coster.computeCost(candidate, o.mem.GroupProperties(group))
+	cost := o.coster.ComputeCost(candidate, o.mem.GroupProperties(group))
+	candidate.SetCost(cost)
 	state := o.lookupOptState(group, candidate.Required())
 	if state.best == memo.UnknownBestExprID {
 		// Lazily allocate the best expression only when it's needed.
