@@ -627,6 +627,10 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
 <tr><td><code>lower(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their lower-case equivalents.</p>
 </span></td></tr>
+<tr><td><code>lpad(string: <a href="string.html">string</a>, length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Pads <code>string</code> to <code>length</code> by adding ’ ’ to the left of <code>string</code>.If <code>string</code> is longer than <code>length</code> it is truncated.</p>
+</span></td></tr>
+<tr><td><code>lpad(string: <a href="string.html">string</a>, length: <a href="int.html">int</a>, fill: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Pads <code>string</code> by adding <code>fill</code> to the left of <code>string</code> to make it <code>length</code>. If <code>string</code> is longer than <code>length</code> it is truncated.</p>
+</span></td></tr>
 <tr><td><code>ltrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning (left-hand side) of <code>input</code> (applies recursively).</p>
 <p>For example, <code>ltrim('doggie', 'od')</code> returns <code>ggie</code>.</p>
 </span></td></tr>
@@ -727,6 +731,10 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <tr><td><code>right(input: <a href="bytes.html">bytes</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns the last <code>return_set</code> bytes from <code>input</code>.</p>
 </span></td></tr>
 <tr><td><code>right(input: <a href="string.html">string</a>, return_set: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the last <code>return_set</code> characters from <code>input</code>.</p>
+</span></td></tr>
+<tr><td><code>rpad(string: <a href="string.html">string</a>, length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Pads <code>string</code> to <code>length</code> by adding ’ ’ to the right of string. If <code>string</code> is longer than <code>length</code> it is truncated.</p>
+</span></td></tr>
+<tr><td><code>rpad(string: <a href="string.html">string</a>, length: <a href="int.html">int</a>, fill: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Pads <code>string</code> to <code>length</code> by adding <code>fill</code> to the right of <code>string</code>. If <code>string</code> is longer than <code>length</code> it is truncated.</p>
 </span></td></tr>
 <tr><td><code>rtrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the end (right-hand side) of <code>input</code> (applies recursively).</p>
 <p>For example, <code>rtrim('doggie', 'ei')</code> returns <code>dogg</code>.</p>
