@@ -121,22 +121,6 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
 		{
-			description: "Test selecting rows using the primary index in lookup join",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 4},
-			},
-			input: [][]tree.Datum{
-				{aFn(2), bFn(2)},
-				{aFn(5), bFn(5)},
-				{aFn(10), bFn(10)},
-				{aFn(15), bFn(15)},
-			},
-			lookupCols:  []uint32{0, 1},
-			outputTypes: threeIntCols,
-			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
-		},
-		{
 			description: "Test a filter in the post process spec and using a secondary index",
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5
