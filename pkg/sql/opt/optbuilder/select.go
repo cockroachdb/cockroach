@@ -109,7 +109,8 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (outScope *scope) {
-	tabID := b.factory.Metadata().AddTable(tab)
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
 	scanOpDef := memo.ScanOpDef{Table: tabID}
 
 	outScope = inScope.push()
