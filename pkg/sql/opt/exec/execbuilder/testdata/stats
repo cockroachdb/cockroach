@@ -16,13 +16,13 @@ project
  ├── stats: [rows=1000]
  ├── cost: 1000.00
  ├── scan a
- │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
+ │    ├── columns: t.public.a.u:1(int) t.public.a.v:2(int) t.public.a.rowid:3(int!null)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1000.00
  │    └── keys: (3)
  └── projections [outer=(1,2)]
-      ├── variable: a.u [type=int, outer=(1)]
-      └── variable: a.v [type=int, outer=(2)]
+      ├── variable: t.public.a.u [type=int, outer=(1)]
+      └── variable: t.public.a.v [type=int, outer=(2)]
 
 # Create a new table to avoid depending on the asynchronous stat cache
 # invalidation.
@@ -44,13 +44,13 @@ project
  ├── stats: [rows=8, distinct(1)=2, distinct(2)=7]
  ├── cost: 8.00
  ├── scan b
- │    ├── columns: b.u:1(int) b.v:2(int) b.rowid:3(int!null)
+ │    ├── columns: t.public.b.u:1(int) t.public.b.v:2(int) t.public.b.rowid:3(int!null)
  │    ├── stats: [rows=8, distinct(1)=2, distinct(2)=7]
  │    ├── cost: 8.00
  │    └── keys: (3)
  └── projections [outer=(1,2)]
-      ├── variable: b.u [type=int, outer=(1)]
-      └── variable: b.v [type=int, outer=(2)]
+      ├── variable: t.public.b.u [type=int, outer=(1)]
+      └── variable: t.public.b.v [type=int, outer=(2)]
 
 # Verify we scan index v which has the more selective constraint.
 opt
@@ -61,13 +61,13 @@ select
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── cost: 1.10
  ├── scan b@b_v_idx
- │    ├── columns: b.u:1(int) b.v:2(int)
+ │    ├── columns: t.public.b.u:1(int) t.public.b.v:2(int)
  │    ├── constraint: /2/3: [/1 - /1]
  │    ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  │    └── cost: 1.00
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: b.u [type=int, outer=(1)]
+           ├── variable: t.public.b.u [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 exec-explain

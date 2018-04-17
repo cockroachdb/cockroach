@@ -73,6 +73,12 @@ type OptTesterFlags struct {
 	// the old planning code.
 	AllowUnsupportedExpr bool
 
+	// FullyQualifyNames if set: when building a query, the optbuilder fully
+	// qualifies all column names before adding them to the metadata. This flag
+	// allows us to test that name resolution works correctly, and avoids
+	// cluttering test output with schema and catalog names in the general case.
+	FullyQualifyNames bool
+
 	// Verbose indicates whether verbose test debugging information will be
 	// output to stdout when commands run. Only certain commands support this.
 	Verbose bool
@@ -125,7 +131,12 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    of hide-cost, hide-stats, hide-constraints. Example:
 //      build format={hide-cost,hide-stats}
 //
+//  - raw-memo: show the raw memo groups, in the order they were originally
+//	  added, including any "orphaned" groups.
+//
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
+//
+//  - fully-qualify-names: fully qualify all column names in the test output.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -203,11 +214,14 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			}
 		}
 
+	case "raw-memo":
+		f.MemoFormat = memo.FmtRaw
+
 	case "allow-unsupported":
 		f.AllowUnsupportedExpr = true
 
-	case "raw-memo":
-		f.MemoFormat = memo.FmtRaw
+	case "fully-qualify-names":
+		f.FullyQualifyNames = true
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -422,6 +436,9 @@ func (ot *OptTester) buildExpr(
 
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
+	if ot.Flags.FullyQualifyNames {
+		b.FmtFlags = tree.FmtAlwaysQualifyTableNames
+	}
 	return b.Build()
 }
 
