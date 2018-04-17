@@ -171,7 +171,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	check := func(t *testing.T) {
 		t.Helper()
-		if err := retry.ForDuration(time.Second*2, func() error {
+		if err := retry.ForDuration(time.Second*5, func() error {
 			lock.Lock()
 			defer lock.Unlock()
 			if e != a {
@@ -183,8 +183,10 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 	}
 	clear := func() {
+		lock.Lock()
 		a = Counters{}
 		e = Counters{}
+		lock.Unlock()
 	}
 
 	resumeCh := make(chan error)
