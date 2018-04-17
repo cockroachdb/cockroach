@@ -64,7 +64,7 @@ For example, if the architecture calls out a thing called e.g. "query
 runner", which takes as input a logical query plan (a data structure)
 and outputs result rows (another data structure), you'd usually expect
 a thing in the source code called "query runner" that looks like a
-class whose instances would carry the execution's internal state, a
+class whose instances would carry the execution's internal state
 providing some methods that take a logical plan as input, and returning
 result rows as results.
 

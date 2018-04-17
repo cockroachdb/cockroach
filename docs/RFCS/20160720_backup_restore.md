@@ -155,7 +155,7 @@ intermediate state.
 
 An alternate, much faster method that doesn't store the data bytes in the raft
 log, and thus avoids the write amplification, is described in the [Raft SSTable
-Sideloading RFC](raft_sstable_sideloading.md).
+Sideloading RFC](20170601_raft_sstable_sideloading.md).
 
 The restored table's NULL, DEFAULT, and PRIMARY KEY constraints do not need to
 be checked. NOT NULL and CHECK are verified for each row as it is inserted. The

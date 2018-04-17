@@ -458,7 +458,7 @@ Now let's see how these `planNode`s run:
    from SQL92/99. Another interesting fact is that, if we're sorting by a
    non-trivial expression (e.g. `SELECT a, b ... ORDER BY a + b`), we
    need the `a + b` values (for every row) to be produced by a
-   lower-level node. This is achieved through a patter that's also
+   lower-level node. This is achieved through a pattern that's also
    present in other node: the lower node capable of evaluating
    expressions and rendering their results is the `renderNode`; the
    `sortNode` constructor checks if the expressions it needs are already
