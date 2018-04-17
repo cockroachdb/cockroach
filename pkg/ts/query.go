@@ -468,16 +468,13 @@ func (ii *interpolatingIterator) isValid() bool {
 	return ii.nextReal.isValid()
 }
 
-// midTimestamp returns a timestamp at the middle of the current offset's sample
-// period. The middle of the sample period has been chosen in order to minimize
-// the possible distance from the returned timestamp and the timestamp of the
-// real measurements used to compute its value.
-func (ii *interpolatingIterator) midTimestamp() int64 {
+// timestamp returns the timestamp at the iterator's current offset.
+func (ii *interpolatingIterator) timestamp() int64 {
 	if !ii.isValid() {
-		panic(fmt.Sprintf("midTimestamp called on invalid interpolatingIterator: %v", ii))
+		panic(fmt.Sprintf("timestamp called on invalid interpolatingIterator: %v", ii))
 	}
 	dsi := ii.nextReal
-	return dsi.underlyingData.startNanos + (int64(ii.offset) * dsi.sampleNanos) + (dsi.sampleNanos / 2)
+	return dsi.underlyingData.startNanos + (int64(ii.offset) * dsi.sampleNanos)
 }
 
 // value returns the value at the current offset of this iterator, or the
@@ -655,7 +652,7 @@ func (ai aggregatingIterator) timestamp() int64 {
 	if !ai.isValid() {
 		return 0
 	}
-	return ai[0].midTimestamp()
+	return ai[0].timestamp()
 }
 
 // validSumAndCount returns the sum value and count of all component

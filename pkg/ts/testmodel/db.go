@@ -196,7 +196,6 @@ func (mdb *ModelDB) Query(
 	result := groupSeriesByTimestamp(queryData, getAggFunction(agg))
 	result = result.TimeSlice(start, end)
 	result = result.intersectTimestamps(beforeFill...)
-	result = result.adjustTimestamps(sampleDuration / 2)
 	return result
 }
 
