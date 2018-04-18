@@ -17,16 +17,13 @@ package sqlmigrations
 import (
 	"bytes"
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,10 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -518,162 +513,6 @@ func TestCreateSystemTable(t *testing.T) {
 	}
 }
 
-func checkNoZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int) {
-	t.Helper()
-
-	var s string
-	err := sqlDB.DB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
-	if err != gosql.ErrNoRows {
-		t.Fatalf("expected no rows, but found %v", err)
-	}
-}
-
-func checkZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, expected config.ZoneConfig) {
-	t.Helper()
-
-	var s string
-	sqlDB.QueryRow(t, `SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
-	var zone config.ZoneConfig
-	if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(expected, zone) {
-		t.Fatalf("unexpected zone config: %s", pretty.Diff(expected, zone))
-	}
-}
-
-func deleteZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int) {
-	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id=$1`, id)
-}
-
-func setZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, zone config.ZoneConfig) {
-	buf, err := protoutil.Marshal(&zone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.Exec(t, `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`, id, buf)
-}
-
-func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "add default .meta and .liveness zone configs")
-	mt.start(t, base.TestServerArgs{})
-
-	checkNoZoneConfig(t, mt.sqlDB, keys.MetaRangesID)
-	checkNoZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	expectedMeta := config.DefaultZoneConfig()
-	expectedMeta.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, expectedMeta)
-	expectedLiveness := config.DefaultZoneConfig()
-	expectedLiveness.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, expectedLiveness)
-
-	// Set configs for the .meta and .system zones and clear the zone config for
-	// .liveness.
-	testZone := config.DefaultZoneConfig()
-	testZone.GC.TTLSeconds = 819
-	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
-	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
-	checkZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
-
-	// Set configs for the .meta and .liveness zones and clear the zone config
-	// for .system.
-	testZone.GC.TTLSeconds = 834
-	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
-	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
-	// NB: The .system zone config still doesn't exist.
-
-	// Verify that we'll update the meta/liveness zone config TTLs by migrating
-	// from the default/system zone configs.
-	testZone.RangeMaxBytes *= 2
-	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
-	setZoneConfig(t, mt.sqlDB, keys.RootNamespaceID, testZone)
-	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
-	deleteZoneConfig(t, mt.sqlDB, keys.MetaRangesID)
-	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	testZone.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	testZone.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.LivenessRangesID, testZone)
-
-	// Verify that we'll update the meta zone config even if it already exists as
-	// long as it has the default TTL.
-	testZone.RangeMaxBytes = 863
-	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
-	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	testZone.GC.TTLSeconds = 60 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-}
-
-func TestAddDefaultSystemJobsZoneConfigMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "add default system.jobs zone config")
-	mt.start(t, base.TestServerArgs{})
-
-	checkNoZoneConfig(t, mt.sqlDB, keys.JobsTableID)
-
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	expected := config.DefaultZoneConfig()
-	expected.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.JobsTableID, expected)
-
-	// Verify we migrate from the .default zone config.
-	testZone := config.DefaultZoneConfig()
-	testZone.RangeMaxBytes = 264
-	setZoneConfig(t, mt.sqlDB, keys.RootNamespaceID, testZone)
-	deleteZoneConfig(t, mt.sqlDB, keys.JobsTableID)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	testZone.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.JobsTableID, testZone)
-
-	// Verify that we'll update even if it already exists as long as it has the
-	// default TTL.
-	testZone.RangeMaxBytes = 863
-	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
-	setZoneConfig(t, mt.sqlDB, keys.JobsTableID, testZone)
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	testZone.GC.TTLSeconds = 10 * 60
-	checkZoneConfig(t, mt.sqlDB, keys.JobsTableID, testZone)
-}
-
 func TestAdminUserExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -690,8 +529,9 @@ func TestAdminUserExists(t *testing.T) {
 		sqlbase.AdminRole)
 
 	e := `cannot create role "admin", a user with that name exists.`
-	if err := mt.runMigration(ctx, migration); !testutils.IsError(err, e) {
-		t.Errorf("expected error %q, got %q", err, e)
+	// The revised migration in v2.1 upserts the admin user, so this should succeed.
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Errorf("expected succcess, got %q", e)
 	}
 }
 
@@ -709,68 +549,6 @@ func TestReplayMigrations(t *testing.T) {
 		if err := mt.runMigration(ctx, m); err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "upgrade table descs to interleaved format version")
-	mt.start(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				// Block schema changes to ensure that our migration sees some table
-				// descriptors in the DROP state. The schema changer might otherwise
-				// erase them before our migration runs.
-				AsyncExecNotification: func() error { return errors.New("schema changes disabled") },
-			},
-		},
-	})
-
-	defer func(prev int64) { upgradeDescBatchSize = prev }(upgradeDescBatchSize)
-	upgradeDescBatchSize = 5
-	n := int(upgradeDescBatchSize) * 3
-
-	// Create n tables.
-	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
-	for i := 0; i < n; i++ {
-		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d ()`, i))
-	}
-
-	// Corrupt every second table's format version, and mark every third table as
-	// dropping.
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if i%2 == 0 {
-			tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
-		}
-		if i%3 == 0 {
-			tableDesc.State = sqlbase.TableDescriptor_DROP
-		}
-		tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
-		if err := mt.kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Ensure the migration upgrades the format of all tables, even those that
-	// are dropping.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if e, a := sqlbase.InterleavedFormatVersion, tableDesc.FormatVersion; e != a {
-			t.Errorf("t%d: expected format version %s, but got %s", i, e, a)
-		}
-	}
-
-	// Verify idempotency.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
 	}
 }
 
