@@ -3881,22 +3881,6 @@ func (r *Replica) tick() (bool, error) {
 	}
 
 	if r.mu.quiescent {
-		// While a replica is quiesced we still advance its logical clock.
-		//
-		// Since we no longer use CheckQuorum, the call to TickQuiesced is
-		// less critical, but still improves our responsiveness to node
-		// failures by priming the replica to start an election
-		// immediately upon unquiescing, instead of waiting for a full
-		// election timeout.
-		//
-		// Enabling TickQuiesced slightly increases the rate of contested
-		// elections. Deployments with high inter-node latency and skewed
-		// range access patterns may benefit from disabling it.
-		//
-		// For more details, see #9372 and #16950.
-		if enableTickQuiesced {
-			r.mu.internalRaftGroup.TickQuiesced()
-		}
 		return false, nil
 	}
 	if r.maybeQuiesceLocked() {
@@ -3920,25 +3904,15 @@ func (r *Replica) tick() (bool, error) {
 	return true, nil
 }
 
-// maybeTickQuiesced attempts to tick a quiesced or dormant replica, returning
-// true on success and false if the regular tick path must be taken
-// (i.e. Replica.tick).
-func (r *Replica) maybeTickQuiesced() bool {
-	var done bool
+// needsTick returns true if tick() should be called on this replica.
+func (r *Replica) needsTick() bool {
+	var need bool
 	r.mu.Lock()
-	if r.mu.internalRaftGroup == nil {
-		done = true
-	} else if r.mu.quiescent {
-		done = true
-		if enableTickQuiesced {
-			// NB: It is safe to call TickQuiesced without holding Replica.raftMu
-			// because that method simply increments a counter without performing any
-			// other logic.
-			r.mu.internalRaftGroup.TickQuiesced()
-		}
+	if r.mu.internalRaftGroup == nil || r.mu.quiescent {
+		need = true
 	}
 	r.mu.Unlock()
-	return done
+	return need
 }
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
