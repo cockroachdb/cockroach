@@ -3438,21 +3438,19 @@ func TestFindSplitKey(t *testing.T) {
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const userID = keys.MaxReservedDescID + 1
 	// Manually creates rows corresponding to the schema:
-	// CREATE TABLE t (id STRING PRIMARY KEY, col INT)
-	encodeTableKey := func(rowVal string, colFam uint32) roachpb.Key {
-		tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
+	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
+		tableKey := keys.MakeTablePrefix(id)
 		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
-		rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), rowVal)
-		colKey := keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
-		return colKey
-	}
-	splitKeyFromTableKey := func(tableKey roachpb.Key) roachpb.Key {
-		splitKey, err := keys.EnsureSafeSplitKey(tableKey)
-		if err != nil {
-			t.Fatal(err)
+		for _, rowVal := range rowVals {
+			rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
 		}
-		return splitKey
+		return rowKey
+	}
+	addColFam := func(rowKey roachpb.Key, colFam uint32) roachpb.Key {
+		return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
 	}
 
 	testCases := []struct {
@@ -3474,11 +3472,12 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// All system span cannot be split.
 		{
 			keys: []roachpb.Key{
-				roachpb.Key(keys.MakeTablePrefix(1)),
-				roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)),
+				addColFam(tablePrefix(1, "some", "data"), 1),
+				addColFam(tablePrefix(keys.MaxSystemConfigDescID, "blah"), 1),
 			},
-			expSplit: nil,
-			expError: false,
+			rangeStart: keys.MakeTablePrefix(1),
+			expSplit:   nil,
+			expError:   false,
 		},
 		// Between meta1 and meta2, splits at meta2.
 		{
@@ -3565,16 +3564,16 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// or return the start key of the range.
 		{
 			keys: []roachpb.Key{
-				encodeTableKey("a", 1),
-				encodeTableKey("a", 2),
-				encodeTableKey("a", 3),
-				encodeTableKey("a", 4),
-				encodeTableKey("a", 5),
-				encodeTableKey("b", 1),
-				encodeTableKey("c", 1),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(tablePrefix(userID, "a"), 3),
+				addColFam(tablePrefix(userID, "a"), 4),
+				addColFam(tablePrefix(userID, "a"), 5),
+				addColFam(tablePrefix(userID, "b"), 1),
+				addColFam(tablePrefix(userID, "c"), 1),
 			},
-			rangeStart: splitKeyFromTableKey(encodeTableKey("a", 1)),
-			expSplit:   splitKeyFromTableKey(encodeTableKey("b", 1)),
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   tablePrefix(userID, "b"),
 			expError:   false,
 		},
 		// More example table data. Make sure ranges at the start of a table can
@@ -3582,30 +3581,58 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// break for such ranges.
 		{
 			keys: []roachpb.Key{
-				encodeTableKey("a", 1),
-				encodeTableKey("b", 1),
-				encodeTableKey("c", 1),
-				encodeTableKey("d", 1),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "b"), 1),
+				addColFam(tablePrefix(userID, "c"), 1),
+				addColFam(tablePrefix(userID, "d"), 1),
 			},
-			rangeStart: keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
-			expSplit:   splitKeyFromTableKey(encodeTableKey("c", 1)),
+			rangeStart: keys.MakeTablePrefix(userID),
+			expSplit:   tablePrefix(userID, "c"),
 			expError:   false,
 		},
 		// More example table data. Make sure ranges at the start of a table can
-		// be split properly (even if "properly" means creating an empty LHS,
-		// splitting here will at least allow the resulting RHS to split again).
+		// be split properly even in the presence of a large first row.
 		{
 			keys: []roachpb.Key{
-				encodeTableKey("a", 1),
-				encodeTableKey("a", 2),
-				encodeTableKey("a", 3),
-				encodeTableKey("a", 4),
-				encodeTableKey("a", 5),
-				encodeTableKey("b", 1),
-				encodeTableKey("c", 1),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(tablePrefix(userID, "a"), 3),
+				addColFam(tablePrefix(userID, "a"), 4),
+				addColFam(tablePrefix(userID, "a"), 5),
+				addColFam(tablePrefix(userID, "b"), 1),
+				addColFam(tablePrefix(userID, "c"), 1),
 			},
 			rangeStart: keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
-			expSplit:   splitKeyFromTableKey(encodeTableKey("a", 1)),
+			expSplit:   tablePrefix(userID, "b"),
+			expError:   false,
+		},
+		// One partition where partition key is the first column. Checks that
+		// split logic is not confused by the special partition start key.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a", "a"), 1),
+				addColFam(tablePrefix(userID, "a", "b"), 1),
+				addColFam(tablePrefix(userID, "a", "c"), 1),
+				addColFam(tablePrefix(userID, "a", "d"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   tablePrefix(userID, "a", "c"),
+			expError:   false,
+		},
+		// One partition with a large first row. Checks that our logic to avoid
+		// splitting in the middle of a row still applies.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a", "a"), 1),
+				addColFam(tablePrefix(userID, "a", "a"), 2),
+				addColFam(tablePrefix(userID, "a", "a"), 3),
+				addColFam(tablePrefix(userID, "a", "a"), 4),
+				addColFam(tablePrefix(userID, "a", "a"), 5),
+				addColFam(tablePrefix(userID, "a", "b"), 1),
+				addColFam(tablePrefix(userID, "a", "c"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   tablePrefix(userID, "a", "b"),
 			expError:   false,
 		},
 	}
