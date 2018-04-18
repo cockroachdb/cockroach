@@ -1036,7 +1036,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "show_ranges_stmt",
-		replace: map[string]string{"ranges_kw": "EXPERIMENTAL_RANGES"},
+		inline:  []string{"ranges_kw"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'TESTING_RANGES'")},
 	},
 	{
 		name: "show_schemas",
