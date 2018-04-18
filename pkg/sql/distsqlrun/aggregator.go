@@ -82,6 +82,14 @@ func GetAggregateInfo(
 	)
 }
 
+type aggregateFuncs []tree.AggregateFunc
+
+func (af aggregateFuncs) close(ctx context.Context) {
+	for _, f := range af {
+		f.Close(ctx)
+	}
+}
+
 // aggregator is the processor core type that does "aggregation" in the SQL
 // sense. It groups rows and computes an aggregate for each group. The group is
 // configured using the group key and the aggregator can be configured with one
@@ -112,7 +120,7 @@ type aggregator struct {
 	// buckets is used during the accumulation phase to track the bucket keys
 	// that have been seen. After accumulation, the keys are extracted into
 	// bucketsIter for iteration.
-	buckets          map[string]struct{}
+	buckets          map[string]aggregateFuncs
 	bucketsIter      []string
 	lastOrdGroupCols sqlbase.EncDatumRow
 	arena            stringarena.Arena
@@ -152,7 +160,7 @@ func newAggregator(
 		groupCols:        spec.GroupCols,
 		orderedGroupCols: spec.OrderedGroupCols,
 		aggregations:     spec.Aggregations,
-		buckets:          make(map[string]struct{}),
+		buckets:          make(map[string]aggregateFuncs),
 		funcs:            make([]*aggregateFuncHolder, len(spec.Aggregations)),
 		outputTypes:      make([]sqlbase.ColumnType, len(spec.Aggregations)),
 		row:              make(sqlbase.EncDatumRow, len(spec.Aggregations)),
@@ -243,10 +251,8 @@ func (ag *aggregator) close() {
 	if ag.internalClose() {
 		log.VEventf(ag.ctx, 2, "exiting aggregator")
 		ag.bucketsAcc.Close(ag.ctx)
-		for _, f := range ag.funcs {
-			for _, aggFunc := range f.buckets {
-				aggFunc.Close(ag.ctx)
-			}
+		for _, bucket := range ag.buckets {
+			bucket.close(ag.ctx)
 		}
 	}
 }
@@ -308,14 +314,18 @@ func (ag *aggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *P
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was
 	// aggregated.
 	if len(ag.buckets) < 1 && len(ag.groupCols) == 0 {
-		ag.buckets[""] = struct{}{}
+		bucket, err := ag.createAggregateFuncs()
+		if err != nil {
+			ag.moveToDraining(err)
+			return aggStateUnknown, nil, nil
+		}
+		ag.buckets[""] = bucket
 	}
 
 	ag.bucketsIter = make([]string, 0, len(ag.buckets))
 	for bucket := range ag.buckets {
 		ag.bucketsIter = append(ag.bucketsIter, bucket)
 	}
-	ag.buckets = nil
 
 	// Transition to aggEmittingRows, and let it generate the next row/meta.
 	return aggEmittingRows, nil, nil
@@ -339,17 +349,16 @@ func (ag *aggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *Producer
 		// the columns specified by ag.orderedGroupCols, so we need to continue
 		// accumulating the remaining rows.
 
+		for _, funcs := range ag.buckets {
+			funcs.close(ag.ctx)
+		}
 		if err := ag.arena.UnsafeReset(ag.ctx); err != nil {
 			ag.moveToDraining(err)
 			return aggStateUnknown, nil, nil
 		}
-		ag.buckets = make(map[string]struct{})
 		ag.bucketsIter = nil
+		ag.buckets = make(map[string]aggregateFuncs)
 		for _, f := range ag.funcs {
-			for _, aggFunc := range f.buckets {
-				aggFunc.Close(ag.ctx)
-			}
-			f.buckets = make(map[string]tree.AggregateFunc)
 			if f.seen != nil {
 				f.seen = make(map[string]struct{})
 			}
@@ -366,8 +375,8 @@ func (ag *aggregator) emitRow() (aggregatorState, sqlbase.EncDatumRow, *Producer
 	bucket := ag.bucketsIter[0]
 	ag.bucketsIter = ag.bucketsIter[1:]
 
-	for i, f := range ag.funcs {
-		result, err := f.get(bucket)
+	for i, b := range ag.buckets[bucket] {
+		result, err := b.Result()
 		if err != nil {
 			ag.moveToDraining(err)
 			return aggStateUnknown, nil, nil
@@ -436,12 +445,17 @@ func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 	}
 	ag.scratch = encoded[:0]
 
-	if _, ok := ag.buckets[string(encoded)]; !ok {
+	bucket, ok := ag.buckets[string(encoded)]
+	if !ok {
 		s, err := ag.arena.AllocBytes(ag.ctx, encoded)
 		if err != nil {
 			return err
 		}
-		ag.buckets[s] = struct{}{}
+		bucket, err = ag.createAggregateFuncs()
+		if err != nil {
+			return err
+		}
+		ag.buckets[s] = bucket
 	}
 
 	// Feed the func holders for this bucket the non-grouping datums.
@@ -479,7 +493,14 @@ func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 			otherArgs[j-1] = row[c].Datum
 		}
 
-		if err := ag.funcs[i].add(ag.ctx, encoded, firstArg, otherArgs); err != nil {
+		canAdd, err := ag.funcs[i].canAdd(ag.ctx, encoded, firstArg, otherArgs)
+		if err != nil {
+			return err
+		}
+		if !canAdd {
+			continue
+		}
+		if err := bucket[i].Add(ag.ctx, firstArg, otherArgs...); err != nil {
 			return err
 		}
 	}
@@ -487,12 +508,10 @@ func (ag *aggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create        func(*tree.EvalContext) tree.AggregateFunc
-	group         *aggregator
-	buckets       map[string]tree.AggregateFunc
-	seen          map[string]struct{}
-	arena         *stringarena.Arena
-	bucketsMemAcc *mon.BoundAccount
+	create func(*tree.EvalContext) tree.AggregateFunc
+	group  *aggregator
+	seen   map[string]struct{}
+	arena  *stringarena.Arena
 }
 
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
@@ -501,67 +520,40 @@ func (ag *aggregator) newAggregateFuncHolder(
 	create func(*tree.EvalContext) tree.AggregateFunc,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
-		create:        create,
-		group:         ag,
-		buckets:       make(map[string]tree.AggregateFunc),
-		bucketsMemAcc: &ag.bucketsAcc,
-		arena:         &ag.arena,
+		create: create,
+		group:  ag,
+		arena:  &ag.arena,
 	}
 }
 
-func (a *aggregateFuncHolder) add(
+func (a *aggregateFuncHolder) canAdd(
 	ctx context.Context, bucket []byte, firstArg tree.Datum, otherArgs tree.Datums,
-) error {
+) (bool, error) {
 	if a.seen != nil {
 		encoded, err := sqlbase.EncodeDatum(bucket, firstArg)
 		if err != nil {
-			return err
+			return false, err
 		}
 		// Encode additional arguments if necessary.
 		if otherArgs != nil {
 			encoded, err = sqlbase.EncodeDatums(bucket, otherArgs)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 
 		if _, ok := a.seen[string(encoded)]; ok {
 			// skip
-			return nil
+			return false, nil
 		}
 		s, err := a.arena.AllocBytes(ctx, encoded)
 		if err != nil {
-			return err
+			return false, err
 		}
 		a.seen[s] = struct{}{}
 	}
 
-	impl, ok := a.buckets[string(bucket)]
-	if !ok {
-		// TODO(radu): we should account for the size of impl (this needs to be done
-		// in each aggregate constructor).
-		impl = a.create(&a.group.flowCtx.EvalCtx)
-		usage := int64(len(bucket))
-		usage += sizeOfAggregateFunc
-		// TODO(radu): this model of each func having a map of buckets (one per
-		// group) for each func plus a global map is very wasteful. We should have a
-		// single map that stores all the AggregateFuncs.
-		if err := a.bucketsMemAcc.Grow(ctx, usage); err != nil {
-			return err
-		}
-		a.buckets[string(bucket)] = impl
-	}
-
-	return impl.Add(ctx, firstArg, otherArgs...)
-}
-
-func (a *aggregateFuncHolder) get(bucket string) (tree.Datum, error) {
-	found, ok := a.buckets[bucket]
-	if !ok {
-		found = a.create(&a.group.flowCtx.EvalCtx)
-	}
-
-	return found.Result()
+	return true, nil
 }
 
 // encode returns the encoding for the grouping columns, this is then used as
@@ -570,10 +562,24 @@ func (ag *aggregator) encode(
 	appendTo []byte, row sqlbase.EncDatumRow,
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Encode(&ag.inputTypes[colIdx], &ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Encode(
+			&ag.inputTypes[colIdx], &ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, err
 		}
 	}
 	return appendTo, nil
+}
+
+func (ag *aggregator) createAggregateFuncs() (aggregateFuncs, error) {
+	bucket := make(aggregateFuncs, len(ag.funcs))
+	for i, f := range ag.funcs {
+		// TODO(radu): we should account for the size of impl (this needs to be done
+		// in each aggregate constructor).
+		bucket[i] = f.create(&ag.flowCtx.EvalCtx)
+	}
+	if err := ag.bucketsAcc.Grow(ag.ctx, sizeOfAggregateFunc*int64(len(ag.funcs))); err != nil {
+		return nil, err
+	}
+	return bucket, nil
 }
