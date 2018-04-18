@@ -156,13 +156,16 @@ type BatchedTuples struct {
 
 // Tuples returns a BatchedTuples where each batch has size 1.
 func Tuples(count int, fn func(int) []interface{}) BatchedTuples {
-	return BatchedTuples{
+	t := BatchedTuples{
 		NumBatches: count,
 		NumTotal:   count,
-		Batch: func(batchIdx int) [][]interface{} {
-			return [][]interface{}{fn(batchIdx)}
-		},
 	}
+	if fn != nil {
+		t.Batch = func(batchIdx int) [][]interface{} {
+			return [][]interface{}{fn(batchIdx)}
+		}
+	}
+	return t
 }
 
 // QueryLoad represents some SQL query workload performable on a database
@@ -283,8 +286,8 @@ func Setup(
 	var size int64
 	for _, table := range tables {
 		if table.InitialRows.Batch == nil {
-			// Some workloads don't support initial table data.
-			continue
+			return 0, errors.Errorf(
+				`initial data is not supported for workload %s`, gen.Meta().Name)
 		}
 		batchesPerWorker := table.InitialRows.NumBatches / concurrency
 		g, gCtx := errgroup.WithContext(ctx)
