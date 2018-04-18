@@ -443,8 +443,6 @@ func convertRecord(
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
-			// TODO(bram): Is the checking of FKs here required? If not, turning them
-			// off may provide a speed boost.
 			if err := ri.InsertRow(
 				ctx,
 				inserter(func(kv roachpb.KeyValue) {
@@ -453,7 +451,7 @@ func convertRecord(
 				}),
 				row,
 				true, /* ignoreConflicts */
-				sqlbase.CheckFKs,
+				sqlbase.SkipFKs,
 				false, /* traceKV */
 			); err != nil {
 				return errors.Wrapf(err, "insert row: %s: row %d", batch.file, rowNum)
