@@ -84,20 +84,14 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 		return true
 
 	case opt.ProjectOp:
-		// Project operator can pass through ordering if it operates only on
-		// input columns.
-		input := mexpr.AsProject().Input()
-		inputCols := f.mem.GroupProperties(input).Relational.OutputCols
-		for _, colOrder := range required {
-			if colOrder < 0 {
-				// Descending order, so recover original index.
-				colOrder = -colOrder
-			}
-			if !inputCols.Contains(int(colOrder)) {
-				return false
-			}
-		}
-		return true
+		// Project operators can pass through their ordering if the ordering
+		// depends only on columns present in the input.
+		return f.orderingBoundBy(required, mexpr.AsProject().Input())
+
+	case opt.LookupJoinOp:
+		// Index Join operators can pass through their ordering if the ordering
+		// depends only on columns present in the input.
+		return f.orderingBoundBy(required, mexpr.AsLookupJoin().Input())
 
 	case opt.ScanOp:
 		// Scan naturally orders according to the order of the scanned index.
@@ -114,6 +108,22 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 	}
 
 	return false
+}
+
+// orderingBoundBy returns whether or not input provides all columns present in
+// ordering.
+func (f physicalPropsFactory) orderingBoundBy(ordering memo.Ordering, input memo.GroupID) bool {
+	inputCols := f.mem.GroupProperties(input).Relational.OutputCols
+	for _, colOrder := range ordering {
+		if colOrder < 0 {
+			// Descending order, so recover original index.
+			colOrder = -colOrder
+		}
+		if !inputCols.Contains(int(colOrder)) {
+			return false
+		}
+	}
+	return true
 }
 
 // constructChildProps returns the set of physical properties required of the
@@ -145,7 +155,7 @@ func (f physicalPropsFactory) constructChildProps(
 
 	// Ordering property.
 	switch mexpr.Operator() {
-	case opt.SelectOp, opt.ProjectOp:
+	case opt.SelectOp, opt.ProjectOp, opt.LookupJoinOp:
 		if nth == 0 {
 			// Pass through the ordering.
 			childProps.Ordering = parentProps.Ordering

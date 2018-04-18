@@ -114,6 +114,13 @@ define AntiJoin {
     On    Expr
 }
 
+# LookupJoin represents a join between an input expression and an index.
+[Relational]
+define LookupJoin {
+    Input Expr
+    Def LookupJoinDef
+}
+
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.

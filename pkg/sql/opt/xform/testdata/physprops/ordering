@@ -202,12 +202,12 @@ memo (optimized)
  │         ├── best: (select G4="[ordering: +1,-2]" G5)
  │         └── cost: 1100.00
  ├── G3: (projections G10 G6 G9)
- ├── G4: (scan a)
+ ├── G4: (scan a,cols=(1,2))
  │    ├── ""
- │    │    ├── best: (scan a)
+ │    │    ├── best: (scan a,cols=(1,2))
  │    │    └── cost: 1000.00
  │    └── "[ordering: +1,-2]"
- │         ├── best: (scan a)
+ │         ├── best: (scan a,cols=(1,2))
  │         └── cost: 1000.00
  ├── G5: (filters G7)
  ├── G6: (minus G9 G8)
@@ -256,9 +256,9 @@ memo (optimized)
  │         ├── best: (sort G2)
  │         └── cost: 1125.00
  ├── G3: (projections G9 G6)
- ├── G4: (scan a)
+ ├── G4: (scan a,cols=(1-3))
  │    ├── ""
- │    │    ├── best: (scan a)
+ │    │    ├── best: (scan a,cols=(1-3))
  │    │    └── cost: 1000.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
