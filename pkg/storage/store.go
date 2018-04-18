@@ -100,9 +100,6 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
-var enablePreVote = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_PREVOTE", true)
-
 var enableTickQuiesced = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_TICK_QUIESCED", true)
 
@@ -175,12 +172,7 @@ func newRaftConfig(
 		Storage:       strg,
 		Logger:        logger,
 
-		// TODO(bdarnell): PreVote and CheckQuorum are two ways of
-		// achieving the same thing. PreVote is more compatible with
-		// quiesced ranges, so we want to switch to it once we've worked
-		// out the bugs.
-		PreVote:     enablePreVote,
-		CheckQuorum: !enablePreVote,
+		PreVote: true,
 
 		// MaxSizePerMsg controls how many Raft log entries the leader will send to
 		// followers in a single MsgApp.
