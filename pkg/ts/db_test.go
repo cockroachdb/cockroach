@@ -284,6 +284,18 @@ func (tm *testModel) prune(nowNanos int64, timeSeries ...timeSeriesResolutionInf
 	}
 }
 
+func (tm *testModel) makeMemoryContext(interpolationLimitNanos int64) QueryMemoryContext {
+	return MakeQueryMemoryContext(
+		tm.workerMemMonitor,
+		tm.resultMemMonitor,
+		QueryMemoryOptions{
+			BudgetBytes:             tm.queryMemoryBudget,
+			EstimatedSources:        tm.model.UniqueSourceCount(),
+			InterpolationLimitNanos: interpolationLimitNanos,
+		},
+	)
+}
+
 // modelDataSource is used to create a mock DataSource. It returns a
 // deterministic set of data to GetTimeSeriesData, storing the returned data in
 // the model whenever GetTimeSeriesData is called. Data is returned until all
