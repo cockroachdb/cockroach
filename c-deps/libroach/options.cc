@@ -40,8 +40,6 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   virtual rocksdb::Slice Transform(const rocksdb::Slice& src) const { return KeyPrefix(src); }
 
   virtual bool InDomain(const rocksdb::Slice& src) const { return true; }
-
-  virtual bool InRange(const rocksdb::Slice& dst) const { return Transform(dst) == dst; }
 };
 
 class DBLogger : public rocksdb::Logger {
