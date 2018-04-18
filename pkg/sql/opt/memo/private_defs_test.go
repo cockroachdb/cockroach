@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-func TestAltIndexHasCols(t *testing.T) {
+func TestAltIndexMissingCols(t *testing.T) {
 	cat := createDefsCatalog(t)
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))
@@ -39,7 +39,7 @@ func TestAltIndexHasCols(t *testing.T) {
 
 	test := func(def *memo.ScanOpDef, altIndex int, expected bool) {
 		t.Helper()
-		if def.AltIndexHasCols(md, altIndex) != expected {
+		if def.AltIndexMissingCols(md, altIndex).Empty() != expected {
 			t.Errorf("expected %v, got %v", expected, !expected)
 		}
 	}

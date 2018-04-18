@@ -114,6 +114,14 @@ define AntiJoin {
     On    Expr
 }
 
+# IndexJoin represents a logical join between a secondary index and the primary
+# index to fetch columns missing from the secondary index.
+[Relational]
+define IndexJoin {
+    Input Expr
+    Def IndexJoinDef
+}
+
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.

@@ -39,6 +39,19 @@ func (f FuncOpDef) String() string {
 	return f.Name
 }
 
+// IndexJoinDef defines the value of the Def private field of the IndexJoin
+// operator.
+type IndexJoinDef struct {
+	// Table identifies the table do to lookups in. The primary index is
+	// currently the only index used.
+	Table opt.TableID
+
+	// Cols is the set of columns the index join outputs. The set of columns
+	// which must be retrieved from the primary index is thus Cols minus the set
+	// of columns provided by the input.
+	Cols opt.ColSet
+}
+
 // ScanOpDef defines the value of the Def private field of the Scan operator.
 type ScanOpDef struct {
 	// Table identifies the table to scan. It is an id that can be passed to
@@ -66,17 +79,17 @@ type ScanOpDef struct {
 	HardLimit int64
 }
 
-// AltIndexHasCols returns true if the given alternate index on the table
-// contains the columns projected by the scan operator. This means that the
-// alternate index can be scanned instead.
-func (s *ScanOpDef) AltIndexHasCols(md *opt.Metadata, altIndex int) bool {
+// AltIndexMissingCols returns the set of columns projected by the scan
+// operator which are not provided by the alternate index. If the set is empty,
+// the alternate index is covering.
+func (s *ScanOpDef) AltIndexMissingCols(md *opt.Metadata, altIndex int) opt.ColSet {
 	index := md.Table(s.Table).Index(altIndex)
 	var indexCols opt.ColSet
 	for col := 0; col < index.ColumnCount(); col++ {
 		ord := index.Column(col).Ordinal
 		indexCols.Add(int(md.TableColumn(s.Table, ord)))
 	}
-	return s.Cols.SubsetOf(indexCols)
+	return s.Cols.Difference(indexCols)
 }
 
 // CanProvideOrdering returns true if the scan operator returns rows that

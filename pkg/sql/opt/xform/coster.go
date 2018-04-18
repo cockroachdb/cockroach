@@ -70,6 +70,10 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	case opt.ValuesOp:
 		return c.computeValuesCost(candidate, props)
 
+	case opt.IndexJoinOp:
+		// TODO(justin): remove this once we can execbuild index joins.
+		return memo.MaxCost
+
 	default:
 		// By default, cost of parent is sum of child costs.
 		return c.computeChildrenCost(candidate)

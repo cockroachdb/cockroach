@@ -83,10 +83,16 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 		// Select operator can always pass through ordering to its input.
 		return true
 
-	case opt.ProjectOp:
-		// Project operator can pass through ordering if it operates only on
-		// input columns.
-		input := mexpr.AsProject().Input()
+	case opt.ProjectOp, opt.IndexJoinOp:
+		// Operators which can pass through ordering if they operate only on input
+		// columns.
+		var input memo.GroupID
+		switch mexpr.Operator() {
+		case opt.ProjectOp:
+			input = mexpr.AsProject().Input()
+		case opt.IndexJoinOp:
+			input = mexpr.AsIndexJoin().Input()
+		}
 		inputCols := f.mem.GroupProperties(input).Relational.OutputCols
 		for _, colOrder := range required {
 			if colOrder < 0 {
@@ -145,7 +151,7 @@ func (f physicalPropsFactory) constructChildProps(
 
 	// Ordering property.
 	switch mexpr.Operator() {
-	case opt.SelectOp, opt.ProjectOp:
+	case opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp:
 		if nth == 0 {
 			// Pass through the ordering.
 			childProps.Ordering = parentProps.Ordering
