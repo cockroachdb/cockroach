@@ -915,7 +915,9 @@ func (ex *connExecutor) runShowSyntax(
 		func(ctx context.Context, field, msg string) error {
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 			return nil
-		}); err != nil {
+		},
+		ex.server.recordError, /* reportErr */
+	); err != nil {
 		res.SetError(err)
 	}
 	return commErr

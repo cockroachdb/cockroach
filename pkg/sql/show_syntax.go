@@ -43,24 +43,50 @@ func (p *planner) ShowSyntax(ctx context.Context, n *tree.ShowSyntax) (planNode,
 	query.WriteString("SELECT @1 AS field, @2 AS text FROM (VALUES ")
 
 	comma := ""
+	// TODO(knz): in the call below, reportErr is nil although we might
+	// want to be able to capture (and report) these errors as well.
+	//
+	// However, this code path is only used when SHOW SYNTAX is used as
+	// a data source, i.e. a client actively uses a query of the form
+	// SELECT ... FROM [SHOW SYNTAX ' ... '] WHERE ....  This is not
+	// what `cockroach sql` does: the SQL shell issues a straight `SHOW
+	// SYNTAX` that goes through the "statement observer" code
+	// path. Since we care mainly about what users do in the SQL shell,
+	// it's OK if we only deal with that case well for now and, for the
+	// time being, forget/ignore errors when SHOW SYNTAX is used as data
+	// source. This can be added later if deemed useful or necessary.
 	if err := runShowSyntax(ctx, n.Statement, func(ctx context.Context, field, msg string) error {
 		fmt.Fprintf(&query, "%s('%s', ", comma, field)
 		lex.EncodeSQLString(&query, msg)
 		query.WriteByte(')')
 		comma = ", "
 		return nil
-	}); err != nil {
+	}, nil /* reportErr */); err != nil {
 		return nil, err
 	}
 	query.WriteByte(')')
 	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
 }
 
+// runShowSyntax analyzes the syntax and reports its structure as data
+// for the client. Even an error is reported as data.
+//
+// Since errors won't propagate to the client as an error, but as
+// a result, the usual code path to capture and record errors will not
+// be triggered. Instead, the caller can pass a reportErr closure to
+// capture errors instead. May be nil.
 func runShowSyntax(
-	ctx context.Context, stmt string, report func(ctx context.Context, field, msg string) error,
+	ctx context.Context,
+	stmt string,
+	report func(ctx context.Context, field, msg string) error,
+	reportErr func(err error),
 ) error {
 	stmts, err := parser.Parse(stmt)
 	if err != nil {
+		if reportErr != nil {
+			reportErr(err)
+		}
+
 		pqErr, ok := pgerror.GetPGCause(err)
 		if !ok {
 			return pgerror.NewErrorf(pgerror.CodeInternalError, "unknown parser error: %v", err)
