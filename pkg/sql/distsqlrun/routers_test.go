@@ -39,7 +39,7 @@ import (
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
 // that tracks the lifetime of the background router goroutines.
 func setupRouter(
-	t *testing.T,
+	t testing.TB,
 	evalCtx *tree.EvalContext,
 	spec OutputRouterSpec,
 	inputTypes []sqlbase.ColumnType,
@@ -693,6 +693,59 @@ func TestRangeRouterInit(t *testing.T) {
 			_, err := makeRouter(&spec, recvs)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("got %v, expected %v", err, tc.err)
+			}
+		})
+	}
+}
+
+func BenchmarkRouter(b *testing.B) {
+	numCols := 1
+	numRows := 1 << 16
+	colTypes := makeIntCols(numCols)
+
+	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	for _, spec := range []OutputRouterSpec{
+		{
+			Type: OutputRouterSpec_BY_RANGE,
+			RangeRouterSpec: OutputRouterSpec_RangeRouterSpec{
+				Spans:     testRangeRouterSpec.Spans,
+				Encodings: testRangeRouterSpec.Encodings,
+			},
+		},
+		{
+			Type:        OutputRouterSpec_BY_HASH,
+			HashColumns: []uint32{0},
+		},
+		{
+			Type: OutputRouterSpec_MIRROR,
+		},
+	} {
+		b.Run(spec.Type.String(), func(b *testing.B) {
+			for _, nOutputs := range []int{2, 4, 8} {
+				chans := make([]RowChannel, nOutputs)
+				recvs := make([]RowReceiver, nOutputs)
+				b.Run(fmt.Sprintf("outputs=%d", nOutputs), func(b *testing.B) {
+					b.SetBytes(int64(nOutputs * numCols * numRows * 8))
+					for i := 0; i < b.N; i++ {
+						input.Reset()
+						for i := 0; i < nOutputs; i++ {
+							chans[i].InitWithBufSize(colTypes, rowChannelBufSize)
+							recvs[i] = &chans[i]
+						}
+						r, wg := setupRouter(b, evalCtx, spec, colTypes, recvs)
+						for i := range chans {
+							go drainRowChannel(&chans[i])
+						}
+						Run(ctx, input, r)
+						r.ProducerDone()
+						wg.Wait()
+					}
+				})
 			}
 		})
 	}
