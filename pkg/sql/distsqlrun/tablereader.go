@@ -242,14 +242,6 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for tr.state == stateRunning {
-		// Check whether calling input.Next() is necessary. Nobody else does this,
-		// but in the case of the TableReader calling Next() on a RowFetcher and one
-		// too many times and causing it run do another Scan is real bad.
-		if tr.out.LimitSatisfied() {
-			tr.moveToDraining(nil /* err */)
-			break
-		}
-
 		row, meta := tr.input.Next()
 
 		if meta != nil {
