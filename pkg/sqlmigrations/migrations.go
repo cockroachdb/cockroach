@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -105,60 +104,43 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: disableNetTrace,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.table_statistics table",
-		workFn:           createTableStatisticsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.TableStatisticsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.table_statistics table",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
+		// Introduced in v2.0. Permanent migration.
 		name:   "add root user",
 		workFn: addRootUser,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.locations table",
-		workFn:           createLocationsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.LocationsTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.locations table",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "add default .meta and .liveness zone configs",
-		workFn: addDefaultMetaAndLivenessZoneConfigs,
+		// Introduced in v2.0. Baked into v2.1.
+		name: "add default .meta and .liveness zone configs",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:             "create system.role_members table",
-		workFn:           createRoleMembersTable,
-		newDescriptorIDs: []sqlbase.ID{keys.RoleMembersTableID},
+		// Introduced in v2.0. Baked into v2.1.
+		name: "create system.role_members table",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:         "add system.users isRole column and create admin role",
-		workFn:       addRoles,
-		doesBackfill: true,
+		// Introduced in v2.0. Permanent migration.
+		name:   "add system.users isRole column and create admin role",
+		workFn: addAdminRole,
 	},
 	{
 		// Introduced in v2.0, replaced by "ensure admin role privileges in all descriptors"
 		name: "grant superuser privileges on all objects to the admin role",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
+		// Introduced in v2.0. Permanent migration.
 		name:   "make root a member of the admin role",
 		workFn: addRootToAdminRole,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "upgrade table descs to interleaved format version",
-		workFn: upgradeTableDescsToInterleavedFormatVersion,
+		// Introduced in v2.0. Baked into v2.1.
+		name: "upgrade table descs to interleaved format version",
 	},
 	{
 		// Introduced in v2.0 alphas then folded into `retiredSettings`.
@@ -169,21 +151,22 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name: "remove cluster setting `kv.transaction.max_intents`",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "add default system.jobs zone config",
-		workFn: addDefaultSystemJobsZoneConfig,
+		// Introduced in v2.0. Baked into v2.1.
+		name: "add default system.jobs zone config",
 	},
 	{
-		// Introduced in v2.0.
+		// Introduced in v2.0. Permanent migration.
 		name:   "initialize cluster.secret",
 		workFn: initializeClusterSecret,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(mberhault): bake this migration into v2.1, but create a new migration
-		// with the same function to catch any tables written in a mixed-version setting.
-		name:   "ensure admin role privileges in all descriptors",
+		// Introduced in v2.0. Repeated in v2.1 below.
+		name: "ensure admin role privileges in all descriptors",
+	},
+	{
+		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
+		// TODO(mberhault): bake into v2.2.
+		name:   "repeat: ensure admin role privileges in all descriptors",
 		workFn: ensureMaxPrivileges,
 	},
 }
@@ -467,18 +450,6 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func createTableStatisticsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
-}
-
-func createLocationsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.LocationsTable)
-}
-
-func createRoleMembersTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
-}
-
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -503,7 +474,9 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
-func runStmtAsRootWithRetry(ctx context.Context, r runner, stmt string) error {
+func runStmtAsRootWithRetry(
+	ctx context.Context, r runner, stmt string, pinfo *tree.PlaceholderInfo,
+) error {
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
@@ -513,7 +486,7 @@ func runStmtAsRootWithRetry(ctx context.Context, r runner, stmt string) error {
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, pinfo, 1)
 		if err == nil {
 			res.Close(ctx)
 			break
@@ -537,15 +510,15 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	if reportingOptOut {
 		return nil
 	}
-	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING diagnostics.reporting.enabled = true`)
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING diagnostics.reporting.enabled = true`, nil)
 }
 
 func disableNetTrace(ctx context.Context, r runner) error {
-	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING trace.debug.enable = false`)
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING trace.debug.enable = false`, nil)
 }
 
 func initializeClusterSecret(ctx context.Context, r runner) error {
-	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING cluster.secret = gen_random_uuid()::STRING`)
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING cluster.secret = gen_random_uuid()::STRING`, nil)
 }
 
 func populateVersionSetting(ctx context.Context, r runner) error {
@@ -600,236 +573,37 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 }
 
 func addRootUser(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	// Upsert the root user into the table. We intentionally override any existing entry.
-	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`
+	const upsertRootStmt = `
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        `
 
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDString(security.RootUser))
-	res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, upsertRootStmt, &pl, 1)
-	if err == nil {
-		res.Close(ctx)
-	}
-	return err
+	return runStmtAsRootWithRetry(ctx, r, upsertRootStmt, &pl)
 }
 
-func addDefaultMetaAndLivenessZoneConfigs(ctx context.Context, r runner) error {
-	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
+func addAdminRole(ctx context.Context, r runner) error {
+	// Upsert the admin role into the table. We intentionally override any existing entry.
+	const upsertAdminStmt = `
+          UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+          `
 
-	// Retrieve the existing .meta zone config.
-	metaZone, err := getZoneConfig(ctx, r, "RANGE meta")
-	if err != nil {
-		return err
-	}
-	// Update the GC TTL seconds if it still at the default setting.
-	if metaZone.GC.TTLSeconds == defaultTTLSeconds {
-		metaZone.GC.TTLSeconds = 60 * 60 // 1h
-	}
-	if err := upsertZoneConfig(ctx, r, keys.MetaRangesID, metaZone); err != nil {
-		return err
-	}
-
-	// The liveness range was previously covered by the ".system" zone. Grab the
-	// existing ".system" zone (if any) for modification.
-	livenessZone, err := getZoneConfig(ctx, r, "RANGE system")
-	if err != nil {
-		return err
-	}
-	// We set the .liveness zone config regardless, but only update the TTL
-	// seconds if it is still at the default setting.
-	if livenessZone.GC.TTLSeconds == defaultTTLSeconds {
-		livenessZone.GC.TTLSeconds = 10 * 60 // 10m
-	}
-	return upsertZoneConfig(ctx, r, keys.LivenessRangesID, livenessZone)
-}
-
-func upsertZoneConfig(ctx context.Context, r runner, id uint32, zone config.ZoneConfig) error {
-	buf, err := protoutil.Marshal(&zone)
-	if err != nil {
-		return err
-	}
-
-	const stmt = `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDInt(tree.DInt(id)))
-	pl.SetValue("2", tree.NewDString(string(buf)))
-
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
-	// Retry a limited number of times because returning an error and letting
-	// the node kill itself is better than holding the migration lease for an
-	// arbitrarily long time.
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, &pl, 1)
-		if err == nil {
-			res.Close(ctx)
-			break
-		}
-		log.Warningf(ctx, "failed attempt to add .%s zone config: %s",
-			config.NamedZonesByID[id], err)
-	}
-	return err
-}
-
-func getZoneConfig(ctx context.Context, r runner, stmtFor string) (config.ZoneConfig, error) {
-	stmt := fmt.Sprintf(
-		`SELECT config_proto FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`,
-		stmtFor)
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
-	// Retry a limited number of times because returning an error and letting the
-	// node kill itself is better than holding the migration lease for an
-	// arbitrarily long time.
-	var err error
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
-		if err != nil {
-			log.Warningf(ctx, "failed attempt to retrieve %s zone config: %s",
-				stmtFor, err)
-			continue
-		}
-		defer res.Close(ctx)
-
-		// TODO(peter): This is very manual. Is there a better way?
-		if len(res.ResultList) == 0 || res.ResultList[0].Rows.Len() == 0 {
-			break
-		}
-		row := res.ResultList[0].Rows.At(0)
-		if len(row) != 1 {
-			break
-		}
-		data, ok := row[0].(*tree.DBytes)
-		if !ok {
-			break
-		}
-		var zone config.ZoneConfig
-		if err = protoutil.Unmarshal([]byte(*data), &zone); err != nil {
-			break
-		}
-		return zone, nil
-	}
-
-	err = fmt.Errorf("failed attempt to retrieve %s zone config: %v",
-		stmtFor, err)
-	return config.ZoneConfig{}, err
-}
-
-func addRoles(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
-	// Add the roles column to the system.users table.
-	const alterStmt = `
-					ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false
-					`
-
-	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session, alterStmt, nil, 1); err == nil {
-		res.Close(ctx)
-	} else {
-		return err
-	}
-
-	// Create the `admin` role.
-	const insertAdminStmt = `
-					INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
-					`
-
-	// Add the `admin` role. We retry a few times as the schema change may still be backfilling.
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
-	var err error
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, insertAdminStmt, &pl, 1)
-		if err == nil {
-			res.Close(ctx)
-			break
-		}
-
-		if !sqlbase.IsUniquenessConstraintViolationError(err) {
-			// Non-constraint violation error: try again.
-			log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
-			continue
-		}
-
-		// Uniqueness error: we have an entry for admin. Either this is a replay of this migration, or
-		// an admin user existed before.
-		// We perform this check here rather than before the INSERT so that we don't needlessly retry
-		// a SELECT on something that doesn't usually exist.
-		// We look for a user named "admin" that is NOT a role (the only possibility before the ALTER above).
-		selectStmt := `SELECT username FROM system.users WHERE username = $1 AND "isRole" = false`
-
-		// Do not overwrite err or res.
-		var selectRes sql.StatementResults
-		selectRes, selectErr := r.sqlExecutor.ExecuteStatementsBuffered(session, selectStmt, &pl, 1)
-		if selectErr != nil {
-			// Rely on the main retry loop to retry failed SELECT.
-			continue
-		}
-		defer selectRes.Close(ctx)
-
-		if len(selectRes.ResultList) == 0 || selectRes.ResultList[0].Rows.Len() == 0 {
-			// No results: this is the migration being rerun.
-			err = nil
-			break
-		}
-
-		err = fmt.Errorf(`cannot create role %q, a user with that name exists. Please drop the user `+
-			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			sqlbase.AdminRole, sqlbase.AdminRole)
-		break
-	}
-	return err
+	return runStmtAsRootWithRetry(ctx, r, upsertAdminStmt, &pl)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
+	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-					UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
-					`
+          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          `
 
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
 	pl.SetValue("2", tree.NewDString(security.RootUser))
-	var err error
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
-		if err == nil {
-			res.Close(ctx)
-			break
-		}
-		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
-	}
-	return err
-}
-
-// upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
-// InterleavedFormatVersion is persisted to disk for all table descriptors. It
-// must otherwise be performed on-the-fly whenever a table descriptor is loaded.
-// In fact, before this migration, a cluster that was continuously upgraded from
-// before beta-20161013 would retain its old-format table descriptors until a
-// schema-mutating statement was executed against every old-format table.
-//
-// TODO(benesch): Remove this migration in v2.1.
-func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
-	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
-		return desc.MaybeFillInDescriptor(), nil
-	}
-	return upgradeDescsWithFn(ctx, r, tableDescFn, nil)
+	return runStmtAsRootWithRetry(ctx, r, upsertAdminStmt, &pl)
 }
 
 // ensureMaxPrivileges ensures that all descriptors have privileges
@@ -942,18 +716,4 @@ func upgradeDescsWithFn(
 		}
 	}
 	return nil
-}
-
-func addDefaultSystemJobsZoneConfig(ctx context.Context, r runner) error {
-	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
-
-	jobsZone, err := getZoneConfig(ctx, r, "TABLE system.jobs")
-	if err != nil {
-		return err
-	}
-	// Only update the TTL seconds if it is still at the default setting.
-	if jobsZone.GC.TTLSeconds == defaultTTLSeconds {
-		jobsZone.GC.TTLSeconds = 10 * 60 // 10m
-	}
-	return upsertZoneConfig(ctx, r, keys.JobsTableID, jobsZone)
 }

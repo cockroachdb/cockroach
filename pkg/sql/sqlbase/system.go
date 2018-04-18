@@ -48,7 +48,8 @@ CREATE TABLE system.descriptor (
 	UsersTableSchema = `
 CREATE TABLE system.users (
   username         STRING PRIMARY KEY,
-  "hashedPassword" BYTES
+  "hashedPassword" BYTES,
+  "isRole"         BOOL NOT NULL DEFAULT false
 );`
 
 	// Zone settings per DB/Table.
@@ -247,7 +248,7 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -276,7 +277,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -285,7 +286,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -304,6 +305,8 @@ var (
 		NextMutationID: 1,
 	}
 
+	falseBoolString = "false"
+
 	// UsersTable is the descriptor for the users table.
 	UsersTable = TableDescriptor{
 		Name:     "users",
@@ -313,16 +316,18 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: colTypeString},
 			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "isRole", ID: 3, Type: colTypeBool, DefaultExpr: &falseBoolString},
 		},
-		NextColumnID: 3,
+		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
 			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
 		PrimaryIndex:   pk("username"),
-		NextFamilyID:   3,
+		NextFamilyID:   4,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -352,7 +357,7 @@ var (
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -380,7 +385,7 @@ var (
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -418,7 +423,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -457,7 +462,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -498,7 +503,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -523,7 +528,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -565,7 +570,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -627,7 +632,7 @@ var (
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
@@ -678,7 +683,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -720,7 +725,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -787,24 +792,16 @@ var (
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
-
-//***************************************************************************
-// WARNING: any tables added after LocationsTable must use:
-//   Privileges: NewCustomSuperuserPrivilegeDescriptor(...)
-// instead of
-//   Privileges: NewCustomRootPrivilegeDescriptor(...)
-//***************************************************************************
 )
 
-// Create the key/value pair for the default zone config entry.
-func createDefaultZoneConfig() roachpb.KeyValue {
-	zoneConfig := config.DefaultZoneConfig()
+// Create a kv pair for the zone config for the given key and config value.
+func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
 	if err := value.SetProto(&zoneConfig); err != nil {
-		panic(fmt.Sprintf("could not marshal DefaultZoneConfig: %s", err))
+		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
-		Key:   config.MakeZoneKey(uint32(keys.RootNamespaceID)),
+		Key:   config.MakeZoneKey(uint32(keyID)),
 		Value: value,
 	}
 }
@@ -832,6 +829,11 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
 
+	// Tables introduced in 2.0, added here for 2.1.
+	target.AddDescriptor(keys.SystemDatabaseID, &TableStatisticsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &LocationsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &RoleMembersTable)
+
 	// Adding a new system table? Don't add it to the metadata schema yet!
 	//
 	// The first release to contain the system table must add the system table
@@ -840,7 +842,21 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// the metadata schema here. This ensures there's only ever one code path
 	// responsible for creating the table.
 
-	target.otherKV = append(target.otherKV, createDefaultZoneConfig())
+	// Default zone config entry.
+	zoneConf := config.DefaultZoneConfig()
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
+
+	// .meta zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+
+	// Jobs zone config entry with a shorter GC time.
+	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

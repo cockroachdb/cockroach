@@ -66,7 +66,6 @@ query IIT rowsort
 SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-4  1 system.public.users
 
 statement ok
 ALTER TABLE a ADD val INT
@@ -75,15 +74,13 @@ query IIT rowsort
 SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-4  1 system.public.users
-51 1 test.public.a
+51  1  test.public.a
 
 query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-4  1
-51 1
+51  1
 
 query II
 SELECT "targetID", "reportingID" FROM system.eventlog
@@ -114,16 +111,14 @@ query IIT rowsort
 SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-4  1 system.public.users
-51 1 test.public.a
-51 1 test.public.a
+51  1  test.public.a
+51  1  test.public.a
 
 query II rowsort
 SELECT "targetID", "reportingID"  FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-4  1
-51 1
+51  1
 
 query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
@@ -155,9 +150,8 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-4  1
-51 1
-51 1
+51  1
+51  1
 
 # Drop the index
 #################
@@ -176,10 +170,9 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-4  1
-51 1
-51 1
-51 1
+51  1
+51  1
+51  1
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################
