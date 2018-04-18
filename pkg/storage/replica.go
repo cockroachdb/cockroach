@@ -3388,6 +3388,7 @@ func (r *Replica) quiesceLocked() bool {
 			log.Infof(ctx, "quiescing")
 		}
 		r.mu.quiescent = true
+		r.store.unquiescedReplicas.Delete(int64(r.RangeID))
 	} else if log.V(4) {
 		log.Infof(ctx, "already quiesced")
 	}
@@ -3401,6 +3402,7 @@ func (r *Replica) unquiesceLocked() {
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
+		r.store.unquiescedReplicas.Store(int64(r.RangeID), unsafe.Pointer(r))
 		r.maybeCampaignOnWakeLocked(ctx)
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
@@ -4972,6 +4974,7 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
+			r.store.unquiescedReplicas.Delete(int64(rightRng.RangeID))
 			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
 			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
 			r.store.replicaQueues.Delete(int64(rightRng.RangeID))

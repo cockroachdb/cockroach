@@ -508,6 +508,9 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
+	// The uniquesed subset of mu.replicas.
+	unquiescedReplicas syncutil.IntMap
+
 	// replicaQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
@@ -2092,6 +2095,7 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
+		s.unquiescedReplicas.Delete(int64(newDesc.RangeID))
 		s.mu.replicas.Delete(int64(newDesc.RangeID))
 		s.replicaQueues.Delete(int64(newDesc.RangeID))
 	}
@@ -2301,6 +2305,7 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
+	s.unquiescedReplicas.Store(int64(repl.RangeID), unsafe.Pointer(repl))
 	return nil
 }
 
@@ -2398,6 +2403,7 @@ func (s *Store) removeReplicaImpl(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.unquiescedReplicas.Delete(int64(rep.RangeID))
 	s.mu.replicas.Delete(int64(rep.RangeID))
 	delete(s.mu.uninitReplicas, rep.RangeID)
 	s.replicaQueues.Delete(int64(rep.RangeID))
@@ -3539,23 +3545,14 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
 
-			s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-				// Fast-path handling of quiesced replicas. This avoids the overhead of
-				// queueing the replica on the Raft scheduler. This overhead is
-				// significant and there is overhead to filling the Raft scheduler with
-				// replicas to tick. A node with 3TB of disk might contain 50k+
-				// replicas. Filling the Raft scheduler with all of those replicas
-				// every tick interval can starve other Raft processing of cycles.
-				//
+			s.unquiescedReplicas.Range(func(k int64, _ unsafe.Pointer) bool {
 				// Why do we bother to ever queue a Replica on the Raft scheduler for
 				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
 				// then a single bad/slow Replica can disrupt tick processing for every
 				// Replica on the store which cascades into Raft elections and more
 				// disruption. Replica.maybeTickQuiesced only grabs short-duration
 				// locks and not locks that are held during disk I/O.
-				if !(*Replica)(v).needsTick() {
-					rangeIDs = append(rangeIDs, roachpb.RangeID(k))
-				}
+				rangeIDs = append(rangeIDs, roachpb.RangeID(k))
 				return true
 			})
 
@@ -3799,6 +3796,7 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
+		s.unquiescedReplicas.Delete(int64(rangeID))
 		s.mu.replicas.Delete(int64(rangeID))
 		delete(s.mu.uninitReplicas, rangeID)
 		s.replicaQueues.Delete(int64(rangeID))
