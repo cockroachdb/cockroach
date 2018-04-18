@@ -91,3 +91,14 @@ ALTER INDEX users@ufo RENAME TO foo
 
 statement ok
 ALTER INDEX users@rar RENAME TO bar
+
+# Regression test for #24774
+statement ok
+ALTER INDEX users@"primary" RENAME TO pk
+
+query ITTT
+EXPLAIN SELECT * FROM users@pk
+----
+0  scan  ·      ·
+0  ·     table  users@pk
+0  ·     spans  ALL
