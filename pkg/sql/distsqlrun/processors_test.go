@@ -411,6 +411,7 @@ func TestProcessorBaseContext(t *testing.T) {
 			t.Fatal(err)
 		}
 		noop.Start(ctx)
+		origCtx := noop.ctx
 
 		// The context should be valid after Start but before Next is called in case
 		// ConsumerDone or ConsumerClosed are called without calling Next.
@@ -420,7 +421,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		f(noop)
 		// The context should be reset after ConsumerClosed is called so that any
 		// subsequent logging calls will not operate on closed spans.
-		if noop.ctx != ctx {
+		if noop.ctx != origCtx {
 			t.Fatalf("processorBase.ctx not reset on close")
 		}
 	}
