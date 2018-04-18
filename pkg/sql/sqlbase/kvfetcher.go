@@ -300,7 +300,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if err != nil {
 		return err.GoError()
 	}
-	f.responses = br.Responses
+	if br != nil {
+		f.responses = br.Responses
+	} else {
+		f.responses = nil
+	}
 
 	// Set end to true until disproved.
 	f.fetchEnd = true

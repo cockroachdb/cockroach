@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -271,13 +272,25 @@ func createDummyStream() (
 	return serverStream, clientStream, cleanup, nil
 }
 
-// mintIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
+// makeIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
 func makeIntRows(numRows, numCols int) sqlbase.EncDatumRows {
 	rows := make(sqlbase.EncDatumRows, numRows)
 	for i := range rows {
 		rows[i] = make(sqlbase.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
-			rows[i][j] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i+j)))
+			rows[i][j] = intEncDatum(i + j)
+		}
+	}
+	return rows
+}
+
+// makeRandIntRows constructs a numRows x numCols table where the values are random.
+func makeRandIntRows(rng *rand.Rand, numRows int, numCols int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = intEncDatum(rng.Int())
 		}
 	}
 	return rows
