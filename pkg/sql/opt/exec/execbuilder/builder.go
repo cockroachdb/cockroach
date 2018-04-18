@@ -49,14 +49,12 @@ func (b *Builder) build(ev memo.ExprView) (exec.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO(radu): plan.outputCols will be used to apply a final projection.
-	// TODO(radu): check physical props for final presentation.
 	return plan.root, err
 }
 
 // BuildScalar converts a scalar expression to a TypedExpr. Variables are mapped
 // according to the IndexedVarHelper.
-func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) tree.TypedExpr {
+func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	ctx := buildScalarCtx{ivh: *ivh}
 	for i := 0; i < ivh.NumVars(); i++ {
 		ctx.ivarMap.Set(i+1, i)

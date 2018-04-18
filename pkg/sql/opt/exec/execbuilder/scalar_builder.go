@@ -30,7 +30,7 @@ type buildScalarCtx struct {
 	ivarMap opt.ColMap
 }
 
-type buildFunc func(b *Builder, ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr
+type buildFunc func(b *Builder, ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error)
 
 var scalarBuildFuncMap [opt.NumOperators]buildFunc
 
@@ -71,103 +71,131 @@ func init() {
 
 // buildScalar converts a scalar expression to a TypedExpr. Variables are mapped
 // according to ctx.
-func (b *Builder) buildScalar(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	if fn := scalarBuildFuncMap[ev.Operator()]; fn != nil {
 		return fn(b, ctx, ev)
 	}
 	panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
 }
 
-func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return ev.Private().(tree.TypedExpr)
+func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	return ev.Private().(tree.TypedExpr), nil
 }
 
-func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return tree.DNull
+func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	return tree.DNull, nil
 }
 
-func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	colID := ev.Private().(opt.ColumnID)
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
 		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colID))
 	}
-	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colID))
+	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colID)), nil
 }
 
-func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	if memo.MatchesTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := range datums {
 			datums[i] = memo.ExtractConstDatum(ev.Child(i))
 		}
-		return tree.NewDTuple(datums...)
+		return tree.NewDTuple(datums...), nil
 	}
 
 	typedExprs := make([]tree.TypedExpr, ev.ChildCount())
+	var err error
 	for i := 0; i < ev.ChildCount(); i++ {
-		typedExprs[i] = b.buildScalar(ctx, ev.Child(i))
+		typedExprs[i], err = b.buildScalar(ctx, ev.Child(i))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return tree.NewTypedTuple(typedExprs)
+	return tree.NewTypedTuple(typedExprs), nil
 }
 
-func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	switch ev.Operator() {
 	case opt.AndOp, opt.OrOp, opt.FiltersOp:
-		expr := b.buildScalar(ctx, ev.Child(0))
+		expr, err := b.buildScalar(ctx, ev.Child(0))
+		if err != nil {
+			return nil, err
+		}
 		for i, n := 1, ev.ChildCount(); i < n; i++ {
-			right := b.buildScalar(ctx, ev.Child(i))
+			right, err := b.buildScalar(ctx, ev.Child(i))
+			if err != nil {
+				return nil, err
+			}
 			if ev.Operator() == opt.OrOp {
 				expr = tree.NewTypedOrExpr(expr, right)
 			} else {
 				expr = tree.NewTypedAndExpr(expr, right)
 			}
 		}
-		return expr
+		return expr, nil
 
 	case opt.NotOp:
-		return tree.NewTypedNotExpr(b.buildScalar(ctx, ev.Child(0)))
+		expr, err := b.buildScalar(ctx, ev.Child(0))
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewTypedNotExpr(expr), nil
 
 	case opt.TrueOp:
-		return tree.DBoolTrue
+		return tree.DBoolTrue, nil
 
 	case opt.FalseOp:
-		return tree.DBoolFalse
+		return tree.DBoolFalse, nil
 
 	default:
 		panic(fmt.Sprintf("invalid op %s", ev.Operator()))
 	}
 }
 
-func (b *Builder) buildComparison(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return tree.NewTypedComparisonExpr(
-		opt.ComparisonOpReverseMap[ev.Operator()],
-		b.buildScalar(ctx, ev.Child(0)),
-		b.buildScalar(ctx, ev.Child(1)),
-	)
+func (b *Builder) buildComparison(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	left, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+	right, err := b.buildScalar(ctx, ev.Child(1))
+	if err != nil {
+		return nil, err
+	}
+	operator := opt.ComparisonOpReverseMap[ev.Operator()]
+	return tree.NewTypedComparisonExpr(operator, left, right), nil
 }
 
-func (b *Builder) buildUnary(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return tree.NewTypedUnaryExpr(
-		opt.UnaryOpReverseMap[ev.Operator()],
-		b.buildScalar(ctx, ev.Child(0)),
-		ev.Logical().Scalar.Type,
-	)
+func (b *Builder) buildUnary(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+	operator := opt.UnaryOpReverseMap[ev.Operator()]
+	return tree.NewTypedUnaryExpr(operator, input, ev.Logical().Scalar.Type), nil
 }
 
-func (b *Builder) buildBinary(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return tree.NewTypedBinaryExpr(
-		opt.BinaryOpReverseMap[ev.Operator()],
-		b.buildScalar(ctx, ev.Child(0)),
-		b.buildScalar(ctx, ev.Child(1)),
-		ev.Logical().Scalar.Type,
-	)
+func (b *Builder) buildBinary(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	left, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+	right, err := b.buildScalar(ctx, ev.Child(1))
+	if err != nil {
+		return nil, err
+	}
+	operator := opt.BinaryOpReverseMap[ev.Operator()]
+	return tree.NewTypedBinaryExpr(operator, left, right, ev.Logical().Scalar.Type), nil
 }
 
-func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
+	var err error
 	for i := range exprs {
-		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+		exprs[i], err = b.buildScalar(ctx, ev.Child(i))
+		if err != nil {
+			return nil, err
+		}
 	}
 	funcDef := ev.Private().(*memo.FuncOpDef)
 	funcRef := tree.WrapFunction(funcDef.Name)
@@ -179,11 +207,14 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) tree.Type
 		nil, /* windowDef */
 		ev.Logical().Scalar.Type,
 		funcDef.Overload,
-	)
+	), nil
 }
 
-func (b *Builder) buildCase(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	input := b.buildScalar(ctx, ev.Child(0))
+func (b *Builder) buildCase(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
 
 	// A searched CASE statement is represented by the optimizer with input=True.
 	// The executor expects searched CASE statements to have nil inputs.
@@ -195,51 +226,63 @@ func (b *Builder) buildCase(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExp
 	whens := make([]*tree.When, ev.ChildCount()-2)
 	for i := 1; i < ev.ChildCount()-1; i++ {
 		whenEv := ev.Child(i)
-		cond := b.buildScalar(ctx, whenEv.Child(0))
-		val := b.buildScalar(ctx, whenEv.Child(1))
+		cond, err := b.buildScalar(ctx, whenEv.Child(0))
+		if err != nil {
+			return nil, err
+		}
+		val, err := b.buildScalar(ctx, whenEv.Child(1))
+		if err != nil {
+			return nil, err
+		}
 		whens[i-1] = &tree.When{Cond: cond, Val: val}
 	}
 
 	// The last child in ev is the ELSE expression.
-	elseExpr := b.buildScalar(ctx, ev.Child(ev.ChildCount()-1))
+	elseExpr, err := b.buildScalar(ctx, ev.Child(ev.ChildCount()-1))
+	if err != nil {
+		return nil, err
+	}
 	if elseExpr == tree.DNull {
 		elseExpr = nil
 	}
 
-	expr, err := tree.NewTypedCaseExpr(input, whens, elseExpr, ev.Logical().Scalar.Type)
+	return tree.NewTypedCaseExpr(input, whens, elseExpr, ev.Logical().Scalar.Type)
+}
+
+func (b *Builder) buildCast(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input, err := b.buildScalar(ctx, ev.Child(0))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return expr
+	return tree.NewTypedCastExpr(input, ev.Logical().Scalar.Type)
 }
 
-func (b *Builder) buildCast(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	expr, err := tree.NewTypedCastExpr(
-		b.buildScalar(ctx, ev.Child(0)),
-		ev.Logical().Scalar.Type,
-	)
-	if err != nil {
-		panic(err)
-	}
-	return expr
-}
-
-func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
+	var err error
 	for i := range exprs {
-		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+		exprs[i], err = b.buildScalar(ctx, ev.Child(i))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return tree.NewTypedCoalesceExpr(exprs, ev.Logical().Scalar.Type)
+	return tree.NewTypedCoalesceExpr(exprs, ev.Logical().Scalar.Type), nil
 }
 
-func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
+func (b *Builder) buildArray(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
+	var err error
 	for i := range exprs {
-		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+		exprs[i], err = b.buildScalar(ctx, ev.Child(i))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return tree.NewTypedArray(exprs, ev.Logical().Scalar.Type)
+	return tree.NewTypedArray(exprs, ev.Logical().Scalar.Type), nil
 }
 
-func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
-	return ev.Private().(tree.TypedExpr)
+func (b *Builder) buildUnsupportedExpr(
+	ctx *buildScalarCtx, ev memo.ExprView,
+) (tree.TypedExpr, error) {
+	return ev.Private().(tree.TypedExpr), nil
 }
