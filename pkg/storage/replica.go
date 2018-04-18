@@ -554,28 +554,7 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		// When waking up a range, campaign unless we know that another
-		// node holds a valid lease (this is most important after a split,
-		// when all replicas create their raft groups at about the same
-		// time, with a lease pre-assigned to one of them). Note that
-		// thanks to PreVote, unnecessary campaigns are not disruptive so
-		// we should err on the side of campaigining here.
-		anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
-			LeaseState_VALID &&
-			!r.mu.state.Lease.OwnedBy(r.store.StoreID())
-		// Raft panics if a node that is not currently a member of the
-		// group tries to campaign. That happens primarily when we apply
-		// preemptive snapshots.
-		_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
-		if currentMember && !anotherOwnsLease {
-			log.VEventf(ctx, 3, "campaigning")
-			if err := raftGroup.Campaign(); err != nil {
-				return err
-			}
-			if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
-				fn(r)
-			}
-		}
+		r.maybeCampaignOnWakeLocked(ctx)
 	}
 
 	unquiesce, err := f(r.mu.internalRaftGroup)
@@ -596,6 +575,38 @@ func (r *Replica) withRaftGroup(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.withRaftGroupLocked(f)
+}
+
+// maybeCampaignOnWakeLocked is called when the range wakes from a
+// dormant state (either the initial "raftGroup == nil" state or after
+// being quiescent) and campaigns for raft leadership if appropriate.
+func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
+	// When waking up a range, campaign unless we know that another
+	// node holds a valid lease (this is most important after a split,
+	// when all replicas create their raft groups at about the same
+	// time, with a lease pre-assigned to one of them). Note that
+	// thanks to PreVote, unnecessary campaigns are not disruptive so
+	// we should err on the side of campaigining here.
+	anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
+		LeaseState_VALID &&
+		!r.mu.state.Lease.OwnedBy(r.store.StoreID())
+	// Raft panics if a node that is not currently a member of the
+	// group tries to campaign. That happens primarily when we apply
+	// preemptive snapshots.
+	_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
+	// If we're already campaigning or know who the leader is, don't
+	// start a new term.
+	status := r.mu.internalRaftGroup.Status()
+	noLeader := status.RaftState == raft.StateFollower && status.Lead == 0
+	if currentMember && !anotherOwnsLease && noLeader {
+		log.VEventf(ctx, 3, "campaigning")
+		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
+			log.VEventf(ctx, 1, "failed to campaign: %s", err)
+		}
+		if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
+			fn(r)
+		}
+	}
 }
 
 var _ client.Sender = &Replica{}
@@ -3381,22 +3392,24 @@ func (r *Replica) quiesceLocked() bool {
 
 func (r *Replica) unquiesceLocked() {
 	if r.mu.quiescent {
+		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			ctx := r.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
+		r.maybeCampaignOnWakeLocked(ctx)
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
 }
 
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	if r.mu.quiescent {
+		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			ctx := r.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "unquiescing: waking leader")
 		}
 		r.mu.quiescent = false
+		r.maybeCampaignOnWakeLocked(ctx)
 		// Propose an empty command which will wake the leader.
 		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommandV1(makeIDKey(), nil))
 	}
