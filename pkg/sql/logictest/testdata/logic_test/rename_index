@@ -95,3 +95,10 @@ ALTER INDEX users@rar RENAME TO bar
 # Regression test for #24774
 statement ok
 ALTER INDEX users@"primary" RENAME TO pk
+
+query TTT
+EXPLAIN SELECT * FROM users@pk
+----
+scan  ·      ·
+·     table  users@pk
+·     spans  ALL
