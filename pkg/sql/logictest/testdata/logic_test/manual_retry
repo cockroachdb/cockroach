@@ -1,11 +1,15 @@
 # LogicTest: default parallel-stmts distsql distsql-metadata
 
-# On an implicit transaction, we retry implicitly and the function
+subtest automatic_retry
+
+# On an implicit transaction, we retry automatically and the function
 # eventually returns a result.
 query I
 SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
 ----
 0
+
+subtest automatic_retry
 
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart
@@ -34,3 +38,42 @@ SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
 
 statement ok
 COMMIT
+
+subtest schema_chage_with_rollback
+
+# Test that creating a table repeatedly across restarts doesn't leave dangling
+# rows behind (the rows are  associated with the correct descriptor).
+# See #24785.
+
+statement ok
+BEGIN
+
+statement ok
+SAVEPOINT cockroach_restart
+
+statement ok
+CREATE TABLE t (
+id INT PRIMARY KEY
+)
+
+statement ok
+ROLLBACK TO SAVEPOINT cockroach_restart
+
+# The following CREATE shouldn't be necessary. This test would like to just run
+# the next insert (or a select) and check that it fails to resolve the table
+# name. However, that doesn't currently work because of #24885.
+statement ok
+CREATE TABLE t (
+id INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO t (id) VALUES (1);
+
+statement ok
+COMMIT
+
+query I
+SELECT id FROM t
+----
+1
