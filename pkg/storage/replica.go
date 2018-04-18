@@ -3384,6 +3384,10 @@ func (r *Replica) quiesceLocked() bool {
 			log.Infof(ctx, "quiescing")
 		}
 		r.mu.quiescent = true
+
+		r.store.unquiescedReplicas.Lock()
+		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
 		log.Infof(ctx, "already quiesced")
 	}
@@ -3397,6 +3401,9 @@ func (r *Replica) unquiesceLocked() {
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
+		r.store.unquiescedReplicas.Lock()
+		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+		r.store.unquiescedReplicas.Unlock()
 		r.maybeCampaignOnWakeLocked(ctx)
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
@@ -3902,17 +3909,6 @@ func (r *Replica) tick() (bool, error) {
 		)
 	}
 	return true, nil
-}
-
-// needsTick returns true if tick() should be called on this replica.
-func (r *Replica) needsTick() bool {
-	var need bool
-	r.mu.Lock()
-	if r.mu.internalRaftGroup == nil || r.mu.quiescent {
-		need = true
-	}
-	r.mu.Unlock()
-	return need
 }
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
@@ -4969,6 +4965,9 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
+			r.store.unquiescedReplicas.Lock()
+			delete(r.store.unquiescedReplicas.m, rightRng.RangeID)
+			r.store.unquiescedReplicas.Unlock()
 			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
 			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
 			r.store.replicaQueues.Delete(int64(rightRng.RangeID))
