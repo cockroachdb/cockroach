@@ -181,9 +181,9 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G12 G13)
  │         └── cost: 1100.00
- ├── G10: (scan b)
+ ├── G10: (scan b,cols=(3))
  │    └── ""
- │         ├── best: (scan b)
+ │         ├── best: (scan b,cols=(3))
  │         └── cost: 1000.00
  ├── G11: (filters G14)
  ├── G12: (scan a)
