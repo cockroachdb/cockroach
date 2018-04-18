@@ -101,7 +101,7 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
 var enableTickQuiesced = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_TICK_QUIESCED", true)
+	"COCKROACH_ENABLE_TICK_QUIESCED", false)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
