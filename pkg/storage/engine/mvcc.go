@@ -2531,17 +2531,61 @@ func MVCCFindSplitKey(
 	it := engine.NewIterator(IterOptions{})
 	defer it.Close()
 
-	minSplitKey := key
-	// If this is a table, we can only split at row boundaries.
-	if remainder, _, err := keys.DecodeTablePrefix(roachpb.Key(key)); err == nil {
-		// If this is the first range containing a table, its start key won't
-		// actually contain any row information, just the table ID. We don't want
-		// to restrict splits on such tables, since key.PrefixEnd will just be the
-		// end of the table span.
-		if len(remainder) > 0 {
-			minSplitKey = roachpb.RKey(roachpb.Key(key).PrefixEnd())
-		}
+	// We must never return a split key that falls within a table row. (Rows in
+	// tables with multiple column families are comprised of multiple keys, one
+	// key per column family.)
+	//
+	// Managing this is complicated: the logic for picking a split key that
+	// creates ranges of the right size lives in C++, while the logic for
+	// determining whether a key falls within a table row lives in Go.
+	//
+	// Most of the time, we can let C++ pick whatever key it wants. If it picks a
+	// key in the middle of a row, we simply rewind the key to the start of the
+	// row. This is handled by keys.EnsureSafeSplitKey.
+	//
+	// If, however, that first row in the range is so large that it exceeds the
+	// range size threshold on its own, and that row is comprised of multiple
+	// column families, we have a problem. C++ will hand us a key in the middle of
+	// that row, keys.EnsureSafeSplitKey will rewind the key to the beginning of
+	// the row, and... we'll end up with what's likely to be the start key of the
+	// range. The higher layers of the stack will take this to mean that no splits
+	// are required, when in fact the range is desperately in need of a split.
+	//
+	// Note that the first range of a table or a partition of a table does not
+	// start on a row boundary and so we have a slightly different problem.
+	// Instead of not splitting the range at all, we'll create a split at the
+	// start of the first row, resulting in an unnecessary empty range from the
+	// beginning of the table to the first row in the table (e.g., from /Table/51
+	// to /Table/51/1/aardvark...). The right-hand side of the split will then be
+	// susceptible to never being split as outlined above.
+	//
+	// To solve both of these problems, we find the end of the first row in Go,
+	// then plumb that to C++ as a "minimum split key." We're then guaranteed that
+	// the key C++ returns will rewind to the start key of the range.
+	//
+	// On a related note, we find the first row by actually looking at the first
+	// key in the the range. A previous version of this code attempted to derive
+	// the first row only by looking at `key`, the start key of the range; this
+	// was dangerous because partitioning can split off ranges that do not start
+	// at valid row keys. The keys that are present in the range, by contrast, are
+	// necessarily valid row keys.
+	it.Seek(MakeMVCCMetadataKey(key.AsRawKey()))
+	if ok, err := it.Valid(); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, nil
 	}
+	minSplitKey := key
+	if _, _, err := keys.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
+		// The first key in this range represents a row in a SQL table. Advance the
+		// minSplitKey past this row to avoid the problems described above.
+		firstRowKey, err := keys.EnsureSafeSplitKey(it.Key().Key)
+		if err != nil {
+			return nil, err
+		}
+		minSplitKey = roachpb.RKey(firstRowKey.PrefixEnd())
+	}
+
 	splitKey, err := it.FindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
@@ -2551,7 +2595,8 @@ func MVCCFindSplitKey(
 	if err != nil {
 		return nil, err
 	}
-	// The family ID has been removed from this key, making it a valid split point.
+	// Ensure the key is a valid split point that does not fall in the middle of a
+	// SQL row by removing the column family ID, if any, from the end of the key.
 	return keys.EnsureSafeSplitKey(splitKey.Key)
 }
 

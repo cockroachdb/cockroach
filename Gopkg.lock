@@ -8,11 +8,11 @@
     "iam",
     "internal",
     "internal/optional",
+    "internal/trace",
     "internal/version",
     "storage",
   ]
-  revision = "eaddaf6dd7ee35fd3c2420c8d27478db176b0485"
-  version = "v0.15.0"
+  revision = "094187a3a68a589c8217a46b90af0efae38542b9"
 
 [[projects]]
   name = "github.com/Azure/azure-sdk-for-go"
@@ -1020,6 +1020,25 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
+  name = "go.opencensus.io"
+  packages = [
+    "exporter/stackdriver/propagation",
+    "internal",
+    "internal/tagencoding",
+    "plugin/ochttp",
+    "plugin/ochttp/propagation/b3",
+    "stats",
+    "stats/internal",
+    "stats/view",
+    "tag",
+    "trace",
+    "trace/internal",
+    "trace/propagation",
+  ]
+  revision = "0095aec66ae14801c6711210f6f0716411cefdd3"
+  version = "v0.8.0"
+
+[[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
   packages = [
@@ -1057,7 +1076,7 @@
     "jws",
     "jwt",
   ]
-  revision = "bb50c06baba3d0c76f9d125c0719093e315b5b44"
+  revision = "6881fee410a5daf86371371f9ad451b95e168b71"
 
 [[projects]]
   branch = "master"
@@ -1148,7 +1167,7 @@
     "storage/v1",
     "transport/http",
   ]
-  revision = "9ae0bf1fac9d6b6b388ab8811c3c85537b8adc10"
+  revision = "9c79deebf7496e355d7e95d82d4af1fe4e769b2f"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -1173,6 +1192,7 @@
   packages = [
     "googleapis/api/annotations",
     "googleapis/iam/v1",
+    "googleapis/rpc/code",
     "googleapis/rpc/status",
   ]
   revision = "f676e0f3ac6395ff1a529ae59a6670878a8371a6"
@@ -1235,6 +1255,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b82fbf831a364809ceeacd0967911bd9bd5e4a738d252d886b8fe658444c9c44"
+  inputs-digest = "220d8cdbc95b1ec79fcaf9552bc450418c8766fa108989fa02e6a15271bd9591"
   solver-name = "gps-cdcl"
   solver-version = 1
