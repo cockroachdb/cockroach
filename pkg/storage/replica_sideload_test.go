@@ -133,7 +133,7 @@ func testSideloadingSideloadedStorage(
 		return []byte("content-" + strconv.Itoa(int(i)))
 	}
 
-	if err := ss.PutIfNotExists(ctx, 1, highTerm, file(1)); err != nil {
+	if err := ss.Put(ctx, 1, highTerm, file(1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,15 +145,15 @@ func testSideloadingSideloadedStorage(
 		t.Fatalf("got %q, wanted %q", c, exp)
 	}
 
-	// Should be a no-op because the slot is occupied.
-	if err := ss.PutIfNotExists(ctx, 1, highTerm, file(12345)); err != nil {
+	// Overwrites the occupied slot.
+	if err := ss.Put(ctx, 1, highTerm, file(12345)); err != nil {
 		t.Fatal(err)
 	}
 
-	// ... consequently the old entry is still there.
+	// ... consequently the old entry is gone.
 	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
 		t.Fatal(err)
-	} else if exp := file(1); !bytes.Equal(c, exp) {
+	} else if exp := file(12345); !bytes.Equal(c, exp) {
 		t.Fatalf("got %q, wanted %q", c, exp)
 	}
 
@@ -203,12 +203,12 @@ func testSideloadingSideloadedStorage(
 		assertCreated(false)
 	}
 
-	// Write some payloads at various indexes. Note that this tests PutIfNotExists
+	// Write some payloads at various indexes. Note that this tests Put
 	// on a recently Clear()ed storage. Randomize order for fun.
 	payloads := []uint64{3, 5, 7, 9, 10}
 	for n := range rand.Perm(len(payloads)) {
 		i := payloads[n]
-		if err := ss.PutIfNotExists(ctx, i, highTerm, file(i*highTerm)); err != nil {
+		if err := ss.Put(ctx, i, highTerm, file(i*highTerm)); err != nil {
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
@@ -218,7 +218,7 @@ func testSideloadingSideloadedStorage(
 	// Write some more payloads, overlapping, at the past term.
 	pastPayloads := append([]uint64{81}, payloads...)
 	for _, i := range pastPayloads {
-		if err := ss.PutIfNotExists(ctx, i, lowTerm, file(i*lowTerm)); err != nil {
+		if err := ss.Put(ctx, i, lowTerm, file(i*lowTerm)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -317,7 +317,7 @@ func testSideloadingSideloadedStorage(
 		payloads := []uint64{3, 5, 7, 9, 10}
 		for n := range rand.Perm(len(payloads)) {
 			i := payloads[n]
-			if err := ss.PutIfNotExists(ctx, i, highTerm, file(i*highTerm)); err != nil {
+			if err := ss.Put(ctx, i, highTerm, file(i*highTerm)); err != nil {
 				t.Fatalf("%d: %s", i, err)
 			}
 		}
@@ -378,7 +378,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 
 	putOnDisk := func(ec *raftEntryCache, ss sideloadStorage) {
-		if err := ss.PutIfNotExists(context.Background(), 5, 6, sstFat.Data); err != nil {
+		if err := ss.Put(context.Background(), 5, 6, sstFat.Data); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -981,7 +981,7 @@ func TestRaftSSTableSideloadingUpdatedReplicaID(t *testing.T) {
 
 	repl.raftMu.Lock()
 	oldDir := repl.raftMu.sideloaded.Dir()
-	err := repl.raftMu.sideloaded.PutIfNotExists(ctx, index, term, val)
+	err := repl.raftMu.sideloaded.Put(ctx, index, term, val)
 	repl.raftMu.Unlock()
 	if err != nil {
 		t.Fatal(err)

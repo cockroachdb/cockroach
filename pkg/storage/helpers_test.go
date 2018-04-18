@@ -382,7 +382,7 @@ const (
 func (r *Replica) PutBogusSideloadedData() {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	if err := r.raftMu.sideloaded.PutIfNotExists(context.Background(), sideloadBogusIndex, sideloadBogusTerm, []byte("bogus")); err != nil {
+	if err := r.raftMu.sideloaded.Put(context.Background(), sideloadBogusIndex, sideloadBogusTerm, []byte("bogus")); err != nil {
 		panic(err)
 	}
 }

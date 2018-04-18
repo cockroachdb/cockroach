@@ -61,13 +61,8 @@ func (ss *inMemSideloadStorage) Dir() string {
 	panic("unsupported")
 }
 
-func (ss *inMemSideloadStorage) PutIfNotExists(
-	_ context.Context, index, term uint64, contents []byte,
-) error {
+func (ss *inMemSideloadStorage) Put(_ context.Context, index, term uint64, contents []byte) error {
 	key := ss.key(index, term)
-	if _, ok := ss.m[key]; ok {
-		return nil
-	}
 	ss.m[key] = contents
 	return nil
 }
