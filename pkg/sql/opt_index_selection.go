@@ -250,7 +250,10 @@ func (p *planner) selectIndex(
 			s.filter = nil
 		} else {
 			execBld := execbuilder.New(nil /* execFactory */, remEv)
-			s.filter = execBld.BuildScalar(&s.filterVars)
+			s.filter, err = execBld.BuildScalar(&s.filterVars)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	s.filterVars.Rebind(s.filter, true, false)

@@ -155,8 +155,12 @@ func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 		// Chop off prefix of rowBuf and limit its capacity.
 		rows[i] = rowBuf[:numCols:numCols]
 		rowBuf = rowBuf[numCols:]
+		var err error
 		for j := 0; j < numCols; j++ {
-			rows[i][j] = b.buildScalar(&scalarCtx, row.Child(j))
+			rows[i][j], err = b.buildScalar(&scalarCtx, row.Child(j))
+			if err != nil {
+				return execPlan{}, err
+			}
 		}
 	}
 
@@ -214,7 +218,10 @@ func (b *Builder) buildSelect(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	ctx := input.makeBuildScalarCtx()
-	filter := b.buildScalar(&ctx, ev.Child(1))
+	filter, err := b.buildScalar(&ctx, ev.Child(1))
+	if err != nil {
+		return execPlan{}, err
+	}
 	node, err := b.factory.ConstructFilter(input.root, filter)
 	if err != nil {
 		return execPlan{}, err
@@ -237,7 +244,10 @@ func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	colNames := make([]string, len(exprs))
 	ctx := input.makeBuildScalarCtx()
 	for i, col := range colList {
-		exprs[i] = b.buildScalar(&ctx, projections.Child(i))
+		exprs[i], err = b.buildScalar(&ctx, projections.Child(i))
+		if err != nil {
+			return execPlan{}, err
+		}
 		colNames[i] = ev.Metadata().ColumnLabel(col)
 	}
 	node, err := b.factory.ConstructRender(input.root, exprs, colNames)
@@ -274,8 +284,10 @@ func (b *Builder) buildJoin(ev memo.ExprView, joinType sqlbase.JoinType) (execPl
 	}
 
 	ctx := ep.makeBuildScalarCtx()
-	onExpr := b.buildScalar(&ctx, ev.Child(2))
-
+	onExpr, err := b.buildScalar(&ctx, ev.Child(2))
+	if err != nil {
+		return execPlan{}, err
+	}
 	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
 	if err != nil {
 		return execPlan{}, err
