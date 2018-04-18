@@ -266,12 +266,16 @@ func (h *ProcOutputHelper) EmitRow(
 		panic("output RowReceiver not initialized for emitting rows")
 	}
 
-	outRow, status, err := h.ProcessRow(ctx, row)
-	// If outRow is nil, either a drain was requested or the row was filtered
-	// out.
-	// If an error occurred, we need to return that here.
-	if outRow == nil || err != nil {
-		return status, err
+	outRow, ok, err := h.ProcessRow(ctx, row)
+	if err != nil {
+		// The status doesn't matter.
+		return NeedMoreRows, err
+	}
+	if outRow == nil {
+		if ok {
+			return NeedMoreRows, nil
+		}
+		return DrainRequested, nil
 	}
 
 	if log.V(3) {
@@ -286,41 +290,46 @@ func (h *ProcOutputHelper) EmitRow(
 		log.VEventf(ctx, 1, "hit row limit; asking producer to drain")
 		return DrainRequested, nil
 	}
-	return NeedMoreRows, nil
+	status := NeedMoreRows
+	if !ok {
+		status = DrainRequested
+	}
+	return status, nil
 }
 
 // ProcessRow sends the invoked row through the post-processing stage and returns
 // the post-processed row.
 //
-// It returns the ConsumerStatus which is interpreted as if there was a consumer
-// consuming the row.
-//
-// ProcessRow is intended for post-processing a row without requiring an actual
-// output RowReceiver.
+// The moreRowsOK retval is true if more rows can be processed, false if the
+// limit has been reached (if there's a limit). Upon seeing a false value, the
+// caller is expected to start draining. Note that both a row and
+// moreRowsOK=false can be returned at the same time: the row that satisfies the
+// limit is returned at the same time as a DrainRequested status. In that case,
+// the caller is supposed to both deal with the row and start draining.
 func (h *ProcOutputHelper) ProcessRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
-) (sqlbase.EncDatumRow, ConsumerStatus, error) {
+) (_ sqlbase.EncDatumRow, moreRowsOK bool, _ error) {
 	if h.rowIdx >= h.maxRowIdx {
-		return nil, DrainRequested, nil
+		return nil, false, nil
 	}
 
 	if h.filter != nil {
 		// Filtering.
 		passes, err := h.filter.evalFilter(row)
 		if err != nil {
-			return nil, ConsumerClosed, err
+			return nil, false, err
 		}
 		if !passes {
 			if log.V(3) {
 				log.Infof(ctx, "filtered out row %s", row.String(h.filter.types))
 			}
-			return nil, NeedMoreRows, nil
+			return nil, true, nil
 		}
 	}
 	h.rowIdx++
 	if h.rowIdx <= h.offset {
 		// Suppress row.
-		return nil, NeedMoreRows, nil
+		return nil, true, nil
 	}
 
 	var outRow sqlbase.EncDatumRow
@@ -330,7 +339,7 @@ func (h *ProcOutputHelper) ProcessRow(
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
 			if err != nil {
-				return nil, ConsumerClosed, err
+				return nil, false, err
 			}
 			outRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
 		}
@@ -346,16 +355,8 @@ func (h *ProcOutputHelper) ProcessRow(
 		copy(outRow, row)
 	}
 
-	return outRow, NeedMoreRows, nil
-}
-
-// LimitSatisfied returns true if sufficient rows have been processed (and have
-// passed the filter).
-//
-// TODO(andrei): This method should go away once we make ProcessRow able to
-// return a row and a status at the same time.
-func (h *ProcOutputHelper) LimitSatisfied() bool {
-	return h.rowIdx >= h.maxRowIdx
+	// If this row satisfies the limit, the caller is told to drain.
+	return outRow, h.rowIdx < h.maxRowIdx, nil
 }
 
 // Close signals to the output that there will be no more rows.
@@ -694,24 +695,16 @@ func (pb *processorBase) moveToTrailingMeta() {
 // should continue processing other rows, with the awareness that the processor
 // might have been transitioned to the draining phase.
 func (pb *processorBase) processRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDatumRow {
-	outRow, status, err := pb.out.ProcessRow(pb.ctx, row)
+	outRow, ok, err := pb.out.ProcessRow(pb.ctx, row)
 	if err != nil {
 		pb.moveToDraining(err)
 		return nil
 	}
-	switch status {
-	case NeedMoreRows:
-		// Note that outRow might be nil here.
-		return outRow
-	case DrainRequested:
-		if outRow != nil {
-			log.Fatal(pb.ctx, "unexpected row when status is DrainRequested")
-		}
+	if !ok {
 		pb.moveToDraining(nil /* err */)
-	default:
-		log.Fatalf(pb.ctx, "unexpected status: %d", status)
 	}
-	return nil
+	// Note that outRow might be nil here.
+	return outRow
 }
 
 // OutputTypes is part of the processor interface.

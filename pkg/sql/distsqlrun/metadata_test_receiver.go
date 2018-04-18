@@ -217,24 +217,25 @@ func (mtr *metadataTestReceiver) Next() (sqlbase.EncDatumRow, *ProducerMetadata)
 		// We don't use processorBase.processRowHelper() here because we need
 		// special handling for errors: this proc never starts draining in order for
 		// it to be as unintrusive as possible.
-		outRow, status, err := mtr.out.ProcessRow(mtr.ctx, row)
+		outRow, ok, err := mtr.out.ProcessRow(mtr.ctx, row)
 		if err != nil {
 			mtr.trailingMeta = append(mtr.trailingMeta, ProducerMetadata{Err: err})
 			continue
 		}
-		switch status {
-		case NeedMoreRows:
-			if outRow == nil {
-				continue
+		if outRow == nil {
+			if !ok {
+				mtr.moveToDraining(nil /* err */)
 			}
-		case DrainRequested:
-			mtr.moveToDraining(nil /* err */)
 			continue
 		}
 
 		// Swallow rows if we're draining.
-		if mtr.state == stateDraining && outRow != nil {
+		if mtr.state == stateDraining {
 			continue
+		}
+
+		if !ok {
+			mtr.moveToDraining(nil /* err */)
 		}
 
 		return outRow, nil
