@@ -178,3 +178,42 @@ func TestMetadataWeakKeys(t *testing.T) {
 	wk.Add(util.MakeFastIntSet(2))
 	test(wk, "[(4) (2)]")
 }
+
+// TestIndexColumns tests that we can extract a set of columns from an index ordinal.
+func TestIndexColumns(t *testing.T) {
+	cat := testutils.NewTestCatalog()
+	testutils.ExecuteTestDDL(
+		t,
+		"CREATE TABLE a ("+
+			"k INT PRIMARY KEY, "+
+			"i INT, "+
+			"s STRING, "+
+			"f FLOAT, "+
+			"INDEX (i, k), "+
+			"INDEX (s DESC) STORING(f))",
+		cat,
+	)
+
+	md := opt.NewMetadata()
+	a := md.AddTable(cat.Table("a"))
+
+	k := int(md.TableColumn(a, 0))
+	i := int(md.TableColumn(a, 1))
+	s := int(md.TableColumn(a, 2))
+	f := int(md.TableColumn(a, 3))
+
+	testCases := []struct {
+		index        int
+		expectedCols opt.ColSet
+	}{
+		{1, util.MakeFastIntSet(k, i)},
+		{2, util.MakeFastIntSet(s, f, k)},
+	}
+
+	for _, tc := range testCases {
+		actual := md.IndexColumns(a, tc.index)
+		if !tc.expectedCols.Equals(actual) {
+			t.Errorf("expected %v, got %v", tc.expectedCols, actual)
+		}
+	}
+}

@@ -331,6 +331,11 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		if def.HardLimit > 0 {
 			tp.Childf("limit: %d", def.HardLimit)
 		}
+
+	case opt.LookupJoinOp:
+		def := ev.Private().(*LookupJoinDef)
+		tableID := def.Table
+		tp.Childf("table: %s", ev.Metadata().Table(tableID).TabName())
 	}
 
 	if !flags.HasFlags(ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {

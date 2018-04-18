@@ -39,6 +39,19 @@ func (f FuncOpDef) String() string {
 	return f.Name
 }
 
+// LookupJoinDef defines the value of the Def private field of the LookupJoin
+// operator.
+type LookupJoinDef struct {
+	// Table identifies the table do to lookups in. The primary index is
+	// currently the only index used.
+	Table opt.TableID
+
+	// Cols is the set of columns the index join outputs. The set of columns
+	// which must be retrieved from the primary index is thus Cols minus the set
+	// of columns provided by the input.
+	Cols opt.ColSet
+}
+
 // ScanOpDef defines the value of the Def private field of the Scan operator.
 type ScanOpDef struct {
 	// Table identifies the table to scan. It is an id that can be passed to
@@ -64,19 +77,6 @@ type ScanOpDef struct {
 	// if more are available. If its value is zero, then the limit is
 	// unknown, and the scan should return all available rows.
 	HardLimit int64
-}
-
-// AltIndexHasCols returns true if the given alternate index on the table
-// contains the columns projected by the scan operator. This means that the
-// alternate index can be scanned instead.
-func (s *ScanOpDef) AltIndexHasCols(md *opt.Metadata, altIndex int) bool {
-	index := md.Table(s.Table).Index(altIndex)
-	var indexCols opt.ColSet
-	for col := 0; col < index.ColumnCount(); col++ {
-		ord := index.Column(col).Ordinal
-		indexCols.Add(int(md.TableColumn(s.Table, ord)))
-	}
-	return s.Cols.SubsetOf(indexCols)
 }
 
 // CanProvideOrdering returns true if the scan operator returns rows that
