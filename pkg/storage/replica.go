@@ -521,13 +521,11 @@ var _ KeyRange = &Replica{}
 // initialized) Raft group. The supplied function should return true for the
 // unquiesceAndWakeLeader argument if the replica should be unquiesced (and the
 // leader awoken). See handleRaftReady for an instance of where this value
-// varies. The shouldCampaignOnCreation argument indicates whether a new raft group
-// should be campaigned upon creation and is used to eagerly campaign idle
-// replicas.
+// varies.
 //
 // Requires that both Replica.mu and Replica.raftMu are held.
 func (r *Replica) withRaftGroupLocked(
-	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
@@ -556,37 +554,20 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		if !shouldCampaignOnCreation {
-			// Automatically campaign and elect a leader for this group if there's
-			// exactly one known node for this group.
-			//
-			// A grey area for this being correct happens in the case when we're
-			// currently in the process of adding a second node to the group, with
-			// the change committed but not applied.
-			//
-			// Upon restarting, the first node would immediately elect itself and
-			// only then apply the config change, where really it should be applying
-			// first and then waiting for the majority (which would now require two
-			// votes, not only its own).
-			//
-			// However, in that special case, the second node has no chance to be
-			// elected leader while the first node restarts (as it's aware of the
-			// configuration and knows it needs two votes), so the worst that could
-			// happen is both nodes ending up in candidate state, timing out and then
-			// voting again. This is expected to be an extremely rare event.
-			//
-			// TODO(peter): It would be more natural for this campaigning to only be
-			// done when proposing a command (see defaultProposeRaftCommandLocked).
-			// Unfortunately, we enqueue the right hand side of a split for Raft
-			// ready processing if the range only has a single replica (see
-			// splitPostApply). Doing so implies we need to be campaigning
-			// that right hand side range when raft ready processing is
-			// performed. Perhaps we should move the logic for campaigning single
-			// replica ranges there so that normally we only eagerly campaign when
-			// proposing.
-			shouldCampaignOnCreation = r.isSoloReplicaRLocked()
-		}
-		if shouldCampaignOnCreation {
+		// When waking up a range, campaign unless we know that another
+		// node holds a valid lease (this is most important after a split,
+		// when all replicas create their raft groups at about the same
+		// time, with a lease pre-assigned to one of them). Note that
+		// thanks to PreVote, unnecessary campaigns are not disruptive so
+		// we should err on the side of campaigining here.
+		anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
+			LeaseState_VALID &&
+			!r.mu.state.Lease.OwnedBy(r.store.StoreID())
+		// Raft panics if a node that is not currently a member of the
+		// group tries to campaign. That happens primarily when we apply
+		// preemptive snapshots.
+		_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
+		if currentMember && !anotherOwnsLease {
 			log.VEventf(ctx, 3, "campaigning")
 			if err := raftGroup.Campaign(); err != nil {
 				return err
@@ -614,7 +595,7 @@ func (r *Replica) withRaftGroup(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(false, f)
+	return r.withRaftGroupLocked(f)
 }
 
 var _ client.Sender = &Replica{}
@@ -1824,17 +1805,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Campaign if this replica is the current lease holder to avoid
-	// an election storm after a recent split. If no replica is the
-	// lease holder, all replicas must campaign to avoid waiting for
-	// an election timeout to acquire the lease. In the latter case,
-	// there's less chance of an election storm because this replica
-	// will only campaign if it's been idle for >= election timeout,
-	// so there's most likely been no traffic to the range.
-	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State !=
-			LeaseState_VALID
-	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
 		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
@@ -3289,11 +3260,6 @@ func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	return defaultSubmitProposalLocked(r, p)
 }
 
-func (r *Replica) isSoloReplicaRLocked() bool {
-	return len(r.mu.state.Desc.Replicas) == 1 &&
-		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
-}
-
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	data, err := protoutil.Marshal(p.command)
 	if err != nil {
@@ -3354,7 +3320,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			return err
 		}
 
-		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+		return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
@@ -3367,7 +3333,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		})
 	}
 
-	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		encode := encodeRaftCommandV1
 		if p.command.ReplicatedEvalResult.AddSSTable != nil {
 			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -3520,7 +3486,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
 	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 
-	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) (bool, error) {
+	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
