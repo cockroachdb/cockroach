@@ -399,11 +399,6 @@ type Store struct {
 	nodeDesc     *roachpb.NodeDescriptor
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
-	idleReplicaElectionTime struct {
-		syncutil.Mutex
-		at time.Time
-	}
-
 	// Semaphore to limit concurrent non-empty snapshot application and replica
 	// data destruction.
 	snapshotApplySem chan struct{}
@@ -1545,36 +1540,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	if err := s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
-		return err
-	}
-	// Once we have gossiped the store descriptor the first time, other nodes
-	// will know that this node has restarted and will start sending Raft
-	// heartbeats for active ranges. We compute the time in the future where a
-	// replica on this store which receives a command for an idle range can
-	// campaign the associated Raft group immediately instead of waiting for the
-	// normal Raft election timeout.
-	//
-	// Note that computing this timestamp here is conservative. We really care
-	// that the node descriptor has been gossiped as that is how remote nodes
-	// locate this one to send Raft messages. The initialization sequence is:
-	//   1. gossip node descriptor
-	//   2. wait for gossip to be connected
-	//   3. gossip store descriptors (where we're at here)
-	s.idleReplicaElectionTime.Lock()
-	if s.idleReplicaElectionTime.at == (time.Time{}) {
-		// Raft uses a randomized election timeout in the range
-		// [electionTimeout,2*electionTimeout]. Using the lower bound here means
-		// that elections are somewhat more likely to be contested (assuming
-		// traffic is distributed evenly across a cluster that is restarted
-		// simultaneously). That's OK; it just adds a network round trip or two to
-		// the process since a contested election just restarts the clock to where
-		// it would have been anyway if we weren't doing idle replica campaigning.
-		electionTimeout := s.cfg.RaftTickInterval * time.Duration(s.cfg.RaftElectionTimeoutTicks)
-		s.idleReplicaElectionTime.at = s.Clock().PhysicalTime().Add(electionTimeout)
-	}
-	s.idleReplicaElectionTime.Unlock()
-	return nil
+	return s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip)
 }
 
 type capacityChangeEvent int
@@ -1613,15 +1579,6 @@ func (s *Store) recordNewWritesPerSecond(newVal float64) {
 	if newVal < oldVal*.5 || newVal > oldVal*1.5 {
 		s.asyncGossipStore(context.TODO(), "writes-per-second change")
 	}
-}
-
-func (s *Store) canCampaignIdleReplica() bool {
-	s.idleReplicaElectionTime.Lock()
-	defer s.idleReplicaElectionTime.Unlock()
-	if s.idleReplicaElectionTime.at == (time.Time{}) {
-		return false
-	}
-	return !s.Clock().PhysicalTime().Before(s.idleReplicaElectionTime.at)
 }
 
 // GossipDeadReplicas broadcasts the store's dead replicas on the gossip
@@ -1676,7 +1633,6 @@ func (s *Store) Bootstrap(
 		return errors.Wrap(err, "persisting bootstrap data")
 	}
 
-	s.NotifyBootstrapped()
 	return nil
 }
 
@@ -1795,14 +1751,6 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 		return errors.Errorf("engine belongs to store %s, contains %s", ident, keyVals)
 	}
 	return nil
-}
-
-// NotifyBootstrapped tells the store that it was bootstrapped and allows idle
-// replicas to campaign immediately. This primarily affects tests.
-func (s *Store) NotifyBootstrapped() {
-	s.idleReplicaElectionTime.Lock()
-	s.idleReplicaElectionTime.at = s.Clock().PhysicalTime()
-	s.idleReplicaElectionTime.Unlock()
 }
 
 // GetReplica fetches a replica by Range ID. Returns an error if no replica is found.

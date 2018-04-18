@@ -541,13 +541,6 @@ func (r *Replica) withRaftGroupLocked(
 		return nil
 	}
 
-	if shouldCampaignOnCreation {
-		// Special handling of idle replicas: we campaign their Raft group upon
-		// creation if we gossiped our store descriptor more than the election
-		// timeout in the past.
-		shouldCampaignOnCreation = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
-	}
-
 	ctx := r.AnnotateCtx(context.TODO())
 
 	if r.mu.internalRaftGroup == nil {
