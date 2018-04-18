@@ -513,6 +513,28 @@ func TestCreateSystemTable(t *testing.T) {
 	}
 }
 
+func TestAdminUserExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add system.users isRole column and create admin role")
+	mt.start(t, base.TestServerArgs{})
+
+	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
+	// knows about "isRole", but the migration hasn't run yet.
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
+		sqlbase.AdminRole)
+
+	e := `cannot create role "admin", a user with that name exists.`
+	// The revised migration in v2.1 upserts the admin user, so this should succeed.
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Errorf("expected succcess, got %q", e)
+	}
+}
+
 func TestReplayMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -527,68 +549,6 @@ func TestReplayMigrations(t *testing.T) {
 		if err := mt.runMigration(ctx, m); err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "repeat: upgrade table descs to interleaved format version")
-	mt.start(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				// Block schema changes to ensure that our migration sees some table
-				// descriptors in the DROP state. The schema changer might otherwise
-				// erase them before our migration runs.
-				AsyncExecNotification: func() error { return errors.New("schema changes disabled") },
-			},
-		},
-	})
-
-	defer func(prev int64) { upgradeDescBatchSize = prev }(upgradeDescBatchSize)
-	upgradeDescBatchSize = 5
-	n := int(upgradeDescBatchSize) * 3
-
-	// Create n tables.
-	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
-	for i := 0; i < n; i++ {
-		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d ()`, i))
-	}
-
-	// Corrupt every second table's format version, and mark every third table as
-	// dropping.
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if i%2 == 0 {
-			tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
-		}
-		if i%3 == 0 {
-			tableDesc.State = sqlbase.TableDescriptor_DROP
-		}
-		tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
-		if err := mt.kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Ensure the migration upgrades the format of all tables, even those that
-	// are dropping.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if e, a := sqlbase.InterleavedFormatVersion, tableDesc.FormatVersion; e != a {
-			t.Errorf("t%d: expected format version %s, but got %s", i, e, a)
-		}
-	}
-
-	// Verify idempotency.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
 	}
 }
 
