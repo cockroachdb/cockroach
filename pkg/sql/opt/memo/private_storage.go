@@ -186,6 +186,23 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+// internLookupJoinDef adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internLookupJoinDef always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeColSet(def.Cols)
+	typ := (*LookupJoinDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internSetOpColMap adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internSetOpColMap always

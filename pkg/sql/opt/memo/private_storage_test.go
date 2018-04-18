@@ -300,6 +300,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		Overload: &builtins.Builtins["concat"][0],
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
+	indexJoinDef := &LookupJoinDef{Table: 1, Cols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -312,6 +313,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internOrdering(ordering)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
+		ps.internLookupJoinDef(indexJoinDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)

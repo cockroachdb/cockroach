@@ -46,13 +46,113 @@ memo
 SELECT s, i, f FROM a ORDER BY s, k, i
 ----
 memo (optimized)
- └── G1: (scan a) (scan a@s_idx)
-      ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]"
-      │    ├── best: (scan a@s_idx)
+ ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,cols=(1-4))
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: +4,+1,+2]"
+ │    │    ├── best: (scan a@s_idx,cols=(1-4))
+ │    │    └── cost: 1000.00
+ │    └── ""
+ │         ├── best: (scan a,cols=(1-4))
+ │         └── cost: 1000.00
+ └── G2: (scan a@si_idx,cols=(1,2,4))
+      ├── ""
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
       │    └── cost: 1000.00
+      └── "[ordering: +4,+1,+2]"
+           ├── best: (sort G2)
+           └── cost: 1250.00
+
+memo
+SELECT s, i, f FROM a ORDER BY f
+----
+memo (optimized)
+ ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: +3]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (scan a,cols=(2-4))
+ │         └── cost: 1000.00
+ └── G2: (scan a@si_idx,cols=(1,2,4))
       └── ""
-           ├── best: (scan a)
+           ├── best: (scan a@si_idx,cols=(1,2,4))
            └── cost: 1000.00
+
+memo
+SELECT s, i, f FROM a ORDER BY s DESC, i
+----
+memo (optimized)
+ ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (scan a,cols=(2-4))
+ │         └── cost: 1000.00
+ └── G2: (scan a@si_idx,cols=(1,2,4))
+      ├── ""
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
+      │    └── cost: 1000.00
+      └── "[ordering: -4,+2]"
+           ├── best: (scan a@si_idx,cols=(1,2,4))
+           └── cost: 1000.00
+
+exec-ddl
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX bc (b, c),
+  INDEX ba (b, a),
+  FAMILY (a, b, c),
+  FAMILY (d)
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d string
+ ├── INDEX primary
+ │    ├── a int not null
+ │    ├── b int not null
+ │    └── c int not null
+ ├── INDEX bc
+ │    ├── b int not null
+ │    ├── c int not null
+ │    └── a int not null (storing)
+ └── INDEX ba
+      ├── b int not null
+      ├── a int not null
+      └── c int not null
+
+memo
+SELECT d FROM abc ORDER BY LOWER(d)
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: d:4] [ordering: +5]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (scan abc,cols=(4)) (lookup-join G4 abc,cols=(4)) (lookup-join G5 abc,cols=(4))
+ │    └── ""
+ │         ├── best: (scan abc,cols=(4))
+ │         └── cost: 1000.00
+ ├── G3: (projections G7 G6)
+ ├── G4: (scan abc@bc,cols=(1-3))
+ │    └── ""
+ │         ├── best: (scan abc@bc,cols=(1-3))
+ │         └── cost: 1000.00
+ ├── G5: (scan abc@ba,cols=(1-3))
+ │    └── ""
+ │         ├── best: (scan abc@ba,cols=(1-3))
+ │         └── cost: 1000.00
+ ├── G6: (function G7 lower)
+ └── G7: (variable abc.d)
 
 # Scan of primary index is lowest cost.
 opt
@@ -67,13 +167,20 @@ memo
 SELECT s, i, f FROM a ORDER BY k, i, s
 ----
 memo (optimized)
- └── G1: (scan a) (scan a@s_idx)
-      ├── "[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]"
-      │    ├── best: (scan a)
+ ├── G1: (scan a,cols=(1-4)) (scan a@s_idx,cols=(1-4)) (lookup-join G2 a,cols=(1-4))
+ │    ├── "[presentation: s:4,i:2,f:3] [ordering: +1,+2,+4]"
+ │    │    ├── best: (scan a,cols=(1-4))
+ │    │    └── cost: 1000.00
+ │    └── ""
+ │         ├── best: (scan a,cols=(1-4))
+ │         └── cost: 1000.00
+ └── G2: (scan a@si_idx,cols=(1,2,4))
+      ├── ""
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
       │    └── cost: 1000.00
-      └── ""
-           ├── best: (scan a)
-           └── cost: 1000.00
+      └── "[ordering: +1,+2,+4]"
+           ├── best: (sort G2)
+           └── cost: 1250.00
 
 # Secondary index has right order, but is not covering.
 opt
@@ -89,12 +196,19 @@ memo
 SELECT s, j FROM a ORDER BY s
 ----
 memo (optimized)
- └── G1: (scan a) (scan a@si_idx)
-      ├── "[presentation: s:4,j:5] [ordering: +4]"
-      │    ├── best: (sort G1)
-      │    └── cost: 1250.00
-      └── ""
-           ├── best: (scan a)
+ ├── G1: (scan a,cols=(4,5)) (lookup-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    ├── "[presentation: s:4,j:5] [ordering: +4]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (scan a,cols=(4,5))
+ │         └── cost: 1000.00
+ └── G2: (scan a@s_idx,cols=(1,4))
+      ├── ""
+      │    ├── best: (scan a@s_idx,cols=(1,4))
+      │    └── cost: 1000.00
+      └── "[ordering: +4]"
+           ├── best: (scan a@s_idx,cols=(1,4))
            └── cost: 1000.00
 
 # Consider three different indexes, and pick index with multiple keys.
@@ -110,12 +224,12 @@ memo
 SELECT i, k FROM a ORDER BY s DESC, i, k
 ----
 memo (optimized)
- └── G1: (scan a) (scan a@s_idx) (scan a@si_idx)
+ └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── "[presentation: i:2,k:1] [ordering: -4,+2,+1]"
-      │    ├── best: (scan a@si_idx)
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
       │    └── cost: 1000.00
       └── ""
-           ├── best: (scan a)
+           ├── best: (scan a,cols=(1,2,4))
            └── cost: 1000.00
 
 memo
@@ -126,14 +240,14 @@ memo (optimized)
  │    └── "[presentation: i:2,k:1]"
  │         ├── best: (project G2 G3)
  │         └── cost: 100.00
- ├── G2: (select G4 G5) (scan a@s_idx,constrained) (scan a@si_idx,constrained)
+ ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained)
  │    └── ""
- │         ├── best: (scan a@s_idx,constrained)
+ │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
  │         └── cost: 100.00
  ├── G3: (projections G6 G7)
- ├── G4: (scan a) (scan a@s_idx) (scan a@si_idx)
+ ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
  │    └── ""
- │         ├── best: (scan a)
+ │         ├── best: (scan a,cols=(1,2,4))
  │         └── cost: 1000.00
  ├── G5: (filters G8)
  ├── G6: (variable a.i)
