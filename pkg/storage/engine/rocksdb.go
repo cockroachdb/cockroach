@@ -2470,9 +2470,15 @@ func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
 	if err := fr.rocksDB.WriteFile(filename, data); err != nil {
 		return err
 	}
+
+	cPaths := make([]*C.char, 1)
+	cPaths[0] = C.CString(filename)
+	cPathLen := C.size_t(len(cPaths))
+	defer C.free(unsafe.Pointer(cPaths[0]))
+
 	const noMove, modify = false, true
-	return statusToError(C.DBIngestExternalFile(
-		fr.rocksDB.rdb, goToCSlice([]byte(filename)), noMove, modify,
+	return statusToError(C.DBIngestExternalFiles(
+		fr.rocksDB.rdb, &cPaths[0], cPathLen, noMove, modify,
 	))
 }
 
@@ -2581,12 +2587,27 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 	return nil
 }
 
-// IngestExternalFile links a file into the RocksDB log-structured merge-tree.
-func (r *RocksDB) IngestExternalFile(
-	ctx context.Context, path string, allowFileModification bool,
+// IngestExternalFiles atomically links a slice of files into the RocksDB
+// log-structured merge-tree.
+func (r *RocksDB) IngestExternalFiles(
+	ctx context.Context, paths []string, allowFileModifications bool,
 ) error {
-	return statusToError(C.DBIngestExternalFile(
-		r.rdb, goToCSlice([]byte(path)), C._Bool(true), C._Bool(allowFileModification),
+	cPaths := make([]*C.char, len(paths))
+	for i := range paths {
+		cPaths[i] = C.CString(paths[i])
+	}
+	defer func() {
+		for i := range cPaths {
+			C.free(unsafe.Pointer(cPaths[i]))
+		}
+	}()
+
+	return statusToError(C.DBIngestExternalFiles(
+		r.rdb,
+		&cPaths[0],
+		C.size_t(len(cPaths)),
+		C._Bool(true), // move_files
+		C._Bool(allowFileModifications),
 	))
 }
 
