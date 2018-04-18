@@ -102,9 +102,6 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
-var enableTickQuiesced = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_TICK_QUIESCED", false)
-
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
@@ -3556,7 +3553,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 				// Replica on the store which cascades into Raft elections and more
 				// disruption. Replica.maybeTickQuiesced only grabs short-duration
 				// locks and not locks that are held during disk I/O.
-				if !(*Replica)(v).maybeTickQuiesced() {
+				if !(*Replica)(v).needsTick() {
 					rangeIDs = append(rangeIDs, roachpb.RangeID(k))
 				}
 				return true
