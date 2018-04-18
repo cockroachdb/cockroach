@@ -260,7 +260,8 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		return
 	}
 
-	for {
+	ok := true
+	for ok {
 		row, desc, index, err := irj.fetcher.NextRow(ctx)
 		if err != nil || row == nil {
 			if err != nil {
@@ -291,11 +292,10 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		}
 
 		// We post-process the intermediate row from either table.
-		tableRow, consumerStatus, err := tInfo.post.ProcessRow(ctx, row)
-		if err != nil || consumerStatus != NeedMoreRows {
-			if err != nil {
-				irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
-			}
+		var tableRow sqlbase.EncDatumRow
+		tableRow, ok, err = tInfo.post.ProcessRow(ctx, row)
+		if err != nil {
+			irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
 			break
 		}
 
@@ -360,7 +360,7 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 				break
 			}
 			if renderedRow != nil {
-				consumerStatus, err = irj.out.EmitRow(ctx, renderedRow)
+				consumerStatus, err := irj.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					if err != nil {
 						irj.out.output.Push(nil /* row */, &ProducerMetadata{Err: err})
