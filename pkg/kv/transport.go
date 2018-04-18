@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -43,6 +45,7 @@ type SendOptions struct {
 
 type batchClient struct {
 	remoteAddr string
+	crpcConn   *rpc.CRPCClientConn
 	args       roachpb.BatchRequest
 	healthy    bool
 	pending    bool
@@ -118,12 +121,19 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
+		var crpcConn *rpc.CRPCClientConn
+		var err error
+		crpcConn, err = rpcContext.CRPCDial(replica.NodeDesc.Address.String())
+		if err != nil {
+			return nil, err
+		}
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
 		remoteAddr := replica.NodeDesc.Address.String()
 		healthy := rpcContext.ConnHealth(remoteAddr) == nil
 		clients = append(clients, batchClient{
 			remoteAddr: remoteAddr,
+			crpcConn:   crpcConn,
 			args:       argsCopy,
 			healthy:    healthy,
 		})
@@ -243,14 +253,22 @@ func (gt *grpcTransport) send(
 		}
 
 		log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-		conn, err := gt.rpcContext.GRPCDial(client.remoteAddr).Connect(ctx)
-		if err != nil {
-			return nil, err
+		var reply *roachpb.BatchResponse
+		var err error
+		if client.crpcConn != nil {
+			reply = &roachpb.BatchResponse{}
+			err = client.crpcConn.Send(&client.args, reply)
+		} else {
+			var conn *grpc.ClientConn
+			conn, err = gt.rpcContext.GRPCDial(client.remoteAddr).Connect(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := grpcutil.ConnectionReady(conn); err != nil {
+				return nil, err
+			}
+			reply, err = roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		}
-		if err := grpcutil.ConnectionReady(conn); err != nil {
-			return nil, err
-		}
-		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
