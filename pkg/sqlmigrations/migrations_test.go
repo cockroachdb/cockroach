@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -383,34 +382,6 @@ func makeMigrationTest(ctx context.Context, t testing.TB) migrationTest {
 	}
 }
 
-// pop removes the migration whose name starts with namePrefix from the list of
-// migrations run at server startup. It fails the test if the number of
-// migrations that match namePrefix is not exactly one.
-//
-// You must not call pop after calling start.
-func (mt *migrationTest) pop(t testing.TB, namePrefix string) migrationDescriptor {
-	t.Helper()
-
-	if mt.server != nil {
-		t.Fatal("migrationTest.pop must be called before mt.start")
-	}
-
-	var migration migrationDescriptor
-	var newMigrations []migrationDescriptor
-	for _, m := range backwardCompatibleMigrations {
-		if strings.HasPrefix(m.name, namePrefix) {
-			migration = m
-			continue
-		}
-		newMigrations = append(newMigrations, m)
-	}
-	if n := len(backwardCompatibleMigrations) - len(newMigrations); n != 1 {
-		t.Fatalf("expected prefix %q to match exactly one migration, but matched %d", namePrefix, n)
-	}
-	backwardCompatibleMigrations = newMigrations
-	return migration
-}
-
 // start starts a test server with the given serverArgs.
 func (mt *migrationTest) start(t testing.TB, serverArgs base.TestServerArgs) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
@@ -527,68 +498,6 @@ func TestReplayMigrations(t *testing.T) {
 		if err := mt.runMigration(ctx, m); err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "repeat: upgrade table descs to interleaved format version")
-	mt.start(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-				// Block schema changes to ensure that our migration sees some table
-				// descriptors in the DROP state. The schema changer might otherwise
-				// erase them before our migration runs.
-				AsyncExecNotification: func() error { return errors.New("schema changes disabled") },
-			},
-		},
-	})
-
-	defer func(prev int64) { upgradeDescBatchSize = prev }(upgradeDescBatchSize)
-	upgradeDescBatchSize = 5
-	n := int(upgradeDescBatchSize) * 3
-
-	// Create n tables.
-	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
-	for i := 0; i < n; i++ {
-		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d ()`, i))
-	}
-
-	// Corrupt every second table's format version, and mark every third table as
-	// dropping.
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if i%2 == 0 {
-			tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
-		}
-		if i%3 == 0 {
-			tableDesc.State = sqlbase.TableDescriptor_DROP
-		}
-		tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
-		if err := mt.kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Ensure the migration upgrades the format of all tables, even those that
-	// are dropping.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < n; i++ {
-		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
-		if e, a := sqlbase.InterleavedFormatVersion, tableDesc.FormatVersion; e != a {
-			t.Errorf("t%d: expected format version %s, but got %s", i, e, a)
-		}
-	}
-
-	// Verify idempotency.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
 	}
 }
 
