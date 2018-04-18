@@ -139,7 +139,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootToAdminRole,
 	},
 	{
-		// Introduced in v2.0. Repeated in v2.1 below.
+		// Introduced in v2.0. Baked into v2.1.
 		name: "upgrade table descs to interleaved format version",
 	},
 	{
@@ -162,12 +162,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.0. Repeated in v2.1 below.
 		name: "ensure admin role privileges in all descriptors",
-	},
-	{
-		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
-		// TODO(mberhault): bake into v2.2.
-		name:   "repeat: upgrade table descs to interleaved format version",
-		workFn: upgradeTableDescsToInterleavedFormatVersion,
 	},
 	{
 		// Introduced in v2.1, repeat of 2.0 migration to catch mixed-version issues.
@@ -610,21 +604,6 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
 	pl.SetValue("2", tree.NewDString(security.RootUser))
 	return runStmtAsRootWithRetry(ctx, r, upsertAdminStmt, &pl)
-}
-
-// upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
-// InterleavedFormatVersion is persisted to disk for all table descriptors. It
-// must otherwise be performed on-the-fly whenever a table descriptor is loaded.
-// In fact, before this migration, a cluster that was continuously upgraded from
-// before beta-20161013 would retain its old-format table descriptors until a
-// schema-mutating statement was executed against every old-format table.
-//
-// TODO(benesch): Remove this migration in v2.1.
-func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
-	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
-		return desc.MaybeFillInDescriptor(), nil
-	}
-	return upgradeDescsWithFn(ctx, r, tableDescFn, nil)
 }
 
 // ensureMaxPrivileges ensures that all descriptors have privileges
