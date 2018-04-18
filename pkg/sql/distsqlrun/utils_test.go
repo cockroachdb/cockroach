@@ -134,6 +134,14 @@ var oneIntCol = []sqlbase.ColumnType{intType}
 var twoIntCols = []sqlbase.ColumnType{intType, intType}
 var threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
 
+func makeIntCols(numCols int) []sqlbase.ColumnType {
+	ret := make([]sqlbase.ColumnType, numCols)
+	for i := 0; i < numCols; i++ {
+		ret[i] = intType
+	}
+	return ret
+}
+
 func intEncDatum(i int) sqlbase.EncDatum {
 	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 }
