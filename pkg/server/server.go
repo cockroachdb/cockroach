@@ -1472,6 +1472,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.serveMode.set(modeOperational)
 
 	s.mux.Handle(adminPrefix, authHandler)
+	// Exempt the health check endpoint from authentication.
+	s.mux.Handle("/_admin/v1/health", gwMux)
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
 	s.mux.Handle(authPrefix, gwMux)
