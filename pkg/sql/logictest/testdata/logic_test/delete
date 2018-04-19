@@ -14,10 +14,10 @@ CREATE TABLE unindexed (
   v INT
 )
 
-statement ok
+statement count 4
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II rowsort
@@ -50,7 +50,7 @@ SELECT * FROM kview
 5 6
 7 8
 
-statement ok
+statement count 2
 DELETE FROM kv WHERE k=3 OR v=6
 
 query II rowsort
@@ -60,7 +60,7 @@ SELECT * FROM kv
 7 8
 
 # delete a non-existent value.
-statement ok
+statement count 0
 DELETE FROM kv WHERE k=5
 
 query II
@@ -91,7 +91,7 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@bar]
 statement error column name "nonexistent" not found
 DELETE FROM kv WHERE nonexistent = 1
 
-statement ok
+statement count 2
 DELETE FROM unindexed WHERE k=3 OR v=6
 
 query II rowsort
@@ -110,7 +110,7 @@ query II
 SELECT * FROM unindexed
 ----
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II colnames
@@ -127,7 +127,7 @@ k v
 1 2
 7 8
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II colnames,rowsort
@@ -161,7 +161,7 @@ k v
 5 6
 7 8
 
-statement ok
+statement count 4
 DELETE FROM unindexed
 
 query II colnames
@@ -172,7 +172,7 @@ k v
 statement ok
 CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 
-statement ok
+statement count 0
 DELETE FROM indexed WHERE value = 5
 
 # Check DELETE with ORDER BY clause (MySQL extension)
@@ -206,7 +206,7 @@ DELETE FROM unindexed ORDER BY v RETURNING k,v
 
 # Check DELETE with LIMIT clause (MySQL extension)
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query TTT
