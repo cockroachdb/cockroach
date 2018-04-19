@@ -71,37 +71,67 @@ cluster version.
 - **IF**:
   - Did not preserve downgrade options for current cluster version.
   <br>**AND**
-  - Look at `crdb_internal.gossip_nodes` and verify that all nodes are running
-  the new version.
+  - Look at `crdb_internal.gossip_nodes` and verify that all live nodes are
+  running the new version.
   <br>**AND**
-  - Look at `NodeStatusKeys` and verify that all non-decommissioned nodes are
-  in `gossip_nodes` (no missing nodes).
+  - Pull `NodeLivenessStatus` from liveness server and verify that all
+  non-decommissioned nodes are alive (no missing nodes).
 - **THEN**:
-  - Do upgrade:
-```
-SET CLUSTER SETTING version = crdb_internal.node_executable_version();
-```
-
+  - Do upgrade: ```
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();```
   - Run `RESET CLUSTER SETTING cluster.preserve_downgrade_option;`.
 - **ELSE**
   - Exit and abort upgrade.
 
 
 ## Testing
-Use the existing ``pkg/cmd/roachtest/version.go`` as a basis.
+Add a new roachtest.
 
-Test Steps:
+Test Steps (between each step it will sleep for a certain amount of time):
 
-1. Run `SET CLUSTER SETTING cluster.preserve_downgrade_option = '2.0';`
+1. Start a cluster of `N` nodes running `v2.0.0`.
 
-2. Perform a rolling upgrade.
+2. Perform a rolling upgrade for node `1` - `N-1`. At every iteration, we check
+the cluster version is not upgraded.
 
-3. Sleep and check `cluster version` is still the old version.
+3. Stop node `N-1`.
 
-4. Run `RESET CLUSTER SETTING cluster.preserve_downgrade_option;`
+4. Perform an upgrade for node `N`, which was running `v2.0.0`.
 
-5. Sleep and check `cluster version` is bumped to the new version.
+5. Check the cluster version is not upgraded.
 
+6. Decommission node `N-2` (decommissioned nodes should not affect auto upgrade).
+
+7. Restart node `N-1`, which is previously force stopped.
+
+8. Check the cluster version is upgraded to new version.
+
+9. Check cluster setting `cluster.preserve_downgrade_option` is reset to be an
+empty string.
+
+
+### What about `cluster.preserve_downgrade_option`?
+
+Please note that we are not testing if `cluster.preserve_downgrade_option` is
+working as expected in the above roachtest. It's because we need at least 2
+different versions of binary running the new auto upgrade code in order to fire
+the command
+```
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+```
+and observe there is no upgrade happening.
+
+### Right now we have 2 options to test it:
+
+1. Write a unit test to test its functionality.
+
+2. Set the default value of `cluster.preserve_downgrade_option` to be `2.0` and
+add the test commands in the above roachtest. If our 2.1 release has the auto
+upgrade feature, users running `2.0.X` might want to preserve the downgrade
+option. However, they cannot do so as soon as they do a rolling upgrade to `2.1`.
+Therefore, it makes sense to set the default value to be `2.0` and users who
+want to use the feature can manually set `cluster.preserve_downgrade_option` to
+be an empty string. So they can have auto upgrade turned on for `v2.1` and onward.
 
 ## UI
 - If the user opt out of the auto upgrade, we should have a banner that alert
@@ -112,16 +142,9 @@ to instruct them to manually run the upgrade command.
 not decommissioned, we should have a banner to alert operators to either revive
 or decommission the down nodes.
 
-- Have an API that returns if the auto-upgrade is disabled or not.
+- Let the operator know if the auto-upgrade is disabled or not at current version.
   - If `cluster.preserve_downgrade_option` is equal to `cluster.version`,
   auto-upgrade is disabled. Otherwise it's enabled.
-- If auto-upgrade is enabled, have an API that returns if the auto upgrade has
-started or not.
-  - If all nodes have the same `node_executable_version`, auto-upgrade has started.
-- If auto-upgrade is enabled, have an API that returns if the auto upgrade has
-  finished or not.
-  - If all node's `node_executable_version` is the same as `cluster.version`,
-  auto-upgrade has finished.
 
 
 ## Drawbacks
