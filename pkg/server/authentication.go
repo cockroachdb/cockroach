@@ -356,6 +356,7 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 	return &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    base64.StdEncoding.EncodeToString(cookieValueBytes),
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
 	}, nil
