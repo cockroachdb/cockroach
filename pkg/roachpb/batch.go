@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -239,7 +240,12 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 // updates the write timestamp cache.
 func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
 	for i, arg := range ba.Requests {
+		log.Infof(context.TODO(), "test    %s", arg)
+
 		req := arg.GetInner()
+
+		log.Infof(context.TODO(), "test2    %s", req)
+
 		if !NeedsRefresh(req) {
 			continue
 		}
