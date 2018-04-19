@@ -1682,3 +1682,122 @@ query TTTT
 SELECT quote_ident('foo'), quote_ident('select'), quote_ident('int8'), quote_ident('numeric')
 ----
 foo  "select"  int8  "numeric"
+
+# lpad tests
+
+query T
+SELECT lpad('abc', 1, 'xy')
+----
+a
+
+query T
+SELECT lpad('abc', 2, 'xy')
+----
+ab
+
+query T
+SELECT lpad('abc', 3, 'xy')
+----
+abc
+
+query T
+SELECT lpad('abc', 5, 'xy')
+----
+xyabc
+
+query T
+SELECT lpad('abc', 6, 'xy')
+----
+xyxabc
+
+query T
+SELECT lpad('abc', 7, 'xy')
+----
+xyxyabc
+
+query T
+SELECT lpad('abc', 1)
+----
+a
+
+query T
+SELECT lpad('abc', 2)
+----
+ab
+
+query T
+SELECT lpad('abc', 3)
+----
+abc
+
+query T
+SELECT lpad('abc', 5)
+----
+  abc
+
+query T
+SELECT lpad('Hello, 世界', 9)
+----
+Hello, 世界
+
+query T
+SELECT lpad('Hello, 世界', 10)
+----
+ Hello, 世界
+
+query T
+SELECT lpad('Hello', 8, '世界')
+----
+世界世Hello
+
+# rpad tests
+
+query T
+SELECT rpad('abc', 1, 'xy')
+----
+a
+
+query T
+SELECT rpad('abc', 2, 'xy')
+----
+ab
+
+query T
+SELECT rpad('abc', 3, 'xy')
+----
+abc
+
+query T
+SELECT rpad('abc', 5, 'xy')
+----
+abcxy
+
+query T
+SELECT rpad('abc', 6, 'xy')
+----
+abcxyx
+
+query T
+SELECT rpad('abc', 7, 'xy')
+----
+abcxyxy
+
+query T
+SELECT rpad('abc', 1)
+----
+a
+
+query T
+SELECT rpad('abc', 2)
+----
+ab
+
+query T
+SELECT rpad('abc', 3)
+----
+abc
+
+query T
+SELECT rpad('abc', 5)
+----
+abc  
