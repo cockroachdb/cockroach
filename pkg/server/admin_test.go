@@ -1041,9 +1041,7 @@ func TestHealthAPI(t *testing.T) {
 	}
 	s.Clock().Update(hlc.Timestamp(self.Expiration).Add(1, 0))
 
-	// Health API is not accessible if the node is not accessible, because it
-	// cannot verify the authentication session.
-	expected := "401 Unauthorized"
+	expected := "503 Service Unavailable"
 	var resp serverpb.HealthResponse
 	for {
 		if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
