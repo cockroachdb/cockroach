@@ -70,7 +70,7 @@ const (
 	// that keeps track of the paths of the temporary directories created.
 	TempDirsRecordFilename                = "temp-dirs-record.txt"
 	defaultEventLogEnabled                = true
-	defaultEnableWebSessionAuthentication = false
+	defaultEnableWebSessionAuthentication = true
 
 	maximumMaxClockOffset = 5 * time.Second
 
