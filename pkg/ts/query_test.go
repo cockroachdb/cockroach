@@ -671,7 +671,7 @@ func TestAggregation(t *testing.T) {
 // verificable steps. These steps will not be memory or computationally
 // efficient, but will be conceptually easy to verify; then we can compare its
 // results against the real data store with more confidence.
-func (tm *testModel) assertQuery(
+func (tm *testModelRunner) assertQuery(
 	name string,
 	sources []string,
 	downsample, agg *tspb.TimeSeriesQueryAggregator,
@@ -733,7 +733,7 @@ func (tm *testModel) assertQuery(
 // model.
 func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -901,7 +901,7 @@ func TestQuery(t *testing.T) {
 // the test model.
 func TestQueryDownsampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -983,7 +983,7 @@ func TestQueryDownsampling(t *testing.T) {
 // the test model.
 func TestInterpolationLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -1068,7 +1068,7 @@ func TestInterpolationLimit(t *testing.T) {
 
 func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	// Swap model's memory monitor in order to adjust allocation size.
 	unlimitedMon := tm.workerMemMonitor
@@ -1173,7 +1173,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 
 func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	memoryBudget := int64(100 * 1024)
 
@@ -1261,7 +1261,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 // obviously bad incoming data.
 func TestQueryBadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
