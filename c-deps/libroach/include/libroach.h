@@ -324,14 +324,14 @@ DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 // proto.
 DBString DBGetUserProperties(DBEngine* db);
 
-// Bulk adds the file at the given path to a database. See the RocksDB
-// documentation on `IngestExternalFile` for the various restrictions on what
-// can be added. If move_file is true, the file will be moved instead of copied.
-// If allow_file_modification is false, RocksDB will return an error if it would
-// have tried to modify the file's sequence number rather than editing the file
-// in place.
-DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file,
-                              bool allow_file_modification);
+// Bulk adds the files at the given paths to a database, all atomically. See the
+// RocksDB documentation on `IngestExternalFile` for the various restrictions on
+// what can be added. If move_files is true, the files will be moved instead of
+// copied. If allow_file_modifications is false, RocksDB will return an error if
+// it would have tried to modify any of the files' sequence numbers rather than
+// editing the files in place.
+DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
+                               bool allow_file_modifications);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
