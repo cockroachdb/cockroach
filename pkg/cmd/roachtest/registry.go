@@ -24,6 +24,7 @@ func registerTests(r *registry) {
 	registerBackup(r)
 	registerCancel(r)
 	registerCopy(r)
+	registerDebug(r)
 	registerDecommission(r)
 	registerDrop(r)
 	registerImportTPCC(r)
