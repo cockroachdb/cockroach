@@ -1170,7 +1170,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, TestSklPageSize, makeMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	size := 1
@@ -1195,7 +1195,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(clock, MinRetentionWindow, TestSklPageSize, makeMetrics())
+	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
