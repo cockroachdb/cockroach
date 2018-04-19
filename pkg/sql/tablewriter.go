@@ -174,57 +174,6 @@ func (tb *tableWriterBase) finalize(
 	return nil
 }
 
-// tableInserter handles writing kvs and forming table rows for inserts.
-type tableInserter struct {
-	tableWriterBase
-	ri sqlbase.RowInserter
-}
-
-// walkExprs is part of the tableWriter interface.
-func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
-
-// init is part of the tableWriter interface.
-func (ti *tableInserter) init(txn *client.Txn, _ *tree.EvalContext) error {
-	ti.tableWriterBase.init(txn)
-	return nil
-}
-
-// row is part of the tableWriter interface.
-func (ti *tableInserter) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
-) (tree.Datums, error) {
-	ti.batchSize++
-	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, sqlbase.CheckFKs, traceKV)
-}
-
-// atBatchEnd is part of the extendedTableWriter interface.
-func (ti *tableInserter) atBatchEnd(_ context.Context) error { return nil }
-
-// flushAndStartNewBatch is part of the extendedTableWriter interface.
-func (ti *tableInserter) flushAndStartNewBatch(ctx context.Context) error {
-	return ti.tableWriterBase.flushAndStartNewBatch(ctx, ti.tableDesc())
-}
-
-// finalize is part of the tableWriter interface.
-func (ti *tableInserter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, _ bool,
-) (*sqlbase.RowContainer, error) {
-	return nil, ti.tableWriterBase.finalize(ctx, autoCommit, ti.tableDesc())
-}
-
-// tableDesc is part of the tableWriter interface.
-func (ti *tableInserter) tableDesc() *sqlbase.TableDescriptor {
-	return ti.ri.Helper.TableDesc
-}
-
-// fkSpanCollector is part of the tableWriter interface.
-func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
-	return ti.ri.Fks
-}
-
-// close is part of the tableWriter interface.
-func (ti *tableInserter) close(_ context.Context) {}
-
 type tableUpsertEvaler interface {
 	expressionCarrier
 
