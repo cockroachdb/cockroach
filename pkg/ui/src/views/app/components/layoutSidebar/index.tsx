@@ -1,8 +1,12 @@
 import classNames from "classnames";
 import _ from "lodash";
 import React from "react";
+import { connect } from "react-redux";
 import PropTypes from "prop-types";
 import { Link } from "react-router";
+
+import { AdminUIState } from "src/redux/state";
+import { LoginState } from "src/redux/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
@@ -54,23 +58,45 @@ class IconLink extends React.Component<IconLinkProps, {}> {
   }
 }
 
+function LoginIndicator({ loginState }: { loginState: LoginState }) {
+  return (
+    <div className="login-indicator">
+      {window.dataFromServer.LoginEnabled
+        ? <span>Logged in as {loginState.loggedInUser}</span>
+        : <span>Insecure mode</span>}
+    </div>
+  );
+}
+
+// tslint:disable-next-line:variable-name
+const LoginIndicatorConnected = connect(
+  (state: AdminUIState) => ({
+    loginState: state.login,
+  }),
+)(LoginIndicator);
+
 /**
- * SideBar represents the static navigation sidebar available on all pages. It
+ * Sidebar represents the static navigation sidebar available on all pages. It
  * displays a number of graphic icons representing available pages; the icon of
  * the page which is currently active will be highlighted.
  */
-export default class extends React.Component<{}, {}> {
+export default class Sidebar extends React.Component {
   render() {
-    return <nav className="navigation-bar">
-      <ul className="navigation-bar__list">
-        <IconLink to="/overview" icon={homeIcon} title="Overview" activeFor="/node" />
-        <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
-        <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
-        <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
-      </ul>
-      <ul className="navigation-bar__list navigation-bar__list--bottom">
-        <IconLink to="/" icon={cockroachIcon} className="cockroach" />
-      </ul>
-    </nav>;
+    return (
+      <nav className="navigation-bar">
+        <ul className="navigation-bar__list">
+          <IconLink to="/overview" icon={homeIcon} title="Overview" activeFor="/node" />
+          <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
+          <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
+          <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
+        </ul>
+        <div className="logged-in-user">
+          <LoginIndicatorConnected />
+        </div>
+        <ul className="navigation-bar__list navigation-bar__list--bottom">
+          <IconLink to="/" icon={cockroachIcon} className="cockroach" />
+        </ul>
+      </nav>
+    );
   }
 }
