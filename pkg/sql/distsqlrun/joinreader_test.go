@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -317,4 +319,51 @@ func TestJoinReaderDrain(t *testing.T) {
 			t.Fatal("missing txn trailing metadata")
 		}
 	})
+}
+
+// BenchmarkJoinReader benchmarks an index join where there is a 1:1
+// relationship between the two sides.
+func BenchmarkJoinReader(b *testing.B) {
+	logScope := log.Scope(b)
+	defer logScope.Close(b)
+
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
+	flowCtx := FlowCtx{
+		EvalCtx:  evalCtx,
+		Settings: s.ClusterSettings(),
+		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+	}
+
+	const numCols = 2
+	const numInputCols = 1
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		tableName := fmt.Sprintf("t%d", numRows)
+		sqlutils.CreateTable(
+			b, sqlDB, tableName, "k INT PRIMARY KEY, v INT", numRows,
+			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn),
+		)
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+
+		spec := JoinReaderSpec{Table: *tableDesc}
+		input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numInputCols))
+		post := PostProcessSpec{}
+		output := RowDisposer{}
+
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
+			for i := 0; i < b.N; i++ {
+				jr, err := newJoinReader(&flowCtx, &spec, input, &post, &output)
+				if err != nil {
+					b.Fatal(err)
+				}
+				jr.Run(context.Background(), nil)
+				input.Reset()
+			}
+		})
+	}
 }
