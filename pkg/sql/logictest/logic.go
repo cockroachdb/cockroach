@@ -117,6 +117,13 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//
+// - statement count N
+//   Like "statement ok" but expect a final RowsAffected count of N.
+//   example:
+//     statement count 2
+//     INSERT INTO kv VALUES (1,2), (2,3)
+//
 //  - statement error <regexp>
 //    Runs the statement that follows and expects an
 //    error that matches the given regexp.
@@ -447,6 +454,8 @@ type logicStatement struct {
 	// expected pgcode for the error, if any. "" indicates the
 	// test does not check the pgwire error code.
 	expectErrCode string
+	// expected rows affected count. -1 to avoid testing this.
+	expectCount int64
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -1173,12 +1182,20 @@ func (t *logicTest) processSubtest(
 
 		case "statement":
 			stmt := logicStatement{
-				pos: fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				expectCount: -1,
 			}
 			// Parse "statement error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
+			}
+			if len(fields) >= 3 && fields[1] == "count" {
+				n, err := strconv.ParseInt(fields[2], 10, 64)
+				if err != nil {
+					return err
+				}
+				stmt.expectCount = n
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
@@ -1529,7 +1546,17 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	_, err := t.db.Exec(stmt.sql)
+	res, err := t.db.Exec(stmt.sql)
+	if err == nil && stmt.expectCount >= 0 {
+		var count int64
+		count, err = res.RowsAffected()
+
+		// If err becomes non-nil here, we'll catch it below.
+
+		if err == nil && count != stmt.expectCount {
+			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, stmt.sql, stmt.expectCount, count)
+		}
+	}
 
 	// General policy for failing vs. continuing:
 	// - we want to do as much work as possible;
