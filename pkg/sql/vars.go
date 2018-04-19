@@ -293,6 +293,29 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_force_zigzag_join`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getSingleBool("experimental_force_zigzag_join", evalCtx, values)
+			if err != nil {
+				return err
+			}
+			m.SetZigzagJoinEnabled(bool(*s))
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.ZigzagJoinEnabled)
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetZigzagJoinEnabled(false)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_opt`: {
 		Set: func(
 			_ context.Context, m *sessionDataMutator,
