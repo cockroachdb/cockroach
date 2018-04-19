@@ -30,7 +30,7 @@ backwards-incompatible features. Therefore, it is necessary to add a version
 check mechanism that automatically runs the finalization command once knowing
 all the nodes in the cluster are running the new version.
 
-Finally, because this finalization step is irreversible, we want to allow
+Because this finalization step is irreversible, we want to allow
 operators to make their own decisions on whether to use this auto-finalization
 feature or not. For example, operators who want to opt out of auto-upgrade from
 `version 2.0` to its next version should run:
@@ -51,6 +51,11 @@ they can run the following command to change it back to auto upgrade:
 RESET CLUSTER SETTING cluster.preserve_downgrade_option;
 ```
 
+Finally, trying to set the cluster setting version when operators have already
+set `cluster.preserve_downgrade_option` is not allowed. Operators have to reset
+the `cluster.preserve_downgrade_option` to allow auto upgrade to happen.
+
+
 ## Detailed Design
 
 ### Add a new setting `cluster.preserve_downgrade_option`
@@ -59,48 +64,71 @@ The field should be added to `CLUSTER SETTING` in the format of:
 `cluster.preserve_downgrade_option = 2.0`
 
 By default, the value should be `""`, an empty string, to indicate we are always
-using auto upgrade.
+using auto upgrade. We validate that the value being stored in this field matches
+the current cluster version before storing it.
 
-We should always validate the value being stored in this field. It should not
-exceed the maximum version we have; nor should it fall below user's current
-cluster version.
+### On node startup, have a daemon that keeps running the following logic until exit:
 
-### On node startup, have a daemon that runs the following logic
-
-- Check setting `cluster.preserve_downgrade_option`.
 - **IF**:
-  - Did not preserve downgrade options for current cluster version.
-  <br>**AND**
-  - Look at `crdb_internal.gossip_nodes` and verify that all nodes are running
-  the new version.
-  <br>**AND**
-  - Look at `NodeStatusKeys` and verify that all non-decommissioned nodes are
-  in `gossip_nodes` (no missing nodes).
+  - All lives nodes are running the same version as cluster version.
 - **THEN**:
-  - Do upgrade:
-```
-SET CLUSTER SETTING version = crdb_internal.node_executable_version();
-```
-
-  - Run `RESET CLUSTER SETTING cluster.preserve_downgrade_option;`.
-- **ELSE**
-  - Exit and abort upgrade.
+  - Exit.
+- **ELSE IF**:
+  - The preserve downgrade option for the current cluster version is not set.
+  <br>**AND**
+  - Look at `crdb_internal.gossip_nodes` and verify that all live nodes are
+  running the new version.
+  <br>**AND**
+  - Pull `NodeLivenessStatus` from liveness server and verify that all
+  non-decommissioned nodes are alive (no missing nodes).
+- **THEN**:
+  - Execute the following statement until success:
+      - Do upgrade: `SET CLUSTER SETTING version = crdb_internal.node_executable_version();`.
+  - Exit.
 
 
 ## Testing
-Use the existing ``pkg/cmd/roachtest/version.go`` as a basis.
 
-Test Steps:
+### Roachtest `upgrade.go`:
 
-1. Run `SET CLUSTER SETTING cluster.preserve_downgrade_option = '2.0';`
+Test Steps covered by `upgrade.go`
+(sleep between each step for a certain amount of time if necessary):
 
-2. Perform a rolling upgrade.
+1. Start a cluster of `N` nodes running `v2.0.0`.
 
-3. Sleep and check `cluster version` is still the old version.
+2. Perform a rolling upgrade for node `1` - `N-1`. At every iteration, check
+that the cluster version is not upgraded.
 
-4. Run `RESET CLUSTER SETTING cluster.preserve_downgrade_option;`
+3. Stop node `N-1`.
 
-5. Sleep and check `cluster version` is bumped to the new version.
+4. Perform an upgrade for node `N`, which was running `v2.0.0`.
+
+5. Check that the cluster version is not upgraded.
+
+6. Decommission node `N-2` (decommissioned nodes should not affect auto upgrade).
+
+7. Check cannot set `cluster.preserve_downgrade_option` to any value besides
+`2.0`, which is the current cluster version.
+
+8. Set `cluster.preserve_downgrade_option` to be `2.0`.
+
+9. Restart node `N-1`, which was previously force stopped.
+
+10. Check that the cluster version is not upgraded.
+
+11. Check cannot set the cluster setting version until `cluster.preserve_downgrade_option`
+is cleared.
+
+12. Reset `cluster.preserve_downgrade_option`.
+
+13. Check that the cluster version is upgraded to new version.
+
+14. Check that `cluster.preserve_downgrade_option` has been reset.
+
+### Unit test `TestClusterVersionUpgrade`:
+
+`TestClusterVersionUpgrade` follows similar test steps as `upgrade.go`. Since 
+it serves as a quick check for CI, it's not as comprehensive as the roachtest.
 
 
 ## UI
@@ -112,16 +140,9 @@ to instruct them to manually run the upgrade command.
 not decommissioned, we should have a banner to alert operators to either revive
 or decommission the down nodes.
 
-- Have an API that returns if the auto-upgrade is disabled or not.
+- Let the operator know if the auto-upgrade is disabled or not at current version.
   - If `cluster.preserve_downgrade_option` is equal to `cluster.version`,
   auto-upgrade is disabled. Otherwise it's enabled.
-- If auto-upgrade is enabled, have an API that returns if the auto upgrade has
-started or not.
-  - If all nodes have the same `node_executable_version`, auto-upgrade has started.
-- If auto-upgrade is enabled, have an API that returns if the auto upgrade has
-  finished or not.
-  - If all node's `node_executable_version` is the same as `cluster.version`,
-  auto-upgrade has finished.
 
 
 ## Drawbacks
