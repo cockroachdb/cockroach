@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
+	"github.com/pkg/errors"
 
 	"github.com/kr/pretty"
 
@@ -281,6 +282,71 @@ func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolut
 				return data, false
 			},
 		)
+	}
+}
+
+// assertQuery generates a query result from the local test model and compares
+// it against the query returned from the server.
+//
+// My suggestion is to break down the model query into multiple, independently
+// verificable steps. These steps will not be memory or computationally
+// efficient, but will be conceptually easy to verify; then we can compare its
+// results against the real data store with more confidence.
+func (tm *testModelRunner) assertQuery(
+	name string,
+	sources []string,
+	downsample, agg *tspb.TimeSeriesQueryAggregator,
+	derivative *tspb.TimeSeriesQueryDerivative,
+	r Resolution,
+	sampleDuration, start, end, interpolationLimit int64,
+	expectedDatapointCount, expectedSourceCount int,
+) {
+	tm.t.Helper()
+	// Query the actual server.
+	q := tspb.Query{
+		Name:             name,
+		Downsampler:      downsample,
+		SourceAggregator: agg,
+		Derivative:       derivative,
+		Sources:          sources,
+	}
+
+	memContext := tm.makeMemoryContext(interpolationLimit)
+	defer memContext.Close(context.TODO())
+	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
+		context.TODO(),
+		q,
+		r,
+		sampleDuration,
+		start,
+		end,
+		memContext,
+	)
+	if err != nil {
+		tm.t.Fatal(err)
+	}
+	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
+		tm.t.Logf("actual datapoints: %v", actualDatapoints)
+		tm.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
+	}
+	if a, e := len(actualSources), expectedSourceCount; a != e {
+		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
+	}
+
+	// Query the testmodel.
+	modelDatapoints := tm.model.Query(
+		name,
+		sources,
+		q.GetDownsampler(),
+		q.GetSourceAggregator(),
+		q.GetDerivative(),
+		r.SlabDuration(),
+		sampleDuration, start, end, interpolationLimit,
+	)
+	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			tm.t.Error(diff)
+		}
 	}
 }
 
