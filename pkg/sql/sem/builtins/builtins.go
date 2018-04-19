@@ -1863,7 +1863,7 @@ CockroachDB supports the following flags:
 				return roundDecimal(&args[0].(*tree.DDecimal).Decimal, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
-				" in `input using half away from zero rounding. If `decimal_accuracy` " +
+				"in `input` using half away from zero rounding. If `decimal_accuracy` " +
 				"is not in the range -2^31...(2^31-1), the results are undefined.",
 		},
 	},
