@@ -74,7 +74,7 @@ func TestContainsTimeSeries(t *testing.T) {
 
 func TestFindTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -291,7 +291,7 @@ func TestFindTimeSeries(t *testing.T) {
 
 func TestPruneTimeSeries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
