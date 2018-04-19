@@ -86,9 +86,13 @@ export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.Comma
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
 
+export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
+export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
+export const AUTH_PREFIX = "_auth/v1";
 export const STATUS_PREFIX = "_status";
 
 // HELPER FUNCTIONS
@@ -309,3 +313,9 @@ export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: momen
 export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
   return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings`, null, timeout);
 }
+
+export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {
+  return timeoutFetch(serverpb.UserLoginResponse, `${AUTH_PREFIX}/login`, req as any, timeout);
+}
+
+// TODO(vilterp): logout
