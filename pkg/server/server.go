@@ -579,7 +579,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.UseLegacyConnHandling {
 		s.registry.AddMetricStruct(s.sqlExecutor)
 	}
-	s.PeriodicallyClearStmtStats(ctx)
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,

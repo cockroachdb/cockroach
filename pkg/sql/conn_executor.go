@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -293,6 +294,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 			}
 		}
 	})
+	s.PeriodicallyClearStmtStats(ctx, stopper)
 }
 
 // recordError takes an error and increments the corresponding count for its
@@ -489,6 +491,43 @@ func (s *Server) ServeConn(
 		ex.closeWrapper(ctx, r)
 	}()
 	return ex.run(ctx, cancel)
+}
+
+var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
+	"diagnostics.forced_stat_reset.interval",
+	"interval after which pending diagnostics statistics should be discarded even if not reported",
+	time.Hour*2, // 2 x diagnosticReportFrequency
+)
+
+// PeriodicallyClearStmtStats runs a loop to ensure that sql stats are reset.
+// Usually we expect those stats to be reset by diagnostics reporting, after it
+// generates its reports. However if the diagnostics loop crashes and stops
+// resetting stats, this loop ensures stats do not accumulate beyond a
+// the diagnostics.forced_stat_reset.interval limit.
+func (s *Server) PeriodicallyClearStmtStats(ctx context.Context, stopper *stop.Stopper) {
+	stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		for {
+
+			s.sqlStats.Lock()
+			last := s.sqlStats.lastReset
+			s.sqlStats.Unlock()
+
+			next := last.Add(maxStmtStatReset.Get(&s.cfg.Settings.SV))
+			wait := next.Sub(timeutil.Now())
+			if wait < 0 {
+				s.ResetStatementStats(ctx)
+			} else {
+				timer.Reset(wait)
+				select {
+				case <-stopper.ShouldQuiesce():
+					return
+				case <-timer.C:
+					timer.Read = true
+				}
+			}
+		}
+	})
 }
 
 type closeType bool
