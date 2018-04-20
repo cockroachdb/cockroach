@@ -23,6 +23,9 @@ import (
 // comparable or worse performance and worse type safety than an ordinary
 // map paired with a read-write mutex.
 //
+// Nil values are not supported; to use an IntMap as a set store a
+// dummy non-nil pointer instead of nil.
+//
 // The zero Map is valid and empty.
 //
 // A Map must not be copied after first use.
