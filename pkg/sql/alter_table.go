@@ -35,6 +35,10 @@ import (
 type alterTableNode struct {
 	n         *tree.AlterTable
 	tableDesc *sqlbase.TableDescriptor
+	// statsData is populated with data for "alter table inject statistics"
+	// commands - the JSON stats expressions.
+	// It is parallel with n.Cmds (for the inject stats commands).
+	statsData map[int]tree.TypedExpr
 }
 
 // AlterTable applies a schema change on a table.
@@ -63,7 +67,28 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
-	return &alterTableNode{n: n, tableDesc: tableDesc}, nil
+
+	// See if there's any "inject statistics" in the query and type check the
+	// expressions.
+	statsData := make(map[int]tree.TypedExpr)
+	for i, cmd := range n.Cmds {
+		injectStats, ok := cmd.(*tree.AlterTableInjectStats)
+		if !ok {
+			continue
+		}
+		typedExpr, err := p.analyzeExpr(
+			ctx, injectStats.Stats,
+			nil, /* sources - no name resolution */
+			tree.IndexedVarHelper{},
+			types.JSON, true, /* requireType */
+			"INJECT STATISTICS" /* typingContext */)
+		if err != nil {
+			return nil, err
+		}
+		statsData[i] = typedExpr
+	}
+
+	return &alterTableNode{n: n, tableDesc: tableDesc, statsData: statsData}, nil
 }
 
 func (n *alterTableNode) startExec(params runParams) error {
@@ -75,7 +100,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	var droppedViews []string
 	tn := n.n.Table.TableName()
 
-	for _, cmd := range n.n.Cmds {
+	for i, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
@@ -545,7 +570,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableInjectStats:
-			if err := params.p.injectTableStats(params.ctx, n.tableDesc, t.Stats); err != nil {
+			sd, ok := n.statsData[i]
+			if !ok {
+				return errors.Errorf("programming error: missing stats data")
+			}
+			if err := params.p.injectTableStats(params.ctx, n.tableDesc, sd); err != nil {
 				return err
 			}
 
@@ -705,15 +734,9 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 // JSON). This is useful for reproducing planning issues without importing the
 // data.
 func (p *planner) injectTableStats(
-	ctx context.Context, desc *sqlbase.TableDescriptor, statsExpr tree.Expr,
+	ctx context.Context, desc *sqlbase.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	typedExpr, err := tree.TypeCheckAndRequire(
-		statsExpr, &p.semaCtx, types.JSON, "INJECT STATISTICS",
-	)
-	if err != nil {
-		return err
-	}
-	val, err := typedExpr.Eval(p.EvalContext())
+	val, err := statsExpr.Eval(p.EvalContext())
 	if err != nil {
 		return err
 	}
