@@ -14,6 +14,12 @@
 
 package tree
 
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+)
+
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
 	IfExists bool
@@ -54,6 +60,7 @@ type AlterTableCmd interface {
 
 func (*AlterTableAddColumn) alterTableCmd()          {}
 func (*AlterTableAddConstraint) alterTableCmd()      {}
+func (*AlterTableAlterColumnType) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
@@ -65,6 +72,7 @@ func (*AlterTableInjectStats) alterTableCmd()        {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
+var _ AlterTableCmd = &AlterTableAlterColumnType{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
@@ -123,6 +131,74 @@ func (node *AlterTableAddConstraint) Format(ctx *FmtCtx) {
 	if node.ValidationBehavior == ValidationSkip {
 		ctx.WriteString(" NOT VALID")
 	}
+}
+
+// AlterColumnTypeControl specifies how the two-phase schema change
+// for an ALTER TABLE ALTER COLUMN TYPE will proceed.
+type AlterColumnTypeControl int
+
+const (
+	// AlterColumnTypeDefault automatically commits the schema change
+	// once the backfill has completed.
+	AlterColumnTypeDefault AlterColumnTypeControl = iota
+	// AlterColumnTypeDeferred starts a two-phase ALTER COLUMN process.
+	AlterColumnTypeDeferred
+	// AlterColumnTypeComplete allows the type change to complete once
+	// the backfill has finished.
+	AlterColumnTypeComplete
+	// AlterColumnTypeAbort allows an an in-progress change to be canceled.
+	AlterColumnTypeAbort
+)
+
+// AlterTableAlterColumnType represents an ALTER TABLE ALTER COLUMN TYPE command.
+type AlterTableAlterColumnType struct {
+	Collation     string
+	Column        Name
+	ColumnKeyword bool
+	Control       AlterColumnTypeControl
+	ToType        coltypes.T
+	Using         Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER ")
+	if node.ColumnKeyword {
+		ctx.WriteString("COLUMN ")
+	}
+	ctx.FormatNode(&node.Column)
+
+	ctx.WriteString(" TYPE ")
+	node.ToType.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+
+	if len(node.Collation) > 0 {
+		ctx.WriteString(" COLLATE ")
+		ctx.WriteString(node.Collation)
+	}
+
+	if node.Using != nil {
+		ctx.WriteString(" USING ")
+		ctx.FormatNode(node.Using)
+	}
+
+	switch node.Control {
+	case AlterColumnTypeDefault:
+		// Nothing needed
+		break
+	case AlterColumnTypeAbort:
+		ctx.WriteString(" ABORT")
+	case AlterColumnTypeComplete:
+		ctx.WriteString(" COMPLETE")
+	case AlterColumnTypeDeferred:
+		ctx.WriteString(" DEFERRED")
+	default:
+		panic(fmt.Sprintf("unhandled control value: %d", node.Control))
+	}
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableAlterColumnType) GetColumn() Name {
+	return node.Column
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.
