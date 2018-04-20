@@ -118,7 +118,7 @@ func (p *planner) Insert(
 
 	// We update the set of columns being inserted into with any computed columns.
 	cols, computedCols, computeExprs, err :=
-		ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+		sqlbase.ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (p *planner) Insert(
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
-					return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+					return nil, sqlbase.CannotWriteToComputedColError(cols[maxInsertIdx])
 				}
 			}
 			src, err = fillDefaults(defaultExprs, cols, values)
@@ -183,7 +183,7 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
-			return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+			return nil, sqlbase.CannotWriteToComputedColError(cols[maxInsertIdx])
 		}
 	}
 
@@ -370,29 +370,6 @@ func (n *insertNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-// rowIndexedVarContainer is used to evaluate expressions over various rows.
-type rowIndexedVarContainer struct {
-	curSourceRow tree.Datums
-	// Because the rows we have might not be permuted in the same way as the
-	// original table, we need to store a mapping between them.
-	cols    []sqlbase.ColumnDescriptor
-	mapping map[sqlbase.ColumnID]int
-}
-
-func (r *rowIndexedVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
-) (tree.Datum, error) {
-	return r.curSourceRow[r.mapping[r.cols[idx].ID]], nil
-}
-
-func (r *rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
-	panic("unsupported")
-}
-
-func (*rowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}
-
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
 func GenerateInsertRow(
@@ -432,7 +409,11 @@ func GenerateInsertRow(
 	if len(computeExprs) > 0 {
 		// Evaluate any computed columns. Since these obviously can reference other
 		// columns, we need an IVarContainer to be able to resolve column references.
-		iv := &rowIndexedVarContainer{rowVals, tableDesc.Columns, insertColIDtoRowIndex}
+		iv := &sqlbase.RowIndexedVarContainer{
+			CurSourceRow: rowVals,
+			Cols:         tableDesc.Columns,
+			Mapping:      insertColIDtoRowIndex,
+		}
 		evalCtx.PushIVarContainer(iv)
 
 		for i := range computedCols {

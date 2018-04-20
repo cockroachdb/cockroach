@@ -84,14 +84,23 @@ func ProcessDefaultColumns(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
+	cols = processColumnSet(cols, tableDesc, func(col ColumnDescriptor) bool {
+		return col.DefaultExpr != nil
+	})
+	defaultExprs, err := MakeDefaultExprs(cols, txCtx, evalCtx)
+	return cols, defaultExprs, err
+}
+
+func processColumnSet(
+	cols []ColumnDescriptor, tableDesc *TableDescriptor, inSet func(ColumnDescriptor) bool,
+) []ColumnDescriptor {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
 	for _, col := range cols {
 		colIDSet[col.ID] = struct{}{}
 	}
 
-	// Add the column if it has a DEFAULT expression.
-	addIfDefault := func(col ColumnDescriptor) {
-		if col.DefaultExpr != nil {
+	addIf := func(col ColumnDescriptor) {
+		if inSet(col) {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}
 				cols = append(cols, col)
@@ -101,17 +110,14 @@ func ProcessDefaultColumns(
 
 	// Add any column that has a DEFAULT expression.
 	for _, col := range tableDesc.Columns {
-		addIfDefault(col)
+		addIf(col)
 	}
-	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY and has
-	// a DEFAULT expression.
+	// Also add any column in a mutation that is DELETE_AND_WRITE_ONLY.
 	for _, m := range tableDesc.Mutations {
 		if col := m.GetColumn(); col != nil &&
 			m.State == DescriptorMutation_DELETE_AND_WRITE_ONLY {
-			addIfDefault(*col)
+			addIf(*col)
 		}
 	}
-
-	defaultExprs, err := MakeDefaultExprs(cols, txCtx, evalCtx)
-	return cols, defaultExprs, err
+	return cols
 }

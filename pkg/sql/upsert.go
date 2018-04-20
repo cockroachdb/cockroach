@@ -440,7 +440,7 @@ type upsertHelper struct {
 	// ccIvarContainer buffers the current values after the upsert
 	// conflict resolution, to serve as input while evaluating
 	// computeExprs.
-	ccIvarContainer rowIndexedVarContainer
+	ccIvarContainer sqlbase.RowIndexedVarContainer
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -626,9 +626,9 @@ func (p *planner) newUpsertHelper(
 	//
 	// This will use the layout from the table columns. The mapping from
 	// column IDs to row datum positions is straightforward.
-	helper.ccIvarContainer = rowIndexedVarContainer{
-		cols:    tableDesc.Columns,
-		mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
+	helper.ccIvarContainer = sqlbase.RowIndexedVarContainer{
+		Cols:    tableDesc.Columns,
+		Mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
 	}
 
 	return helper, nil
@@ -668,7 +668,7 @@ func (uh *upsertHelper) evalComputedCols(
 	updatedRow tree.Datums, appendTo tree.Datums,
 ) (tree.Datums, error) {
 	// Buffer the row.
-	uh.ccIvarContainer.curSourceRow = updatedRow
+	uh.ccIvarContainer.CurSourceRow = updatedRow
 
 	// Evaluate the computed columns.
 	uh.p.EvalContext().PushIVarContainer(&uh.ccIvarContainer)

@@ -623,9 +623,49 @@ WHERE table_name = 'x' and generation_expression = ''
 ----
 1
 
-# TODO(justin): #22652
-statement error adding a computed column via ALTER not supported
-ALTER TABLE x ADD COLUMN c INT AS (4) STORED
+statement ok
+INSERT INTO x VALUES (3)
+
+# Verify computed columns work.
+statement ok
+ALTER TABLE x ADD COLUMN c INT AS (a + 4) STORED
+
+query TT
+SHOW CREATE TABLE x
+----
+x  CREATE TABLE x (
+    a INT NULL,
+    b INT NULL AS (a * 2) STORED,
+    c INT NULL AS (a + 4) STORED,
+    FAMILY "primary" (a, b, rowid, c)
+)
+
+statement ok
+INSERT INTO x VALUES (6)
+
+query III
+SELECT * FROM x ORDER BY a
+----
+3 6 7
+6 12 10
+
+# Verify error if a default and computed column are added at the same time.
+statement error column name "d" not found
+ALTER TABLE x ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + a) STORED
+
+# Verify a bad statement fails.
+statement error could not parse "a" as type int
+ALTER TABLE x ADD COLUMN d INT AS (a + 'a') STORED
+
+statement error could not parse "a" as type int
+ALTER TABLE x ADD COLUMN d INT AS ('a') STORED
+
+statement error unsupported binary operator
+ALTER TABLE x ADD COLUMN d INT AS (a / 0) STORED
+
+# Verify an error during computation fails.
+statement error division by zero
+ALTER TABLE x ADD COLUMN d INT AS (a // 0) STORED
 
 statement ok
 DROP TABLE x
