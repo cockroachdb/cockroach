@@ -3799,18 +3799,40 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	}
 }
 
-func lpad(s string, length int, fill string) string {
-	slen := utf8.RuneCountInString(s)
+// padMaybeTruncate truncates the input string to length if the string is
+// longer or equal in size to length. If truncated, the first return value
+// will be true, and the last return value will be the truncated string.
+// The second return value is set to the length of the input string in runes.
+func padMaybeTruncate(s string, length int, fill string) (ok bool, slen int, ret string) {
+	if length < 0 {
+		// lpad and rpad both return an empty string if the input length is
+		// negative.
+		length = 0
+	}
+	slen = utf8.RuneCountInString(s)
 	if length == slen {
-		return s
+		return true, slen, s
 	}
 
 	// If string is longer then length truncate it to the requested number
 	// of characters.
 	if length < slen {
-		return string([]rune(s)[:length])
+		return true, slen, string([]rune(s)[:length])
 	}
 
+	// If the input fill is the empty string, return the original string.
+	if len(fill) == 0 {
+		return true, slen, s
+	}
+
+	return false, slen, s
+}
+
+func lpad(s string, length int, fill string) string {
+	ok, slen, ret := padMaybeTruncate(s, length, fill)
+	if ok {
+		return ret
+	}
 	var buf strings.Builder
 	fillRunes := []rune(fill)
 	for i := 0; i < length-slen; i++ {
@@ -3822,17 +3844,10 @@ func lpad(s string, length int, fill string) string {
 }
 
 func rpad(s string, length int, fill string) string {
-	slen := utf8.RuneCountInString(s)
-	if length == slen {
-		return s
+	ok, slen, ret := padMaybeTruncate(s, length, fill)
+	if ok {
+		return ret
 	}
-
-	// If string is longer then length truncate it to the requested number
-	// of characters.
-	if length < slen {
-		return string([]rune(s)[:length])
-	}
-
 	var buf strings.Builder
 	buf.WriteString(s)
 	fillRunes := []rune(fill)
