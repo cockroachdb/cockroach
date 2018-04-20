@@ -71,7 +71,8 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 
 	// Run a command with output redirected to the logs instead of to
 	// os.Stdout (which doesn't go anywhere I've been able to find)
-	// Don't use this if you're going to call cmd.CombinedOutput.
+	// Don't use this if you're going to call cmd.CombinedOutput or
+	// cmd.Output.
 	loggedCommand := func(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, arg0, args...)
 		cmd.Stdout = c.l.stdout
@@ -219,7 +220,7 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 				c.Run(ctx, controller, "journalctl -x --no-pager")
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
-				cmd = loggedCommand(ctx, "roachprod", "run", c.makeNodes(controller),
+				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
 					// -h causes tar to follow symlinks; needed by the "latest" symlink.
 					// -f- sends the output to stdout, we read it and save it to a local file.
 					"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
