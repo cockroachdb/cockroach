@@ -107,7 +107,7 @@ func registerVersion(r *registry) {
 		m.Go(func() error {
 			// NB: the number of calls to `sleep` needs to be reflected in `loadDuration`.
 			sleepAndCheck := func() error {
-				t.Status("sleeping")
+				t.WorkerStatus("sleeping")
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -115,7 +115,7 @@ func registerVersion(r *registry) {
 				}
 				// Make sure everyone is still running.
 				for i := 1; i <= nodes; i++ {
-					t.Status("checking ", i)
+					t.WorkerStatus("checking ", i)
 					db := c.Conn(ctx, 1)
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
@@ -157,7 +157,7 @@ func registerVersion(r *registry) {
 
 			// Now perform a rolling restart into the new binary.
 			for i := 1; i <= nodes; i++ {
-				t.Status("upgrading ", i)
+				t.WorkerStatus("upgrading ", i)
 				if err := stop(i); err != nil {
 					return err
 				}
@@ -170,7 +170,7 @@ func registerVersion(r *registry) {
 
 			// Changed our mind, let's roll that back.
 			for i := 1; i <= nodes; i++ {
-				t.Status("downgrading", i)
+				t.WorkerStatus("downgrading", i)
 				if err := stop(i); err != nil {
 					return err
 				}
@@ -183,7 +183,7 @@ func registerVersion(r *registry) {
 
 			// OK, let's go forward again.
 			for i := 1; i <= nodes; i++ {
-				t.Status("upgrading", i, "(again)")
+				t.WorkerStatus("upgrading", i, "(again)")
 				if err := stop(i); err != nil {
 					return err
 				}
@@ -195,7 +195,7 @@ func registerVersion(r *registry) {
 			}
 
 			// Finally, bump the cluster version (completing the upgrade).
-			t.Status("bumping cluster version")
+			t.WorkerStatus("bumping cluster version")
 			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING version = crdb_internal.node_executable_version()`); err != nil {
 				return err
 			}
