@@ -475,52 +475,6 @@ func (p *planner) getSequenceSource(
 	}, nil
 }
 
-// expandStar returns the array of column metadata and name
-// expressions that correspond to the expansion of a star.
-func expandStar(
-	ctx context.Context,
-	src sqlbase.MultiSourceInfo,
-	v tree.VarName,
-	ivarHelper tree.IndexedVarHelper,
-) (columns sqlbase.ResultColumns, exprs []tree.TypedExpr, err error) {
-	if len(src) == 0 || len(src[0].SourceColumns) == 0 {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"cannot use %q without a FROM clause", tree.ErrString(v))
-	}
-
-	colSel := func(src *sqlbase.DataSourceInfo, idx int) {
-		col := src.SourceColumns[idx]
-		if !col.Hidden {
-			ivar := ivarHelper.IndexedVar(idx + src.ColOffset)
-			columns = append(columns, sqlbase.ResultColumn{Name: col.Name, Typ: ivar.ResolvedType()})
-			exprs = append(exprs, ivar)
-		}
-	}
-
-	switch sel := v.(type) {
-	case tree.UnqualifiedStar:
-		// Simple case: a straight '*'. Take all columns.
-		for _, ds := range src {
-			for i := 0; i < len(ds.SourceColumns); i++ {
-				colSel(ds, i)
-			}
-		}
-	case *tree.AllColumnsSelector:
-		resolver := sqlbase.ColumnResolver{Sources: src}
-		_, _, err := sel.Resolve(ctx, &resolver)
-		if err != nil {
-			return nil, nil, err
-		}
-		ds := src[resolver.ResolverState.SrcIdx]
-		colSet := ds.SourceAliases[resolver.ResolverState.ColSetIdx].ColumnSet
-		for i, ok := colSet.Next(0); ok; i, ok = colSet.Next(i + 1) {
-			colSel(ds, i)
-		}
-	}
-
-	return columns, exprs, nil
-}
-
 // getAliasedTableName returns the underlying table name for a TableExpr that
 // could be either an alias or a normal table name. It also returns the original
 // table name, which will be equal to the alias name if the input is an alias,

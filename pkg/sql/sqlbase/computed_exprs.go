@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package sqlbase
 
 import (
 	"context"
@@ -22,13 +22,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
+
+// RowIndexedVarContainer is used to evaluate expressions over various rows.
+type RowIndexedVarContainer struct {
+	CurSourceRow tree.Datums
+
+	// Because the rows we have might not be permuted in the same way as the
+	// original table, we need to store a mapping between them.
+
+	Cols    []ColumnDescriptor
+	Mapping map[ColumnID]int
+}
+
+var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
+
+// IndexedVarEval implements tree.IndexedVarContainer.
+func (r *RowIndexedVarContainer) IndexedVarEval(
+	idx int, ctx *tree.EvalContext,
+) (tree.Datum, error) {
+	return r.CurSourceRow[r.Mapping[r.Cols[idx].ID]], nil
+}
+
+// IndexedVarResolvedType implements tree.IndexedVarContainer.
+func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+	panic("unsupported")
+}
+
+// IndexedVarNodeFormatter implements tree.IndexedVarContainer.
+func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
 
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
 // is used to type check computed columns and does not support evaluation.
 type descContainer struct {
-	cols []sqlbase.ColumnDescriptor
+	cols []ColumnDescriptor
 }
 
 func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
@@ -43,20 +72,12 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return nil
 }
 
-func cannotWriteToComputedColError(col sqlbase.ColumnDescriptor) error {
+// CannotWriteToComputedColError constructs a write error for a computed column.
+func CannotWriteToComputedColError(col ColumnDescriptor) error {
 	return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError, "cannot write directly to computed column %q",
 		tree.ErrString(&tree.ColumnItem{
 			ColumnName: tree.Name(col.Name),
 		}))
-}
-
-func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
-	for i := range cols {
-		if cols[i].IsComputed() {
-			return cannotWriteToComputedColError(cols[i])
-		}
-	}
-	return nil
 }
 
 // ProcessComputedColumns adds columns which are computed to the set of columns
@@ -74,43 +95,61 @@ func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 // https://github.com/cockroachdb/cockroach/issues/23523.
 func ProcessComputedColumns(
 	ctx context.Context,
-	cols []sqlbase.ColumnDescriptor,
+	cols []ColumnDescriptor,
 	tn *tree.TableName,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *TableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
-) ([]sqlbase.ColumnDescriptor, []sqlbase.ColumnDescriptor, []tree.TypedExpr, error) {
-	// TODO(justin): the DEFAULT version of this code also had code to handle
-	// mutations. We don't support adding computed columns yet, but we will need
-	// to add that back in.
-
-	// TODO(justin): is there a way we can somehow cache this property on the
-	// table descriptor so we don't have to iterate through all of these?
-	haveComputed := false
-	endOfNonComputed := len(cols)
-	for _, col := range tableDesc.Columns {
-		if col.IsComputed() {
-			cols = append(cols, col)
-			haveComputed = true
-		}
-	}
-
-	// If this table has no computed columns, don't bother.
-	if !haveComputed {
-		return cols, nil, nil, nil
-	}
-
-	computedCols := cols[endOfNonComputed:]
+) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
+	computedCols := processColumnSet(nil, tableDesc, func(col ColumnDescriptor) bool {
+		return col.IsComputed()
+	})
+	cols = append(cols, computedCols...)
 
 	// TODO(justin): it's unfortunate that this parses and typechecks the
 	// ComputeExprs on every query.
+	computedExprs, err := MakeComputedExprs(computedCols, tableDesc, tn, txCtx, evalCtx)
+	return cols, computedCols, computedExprs, err
+}
+
+// MakeComputedExprs returns a slice of the computed expressions for the
+// slice of input column descriptors, or nil if none of the input column
+// descriptors have computed expressions.
+// The length of the result slice matches the length of the input column
+// descriptors. For every column that has no computed expression, a NULL
+// expression is reported.
+func MakeComputedExprs(
+	cols []ColumnDescriptor,
+	tableDesc *TableDescriptor,
+	tn *tree.TableName,
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
+	// Check to see if any of the columns have computed expressions. If there
+	// are none, we don't bother with constructing the map as the expressions
+	// are all NULL.
+	haveComputed := false
+	for _, col := range cols {
+		if col.IsComputed() {
+			haveComputed = true
+			break
+		}
+	}
+	if !haveComputed {
+		return nil, nil
+	}
+
+	// Build the computed expressions map from the parsed statement.
+	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
-	for _, col := range computedCols {
-		exprStrings = append(exprStrings, *col.ComputeExpr)
+	for _, col := range cols {
+		if col.IsComputed() {
+			exprStrings = append(exprStrings, *col.ComputeExpr)
+		}
 	}
 	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	// We need an ivarHelper and sourceInfo, unlike DEFAULT, since computed
@@ -120,31 +159,35 @@ func ProcessComputedColumns(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
+	sourceInfo := NewSourceInfoForSingleTable(
+		*tn, ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
 	semaCtx := tree.MakeSemaContext(false)
 	semaCtx.IVarContainer = iv
 
-	computedExprs := make([]tree.TypedExpr, 0, len(cols))
-	for i, col := range computedCols {
-		expr, _, _, err := resolveNames(exprs[i],
-			sqlbase.MakeMultiSourceInfo(sourceInfo),
+	compExprIdx := 0
+	for _, col := range cols {
+		if !col.IsComputed() {
+			computedExprs = append(computedExprs, tree.DNull)
+			continue
+		}
+		expr, _, _, err := ResolveNames(exprs[compExprIdx],
+			MakeMultiSourceInfo(sourceInfo),
 			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
 		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type.ToDatumType())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		computedExprs = append(computedExprs, typedExpr)
+		compExprIdx++
 	}
-
-	return cols, computedCols, computedExprs, nil
+	return computedExprs, nil
 }

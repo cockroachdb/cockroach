@@ -112,10 +112,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			if d.Computed.Computed {
-				return pgerror.Unimplemented(
-					"alter add computed", "adding a computed column via ALTER not supported")
-			}
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err

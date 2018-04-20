@@ -631,7 +631,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	// tu.evaler.ccIvarContainer.mapping which contains the suitable
 	// mapping for the table columns already.
 	updatedConflictingRowPK, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.mapping, updatedRow, tu.indexKeyPrefix)
+		tableDesc, &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
