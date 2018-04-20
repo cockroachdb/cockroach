@@ -1157,13 +1157,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								schemaChanger.forGC = true
 								schemaChanger.execAfter = execGCAfter
 							}
-							// Keep track of this schema change.
-							if sc, ok := s.schemaChangers[table.ID]; ok {
-								if sc.mutationID == schemaChanger.mutationID {
-									// Ignore duplicate.
-									return
-								}
-							}
+
 							s.schemaChangers[table.ID] = schemaChanger
 						}
 
