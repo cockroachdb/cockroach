@@ -58,12 +58,26 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		db := c.Conn(ctx, nodes)
 		defer db.Close()
 
-		for ok := false; !ok; {
+		for {
+			var count int
 			if err := db.QueryRow(
-				"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NULL",
+				// Check if the down node has any replicas.
+				"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
 				downNodeID,
-			).Scan(&ok); err != nil {
+			).Scan(&count); err != nil {
 				return err
+			}
+			if count == 0 {
+				fullReplicated := false
+				if err := db.QueryRow(
+					// Check if all ranges are fully replicated.
+					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
+				).Scan(&fullReplicated); err != nil {
+					return err
+				}
+				if fullReplicated {
+					break
+				}
 			}
 			time.Sleep(time.Second)
 		}
