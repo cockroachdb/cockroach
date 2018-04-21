@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestLogicalPropsFactory(t *testing.T) {
@@ -69,6 +70,21 @@ func TestLogicalJoinProps(t *testing.T) {
 	joinFunc(opt.SemiJoinApplyOp, "a.x:1(int!null) a.y:2(int)")
 	joinFunc(opt.AntiJoinOp, "a.x:1(int!null) a.y:2(int)")
 	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)")
+
+	// Ensure that OuterCols that refer to outer relation of apply join do not
+	// become OuterCols of the join (i.e. that they are bound).
+	// (ApplyInnerJoin (Scan a) (Values (Tuple (Variable a.x))))
+	leftGroup := f.ConstructScan(f.InternScanOpDef(constructScanOpDef(f.Metadata(), a)))
+	varGroup := f.ConstructVariable(f.InternColumnID(f.Metadata().TableColumn(a, 0)))
+	tupleGroup := f.ConstructTuple(f.InternList([]memo.GroupID{varGroup}))
+	rows := f.InternList([]memo.GroupID{tupleGroup})
+	cols := f.InternColList(opt.ColList{f.Metadata().AddColumn("column1", types.Int)})
+	valuesGroup := f.ConstructValues(rows, cols)
+	joinGroup := f.ConstructInnerJoinApply(leftGroup, valuesGroup, f.ConstructTrue())
+
+	if !f.Memo().GroupProperties(joinGroup).Relational.OuterCols.Empty() {
+		t.Fatalf("expected outer columns to be empty on apply join group")
+	}
 }
 
 func constructScanOpDef(md *opt.Metadata, tabID opt.TableID) *memo.ScanOpDef {

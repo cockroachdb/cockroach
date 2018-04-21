@@ -1,7 +1,7 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z))
 ----
-TABLE a
+TABLE xyzs
  ├── x int not null
  ├── y int
  ├── z float not null
@@ -13,160 +13,224 @@ TABLE a
       ├── z float not null
       └── x int not null (storing)
 
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
 build
-SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
+SELECT y, SUM(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
  ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool)
  ├── stats: [rows=100]
  ├── keys: (1)
  ├── group-by
- │    ├── columns: a.x:1(int!null) a.y:2(int) column5:5(float)
- │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) column5:5(float)
+ │    ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int)
  │    ├── stats: [rows=100]
  │    ├── keys: (1)
  │    ├── project
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
+ │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null)
  │    │    ├── stats: [rows=1000]
  │    │    ├── keys: (1)
- │    │    ├── scan a
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── scan xyzs
+ │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    └── keys: (1) weak(3,4)
  │    │    └── projections [outer=(1-3)]
- │    │         ├── variable: a.x [type=int, outer=(1)]
- │    │         ├── variable: a.y [type=int, outer=(2)]
- │    │         └── variable: a.z [type=float, outer=(3)]
+ │    │         ├── variable: xyzs.x [type=int, outer=(1)]
+ │    │         ├── variable: xyzs.y [type=int, outer=(2)]
+ │    │         └── variable: xyzs.z [type=float, outer=(3)]
  │    └── aggregations [outer=(3)]
  │         └── function: sum [type=float, outer=(3)]
- │              └── variable: a.z [type=float, outer=(3)]
+ │              └── variable: xyzs.z [type=float, outer=(3)]
  └── projections [outer=(1,2,5)]
-      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: xyzs.y [type=int, outer=(2)]
       ├── variable: column5 [type=float, outer=(5)]
-      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: xyzs.x [type=int, outer=(1)]
       └── false [type=bool]
 
 # Scalar groupby.
 build
-SELECT SUM(a.x), MAX(a.y) FROM a
+SELECT SUM(x), MAX(y) FROM xyzs
 ----
 group-by
  ├── columns: column5:5(decimal) column6:6(int)
  ├── stats: [rows=1]
  ├── keys: ()
  ├── project
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int)
  │    ├── stats: [rows=1000]
  │    ├── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── scan xyzs
+ │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1) weak(3,4)
  │    └── projections [outer=(1,2)]
- │         ├── variable: a.x [type=int, outer=(1)]
- │         └── variable: a.y [type=int, outer=(2)]
+ │         ├── variable: xyzs.x [type=int, outer=(1)]
+ │         └── variable: xyzs.y [type=int, outer=(2)]
  └── aggregations [outer=(1,2)]
       ├── function: sum [type=decimal, outer=(1)]
-      │    └── variable: a.x [type=int, outer=(1)]
+      │    └── variable: xyzs.x [type=int, outer=(1)]
       └── function: max [type=int, outer=(2)]
-           └── variable: a.y [type=int, outer=(2)]
+           └── variable: xyzs.y [type=int, outer=(2)]
 
 # Group by unique index columns.
 build
-SELECT s FROM a GROUP BY z, s
+SELECT s FROM xyzs GROUP BY z, s
 ----
 project
  ├── columns: s:4(string)
  ├── stats: [rows=100]
  ├── group-by
- │    ├── columns: a.z:3(float!null) a.s:4(string)
- │    ├── grouping columns: a.z:3(float!null) a.s:4(string)
+ │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── grouping columns: xyzs.z:3(float!null) xyzs.s:4(string)
  │    ├── stats: [rows=100]
  │    ├── keys: weak(3,4)
  │    ├── project
- │    │    ├── columns: a.z:3(float!null) a.s:4(string)
+ │    │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    ├── stats: [rows=1000]
  │    │    ├── keys: weak(3,4)
- │    │    ├── scan a
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── scan xyzs
+ │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    └── keys: (1) weak(3,4)
  │    │    └── projections [outer=(3,4)]
- │    │         ├── variable: a.z [type=float, outer=(3)]
- │    │         └── variable: a.s [type=string, outer=(4)]
+ │    │         ├── variable: xyzs.z [type=float, outer=(3)]
+ │    │         └── variable: xyzs.s [type=string, outer=(4)]
  │    └── aggregations
  └── projections [outer=(4)]
-      └── variable: a.s [type=string, outer=(4)]
+      └── variable: xyzs.s [type=string, outer=(4)]
 
 # Group by columns that otherwise wouldn't be weak key.
 build
-SELECT y, SUM(z) FROM a GROUP BY z, y
+SELECT y, SUM(z) FROM xyzs GROUP BY z, y
 ----
 project
  ├── columns: y:2(int) column5:5(float)
  ├── stats: [rows=100]
  ├── group-by
- │    ├── columns: a.y:2(int) a.z:3(float!null) column5:5(float)
- │    ├── grouping columns: a.y:2(int) a.z:3(float!null)
+ │    ├── columns: xyzs.y:2(int) xyzs.z:3(float!null) column5:5(float)
+ │    ├── grouping columns: xyzs.y:2(int) xyzs.z:3(float!null)
  │    ├── stats: [rows=100]
  │    ├── keys: weak(2,3)
  │    ├── project
- │    │    ├── columns: a.z:3(float!null) a.y:2(int)
+ │    │    ├── columns: xyzs.z:3(float!null) xyzs.y:2(int)
  │    │    ├── stats: [rows=1000]
- │    │    ├── scan a
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    │    ├── scan xyzs
+ │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    └── keys: (1) weak(3,4)
  │    │    └── projections [outer=(2,3)]
- │    │         ├── variable: a.z [type=float, outer=(3)]
- │    │         └── variable: a.y [type=int, outer=(2)]
+ │    │         ├── variable: xyzs.z [type=float, outer=(3)]
+ │    │         └── variable: xyzs.y [type=int, outer=(2)]
  │    └── aggregations [outer=(3)]
  │         └── function: sum [type=float, outer=(3)]
- │              └── variable: a.z [type=float, outer=(3)]
+ │              └── variable: xyzs.z [type=float, outer=(3)]
  └── projections [outer=(2,5)]
-      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: xyzs.y [type=int, outer=(2)]
       └── variable: column5 [type=float, outer=(5)]
 
 # Group by column that is subset of unique index.
 build
-SELECT z, MAX(s) FROM a GROUP BY z
+SELECT z, MAX(s) FROM xyzs GROUP BY z
 ----
 group-by
  ├── columns: z:3(float!null) column5:5(string)
- ├── grouping columns: a.z:3(float!null)
+ ├── grouping columns: xyzs.z:3(float!null)
  ├── stats: [rows=100]
  ├── keys: (3)
  ├── project
- │    ├── columns: a.z:3(float!null) a.s:4(string)
+ │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── keys: weak(3,4)
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── scan xyzs
+ │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1) weak(3,4)
  │    └── projections [outer=(3,4)]
- │         ├── variable: a.z [type=float, outer=(3)]
- │         └── variable: a.s [type=string, outer=(4)]
+ │         ├── variable: xyzs.z [type=float, outer=(3)]
+ │         └── variable: xyzs.s [type=string, outer=(4)]
  └── aggregations [outer=(4)]
       └── function: max [type=string, outer=(4)]
-           └── variable: a.s [type=string, outer=(4)]
+           └── variable: xyzs.s [type=string, outer=(4)]
 
 # Group by all columns.
 build
-SELECT s FROM a GROUP BY a.*
+SELECT s FROM xyzs GROUP BY xyzs.*
 ----
 project
  ├── columns: s:4(string)
  ├── stats: [rows=100]
  ├── group-by
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
- │    ├── grouping columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    ├── stats: [rows=100]
  │    ├── keys: (1) weak(3,4)
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
+ │    ├── scan xyzs
+ │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1) weak(3,4)
  │    └── aggregations
  └── projections [outer=(4)]
-      └── variable: a.s [type=string, outer=(4)]
+      └── variable: xyzs.s [type=string, outer=(4)]
+
+# Propagate outer columns.
+build
+SELECT * FROM xyzs WHERE (SELECT SUM(x) FROM (SELECT y, u FROM kuv) GROUP BY u) > 100
+----
+select
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── stats: [rows=100]
+ ├── keys: (1) weak(3,4)
+ ├── scan xyzs
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
+ └── gt [type=bool, outer=(1,2)]
+      ├── subquery [type=decimal, outer=(1,2)]
+      │    ├── max1-row
+      │    │    ├── columns: column8:8(decimal)
+      │    │    ├── outer: (1,2)
+      │    │    ├── stats: [rows=1]
+      │    │    └── project
+      │    │         ├── columns: column8:8(decimal)
+      │    │         ├── outer: (1,2)
+      │    │         ├── stats: [rows=100]
+      │    │         ├── group-by
+      │    │         │    ├── columns: kuv.u:6(float) column8:8(decimal)
+      │    │         │    ├── grouping columns: kuv.u:6(float)
+      │    │         │    ├── outer: (1,2)
+      │    │         │    ├── stats: [rows=100]
+      │    │         │    ├── keys: weak(6)
+      │    │         │    ├── project
+      │    │         │    │    ├── columns: kuv.u:6(float) xyzs.x:1(int)
+      │    │         │    │    ├── outer: (1,2)
+      │    │         │    │    ├── stats: [rows=1000]
+      │    │         │    │    ├── project
+      │    │         │    │    │    ├── columns: xyzs.y:2(int) kuv.u:6(float)
+      │    │         │    │    │    ├── outer: (2)
+      │    │         │    │    │    ├── stats: [rows=1000]
+      │    │         │    │    │    ├── scan kuv
+      │    │         │    │    │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │    │         │    │    │    │    ├── stats: [rows=1000]
+      │    │         │    │    │    │    └── keys: (5)
+      │    │         │    │    │    └── projections [outer=(2,6)]
+      │    │         │    │    │         ├── variable: xyzs.y [type=int, outer=(2)]
+      │    │         │    │    │         └── variable: kuv.u [type=float, outer=(6)]
+      │    │         │    │    └── projections [outer=(1,6)]
+      │    │         │    │         ├── variable: kuv.u [type=float, outer=(6)]
+      │    │         │    │         └── variable: xyzs.x [type=int, outer=(1)]
+      │    │         │    └── aggregations [outer=(1)]
+      │    │         │         └── function: sum [type=decimal, outer=(1)]
+      │    │         │              └── variable: xyzs.x [type=int, outer=(1)]
+      │    │         └── projections [outer=(8)]
+      │    │              └── variable: column8 [type=decimal, outer=(8)]
+      │    └── variable: column8 [type=decimal, outer=(8)]
+      └── const: 100 [type=decimal]
