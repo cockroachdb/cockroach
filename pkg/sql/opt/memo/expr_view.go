@@ -333,6 +333,10 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		}
 	}
 
+	if !flags.HasFlags(ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
+		tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
+	}
+
 	if !flags.HasFlags(ExprFmtHideStats) {
 		ev.formatStats(tp, &logProps.Relational.Stats)
 	}
