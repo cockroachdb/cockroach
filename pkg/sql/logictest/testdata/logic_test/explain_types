@@ -9,13 +9,14 @@ CREATE TABLE t (
 query TITTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-Tree         Level  Type    Field          Description       Columns                     Ordering
-insert       0      insert  ·              ·                 ()                          ·
- │           0      ·       into           t(k, v)           ·                           ·
- └── values  1      values  ·              ·                 (column1 int, column2 int)  ·
-·            1      ·       size           2 columns, 1 row  ·                           ·
-·            1      ·       row 0, expr 0  (1)[int]          ·                           ·
-·            1      ·       row 0, expr 1  (2)[int]          ·                           ·
+Tree              Level  Type    Field          Description       Columns                     Ordering
+count             0      count   ·              ·                 ()                          ·
+ └── insert       1      insert  ·              ·                 ()                          ·
+      │           1      ·       into           t(k, v)           ·                           ·
+      └── values  2      values  ·              ·                 (column1 int, column2 int)  ·
+·                 2      ·       size           2 columns, 1 row  ·                           ·
+·                 2      ·       row 0, expr 0  (1)[int]          ·                           ·
+·                 2      ·       row 0, expr 1  (2)[int]          ·                           ·
 
 statement ok
 INSERT INTO t VALUES (1, 2)
@@ -125,54 +126,58 @@ render                    0  render  ·            ·                           
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
 ----
-delete          0  delete  ·         ·                            ()              ·
- │              0  ·       from      t                            ·               ·
- └── render     1  render  ·         ·                            (k int)         ·
-      │         1  ·       render 0  (k)[int]                     ·               ·
-      └── scan  2  scan    ·         ·                            (k int, v int)  ·
-·               2  ·       table     t@primary                    ·               ·
-·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
+count                0  count   ·         ·                            ()              ·
+ └── delete          1  delete  ·         ·                            ()              ·
+      │              1  ·       from      t                            ·               ·
+      └── render     2  render  ·         ·                            (k int)         ·
+           │         2  ·       render 0  (k)[int]                     ·               ·
+           └── scan  3  scan    ·         ·                            (k int, v int)  ·
+·                    3  ·       table     t@primary                    ·               ·
+·                    3  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TITTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
 ----
-delete          0  delete  ·         ·                            ()              ·
- │              0  ·       from      t                            ·               ·
- └── render     1  render  ·         ·                            (k int)         k!=NULL; key(k)
-      │         1  ·       render 0  (k)[int]                     ·               ·
-      └── scan  2  scan    ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
-·               2  ·       table     t@primary                    ·               ·
-·               2  ·       spans     ALL                          ·               ·
-·               2  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
+count                0  count   ·         ·                            ()              ·
+ └── delete          1  delete  ·         ·                            ()              ·
+      │              1  ·       from      t                            ·               ·
+      └── render     2  render  ·         ·                            (k int)         k!=NULL; key(k)
+           │         2  ·       render 0  (k)[int]                     ·               ·
+           └── scan  3  scan    ·         ·                            (k int, v int)  k!=NULL; v!=NULL; key(k)
+·                    3  ·       table     t@primary                    ·               ·
+·                    3  ·       spans     ALL                          ·               ·
+·                    3  ·       filter    ((v)[int] > (1)[int])[bool]  ·               ·
 
 query TITTTTT
 EXPLAIN (TYPES) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-update          0  update  ·         ·                              ()                           ·
- │              0  ·       table     t                              ·                            ·
- │              0  ·       set       v                              ·                            ·
- └── render     1  render  ·         ·                              (k int, v int, "k + 1" int)  k!=NULL; v!=NULL; key(k)
-      │         1  ·       render 0  (k)[int]                       ·                            ·
-      │         1  ·       render 1  (v)[int]                       ·                            ·
-      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
-      └── scan  2  scan    ·         ·                              (k int, v int)               k!=NULL; v!=NULL; key(k)
-·               2  ·       table     t@primary                      ·                            ·
-·               2  ·       spans     ALL                            ·                            ·
-·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
+count                0  count   ·         ·                              ()                           ·
+ └── update          1  update  ·         ·                              ()                           ·
+      │              1  ·       table     t                              ·                            ·
+      │              1  ·       set       v                              ·                            ·
+      └── render     2  render  ·         ·                              (k int, v int, "k + 1" int)  k!=NULL; v!=NULL; key(k)
+           │         2  ·       render 0  (k)[int]                       ·                            ·
+           │         2  ·       render 1  (v)[int]                       ·                            ·
+           │         2  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
+           └── scan  3  scan    ·         ·                              (k int, v int)               k!=NULL; v!=NULL; key(k)
+·                    3  ·       table     t@primary                      ·                            ·
+·                    3  ·       spans     ALL                            ·                            ·
+·                    3  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) UPDATE t SET v = k + 1 WHERE v > 123
 ----
-update          0  update  ·         ·                              ()                           ·
- │              0  ·       table     t                              ·                            ·
- │              0  ·       set       v                              ·                            ·
- └── render     1  render  ·         ·                              (k int, v int, "k + 1" int)  ·
-      │         1  ·       render 0  (k)[int]                       ·                            ·
-      │         1  ·       render 1  (v)[int]                       ·                            ·
-      │         1  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
-      └── scan  2  scan    ·         ·                              (k int, v int)               ·
-·               2  ·       table     t@primary                      ·                            ·
-·               2  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
+count                0  count   ·         ·                              ()                           ·
+ └── update          1  update  ·         ·                              ()                           ·
+      │              1  ·       table     t                              ·                            ·
+      │              1  ·       set       v                              ·                            ·
+      └── render     2  render  ·         ·                              (k int, v int, "k + 1" int)  ·
+           │         2  ·       render 0  (k)[int]                       ·                            ·
+           │         2  ·       render 1  (v)[int]                       ·                            ·
+           │         2  ·       render 2  ((k)[int] + (1)[int])[int]     ·                            ·
+           └── scan  3  scan    ·         ·                              (k int, v int)               ·
+·                    3  ·       table     t@primary                      ·                            ·
+·                    3  ·       filter    ((v)[int] > (123)[int])[bool]  ·                            ·
 
 query TITTTTT
 EXPLAIN (TYPES) VALUES (1) UNION VALUES (2)

@@ -355,9 +355,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *insertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.tableDesc.Name)
+			buf.WriteString(n.run.ti.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.insertCols {
+			for i, col := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
@@ -368,24 +368,21 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 
 		if v.observer.expr != nil {
-			for i, dexpr := range n.defaultExprs {
+			for i, dexpr := range n.run.defaultExprs {
 				v.expr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.checkHelper.Exprs {
+			for i, cexpr := range n.run.checkHelper.Exprs {
 				v.expr(name, "check", i, cexpr)
 			}
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
 		}
-		v.visit(n.run.rows)
+		v.visit(n.source)
 
 	case *upsertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.tableDesc.Name)
+			buf.WriteString(n.run.tw.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.insertCols {
+			for i, col := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
@@ -396,27 +393,24 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 
 		if v.observer.expr != nil {
-			for i, dexpr := range n.defaultExprs {
+			for i, dexpr := range n.run.defaultExprs {
 				v.expr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.checkHelper.Exprs {
+			for i, cexpr := range n.run.checkHelper.Exprs {
 				v.expr(name, "check", i, cexpr)
 			}
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
+			n.run.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 				v.expr(name, d, i, e)
 			})
 		}
-		v.visit(n.run.rows)
+		v.visit(n.source)
 
 	case *updateNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "table", n.tableDesc.Name)
-			if len(n.tw.ru.UpdateCols) > 0 {
+			v.observer.attr(name, "table", n.run.tu.tableDesc().Name)
+			if len(n.run.tu.ru.UpdateCols) > 0 {
 				var buf bytes.Buffer
-				for i, col := range n.tw.ru.UpdateCols {
+				for i, col := range n.run.tu.ru.UpdateCols {
 					if i > 0 {
 						buf.WriteString(", ")
 					}
@@ -426,28 +420,28 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 		}
 		if v.observer.expr != nil {
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
+			for i, cexpr := range n.run.computeExprs {
+				v.expr(name, "computed", i, cexpr)
 			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.expr(name, d, i, e)
-			})
+			for i, cexpr := range n.run.checkHelper.Exprs {
+				v.expr(name, "check", i, cexpr)
+			}
 		}
-		v.visit(n.run.rows)
+		// An updater has no sub-expressions, so nothing special to do here.
+		v.visit(n.source)
 
 	case *deleteNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "from", n.tableDesc.Name)
+			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
 		}
-		if v.observer.expr != nil {
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.expr(name, d, i, e)
-			})
-		}
-		v.visit(n.run.rows)
+		// A deleter has no sub-expressions, so nothing special to do here.
+		v.visit(n.source)
+
+	case *serializeNode:
+		v.visit(n.source)
+
+	case *rowCountNode:
+		v.visit(n.source)
 
 	case *createTableNode:
 		if n.n.As() {
@@ -600,10 +594,12 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&testingRelocateNode{}):      "testingRelocate",
 	reflect.TypeOf(&renderNode{}):               "render",
+	reflect.TypeOf(&rowCountNode{}):             "count",
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
 	reflect.TypeOf(&sequenceSelectNode{}):       "sequence select",
+	reflect.TypeOf(&serializeNode{}):            "run",
 	reflect.TypeOf(&setVarNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}):    "set cluster setting",
 	reflect.TypeOf(&setZoneConfigNode{}):        "configure zone",

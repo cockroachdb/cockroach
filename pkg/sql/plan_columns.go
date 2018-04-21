@@ -79,6 +79,14 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *zeroNode:
 		return n.columns
+	case *deleteNode:
+		return n.columns
+	case *updateNode:
+		return n.columns
+	case *insertNode:
+		return n.columns
+	case *upsertNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -102,16 +110,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *sequenceSelectNode:
 		return n.getColumns(mut, sequenceSelectColumns)
 
-	// Nodes using the RETURNING helper.
-	case *deleteNode:
-		return n.rh.columns
-	case *insertNode:
-		return n.rh.columns
-	case *updateNode:
-		return n.rh.columns
-	case *upsertNode:
-		return n.rh.columns
-
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
 	case *distinctNode:
@@ -123,6 +121,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
 	case *spoolNode:
+		return getPlanColumns(n.source, mut)
+	case *serializeNode:
 		return getPlanColumns(n.source, mut)
 	}
 

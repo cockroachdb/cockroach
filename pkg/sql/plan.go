@@ -189,8 +189,10 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &testingRelocateNode{}
 var _ planNode = &renderNode{}
+var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
+var _ planNode = &serializeNode{}
 var _ planNode = &showRangesNode{}
 var _ planNode = &showFingerprintsNode{}
 var _ planNode = &sortNode{}
@@ -209,8 +211,9 @@ var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
 var _ planNodeFastPath = &deleteNode{}
+var _ planNodeFastPath = &rowCountNode{}
+var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
-var _ planNodeFastPath = &upsertNode{}
 
 // planNodeRequireSpool serves as marker for nodes whose parent must
 // ensure that the node is fully run to completion (and the results
@@ -220,9 +223,7 @@ type planNodeRequireSpool interface {
 	requireSpool()
 }
 
-var _ planNodeRequireSpool = &insertNode{}
-var _ planNodeRequireSpool = &deleteNode{}
-var _ planNodeRequireSpool = &updateNode{}
+var _ planNodeRequireSpool = &serializeNode{}
 
 // planNodeSpool serves as marker for nodes that can perform all their
 // execution during the start phase. This is different from the "fast
@@ -237,7 +238,6 @@ type planNodeSpooled interface {
 	spooled()
 }
 
-var _ planNodeSpooled = &upsertNode{}
 var _ planNodeSpooled = &spoolNode{}
 
 // planTop is the struct that collects the properties

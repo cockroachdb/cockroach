@@ -14,10 +14,10 @@ CREATE TABLE unindexed (
   v INT
 )
 
-statement ok
+statement count 4
 INSERT INTO kv VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II rowsort
@@ -50,7 +50,7 @@ SELECT * FROM kview
 5 6
 7 8
 
-statement ok
+statement count 2
 DELETE FROM kv WHERE k=3 OR v=6
 
 query II rowsort
@@ -60,7 +60,7 @@ SELECT * FROM kv
 7 8
 
 # delete a non-existent value.
-statement ok
+statement count 0
 DELETE FROM kv WHERE k=5
 
 query II
@@ -91,7 +91,7 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM kv@bar]
 statement error column name "nonexistent" not found
 DELETE FROM kv WHERE nonexistent = 1
 
-statement ok
+statement count 2
 DELETE FROM unindexed WHERE k=3 OR v=6
 
 query II rowsort
@@ -110,7 +110,7 @@ query II
 SELECT * FROM unindexed
 ----
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II colnames
@@ -127,7 +127,7 @@ k v
 1 2
 7 8
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query II colnames,rowsort
@@ -143,13 +143,14 @@ k v
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Tree            Field  Description
-delete          ·      ·
- │              from   unindexed
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  unindexed@primary
-·               spans  ALL
+Tree                 Field  Description
+count                ·      ·
+ └── delete          ·      ·
+      │              from   unindexed
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query II colnames,rowsort
 SELECT k, v FROM unindexed
@@ -160,7 +161,7 @@ k v
 5 6
 7 8
 
-statement ok
+statement count 4
 DELETE FROM unindexed
 
 query II colnames
@@ -171,7 +172,7 @@ k v
 statement ok
 CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 
-statement ok
+statement count 0
 DELETE FROM indexed WHERE value = 5
 
 # Check DELETE with ORDER BY clause (MySQL extension)
@@ -182,13 +183,14 @@ INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-delete          ·      ·
- │              from   unindexed
- └── nosort     ·      ·
-      │         order  +v
-      └── scan  ·      ·
-·               table  unindexed@primary
-·               spans  ALL
+count                ·      ·
+ └── delete          ·      ·
+      │              from   unindexed
+      └── nosort     ·      ·
+           │         order  +v
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query II
 DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
@@ -204,19 +206,20 @@ DELETE FROM unindexed ORDER BY v RETURNING k,v
 
 # Check DELETE with LIMIT clause (MySQL extension)
 
-statement ok
+statement count 4
 INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-delete               ·      ·
- │                   from   unindexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  unindexed@primary
-·                    spans  ALL
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   unindexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  unindexed@primary
+·                         spans  ALL
 
 query I
 SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
@@ -236,37 +239,41 @@ SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-delete               ·      ·
- │                   from   indexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  indexed@indexed_value_idx
-·                    spans  /5-/6
-·                    limit  10
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   indexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  indexed@indexed_value_idx
+·                         spans  /5-/6
+·                         limit  10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-delete               ·      ·
- │                   from   indexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  indexed@primary
-·                    spans  ALL
-·                    limit  10
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   indexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  indexed@primary
+·                         spans  ALL
+·                         limit  10
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-delete                ·      ·
- │                    from   indexed
- └── limit            ·      ·
-      └── index-join  ·      ·
-           ├── scan   ·      ·
-           │          table  indexed@indexed_value_idx
-           │          spans  /5-/6
-           │          limit  10
-           └── scan   ·      ·
-·                     table  indexed@primary
+render                          ·      ·
+ └── run                        ·      ·
+      └── delete                ·      ·
+           │                    from   indexed
+           └── limit            ·      ·
+                └── index-join  ·      ·
+                     ├── scan   ·      ·
+                     │          table  indexed@indexed_value_idx
+                     │          spans  /5-/6
+                     │          limit  10
+                     └── scan   ·      ·
+·                               table  indexed@primary

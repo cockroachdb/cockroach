@@ -770,30 +770,36 @@ ordinality        0  ordinality  ·      ·                 (x, "ordinality")  w
 query TITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-insert              0  insert    ·     ·        (b)     ·
- │                  0  ·         into  t(a, b)  ·       ·
- └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
-      └── emptyrow  2  emptyrow  ·     ·        ()      ·
+render                        0  render    ·     ·        (b)        ·
+ └── run                      1  run       ·     ·        (a, b, c)  ·
+      └── insert              2  insert    ·     ·        (a, b, c)  ·
+           │                  2  ·         into  t(a, b)  ·          ·
+           └── render         3  render    ·     ·        (x, y)     x=CONST; y=CONST
+                └── emptyrow  4  emptyrow  ·     ·        ()         ·
 
 query TITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-delete     0  delete  ·      ·          (b)        ·
- │         0  ·       from   t          ·          ·
- └── scan  1  scan    ·      ·          (a, b, c)  a=CONST; key()
-·          1  ·       table  t@primary  ·          ·
-·          1  ·       spans  /3-/3/#    ·          ·
+render               0  render  ·      ·          (b)        key()
+ └── run             1  run     ·      ·          (a, b, c)  a=CONST; key()
+      └── delete     2  delete  ·      ·          (a, b, c)  a=CONST; key()
+           │         2  ·       from   t          ·          ·
+           └── scan  3  scan    ·      ·          (a, b, c)  a=CONST; key()
+·                    3  ·       table  t@primary  ·          ·
+·                    3  ·       spans  /3-/3/#    ·          ·
 
 query TITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 ----
-update          0  update  ·      ·          (b)                ·
- │              0  ·       table  t          ·                  ·
- │              0  ·       set    c          ·                  ·
- └── render     1  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-      └── scan  2  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
-·               2  ·       table  t@primary  ·                  ·
-·               2  ·       spans  ALL        ·                  ·
+render                    0  render  ·      ·          (b)                ·
+ └── run                  1  run     ·      ·          (a, b, c)          ·
+      └── update          2  update  ·      ·          (a, b, c)          ·
+           │              2  ·       table  t          ·                  ·
+           │              2  ·       set    c          ·                  ·
+           └── render     3  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
+                └── scan  4  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
+·                         4  ·       table  t@primary  ·                  ·
+·                         4  ·       spans  ALL        ·                  ·
 
 statement ok
 CREATE TABLE uvwxyz (

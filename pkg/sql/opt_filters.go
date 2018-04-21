@@ -267,22 +267,36 @@ func (p *planner) propagateFilters(
 		}
 
 	case *deleteNode:
-		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 
+	case *rowCountNode:
+		newSource, err := p.triggerFilterPropagation(ctx, n.source)
+		if err != nil {
+			return plan, extraFilter, err
+		}
+		n.source = newSource.(batchedPlanNode)
+
+	case *serializeNode:
+		newSource, err := p.triggerFilterPropagation(ctx, n.source)
+		if err != nil {
+			return plan, extraFilter, err
+		}
+		n.source = newSource.(batchedPlanNode)
+
 	case *insertNode:
-		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *upsertNode:
-		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 
 	case *updateNode:
-		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 

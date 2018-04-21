@@ -6,7 +6,7 @@ CREATE TABLE kv (
   v INT
 )
 
-statement ok
+statement count 3
 INSERT INTO kv VALUES (1, 1), (2, 2), (3, 3) ON CONFLICT (k) DO UPDATE SET v = excluded.v
 
 query II
@@ -19,19 +19,19 @@ SELECT * FROM kv ORDER BY (k, v)
 statement error multiple assignments to the same column
 INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = 1, v = 1
 
-statement ok
+statement count 3
 INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = excluded.v
 
-statement ok
+statement count 3
 UPSERT INTO kv VALUES (7, 7), (3, 8), (9, 9)
 
-statement ok
+statement count 1
 INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(SUM(k) AS INT) FROM kv)
 
 statement error column reference "v" is ambiguous \(candidates: excluded.v, kv.v\)
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
 
-statement ok
+statement count 1
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = kv.v + 20
 
 statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
@@ -40,10 +40,10 @@ INSERT INTO kv VALUES (4, 10) ON CONFLICT DO UPDATE SET v = kv.v + 20
 statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
-statement ok
+statement count 1
 INSERT INTO kv VALUES (9, 9) ON CONFLICT (k) DO UPDATE SET (k, v) = (excluded.k + 2, excluded.v + 3)
 
-statement ok
+statement count 2
 UPSERT INTO kv VALUES (10, 10), (10, 11)
 
 query II
@@ -52,19 +52,19 @@ UPSERT INTO kv VALUES (11, 10), (11, 12) RETURNING k, v
 11 10
 11 12
 
-statement ok
+statement count 1
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
 
 statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT DO NOTHING
 
-statement ok
+statement count 2
 INSERT INTO kv VALUES (14, 14), (14, 15) ON CONFLICT (k) DO UPDATE SET v = excluded.v + 1
 
-statement ok
+statement count 2
 INSERT INTO kv VALUES (15, 15), (15, 16) ON CONFLICT (k) DO UPDATE SET k = excluded.k * 10
 
-statement ok
+statement count 2
 INSERT INTO kv VALUES (16, 16), (16, 17) ON CONFLICT (k) DO UPDATE SET k = excluded.k * 10, v = excluded.v
 
 query II
@@ -121,10 +121,10 @@ UPSERT INTO abc (a, c) VALUES (1, 1)
 statement error missing "a" primary key column
 UPSERT INTO abc (b, c) VALUES (1, 1)
 
-statement ok
+statement count 1
 INSERT INTO abc VALUES (1, 2, 3)
 
-statement ok
+statement count 1
 INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET a = 4
 
 query III
@@ -132,10 +132,10 @@ SELECT * FROM abc
 ----
 4 2 3
 
-statement ok
+statement count 1
 INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET b = 5
 
-statement ok
+statement count 1
 INSERT INTO abc VALUES (1, 2, 3) ON CONFLICT (c) DO UPDATE SET c = 6
 
 query III
@@ -143,10 +143,10 @@ SELECT * FROM abc
 ----
 4 5 6
 
-statement ok
+statement count 1
 INSERT INTO abc (a, b) VALUES (1, 2) ON CONFLICT (a, b) DO UPDATE SET a = 1, b = 2
 
-statement ok
+statement count 1
 INSERT INTO abc (a, b) VALUES (4, 5) ON CONFLICT (a, b) DO UPDATE SET a = 7, b = 8
 
 query III
@@ -155,10 +155,10 @@ SELECT * FROM abc ORDER BY (a, b, c)
 1 2 7
 7 8 6
 
-statement ok
+statement count 1
 DELETE FROM abc where a = 1
 
-statement ok
+statement count 1
 UPSERT INTO abc VALUES (1, 2)
 
 query III
@@ -167,7 +167,7 @@ SELECT * FROM abc ORDER BY (a, b, c)
 1 2 7
 7 8 6
 
-statement ok
+statement count 1
 UPSERT INTO abc VALUES (1, 2, 5)
 
 query III
@@ -176,7 +176,7 @@ SELECT * FROM abc ORDER BY (a, b, c)
 1 2 5
 7 8 6
 
-statement ok
+statement count 1
 UPSERT INTO abc VALUES (1, 2)
 
 query III
@@ -185,10 +185,10 @@ SELECT * FROM abc ORDER BY (a, b, c)
 1 2 7
 7 8 6
 
-statement ok
+statement count 1
 DELETE FROM abc where a = 1
 
-statement ok
+statement count 1
 INSERT INTO abc VALUES (7, 8, 9) ON CONFLICT (a, b) DO UPDATE SET c = DEFAULT
 
 query III
@@ -210,7 +210,7 @@ UPSERT INTO excluded VALUES (1, 1)
 statement ok
 CREATE TABLE upsert_returning (a INT PRIMARY KEY, b INT, c INT, d INT DEFAULT -1)
 
-statement ok
+statement count 1
 INSERT INTO upsert_returning VALUES (1, 1, NULL)
 
 # Handle INSERT ... ON CONFLICT ... RETURNING
@@ -283,10 +283,10 @@ SELECT a FROM [UPSERT INTO upsert_returning VALUES (7) RETURNING a] UNION VALUES
 statement ok
 CREATE TABLE issue_6710 (a INT PRIMARY KEY, b STRING, c INT)
 
-statement ok
+statement count 2
 INSERT INTO issue_6710 (a, b) VALUES (1, 'foo'), (2, 'bar')
 
-statement ok
+statement count 2
 UPSERT INTO issue_6710 (a, b) VALUES (1, 'test1'), (2, 'test2')
 
 query IT rowsort
@@ -298,10 +298,10 @@ SELECT a, b from issue_6710
 statement ok
 CREATE TABLE issue_13962 (a INT PRIMARY KEY, b INT, c INT)
 
-statement ok
+statement count 1
 INSERT INTO issue_13962 VALUES (1, 1, 1)
 
-statement ok
+statement count 1
 INSERT INTO issue_13962 VALUES (1, 2, 2) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
 query III
@@ -312,10 +312,10 @@ SELECT * FROM issue_13962
 statement ok
 CREATE TABLE issue_14052 (a INT PRIMARY KEY, b INT, c INT)
 
-statement ok
+statement count 2
 INSERT INTO issue_14052 (a, b) VALUES (1, 1), (2, 2)
 
-statement ok
+statement count 2
 UPSERT INTO issue_14052 (a, c) (SELECT a, b from issue_14052)
 
 statement ok
@@ -326,12 +326,12 @@ CREATE TABLE issue_14052_2 (
   updatedAt INT
 )
 
-statement ok
+statement count 1
 INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
   (1, 'original', 1, 1)
 
 # Make sure the fast path isn't taken (createdAt is not in the ON CONFLICT clause)
-statement ok
+statement count 1
 INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
   (1, 'UPDATED', 2, 2)
 ON CONFLICT (id) DO UPDATE
@@ -349,7 +349,7 @@ ON CONFLICT (id) DO UPDATE
   SET id = excluded.id, name = excluded.name, name = excluded.name, name = excluded.name
 
 # Make sure the fast path isn't taken (all clauses in the set must be of the form x = excluded.x)
-statement ok
+statement count 1
 INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
   (1, 'BAR', 4, 5)
 ON CONFLICT (id) DO UPDATE
@@ -367,11 +367,11 @@ CREATE TABLE issue_16873 (col int PRIMARY KEY, date TIMESTAMP);
 
 # n.b. the fully-qualified names below are required, as there are two providers of
 # the column named `col` here, the original table and the `excluded` pseudo-table.
-statement ok
+statement count 1
 INSERT INTO issue_16873 VALUES (1,clock_timestamp())
 ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
 
-statement ok
+statement count 1
 INSERT INTO issue_16873 VALUES (1,clock_timestamp())
 ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col = 1;
 
@@ -379,10 +379,10 @@ ON CONFLICT (col) DO UPDATE SET date = clock_timestamp() WHERE issue_16873.col =
 statement ok
 CREATE TABLE issue_17339 (a int primary key, b int);
 
-statement ok
+statement count 2
 INSERT INTO issue_17339 VALUES (1, 1), (2, 0);
 
-statement ok
+statement count 1
 INSERT INTO issue_17339 VALUES (1, 0), (2, 2)
 ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE excluded.b > issue_17339.b;
 
@@ -392,7 +392,7 @@ SELECT * FROM issue_17339 ORDER BY a;
 1 1
 2 2
 
-statement ok
+statement count 2
 INSERT INTO issue_17339 VALUES (1, 0), (2, 1)
 ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE TRUE;
 
@@ -405,10 +405,11 @@ SELECT * FROM issue_17339 ORDER BY a;
 query TTT
 EXPLAIN (PLAN,EXPRS) UPSERT INTO kv TABLE kv ORDER BY v DESC
 ----
-upsert          ·       ·
- │              into    kv(k, v)
- └── sort       ·       ·
-      │         order   -v
-      └── scan  ·       ·
-·               table   kv@primary
-·               spans   ALL
+count                ·      ·
+ └── upsert          ·      ·
+      │              into   kv(k, v)
+      └── sort       ·      ·
+           │         order  -v
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL

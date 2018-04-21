@@ -110,11 +110,14 @@ func newCopyMachine(
 	if err != nil {
 		return nil, err
 	}
-	en, err := c.p.makeEditNode(ctx, tn, privilege.INSERT)
+	tableDesc, err := ResolveExistingObject(ctx, &c.p, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
-	cols, err := c.p.processColumns(en.tableDesc, n.Columns,
+	if err := c.p.CheckPrivilege(ctx, tableDesc, privilege.INSERT); err != nil {
+		return nil, err
+	}
+	cols, err := c.p.processColumns(tableDesc, n.Columns,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
