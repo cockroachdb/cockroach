@@ -250,6 +250,10 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		i := r.Int63n(int64(timeofday.Max))
 		d := tree.MakeDTime(timeofday.FromInt(i))
 		v = fmt.Sprintf(`'%s'`, d)
+	case types.TimeTZ:
+		i := r.Int63n(int64(timeofday.Max))
+		d := tree.MakeDTimeTZ(timeofday.FromInt(i), time.UTC)
+		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
 		v = fmt.Sprintf(`'%s'`, &tree.DInterval{Duration: d})
