@@ -132,12 +132,9 @@ func MakeSimpleTableDescriptor(
 		case *tree.CheckConstraintTableDef,
 			*tree.FamilyTableDef,
 			*tree.IndexTableDef,
-			*tree.UniqueConstraintTableDef:
+			*tree.UniqueConstraintTableDef,
+			*tree.ColumnTableDef:
 			// ignore
-		case *tree.ColumnTableDef:
-			if def.Computed.Expr != nil {
-				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
-			}
 		case *tree.ForeignKeyConstraintTableDef:
 			return nil, errors.Errorf("foreign keys not supported: %s", tree.AsString(def))
 		default:
@@ -361,6 +358,7 @@ func convertRecord(
 	kvCh chan<- []roachpb.KeyValue,
 	nullif *string,
 	tableDesc *sqlbase.TableDescriptor,
+	expectedCols []sqlbase.ColumnDescriptor,
 ) error {
 	done := ctx.Done()
 
@@ -377,10 +375,16 @@ func convertRecord(
 
 	var txCtx transform.ExprTransformContext
 	evalCtx := tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
+
+	cols, computedCols, computedExprs, err := sql.ProcessComputedColumns(ctx, expectedCols, tree.NewUnqualifiedTableName(tree.Name(tableDesc.Name)), tableDesc, &txCtx, &evalCtx)
+	if err != nil {
+		return errors.Wrap(err, "process computed columns")
+	}
+
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(cols, tableDesc, &txCtx, &evalCtx)
 	if err != nil {
 		return errors.Wrap(err, "process default columns")
 	}
@@ -435,11 +439,7 @@ func convertRecord(
 				datums[hidden] = tree.NewDInt(builtins.GenerateUniqueID(batch.fileIndex, uint64(rowNum)))
 			}
 
-			// TODO(justin): we currently disallow computed columns in import statements.
-			var computeExprs []tree.TypedExpr
-			var computedCols []sqlbase.ColumnDescriptor
-
-			row, err := sql.GenerateInsertRow(defaultExprs, computeExprs, ri.InsertColIDtoRowIndex, cols, computedCols, evalCtx, tableDesc, datums)
+			row, err := sql.GenerateInsertRow(defaultExprs, computedExprs, ri.InsertColIDtoRowIndex, cols, computedCols, evalCtx, tableDesc, datums)
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
@@ -1077,6 +1077,18 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	recordCh := make(chan csvRecord)
 	kvCh := make(chan []roachpb.KeyValue)
 	sampleCh := make(chan sqlbase.EncDatumRow)
+	var expectedCols []sqlbase.ColumnDescriptor
+	for i, col := range cp.tableDesc.VisibleColumns() {
+		if col.IsComputed() {
+			continue
+		}
+		if i != len(expectedCols) {
+			err := errors.New("computed columns must appear after other columns")
+			distsqlrun.DrainAndClose(ctx, cp.output, err)
+			return
+		}
+		expectedCols = append(expectedCols, col)
+	}
 
 	// Read CSV into CSV records
 	group.Go(func() error {
@@ -1103,7 +1115,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		}
 
 		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment, cp.csvOptions.Skip,
-			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
+			len(expectedCols), cp.uri, recordCh, progFn, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -1113,7 +1125,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		defer close(kvCh)
 		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc, expectedCols)
 		})
 	})
 	// Sample KVs
