@@ -60,9 +60,9 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	defer m.Stop(ctx)
 
 	var mc memRowContainer
-	mc.initWithMon(
+	mc.initWithBytesAccount(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m,
+		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, m.NewBoundAccount(),
 	)
 	defer mc.Close(ctx)
 

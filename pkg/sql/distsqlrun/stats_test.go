@@ -17,7 +17,12 @@ package distsqlrun
 import (
 	"testing"
 
+	"context"
+
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // TestInputStatCollector verifies that an InputStatCollector correctly collects
@@ -35,4 +40,31 @@ func TestInputStatCollector(t *testing.T) {
 	if isc.NumRows != numRows {
 		t.Fatalf("counted %d rows but expected %d", isc.NumRows, numRows)
 	}
+}
+
+// TestBytesAccountStatCollector verifies that a BytesAccountStatCollector
+// correctly reports stats from a mon.BytesAccount.
+func TestBytesAccountStatCollector(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, nil)
+	bsc := NewBytesAccountStatCollector(
+		m.NewBoundAccount(), "bytes account",
+	)
+
+	bsc.Grow(ctx, 120)
+	bsc.Shrink(ctx, 20)
+	bsc.Grow(ctx, 10)
+	bsc.Resize(ctx, 10, 100)
+	bsc.Clear(ctx)
+	bsc.Grow(ctx, 50)
+	bsc.Close(ctx)
+
+	const expectedMaxUsed = 200
+
+	if bsc.MaxUsed != expectedMaxUsed {
+		t.Fatalf("counted %d bytes but expected %d", bsc.MaxUsed, expectedMaxUsed)
+	}
+
 }

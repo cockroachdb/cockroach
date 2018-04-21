@@ -470,6 +470,26 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// NewBoundAccount allocates a BoundAccount connected to the given monitor and
+// returns its address.
+func (mm *BytesMonitor) NewBoundAccount() *BoundAccount {
+	return &BoundAccount{mon: mm}
+}
+
+// BytesAccount keeps track of bytes usage.
+type BytesAccount interface {
+	Grow(ctx context.Context, x int64) error
+	Shrink(ctx context.Context, x int64)
+	// Resize removes oldSize bytes from the account and increases the size by
+	// newSize.
+	Resize(ctx context.Context, oldSize int64, newSize int64) error
+	Used() int64
+	Clear(ctx context.Context)
+	Close(ctx context.Context)
+}
+
+var _ BytesAccount = &BoundAccount{}
+
 // Clear releases all the cumulated allocations of an account at once and
 // primes it for reuse.
 func (b *BoundAccount) Clear(ctx context.Context) {

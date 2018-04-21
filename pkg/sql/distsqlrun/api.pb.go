@@ -29,6 +29,7 @@
 		ProducerMessage
 		RemoteProducerMetadata
 		InputStats
+		BytesAccountStats
 		DistSQLVersionGossipInfo
 		DistSQLDrainingInfo
 		ProcessorSpec

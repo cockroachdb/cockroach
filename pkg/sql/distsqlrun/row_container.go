@@ -96,18 +96,18 @@ var _ sortableRowContainer = &memRowContainer{}
 func (mc *memRowContainer) init(
 	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) {
-	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon)
+	mc.initWithBytesAccount(ordering, types, evalCtx, evalCtx.Mon.NewBoundAccount())
 }
 
-// initWithMon initializes the memRowContainer with an explicit monitor. Only
-// use this if the default memRowContainer.init() function is insufficient.
-func (mc *memRowContainer) initWithMon(
+// initWithBytesAccount initializes the memRowContainer with an explicit bytes
+// account. Only use this if the default memRowContainer.init() function is
+// insufficient.
+func (mc *memRowContainer) initWithBytesAccount(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
 	evalCtx *tree.EvalContext,
-	mon *mon.BytesMonitor,
+	acc mon.BytesAccount,
 ) {
-	acc := mon.MakeBoundAccount()
 	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
 	mc.types = types
 	mc.ordering = ordering
