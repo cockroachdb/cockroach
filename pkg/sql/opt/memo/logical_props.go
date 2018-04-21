@@ -90,8 +90,6 @@ type RelationalProps struct {
 	// SELECT expression binds the b.x and b.y references, so they are not
 	// part of the outer column set. The outer SELECT binds the a.x column, and
 	// so its outer column set is empty.
-	//
-	// TODO(andyk): populate this when we have subquery support
 	OuterCols opt.ColSet
 
 	// Stats is the set of statistics that apply to this relational expression.

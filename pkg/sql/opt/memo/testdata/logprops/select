@@ -1,63 +1,89 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
+TABLE xy
  ├── x int not null
  ├── y int
  └── INDEX primary
       └── x int not null
 
 exec-ddl
-CREATE TABLE b (x INT, z INT NOT NULL)
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
 ----
-TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
  └── INDEX primary
-      └── rowid int not null (hidden)
+      └── k int not null
 
 build
-SELECT * FROM a WHERE x=1
+SELECT * FROM xy WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=100]
  ├── keys: (1)
- ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── stats: [rows=1000]
  │    └── keys: (1)
  └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: xy.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 build
-SELECT * FROM a,b WHERE a.x=b.x
+SELECT * FROM xy,kuv WHERE xy.x=kuv.k
 ----
-project
- ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int!null)
+select
+ ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
  ├── stats: [rows=100000]
- ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    ├── stats: [rows=100000]
- │    ├── inner-join
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    ├── stats: [rows=1000000]
- │    │    ├── scan a
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    └── keys: (1)
- │    │    ├── scan b
- │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    └── keys: (5)
- │    │    └── true [type=bool]
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: a.x [type=int, outer=(1)]
- │         └── variable: b.x [type=int, outer=(3)]
- └── projections [outer=(1-4)]
-      ├── variable: a.x [type=int, outer=(1)]
-      ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: b.x [type=int, outer=(3)]
-      └── variable: b.z [type=int, outer=(4)]
+ ├── inner-join
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int) kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+ │    ├── stats: [rows=1000000]
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1)
+ │    ├── scan kuv
+ │    │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (3)
+ │    └── true [type=bool]
+ └── eq [type=bool, outer=(1,3)]
+      ├── variable: xy.x [type=int, outer=(1)]
+      └── variable: kuv.k [type=int, outer=(3)]
+
+# Propagate outer columns.
+build
+SELECT * FROM xy WHERE EXISTS(SELECT * FROM (SELECT * FROM kuv WHERE k=y) WHERE k=x)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=100]
+ ├── keys: (1)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
+ └── exists [type=bool, outer=(1,2)]
+      └── select
+           ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           ├── outer: (1,2)
+           ├── stats: [rows=10]
+           ├── keys: (3)
+           ├── select
+           │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           │    ├── outer: (2)
+           │    ├── stats: [rows=100]
+           │    ├── keys: (3)
+           │    ├── scan kuv
+           │    │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           │    │    ├── stats: [rows=1000]
+           │    │    └── keys: (3)
+           │    └── eq [type=bool, outer=(2,3)]
+           │         ├── variable: kuv.k [type=int, outer=(3)]
+           │         └── variable: xy.y [type=int, outer=(2)]
+           └── eq [type=bool, outer=(1,3)]
+                ├── variable: kuv.k [type=int, outer=(3)]
+                └── variable: xy.x [type=int, outer=(1)]
