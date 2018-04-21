@@ -523,7 +523,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   SYMMETRIC SYNTAX SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THAN THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -754,7 +754,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
-%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name simple_db_object_name complex_db_object_name 
+%type <*tree.UnresolvedName> table_name sequence_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
 %type <tree.TableExpr> insert_target
@@ -5962,6 +5962,14 @@ const_datetime:
   {
     $$.val = coltypes.Time
   }
+| TIMETZ
+  {
+    $$.val = coltypes.TimeTZ
+  }
+| TIME WITH_LA TIME ZONE
+  {
+    $$.val = coltypes.TimeTZ
+  }
 | TIMESTAMP
   {
     $$.val = coltypes.Timestamp
@@ -6704,6 +6712,10 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+| CURRENT_TIME
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
 | CURRENT_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
@@ -6764,6 +6776,11 @@ special_function:
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
+| CURRENT_TIME '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_TIME '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_USER '(' ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
@@ -7962,6 +7979,7 @@ col_name_keyword:
 | SMALLINT
 | SUBSTRING
 | TIME
+| TIMETZ
 | TIMESTAMP
 | TREAT
 | TRIM

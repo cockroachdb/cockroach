@@ -1513,7 +1513,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 	switch col.Type.SemanticType {
 	case ColumnType_BOOL:
 		typ = encoding.True
-	case ColumnType_INT, ColumnType_DATE, ColumnType_TIME, ColumnType_TIMESTAMP,
+	case ColumnType_INT, ColumnType_DATE, ColumnType_TIME, ColumnType_TIMETZ, ColumnType_TIMESTAMP,
 		ColumnType_TIMESTAMPTZ, ColumnType_OID:
 		typ, size = encoding.Int, int(col.Type.Width)
 	case ColumnType_FLOAT:
@@ -2262,6 +2262,8 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		return ColumnType_DATE, nil
 	case types.Time:
 		return ColumnType_TIME, nil
+	case types.TimeTZ:
+		return ColumnType_TIMETZ, nil
 	case types.Timestamp:
 		return ColumnType_TIMESTAMP, nil
 	case types.TimestampTZ:
@@ -2339,6 +2341,8 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 		return types.Date
 	case ColumnType_TIME:
 		return types.Time
+	case ColumnType_TIMETZ:
+		return types.TimeTZ
 	case ColumnType_TIMESTAMP:
 		return types.Timestamp
 	case ColumnType_TIMESTAMPTZ:

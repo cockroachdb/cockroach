@@ -56,6 +56,7 @@ func TestParseColumnType(t *testing.T) {
 		{"INET", &coltypes.TIPAddr{Name: "INET"}},
 		{"DATE", &coltypes.TDate{}},
 		{"TIME", &coltypes.TTime{}},
+		{"TIME WITH TIME ZONE", &coltypes.TTimeTZ{}},
 		{"TIMESTAMP", &coltypes.TTimestamp{}},
 		{"TIMESTAMP WITH TIME ZONE", &coltypes.TTimestampTZ{}},
 		{"INTERVAL", &coltypes.TInterval{}},

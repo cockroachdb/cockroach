@@ -616,6 +616,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					case "TIME":
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))
+					case "TIME WITH TIME ZONE", "TIMETZ":
+						d = tree.MakeDTimeTZ(timeofday.FromTime(t), t.Location())
 					case "TIMESTAMP":
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
 					case "TIMESTAMP WITH TIME ZONE":

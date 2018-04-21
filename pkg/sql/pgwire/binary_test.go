@@ -143,6 +143,17 @@ func TestBinaryTime(t *testing.T) {
 	})
 }
 
+func TestBinaryTimeTZ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "timetz", func(val string) tree.Datum {
+		ttz, err := tree.ParseDTimeTZ(val, time.UTC)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ttz
+	})
+}
+
 func TestBinaryUuid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "uuid", func(val string) tree.Datum {
