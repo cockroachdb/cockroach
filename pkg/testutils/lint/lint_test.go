@@ -622,7 +622,8 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGofmtSimplify", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkgDir, "gofmt", "-s", "-d", "-l", ".")
+
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -631,9 +632,16 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
-			t.Error(s)
-		}); err != nil {
+		if err := stream.ForEach(
+			stream.Sequence(
+				filter,
+				stream.Map(func(s string) string {
+					return filepath.Join(pkgDir, s)
+				}),
+				stream.Xargs("gofmt", "-s", "-d", "-l"),
+			), func(s string) {
+				t.Error(s)
+			}); err != nil {
 			t.Error(err)
 		}
 
@@ -646,7 +654,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
-		ignore := `\.(pb(\.gw)?)|(.og)\.go`
+		ignore := `\.(pb(\.gw)?)|(.og)\.go|/testdata/`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)

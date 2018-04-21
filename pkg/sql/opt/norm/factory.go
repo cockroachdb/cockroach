@@ -39,8 +39,6 @@ type MatchedRuleFunc func(ruleName opt.RuleName) bool
 // expressions added to the group by the rule.
 type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
 
-//go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
-
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
 // normalization transformations defined for that expression type. This may
