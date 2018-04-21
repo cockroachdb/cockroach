@@ -265,16 +265,15 @@ count                     ·      ·
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-render                               ·      ·
- └── spool                           ·      ·
-      └── run                        ·      ·
-           └── delete                ·      ·
-                │                    from   indexed
-                └── limit            ·      ·
-                     └── index-join  ·      ·
-                          ├── scan   ·      ·
-                          │          table  indexed@indexed_value_idx
-                          │          spans  /5-/6
-                          │          limit  10
-                          └── scan   ·      ·
-·                                    table  indexed@primary
+render                          ·      ·
+ └── run                        ·      ·
+      └── delete                ·      ·
+           │                    from   indexed
+           └── limit            ·      ·
+                └── index-join  ·      ·
+                     ├── scan   ·      ·
+                     │          table  indexed@indexed_value_idx
+                     │          spans  /5-/6
+                     │          limit  10
+                     └── scan   ·      ·
+·                               table  indexed@primary

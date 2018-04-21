@@ -770,39 +770,36 @@ ordinality        0  ordinality  ·      ·                 (x, "ordinality")  w
 query TITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-render                             0  render    ·     ·        (b)        ·
- └── spool                         1  spool     ·     ·        (a, b, c)  ·
-      └── run                      2  run       ·     ·        (a, b, c)  ·
-           └── insert              3  insert    ·     ·        (a, b, c)  ·
-                │                  3  ·         into  t(a, b)  ·          ·
-                └── render         4  render    ·     ·        (x, y)     x=CONST; y=CONST
-                     └── emptyrow  5  emptyrow  ·     ·        ()         ·
+render                        0  render    ·     ·        (b)        ·
+ └── run                      1  run       ·     ·        (a, b, c)  ·
+      └── insert              2  insert    ·     ·        (a, b, c)  ·
+           │                  2  ·         into  t(a, b)  ·          ·
+           └── render         3  render    ·     ·        (x, y)     x=CONST; y=CONST
+                └── emptyrow  4  emptyrow  ·     ·        ()         ·
 
 query TITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-render                    0  render  ·      ·          (b)        key()
- └── spool                1  spool   ·      ·          (a, b, c)  a=CONST; key()
-      └── run             2  run     ·      ·          (a, b, c)  a=CONST; key()
-           └── delete     3  delete  ·      ·          (a, b, c)  a=CONST; key()
-                │         3  ·       from   t          ·          ·
-                └── scan  4  scan    ·      ·          (a, b, c)  a=CONST; key()
-·                         4  ·       table  t@primary  ·          ·
-·                         4  ·       spans  /3-/3/#    ·          ·
+render               0  render  ·      ·          (b)        key()
+ └── run             1  run     ·      ·          (a, b, c)  a=CONST; key()
+      └── delete     2  delete  ·      ·          (a, b, c)  a=CONST; key()
+           │         2  ·       from   t          ·          ·
+           └── scan  3  scan    ·      ·          (a, b, c)  a=CONST; key()
+·                    3  ·       table  t@primary  ·          ·
+·                    3  ·       spans  /3-/3/#    ·          ·
 
 query TITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 ----
-render                         0  render  ·      ·          (b)                ·
- └── spool                     1  spool   ·      ·          (a, b, c)          ·
-      └── run                  2  run     ·      ·          (a, b, c)          ·
-           └── update          3  update  ·      ·          (a, b, c)          ·
-                │              3  ·       table  t          ·                  ·
-                │              3  ·       set    c          ·                  ·
-                └── render     4  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-                     └── scan  5  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
-·                              5  ·       table  t@primary  ·                  ·
-·                              5  ·       spans  ALL        ·                  ·
+render                    0  render  ·      ·          (b)                ·
+ └── run                  1  run     ·      ·          (a, b, c)          ·
+      └── update          2  update  ·      ·          (a, b, c)          ·
+           │              2  ·       table  t          ·                  ·
+           │              2  ·       set    c          ·                  ·
+           └── render     3  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
+                └── scan  4  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
+·                         4  ·       table  t@primary  ·                  ·
+·                         4  ·       spans  ALL        ·                  ·
 
 statement ok
 CREATE TABLE uvwxyz (
