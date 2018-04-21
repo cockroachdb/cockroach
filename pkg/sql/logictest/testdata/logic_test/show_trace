@@ -173,24 +173,29 @@ dist sender  querying next range at /Table/52/1/1/0
 dist sender  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
 
 
-# We use SHOW KV TRACE FOR <stmt> here to reveal how the error shows up in traces.
-query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (1,2)]
-----
-sql txn         CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
-consuming rows  output row: []
-dist sender     querying next range at /Table/52/1/1/0
-dist sender     r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
-consuming rows  execution failed: duplicate key value (k)=(1) violates unique constraint "primary"
+statement error duplicate key value
+set tracing=kv;
+INSERT INTO t.kv(k, v) VALUES (1,2)
 
 query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (2,2)]
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-sql txn         CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
-consuming rows  output row: []
-dist sender     querying next range at /Table/52/1/2/0
-dist sender     r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
-consuming rows  execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+sql txn      CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+dist sender  querying next range at /Table/52/1/1/0
+dist sender  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+
+statement error duplicate key value
+set tracing=kv;
+INSERT INTO t.kv(k, v) VALUES (2,2)
+
+query TT
+set tracing=off;
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+----
+sql txn      CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+dist sender  querying next range at /Table/52/1/2/0
+dist sender  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
 
 query TT
 SET tracing=kv;
@@ -736,7 +741,6 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR INSERT INTO ab(a, b) VALUES (42, 51)]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-output row: []
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR INSERT INTO ab(a, b) SELECT a+1, b+1 FROM ab WHERE b > 6]
@@ -748,9 +752,7 @@ fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/3/9 -> NULL
-output row: []
 fetched: /ab/primary/42/51 -> NULL
-output row: []
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR UPDATE ab SET a = a + 1 WHERE b > 6]
@@ -762,13 +764,9 @@ fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/3/9 -> NULL
-output row: [4 9]
 fetched: /ab/primary/4/10 -> NULL
-output row: [5 10]
 fetched: /ab/primary/42/51 -> NULL
-output row: [43 51]
 fetched: /ab/primary/43/52 -> NULL
-output row: [44 52]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab WHERE b > 6]
@@ -780,13 +778,9 @@ fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/4/9 -> NULL
-output row: [4 9]
 fetched: /ab/primary/5/10 -> NULL
-output row: [5 10]
 fetched: /ab/primary/43/51 -> NULL
-output row: [43 51]
 fetched: /ab/primary/44/52 -> NULL
-output row: [44 52]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab]

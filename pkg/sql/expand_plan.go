@@ -112,16 +112,26 @@ func doExpandPlan(
 		n.sourcePlan, err = doExpandPlan(ctx, p, noParams, n.sourcePlan)
 
 	case *updateNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *insertNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *upsertNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *deleteNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
+
+	case *rowCountNode:
+		var newPlan planNode
+		newPlan, err = doExpandPlan(ctx, p, noParams, n.source)
+		n.source = newPlan.(batchedPlanNode)
+
+	case *serializeNode:
+		var newPlan planNode
+		newPlan, err = doExpandPlan(ctx, p, noParams, n.source)
+		n.source = newPlan.(batchedPlanNode)
 
 	case *explainDistSQLNode:
 		// EXPLAIN only shows the structure of the plan, and wants to do
@@ -185,7 +195,7 @@ func doExpandPlan(
 		n.left, err = doExpandPlan(ctx, p, params, n.left)
 
 	case *filterNode:
-		n.source.plan, err = doExpandPlan(ctx, p, params, n.source.plan)
+		plan, err = expandFilterNode(ctx, p, params, n)
 
 	case *joinNode:
 		n.left.plan, err = doExpandPlan(ctx, p, noParams, n.left.plan)
@@ -399,6 +409,24 @@ func elideDoubleSort(parent, source *sortNode) {
 	}
 }
 
+func expandFilterNode(
+	ctx context.Context, p *planner, params expandParameters, n *filterNode,
+) (planNode, error) {
+	var err error
+	n.source.plan, err = doExpandPlan(ctx, p, params, n.source.plan)
+	if err != nil {
+		return n, err
+	}
+
+	// If there's a spool, pull it up.
+	if spool, ok := n.source.plan.(*spoolNode); ok {
+		n.source.plan = spool.source
+		return p.makeSpool(n), nil
+	}
+
+	return n, nil
+}
+
 func expandDistinctNode(
 	ctx context.Context, p *planner, params expandParameters, d *distinctNode,
 ) (planNode, error) {
@@ -408,6 +436,13 @@ func expandDistinctNode(
 	d.plan, err = doExpandPlan(ctx, p, params, d.plan)
 	if err != nil {
 		return d, err
+	}
+
+	// If there's a spool, we'll pull it up before returning below.
+	respool := func(plan planNode) planNode { return plan }
+	if spool, ok := d.plan.(*spoolNode); ok {
+		respool = p.makeSpool
+		d.plan = spool.source
 	}
 
 	// We use the physical properties of the distinctNode but projected
@@ -421,7 +456,7 @@ func expandDistinctNode(
 		// Since distinctNode does not project columns, this is fine
 		// (it has a parent renderNode).
 		if k.SubsetOf(distinctOnPp.notNullCols) {
-			return d.plan, nil
+			return respool(d.plan), nil
 		}
 	}
 
@@ -448,7 +483,7 @@ func expandDistinctNode(
 		}
 	}
 
-	return d, nil
+	return respool(d), nil
 }
 
 func expandScanNode(
@@ -485,6 +520,13 @@ func expandRenderNode(
 	r.source.plan, err = doExpandPlan(ctx, p, params, r.source.plan)
 	if err != nil {
 		return r, err
+	}
+
+	// If there's a spool, we'll pull it up before returning below.
+	respool := func(plan planNode) planNode { return plan }
+	if spool, ok := r.source.plan.(*spoolNode); ok {
+		respool = p.makeSpool
+		r.source.plan = spool.source
 	}
 
 	// Elide the render node if it renders its source as-is.
@@ -526,12 +568,12 @@ func expandRenderNode(
 					mutSourceCols[i].Name = col.Name
 				}
 			}
-			return r.source.plan, nil
+			return respool(r.source.plan), nil
 		}
 	}
 
 	p.computePhysicalPropsForRender(r, planPhysicalProps(r.source.plan))
-	return r, nil
+	return respool(r), nil
 }
 
 // translateOrdering modifies a desired ordering on the output of the
@@ -613,16 +655,22 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.sourcePlan = p.simplifyOrderings(n.sourcePlan, nil)
 
 	case *updateNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *insertNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *upsertNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *deleteNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
+
+	case *rowCountNode:
+		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
+
+	case *serializeNode:
+		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
 
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)

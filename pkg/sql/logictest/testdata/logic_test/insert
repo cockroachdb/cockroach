@@ -605,19 +605,20 @@ INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 query TTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
 ----
-insert               ·          ·
- │                   into       insert_t(x, v, rowid)
- │                   default 0  NULL
- │                   default 1  NULL
- │                   default 2  unique_rowid()
- └── sort            ·          ·
-      │              order      -v
-      └── render     ·          ·
-           │         render 0   x
-           │         render 1   v
-           └── scan  ·          ·
-·                    table      select_t@primary
-·                    spans      ALL
+count                     ·          ·
+ └── insert               ·          ·
+      │                   into       insert_t(x, v, rowid)
+      │                   default 0  NULL
+      │                   default 1  NULL
+      │                   default 2  unique_rowid()
+      └── sort            ·          ·
+           │              order      -v
+           └── render     ·          ·
+                │         render 0   x
+                │         render 1   v
+                └── scan  ·          ·
+·                         table      select_t@primary
+·                         spans      ALL
 
 query II
 INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
@@ -635,20 +636,21 @@ TRUNCATE TABLE insert_t
 query TTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
-insert               ·          ·
- │                   into       insert_t(x, v, rowid)
- │                   default 0  NULL
- │                   default 1  NULL
- │                   default 2  unique_rowid()
- └── limit           ·          ·
-      │              count      1
-      └── render     ·          ·
-           │         render 0   x
-           │         render 1   v
-           └── scan  ·          ·
-·                    table      select_t@primary
-·                    spans      ALL
-·                    limit      1
+count                     ·          ·
+ └── insert               ·          ·
+      │                   into       insert_t(x, v, rowid)
+      │                   default 0  NULL
+      │                   default 1  NULL
+      │                   default 2  unique_rowid()
+      └── limit           ·          ·
+           │              count      1
+           └── render     ·          ·
+                │         render 0   x
+                │         render 1   v
+                └── scan  ·          ·
+·                         table      select_t@primary
+·                         spans      ALL
+·                         limit      1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -674,47 +676,51 @@ SELECT * FROM insert_t
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
-insert            ·     ·
- │                into  insert_t(x, v, rowid)
- └── limit        ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 2 rows
+count                  ·     ·
+ └── insert            ·     ·
+      │                into  insert_t(x, v, rowid)
+      └── limit        ·     ·
+           └── values  ·     ·
+·                      size  2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-insert                 ·         ·
- │                     into      insert_t(x, v, rowid)
- └── limit             ·         ·
-      └── sort         ·         ·
-           │           order     +column2
-           │           strategy  top 1
-           └── values  ·         ·
-·                      size      2 columns, 2 rows
+count                       ·         ·
+ └── insert                 ·         ·
+      │                     into      insert_t(x, v, rowid)
+      └── limit             ·         ·
+           └── sort         ·         ·
+                │           order     +column2
+                │           strategy  top 1
+                └── values  ·         ·
+·                           size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-insert                 ·         ·
- │                     into      insert_t(x, v, rowid)
- └── limit             ·         ·
-      └── sort         ·         ·
-           │           order     +column2
-           │           strategy  top 1
-           └── values  ·         ·
-·                      size      2 columns, 2 rows
+count                       ·         ·
+ └── insert                 ·         ·
+      │                     into      insert_t(x, v, rowid)
+      └── limit             ·         ·
+           └── sort         ·         ·
+                │           order     +column2
+                │           strategy  top 1
+                └── values  ·         ·
+·                           size      2 columns, 2 rows
 
 query TTT
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
 ----
-insert                 ·         ·
- │                     into      insert_t(x, v, rowid)
- └── limit             ·         ·
-      └── sort         ·         ·
-           │           order     +column2
-           │           strategy  top 1
-           └── values  ·         ·
-·                      size      2 columns, 2 rows
+count                       ·         ·
+ └── insert                 ·         ·
+      │                     into      insert_t(x, v, rowid)
+      └── limit             ·         ·
+           └── sort         ·         ·
+                │           order     +column2
+                │           strategy  top 1
+                └── values  ·         ·
+·                           size      2 columns, 2 rows
 
 statement error pq: multiple LIMIT clauses not allowed
 EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) LIMIT 1) LIMIT 1

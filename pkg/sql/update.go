@@ -35,19 +35,14 @@ var updateNodePool = sync.Pool{
 }
 
 type updateNode struct {
-	// The following fields are populated during makePlan.
-	editNodeBase
-	n             *tree.Update
-	updateCols    []sqlbase.ColumnDescriptor
-	computedCols  []sqlbase.ColumnDescriptor
-	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
-	computeExprs  []tree.TypedExpr
-	tw            tableUpdater
-	checkHelper   *sqlbase.CheckHelper
-	sourceSlots   []sourceSlot
+	source planNode
 
-	run        updateRun
-	autoCommit autoCommitOpt
+	// columns is set if this UPDATE is returning any rows, to be
+	// consumed by a renderNode upstream. This occurs when there is a
+	// RETURNING clause with some scalar expressions.
+	columns sqlbase.ResultColumns
+
+	run updateRun
 }
 
 // updateNode implements the autoCommitNode interface.
@@ -60,9 +55,12 @@ var _ autoCommitNode = &updateNode{}
 func (p *planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
 ) (planNode, error) {
+	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
 	}
+
+	// CTE analysis.
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
@@ -73,16 +71,63 @@ func (p *planner) Update(
 
 	tracing.AnnotateTrace()
 
+	// UPDATE xx AS yy - we want to know about xx (tn) because
+	// that's what we get the descriptor with, and yy (alias) because
+	// that's what RETURNING will use.
 	tn, alias, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err
 	}
 
-	en, err := p.makeEditNode(ctx, tn, privilege.UPDATE)
+	// Find which table we're working on, check the permissions.
+	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.CheckPrivilege(ctx, desc, privilege.UPDATE); err != nil {
+		return nil, err
+	}
+
+	// Determine what are the foreign key tables that are involved in the update.
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx,
+		*desc,
+		sqlbase.CheckUpdates,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	// Pre-perform early subquery analysis and extraction. Usually
+	// this is done by analyzeExpr(), and, in fact, analyzeExpr() is indirectly
+	// called below as well. Why not call analyzeExpr() already?
+	//
+	// The obstacle is that there's a circular dependency here.
+	//
+	// - We can't call analyzeExpr() at this point because the RHS of
+	//   UPDATE SET can contain the special expression "DEFAULT", and
+	//   analyzeExpr() does not work with DEFAULT.
+	//
+	// - The substitution of DEFAULT by the actual default expression
+	//   occurs below (in addOrMergeExpr), but we can't do that yet here
+	//   because we first need to decompose a tuple in the LHS into
+	//   multiple assignments.
+	//
+	// - We can't decompose the tuple in the LHS without validating it
+	//   against the arity of the RHS (to properly reject mismatched
+	//   arities with an error) until subquery analysis has occurred.
+	//
+	// So we need the subquery analysis to be done early and we can't
+	// call analyzeExpr() to do so.
+	//
+	// TODO(knz): arguably we could do the tuple decomposition _before_
+	// the arity check, in this order: decompose tuples, substitute
+	// DEFAULT / run addOrMergeExpr which itself calls analyzeExpr, and
+	// then check the arity. This improvement is left as an exercise for
+	// the reader.
 	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		// Analyze the sub-query nodes.
@@ -93,24 +138,25 @@ func (p *planner) Update(
 		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: expr.Expr, Names: expr.Names}
 	}
 
-	// Determine which columns we're inserting into.
+	// Extract all the LHS column names, and verify that the arity of
+	// the LHS and RHS match when assigning tuples.
 	names, err := p.namesForExprs(setExprs)
 	if err != nil {
 		return nil, err
 	}
 
-	updateCols, err := p.processColumns(en.tableDesc, names,
+	// Extract the column descriptors for the column names listed
+	// in the LHS operands of SET expressions. This also checks
+	// that each column is assigned at most once.
+	updateCols, err := p.processColumns(desc, names,
 		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
 	}
 
-	defaultExprs, err := sqlbase.MakeDefaultExprs(
-		updateCols, &p.txCtx, p.EvalContext())
-	if err != nil {
-		return nil, err
-	}
-
+	// Ensure that the columns being updated are not computed.
+	// We do this check as early as possible to avoid doing
+	// unnecessary work below in case there's an error.
 	// TODO(justin): this is incorrect: we should allow this, but then it should
 	// error unless we both have a VALUES clause and every value being "inserted"
 	// into a computed column is DEFAULT. See #22434.
@@ -118,36 +164,44 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	// We update the set of columns being updated into with any computed columns.
-	updateCols, computedCols, computeExprs, err :=
-		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+	// Extract the pre-analyzed, pre-typed default expressions for all
+	// the updated columns. There are as many defaultExprs as there are
+	// updateCols.
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		updateCols, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
 
+	// Extract the computed columns, if any. This extends updateCols with
+	// all the computed columns. The computedCols result is an alias for the suffix
+	// of updateCols that corresponds to computed columns.
+	updateCols, computedCols, computeExprs, err :=
+		sqlbase.ProcessComputedColumns(ctx, updateCols, tn, desc, &p.txCtx, p.EvalContext())
+	if err != nil {
+		return nil, err
+	}
+
+	// rowsNeeded will help determine whether we need to allocate a
+	// rowsContainer.
+	rowsNeeded := resultsNeeded(n.Returning)
+
 	var requestedCols []sqlbase.ColumnDescriptor
-	if _, retExprs := n.Returning.(*tree.ReturningExprs); retExprs || len(en.tableDesc.Checks) > 0 {
+	if rowsNeeded || len(desc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		// TODO(nvanbenschoten): This could be made tighter, just the rows needed for
 		// the CHECK exprs.
-		requestedCols = en.tableDesc.Columns
+		requestedCols = desc.Columns
 	}
 
-	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx,
-		*en.tableDesc,
-		sqlbase.CheckUpdates,
-		p.lookupFKTable,
-		p.CheckPrivilege,
-		p.analyzeExpr,
-	)
-	if err != nil {
-		return nil, err
-	}
+	// Create the table updater, which does the bulk of the work.
+	// As a result of MakeRowUpdater, ru.FetchCols include all the
+	// columns in the table descriptor + any columns currently in the
+	// process of being added.
 	ru, err := sqlbase.MakeRowUpdater(
 		p.txn,
-		en.tableDesc,
+		desc,
 		fkTables,
 		updateCols,
 		requestedCols,
@@ -158,12 +212,12 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru}
 
 	tracing.AnnotateTrace()
 
-	// We construct a query containing the columns being updated, and then later merge the values
-	// they are being updated with into that renderNode to ideally reuse some of the queries.
+	// We construct a query containing the columns being updated, and
+	// then later merge the values they are being updated with into that
+	// renderNode to ideally reuse some of the queries.
 	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols, true /* forUpdateOrDelete */),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
@@ -173,8 +227,13 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	// This capacity is an overestimate, since subqueries only take up one sourceSlot.
-	sourceSlots := make([]sourceSlot, 0, len(ru.FetchCols))
+	// sourceSlots describes the RHS operands to potential tuple-wise
+	// assignments to the LHS operands. See the comment on
+	// updateRun.sourceSlots for details.
+	//
+	// UPDATE ... SET (a,b) = (...), (c,d) = (...)
+	//                ^^^^^^^^^^(1)  ^^^^^^^^^^(2) len(n.Exprs) == len(sourceSlots)
+	sourceSlots := make([]sourceSlot, 0, len(n.Exprs))
 
 	// currentUpdateIdx is the index of the first column descriptor in updateCols
 	// that is assigned to by the current setExpr.
@@ -193,6 +252,14 @@ func (p *planner) Update(
 		}
 		// The new renderNode is also the new data source for the update.
 		rows = render
+	}
+
+	// Capture the columns of the source, prior to the insertion of
+	// extra renders. This will be the input for RETURNING, if any, and
+	// this must not see the additional renders added below.
+	var columns sqlbase.ResultColumns
+	if rowsNeeded {
+		columns = planColumns(rows)
 	}
 
 	for _, setExpr := range setExprs {
@@ -264,6 +331,8 @@ func (p *planner) Update(
 		}
 	}
 
+	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
+	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
 	for i, col := range ru.UpdateCols {
 		updateColsIdx[col.ID] = i
@@ -271,219 +340,345 @@ func (p *planner) Update(
 
 	un := updateNodePool.Get().(*updateNode)
 	*un = updateNode{
-		n:             n,
-		editNodeBase:  en,
-		updateCols:    ru.UpdateCols,
-		computedCols:  computedCols,
-		computeExprs:  computeExprs,
-		updateColsIdx: updateColsIdx,
-		tw:            tw,
-		sourceSlots:   sourceSlots,
-		checkHelper:   fkTables[en.tableDesc.ID].CheckHelper,
+		source:  rows,
+		columns: columns,
+		run: updateRun{
+			tu:           tableUpdater{ru: ru},
+			checkHelper:  fkTables[desc.ID].CheckHelper,
+			rowsNeeded:   rowsNeeded,
+			computedCols: computedCols,
+			computeExprs: computeExprs,
+			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+				CurSourceRow: make(tree.Datums, len(ru.FetchCols)),
+				Cols:         desc.Columns,
+				Mapping:      ru.FetchColIDtoRowIndex,
+			},
+			sourceSlots:   sourceSlots,
+			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
+			updateColsIdx: updateColsIdx,
+		},
 	}
-	if err := un.run.initEditNode(
-		ctx, &un.editNodeBase, rows, &un.tw, alias, n.Returning, desiredTypes); err != nil {
-		return nil, err
+
+	// Finally, handle RETURNING, if any.
+	r, err := p.Returning(ctx, un, n.Returning, desiredTypes, alias)
+	if err != nil {
+		// We close explicitly here to release the node to the pool.
+		un.Close(ctx)
 	}
-	return un, nil
+	return r, err
 }
 
 // updateRun contains the run-time state of updateNode during local execution.
 type updateRun struct {
-	// The following fields are populated during Start().
-	editNodeRun
+	tu          tableUpdater
+	checkHelper *sqlbase.CheckHelper
+	rowsNeeded  bool
+
+	// rowCount is the number of rows in the current batch.
+	rowCount int
+
+	// done informs a new call to BatchedNext() that the previous call to
+	// BatchedNext() has completed the work already.
+	done bool
+
+	// rows contains the accumulated result rows if rowsNeeded is set.
+	rows *sqlbase.RowContainer
+
+	// autoCommit indicates whether the last KV batch processed by
+	// this update will also commit the KV txn.
+	autoCommit autoCommitOpt
+
+	// traceKV caches the current KV tracing flag.
+	traceKV bool
+
+	// computedCols are the columns that need to be (re-)computed as
+	// the result of updating some of the columns in updateCols.
+	computedCols []sqlbase.ColumnDescriptor
+	// computeExprs are the expressions to evaluate to re-compute the
+	// columns in computedCols.
+	computeExprs []tree.TypedExpr
+	// iVarContainerForComputedCols is used as a temporary buffer that
+	// holds the updated values for every column in the source, to
+	// serve as input for indexed vars contained in the computeExprs.
+	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
+
+	// sourceSlots is the helper that maps RHS expressions to LHS targets.
+	// This is necessary because there may be fewer RHS expressions than
+	// LHS targets. For example, SET (a, b) = (SELECT 1,2) has:
+	// - 2 targets (a, b)
+	// - 1 source slot, the subquery (SELECT 1, 2).
+	// Each call to extractValues() on a sourceSlot will return 1 or more
+	// datums suitable for assignments. In the example above, the
+	// method would return 2 values.
+	sourceSlots []sourceSlot
+
+	// updateValues will hold the new values for every column
+	// mentioned in the LHS of the SET expressions, in the
+	// order specified by those SET expressions (thus potentially
+	// a different order than the source).
+	updateValues tree.Datums
+
+	// During the update, the expressions provided by the source plan
+	// contain the columns that are being assigned in the order
+	// specified by the table descriptor.
+	//
+	// For example, with UPDATE kv SET v=3, k=2, the source plan will
+	// provide the values in the order k, v (assuming this is the order
+	// the columns are defined in kv's descriptor).
+	//
+	// Then during the update, the columns are updated in the order of
+	// the setExprs (or, equivalently, the order of the sourceSlots),
+	// for the example above that would be v, k. The results
+	// are stored in updateValues above.
+	//
+	// Then at the end of the update, the values need to be presented
+	// back to the TableRowUpdater in the order of the table descriptor
+	// again.
+	//
+	// updateVals is the buffer for this 2nd stage.
+	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
+	// This provides the inverse mapping of sourceSlots.
+	//
+	updateColsIdx map[sqlbase.ColumnID]int
 }
+
+// maxUpdateBatchSize is the max number of entries in the KV batch for
+// the update operation (including secondary index updates, FK
+// cascading updates, etc), before the current KV batch is executed
+// and a new batch is started.
+const maxUpdateBatchSize = 10000
 
 func (u *updateNode) startExec(params runParams) error {
-	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
-		return err
+	if sqlbase.IsSystemConfigID(u.run.tu.tableDesc().GetID()) {
+		// Mark transaction as operating on the system DB.
+		if err := params.p.txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 	}
-	return u.run.tw.init(params.p.txn, params.EvalContext())
+
+	// cache traceKV during execution, to avoid re-evaluating it for every row.
+	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+
+	if u.run.rowsNeeded {
+		u.run.rows = sqlbase.NewRowContainer(
+			params.EvalContext().Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(u.columns),
+			maxUpdateBatchSize)
+	}
+	return u.run.tu.init(params.p.txn, params.EvalContext())
 }
 
-func (u *updateNode) Next(params runParams) (bool, error) {
-	next, err := u.run.rows.Next(params)
-	if !next {
-		if err == nil {
-			if err := params.p.cancelChecker.Check(); err != nil {
-				return false, err
-			}
-			// We're done. Finish the batch.
-			_, err = u.tw.finalize(params.ctx, u.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-		}
-		return false, err
+// Next is required because batchedPlanNode inherits from planNode, but
+// batchedPlanNode doesn't really provide it. See the explanatory comments
+// in plan_batch.go.
+func (u *updateNode) Next(params runParams) (bool, error) { panic("not valid") }
+
+// Values is required because batchedPlanNode inherits from planNode, but
+// batchedPlanNode doesn't really provide it. See the explanatory comments
+// in plan_batch.go.
+func (u *updateNode) Values() tree.Datums { panic("not valid") }
+
+// BatchedNext implements the batchedPlanNode interface.
+func (u *updateNode) BatchedNext(params runParams) (bool, error) {
+	if u.run.done {
+		return false, nil
 	}
 
 	tracing.AnnotateTrace()
 
-	entireRow := u.run.rows.Values()
+	// Advance one batch. First, clear the current batch.
+	u.run.rowCount = 0
+	if u.run.rows != nil {
+		u.run.rows.Clear(params.ctx)
+	}
+	// Now consume/accumulate the rows for this batch.
+	lastBatch := false
+	for {
+		if err := params.p.cancelChecker.Check(); err != nil {
+			return false, err
+		}
 
-	// Our updated value expressions occur immediately after the plain
-	// columns in the output.
-	oldValues := entireRow[:len(u.tw.ru.FetchCols)]
+		// Advance one individual row.
+		if next, err := u.source.Next(params); !next {
+			lastBatch = true
+			if err != nil {
+				return false, err
+			}
+			break
+		}
 
-	updateValues := make(tree.Datums, len(u.tw.ru.UpdateCols))
+		// Process the update for the current source row, potentially
+		// accumulating the result row for later.
+		if err := u.processSourceRow(params, u.source.Values()); err != nil {
+			return false, err
+		}
+
+		u.run.rowCount++
+
+		// Are we done yet with the current batch?
+		if u.run.tu.curBatchSize() >= maxUpdateBatchSize {
+			break
+		}
+	}
+
+	if u.run.rowCount > 0 {
+		if err := u.run.tu.atBatchEnd(params.ctx, u.run.traceKV); err != nil {
+			return false, err
+		}
+
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err := u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		if _, err := u.run.tu.finalize(params.ctx, u.run.autoCommit, u.run.traceKV); err != nil {
+			return false, err
+		}
+		// Remember we're done for the next call to BatchedNext().
+		u.run.done = true
+	}
+
+	return u.run.rowCount > 0, nil
+}
+
+// processSourceRow processes one row from the source for update and, if
+// result rows are needed, saves it in the result row container.
+func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) error {
+	// sourceVals contains values for the columns from the table, in the order of the
+	// table descriptor. (One per column in u.tw.ru.FetchCols)
+	//
+	// And then after that, all the extra expressions potentially added via
+	// a renderNode for the RHS of the assignments.
+
+	// oldValues is the prefix of sourceVals that corresponds to real
+	// stored columns in the table, that is, excluding the RHS assignment
+	// expressions.
+	oldValues := sourceVals[:len(u.run.tu.ru.FetchCols)]
+
+	// valueIdx is used in the loop below to map sourceSlots to
+	// entries in updateValues.
 	valueIdx := 0
 
-	for _, slot := range u.sourceSlots {
-		for _, value := range slot.extractValues(entireRow) {
-			updateValues[valueIdx] = value
+	// Propagate the values computed for the RHS expressions into
+	// updateValues at the right positions. The positions in
+	// updateValues correspond to the columns named in the LHS
+	// operands for SET.
+	for _, slot := range u.run.sourceSlots {
+		for _, value := range slot.extractValues(sourceVals) {
+			u.run.updateValues[valueIdx] = value
 			valueIdx++
 		}
 	}
 
-	if len(u.computeExprs) > 0 {
-		// Evaluate computed columns if necessary.
-		newVals := make(tree.Datums, len(oldValues))
-		copy(newVals, oldValues)
-		for i, col := range u.tw.ru.UpdateCols {
-			newVals[u.tw.ru.FetchColIDtoRowIndex[col.ID]] = updateValues[i]
+	// At this point, we have populated updateValues with the result of
+	// computing the RHS for every assignment.
+	//
+
+	if len(u.run.computeExprs) > 0 {
+		// We now need to (re-)compute the computed column values, using
+		// the updated values above as input.
+		//
+		// This needs to happen in the context of a row containing all the
+		// table's columns as if they had been updated already. This is not
+		// yet reflected neither by oldValues (which contain non-updated values)
+		// nor updateValues (which contain only those columns mentioned in the SET LHS).
+		//
+		// So we need to construct a buffer that groups them together.
+		// iVarContainerForComputedCols does this.
+		copy(u.run.iVarContainerForComputedCols.CurSourceRow, oldValues)
+		for i, col := range u.run.tu.ru.UpdateCols {
+			u.run.iVarContainerForComputedCols.CurSourceRow[u.run.tu.ru.FetchColIDtoRowIndex[col.ID]] = u.run.updateValues[i]
 		}
 
-		iv := &sqlbase.RowIndexedVarContainer{
-			CurSourceRow: newVals,
-			Cols:         u.tableDesc.Columns,
-			Mapping:      u.tw.ru.FetchColIDtoRowIndex,
-		}
-		params.EvalContext().IVarContainer = iv
-
-		for i := range u.computedCols {
-			d, err := u.computeExprs[i].Eval(params.EvalContext())
+		// Now (re-)compute the computed columns.
+		// Note that it's safe to do this in any order, because we currently
+		// prevent computed columns from depending on other computed columns.
+		params.EvalContext().PushIVarContainer(&u.run.iVarContainerForComputedCols)
+		for i := range u.run.computedCols {
+			d, err := u.run.computeExprs[i].Eval(params.EvalContext())
 			if err != nil {
-				return false, err
+				params.EvalContext().IVarContainer = nil
+				return err
 			}
-			updateValues[u.updateColsIdx[u.computedCols[i].ID]] = d
+			u.run.updateValues[u.run.updateColsIdx[u.run.computedCols[i].ID]] = d
 		}
+		params.EvalContext().PopIVarContainer()
 	}
 
-	params.EvalContext().IVarContainer = nil
-
+	// Run the CHECK constraints, if any.
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
-	if err := u.checkHelper.LoadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
-		return false, err
-	}
-	if err := u.checkHelper.LoadRow(u.updateColsIdx, updateValues, true); err != nil {
-		return false, err
-	}
-	if err := u.checkHelper.Check(params.EvalContext()); err != nil {
-		return false, err
-	}
-
-	// Ensure that the values honor the specified column widths.
-	for i := range updateValues {
-		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i].Type, updateValues[i], u.tw.ru.UpdateCols[i].Name); err != nil {
-			return false, err
+	if len(u.run.checkHelper.Exprs) > 0 {
+		if err := u.run.checkHelper.LoadRow(
+			u.run.tu.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
+			return err
+		}
+		if err := u.run.checkHelper.LoadRow(
+			u.run.updateColsIdx, u.run.updateValues, true); err != nil {
+			return err
+		}
+		if err := u.run.checkHelper.Check(params.EvalContext()); err != nil {
+			return err
 		}
 	}
 
-	for i, col := range u.tw.ru.UpdateCols {
-		val := updateValues[i]
-		if !col.Nullable && val == tree.DNull {
-			return false, sqlbase.NewNonNullViolationError(col.Name)
+	// Verify the schema constraints.
+	for i, val := range u.run.updateValues {
+		col := &u.run.tu.ru.UpdateCols[i]
+		if val == tree.DNull {
+			// Verify no NULL makes it to a nullable column.
+			if !col.Nullable {
+				return sqlbase.NewNonNullViolationError(col.Name)
+			}
+		} else {
+			// Verify that the data width matches the column constraint.
+			if err := sqlbase.CheckValueWidth(col.Type, val, col.Name); err != nil {
+				return err
+			}
 		}
 	}
 
-	// Update the row values.
-	newValues, err := u.tw.row(
-		params.ctx, append(oldValues, updateValues...), params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
-	)
+	// Queue the insert in the KV batch.
+	newValues, err := u.run.tu.rowForUpdate(params.ctx, oldValues, u.run.updateValues, u.run.traceKV)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	resultRow, err := u.rh.cookResultRow(newValues)
-	if err != nil {
-		return false, err
+	// If result rows need to be accumulated, do it.
+	if u.run.rows != nil {
+		if _, err := u.run.rows.AddRow(params.ctx, newValues); err != nil {
+			return err
+		}
 	}
-	u.run.resultRow = resultRow
 
-	return true, nil
+	return nil
 }
 
-func (u *updateNode) Values() tree.Datums {
-	return u.run.resultRow
-}
+// BatchedCount implements the batchedPlanNode interface.
+func (u *updateNode) BatchedCount() int { return u.run.rowCount }
 
-// requireSpool implements the planNodeRequireSpool interface.
-func (u *updateNode) requireSpool() {}
+// BatchedCount implements the batchedPlanNode interface.
+func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.rows.At(rowIdx) }
 
 func (u *updateNode) Close(ctx context.Context) {
-	u.run.rows.Close(ctx)
-	u.tw.close(ctx)
+	u.source.Close(ctx)
+	if u.run.rows != nil {
+		u.run.rows.Close(ctx)
+		u.run.rows = nil
+	}
+	u.run.tu.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
 }
 
-// enableAutoCommit is part of the autoCommitNode interface.
+// enableAutoCommit implements the autoCommitNode interface.
 func (u *updateNode) enableAutoCommit() {
-	u.autoCommit = autoCommitEnabled
-}
-
-// editNode (Base, Run) is shared between all row updating
-// statements (DELETE, UPDATE, INSERT).
-
-// editNodeBase holds the common (prepare+execute) state needed to run
-// row-modifying statements.
-type editNodeBase struct {
-	p         *planner
-	rh        *returningHelper
-	tableDesc *sqlbase.TableDescriptor
-}
-
-func (p *planner) makeEditNode(
-	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
-) (editNodeBase, error) {
-	tableDesc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	if err != nil {
-		return editNodeBase{}, err
-	}
-
-	if err := p.CheckPrivilege(ctx, tableDesc, priv); err != nil {
-		return editNodeBase{}, err
-	}
-
-	return editNodeBase{
-		p:         p,
-		tableDesc: tableDesc,
-	}, nil
-}
-
-// editNodeRun holds the runtime (execute) state needed to run
-// row-modifying statements.
-type editNodeRun struct {
-	rows      planNode
-	tw        tableWriter
-	resultRow tree.Datums
-}
-
-func (r *editNodeRun) initEditNode(
-	ctx context.Context,
-	en *editNodeBase,
-	rows planNode,
-	tw tableWriter,
-	tn *tree.TableName,
-	re tree.ReturningClause,
-	desiredTypes []types.T,
-) error {
-	r.rows = rows
-	r.tw = tw
-
-	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, tn, en.tableDesc.Columns)
-	if err != nil {
-		return err
-	}
-	en.rh = rh
-
-	return nil
-}
-
-func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
-	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		return en.p.txn.SetSystemConfigTrigger()
-	}
-	return nil
+	u.run.autoCommit = autoCommitEnabled
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples

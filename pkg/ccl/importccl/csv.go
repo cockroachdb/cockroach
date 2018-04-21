@@ -404,6 +404,11 @@ func convertRecord(
 
 	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize+padding)
 
+	computedIVarContainer := sqlbase.RowIndexedVarContainer{
+		Mapping: ri.InsertColIDtoRowIndex,
+		Cols:    tableDesc.Columns,
+	}
+
 	for batch := range recordCh {
 		for batchIdx, record := range batch.r {
 			rowNum := batch.rowOffset + batchIdx
@@ -439,7 +444,8 @@ func convertRecord(
 			var computeExprs []tree.TypedExpr
 			var computedCols []sqlbase.ColumnDescriptor
 
-			row, err := sql.GenerateInsertRow(defaultExprs, computeExprs, ri.InsertColIDtoRowIndex, cols, computedCols, evalCtx, tableDesc, datums)
+			row, err := sql.GenerateInsertRow(
+				defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, datums, &computedIVarContainer)
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}

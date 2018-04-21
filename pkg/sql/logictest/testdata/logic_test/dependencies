@@ -152,19 +152,21 @@ COMMIT
 query TITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM v
 ----
-Tree            Level  Type    Field        Description       Columns           Ordering
-update          0      update  ·            ·                 (k)               ·
- │              0      ·       table        kv                ·                 ·
- │              0      ·       set          v                 ·                 ·
- │              0      ·       returning 0  test.public.kv.k  ·                 ·
- └── render     1      render  ·            ·                 (k, v, z, "444")  "444"=CONST; k!=NULL; key(k)
-      │         1      ·       render 0     test.public.kv.k  ·                 ·
-      │         1      ·       render 1     test.public.kv.v  ·                 ·
-      │         1      ·       render 2     test.public.kv.z  ·                 ·
-      │         1      ·       render 3     444               ·                 ·
-      └── scan  2      scan    ·            ·                 (k, v, z)         k!=NULL; key(k)
-·               2      ·       table        kv@primary        ·                 ·
-·               2      ·       spans        /1-               ·                 ·
+Tree                      Level  Type    Field     Description       Columns           Ordering
+render                    0      render  ·         ·                 (k)               ·
+ │                        0      ·       render 0  test.public.kv.k  ·                 ·
+ └── run                  1      run     ·         ·                 (k, v, z)         ·
+      └── update          2      update  ·         ·                 (k, v, z)         ·
+           │              2      ·       table     kv                ·                 ·
+           │              2      ·       set       v                 ·                 ·
+           └── render     3      render  ·         ·                 (k, v, z, "444")  "444"=CONST; k!=NULL; key(k)
+                │         3      ·       render 0  test.public.kv.k  ·                 ·
+                │         3      ·       render 1  test.public.kv.v  ·                 ·
+                │         3      ·       render 2  test.public.kv.z  ·                 ·
+                │         3      ·       render 3  444               ·                 ·
+                └── scan  4      scan    ·         ·                 (k, v, z)         k!=NULL; key(k)
+·                         4      ·       table     kv@primary        ·                 ·
+·                         4      ·       spans     /1-               ·                 ·
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
