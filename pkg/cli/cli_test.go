@@ -931,7 +931,7 @@ thenshort`,
 	// -- 1 row
 	// sql --format=html -e select * from t.u
 	// <table>
-	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
+	// <thead><tr><th>row</th><th>f&#34;oo</th><th>f&#39;oo</th><th>f\oo</th><th>short<br/>very very long<br/>not much</th><th>very very long<br/>thenshort</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></thead>
 	// <tbody>
 	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
@@ -994,7 +994,7 @@ func Example_sql_empty_table() {
 	// -- 0 rows
 	// sql --format=html -e select * from t.norows
 	// <table>
-	// <thead><tr><th>row</th><th>x</th></tr></head>
+	// <thead><tr><th>row</th><th>x</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=2>0 rows</td></tr></tfoot></table>
 	// sql --format=raw -e select * from t.norows
@@ -1025,7 +1025,7 @@ func Example_sql_empty_table() {
 	// -- 3 rows
 	// sql --format=html -e select * from t.nocols
 	// <table>
-	// <thead><tr><th>row</th></tr></head>
+	// <thead><tr><th>row</th></tr></thead>
 	// <tbody>
 	// <tr><td>1</td></tr>
 	// <tr><td>2</td></tr>
@@ -1054,7 +1054,7 @@ func Example_sql_empty_table() {
 	// -- 0 rows
 	// sql --format=html -e select * from t.nocolsnorows
 	// <table>
-	// <thead><tr><th>row</th></tr></head>
+	// <thead><tr><th>row</th></tr></thead>
 	// </tbody>
 	// <tfoot><tr><td colspan=1>0 rows</td></tr></tfoot></table>
 	// sql --format=raw -e select * from t.nocolsnorows
@@ -1378,7 +1378,7 @@ func Example_sql_table() {
 	// -- 9 rows
 	// sql --format=html -e select * from t.t
 	// <table>
-	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
+	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></thead>
 	// <tbody>
 	// <tr><td>1</td><td>foo</td><td>printable ASCII</td></tr>
 	// <tr><td>2</td><td>&#34;foo</td><td>printable ASCII with quotes</td></tr>
@@ -1441,6 +1441,83 @@ func Example_sql_table() {
 	// ## 4
 	// tabs
 	// # 9 rows
+}
+
+func TestRenderHTML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cols := []string{"colname"}
+	align := "d"
+	rows := [][]string{
+		{"<b>foo</b>"},
+		{"bar"},
+	}
+
+	type testCase struct {
+		reporter htmlReporter
+		out      string
+	}
+
+	testCases := []testCase{
+		{
+			reporter: htmlReporter{},
+			out: `<table>
+<thead><tr><th>colname</th></tr></thead>
+<tbody>
+<tr><td><b>foo</b></td></tr>
+<tr><td>bar</td></tr>
+</tbody>
+</table>
+`,
+		},
+		{
+			reporter: htmlReporter{escape: true},
+			out: `<table>
+<thead><tr><th>colname</th></tr></thead>
+<tbody>
+<tr><td>&lt;b&gt;foo&lt;/b&gt;</td></tr>
+<tr><td>bar</td></tr>
+</tbody>
+</table>
+`,
+		},
+		{
+			reporter: htmlReporter{rowStats: true},
+			out: `<table>
+<thead><tr><th>row</th><th>colname</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><b>foo</b></td></tr>
+<tr><td>2</td><td>bar</td></tr>
+</tbody>
+<tfoot><tr><td colspan=2>2 rows</td></tr></tfoot></table>
+`,
+		},
+		{
+			reporter: htmlReporter{escape: true, rowStats: true},
+			out: `<table>
+<thead><tr><th>row</th><th>colname</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>&lt;b&gt;foo&lt;/b&gt;</td></tr>
+<tr><td>2</td><td>bar</td></tr>
+</tbody>
+<tfoot><tr><td colspan=2>2 rows</td></tr></tfoot></table>
+`,
+		},
+	}
+
+	for _, tc := range testCases {
+		name := fmt.Sprintf("escape=%v/rowStats=%v", tc.reporter.escape, tc.reporter.rowStats)
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := render(&tc.reporter, &buf, cols, newRowSliceIter(rows, align), nil /* noRowsHook */)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.out != buf.String() {
+				t.Errorf("expected:\n%s\ngot:\n%s", tc.out, buf.String())
+			}
+		})
+	}
 }
 
 func Example_misc_pretty() {
