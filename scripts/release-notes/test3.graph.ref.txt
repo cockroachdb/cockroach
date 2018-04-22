@@ -1,0 +1,16 @@
+*   43416a67862cd1f2ec8260b70653fbd166745d3d Merge pull request #100 from foo/bar
+|\  
+| * 0c7dc7021d94d65f0988f0fe5066112bb97662f5 merge pr canary
+|/  
+*   78804022d6076661ba05df7730485dbaa8d4b79f Merge #1
+|\  
+| * 2e7cd48be4786d6d8a52577cc345788b431258cb feature D
+| *   fce50077ec20f1f0158e7e20dbc72d58b7dd4c50 Merge feature2 into current
+| |\  
+| | * 624e1cfd9a21dea57316873daec0c1cf2f4d854b feature C
+| * | 8aa2d260e68b9c53b21ea19fff658f6039ba9c0b feature B
+| |/  
+| * f6f493394e53b0ef483ad8a006aa82174263c294 feature A
+* | ba19efc71c6364e6fe49ba6cf9f77610f2d7a227 master update
+|/  
+* e82a66de5a4d9a4cb06024f0d7d3e328c175c020 initial
