@@ -1,0 +1,36 @@
+### Bug Fixes
+
+- feature A [#1][#1] [c32ce70cb][c32ce70cb]
+
+### Miscellaneous
+
+#### Changes without release note annotation
+
+- [#unknown][#unknown] [14f0a6303][14f0a6303] master update (test1)
+
+### Doc Updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 2 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+
+- test1
+
+### PRs merged by contributors
+
+- test1:
+  - [#unknown][#unknown] [14f0a6303][14f0a6303] (+   0 -   0 ~   0/ 1) master update
+  - [#100  ][#100] [6766d6a96][6766d6a96] (+   0 -   0 ~   0/ 1) PR title alternate format
+  - [#1    ][#1] [4a1e52a5e][4a1e52a5e] (+   0 -   0 ~   0/ 1) PR title
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#unknown]: https://github.com/cockroachdb/cockroach/pull/unknown
+[14f0a6303]: https://github.com/cockroachdb/cockroach/commit/14f0a6303
+[4a1e52a5e]: https://github.com/cockroachdb/cockroach/commit/4a1e52a5e
+[6766d6a96]: https://github.com/cockroachdb/cockroach/commit/6766d6a96
+[c32ce70cb]: https://github.com/cockroachdb/cockroach/commit/c32ce70cb
+
