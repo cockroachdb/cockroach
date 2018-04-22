@@ -1,0 +1,40 @@
+### Bug Fixes
+
+- Feature A [#1][#1] [9ce6f14aa][9ce6f14aa]
+
+### Miscellaneous
+
+#### Changes without release note annotation
+
+- [#2][#2] [6f55a7859][6f55a7859] PR title in need of release note (test5)
+
+### Doc Updates
+
+Docs team: Please add these manually.
+
+### Contributors
+
+This release includes 4 merged PRs by 1 author. We would like to thank the following contributors from the CockroachDB community:
+
+- test5
+
+### PRs merged by contributors
+
+- test5:
+  - 2018-04-22 [#200  ][#200  ] [8bb149605][8bb149605] (+   0 -   0 ~   0/ 1) PR title in need of release note alternate format
+  - 2018-04-22 [#2    ][#2    ] [8aedb65ce][8aedb65ce] (+   0 -   0 ~   0/ 1) PR title in need of release note
+  - 2018-04-22 [#100  ][#100  ] [7b882cbdc][7b882cbdc] (+   0 -   0 ~   0/ 1) PR title alternate format
+  - 2018-04-22 [#1    ][#1    ] [13c3a6ced][13c3a6ced] (+   0 -   0 ~   0/ 2) PR title (2 commits)
+
+
+[#1]: https://github.com/cockroachdb/cockroach/pull/1
+[#100]: https://github.com/cockroachdb/cockroach/pull/100
+[#2]: https://github.com/cockroachdb/cockroach/pull/2
+[#200]: https://github.com/cockroachdb/cockroach/pull/200
+[13c3a6ced]: https://github.com/cockroachdb/cockroach/commit/13c3a6ced
+[6f55a7859]: https://github.com/cockroachdb/cockroach/commit/6f55a7859
+[7b882cbdc]: https://github.com/cockroachdb/cockroach/commit/7b882cbdc
+[8aedb65ce]: https://github.com/cockroachdb/cockroach/commit/8aedb65ce
+[8bb149605]: https://github.com/cockroachdb/cockroach/commit/8bb149605
+[9ce6f14aa]: https://github.com/cockroachdb/cockroach/commit/9ce6f14aa
+
