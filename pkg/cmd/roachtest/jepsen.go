@@ -214,16 +214,16 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 
 			if failed {
 				failures = append(failures, testCfg)
-				// collect the systemd log on failure to diagnose #20492.
-				// TODO(bdarnell): remove the next two lines when that's resolved.
-				logf("%s: systemd log:", testCfg)
-				c.Run(ctx, controller, "journalctl -x --no-pager")
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
 				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
 					// -h causes tar to follow symlinks; needed by the "latest" symlink.
 					// -f- sends the output to stdout, we read it and save it to a local file.
-					"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
+					// Redirect stderr to /dev/null to work around
+					// https://github.com/cockroachdb/roachprod/issues/154
+					// (among other possibilities, the latest symlink may not point anywhere in
+					// some failures).
+					"sh -c 'tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/ 2> /dev/null'")
 				output, err := cmd.Output()
 				if err != nil {
 					t.Fatal(err)
