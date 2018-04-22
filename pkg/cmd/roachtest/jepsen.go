@@ -214,10 +214,6 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 
 			if failed {
 				failures = append(failures, testCfg)
-				// collect the systemd log on failure to diagnose #20492.
-				// TODO(bdarnell): remove the next two lines when that's resolved.
-				logf("%s: systemd log:", testCfg)
-				c.Run(ctx, controller, "journalctl -x --no-pager")
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
 				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
