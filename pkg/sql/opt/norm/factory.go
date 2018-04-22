@@ -172,6 +172,23 @@ func (f *Factory) listOnlyHasNulls(list memo.ListID) bool {
 	return true
 }
 
+// removeListItem returns a new list that is a copy of the given list, except
+// that it does not contain the given search item. If the list contains the item
+// multiple times, then only the first instance is removed.
+func (f *Factory) removeListItem(list memo.ListID, search memo.GroupID) memo.ListID {
+	existingList := f.mem.LookupList(list)
+	newList := make([]memo.GroupID, len(existingList)-1)
+	for i, item := range existingList {
+		if item == search {
+			newList = append(newList[:i], existingList[i+1:]...)
+			break
+		}
+
+		newList[i] = item
+	}
+	return f.mem.InternList(newList)
+}
+
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
@@ -369,6 +386,13 @@ func (f *Factory) hasSameCols(left, right memo.GroupID) bool {
 // the right group's output columns.
 func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).SubsetOf(f.outputCols(right))
+}
+
+// isScalarGroupBy returns true if the given grouping columns come from a
+// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
+// with any aggregate functions operating over the entire input expression.
+func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
+	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
 }
 
 // ----------------------------------------------------------------------
@@ -578,12 +602,6 @@ func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.Private
 //
 // ----------------------------------------------------------------------
 
-// emptyGroupingCols returns true if the given grouping columns for a GroupBy
-// operator are empty.
-func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(cols).(opt.ColSet).Empty()
-}
-
 // isCorrelated returns true if variables in the source expression reference
 // columns in the destination expression. For example:
 //   (InnerJoin
@@ -692,6 +710,18 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 	return f.ConstructFilters(f.InternList(conditions))
 }
 
+// isCorrelatedSubquery returns true if the given relational expression contains
+// unbound variable references. For example:
+//
+//   SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x)
+//
+// The a.x variable in the EXISTS subquery references a column outside the scope
+// of the subquery. It is an "outer column" for the subquery (see the comment on
+// RelationalProps.OuterCols for more details).
+func (f *Factory) isCorrelatedSubquery(subquery memo.GroupID) bool {
+	return !f.lookupLogical(subquery).Relational.OuterCols.Empty()
+}
+
 // ----------------------------------------------------------------------
 //
 // GroupBy Rules
@@ -711,6 +741,33 @@ func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 		}
 	}
 	return false
+}
+
+// ----------------------------------------------------------------------
+//
+// Join Rules
+//   Custom match and replace functions used with join.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// removeApply replaces an apply join operator type with the corresponding non-
+// apply join operator type. This is used when decorrelating subqueries.
+func (f *Factory) removeApply(op opt.Operator, left, right, filter memo.GroupID) memo.GroupID {
+	switch op {
+	case opt.InnerJoinApplyOp:
+		return f.ConstructInnerJoin(left, right, filter)
+	case opt.LeftJoinApplyOp:
+		return f.ConstructLeftJoin(left, right, filter)
+	case opt.RightJoinApplyOp:
+		return f.ConstructRightJoin(left, right, filter)
+	case opt.FullJoinApplyOp:
+		return f.ConstructFullJoin(left, right, filter)
+	case opt.SemiJoinApplyOp:
+		return f.ConstructSemiJoin(left, right, filter)
+	case opt.AntiJoinApplyOp:
+		return f.ConstructAntiJoin(left, right, filter)
+	}
+	panic(fmt.Sprintf("unexpected join operator: %v", op))
 }
 
 // ----------------------------------------------------------------------

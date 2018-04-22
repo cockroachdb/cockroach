@@ -8,5 +8,11 @@ further information, and in some cases proofs, can be found.
     ACM Trans. Database Syst.. 22. 43-73. 10.1145/244810.244812.
     https://www.researchgate.net/publication/220225172_Outerjoin_Simplification_and_Reordering_for_Query_Optimization
 
-[2] M. M. Joshi and C. A. Galindo-Legaria. Properties of the GroupBy/Aggregate
-    relational operator. Technical report, Microsoft, 2001. MSR-TR-2001-13.
+[2] M. M. Joshi and C. A. Galindo-Legaria.
+    Properties of the GroupBy/Aggregate relational operator.
+    Technical report, Microsoft, 2001. MSR-TR-2001-13.
+
+[3] Galindo-Legaria, C.A. & Joshi, Milind. (2001).
+    Orthogonal Optimization of Subqueries and Aggregation.
+    Sigmod Record. 30. 571-581. 10.1145/375663.375748. 
+    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf

@@ -36,19 +36,42 @@
 # The Input field contains the subquery itself, which should be wrapped in a
 # Max1Row operator to enforce that the subquery can return at most one row
 # (Max1Row may be removed by the optimizer later if it can determine statically
-# that the subquery will always return at most one row). The Projection field
-# contains a single column representing the output of the subquery. For
-# example, `(SELECT 1, 'a')` would be represented by the following structure:
+# that the subquery will always return at most one row). In addition, the
+# subquery must project exactly one output column. If the subquery returns one
+# row, then that column is bound to the single column value in that row. If the
+# subquery returns zero rows, then that column is bound to NULL.
 #
-# (Subquery
-#   (Max1Row
-#     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+# The Projection field contains a single expression that represents the output
+# of the Subquery operator. The expression can be of arbitrary complexity, and
+# can depend on the output column of the Input expression by using a Variable
+# operator. For example, `(SELECT 1, 'a')` would be represented by the following
+# structure:
+#
+#   (Subquery
+#     (Max1Row
+#       (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#     )
+#     (Variable 3)
 #   )
-#   (Variable 3)
-# )
 #
-# Here Variable 3 refers to the projection from the Input,
-# (Tuple (Const 1) (Const 'a')).
+# Here Variable 3 refers to the projection from the Input expression, which is
+# (Tuple (Const 1) (Const 'a')). Here is an example with a more complex
+# Projection field, in which the Subquery evaluates to non-NULL even though its
+# Input expression returns zero rows:
+#
+#   (Subquery
+#     (Select (Scan a) (False))
+#     (IsNull (Variable 1))
+#   )
+#
+# Since the subquery returns zero rows, (Variable 1) is bound to NULL, and so
+# the IsNull operator returns True, which then becomes the final output of the
+# Subquery operator.
+#
+# These behaviors may seem unnecessary or arbitrary at first glance, but they're
+# designed to allow transformation rules to easily "bubble up" a subquery to the
+# root of a scalar expression tree, so that it can then be turned into one of
+# the JoinApply operators.
 [Scalar]
 define Subquery {
     Input      Expr

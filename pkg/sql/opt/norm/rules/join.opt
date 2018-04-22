@@ -84,3 +84,43 @@
     )
     (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
 )
+
+# DecorrelateJoin maps an apply join into the corresponding join without an
+# apply if the right side of the join is not correlated with the left side.
+# This allows the optimizer to consider additional physical join operators that
+# are unable to handle correlated inputs.
+#
+# NOTE: Keep this before other decorrelation patterns, as if the correlated
+#       join can be removed first, it avoids unnecessarily matching other
+#       patterns that only exist to get to this pattern.
+#
+# Citations: [3]
+[DecorrelateJoin, Normalize]
+(JoinApply
+    $left:*
+    $right:* & ^(IsCorrelated $right $left)
+    $on:*
+)
+=>
+(RemoveApply (OpName) $left $right $on)
+
+# TryDecorrelateSelect "pushes down" the join apply into the select operator,
+# in order to eliminate any correlation between the select filter list and the
+# left side of the join, and also to keep "digging" down to find and eliminate
+# other unnecessary correlation. Eventually, the hope is to trigger the
+# DecorrelateJoin pattern to turn the JoinApply operator into a non-apply Join
+# operator.
+#
+# Citations: [3]
+[TryDecorrelateSelect, Normalize]
+(InnerJoinApply | LeftJoinApply | SemiJoinApply | AntiJoinApply
+    $left:*
+    $right:(Select $input:* $filter:*) & (IsCorrelated $right $left)
+    $on:*
+)
+=>
+((OpName)
+    $left
+    $input
+    (ConcatFilters $on $filter)
+)

@@ -175,9 +175,8 @@
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
 # where it does not reference any of the aggregation columns. This only works
-# if there are grouping columns. Otherwise, this is an instance of the "scalar"
-# GroupBy, which returns only one row, and which exhibits different behavior if
-# the input is empty:
+# if this is an instance of the "scalar" GroupBy, which returns only one row,
+# and which exhibits different behavior if the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -191,7 +190,7 @@
     (GroupBy
         $input:*
         $aggregations:*
-        $groupingCols:* & ^(EmptyGroupingCols $groupingCols)
+        $groupingCols:* & ^(IsScalarGroupBy $groupingCols)
     )
     (Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $aggregations) ... ])
 )
@@ -206,4 +205,38 @@
         $groupingCols
     )
     (Filters (ExtractCorrelatedConditions $list (OutputCols $aggregations)))
+)
+
+# HoistSelectExists extracts existential subqueries from Select filters,
+# turning them into semi-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Exists $subquery:* & (IsCorrelatedSubquery $subquery)) ... ]
+    )
+)
+=>
+(SemiJoinApply
+    $input
+    $subquery
+    (Filters (RemoveListItem $list $exists))
+)
+
+# HoistSelectNotExists extracts non-existential subqueries from Select filters,
+# turning them into semi-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectNotExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Not (Exists $subquery:* & (IsCorrelatedSubquery $subquery))) ... ]
+    )
+)
+=>
+(AntiJoinApply
+    $input
+    $subquery
+    (Filters (RemoveListItem $list $exists))
 )
