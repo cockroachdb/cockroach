@@ -1594,6 +1594,7 @@ Final best expression
    └── projections [outer=(6)]
         └── variable: column6 [type=decimal, outer=(6)]
 
+# Exploration patterns with varying costs.
 optsteps
 SELECT s, x FROM a WHERE s='foo' AND f>100
 ----
@@ -1780,3 +1781,213 @@ Final best expression
    └── projections [outer=(1,4)]
         ├── variable: a.s [type=string, outer=(4)]
         └── variable: a.x [type=int, outer=(1)]
+
+# Decorrelation pattern.
+optsteps
+SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE z=i)
+----
+================================================================================
+Initial expression
+  Cost: 2200.00
+================================================================================
+  select
+   ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+   ├── keys: (1) weak(3,4)
+   ├── scan a
+   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    └── keys: (1) weak(3,4)
+   └── exists [type=bool, outer=(2)]
+        └── select
+             ├── columns: b.x:6(int!null) b.z:7(int)
+             ├── outer: (2)
+             ├── keys: (6)
+             ├── scan b
+             │    ├── columns: b.x:6(int!null) b.z:7(int)
+             │    └── keys: (6)
+             └── eq [type=bool, outer=(2,7)]
+                  ├── variable: b.z [type=int, outer=(7)]
+                  └── variable: a.i [type=int, outer=(2)]
+================================================================================
+EnsureSelectFilters
+  Cost: 2200.00
+================================================================================
+   select
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+    └── exists [type=bool, outer=(2)]
+         └── select
+              ├── columns: b.x:6(int!null) b.z:7(int)
+              ├── outer: (2)
+              ├── keys: (6)
+              ├── scan b
+              │    ├── columns: b.x:6(int!null) b.z:7(int)
+              │    └── keys: (6)
+  -           └── eq [type=bool, outer=(2,7)]
+  -                ├── variable: b.z [type=int, outer=(7)]
+  -                └── variable: a.i [type=int, outer=(2)]
+  +           └── filters [type=bool, outer=(2,7)]
+  +                └── eq [type=bool, outer=(2,7)]
+  +                     ├── variable: b.z [type=int, outer=(7)]
+  +                     └── variable: a.i [type=int, outer=(2)]
+================================================================================
+EnsureSelectFilters
+  Cost: 2200.00
+================================================================================
+   select
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+  - └── exists [type=bool, outer=(2)]
+  -      └── select
+  -           ├── columns: b.x:6(int!null) b.z:7(int)
+  -           ├── outer: (2)
+  -           ├── keys: (6)
+  -           ├── scan b
+  -           │    ├── columns: b.x:6(int!null) b.z:7(int)
+  -           │    └── keys: (6)
+  -           └── filters [type=bool, outer=(2,7)]
+  -                └── eq [type=bool, outer=(2,7)]
+  -                     ├── variable: b.z [type=int, outer=(7)]
+  -                     └── variable: a.i [type=int, outer=(2)]
+  + └── filters [type=bool, outer=(2)]
+  +      └── exists [type=bool, outer=(2)]
+  +           └── select
+  +                ├── columns: b.x:6(int!null) b.z:7(int)
+  +                ├── outer: (2)
+  +                ├── keys: (6)
+  +                ├── scan b
+  +                │    ├── columns: b.x:6(int!null) b.z:7(int)
+  +                │    └── keys: (6)
+  +                └── filters [type=bool, outer=(2,7)]
+  +                     └── eq [type=bool, outer=(2,7)]
+  +                          ├── variable: b.z [type=int, outer=(7)]
+  +                          └── variable: a.i [type=int, outer=(2)]
+================================================================================
+HoistSelectExists
+  Cost: 2100.00
+================================================================================
+  -select
+  +semi-join-apply
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+  - ├── keys: (1) weak(3,4)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+  - └── filters [type=bool, outer=(2)]
+  -      └── exists [type=bool, outer=(2)]
+  -           └── select
+  -                ├── columns: b.x:6(int!null) b.z:7(int)
+  -                ├── outer: (2)
+  -                ├── keys: (6)
+  -                ├── scan b
+  -                │    ├── columns: b.x:6(int!null) b.z:7(int)
+  -                │    └── keys: (6)
+  -                └── filters [type=bool, outer=(2,7)]
+  -                     └── eq [type=bool, outer=(2,7)]
+  -                          ├── variable: b.z [type=int, outer=(7)]
+  -                          └── variable: a.i [type=int, outer=(2)]
+  + ├── select
+  + │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    ├── outer: (2)
+  + │    ├── keys: (6)
+  + │    ├── scan b
+  + │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    │    └── keys: (6)
+  + │    └── filters [type=bool, outer=(2,7)]
+  + │         └── eq [type=bool, outer=(2,7)]
+  + │              ├── variable: b.z [type=int, outer=(7)]
+  + │              └── variable: a.i [type=int, outer=(2)]
+  + └── filters [type=bool]
+================================================================================
+EliminateEmptyAnd
+  Cost: 2100.00
+================================================================================
+   semi-join-apply
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+    ├── select
+    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── outer: (2)
+    │    ├── keys: (6)
+    │    ├── scan b
+    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │    └── keys: (6)
+    │    └── filters [type=bool, outer=(2,7)]
+    │         └── eq [type=bool, outer=(2,7)]
+    │              ├── variable: b.z [type=int, outer=(7)]
+    │              └── variable: a.i [type=int, outer=(2)]
+  - └── filters [type=bool]
+  + └── true [type=bool]
+================================================================================
+TryDecorrelateSelect
+  Cost: 2000.00
+================================================================================
+   semi-join-apply
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+  - ├── select
+  + ├── scan b
+    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  - │    ├── outer: (2)
+  - │    ├── keys: (6)
+  - │    ├── scan b
+  - │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  - │    │    └── keys: (6)
+  - │    └── filters [type=bool, outer=(2,7)]
+  - │         └── eq [type=bool, outer=(2,7)]
+  - │              ├── variable: b.z [type=int, outer=(7)]
+  - │              └── variable: a.i [type=int, outer=(2)]
+  - └── true [type=bool]
+  + │    └── keys: (6)
+  + └── filters [type=bool, outer=(2,7)]
+  +      └── eq [type=bool, outer=(2,7)]
+  +           ├── variable: b.z [type=int, outer=(7)]
+  +           └── variable: a.i [type=int, outer=(2)]
+================================================================================
+DecorrelateJoin
+  Cost: 2000.00
+================================================================================
+  -semi-join-apply
+  +semi-join
+    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── scan a
+    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    └── keys: (1) weak(3,4)
+    ├── scan b
+    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    └── keys: (6)
+    └── filters [type=bool, outer=(2,7)]
+         └── eq [type=bool, outer=(2,7)]
+              ├── variable: b.z [type=int, outer=(7)]
+              └── variable: a.i [type=int, outer=(2)]
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 2000.00
+================================================================================
+  semi-join
+   ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+   ├── scan a
+   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    └── keys: (1) weak(3,4)
+   ├── scan b
+   │    ├── columns: b.x:6(int!null) b.z:7(int)
+   │    └── keys: (6)
+   └── filters [type=bool, outer=(2,7)]
+        └── eq [type=bool, outer=(2,7)]
+             ├── variable: b.z [type=int, outer=(7)]
+             └── variable: a.i [type=int, outer=(2)]

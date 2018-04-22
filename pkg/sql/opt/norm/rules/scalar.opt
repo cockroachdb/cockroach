@@ -138,3 +138,24 @@
 )
 =>
 (Null (BoolType))
+
+# EliminateExistsProject discards a Project input to the Exists operator. The
+# Project operator never changes the row cardinality of its input, and row
+# cardinality is the only thing that Exists cares about, so Project is a no-op.
+[EliminateExistsProject, Normalize]
+(Exists (Project $input:*)) => (Exists $input)
+
+# EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
+# operator. While non-scalar GroupBy can change row cardinality, it always
+# returns a non-empty set if its input is non-empty. Similarly, if its input is
+# empty, then it returns the empty set. Therefore, it's a no-op for Exists.
+[EliminateExistsGroupBy, Normalize]
+(Exists
+    (GroupBy
+        $input:*
+        *
+        $groupingCols:* & ^(IsScalarGroupBy $groupingCols)
+    )
+)
+=>
+(Exists $input)
