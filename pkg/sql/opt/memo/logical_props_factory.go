@@ -249,8 +249,7 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 
 	// Any outer columns from aggregation expressions that are not bound by the
 	// input columns are outer columns.
-	props.Relational.OuterCols = aggProps.OuterCols.Copy()
-	props.Relational.OuterCols.DifferenceWith(inputProps.OutputCols)
+	props.Relational.OuterCols = aggProps.OuterCols.Difference(inputProps.OutputCols)
 	props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 
 	// Scalar group by has no grouping columns and always a single row.
