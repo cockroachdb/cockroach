@@ -586,7 +586,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 			} else {
 				fmt.Fprintf(tw, "status:\trestarted pre-existing node\n")
 			}
-			fmt.Fprintf(tw, "clusterID:\t%s\n", s.ClusterID())
+
+			// Remember the cluster ID for log file rotation.
+			clusterID := s.ClusterID().String()
+			log.SetClusterID(clusterID)
+			fmt.Fprintf(tw, "clusterID:\t%s\n", clusterID)
+
 			fmt.Fprintf(tw, "nodeID:\t%d\n", nodeID)
 			if err := tw.Flush(); err != nil {
 				return err

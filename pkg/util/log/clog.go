@@ -696,6 +696,10 @@ type loggingT struct {
 	fatalCh   chan struct{} // closed on fatal error
 
 	interceptor atomic.Value // InterceptorFn
+
+	// The Cluster ID is reported on every new log file so as to ease the correlation
+	// of panic reports with self-reported log files.
+	clusterID string
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -706,6 +710,18 @@ type buffer struct {
 }
 
 var logging loggingT
+
+// SetClusterID stores the Cluster ID for further reference.
+func SetClusterID(clusterID string) {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	if logging.clusterID != "" {
+		panic("clusterID already set")
+	}
+
+	logging.clusterID = clusterID
+}
 
 // setVState sets a consistent state for V logging.
 // l.mu is held.
@@ -1039,16 +1055,22 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 
 	sb.Writer = bufio.NewWriterSize(sb.file, bufferSize)
 
-	f, l, _ := caller.Lookup(1)
-	for _, msg := range []string{
+	messages := make([]string, 0, 6)
+	messages = append(messages,
 		fmt.Sprintf("[config] file created at: %s\n", now.Format("2006/01/02 15:04:05")),
 		fmt.Sprintf("[config] running on machine: %s\n", host),
 		fmt.Sprintf("[config] binary: %s\n", build.GetInfo().Short()),
 		fmt.Sprintf("[config] arguments: %s\n", os.Args),
-		// Including a non-ascii character in the first 1024 bytes of the log helps
-		// viewers that attempt to guess the character encoding.
-		fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"),
-	} {
+	)
+	if sb.logger.clusterID != "" {
+		messages = append(messages, fmt.Sprintf("[config] clusterID: %s\n", sb.logger.clusterID))
+	}
+	// Including a non-ascii character in the first 1024 bytes of the log helps
+	// viewers that attempt to guess the character encoding.
+	messages = append(messages, fmt.Sprintf("line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid file:line msg utf8=\u2713\n"))
+
+	f, l, _ := caller.Lookup(1)
+	for _, msg := range messages {
 		buf := formatLogEntry(Entry{
 			Severity:  Severity_INFO,
 			Time:      now.UnixNano(),
