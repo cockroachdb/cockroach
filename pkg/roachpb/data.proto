@@ -17,6 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -132,6 +133,12 @@ message MergeTrigger {
 
   RangeDescriptor left_desc = 1 [(gogoproto.nullable) = false];
   RangeDescriptor right_desc = 2 [(gogoproto.nullable) = false];
+
+  bytes right_data = 3;
+  storage.engine.enginepb.MVCCStats right_mvcc_stats = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "RightMVCCStats"
+  ];
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
