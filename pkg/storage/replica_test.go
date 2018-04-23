@@ -6800,12 +6800,16 @@ func TestReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedErr := "replica descriptor's ID has changed"
-	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *origDesc, true); !testutils.IsError(err, expectedErr) {
+	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *origDesc, RemoveOptions{
+		DestroyData: true,
+	}); !testutils.IsError(err, expectedErr) {
 		t.Fatalf("expected error %q but got %v", expectedErr, err)
 	}
 
 	// Now try a fresh descriptor and succeed.
-	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *repl.Desc(), true); err != nil {
+	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *repl.Desc(), RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -6847,7 +6851,9 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tc.store.removeReplicaImpl(context.TODO(), repl, *repl.Desc(), true); err != nil {
+	if err := tc.store.removeReplicaImpl(context.TODO(), repl, *repl.Desc(), RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
 		t.Fatal(err)
 	}
 

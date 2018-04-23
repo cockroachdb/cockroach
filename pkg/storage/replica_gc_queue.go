@@ -212,7 +212,9 @@ func (rgcq *replicaGCQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "destroying local data")
 		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, true); err != nil {
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
 			return err
 		}
 	} else if desc.RangeID != replyDesc.RangeID {
@@ -224,12 +226,11 @@ func (rgcq *replicaGCQueue) process(
 		if log.V(1) {
 			log.Infof(ctx, "removing merged range")
 		}
-		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, false); err != nil {
+		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, RemoveOptions{
+			DestroyData: false,
+		}); err != nil {
 			return err
 		}
-
-		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
-		// tombstone). Add tests for GC of merged ranges.
 	} else {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.
