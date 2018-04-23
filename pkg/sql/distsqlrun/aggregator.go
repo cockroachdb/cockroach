@@ -372,23 +372,37 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 	return true, nil
 }
 
+// readInputRow reads a single row from the input. The state returned here is
+// only significant when there is metadata; it is ignored otherwise.
+func (ag *aggregatorBase) readInputRow() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+	row, meta := ag.input.Next()
+	if meta != nil {
+		if meta.Err != nil {
+			ag.moveToDraining(nil /* err */)
+			return aggStateUnknown, nil, meta
+		}
+		return aggAccumulating, nil, meta
+	}
+	if row == nil {
+		log.VEvent(ag.ctx, 1, "accumulation complete")
+		ag.inputDone = true
+	}
+
+	// The state we return here doesn't matter, since it will be ignored.
+	return aggStateUnknown, row, meta
+}
+
 // accumulateRows continually reads rows from the input and accumulates them
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
 // accumulation.
 func (ag *aggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
-		row, meta := ag.input.Next()
+		metaState, row, meta := ag.readInputRow()
 		if meta != nil {
-			if meta.Err != nil {
-				ag.moveToDraining(nil /* err */)
-				return aggStateUnknown, nil, meta
-			}
-			return aggAccumulating, nil, meta
+			return metaState, nil, meta
 		}
 		if row == nil {
-			log.VEvent(ag.ctx, 1, "accumulation complete")
-			ag.inputDone = true
 			break
 		}
 
@@ -437,17 +451,11 @@ func (ag *aggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *P
 // accumulation.
 func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
-		row, meta := ag.input.Next()
+		metaState, row, meta := ag.readInputRow()
 		if meta != nil {
-			if meta.Err != nil {
-				ag.moveToDraining(nil /* err */)
-				return aggStateUnknown, nil, meta
-			}
-			return aggAccumulating, nil, meta
+			return metaState, nil, meta
 		}
 		if row == nil {
-			log.VEvent(ag.ctx, 1, "accumulation complete")
-			ag.inputDone = true
 			break
 		}
 
