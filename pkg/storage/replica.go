@@ -525,7 +525,8 @@ var _ KeyRange = &Replica{}
 // should be campaigned upon creation and is used to eagerly campaign idle
 // replicas.
 //
-// Requires that both Replica.mu and Replica.raftMu are held.
+// Requires that Replica.mu is held. Also requires that Replica.raftMu is held
+// iff r.mu.internalRaftGroup == nil.
 func (r *Replica) withRaftGroupLocked(
 	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -541,16 +542,10 @@ func (r *Replica) withRaftGroupLocked(
 		return nil
 	}
 
-	if shouldCampaignOnCreation {
-		// Special handling of idle replicas: we campaign their Raft group upon
-		// creation if we gossiped our store descriptor more than the election
-		// timeout in the past.
-		shouldCampaignOnCreation = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
-	}
-
-	ctx := r.AnnotateCtx(context.TODO())
-
 	if r.mu.internalRaftGroup == nil {
+		r.raftMu.Mutex.AssertHeld()
+
+		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
 			uint64(r.mu.replicaID),
@@ -563,37 +558,41 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		if !shouldCampaignOnCreation {
-			// Automatically campaign and elect a leader for this group if there's
-			// exactly one known node for this group.
-			//
-			// A grey area for this being correct happens in the case when we're
-			// currently in the process of adding a second node to the group, with
-			// the change committed but not applied.
-			//
-			// Upon restarting, the first node would immediately elect itself and
-			// only then apply the config change, where really it should be applying
-			// first and then waiting for the majority (which would now require two
-			// votes, not only its own).
-			//
-			// However, in that special case, the second node has no chance to be
-			// elected leader while the first node restarts (as it's aware of the
-			// configuration and knows it needs two votes), so the worst that could
-			// happen is both nodes ending up in candidate state, timing out and then
-			// voting again. This is expected to be an extremely rare event.
-			//
-			// TODO(peter): It would be more natural for this campaigning to only be
-			// done when proposing a command (see defaultProposeRaftCommandLocked).
-			// Unfortunately, we enqueue the right hand side of a split for Raft
-			// ready processing if the range only has a single replica (see
-			// splitPostApply). Doing so implies we need to be campaigning
-			// that right hand side range when raft ready processing is
-			// performed. Perhaps we should move the logic for campaigning single
-			// replica ranges there so that normally we only eagerly campaign when
-			// proposing.
-			shouldCampaignOnCreation = r.isSoloReplicaRLocked()
-		}
-		if shouldCampaignOnCreation {
+		// Special handling of idle replicas: we campaign their Raft group upon
+		// creation if we gossiped our store descriptor more than the election
+		// timeout in the past.
+		canCampaign := r.store.canCampaignIdleReplica()
+
+		// Automatically campaign and elect a leader for this group if there's
+		// exactly one known node for this group.
+		//
+		// A grey area for this being correct happens in the case when we're
+		// currently in the process of adding a second node to the group, with
+		// the change committed but not applied.
+		//
+		// Upon restarting, the first node would immediately elect itself and
+		// only then apply the config change, where really it should be applying
+		// first and then waiting for the majority (which would now require two
+		// votes, not only its own).
+		//
+		// However, in that special case, the second node has no chance to be
+		// elected leader while the first node restarts (as it's aware of the
+		// configuration and knows it needs two votes), so the worst that could
+		// happen is both nodes ending up in candidate state, timing out and then
+		// voting again. This is expected to be an extremely rare event.
+		//
+		// TODO(peter): It would be more natural for this campaigning to only be
+		// done when proposing a command (see defaultProposeRaftCommandLocked).
+		// Unfortunately, we enqueue the right hand side of a split for Raft
+		// ready processing if the range only has a single replica (see
+		// splitPostApply). Doing so implies we need to be campaigning
+		// that right hand side range when raft ready processing is
+		// performed. Perhaps we should move the logic for campaigning single
+		// replica ranges there so that normally we only eagerly campaign when
+		// proposing.
+		isSoloReplica := r.isSoloReplicaRLocked()
+
+		if (shouldCampaignOnCreation && canCampaign) || isSoloReplica {
 			log.VEventf(ctx, 3, "campaigning")
 			if err := raftGroup.Campaign(); err != nil {
 				return err
@@ -3198,20 +3197,27 @@ func (r *Replica) propose(
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
-	// submitProposalLocked calls withRaftGroupLocked which requires that
-	// raftMu is held. In order to maintain our lock ordering we need to lock
-	// Replica.raftMu here before locking Replica.mu.
-	//
-	// TODO(peter): It appears that we only need to hold Replica.raftMu when
-	// calling raft.NewRawNode. We could get fancier with the locking here to
-	// optimize for the common case where Replica.mu.internalRaftGroup is
-	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
-	// has a tiny (~1%) performance hit for single-node block_writer testing.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
+	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
+	// locking Replica.raftMu in the common case where the raft group is
+	// non-nil, we lock only Replica.mu at first before checking the status of
+	// the internal raft group. If it equals nil then we fall back to the slow
+	// path of locking Replica.raftMu. However, in order to maintain our lock
+	// ordering we need to lock Replica.raftMu here before locking Replica.mu,
+	// so we unlock Replica.mu before locking them both again.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	if r.mu.internalRaftGroup == nil {
+		// Unlock first before locking in {raft,replica}mu order.
+		r.mu.Unlock()
+
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.mu.Lock()
+		log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	} else {
+		log.Event(proposal.ctx, "acquired replica mu")
+	}
 
 	// Add size of proposal to commandSizes map.
 	if r.mu.commandSizes != nil {
