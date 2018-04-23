@@ -4,6 +4,7 @@ import { assert } from "chai";
 import { mount } from "enzyme";
 import * as sinon from "sinon";
 
+import "src/enzymeInit";
 import { SortedTable, ColumnDescriptor } from "src/views/shared/components/sortedtable";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 
@@ -25,13 +26,7 @@ const columns: ColumnDescriptor<TestRow>[] = [
   },
 ];
 
-// Specialization of generic SortedTable component:
-//   https://github.com/Microsoft/TypeScript/issues/3960
-//
-// The variable name must start with a capital letter or JSX will not recognize
-// it as a component.
-// tslint:disable-next-line:variable-name
-const TestSortedTable = SortedTable as new () => SortedTable<TestRow>;
+class TestSortedTable extends SortedTable<TestRow> {}
 
 function makeTable(
   data: TestRow[], sortSetting?: SortSetting, onChangeSortSetting?: (ss: SortSetting) => void,

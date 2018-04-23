@@ -203,12 +203,12 @@ func (s *Server) Query(
 	// error or nil (when successful).
 	workerOutput := make(chan error)
 
-	// Create a separate account for each query, allowing them to be run in
-	// parallel.
-	resultAccounts := make([]mon.BoundAccount, len(request.Queries))
+	// Create a separate memory management context for each query, allowing them
+	// to be run in parallel.
+	memContexts := make([]QueryMemoryContext, len(request.Queries))
 	defer func() {
-		for idx := range resultAccounts {
-			resultAccounts[idx].Close(ctx)
+		for idx := range memContexts {
+			memContexts[idx].Close(ctx)
 		}
 	}()
 
@@ -229,9 +229,6 @@ func (s *Server) Query(
 				s.workerSem,
 				true, /* wait */
 				func(ctx context.Context) {
-					// Create a memory account for the results of this query.
-					resultAccounts[queryIdx] = s.resultMemMonitor.MakeBoundAccount()
-
 					// Estimated source count is either the count of requested sources
 					// *or* the estimated cluster node count if no sources are specified.
 					var estimatedSourceCount int64
@@ -241,6 +238,17 @@ func (s *Server) Query(
 						estimatedSourceCount = estimatedClusterNodeCount
 					}
 
+					// Create a memory account for the results of this query.
+					memContexts[queryIdx] = MakeQueryMemoryContext(
+						&s.workerMemMonitor,
+						&s.resultMemMonitor,
+						QueryMemoryOptions{
+							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
+							EstimatedSources:        estimatedSourceCount,
+							InterpolationLimitNanos: interpolationLimit,
+						},
+					)
+
 					datapoints, sources, err := s.db.QueryMemoryConstrained(
 						ctx,
 						query,
@@ -248,13 +256,7 @@ func (s *Server) Query(
 						sampleNanos,
 						request.StartNanos,
 						request.EndNanos,
-						interpolationLimit,
-						&resultAccounts[queryIdx],
-						&s.workerMemMonitor,
-						// The worker is allotted an even share of the total worker memory
-						// budget for the server.
-						s.queryMemoryMax/int64(s.queryWorkerMax),
-						estimatedSourceCount,
+						memContexts[queryIdx],
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{

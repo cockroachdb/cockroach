@@ -1,4 +1,4 @@
-# LogicTest: 5node-distsql
+# LogicTest: 5node-distsql 5node-distsql-metadata
 
 statement ok
 CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))

@@ -166,7 +166,7 @@ type planner struct {
 	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
-	nameResolutionVisitor nameResolutionVisitor
+	nameResolutionVisitor sqlbase.NameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
 
 	// Use a common datum allocator across all the plan nodes. This separates the

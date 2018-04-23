@@ -65,7 +65,7 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.Format = memo.ExprFmtHideAll
+			tester.Flags.ExprFormat = memo.ExprFmtHideAll
 
 			for _, arg := range d.CmdArgs {
 				key, vals := arg.Key, arg.Vals

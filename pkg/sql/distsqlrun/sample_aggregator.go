@@ -100,7 +100,11 @@ func newSampleAggregator(
 
 	s.sr.Init(int(spec.SampleSize))
 
-	if err := s.init(post, []sqlbase.ColumnType{}, flowCtx, output); err != nil {
+	if err := s.init(
+		post, []sqlbase.ColumnType{}, flowCtx, output,
+		// this proc doesn't implement RowSource and doesn't use processorBase to drain
+		procStateOpts{},
+	); err != nil {
 		return nil, err
 	}
 	return s, nil

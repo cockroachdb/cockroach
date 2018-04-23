@@ -196,6 +196,7 @@ type multiTestContext struct {
 	manualClock *hlc.ManualClock
 	clock       *hlc.Clock
 	rpcContext  *rpc.Context
+	injEngines  bool
 
 	nodeIDtoAddrMu struct {
 		*syncutil.RWMutex
@@ -250,12 +251,16 @@ func (m *multiTestContext) Start(t *testing.T, numStores int) {
 		mCopy.storeConfig = nil
 		mCopy.clocks = nil
 		mCopy.clock = nil
+		mCopy.engines = nil
+		mCopy.engineStoppers = nil
+		mCopy.injEngines = false
 		mCopy.timeUntilStoreDead = 0
 		var empty multiTestContext
 		if !reflect.DeepEqual(empty, mCopy) {
 			t.Fatalf("illegal fields set in multiTestContext:\n%s", pretty.Diff(empty, mCopy))
 		}
 	}
+
 	m.t = t
 
 	m.nodeIDtoAddrMu.RWMutex = &syncutil.RWMutex{}
@@ -697,6 +702,7 @@ func (m *multiTestContext) addStore(idx int) {
 	var needBootstrap bool
 	if len(m.engines) > idx {
 		eng = m.engines[idx]
+		needBootstrap = m.injEngines
 	} else {
 		engineStopper := stop.NewStopper()
 		m.engineStoppers = append(m.engineStoppers, engineStopper)
@@ -744,7 +750,7 @@ func (m *multiTestContext) addStore(idx int) {
 	m.populateDB(idx, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[idx] = storage.NewNodeLiveness(
-		ambient, m.clocks[idx], m.dbs[idx], m.gossips[idx],
+		ambient, m.clocks[idx], m.dbs[idx], m.engines, m.gossips[idx],
 		nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(idx, m.nodeLivenesses[idx])
@@ -904,8 +910,8 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.populateDB(i, stopper)
 	nlActive, nlRenewal := cfg.NodeLivenessDurations()
 	m.nodeLivenesses[i] = storage.NewNodeLiveness(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.gossips[i],
-		nlActive, nlRenewal, metric.TestSampleInterval,
+		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}, m.clocks[i], m.dbs[i], m.engines,
+		m.gossips[i], nlActive, nlRenewal, metric.TestSampleInterval,
 	)
 	m.populateStorePool(i, m.nodeLivenesses[i])
 	cfg.DB = m.dbs[i]

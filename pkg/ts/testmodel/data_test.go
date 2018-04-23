@@ -72,7 +72,7 @@ func TestDataSeriesTimeSlice(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			results := testData.timeSlice(tc.start, tc.end)
+			results := testData.TimeSlice(tc.start, tc.end)
 			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
 				t.Errorf("time slice got %v, wanted %v", a, e)
 			}
@@ -115,7 +115,7 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		// Group by 10 second resolution, aggregate add.
 		{
 			resolution: 10,
-			aggFunc:    aggFuncSum,
+			aggFunc:    AggregateSum,
 			expected: DataSeries{
 				dp(0, 20),
 				dp(10, 15),
@@ -128,7 +128,7 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		// Group by 10 second resolution, aggregate last.
 		{
 			resolution: 10,
-			aggFunc:    aggFuncLast,
+			aggFunc:    AggregateLast,
 			expected: DataSeries{
 				dp(0, 10),
 				dp(10, 5),
@@ -141,7 +141,7 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		// Group by 20 second resolution, aggregate last.
 		{
 			resolution: 20,
-			aggFunc:    aggFuncLast,
+			aggFunc:    AggregateLast,
 			expected: DataSeries{
 				dp(0, 5),
 				dp(20, 75),
@@ -152,7 +152,7 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		// Group by 100 second resolution, aggregate add.
 		{
 			resolution: 100,
-			aggFunc:    aggFuncSum,
+			aggFunc:    AggregateSum,
 			expected: DataSeries{
 				dp(0, 260),
 				dp(100, 649),
@@ -160,7 +160,7 @@ func TestDataSeriesGroupByResolution(t *testing.T) {
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			results := testData.groupByResolution(tc.resolution, tc.aggFunc)
+			results := testData.GroupByResolution(tc.resolution, tc.aggFunc)
 			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
 				t.Errorf("group by resolution got %v, wanted %v", a, e)
 			}
@@ -202,7 +202,7 @@ func TestDataSeriesFillByResolution(t *testing.T) {
 			resolution: 10,
 			fillFunc: func(before DataSeries, _ DataSeries, res int64) DataSeries {
 				return DataSeries{
-					dp(before[len(before)-1].timestamp+res, 777),
+					dp(before[len(before)-1].TimestampNanos+res, 777),
 				}
 			},
 			expected: DataSeries{
@@ -339,6 +339,124 @@ func TestDataSeriesNonNegative(t *testing.T) {
 	}
 }
 
+func TestDataSeriesAdjustTimestamp(t *testing.T) {
+	testData := DataSeries{
+		dp(0, 10),
+		dp(10, 5),
+		dp(30, 75),
+		dp(40, 10),
+		dp(100, 70),
+		dp(110, 99),
+	}
+
+	for _, tc := range []struct {
+		offset   int64
+		expected DataSeries
+	}{
+		{
+			offset: 0,
+			expected: DataSeries{
+				dp(0, 10),
+				dp(10, 5),
+				dp(30, 75),
+				dp(40, 10),
+				dp(100, 70),
+				dp(110, 99),
+			},
+		},
+		{
+			offset: 15,
+			expected: DataSeries{
+				dp(15, 10),
+				dp(25, 5),
+				dp(45, 75),
+				dp(55, 10),
+				dp(115, 70),
+				dp(125, 99),
+			},
+		},
+		{
+			offset: -15,
+			expected: DataSeries{
+				dp(-15, 10),
+				dp(-5, 5),
+				dp(15, 75),
+				dp(25, 10),
+				dp(85, 70),
+				dp(95, 99),
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			results := testData.adjustTimestamps(tc.offset)
+			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
+				t.Errorf("adjust timestamp got %v, wanted %v", a, e)
+			}
+		})
+	}
+}
+
+func TestDataSeriesRemoveDuplicates(t *testing.T) {
+	for _, tc := range []struct {
+		input    DataSeries
+		expected DataSeries
+	}{
+		{
+			input: DataSeries{
+				dp(10, 999),
+				dp(10, 888),
+				dp(10, 777),
+			},
+			expected: DataSeries{
+				dp(10, 777),
+			},
+		},
+		{
+			input: DataSeries{
+				dp(10, 999),
+				dp(10, 888),
+				dp(10, 777),
+				dp(20, 100),
+				dp(45, 300),
+				dp(100, 1),
+				dp(100, 2),
+				dp(100, 3),
+			},
+			expected: DataSeries{
+				dp(10, 777),
+				dp(20, 100),
+				dp(45, 300),
+				dp(100, 3),
+			},
+		},
+		{
+			input: DataSeries{
+				dp(10, 777),
+				dp(20, 100),
+				dp(45, 300),
+				dp(100, 3),
+			},
+			expected: DataSeries{
+				dp(10, 777),
+				dp(20, 100),
+				dp(45, 300),
+				dp(100, 3),
+			},
+		},
+		{
+			input:    DataSeries{},
+			expected: DataSeries{},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			results := tc.input.removeDuplicates()
+			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
+				t.Errorf("remove duplicates got %v, wanted %v", a, e)
+			}
+		})
+	}
+}
+
 func TestDataSeriesGroupByTimestamp(t *testing.T) {
 	testData1 := DataSeries{
 		dp(10, 1),
@@ -369,12 +487,12 @@ func TestDataSeriesGroupByTimestamp(t *testing.T) {
 	}{
 		{
 			inputs:   nil,
-			aggFunc:  aggFuncSum,
+			aggFunc:  AggregateSum,
 			expected: nil,
 		},
 		{
 			inputs:  []DataSeries{testData1},
-			aggFunc: aggFuncSum,
+			aggFunc: AggregateSum,
 			expected: DataSeries{
 				dp(10, 1),
 				dp(20, 1),
@@ -385,7 +503,7 @@ func TestDataSeriesGroupByTimestamp(t *testing.T) {
 		},
 		{
 			inputs:  []DataSeries{testData1, testData2},
-			aggFunc: aggFuncSum,
+			aggFunc: AggregateSum,
 			expected: DataSeries{
 				dp(10, 3),
 				dp(20, 3),
@@ -396,7 +514,7 @@ func TestDataSeriesGroupByTimestamp(t *testing.T) {
 		},
 		{
 			inputs:  []DataSeries{testData1, testData2},
-			aggFunc: aggFuncAvg,
+			aggFunc: AggregateAverage,
 			expected: DataSeries{
 				dp(10, 1.5),
 				dp(20, 1.5),
@@ -407,7 +525,7 @@ func TestDataSeriesGroupByTimestamp(t *testing.T) {
 		},
 		{
 			inputs:  []DataSeries{testData1, testData2, testDataStaggered},
-			aggFunc: aggFuncSum,
+			aggFunc: AggregateSum,
 			expected: DataSeries{
 				dp(10, 8),
 				dp(20, 3),
@@ -424,6 +542,91 @@ func TestDataSeriesGroupByTimestamp(t *testing.T) {
 			results := groupSeriesByTimestamp(tc.inputs, tc.aggFunc)
 			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
 				t.Errorf("rate of change got %v, wanted %v", a, e)
+			}
+		})
+	}
+}
+
+func TestDataSeriesIntersectTimestamps(t *testing.T) {
+	testData := DataSeries{
+		dp(10, 999),
+		dp(11, 888),
+		dp(12, 777),
+		dp(13, 999),
+		dp(14, 888),
+		dp(15, 777),
+		dp(16, 999),
+		dp(17, 888),
+		dp(18, 777),
+	}
+
+	for _, tc := range []struct {
+		intersections []DataSeries
+		expected      DataSeries
+	}{
+		{
+			intersections: []DataSeries{
+				{
+					dp(10, 0),
+				},
+			},
+			expected: DataSeries{
+				dp(10, 999),
+			},
+		},
+		{
+			intersections: []DataSeries{},
+			expected:      DataSeries{},
+		},
+		{
+			intersections: []DataSeries{
+				{
+					dp(10, 0),
+					dp(12, 0),
+					dp(14, 0),
+					dp(16, 0),
+					dp(18, 0),
+					dp(20, 0),
+				},
+				{
+					dp(11, 0),
+					dp(13, 0),
+					dp(15, 0),
+					dp(17, 0),
+					dp(19, 0),
+					dp(21, 0),
+				},
+			},
+			expected: testData,
+		},
+		{
+			intersections: []DataSeries{
+				{
+					dp(10, 0),
+				},
+				{
+					dp(13, 0),
+					dp(17, 0),
+					dp(21, 0),
+				},
+				{
+					dp(10, 0),
+					dp(15, 0),
+					dp(17, 0),
+				},
+			},
+			expected: DataSeries{
+				dp(10, 999),
+				dp(13, 999),
+				dp(15, 777),
+				dp(17, 888),
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			results := testData.intersectTimestamps(tc.intersections...)
+			if a, e := results, tc.expected; !reflect.DeepEqual(a, e) {
+				t.Errorf("intersect timestamps got %v, wanted %v", a, e)
 			}
 		})
 	}

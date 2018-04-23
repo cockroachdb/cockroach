@@ -495,7 +495,7 @@ func resolveLocalIntents(
 	}
 
 	min, max := txn.InclusiveTimeBounds()
-	iter := batch.NewTimeBoundIterator(min, max)
+	iter := batch.NewTimeBoundIterator(min, max, false)
 	iterAndBuf := engine.GetBufUsingIter(iter)
 	defer iterAndBuf.Cleanup()
 
@@ -1898,6 +1898,7 @@ func (r *Replica) sendSnapshot(
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == snapTypePreemptive,
 		Priority:   priority,
+		Strategy:   SnapshotRequest_KV_BATCH,
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

@@ -345,16 +345,24 @@ func (p *rawReporter) doneRows(w io.Writer, nRows int) error {
 
 type htmlReporter struct {
 	nCols int
+
+	escape   bool
+	rowStats bool
 }
 
 func (p *htmlReporter) describe(w io.Writer, cols []string) error {
 	p.nCols = len(cols)
 	fmt.Fprint(w, "<table>\n<thead><tr>")
-	fmt.Fprint(w, "<th>row</th>")
-	for _, col := range cols {
-		fmt.Fprintf(w, "<th>%s</th>", strings.Replace(html.EscapeString(col), "\n", "<br/>", -1))
+	if p.rowStats {
+		fmt.Fprint(w, "<th>row</th>")
 	}
-	fmt.Fprintln(w, "</tr></head>")
+	for _, col := range cols {
+		if p.escape {
+			col = html.EscapeString(col)
+		}
+		fmt.Fprintf(w, "<th>%s</th>", strings.Replace(col, "\n", "<br/>", -1))
+	}
+	fmt.Fprintln(w, "</tr></thead>")
 	return nil
 }
 
@@ -364,9 +372,15 @@ func (p *htmlReporter) beforeFirstRow(w io.Writer, _ rowStrIter) error {
 }
 
 func (p *htmlReporter) iter(w io.Writer, rowIdx int, row []string) error {
-	fmt.Fprintf(w, "<tr><td>%d</td>", rowIdx+1)
+	fmt.Fprint(w, "<tr>")
+	if p.rowStats {
+		fmt.Fprintf(w, "<td>%d</td>", rowIdx+1)
+	}
 	for _, r := range row {
-		fmt.Fprintf(w, "<td>%s</td>", strings.Replace(html.EscapeString(r), "\n", "<br/>", -1))
+		if p.escape {
+			r = html.EscapeString(r)
+		}
+		fmt.Fprintf(w, "<td>%s</td>", strings.Replace(r, "\n", "<br/>", -1))
 	}
 	fmt.Fprintln(w, "</tr>")
 	return nil
@@ -379,8 +393,11 @@ func (p *htmlReporter) doneNoRows(w io.Writer) error {
 
 func (p *htmlReporter) doneRows(w io.Writer, nRows int) error {
 	fmt.Fprintln(w, "</tbody>")
-	fmt.Fprintf(w, "<tfoot><tr><td colspan=%d>%d row%s</td></tr></tfoot></table>\n",
-		p.nCols+1, nRows, util.Pluralize(int64(nRows)))
+	if p.rowStats {
+		fmt.Fprintf(w, "<tfoot><tr><td colspan=%d>%d row%s</td></tr></tfoot>",
+			p.nCols+1, nRows, util.Pluralize(int64(nRows)))
+	}
+	fmt.Fprintln(w, "</table>")
 	return nil
 }
 
@@ -510,7 +527,7 @@ func makeReporter() (rowReporter, error) {
 		return &rawReporter{}, nil
 
 	case tableDisplayHTML:
-		return &htmlReporter{}, nil
+		return &htmlReporter{escape: true, rowStats: true}, nil
 
 	case tableDisplayRecords:
 		return &recordReporter{}, nil

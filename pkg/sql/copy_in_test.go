@@ -50,6 +50,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 			b BYTES NULL,
 			d DATE NULL,
 			t TIME NULL,
+			ttz TIMETZ NULL,
 			ts TIMESTAMP NULL,
 			n INTERVAL NULL,
 			o BOOL NULL,
@@ -67,16 +68,16 @@ func TestCopyNullInfNaN(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyIn("t", "i", "f", "s", "b", "d", "t", "ts", "n", "o", "e", "u", "ip", "tz"))
+	stmt, err := txn.Prepare(pq.CopyIn("t", "i", "f", "s", "b", "d", "t", "ttz", "ts", "n", "o", "e", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	input := [][]interface{}{
-		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
-		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.Inf(-1), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
+		{nil, math.NaN(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil},
 	}
 
 	for _, in := range input {
@@ -144,6 +145,7 @@ func TestCopyRandom(t *testing.T) {
 			f FLOAT,
 			e DECIMAL,
 			t TIME,
+			ttz TIMETZ,
 			ts TIMESTAMP,
 			s STRING,
 			b BYTES,
@@ -160,7 +162,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +176,7 @@ func TestCopyRandom(t *testing.T) {
 		sqlbase.ColumnType_FLOAT,
 		sqlbase.ColumnType_DECIMAL,
 		sqlbase.ColumnType_TIME,
+		sqlbase.ColumnType_TIMETZ,
 		sqlbase.ColumnType_TIMESTAMP,
 		sqlbase.ColumnType_STRING,
 		sqlbase.ColumnType_BYTES,
@@ -241,6 +244,8 @@ func TestCopyRandom(t *testing.T) {
 				var dt tree.NodeFormatter
 				if types[i] == sqlbase.ColumnType_TIME {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
+				} else if types[i] == sqlbase.ColumnType_TIMETZ {
+					dt = tree.MakeDTimeTZ(timeofday.FromTime(d), d.Location())
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)
 				}

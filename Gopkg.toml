@@ -65,6 +65,12 @@ ignored = [
   name = "github.com/rubyist/circuitbreaker"
   branch = "master"
 
+# https://github.com/GoogleCloudPlatform/google-cloud-go/issues/784
+# Remove this when that commit is in a tagged release.
+[[constraint]]
+  name = "cloud.google.com/go"
+  revision = "094187a3a68a589c8217a46b90af0efae38542b9"
+
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #

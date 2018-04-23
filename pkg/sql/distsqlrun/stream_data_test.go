@@ -143,3 +143,86 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 		t.Errorf("received bogus row %v %v", row, meta)
 	}
 }
+
+func BenchmarkStreamEncoder(b *testing.B) {
+	numRows := 1 << 16
+
+	for _, numCols := range []int{1, 4, 16, 64} {
+		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
+			b.SetBytes(int64(numRows * numCols * 8))
+			cols := makeIntCols(numCols)
+			input := NewRepeatableRowSource(cols, makeIntRows(numRows, numCols))
+
+			b.ResetTimer()
+			ctx := context.Background()
+
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				input.Reset()
+				// Reset the EncDatums' encoded bytes cache.
+				for _, row := range input.rows {
+					for j := range row {
+						row[j] = sqlbase.EncDatum{
+							Datum: row[j].Datum,
+						}
+					}
+				}
+				var se StreamEncoder
+				se.init(cols)
+				b.StartTimer()
+
+				// Add rows to the StreamEncoder until the input source is exhausted.
+				// "Flush" every outboxBufRows.
+				for j := 0; ; j++ {
+					row, _ := input.Next()
+					if row == nil {
+						break
+					}
+					if err := se.AddRow(row); err != nil {
+						b.Fatal(err)
+					}
+					if j%outboxBufRows == 0 {
+						// ignore output
+						se.FormMessage(ctx)
+					}
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkStreamDecoder(b *testing.B) {
+	ctx := context.Background()
+
+	for _, numCols := range []int{1, 4, 16, 64} {
+		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
+			b.SetBytes(int64(outboxBufRows * numCols * 8))
+			var se StreamEncoder
+			colTypes := makeIntCols(numCols)
+			se.init(colTypes)
+			inRow := makeIntRows(1, numCols)[0]
+			for i := 0; i < outboxBufRows; i++ {
+				if err := se.AddRow(inRow); err != nil {
+					b.Fatal(err)
+				}
+			}
+			msg := se.FormMessage(ctx)
+
+			for i := 0; i < b.N; i++ {
+				var sd StreamDecoder
+				if err := sd.AddMessage(msg); err != nil {
+					b.Fatal(err)
+				}
+				for j := 0; j < outboxBufRows; j++ {
+					row, meta, err := sd.GetRow(nil)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if row == nil && meta == nil {
+						break
+					}
+				}
+			}
+		})
+	}
+}

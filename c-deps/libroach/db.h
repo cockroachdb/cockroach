@@ -61,14 +61,22 @@ inline std::string ToString(DBString s) { return std::string(s.data, s.len); }
 inline rocksdb::Slice ToSlice(DBSlice s) { return rocksdb::Slice(s.data, s.len); }
 inline rocksdb::Slice ToSlice(DBString s) { return rocksdb::Slice(s.data, s.len); }
 
-// MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
-// custom RocksDB comparator (DBComparator) is used to maintain the desired
-// ordering as these keys do not sort lexicographically correctly.
-std::string EncodeKey(DBKey k);
-
 // MVCCComputeStatsInternal returns the mvcc stats of the data in an iterator.
 // Stats are only computed for keys between the given range.
 MVCCStatsResult MVCCComputeStatsInternal(::rocksdb::Iterator* const iter_rep, DBKey start,
                                          DBKey end, int64_t now_nanos);
+
+// ScopedStats wraps an iterator and, if that iterator has the stats
+// member populated, aggregates a subset of the RocksDB perf counters
+// into it (while the ScopedStats is live).
+class ScopedStats {
+ public:
+  ScopedStats(DBIterator*);
+  ~ScopedStats();
+
+ private:
+  DBIterator* const iter_;
+  uint64_t internal_delete_skipped_count_base_;
+};
 
 }  // namespace cockroach

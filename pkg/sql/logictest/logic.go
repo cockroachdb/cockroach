@@ -117,6 +117,13 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//
+// - statement count N
+//   Like "statement ok" but expect a final RowsAffected count of N.
+//   example:
+//     statement count 2
+//     INSERT INTO kv VALUES (1,2), (2,3)
+//
 //  - statement error <regexp>
 //    Runs the statement that follows and expects an
 //    error that matches the given regexp.
@@ -329,10 +336,6 @@ var (
 		"flex-types", false,
 		"do not fail when a test expects a column of a numeric type but the query provides another type",
 	)
-	metadataTestOff = flag.Bool(
-		"metadata-test-off", false,
-		"disable DistSQL metadata propagation tests",
-	)
 
 	// Output parameters
 	showSQL = flag.Bool("show-sql", false,
@@ -364,6 +367,10 @@ type testClusterConfig struct {
 	// if set, queries using distSQL processors that can fall back to disk do
 	// so immediately, using only their disk-based implementation.
 	distSQLUseDisk bool
+	// if set, enables DistSQL metadata propagation tests.
+	distSQLMetadataTestEnabled bool
+	// if set and the -test.short flag is passed, skip this config.
+	skipShort bool
 	// if set, any logic statement expected to succeed and parallelizable
 	// using RETURNING NOTHING syntax will be parallelized transparently.
 	// See logicStatement.parallelizeStmts.
@@ -389,9 +396,11 @@ var logicTestConfigs = []testClusterConfig{
 	},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
 	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 	{name: "5node-distsql", numNodes: 5, overrideDistSQLMode: "On"},
+	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "5node-distsql-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
 }
 
@@ -445,6 +454,8 @@ type logicStatement struct {
 	// expected pgcode for the error, if any. "" indicates the
 	// test does not check the pgwire error code.
 	expectErrCode string
+	// expected rows affected count. -1 to avoid testing this.
+	expectCount int64
 }
 
 // readSQL reads the lines of a SQL statement or query until the first blank
@@ -862,14 +873,12 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	distSQLKnobs := &distsqlrun.TestingKnobs{
-		MetadataTestLevel: distsqlrun.NoExplain,
-	}
+	distSQLKnobs := &distsqlrun.TestingKnobs{MetadataTestLevel: distsqlrun.Off}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
-	if *metadataTestOff {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.Off
+	if cfg.distSQLMetadataTestEnabled {
+		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
@@ -1173,12 +1182,20 @@ func (t *logicTest) processSubtest(
 
 		case "statement":
 			stmt := logicStatement{
-				pos: fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				pos:         fmt.Sprintf("\n%s:%d", path, s.line+subtest.lineLineIndexIntoFile),
+				expectCount: -1,
 			}
 			// Parse "statement error <regexp>"
 			if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
+			}
+			if len(fields) >= 3 && fields[1] == "count" {
+				n, err := strconv.ParseInt(fields[2], 10, 64)
+				if err != nil {
+					return err
+				}
+				stmt.expectCount = n
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
@@ -1529,7 +1546,17 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	_, err := t.db.Exec(stmt.sql)
+	res, err := t.db.Exec(stmt.sql)
+	if err == nil && stmt.expectCount >= 0 {
+		var count int64
+		count, err = res.RowsAffected()
+
+		// If err becomes non-nil here, we'll catch it below.
+
+		if err == nil && count != stmt.expectCount {
+			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, stmt.sql, stmt.expectCount, count)
+		}
+	}
 
 	// General policy for failing vs. continuing:
 	// - we want to do as much work as possible;
@@ -1914,6 +1941,9 @@ func RunLogicTest(t *testing.T) {
 		}
 		// Top-level test: one per test configuration.
 		t.Run(cfg.name, func(t *testing.T) {
+			if testing.Short() && cfg.skipShort {
+				t.Skip("config skipped by -test.short")
+			}
 			if logicTestsConfigExclude != "" && cfg.name == logicTestsConfigExclude {
 				t.Skip("config excluded via env var")
 			}

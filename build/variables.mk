@@ -93,6 +93,7 @@ define VALID_VARS
   NATIVE_SPECIFIER_TAG
   NATIVE_SUFFIX
   NODE_RUN
+  OPTGEN_TARGETS
   PATH
   PBJS
   PBTS
@@ -109,6 +110,7 @@ define VALID_VARS
   ROCKSDB_DIR
   ROCKSDB_SRC_DIR
   SED_INPLACE
+  SETTINGS_DOC_PAGE
   SHELL
   SNAPPY_DIR
   SNAPPY_SRC_DIR
@@ -149,10 +151,14 @@ define VALID_VARS
   XHOST_TRIPLE
   YARN_INSTALLED_TARGET
   bindir
+  bins
   cyan
   go-version-check
   langgen-package
+  optgen-defs
+  optgen-norm-rules
   optgen-package
+  optgen-xform-rules
   prefix
   space
   sse

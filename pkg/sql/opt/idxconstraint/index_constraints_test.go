@@ -161,7 +161,10 @@ func TestIndexConstraints(t *testing.T) {
 				remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
 				if remEv.Operator() != opt.TrueOp {
 					execBld := execbuilder.New(nil /* execFactory */, remEv)
-					expr := execBld.BuildScalar(&iVarHelper)
+					expr, err := execBld.BuildScalar(&iVarHelper)
+					if err != nil {
+						return fmt.Sprintf("error: %v\n", err)
+					}
 					fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
 				}
 				return buf.String()

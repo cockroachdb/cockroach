@@ -1278,6 +1278,18 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"current_time": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.TimeTZ),
+			Impure:     true,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return ctx.GetTxnTime(), nil
+			},
+			Info: "Returns the current transaction's time with time zone.",
+		},
+	},
+
 	"now":                   txnTSImpl,
 	"current_timestamp":     txnTSImpl,
 	"transaction_timestamp": txnTSImpl,
@@ -1387,6 +1399,19 @@ CockroachDB supports the following flags:
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				fromTime := args[1].(*tree.DTime)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractStringFromTime(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimeTZ}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryDateAndTime,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTimeTZ := args[1].(*tree.DTimeTZ)
+				fromTime := tree.MakeDTime(fromTimeTZ.TimeOfDay)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return extractStringFromTime(fromTime, timeSpan)
 			},
@@ -1863,7 +1888,7 @@ CockroachDB supports the following flags:
 				return roundDecimal(&args[0].(*tree.DDecimal).Decimal, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
-				" in `input using half away from zero rounding. If `decimal_accuracy` " +
+				"in `input` using half away from zero rounding. If `decimal_accuracy` " +
 				"is not in the range -2^31...(2^31-1), the results are undefined.",
 		},
 	},
@@ -2444,6 +2469,61 @@ CockroachDB supports the following flags:
 			Category: categorySystemInfo,
 			Info: "This function is used for internal debugging purposes. " +
 				"Incorrect use can severely impact performance.",
+		},
+	},
+
+	"lpad": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				return tree.NewDString(lpad(s, length, " ")), nil
+			},
+			Category: categoryString,
+			Info: "Pads `string` to `length` by adding ' ' to the left of `string`." +
+				"If `string` is longer than `length` it is truncated.",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				fill := string(tree.MustBeDString(args[2]))
+				return tree.NewDString(lpad(s, length, fill)), nil
+			},
+			Category: categoryString,
+			Info: "Pads `string` by adding `fill` to the left of `string` to make it `length`. " +
+				"If `string` is longer than `length` it is truncated.",
+		},
+	},
+	"rpad": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				return tree.NewDString(rpad(s, length, " ")), nil
+			},
+			Category: categoryString,
+			Info: "Pads `string` to `length` by adding ' ' to the right of string. " +
+				"If `string` is longer than `length` it is truncated.",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				length := int(tree.MustBeDInt(args[1]))
+				fill := string(tree.MustBeDString(args[2]))
+				return tree.NewDString(rpad(s, length, fill)), nil
+			},
+			Category: categoryString,
+			Info: "Pads `string` to `length` by adding `fill` to the right of `string`. " +
+				"If `string` is longer than `length` it is truncated.",
 		},
 	},
 }
@@ -3707,7 +3787,7 @@ func AsJSON(d tree.Datum) (json.JSON, error) {
 			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
 		return builder.Build(), nil
-	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime:
+	case *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DOid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DTime, *tree.DTimeTZ:
 		return json.FromString(tree.AsStringWithFlags(t, tree.FmtBareStrings)), nil
 	default:
 		if d == tree.DNull {
@@ -3742,4 +3822,63 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	default:
 		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSONObjectKey", d)
 	}
+}
+
+// padMaybeTruncate truncates the input string to length if the string is
+// longer or equal in size to length. If truncated, the first return value
+// will be true, and the last return value will be the truncated string.
+// The second return value is set to the length of the input string in runes.
+func padMaybeTruncate(s string, length int, fill string) (ok bool, slen int, ret string) {
+	if length < 0 {
+		// lpad and rpad both return an empty string if the input length is
+		// negative.
+		length = 0
+	}
+	slen = utf8.RuneCountInString(s)
+	if length == slen {
+		return true, slen, s
+	}
+
+	// If string is longer then length truncate it to the requested number
+	// of characters.
+	if length < slen {
+		return true, slen, string([]rune(s)[:length])
+	}
+
+	// If the input fill is the empty string, return the original string.
+	if len(fill) == 0 {
+		return true, slen, s
+	}
+
+	return false, slen, s
+}
+
+func lpad(s string, length int, fill string) string {
+	ok, slen, ret := padMaybeTruncate(s, length, fill)
+	if ok {
+		return ret
+	}
+	var buf strings.Builder
+	fillRunes := []rune(fill)
+	for i := 0; i < length-slen; i++ {
+		buf.WriteRune(fillRunes[i%len(fillRunes)])
+	}
+	buf.WriteString(s)
+
+	return buf.String()
+}
+
+func rpad(s string, length int, fill string) string {
+	ok, slen, ret := padMaybeTruncate(s, length, fill)
+	if ok {
+		return ret
+	}
+	var buf strings.Builder
+	buf.WriteString(s)
+	fillRunes := []rune(fill)
+	for i := 0; i < length-slen; i++ {
+		buf.WriteRune(fillRunes[i%len(fillRunes)])
+	}
+
+	return buf.String()
 }

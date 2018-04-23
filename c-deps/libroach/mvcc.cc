@@ -292,6 +292,7 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
   // don't retrieve a key different than the start key. This is a bit
   // of a hack.
   const DBSlice end = {0, 0};
+  ScopedStats scoped_iter(iter);
   mvccForwardScanner scanner(iter, key, end, timestamp, 0 /* max_keys */, txn, consistent,
                              tombstones);
   return scanner.get();
@@ -300,6 +301,7 @@ DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTx
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
                        int64_t max_keys, DBTxn txn, bool consistent, bool reverse,
                        bool tombstones) {
+  ScopedStats scoped_iter(iter);
   if (reverse) {
     mvccReverseScanner scanner(iter, end, start, timestamp, max_keys, txn, consistent, tombstones);
     return scanner.scan();

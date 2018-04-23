@@ -14,8 +14,6 @@
 
 package memo
 
-//go:generate optgen -out expr.og.go exprs ../ops/*.opt
-
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
@@ -38,6 +36,10 @@ type ExprID struct {
 	Group GroupID
 	Expr  ExprOrdinal
 }
+
+// InvalidExprID is the uninitialized ExprID that never points to a valid
+// expression.
+var InvalidExprID = ExprID{}
 
 // MakeNormExprID returns the id of the normalized expression for the given
 // group.

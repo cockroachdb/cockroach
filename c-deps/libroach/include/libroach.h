@@ -175,17 +175,34 @@ DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 // the user-key prefix of the key supplied to DBIterSeek() to restrict
 // which sstables are searched, but iteration (using Next) over keys
 // without the same user-key prefix will not work correctly (keys may
-// be skipped). It is the callers responsibility to call
-// DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, bool prefix);
+// be skipped). When stats is true, the iterator will collect RocksDB
+// performance counters which can be retrieved via `DBIterStats`.
+//
+// It is the caller's responsibility to call DBIterDestroy().
+DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats);
 
-DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts);
+DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts,
+                               bool with_stats);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
 
 // Positions the iterator at the first key that is >= "key".
 DBIterState DBIterSeek(DBIterator* iter, DBKey key);
+
+typedef struct {
+  uint64_t internal_delete_skipped_count;
+  // the number of SSTables touched (only for time bound iterators).
+  // This field is populated from the table filter, not from the
+  // RocksDB perf counters.
+  //
+  // TODO(tschottdorf): populate this field for all iterators.
+  uint64_t timebound_num_ssts;
+  // New fields added here must also be added in various other places;
+  // just grep the repo for internal_delete_skipped_count. Sorry.
+} IteratorStats;
+
+IteratorStats DBIterStats(DBIterator* iter);
 
 // Positions the iterator at the first key in the database.
 DBIterState DBIterSeekToFirst(DBIterator* iter);
@@ -307,14 +324,14 @@ DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 // proto.
 DBString DBGetUserProperties(DBEngine* db);
 
-// Bulk adds the file at the given path to a database. See the RocksDB
-// documentation on `IngestExternalFile` for the various restrictions on what
-// can be added. If move_file is true, the file will be moved instead of copied.
-// If allow_file_modification is false, RocksDB will return an error if it would
-// have tried to modify the file's sequence number rather than editing the file
-// in place.
-DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file,
-                              bool allow_file_modification);
+// Bulk adds the files at the given paths to a database, all atomically. See the
+// RocksDB documentation on `IngestExternalFile` for the various restrictions on
+// what can be added. If move_files is true, the files will be moved instead of
+// copied. If allow_file_modifications is false, RocksDB will return an error if
+// it would have tried to modify any of the files' sequence numbers rather than
+// editing the files in place.
+DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
+                               bool allow_file_modifications);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 

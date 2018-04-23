@@ -713,6 +713,13 @@ PROTOBUF_TARGETS := $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(CPP_PROTOS_TARGET)
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
+OPTGEN_TARGETS = \
+	pkg/sql/opt/memo/expr.og.go \
+	pkg/sql/opt/operator.og.go \
+	pkg/sql/opt/xform/explorer.og.go \
+	pkg/sql/opt/norm/factory.og.go \
+	pkg/sql/opt/rule_name.og.go
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
@@ -735,7 +742,7 @@ BUILD_TAGGED_RELEASE =
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) $(PROTOBUF_TARGETS)
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(PROTOBUF_TARGETS)
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -743,6 +750,8 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 	-X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=$(TARGET_TRIPLE)" \
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)") \
 	$(if $(BUILD_TAGGED_RELEASE),-X "github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv=$(shell cat .buildinfo/tag)")
+
+SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
@@ -753,6 +762,10 @@ build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss buildshort go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+ifndef XHOST_TRIPLE
+	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
+	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
+endif
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
@@ -874,13 +887,13 @@ dupl: $(BOOTSTRAP_TARGET)
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) | bin/langgen bin/optgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) bin/langgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-lint: | bin/returncheck
+lint: bin/returncheck
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	@# Run 'go install' to ensure we have compiled object files available for all
 	@# packages. In Go 1.10, only 'go vet' recompiles on demand. For details:
@@ -922,6 +935,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
+	$(OPTGEN_TARGETS) \
 	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
@@ -1000,7 +1014,7 @@ CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.
 
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
-$(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) | bin/protoc-gen-gogoroach
+$(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) bin/protoc-gen-gogoroach
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
@@ -1215,13 +1229,32 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
-bin/.docgen_bnfs: $(SQLPARSER_ROOT)/sql.y pkg/cmd/docgen/diagrams.go pkg/cmd/docgen/main.go | $(SUBMODULES_TARGET)
-	go run pkg/cmd/docgen/{main,diagrams}.go grammar bnf docs/generated/sql/bnf --quiet
+bin/.docgen_bnfs: bin/docgen
+	docgen grammar bnf docs/generated/sql/bnf --quiet
 	touch $@
 
-bin/.docgen_functions: $(PKG_ROOT)/sql/sem/builtins/*.go $(SQLPARSER_TARGETS) $(GO_PROTOS_TARGET) | $(SUBMODULES_TARGET)
-	go run pkg/cmd/docgen/{main,funcs}.go functions docs/generated/sql --quiet
+bin/.docgen_functions: bin/docgen
+	docgen functions docs/generated/sql --quiet
 	touch $@
+
+optgen-defs := pkg/sql/opt/ops/*.opt
+optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
+optgen-xform-rules := pkg/sql/opt/xform/rules/*.opt
+
+pkg/sql/opt/memo/expr.og.go: $(optgen-defs) bin/optgen
+	optgen -out $@ exprs $(optgen-defs)
+
+pkg/sql/opt/operator.og.go: $(optgen-defs) bin/optgen
+	optgen -out $@ ops $(optgen-defs)
+
+pkg/sql/opt/rule_name.og.go: $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules) bin/optgen
+	optgen -out $(@D)/rule_name.og.go rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)
+
+pkg/sql/opt/xform/explorer.og.go: $(optgen-defs) $(optgen-xform-rules) bin/optgen
+	optgen -out $@ explorer $(optgen-defs) $(optgen-xform-rules)
+
+pkg/sql/opt/norm/factory.og.go: $(optgen-defs) $(optgen-norm-rules) bin/optgen
+	optgen -out $@ factory $(optgen-defs) $(optgen-norm-rules)
 
 # Format libroach .cc and .h files (excluding protos) using clang-format if installed.
 # We also exclude the auto-generated keys.h
@@ -1257,19 +1290,57 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
 unsafe-clean: maintainer-clean unsafe-clean-c-deps
 	git clean -dxf
 
+# The following rules automatically generate dependency information for Go
+# binaries. See [0] for details on the approach.
+#
+# [0]: http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/
+
+bins := \
+  bin/allocsim \
+  bin/benchmark \
+  bin/cockroach-oss \
+  bin/cockroach-short \
+  bin/docgen \
+  bin/generate-binary \
+  bin/github-post \
+  bin/github-pull-request-make \
+  bin/gossipsim \
+  bin/langgen \
+  bin/protoc-gen-gogoroach \
+  bin/publish-artifacts \
+  bin/optgen \
+  bin/returncheck \
+  bin/roachtest \
+  bin/teamcity-trigger \
+  bin/urlcheck \
+  bin/workload \
+  bin/zerosum
+
 # Mappings for binaries that don't live in pkg/cmd.
 langgen-package := ./pkg/sql/opt/optgen/cmd/langgen
 optgen-package := ./pkg/sql/opt/optgen/cmd/optgen
 
-bin/%: .ALWAYS_REBUILD | $(SUBMODULES_TARGET)
+# Additional dependencies for binaries that depend on generated code.
+bin/workload bin/docgen: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+
+$(bins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
+	@echo go install -v $*
+	bin/prereqs $(if $($*-package),$($*-package),$(PKG_ROOT)/cmd/$*) > $@.d.tmp
+	mv -f $@.d.tmp $@.d
 	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),$(PKG_ROOT)/cmd/$*)
 
-# Additional dependencies for binaries that depend on generated code.
-bin/workload: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/prereqs: ./pkg/cmd/prereqs/*.go
+	@echo go install -v ./pkg/cmd/prereqs
+	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+.PRECIOUS: bin/%.d
+bin/%.d: ;
+
+include $(wildcard bin/*.d)

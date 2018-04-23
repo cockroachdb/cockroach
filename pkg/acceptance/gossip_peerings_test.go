@@ -167,6 +167,9 @@ func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c clus
 			t.Fatal(err)
 		}
 		if i == 0 {
+			if _, err := db.Exec("DROP DATABASE IF EXISTS test"); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := db.Exec("CREATE DATABASE test"); err != nil {
 				t.Fatal(err)
 			}

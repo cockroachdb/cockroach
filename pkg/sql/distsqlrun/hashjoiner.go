@@ -148,6 +148,7 @@ func newHashJoiner(
 		uint32(numMergedColumns),
 		post,
 		output,
+		procStateOpts{}, // hashJoiner doesn't implement RowSource and so doesn't use it.
 	); err != nil {
 		return nil, err
 	}
@@ -556,7 +557,7 @@ func (h *hashJoiner) probeRow(
 			if shouldEmit {
 				consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
-					return true, nil
+					return true, err
 				} else if h.joinType == sqlbase.IntersectAllJoin {
 					// We found a match, so we are done with this row.
 					return false, nil

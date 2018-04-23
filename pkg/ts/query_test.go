@@ -19,12 +19,9 @@ import (
 	"math"
 	"reflect"
 	"runtime"
-	"sort"
 	"testing"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -664,190 +661,11 @@ func TestAggregation(t *testing.T) {
 	}
 }
 
-// assertQuery generates a query result from the local test model and compares
-// it against the query returned from the server.
-//
-// TODO(mrtracy): This verification model is showing its age, and likely needs
-// to be restructured in order to improve its trustworthiness. Currently, there
-// is just enough overlap in the functionality between the model and the real
-// system that it's difficult to be sure that you don't have a common error in
-// both systems.
-//
-// My suggestion is to break down the model query into multiple, independently
-// verificable steps. These steps will not be memory or computationally
-// efficient, but will be conceptually easy to verify; then we can compare its
-// results against the real data store with more confidence.
-func (tm *testModel) assertQuery(
-	name string,
-	sources []string,
-	downsample, agg *tspb.TimeSeriesQueryAggregator,
-	derivative *tspb.TimeSeriesQueryDerivative,
-	r Resolution,
-	sampleDuration, start, end, interpolationLimit int64,
-	expectedDatapointCount, expectedSourceCount int,
-) {
-	tm.t.Helper()
-	// Query the actual server.
-	q := tspb.Query{
-		Name:             name,
-		Downsampler:      downsample,
-		SourceAggregator: agg,
-		Derivative:       derivative,
-		Sources:          sources,
-	}
-
-	account := tm.resultMemMonitor.MakeBoundAccount()
-	defer account.Close(context.TODO())
-	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
-		context.TODO(),
-		q,
-		r,
-		sampleDuration,
-		start,
-		end,
-		interpolationLimit,
-		&account,
-		tm.workerMemMonitor,
-		tm.queryMemoryBudget,
-		int64(len(tm.seenSources)),
-	)
-
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
-		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
-	}
-	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
-	}
-
-	// Construct an expected result for comparison.
-	var expectedDatapoints []tspb.TimeSeriesDatapoint
-	expectedSources := make([]string, 0)
-	dataSpans := make(map[string]*dataSpan)
-
-	// If no specific sources were provided, look for data from every source
-	// encountered by the test model.
-	var sourcesToCheck map[string]struct{}
-	if len(sources) == 0 {
-		sourcesToCheck = tm.seenSources
-	} else {
-		sourcesToCheck = make(map[string]struct{})
-		for _, s := range sources {
-			sourcesToCheck[s] = struct{}{}
-		}
-	}
-
-	// Iterate over all possible sources which may have data for this query.
-	for sourceName := range sourcesToCheck {
-		// Iterate over all possible key times at which query data may be present.
-		dataStart := start - interpolationLimit
-		dataEnd := end + interpolationLimit
-		for time := dataStart - (dataStart % r.SlabDuration()); time < dataEnd; time += r.SlabDuration() {
-			// Construct a key for this source/time and retrieve it from model.
-			key := MakeDataKey(name, sourceName, r, time)
-			value, ok := tm.modelData[string(key)]
-			if !ok {
-				continue
-			}
-
-			// Add data from the key to the correct dataSpan.
-			data, err := value.GetTimeseries()
-			if err != nil {
-				tm.t.Fatal(err)
-			}
-			ds, ok := dataSpans[sourceName]
-			if !ok {
-				ds = &dataSpan{
-					startNanos:  start - (start % r.SampleDuration()),
-					sampleNanos: r.SampleDuration(),
-				}
-				dataSpans[sourceName] = ds
-				expectedSources = append(expectedSources, sourceName)
-			}
-			if err := ds.addData(data); err != nil {
-				tm.t.Fatal(err)
-			}
-		}
-	}
-
-	// Verify that expected sources match actual sources.
-	sort.Strings(expectedSources)
-	sort.Strings(actualSources)
-	if !reflect.DeepEqual(actualSources, expectedSources) {
-		tm.t.Error(errors.Errorf("actual source list: %v, wanted: %v", actualSources, expectedSources))
-	}
-
-	// Iterate over data in all dataSpans and construct expected datapoints.
-	extractFn, err := getExtractionFunction(q.GetDownsampler())
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	downsampleFn, err := getDownsampleFunction(q.GetDownsampler())
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	maxDistance := int32(interpolationLimit / r.SampleDuration())
-	var iters aggregatingIterator
-	for _, ds := range dataSpans {
-		iters = append(
-			iters,
-			newInterpolatingIterator(
-				*ds, 0, sampleDuration, maxDistance, extractFn, downsampleFn, q.GetDerivative(),
-			),
-		)
-	}
-
-	iters.init()
-	if !iters.isValid() {
-		if a, e := 0, len(expectedDatapoints); a != e {
-			tm.t.Error(errors.Errorf("query had zero datapoints, wanted: %v", expectedDatapoints))
-		}
-		return
-	}
-	currentVal := func() (tspb.TimeSeriesDatapoint, bool) {
-		var value float64
-		var valid bool
-		switch q.GetSourceAggregator() {
-		case tspb.TimeSeriesQueryAggregator_SUM:
-			value, valid = iters.sum()
-		case tspb.TimeSeriesQueryAggregator_AVG:
-			value, valid = iters.avg()
-		case tspb.TimeSeriesQueryAggregator_MAX:
-			value, valid = iters.max()
-		case tspb.TimeSeriesQueryAggregator_MIN:
-			value, valid = iters.min()
-		default:
-			tm.t.Fatalf("unknown query aggregator %s", q.GetSourceAggregator())
-		}
-		return tspb.TimeSeriesDatapoint{
-			TimestampNanos: iters.timestamp(),
-			Value:          value,
-		}, valid
-	}
-
-	for iters.isValid() && iters.timestamp() <= end {
-		if result, valid := currentVal(); valid {
-			if q.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
-				result.Value = result.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
-			}
-			expectedDatapoints = append(expectedDatapoints, result)
-		}
-		iters.advance()
-	}
-
-	if !reflect.DeepEqual(actualDatapoints, expectedDatapoints) {
-		tm.t.Error(errors.Errorf("actual datapoints: %v, wanted: %v", actualDatapoints, expectedDatapoints))
-	}
-}
-
 // TestQuery validates that query results match the expectation of the test
 // model.
 func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -1015,16 +833,16 @@ func TestQuery(t *testing.T) {
 // the test model.
 func TestQueryDownsampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
-	account := tm.workerMemMonitor.MakeBoundAccount()
-	defer account.Close(context.TODO())
+	memContext := tm.makeMemoryContext(0)
+	defer memContext.Close(context.TODO())
 
 	// Query with sampleDuration that is too small, expect error.
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, 0, &account, tm.workerMemMonitor,
+		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, memContext,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
@@ -1035,6 +853,7 @@ func TestQueryDownsampling(t *testing.T) {
 	}
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
+
 	_, _, err = tm.DB.Query(
 		context.TODO(),
 		tspb.Query{},
@@ -1042,9 +861,7 @@ func TestQueryDownsampling(t *testing.T) {
 		Resolution10s.SampleDuration()+1,
 		0,
 		10000,
-		0,
-		&account,
-		tm.workerMemMonitor,
+		memContext,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
@@ -1098,7 +915,7 @@ func TestQueryDownsampling(t *testing.T) {
 // the test model.
 func TestInterpolationLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -1181,130 +998,9 @@ func TestInterpolationLimit(t *testing.T) {
 	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
 }
 
-func TestGetMaxTimespan(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	for _, tc := range []struct {
-		r                   Resolution
-		memoryBudget        int64
-		estimatedSources    int64
-		interpolationLimit  int64
-		expectedTimespan    int64
-		expectedErrorString string
-	}{
-		// Simplest case: One series, room for exactly one hour of query (need two
-		// slabs of memory budget, as queried time span may stagger across two
-		// slabs)
-		{
-			Resolution10s,
-			2 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			1,
-			0,
-			(1 * time.Hour).Nanoseconds(),
-			"",
-		},
-		// Not enough room for to make query.
-		{
-			Resolution10s,
-			sizeOfTimeSeriesData + sizeOfTimeSeriesData*360,
-			1,
-			0,
-			0,
-			"insufficient",
-		},
-		// Not enough room because of multiple sources.
-		{
-			Resolution10s,
-			2 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			2,
-			0,
-			0,
-			"insufficient",
-		},
-		// 6 sources, room for 1 hour.
-		{
-			Resolution10s,
-			12 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			0,
-			(1 * time.Hour).Nanoseconds(),
-			"",
-		},
-		// 6 sources, room for 2 hours.
-		{
-			Resolution10s,
-			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			0,
-			(2 * time.Hour).Nanoseconds(),
-			"",
-		},
-		// Not enough room due to interpolation buffer.
-		{
-			Resolution10s,
-			12 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			1,
-			0,
-			"insufficient",
-		},
-		// Sufficient room even with interpolation buffer.
-		{
-			Resolution10s,
-			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			1,
-			(1 * time.Hour).Nanoseconds(),
-			"",
-		},
-		// Insufficient room for interpolation buffer (due to straddling)
-		{
-			Resolution10s,
-			18 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			int64(float64(Resolution10s.SlabDuration()) * 0.75),
-			0,
-			"insufficient",
-		},
-		// Sufficient room even with interpolation buffer.
-		{
-			Resolution10s,
-			24 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*360),
-			6,
-			int64(float64(Resolution10s.SlabDuration()) * 0.75),
-			(1 * time.Hour).Nanoseconds(),
-			"",
-		},
-		// 1ns test resolution.
-		{
-			resolution1ns,
-			3 * (sizeOfTimeSeriesData + sizeOfTimeSeriesData*10),
-			1,
-			1,
-			10,
-			"",
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			actual, err := getMaxTimespan(
-				tc.r, tc.memoryBudget, tc.estimatedSources, tc.interpolationLimit,
-			)
-			if !testutils.IsError(err, tc.expectedErrorString) {
-				t.Fatalf("got error %s, wanted error matching %s", err, tc.expectedErrorString)
-			}
-			if tc.expectedErrorString == "" {
-				return
-			}
-			if a, e := actual, tc.expectedTimespan; a != e {
-				t.Fatalf("got max timespan %d, wanted %d", a, e)
-			}
-		})
-	}
-}
-
 func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	// Swap model's memory monitor in order to adjust allocation size.
 	unlimitedMon := tm.workerMemMonitor
@@ -1389,8 +1085,10 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	}
 
 	// Verify insufficient memory error bubbles up.
-	queryAcc := tm.workerMemMonitor.MakeBoundAccount()
-	defer queryAcc.Close(context.TODO())
+	memContext := tm.makeMemoryContext(5)
+	memContext.BudgetBytes = 1000
+	memContext.EstimatedSources = 3
+	defer memContext.Close(context.TODO())
 	_, _, err := tm.DB.QueryMemoryConstrained(
 		context.TODO(),
 		tspb.Query{Name: "test.metric"},
@@ -1398,11 +1096,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		1,
 		0,
 		10000,
-		5,
-		&queryAcc,
-		tm.workerMemMonitor,
-		1000,
-		3,
+		memContext,
 	)
 	if errorStr := "insufficient"; !testutils.IsError(err, errorStr) {
 		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
@@ -1411,7 +1105,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 
 func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	memoryBudget := int64(100 * 1024)
 
@@ -1460,10 +1154,10 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	queryAcc := limitedMon.MakeBoundAccount()
-	defer queryAcc.Close(context.TODO())
+	memContext := tm.makeMemoryContext(0)
+	defer memContext.Close(context.TODO())
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc, tm.workerMemMonitor,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, memContext,
 	)
 	if errorStr := "memory budget exceeded"; !testutils.IsError(err, errorStr) {
 		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
@@ -1484,7 +1178,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	runtime.ReadMemStats(&memStatsBefore)
 
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, 0, &queryAcc, tm.workerMemMonitor,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, memContext,
 	)
 	if err != nil {
 		t.Fatalf("expected no error from query, got %v", err)
@@ -1499,12 +1193,12 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 // obviously bad incoming data.
 func TestQueryBadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
-	account := tm.workerMemMonitor.MakeBoundAccount()
-	defer account.Close(context.TODO())
+	memContext := tm.makeMemoryContext(0)
+	defer memContext.Close(context.TODO())
 
 	// Query with a downsampler that is invalid, expect error.
 	downsampler := (tspb.TimeSeriesQueryAggregator)(999)
@@ -1512,7 +1206,7 @@ func TestQueryBadRequests(t *testing.T) {
 		context.TODO(), tspb.Query{
 			Name:        "metric.test",
 			Downsampler: downsampler.Enum(),
-		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+		}, resolution1ns, 10, 0, 10000, memContext,
 	)
 	errorStr := "unknown time series downsampler"
 	if !testutils.IsError(err, errorStr) {
@@ -1529,7 +1223,7 @@ func TestQueryBadRequests(t *testing.T) {
 		context.TODO(), tspb.Query{
 			Name:             "metric.test",
 			SourceAggregator: aggregator.Enum(),
-		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+		}, resolution1ns, 10, 0, 10000, memContext,
 	)
 	errorStr = "unknown time series aggregator"
 	if !testutils.IsError(err, errorStr) {
@@ -1545,7 +1239,7 @@ func TestQueryBadRequests(t *testing.T) {
 	_, _, err = tm.DB.Query(
 		context.TODO(), tspb.Query{
 			Derivative: derivative.Enum(),
-		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+		}, resolution1ns, 10, 0, 10000, memContext,
 	)
 	if !testutils.IsError(err, "") {
 		t.Fatalf("bad query got error %q, wanted no error", err.Error())

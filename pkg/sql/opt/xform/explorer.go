@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-//go:generate optgen -out explorer.og.go explorer ../ops/*.opt rules/*.opt
-
 // explorer generates alternate expressions that are logically equivalent to
 // existing expressions in the memo. The new expressions are added to the same
 // memo group as the existing expression. The optimizer will cost all the

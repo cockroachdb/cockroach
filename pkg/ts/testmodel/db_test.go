@@ -49,6 +49,7 @@ func TestModelDBQuery(t *testing.T) {
 		downsampler        tspb.TimeSeriesQueryAggregator
 		aggregator         tspb.TimeSeriesQueryAggregator
 		derivative         tspb.TimeSeriesQueryDerivative
+		slabDuration       int64
 		sampleDuration     int64
 		start              int64
 		end                int64
@@ -62,6 +63,7 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
@@ -81,6 +83,7 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_MAX,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
@@ -100,6 +103,7 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_MAX,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
@@ -119,6 +123,7 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
@@ -138,9 +143,10 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              200,
-			end:                400,
+			end:                300,
 			interpolationLimit: 10000,
 			expected: DataSeries{
 				dp(200, 600.0),
@@ -154,10 +160,11 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
-			interpolationLimit: 0,
+			interpolationLimit: 1,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 200.0),
@@ -173,6 +180,7 @@ func TestModelDBQuery(t *testing.T) {
 			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
 			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
 			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
 			sampleDuration:     100,
 			start:              0,
 			end:                10000,
@@ -184,9 +192,10 @@ func TestModelDBQuery(t *testing.T) {
 			result := db.Query(
 				tc.seriesName,
 				tc.sources,
-				tc.downsampler.Enum(),
-				tc.aggregator.Enum(),
-				tc.derivative.Enum(),
+				tc.downsampler,
+				tc.aggregator,
+				tc.derivative,
+				tc.slabDuration,
 				tc.sampleDuration,
 				tc.start,
 				tc.end,

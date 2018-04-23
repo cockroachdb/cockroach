@@ -57,6 +57,12 @@ type SimpleIterator interface {
 	UnsafeValue() []byte
 }
 
+// IteratorStats is returned from (Iterator).Stats.
+type IteratorStats struct {
+	InternalDeleteSkippedCount int
+	TimeBoundNumSSTs           int
+}
+
 // Iterator is an interface for iterating over key/value pairs in an
 // engine. Iterator implementations are thread safe unless otherwise
 // noted.
@@ -116,6 +122,8 @@ type Iterator interface {
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
 	) (kvs []byte, numKvs int64, intents []byte, err error)
+
+	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
@@ -125,6 +133,9 @@ type IterOptions struct {
 	// but iteration (using Next) over keys without the same user-key
 	// prefix will not work correctly (keys may be skipped)
 	Prefix bool
+	// If WithStats is true, the iterator accumulates RocksDB performance
+	// counters over its lifetime which can be queried via `Stats()`.
+	WithStats bool
 }
 
 // Reader is the read interface to an engine's data.
@@ -164,7 +175,7 @@ type Reader interface {
 	// will frequently return keys outside of the [start, end] time range. If you
 	// must guarantee that you never see a key outside of the time bounds, perform
 	// your own filtering.
-	NewTimeBoundIterator(start, end hlc.Timestamp) Iterator
+	NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -259,12 +270,12 @@ type Engine interface {
 	// by invoking Close(). Note that snapshots must not be used after the
 	// original engine has been stopped.
 	NewSnapshot() Reader
-	// IngestExternalFile links a file into the RocksDB log-structured
-	// merge-tree. May modify the file (including the underlying file in
-	// the case of hard-links) if allowFileModification is passed as
-	// well. See additional comments in db.cc's IngestExternalFile
-	// explaining modification behavior.
-	IngestExternalFile(ctx context.Context, path string, allowFileModification bool) error
+	// IngestExternalFiles atomically links a slice of files into the RocksDB
+	// log-structured merge-tree. May modify the files (including the underlying
+	// file in the case of hard-links) if allowFileModifications is passed as
+	// well. See additional comments in db.cc's IngestExternalFile explaining
+	// modification behavior.
+	IngestExternalFiles(ctx context.Context, paths []string, allowFileModifications bool) error
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is

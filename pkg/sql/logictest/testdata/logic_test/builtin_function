@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql
+# LogicTest: default parallel-stmts distsql distsql-metadata
 
 query error unknown function: foo.bar
 SELECT foo.bar()
@@ -1682,3 +1682,14 @@ query TTTT
 SELECT quote_ident('foo'), quote_ident('select'), quote_ident('int8'), quote_ident('numeric')
 ----
 foo  "select"  int8  "numeric"
+
+
+query TT
+SELECT lpad('abc', 5, 'xy'), rpad('abc', 5, 'xy')
+----
+xyabc  abcxy
+
+query TT
+SELECT lpad('abc', 5, ''), rpad('abc', 5, '')
+----
+abc  abc

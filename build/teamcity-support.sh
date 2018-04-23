@@ -23,7 +23,7 @@ run() {
 changed_go_pkgs() {
   git fetch --quiet origin master
   # Find changed packages, minus those that have been removed entirely.
-  git diff --name-only origin/master... -- "pkg/**/*.go" \
+  git diff --name-only origin/master... -- "pkg/**/*.go" ":!*/testdata/*" \
     | xargs -rn1 dirname \
     | sort -u \
     | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }

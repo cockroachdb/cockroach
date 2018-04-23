@@ -416,3 +416,19 @@ PREPARE x21701c AS SELECT * FROM kv WHERE k IS NOT DISTINCT FROM $1
 query II
 EXECUTE x21701c(NULL)
 ----
+
+# Test that a PREPARE statement after a CREATE TABLE in the same TRANSACTION
+# doesn't hang.
+subtest 24578
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+create table bar (id integer)
+
+statement ok
+PREPARE forbar AS insert into bar (id) VALUES (1)
+
+statement ok
+COMMIT TRANSACTION

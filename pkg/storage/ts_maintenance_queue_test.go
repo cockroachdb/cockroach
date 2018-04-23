@@ -246,15 +246,15 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	sampleDuration := ts.Resolution10s.SampleDuration()
 	datapoints := []tspb.TimeSeriesDatapoint{
 		{
-			TimestampNanos: farPast - farPast%sampleDuration + sampleDuration/2,
+			TimestampNanos: farPast - farPast%sampleDuration,
 			Value:          100.0,
 		},
 		{
-			TimestampNanos: nearPast - (nearPast)%sampleDuration + sampleDuration/2,
+			TimestampNanos: nearPast - (nearPast)%sampleDuration,
 			Value:          200.0,
 		},
 		{
-			TimestampNanos: now - now%sampleDuration + sampleDuration/2,
+			TimestampNanos: now - now%sampleDuration,
 			Value:          300.0,
 		},
 	}
@@ -290,8 +290,16 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	)
 	memMon.Start(context.TODO(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(context.TODO())
-	acc := memMon.MakeBoundAccount()
-	defer acc.Close(context.TODO())
+	memContext := ts.MakeQueryMemoryContext(
+		&memMon,
+		&memMon,
+		ts.QueryMemoryOptions{
+			BudgetBytes:             math.MaxInt64,
+			EstimatedSources:        1,
+			InterpolationLimitNanos: 0,
+		},
+	)
+	defer memContext.Close(context.TODO())
 
 	// getDatapoints queries all datapoints in the series from the beginning
 	// of time to a point in the near future.
@@ -303,9 +311,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			ts.Resolution10s.SampleDuration(),
 			0,
 			now+ts.Resolution10s.SlabDuration(),
-			0,
-			&acc,
-			&memMon,
+			memContext,
 		)
 		return dps, err
 	}

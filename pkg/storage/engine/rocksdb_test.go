@@ -761,9 +761,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 	batch := rocksdb.NewBatch()
 	defer batch.Close()
 
-	// Make a time bounded iterator that skips the SSTable containing our writes.
-	func() {
-		tbi := batch.NewTimeBoundIterator(maxTimestamp.Next(), maxTimestamp.Next().Next())
+	check := func(t *testing.T, tbi Iterator, keys, ssts int) {
 		defer tbi.Close()
 		tbi.Seek(NilKey)
 
@@ -780,10 +778,35 @@ func TestRocksDBTimeBound(t *testing.T) {
 		}
 
 		// Make sure the iterator sees no writes.
-		if expCount := 0; expCount != count {
-			t.Fatalf("saw %d values in time bounded iterator, but expected %d", count, expCount)
+		if keys != count {
+			t.Fatalf("saw %d values in time bounded iterator, but expected %d", count, keys)
 		}
-	}()
+		stats := tbi.Stats()
+		if a := stats.TimeBoundNumSSTs; a != ssts {
+			t.Fatalf("touched %d SSTs, expected %d", a, ssts)
+		}
+	}
+
+	testCases := []struct {
+		iter       Iterator
+		keys, ssts int
+	}{
+		// Completely to the right, not touching.
+		{iter: batch.NewTimeBoundIterator(maxTimestamp.Next(), maxTimestamp.Next().Next(), true /* withStats */), keys: 0, ssts: 0},
+		// Completely to the left, not touching.
+		{iter: batch.NewTimeBoundIterator(minTimestamp.Prev().Prev(), minTimestamp.Prev(), true /* withStats */), keys: 0, ssts: 0},
+		// Touching on the right.
+		{iter: batch.NewTimeBoundIterator(maxTimestamp, maxTimestamp, true /* withStats */), keys: len(times), ssts: 1},
+		// Touching on the left.
+		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, true /* withStats */), keys: len(times), ssts: 1},
+		// Copy of last case, but confirm that we don't get SST stats if we don't ask for them.
+		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, false /* withStats */), keys: len(times), ssts: 0}}
+
+	for _, test := range testCases {
+		t.Run("", func(t *testing.T) {
+			check(t, test.iter, test.keys, test.ssts)
+		})
+	}
 
 	// Make a regular iterator. Before #21721, this would accidentally pick up the
 	// time bounded iterator instead.

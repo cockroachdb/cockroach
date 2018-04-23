@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -125,17 +126,72 @@ func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_Schem
 		NodeID: sc.nodeID, ExpirationTime: timeutil.Now().Add(SchemaChangeLeaseDuration).UnixNano()}
 }
 
-var errExistingSchemaChangeLease = errors.New(
-	"an outstanding schema change lease exists")
-var errSchemaChangeNotFirstInLine = errors.New(
-	"schema change not first in line")
-var errNotHitGCTTLDeadline = errors.New(
-	"not hit gc ttl deadline")
+// isPermanentSchemaChangeError returns true if the error results in
+// a permanent failure of a schema change. This function is a whitelist
+// instead of a blacklist: only known safe errors are confirmed to not be
+// permanent errors. Anything unknown is assumed to be permanent.
+func isPermanentSchemaChangeError(err error) bool {
+	if err == nil {
+		return false
+	}
+	err = errors.Cause(err)
+	switch err {
+	case
+		context.Canceled,
+		context.DeadlineExceeded,
+		errExistingSchemaChangeLease,
+		errNotHitGCTTLDeadline,
+		errSchemaChangeDuringDrain,
+		errSchemaChangeNotFirstInLine:
+		return false
+	}
+	switch err := err.(type) {
+	case errTableVersionMismatch:
+		return false
+	case *pgerror.Error:
+		switch err.Code {
+		case pgerror.CodeSerializationFailureError:
+			return false
+		case pgerror.CodeInternalError:
+			if err.Message == context.DeadlineExceeded.Error() {
+				return false
+			}
+		}
+	}
+	fmt.Printf("ERRR: %T %v\n", err, err)
+	if pg, ok := err.(*pgerror.Error); ok {
+		fmt.Printf("PGCODE: %#v\n", pg)
+	}
+	return true
+}
+
+var (
+	errExistingSchemaChangeLease  = errors.New("an outstanding schema change lease exists")
+	errSchemaChangeNotFirstInLine = errors.New("schema change not first in line")
+	errNotHitGCTTLDeadline        = errors.New("not hit gc ttl deadline")
+	errSchemaChangeDuringDrain    = errors.New("a schema change ran during the drain phase, re-increment")
+)
 
 func shouldLogSchemaChangeError(err error) bool {
 	return err != errExistingSchemaChangeLease &&
 		err != errSchemaChangeNotFirstInLine &&
 		err != errNotHitGCTTLDeadline
+}
+
+type errTableVersionMismatch struct {
+	version  sqlbase.DescriptorVersion
+	expected sqlbase.DescriptorVersion
+}
+
+func makeErrTableVersionMismatch(version, expected sqlbase.DescriptorVersion) error {
+	return errors.WithStack(errTableVersionMismatch{
+		version:  version,
+		expected: expected,
+	})
+}
+
+func (e errTableVersionMismatch) Error() string {
+	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
 }
 
 // AcquireLease acquires a schema change lease on the table if
@@ -379,7 +435,7 @@ func (sc *SchemaChanger) drainNames(
 			// error, so that sc.exec() is reexecuted and increments the
 			// version before coming back here to correctly drain the names.
 			if desc.UpVersion {
-				return errors.Errorf("a schema change ran during the drain phase, re-increment")
+				return errSchemaChangeDuringDrain
 			}
 			// Free up the old name(s) for reuse.
 			namesToReclaim = desc.DrainingNames
@@ -502,7 +558,7 @@ func (sc *SchemaChanger) exec(
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are
 	// resolved by retrying the backfill.
-	if sqlbase.IsPermanentSchemaChangeError(err) {
+	if isPermanentSchemaChangeError(err) {
 		if err := sc.rollbackSchemaChange(ctx, err, &lease, evalCtx); err != nil {
 			return err
 		}

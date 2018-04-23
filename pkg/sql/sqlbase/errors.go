@@ -121,25 +121,6 @@ func IsCCLRequiredError(err error) bool {
 	return errHasCode(err, CodeCCLRequired)
 }
 
-// IsPermanentSchemaChangeError returns true if the error results in
-// a permanent failure of a schema change.
-func IsPermanentSchemaChangeError(err error) bool {
-	if errHasCode(err,
-		pgerror.CodeNotNullViolationError,
-		pgerror.CodeUniqueViolationError,
-		pgerror.CodeInvalidSchemaDefinitionError,
-		CodeCCLRequired,
-	) {
-		return true
-	}
-	switch err.(type) {
-	case *roachpb.BatchTimestampBeforeGCError:
-		return true
-	default:
-		return false
-	}
-}
-
 // NewUndefinedDatabaseError creates an error that represents a missing database.
 func NewUndefinedDatabaseError(name string) error {
 	// Postgres will return an UndefinedTable error on queries that go to a "relation"

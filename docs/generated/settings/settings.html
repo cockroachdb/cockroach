@@ -1,0 +1,63 @@
+<table>
+<thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>cloudstorage.gs.default.key</code></td><td>string</td><td><code></code></td><td>if set, JSON key to use during Google Cloud Storage operations</td></tr>
+<tr><td><code>cloudstorage.http.custom_ca</code></td><td>string</td><td><code></code></td><td>custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage</td></tr>
+<tr><td><code>cloudstorage.timeout</code></td><td>duration</td><td><code>10m0s</code></td><td>the timeout for import/export storage operations</td></tr>
+<tr><td><code>cluster.organization</code></td><td>string</td><td><code></code></td><td>organization name</td></tr>
+<tr><td><code>debug.panic_on_failed_assertions</code></td><td>boolean</td><td><code>false</code></td><td>panic when an assertion fails rather than reporting</td></tr>
+<tr><td><code>diagnostics.forced_stat_reset.interval</code></td><td>duration</td><td><code>2h0m0s</code></td><td>interval after which pending diagnostics statistics should be discarded even if not reported</td></tr>
+<tr><td><code>diagnostics.reporting.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable reporting diagnostic metrics to cockroach labs</td></tr>
+<tr><td><code>diagnostics.reporting.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)</td></tr>
+<tr><td><code>diagnostics.reporting.send_crash_reports</code></td><td>boolean</td><td><code>true</code></td><td>send crash and panic reports</td></tr>
+<tr><td><code>external.kafka.bootstrap_servers</code></td><td>string</td><td><code></code></td><td>comma-separated list of host:port addresses of Kafka brokers to bootstrap the connection</td></tr>
+<tr><td><code>jobs.registry.leniency</code></td><td>duration</td><td><code>1m0s</code></td><td>the amount of time to defer any attempts to reschedule a job</td></tr>
+<tr><td><code>kv.allocator.lease_rebalancing_aggressiveness</code></td><td>float</td><td><code>1E+00</code></td><td>set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases</td></tr>
+<tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
+<tr><td><code>kv.allocator.range_rebalance_threshold</code></td><td>float</td><td><code>5E-02</code></td><td>minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull</td></tr>
+<tr><td><code>kv.allocator.stat_based_rebalancing.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to enable rebalancing of range replicas based on write load and disk usage</td></tr>
+<tr><td><code>kv.allocator.stat_rebalance_threshold</code></td><td>float</td><td><code>2E-01</code></td><td>minimum fraction away from the mean a store's stats (like disk usage or writes per second) can be before it is considered overfull or underfull</td></tr>
+<tr><td><code>kv.bulk_io_write.concurrent_export_requests</code></td><td>integer</td><td><code>5</code></td><td>number of export requests a store will handle concurrently before queuing</td></tr>
+<tr><td><code>kv.bulk_io_write.concurrent_import_requests</code></td><td>integer</td><td><code>1</code></td><td>number of import requests a store will handle concurrently before queuing</td></tr>
+<tr><td><code>kv.bulk_io_write.max_rate</code></td><td>byte size</td><td><code>8.0 EiB</code></td><td>the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops</td></tr>
+<tr><td><code>kv.bulk_sst.sync_size</code></td><td>byte size</td><td><code>2.0 MiB</code></td><td>threshold after which non-Rocks SST writes must fsync (0 disables)</td></tr>
+<tr><td><code>kv.raft.command.max_size</code></td><td>byte size</td><td><code>64 MiB</code></td><td>maximum size of a raft command</td></tr>
+<tr><td><code>kv.raft_log.synchronize</code></td><td>boolean</td><td><code>true</code></td><td>set to true to synchronize on Raft log writes to persistent storage</td></tr>
+<tr><td><code>kv.range.backpressure_range_size_multiplier</code></td><td>float</td><td><code>2E+00</code></td><td>multiple of range_max_bytes that a range is allowed to grow to without splitting before writes to that range are blocked, or 0 to disable</td></tr>
+<tr><td><code>kv.range_descriptor_cache.size</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of entries in the range descriptor and leaseholder caches</td></tr>
+<tr><td><code>kv.snapshot_rebalance.max_rate</code></td><td>byte size</td><td><code>2.0 MiB</code></td><td>the rate limit (bytes/sec) to use for rebalance snapshots</td></tr>
+<tr><td><code>kv.snapshot_recovery.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for recovery snapshots</td></tr>
+<tr><td><code>kv.transaction.max_intents_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track write intents in transactions</td></tr>
+<tr><td><code>kv.transaction.max_refresh_spans_bytes</code></td><td>integer</td><td><code>256000</code></td><td>maximum number of bytes used to track refresh spans in serializable transactions</td></tr>
+<tr><td><code>rocksdb.min_wal_sync_interval</code></td><td>duration</td><td><code>0s</code></td><td>minimum duration between syncs of the RocksDB WAL</td></tr>
+<tr><td><code>server.clock.forward_jump_check_enabled</code></td><td>boolean</td><td><code>false</code></td><td>If enabled, forward clock jumps > max_offset/2 will cause a panic.</td></tr>
+<tr><td><code>server.clock.persist_upper_bound_interval</code></td><td>duration</td><td><code>0s</code></td><td>the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.</td></tr>
+<tr><td><code>server.consistency_check.interval</code></td><td>duration</td><td><code>24h0m0s</code></td><td>the time between range consistency checks; set to 0 to disable consistency checking</td></tr>
+<tr><td><code>server.declined_reservation_timeout</code></td><td>duration</td><td><code>1s</code></td><td>the amount of time to consider the store throttled for up-replication after a reservation was declined</td></tr>
+<tr><td><code>server.failed_reservation_timeout</code></td><td>duration</td><td><code>5s</code></td><td>the amount of time to consider the store throttled for up-replication after a failed reservation call</td></tr>
+<tr><td><code>server.remote_debugging.mode</code></td><td>string</td><td><code>local</code></td><td>set to enable remote debugging, localhost-only or disable (any, local, off)</td></tr>
+<tr><td><code>server.shutdown.drain_wait</code></td><td>duration</td><td><code>0s</code></td><td>the amount of time a server waits in an unready state before proceeding with the rest of the shutdown process</td></tr>
+<tr><td><code>server.shutdown.query_wait</code></td><td>duration</td><td><code>10s</code></td><td>the server will wait for at least this amount of time for active queries to finish</td></tr>
+<tr><td><code>server.time_until_store_dead</code></td><td>duration</td><td><code>5m0s</code></td><td>the time after which if there is no new gossiped information about a store, it is considered dead</td></tr>
+<tr><td><code>server.web_session_timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that a newly created web session will be valid</td></tr>
+<tr><td><code>sql.defaults.distsql</code></td><td>enumeration</td><td><code>1</code></td><td>Default distributed SQL execution mode [off = 0, auto = 1, on = 2]</td></tr>
+<tr><td><code>sql.distsql.distribute_index_joins</code></td><td>boolean</td><td><code>true</code></td><td>if set, for index joins we instantiate a join reader on every node that has a stream; if not set, we use a single join reader</td></tr>
+<tr><td><code>sql.distsql.interleaved_joins.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set we plan interleaved table joins instead of merge joins when possible</td></tr>
+<tr><td><code>sql.distsql.merge_joins.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, we plan merge joins when possible</td></tr>
+<tr><td><code>sql.distsql.temp_storage.joins</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable use of disk for distributed sql joins</td></tr>
+<tr><td><code>sql.distsql.temp_storage.sorts</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable use of disk for distributed sql sorts</td></tr>
+<tr><td><code>sql.distsql.temp_storage.workmem</code></td><td>byte size</td><td><code>64 MiB</code></td><td>maximum amount of memory in bytes a processor can use before falling back to temp storage</td></tr>
+<tr><td><code>sql.metrics.statement_details.dump_to_logs</code></td><td>boolean</td><td><code>false</code></td><td>dump collected statement statistics to node logs when periodically cleared</td></tr>
+<tr><td><code>sql.metrics.statement_details.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-statement query statistics</td></tr>
+<tr><td><code>sql.metrics.statement_details.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statistics to be collected</td></tr>
+<tr><td><code>sql.trace.log_statement_execute</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable logging of executed statements</td></tr>
+<tr><td><code>sql.trace.session_eventlog.enabled</code></td><td>boolean</td><td><code>false</code></td><td>set to true to enable session tracing</td></tr>
+<tr><td><code>sql.trace.txn.enable_threshold</code></td><td>duration</td><td><code>0s</code></td><td>duration beyond which all transactions are traced (set to 0 to disable)</td></tr>
+<tr><td><code>timeseries.resolution_10s.storage_duration</code></td><td>duration</td><td><code>720h0m0s</code></td><td>the amount of time to store timeseries data</td></tr>
+<tr><td><code>timeseries.storage.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere</td></tr>
+<tr><td><code>trace.debug.enable</code></td><td>boolean</td><td><code>false</code></td><td>if set, traces for recent requests can be seen in the /debug page</td></tr>
+<tr><td><code>trace.lightstep.token</code></td><td>string</td><td><code></code></td><td>if set, traces go to Lightstep using this token</td></tr>
+<tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.</td></tr>
+<tr><td><code>version</code></td><td>custom validation</td><td><code>2.0-3</code></td><td>set the active cluster version in the format '<major>.<minor>'.</td></tr>
+</tbody>
+</table>
