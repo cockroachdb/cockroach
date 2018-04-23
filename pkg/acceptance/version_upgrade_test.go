@@ -212,6 +212,41 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 	time.Sleep(1 * time.Second)
 }
 
+// lastBinaryVersionUpgrade performs an upgrade of the last node in the
+// cluster up to its binary version.
+type lastBinaryVersionUpgrade struct {
+	binaryVersionUpgrade
+}
+
+func (lbv lastBinaryVersionUpgrade) name() string {
+	return fmt.Sprintf("lastBinary=%s", lbv.binaryVersionUpgrade)
+}
+
+func (lbv lastBinaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
+	t.Helper()
+
+	var newBin string
+	if string(lbv.binaryVersionUpgrade) == sourceVersion {
+		newBin = localcluster.SourceBinary()
+	} else {
+		newBin = GetBinary(ctx, t, string(lbv.binaryVersionUpgrade))
+	}
+	lc := c.(*localcluster.LocalCluster)
+
+	log.Infof(ctx, "upgrading node %d's binary to %s", c.NumNodes()-1, string(lbv.binaryVersionUpgrade))
+	lc.ReplaceBinary(c.NumNodes()-1, newBin)
+	if err := lc.Restart(ctx, c.NumNodes()-1); err != nil {
+		t.Fatal(err)
+	}
+
+	lbv.checkNode(ctx, t, c, c.NumNodes()-1)
+
+	// TODO(nvanbenschoten): add upgrade qualification step. What should we
+	// test? We could run logictests. We could add custom logic here. Maybe
+	// this should all be pushed to nightly migration tests instead.
+	time.Sleep(1 * time.Second)
+}
+
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
 	steps := []versionStep{
 		binaryVersionUpgrade("v1.0.6"),
@@ -223,6 +258,8 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 
 		binaryVersionUpgrade("v1.1.1"),
 		clusterVersionUpgrade("1.1"),
+
+		lastBinaryVersionUpgrade{binaryVersionUpgrade: "v2.0.0"},
 
 		binaryVersionUpgrade("v2.0.0"),
 		clusterVersionUpgrade("1.1-6"),
