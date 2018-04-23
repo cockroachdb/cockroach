@@ -24,7 +24,7 @@ import (
 
 func TestTimeSeriesWriteMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 

@@ -22,13 +22,10 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/ts/testmodel"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -664,76 +661,11 @@ func TestAggregation(t *testing.T) {
 	}
 }
 
-// assertQuery generates a query result from the local test model and compares
-// it against the query returned from the server.
-//
-// My suggestion is to break down the model query into multiple, independently
-// verificable steps. These steps will not be memory or computationally
-// efficient, but will be conceptually easy to verify; then we can compare its
-// results against the real data store with more confidence.
-func (tm *testModel) assertQuery(
-	name string,
-	sources []string,
-	downsample, agg *tspb.TimeSeriesQueryAggregator,
-	derivative *tspb.TimeSeriesQueryDerivative,
-	r Resolution,
-	sampleDuration, start, end, interpolationLimit int64,
-	expectedDatapointCount, expectedSourceCount int,
-) {
-	tm.t.Helper()
-	// Query the actual server.
-	q := tspb.Query{
-		Name:             name,
-		Downsampler:      downsample,
-		SourceAggregator: agg,
-		Derivative:       derivative,
-		Sources:          sources,
-	}
-
-	memContext := tm.makeMemoryContext(interpolationLimit)
-	defer memContext.Close(context.TODO())
-	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
-		context.TODO(),
-		q,
-		r,
-		sampleDuration,
-		start,
-		end,
-		memContext,
-	)
-	if err != nil {
-		tm.t.Fatal(err)
-	}
-	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
-		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
-	}
-	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
-	}
-
-	// Query the testmodel.
-	modelDatapoints := tm.model.Query(
-		name,
-		sources,
-		q.GetDownsampler(),
-		q.GetSourceAggregator(),
-		q.GetDerivative(),
-		r.SlabDuration(),
-		sampleDuration, start, end, interpolationLimit,
-	)
-	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
-		for _, diff := range pretty.Diff(a, e) {
-			tm.t.Error(diff)
-		}
-	}
-}
-
 // TestQuery validates that query results match the expectation of the test
 // model.
 func TestQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -901,7 +833,7 @@ func TestQuery(t *testing.T) {
 // the test model.
 func TestQueryDownsampling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -983,7 +915,7 @@ func TestQueryDownsampling(t *testing.T) {
 // the test model.
 func TestInterpolationLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
@@ -1068,7 +1000,7 @@ func TestInterpolationLimit(t *testing.T) {
 
 func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	// Swap model's memory monitor in order to adjust allocation size.
 	unlimitedMon := tm.workerMemMonitor
@@ -1173,7 +1105,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 
 func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 
 	memoryBudget := int64(100 * 1024)
 
@@ -1261,7 +1193,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 // obviously bad incoming data.
 func TestQueryBadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tm := newTestModel(t)
+	tm := newTestModelRunner(t)
 	tm.Start()
 	defer tm.Stop()
 
