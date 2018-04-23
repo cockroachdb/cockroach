@@ -65,10 +65,11 @@ func collectFiles(path string) ([]string, error) {
 		return nil, err
 	}
 
-	return collectFilesImpl(cwd, path, map[string]struct{}{})
+	srcDir := cwd // top-level relative imports are relative to cwd
+	return collectFilesImpl(cwd, path, srcDir, map[string]struct{}{})
 }
 
-func collectFilesImpl(cwd, path string, seen map[string]struct{}) ([]string, error) {
+func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]string, error) {
 	// Skip packages we've seen before.
 	if _, ok := seen[path]; ok {
 		return nil, nil
@@ -81,7 +82,7 @@ func collectFilesImpl(cwd, path string, seen map[string]struct{}) ([]string, err
 	}
 
 	// Import the package.
-	pkg, err := buildCtx.Import(path, cwd, 0)
+	pkg, err := buildCtx.Import(path, srcDir, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func collectFilesImpl(cwd, path string, seen map[string]struct{}) ([]string, err
 		}
 	}
 	for _, importPath := range pkg.Imports {
-		files, err := collectFilesImpl(cwd, importPath, seen)
+		files, err := collectFilesImpl(cwd, importPath, pkg.Dir, seen)
 		if err != nil {
 			return nil, err
 		}
