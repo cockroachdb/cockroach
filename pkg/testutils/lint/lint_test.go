@@ -654,7 +654,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestCrlfmt", func(t *testing.T) {
 		t.Parallel()
-		ignore := `\.(pb(\.gw)?)|(.og)\.go|/testdata/`
+		ignore := `\.(pb(\.gw)?)|(\.og)\.go|/testdata/`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)

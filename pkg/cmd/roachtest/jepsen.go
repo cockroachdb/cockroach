@@ -105,7 +105,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	// Install Jepsen and its prereqs on the controller.
 	c.Run(ctx, controller, "sh", "-c", `"sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`)
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
-	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "./jepsen", "tc-nightly", controller)
+	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
 
 	// Get the IP addresses for all our workers.
 	cmd := exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(workers), "--", "hostname", "-I")
@@ -166,7 +166,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 			errCh := make(chan error, 1)
 			go func() {
 				errCh <- c.RunE(ctx, controller, "bash", "-e", "-c", fmt.Sprintf(`"\
-cd jepsen/cockroachdb && set -eo pipefail && \
+cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
  ~/lein run test \
    --tarball file://${PWD}/cockroach.tgz \
    --username ${USER} \
@@ -214,10 +214,6 @@ cd jepsen/cockroachdb && set -eo pipefail && \
 
 			if failed {
 				failures = append(failures, testCfg)
-				// collect the systemd log on failure to diagnose #20492.
-				// TODO(bdarnell): remove the next two lines when that's resolved.
-				logf("%s: systemd log:", testCfg)
-				c.Run(ctx, controller, "journalctl -x --no-pager")
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
 				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
