@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1471,6 +1472,28 @@ func (s *statusServer) SpanStats(
 	}
 
 	return output, nil
+}
+
+// Diagnostics returns an anonymized diagnostics report.
+func (s *statusServer) Diagnostics(
+	ctx context.Context, req *serverpb.DiagnosticsRequest,
+) (*diagnosticspb.DiagnosticReport, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Diagnostics(ctx, req)
+	}
+
+	return s.admin.server.getReportingInfo(ctx), nil
 }
 
 // jsonWrapper provides a wrapper on any slice data type being
