@@ -18,8 +18,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/pkg/errors"
 )
 
 type buildScalarCtx struct {
@@ -50,6 +53,10 @@ func init() {
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.ArrayOp:           (*Builder).buildArray,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
+
+		// Subquery operators.
+		opt.ExistsOp:   (*Builder).buildExistsSubquery,
+		opt.SubqueryOp: (*Builder).buildSubquery,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -285,4 +292,62 @@ func (b *Builder) buildUnsupportedExpr(
 	ctx *buildScalarCtx, ev memo.ExprView,
 ) (tree.TypedExpr, error) {
 	return ev.Private().(tree.TypedExpr), nil
+}
+
+func (b *Builder) buildExistsSubquery(
+	ctx *buildScalarCtx, ev memo.ExprView,
+) (tree.TypedExpr, error) {
+	// Build the execution plan for the subquery. Note that the subquery could
+	// have subqueries of its own which are added to b.subqueries.
+	root, err := b.build(ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+
+	return b.addSubquery(exec.SubqueryExists, types.Bool, root), nil
+}
+
+func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	input := ev.Child(0)
+	// Typically, the input is a Max1RowOp; it might be elided if the optimizer
+	// proves that more than 1 result is not possible.
+	if input.Operator() == opt.Max1RowOp {
+		input = input.Child(0)
+	}
+
+	// TODO(radu): for now we only support the trivial projection.
+	cols := input.Logical().Relational.OutputCols
+	if cols.Len() != 1 {
+		return nil, errors.Errorf("subquery input with multiple columns")
+	}
+	colID, _ := cols.Next(0)
+	proj := ev.Child(1)
+	if proj.Operator() != opt.VariableOp || proj.Private().(opt.ColumnID) != opt.ColumnID(colID) {
+		return nil, errors.Errorf("subquery with non-trivial projection not supported")
+	}
+
+	// Build the execution plan for the subquery. Note that the subquery could
+	// have subqueries of its own which are added to b.subqueries.
+	root, err := b.build(input)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.addSubquery(exec.SubqueryOneRow, ev.Logical().Scalar.Type, root), nil
+}
+
+// addSubquery adds an entry to b.subqueries and creates a tree.Subquery
+// expression node associated with it.
+func (b *Builder) addSubquery(mode exec.SubqueryMode, typ types.T, root exec.Node) *tree.Subquery {
+	exprNode := &tree.Subquery{Exists: mode == exec.SubqueryExists}
+	exprNode.SetType(typ)
+	b.subqueries = append(b.subqueries, exec.Subquery{
+		ExprNode: exprNode,
+		Mode:     mode,
+		Root:     root,
+	})
+	// Associate the tree.Subquery expression node with this subquery
+	// by index (1-based).
+	exprNode.Idx = len(b.subqueries)
+	return exprNode
 }

@@ -33,20 +33,20 @@ type TestEngine interface {
 	// can be used to create an execution plan.
 	Factory() Factory
 
-	// Columns returns the column information for the given execution node
-	// (created through the factory).
-	Columns(n Node) sqlbase.ResultColumns
+	// Columns returns the column information for the given plan (created through
+	// the factory).
+	Columns(p Plan) sqlbase.ResultColumns
 
-	// Execute runs the given execution node (created through the Factory) and
-	// returns the results as a Datum table.
-	Execute(n Node) ([]tree.Datums, error)
+	// Execute runs the given plan (created through the Factory) and returns the
+	// results as a Datum table.
+	Execute(p Plan) ([]tree.Datums, error)
 
-	// Explain executes EXPLAIN (VERBOSE) on the given execution node (created
-	// through the Factory) and returns the results as a Datum table.
-	Explain(n Node) ([]tree.Datums, error)
+	// Explain executes EXPLAIN (VERBOSE) on the given plan (created through the
+	// Factory) and returns the results as a Datum table.
+	Explain(n Plan) ([]tree.Datums, error)
 
 	// Close cleans up any state associated with construction or execution of
-	// nodes. It must always be called as the last step in using an engine
+	// plans. It must always be called as the last step in using an engine
 	// instance.
 	Close()
 }
