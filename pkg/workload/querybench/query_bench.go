@@ -13,11 +13,14 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package singlequery
+package querybench
 
 import (
+	"bufio"
 	"context"
 	gosql "database/sql"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -26,45 +29,46 @@ import (
 	"github.com/spf13/pflag"
 )
 
-type singleQuery struct {
+type queryBench struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	query string
+	queryFile string
 }
 
 func init() {
-	workload.Register(singleQueryMeta)
+	workload.Register(queryBenchMeta)
 }
 
-var singleQueryMeta = workload.Meta{
-	Name:        `singlequery`,
-	Description: `SingleQuery runs the specified query repeatedly`,
-	Version:     `1.0.0`,
+var queryBenchMeta = workload.Meta{
+	Name: `querybench`,
+	Description: `QueryBench runs queries from the specified file. The queries are run ` +
+		`sequentially in each concurrent worker.`,
+	Version: `1.0.0`,
 	New: func() workload.Generator {
-		g := &singleQuery{}
-		g.flags.FlagSet = pflag.NewFlagSet(`singlequery`, pflag.ContinueOnError)
+		g := &queryBench{}
+		g.flags.FlagSet = pflag.NewFlagSet(`querybench`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`query`: {RuntimeOnly: true},
+			`query-file`: {RuntimeOnly: true},
 		}
-		g.flags.StringVar(&g.query, `query`, ``, `Query to run`)
+		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
 
 // Meta implements the Generator interface.
-func (*singleQuery) Meta() workload.Meta { return singleQueryMeta }
+func (*queryBench) Meta() workload.Meta { return queryBenchMeta }
 
 // Flags implements the Flagser interface.
-func (g *singleQuery) Flags() workload.Flags { return g.flags }
+func (g *queryBench) Flags() workload.Flags { return g.flags }
 
 // Hooks implements the Hookser interface.
-func (g *singleQuery) Hooks() workload.Hooks {
+func (g *queryBench) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if g.query == "" {
-				return errors.Errorf("Missing required argument '--query'")
+			if g.queryFile == "" {
+				return errors.Errorf("Missing required argument '--query-file'")
 			}
 			return nil
 		},
@@ -72,19 +76,15 @@ func (g *singleQuery) Hooks() workload.Hooks {
 }
 
 // Tables implements the Generator interface.
-func (*singleQuery) Tables() []workload.Table {
+func (*queryBench) Tables() []workload.Table {
 	// Assume the necessary tables are already present.
 	return []workload.Table{}
 }
 
 // Ops implements the Opser interface.
-func (g *singleQuery) Ops(
+func (g *queryBench) Ops(
 	urls []string, reg *workload.HistogramRegistry,
 ) (workload.QueryLoad, error) {
-	if g.query == "" {
-		panic("Missing required argument --query")
-	}
-
 	sqlDatabase, err := workload.SanitizeUrls(g, g.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -97,32 +97,83 @@ func (g *singleQuery) Ops(
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
 
-	stmt, err := db.Prepare(g.query)
+	queries, err := getQueries(g.queryFile)
 	if err != nil {
 		return workload.QueryLoad{}, err
+	}
+	if len(queries) < 1 {
+		return workload.QueryLoad{}, errors.New("no queries found in file")
+	}
+
+	stmts := make([]namedStmt, len(queries))
+	for i, query := range queries {
+		stmt, err := db.Prepare(query)
+		if err != nil {
+			return workload.QueryLoad{}, errors.Wrapf(err, "failed to prepare query %q", query)
+		}
+		stmts[i] = namedStmt{
+			// TODO(solon): Allow specifying names in the query file rather than using
+			// the entire query as the name.
+			name: fmt.Sprintf("%2d: %s", i+1, query),
+			stmt: stmt,
+		}
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
-		op := singleQueryOp{
+		op := queryBenchWorker{
 			hists: reg.GetHandle(),
 			db:    db,
-			stmt:  stmt,
+			stmts: stmts,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 	}
 	return ql, nil
 }
 
-type singleQueryOp struct {
-	hists *workload.Histograms
-	db    *gosql.DB
-	stmt  *gosql.Stmt
+// getQueries returns the lines of a file as a string slice. Ignores lines
+// beginning with '#'.
+func getQueries(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) > 0 && line[0] != '#' {
+			lines = append(lines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return lines, nil
 }
 
-func (o *singleQueryOp) run(ctx context.Context) error {
+type namedStmt struct {
+	name string
+	stmt *gosql.Stmt
+}
+
+type queryBenchWorker struct {
+	hists *workload.Histograms
+	db    *gosql.DB
+	stmts []namedStmt
+
+	stmtIdx int
+}
+
+func (o *queryBenchWorker) run(ctx context.Context) error {
 	start := timeutil.Now()
-	rows, err := o.stmt.Query()
+	stmt := o.stmts[o.stmtIdx]
+	o.stmtIdx++
+	o.stmtIdx %= len(o.stmts)
+
+	rows, err := stmt.stmt.Query()
 	if err != nil {
 		return err
 	}
@@ -132,6 +183,6 @@ func (o *singleQueryOp) run(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	o.hists.Get(`query`).Record(timeutil.Since(start))
+	o.hists.Get(stmt.name).Record(timeutil.Since(start))
 	return nil
 }
