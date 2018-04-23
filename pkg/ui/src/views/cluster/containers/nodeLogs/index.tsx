@@ -15,8 +15,7 @@ import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
-import Loading from "src/views/shared/components/loading";
-import spinner from "assets/spinner.gif";
+import buildLoading from "src/views/shared/components/loading2";
 import "./logs.styl";
 
 interface LogProps {
@@ -26,6 +25,9 @@ interface LogProps {
   refreshNodes: typeof refreshNodes;
 }
 
+// tslint:disable-next-line:variable-name
+const Loading = buildLoading<LogEntriesResponseMessage>();
+
 /**
  * Renders the main content of the logs page.
  */
@@ -33,6 +35,39 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
   componentWillMount() {
     this.props.refreshNodes();
     this.props.refreshLogs(new protos.cockroach.server.serverpb.LogsRequest({ node_id: this.props.params[nodeIDAttr] }));
+  }
+
+  renderContent (logs: LogEntriesResponseMessage) {
+    const logEntries = _.sortBy(logs.entries, (e) => e.time);
+    const columns = [
+      {
+        title: "Time",
+        cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
+      },
+      {
+        title: "Severity",
+        cell: (index: number) => protos.cockroach.util.log.Severity[logEntries[index].severity],
+      },
+      {
+        title: "Message",
+        cell: (index: number) => (
+          <pre className="sort-table__unbounded-column logs-table__message">
+            { logEntries[index].message }
+          </pre>
+        ),
+      },
+      {
+        title: "File:Line",
+        cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
+      },
+    ];
+    return (
+      <SortableTable
+        count={logEntries.length}
+        columns={columns}
+        className="logs-table"
+      />
+    );
   }
 
   render() {
@@ -63,40 +98,6 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
       );
     }
 
-    let content: React.ReactNode = "No data";
-
-    if (this.props.logs.data) {
-      const logEntries = _.sortBy(this.props.logs.data.entries, (e) => e.time);
-      const columns = [
-        {
-          title: "Time",
-          cell: (index: number) => LongToMoment(logEntries[index].time).format("YYYY-MM-DD HH:mm:ss"),
-        },
-        {
-          title: "Severity",
-          cell: (index: number) => protos.cockroach.util.log.Severity[logEntries[index].severity],
-        },
-        {
-          title: "Message",
-          cell: (index: number) => (
-            <pre className="sort-table__unbounded-column logs-table__message">
-              { logEntries[index].message }
-            </pre>
-          ),
-        },
-        {
-          title: "File:Line",
-          cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
-        },
-      ];
-      content = (
-        <SortableTable
-          count={logEntries.length}
-          columns={columns}
-          className="logs-table"
-        />
-      );
-    }
     return (
       <div>
         <Helmet>
@@ -107,11 +108,10 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
         </div>
         <section className="section">
           <Loading
-            loading={ !this.props.logs.data }
+            data={ this.props.logs }
             className="loading-image loading-image__spinner-left"
-            image={ spinner }
           >
-            { content }
+            { this.renderContent }
           </Loading>
         </section>
       </div>

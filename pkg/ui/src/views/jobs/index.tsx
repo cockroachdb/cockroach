@@ -7,26 +7,29 @@ import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
 import { jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
+import { JobsResponseMessage } from "src/util/api";
 import { TimestampToMoment } from "src/util/convert";
 import docsURL from "src/util/docs";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { ExpandableString } from "src/views/shared/components/expandableString";
-import Loading from "src/views/shared/components/loading";
+import buildLoading from "src/views/shared/components/loading2";
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
-import spinner from "assets/spinner.gif";
-
-type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
+type Job = protos.cockroach.server.serverpb.JobsResponse.Job$Properties;
 
 type JobType = protos.cockroach.sql.jobs.Type;
 const jobType = protos.cockroach.sql.jobs.Type;
 
 const JobsRequest = protos.cockroach.server.serverpb.JobsRequest;
+
+// tslint:disable-next-line:variable-name
+const Loading = buildLoading<JobsResponseMessage>();
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -158,8 +161,7 @@ interface JobsTableProps {
   setShow: (value: string) => void;
   setType: (value: JobType) => void;
   refreshJobs: typeof refreshJobs;
-  jobs: Job[];
-  jobsValid: boolean;
+  jobs: CachedDataReducerState<JobsResponseMessage>;
 }
 
 const titleTooltip = (
@@ -199,7 +201,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
-  renderTable(jobs: Job[]) {
+  renderTable = (response: JobsResponseMessage) => {
+    const jobs = response.jobs;
     if (_.isEmpty(jobs)) {
       return <div className="no-results"><h2>No Results</h2></div>;
     }
@@ -218,7 +221,6 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
       <Helmet>
         <title>Jobs</title>
@@ -263,8 +265,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           </PageConfigItem>
         </PageConfig>
       </div>
-      <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-          { this.renderTable(data) }
+      <Loading data={this.props.jobs} className="loading-image loading-image__spinner">
+          { this.renderTable }
       </Loading>
     </div>;
   }
@@ -279,8 +281,7 @@ const mapStateToProps = (state: AdminUIState) => {
   const jobs = state.cachedData.jobs[key];
   return {
     sort, status, show, type,
-    jobs: jobs && jobs.data && jobs.data.jobs,
-    jobsValid: jobs && jobs.valid,
+    jobs: jobs,
   };
 };
 

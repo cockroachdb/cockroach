@@ -7,12 +7,14 @@ import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
-import Loading from "src/views/shared/components/loading";
+import { SettingsResponseMessage } from "src/util/api";
+import buildLoading from "src/views/shared/components/loading2";
 
-import spinner from "assets/spinner.gif";
+// tslint:disable-next-line:variable-name
+const Loading = buildLoading<SettingsResponseMessage>();
 
 interface SettingsOwnProps {
-  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
+  settings: CachedDataReducerState<SettingsResponseMessage>;
   refreshSettings: typeof refreshSettings;
 }
 
@@ -31,37 +33,36 @@ class Settings extends React.Component<SettingsProps, {}> {
     this.refresh();
   }
 
-  renderTable() {
-    if (_.isNil(this.props.settings.data)) {
-      return null;
-    }
-
-    const { key_values } = this.props.settings.data;
+  renderContent(settings: SettingsResponseMessage) {
+    const { key_values } = settings;
 
     return (
-      <table className="settings-table">
-        <thead>
-          <tr className="settings-table__row settings-table__row--header">
-            <th className="settings-table__cell settings-table__cell--header">Setting</th>
-            <th className="settings-table__cell settings-table__cell--header">Value</th>
-            <th className="settings-table__cell settings-table__cell--header">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {
-            _.chain(_.keys(key_values))
-              .sort()
-              .map(key => (
-                <tr key={key} className="settings-table__row">
-                  <td className="settings-table__cell">{key}</td>
-                  <td className="settings-table__cell">{key_values[key].value}</td>
-                  <td className="settings-table__cell">{key_values[key].description}</td>
-                </tr>
-              ))
-              .value()
-          }
-        </tbody>
-      </table>
+      <div>
+        <p>Note that some settings have been redacted for security purposes.</p>
+        <table className="settings-table">
+          <thead>
+            <tr className="settings-table__row settings-table__row--header">
+              <th className="settings-table__cell settings-table__cell--header">Setting</th>
+              <th className="settings-table__cell settings-table__cell--header">Value</th>
+              <th className="settings-table__cell settings-table__cell--header">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              _.chain(_.keys(key_values))
+                .sort()
+                .map(key => (
+                  <tr key={key} className="settings-table__row">
+                    <td className="settings-table__cell">{key}</td>
+                    <td className="settings-table__cell">{key_values[key].value}</td>
+                    <td className="settings-table__cell">{key_values[key].description}</td>
+                  </tr>
+                ))
+                .value()
+            }
+          </tbody>
+        </table>
+      </div>
     );
   }
 
@@ -84,14 +85,10 @@ class Settings extends React.Component<SettingsProps, {}> {
         <h1>Cluster Settings</h1>
         <h2></h2>
         <Loading
-          loading={!this.props.settings.data}
+          data={this.props.settings}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
         >
-          <div>
-            <p>Note that some settings have been redacted for security purposes.</p>
-            {this.renderTable()}
-          </div>
+          { this.renderContent }
         </Loading>
       </div>
     );
