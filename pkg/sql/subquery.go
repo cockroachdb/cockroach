@@ -42,7 +42,7 @@ type subqueryExecMode int
 
 const (
 	execModeUnknown subqueryExecMode = iota
-	// Subquery is argument to EXISTS. Only 0 or 1 row is expected.
+	// Subquery is argument to EXISTS.
 	// Result type is Bool.
 	execModeExists
 	// Subquery is argument to IN, ANY, SOME, or ALL. Any number of rows
@@ -54,10 +54,10 @@ const (
 	// expected, and exactly one column is expected. Result type is tuple
 	// of selected values.
 	execModeAllRows
-	// Subquery is argument to another function. Exactly 1 row
+	// Subquery is argument to another function. At most 1 row
 	// expected. Result type is tuple of columns, unless there is
 	// exactly 1 column in which case the result type is that column's
-	// type.
+	// type. If there are no rows, the result is NULL.
 	execModeOneRow
 )
 
@@ -126,17 +126,12 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 	switch s.execMode {
 	case execModeExists:
 		// For EXISTS expressions, all we want to know is if there is at least one
-		// result.
-		next, err := s.plan.Next(params)
+		// row.
+		hasRow, err := s.plan.Next(params)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
-		if next {
-			result = tree.DBoolTrue
-		}
-		if result == nil {
-			result = tree.DBoolFalse
-		}
+		return tree.MakeDBool(tree.DBool(hasRow)), nil
 
 	case execModeAllRows, execModeAllRowsNormalized:
 		var rows tree.DTuple
@@ -159,7 +154,7 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 			}
 		}
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 
 		if ok, dir := s.subqueryTupleOrdering(); ok {
@@ -171,37 +166,38 @@ func (s *subquery) doEval(params runParams) (result tree.Datum, err error) {
 		if s.execMode == execModeAllRowsNormalized {
 			rows.Normalize(params.EvalContext())
 		}
-		result = &rows
+		return &rows, nil
 
 	case execModeOneRow:
-		result = tree.DNull
 		hasRow, err := s.plan.Next(params)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
-		if hasRow {
-			values := s.plan.Values()
-			switch len(values) {
-			case 1:
-				result = values[0]
-			default:
-				valuesCopy := tree.NewDTupleWithLen(len(values))
-				copy(valuesCopy.D, values)
-				result = valuesCopy
-			}
-			another, err := s.plan.Next(params)
-			if err != nil {
-				return result, err
-			}
-			if another {
-				return result, fmt.Errorf("more than one row returned by a subquery used as an expression")
-			}
+		if !hasRow {
+			return tree.DNull, nil
 		}
+		values := s.plan.Values()
+		switch len(values) {
+		case 1:
+			result = values[0]
+		default:
+			valuesCopy := tree.NewDTupleWithLen(len(values))
+			copy(valuesCopy.D, values)
+			result = valuesCopy
+		}
+		another, err := s.plan.Next(params)
+		if err != nil {
+			return nil, err
+		}
+		if another {
+			err := fmt.Errorf("more than one row returned by a subquery used as an expression")
+			return nil, err
+		}
+		return result, nil
+
 	default:
 		panic(fmt.Sprintf("unexpected subqueryExecMode: %d", s.execMode))
 	}
-
-	return result, nil
 }
 
 // subqueryTupleOrdering returns whether the rows of the subquery are ordered

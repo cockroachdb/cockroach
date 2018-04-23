@@ -377,7 +377,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 
 // ExecBuild builds the exec node tree for the SQL query. This can be executed
 // by the exec engine.
-func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Node, error) {
+func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Plan, error) {
 	ev, err := ot.Optimize()
 	if err != nil {
 		return nil, err
@@ -388,24 +388,24 @@ func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Node, error) {
 // Explain builds the exec node tree for the SQL query and then runs the
 // explain command that describes the physical execution plan.
 func (ot *OptTester) Explain(eng exec.TestEngine) ([]tree.Datums, error) {
-	node, err := ot.ExecBuild(eng)
+	plan, err := ot.ExecBuild(eng)
 	if err != nil {
 		return nil, err
 	}
-	return eng.Explain(node)
+	return eng.Explain(plan)
 }
 
 // Exec builds the exec node tree for the SQL query and then executes it.
 func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Datums, error) {
-	node, err := ot.ExecBuild(eng)
+	plan, err := ot.ExecBuild(eng)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	columns := eng.Columns(node)
+	columns := eng.Columns(plan)
 
 	var datums []tree.Datums
-	datums, err = eng.Execute(node)
+	datums, err = eng.Execute(plan)
 	if err != nil {
 		return nil, nil, err
 	}
