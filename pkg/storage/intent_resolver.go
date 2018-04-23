@@ -58,6 +58,22 @@ const (
 	intentResolverBatchSize = 100
 )
 
+type pusher struct {
+	txn    *roachpb.Transaction
+	waitCh chan *roachpb.Transaction
+}
+
+func newPusher(txn *roachpb.Transaction) *pusher {
+	return &pusher{
+		txn:    txn,
+		waitCh: make(chan *roachpb.Transaction, 1),
+	}
+}
+
+func (p *pusher) activeTxn() bool {
+	return p.txn != nil && p.txn.Key != nil && p.txn.Writing
+}
+
 // intentResolver manages the process of pushing transactions and
 // resolving intents.
 type intentResolver struct {
@@ -73,6 +89,8 @@ type intentResolver struct {
 		// this pertains only to EndTransaction-style intent cleanups, whether called
 		// directly after EndTransaction evaluation or during GC of txn spans.
 		inFlightTxnCleanups map[uuid.UUID]struct{}
+		// contendedKeys is a map from key to a slice of pusher instances.
+		contendedKeys map[string][]*pusher
 	}
 }
 
@@ -83,6 +101,7 @@ func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 	}
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
+	ir.mu.contendedKeys = map[string][]*pusher{}
 	return ir
 }
 
@@ -96,21 +115,30 @@ func (ir *intentResolver) processWriteIntentError(
 	args roachpb.Request,
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
-) *roachpb.Error {
+) (func(*roachpb.Transaction), *roachpb.Error) {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {
-		return roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
+		return nil, roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
 	}
 
 	if log.V(6) {
 		log.Infof(ctx, "resolving write intent %s", wiErr)
 	}
 
+	// Queue pushes if single intent affecting a unitary key.
+	var cleanup func(*roachpb.Transaction)
+	if len(wiErr.Intents) == 1 && len(wiErr.Intents[0].Span.EndKey) == 0 {
+		var done bool
+		if cleanup, done = ir.queuePushIfContended(ctx, wiErr, h); done {
+			return cleanup, nil
+		}
+	}
+
 	resolveIntents, pErr := ir.maybePushTransactions(
 		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return pErr
+		return cleanup, pErr
 	}
 
 	// We always poison due to limitations of the API: not poisoning equals
@@ -125,10 +153,105 @@ func (ir *intentResolver) processWriteIntentError(
 	// poison.
 	if err := ir.resolveIntents(ctx, resolveIntents,
 		ResolveOptions{Wait: false, Poison: true}); err != nil {
-		return roachpb.NewError(err)
+		return cleanup, roachpb.NewError(err)
 	}
 
-	return nil
+	return cleanup, nil
+}
+
+// queuePushIfContended handles contention on an intent by redirecting
+// the current pusher's intent resolution on successive transactions
+// of other, previous pushers. This in effect creates a queue of
+// transactions vying to push the same transaction. Returns a cleanup
+// function and a bool indicating whether the push is no longer
+// applicable and the caller should return success. The cleanup
+// function should be invoked by the caller after the request which
+// experienced the conflict has completed with a parameter specifying
+// a transaction in the event that the request left its own intent.
+func (ir *intentResolver) queuePushIfContended(
+	ctx context.Context,
+	wiErr *roachpb.WriteIntentError,
+	h roachpb.Header,
+) (func(*roachpb.Transaction), bool) {
+	ir.mu.Lock()
+	intent := wiErr.Intents[0]
+	key := string(intent.Span.Key)
+	pusher := newPusher(h.Txn)
+
+	// Consider prior pushers in reverse arrival order to build queue
+	// by waiting on the most recent overlapping pusher.
+	var waitCh chan *roachpb.Transaction
+	var inserted bool
+	for i := len(ir.mu.contendedKeys[key]) - 1; i >= 0; i-- {
+		p := ir.mu.contendedKeys[key][i]
+		// If both the current and prior pusher have active transactions,
+		// redirect current to await prior txn's completion. Note that
+		// the i==0 clause handles the special case of the current pusher
+		// with an active txn having to wait on the original pushee. We
+		// want to divert waiters on the first prior pusher to wait on
+		// this pusher instead.
+		if pusher.activeTxn() && (p.activeTxn() || i == 0) {
+			// The redirect case.
+			if p.activeTxn() {
+				wiErr.Intents[0] = roachpb.Intent{
+					Span:   intent.Span,
+					Txn:    p.txn.TxnMeta,
+					Status: p.txn.Status,
+				}
+			}
+			// If applicable, insert this pusher earlier into the queue of
+			// waiting pushers, so that pushers with non-active txns will
+			// wait on the outcome of this pusher.
+			if i < len(ir.mu.contendedKeys[key])-1 {
+				pusher.waitCh, p.waitCh = p.waitCh, pusher.waitCh
+				ir.mu.contendedKeys[key] = append(
+					append(ir.mu.contendedKeys[key][0:i], pusher), ir.mu.contendedKeys[key][i+1:]...)
+				inserted = true
+			}
+			break
+		} else if !pusher.activeTxn() {
+			// Otherwise, if the pusher is not active, it always waits on
+			// the most recent overlapping prior pusher.
+			waitCh = p.waitCh
+			break
+		}
+	}
+	if !inserted {
+		ir.mu.contendedKeys[key] = append(ir.mu.contendedKeys[key], pusher)
+	}
+	ir.mu.Unlock()
+
+	var done bool
+	if waitCh != nil {
+		// If the prior pusher wrote an intent, push it instead.
+		if txn := <-waitCh; txn != nil {
+			wiErr.Intents[0] = roachpb.Intent{
+				Span:   intent.Span,
+				Txn:    txn.TxnMeta,
+				Status: txn.Status,
+			}
+		} else {
+			// No intent was left by the prior pusher; don't push, go
+			// immediately to retrying the conflicted request.
+			done = true
+		}
+	}
+
+	return func(txn *roachpb.Transaction) {
+		ir.mu.Lock()
+		for i, p := range ir.mu.contendedKeys[key] {
+			if p == pusher {
+				ir.mu.contendedKeys[key] = append(
+					ir.mu.contendedKeys[key][0:i], ir.mu.contendedKeys[key][i+1:]...)
+				break
+			}
+		}
+		if len(ir.mu.contendedKeys[key]) == 0 {
+			delete(ir.mu.contendedKeys, key)
+		}
+		pusher.waitCh <- txn
+		ir.mu.Unlock()
+	}, done
 }
 
 // maybePushTransactions tries to push the conflicting transaction(s)
@@ -180,7 +303,7 @@ func (ir *intentResolver) maybePushTransactions(
 	ir.mu.Lock()
 	// TODO(tschottdorf): can optimize this and use same underlying slice.
 	var pushIntents []roachpb.Intent
-	cleanupPushIntentsLocked := func() {
+	cleanupInFlightPushesLocked := func() {
 		for _, intent := range pushIntents {
 			ir.mu.inFlightPushes[intent.Txn.ID]--
 			if ir.mu.inFlightPushes[intent.Txn.ID] == 0 {
@@ -195,7 +318,7 @@ func (ir *intentResolver) maybePushTransactions(
 			// because the transaction is already finalized.
 			// This shouldn't happen as all intents created are in
 			// the PENDING status.
-			cleanupPushIntentsLocked()
+			cleanupInFlightPushesLocked()
 			ir.mu.Unlock()
 			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
 		}
@@ -247,7 +370,7 @@ func (ir *intentResolver) maybePushTransactions(
 		pErr = b.MustPErr()
 	}
 	ir.mu.Lock()
-	cleanupPushIntentsLocked()
+	cleanupInFlightPushesLocked()
 	ir.mu.Unlock()
 	if pErr != nil {
 		return nil, pErr
@@ -270,9 +393,24 @@ func (ir *intentResolver) maybePushTransactions(
 		if !ok {
 			log.Fatalf(ctx, "no PushTxn response for intent %+v\nreqs: %+v", intent, pushReqs)
 		}
-		intent.Txn = pushee.TxnMeta
-		intent.Status = pushee.Status
-		resolveIntents = append(resolveIntents, intent)
+		var resolve bool
+		if pushee.Status == roachpb.ABORTED {
+			resolve = true
+		} else if pushee.Status == roachpb.COMMITTED && len(pushee.Intents) > 0 {
+			// Only resolve intents which are not already resolved by the
+			// transaction, if committed.
+			for _, span := range pushee.Intents {
+				if span.Overlaps(intent.Span) {
+					resolve = true
+					break
+				}
+			}
+		}
+		if resolve {
+			intent.Txn = pushee.TxnMeta
+			intent.Status = pushee.Status
+			resolveIntents = append(resolveIntents, intent)
+		}
 	}
 	return resolveIntents, nil
 }

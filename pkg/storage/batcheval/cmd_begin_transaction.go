@@ -107,6 +107,8 @@ func BeginTransaction(
 				fmt.Sprintf("bad txn state: %s", tmpTxn),
 			)
 		}
+	} else {
+		reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 	}
 
 	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()

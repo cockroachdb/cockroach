@@ -2783,6 +2783,20 @@ func (s *Store) Send(
 		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 
+	var cleanup func(*roachpb.Transaction)
+	defer func() {
+		if cleanup != nil {
+			// This request wrote an intent only if there was no error, the request
+			// is transactional, the transaction is still pending, and the request
+			// wasn't read-only.
+			if pErr == nil && ba.Txn != nil && br.Txn.Status == roachpb.PENDING && !ba.IsReadOnly() {
+				cleanup(br.Txn)
+			} else {
+				cleanup(nil)
+			}
+		}
+	}()
+
 	// Add the command to the range for execution; exit retry loop on success.
 	for {
 		// Exit loop if context has been canceled or timed out.
@@ -2890,7 +2904,10 @@ func (s *Store) Send(
 					clonedTxn := h.Txn.Clone()
 					h.Txn = &clonedTxn
 				}
-				if pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
+				if cleanup != nil {
+					cleanup(nil)
+				}
+				if cleanup, pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
 					// Do not propagate ambiguous results; assume success and retry original op.
 					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 						// Preserve the error index.
