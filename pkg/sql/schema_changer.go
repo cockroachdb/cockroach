@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -69,11 +70,6 @@ var (
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 30 * time.Second
 
-// This is the delay [0.9 * asyncSchemaChangeGCDelay, 1.1 * asyncSchemaChangeGCDelay)
-// added to an attempt to run a schema change via the asynchronous path
-// for GC-ing of dropped schema change data.
-const asyncSchemaChangeGCDelay = 10 * time.Minute
-
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
 	tableID    sqlbase.ID
@@ -84,6 +80,9 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter time.Time
+
+	// table.DropTime.
+	dropTime int64
 
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
@@ -1078,18 +1077,19 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
+		k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
+		k = encoding.EncodeUvarintAscending(k, uint64(keys.ZonesTablePrimaryIndexID))
+		zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
 		gossipUpdateC := s.execCfg.Gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
 		gcTimer := &time.Timer{}
+		// A jitter is added to reduce contention between nodes
+		// attempting to run the schema change.
+		delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.9 + 0.2*rand.Float64()))
+		if s.testingKnobs.AsyncExecQuickly {
+			delay = 20 * time.Millisecond
+		}
 		for {
-			// A jitter is added to reduce contention between nodes
-			// attempting to run the schema change.
-			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.9 + 0.2*rand.Float64()))
-			gcDelay := time.Duration(float64(asyncSchemaChangeGCDelay) * (0.9 + 0.2*rand.Float64()))
-			if s.testingKnobs.AsyncExecQuickly {
-				delay = 20 * time.Millisecond
-				gcDelay = 20 * time.Millisecond
-			}
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.execCfg.Gossip.GetSystemConfig()
@@ -1097,6 +1097,42 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
 				}
+
+				resetTimer := false
+				// Check to see if the zone cfg has been modified.
+				zoneCfgModified := false
+				zoneCfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
+					zoneCfgModified = true
+				})
+				if zoneCfgModified {
+					// Check to see if the GC TTL has changed for all the
+					// tables that are currently waiting to be GC-ed. If the
+					// GC TTL for a table has indeed changed it is modified
+					// and enqueued with the new TTL timeout.
+					for id, sc := range s.forGC {
+						if sc.dropTime > 0 {
+							zoneCfg, _, err := ZoneConfigHook(cfg, uint32(id), nil)
+							if err != nil {
+								log.Errorf(ctx, "no zone config for desc: %d", id)
+								return
+							}
+							deadline := sc.dropTime +
+								int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
+								int64(delay)
+							if ea := timeutil.Unix(0, deadline); ea != sc.execAfter {
+								resetTimer = true
+								sc.execAfter = ea
+								// Safe to modify map inplace while iterating over it.
+								s.forGC[id] = sc
+								if log.V(2) {
+									log.Infof(ctx,
+										"re-queue up pending drop table GC; table: %d", id)
+								}
+							}
+						}
+					}
+				}
+
 				schemaChanger := SchemaChanger{
 					execCfg:              s.execCfg,
 					nodeID:               s.execCfg.NodeID.Get(),
@@ -1112,8 +1148,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 
 				execAfter := timeutil.Now().Add(delay)
-				execGCAfter := timeutil.Now().Add(gcDelay)
-				resetTimer := false
 				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					resetTimer = true
 					// Attempt to unmarshal config into a table/database descriptor.
@@ -1133,6 +1167,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 						schemaChanger.tableID = table.ID
 						schemaChanger.mutationID = sqlbase.InvalidMutationID
+						schemaChanger.execAfter = execAfter
+						schemaChanger.dropTime = 0
 
 						// If the table is dropped add table to map forGC.
 						if table.Dropped() {
@@ -1142,8 +1178,19 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 									kv.Key, table.ID, table.Version)
 							}
 
-							// Use extended delay instead of the standard delay.
-							schemaChanger.execAfter = execGCAfter
+							if table.DropTime > 0 {
+								schemaChanger.dropTime = table.DropTime
+								zoneCfg, _, err := ZoneConfigHook(cfg, uint32(table.ID), nil)
+								if err != nil {
+									log.Errorf(ctx, "no zone config for desc: %d", table.ID)
+									return
+								}
+								deadline := table.DropTime +
+									int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
+									int64(delay)
+								schemaChanger.execAfter = timeutil.Unix(0, deadline)
+							}
+
 							s.forGC[table.ID] = schemaChanger
 							// Remove from schema change map if present because
 							// this table has been dropped and is only waiting
@@ -1168,7 +1215,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							if len(table.Mutations) > 0 {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
-							schemaChanger.execAfter = execAfter
 							s.schemaChangers[table.ID] = schemaChanger
 						}
 
@@ -1242,7 +1288,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(gcDelay)
+						sc.execAfter = timeutil.Now().Add(delay)
 						s.forGC[tableID] = sc
 
 						if err != nil {
