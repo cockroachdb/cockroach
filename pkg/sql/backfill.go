@@ -207,7 +207,7 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, err
 	}
 	if version != tableDesc.Version {
-		return nil, errors.Errorf("table version mismatch: %d, expected=%d", tableDesc.Version, version)
+		return nil, makeErrTableVersionMismatch(tableDesc.Version, version)
 	}
 	return tableDesc, nil
 }
@@ -342,7 +342,7 @@ func (sc *SchemaChanger) getMutationToBackfill(
 			return err
 		}
 		if tableDesc.Version != version {
-			return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
+			return makeErrTableVersionMismatch(tableDesc.Version, version)
 		}
 		if len(tableDesc.Mutations) > 0 {
 			mutationID := tableDesc.Mutations[0].MutationID
@@ -374,7 +374,7 @@ func (sc *SchemaChanger) getJobIDForMutation(
 			return err
 		}
 		if tableDesc.Version != version {
-			return errors.Errorf("table version mismatch: %d, expected: %d", tableDesc.Version, version)
+			return makeErrTableVersionMismatch(tableDesc.Version, version)
 		}
 
 		if len(tableDesc.MutationJobs) > 0 {
