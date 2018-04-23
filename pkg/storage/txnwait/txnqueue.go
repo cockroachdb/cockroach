@@ -278,6 +278,7 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 		q.mu.Unlock()
 		return
 	}
+
 	pending, ok := q.mu.txns[txn.ID]
 	if !ok {
 		q.mu.Unlock()
@@ -433,6 +434,10 @@ func (q *Queue) MaybeWaitForPush(
 	var queryPusherCh <-chan *roachpb.Transaction // accepts updates to the pusher txn
 	var queryPusherErrCh <-chan *roachpb.Error    // accepts errors querying the pusher txn
 	var readyCh chan struct{}                     // signaled when pusher txn should be queried
+
+	// Query the pusher if it's a valid transaction which already [may]
+	// have a transaction record (note that key being non-nil does not
+	// guarantee a txn record has been successfully written yet).
 	if req.PusherTxn.ID != uuid.Nil && req.PusherTxn.Key != nil {
 		// Create a context which will be canceled once this call completes.
 		// This ensures that the goroutine created to query the pusher txn

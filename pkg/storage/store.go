@@ -2863,6 +2863,20 @@ func (s *Store) Send(
 		log.Eventf(ctx, "executing %d requests", len(ba.Requests))
 	}
 
+	var cleanupAfterWriteIntentError func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta)
+	defer func() {
+		if cleanupAfterWriteIntentError != nil {
+			// This request wrote an intent only if there was no error, the request
+			// is transactional, the transaction is still pending, and the request
+			// wasn't read-only.
+			if pErr == nil && ba.Txn != nil && br.Txn.Status == roachpb.PENDING && !ba.IsReadOnly() {
+				cleanupAfterWriteIntentError(nil, &br.Txn.TxnMeta)
+			} else {
+				cleanupAfterWriteIntentError(nil, nil)
+			}
+		}
+	}()
+
 	// Add the command to the range for execution; exit retry loop on success.
 	for {
 		// Exit loop if context has been canceled or timed out.
@@ -2970,7 +2984,14 @@ func (s *Store) Send(
 					clonedTxn := h.Txn.Clone()
 					h.Txn = &clonedTxn
 				}
-				if pErr = s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
+				// Handle the case where we get more than one write intent error;
+				// we need to cleanup the previous attempt to handle it to allow
+				// any other pusher queued up behind this RPC to proceed.
+				if cleanupAfterWriteIntentError != nil {
+					cleanupAfterWriteIntentError(t, nil)
+				}
+				if cleanupAfterWriteIntentError, pErr =
+					s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
 					// Do not propagate ambiguous results; assume success and retry original op.
 					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 						// Preserve the error index.
@@ -3005,8 +3026,10 @@ func (s *Store) maybeWaitForPushee(
 		// updating the Now timestamp (see below).
 		pushReqCopy := *pushReq
 		if pErr == txnwait.ErrDeadlock {
-			// We've experienced a deadlock; set Force=true on push request.
+			// We've experienced a deadlock; set Force=true on push request,
+			// and set the push type to ABORT.
 			pushReqCopy.Force = true
+			pushReqCopy.PushType = roachpb.PUSH_ABORT
 		} else if pErr != nil {
 			return nil, pErr
 		} else if pushResp != nil {
