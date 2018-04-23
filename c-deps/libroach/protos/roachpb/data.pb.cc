@@ -1733,6 +1733,7 @@ void MergeTrigger::clear_right_desc() {
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int MergeTrigger::kLeftDescFieldNumber;
 const int MergeTrigger::kRightDescFieldNumber;
+const int MergeTrigger::kRightDataFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 MergeTrigger::MergeTrigger()
@@ -1748,6 +1749,10 @@ MergeTrigger::MergeTrigger(const MergeTrigger& from)
       _internal_metadata_(NULL),
       _cached_size_(0) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  right_data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.right_data().size() > 0) {
+    right_data_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.right_data_);
+  }
   if (from.has_left_desc()) {
     left_desc_ = new ::cockroach::roachpb::RangeDescriptor(*from.left_desc_);
   } else {
@@ -1762,6 +1767,7 @@ MergeTrigger::MergeTrigger(const MergeTrigger& from)
 }
 
 void MergeTrigger::SharedCtor() {
+  right_data_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&left_desc_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&right_desc_) -
       reinterpret_cast<char*>(&left_desc_)) + sizeof(right_desc_));
@@ -1774,6 +1780,7 @@ MergeTrigger::~MergeTrigger() {
 }
 
 void MergeTrigger::SharedDtor() {
+  right_data_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete left_desc_;
   if (this != internal_default_instance()) delete right_desc_;
 }
@@ -1802,6 +1809,7 @@ void MergeTrigger::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  right_data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && left_desc_ != NULL) {
     delete left_desc_;
   }
@@ -1851,6 +1859,18 @@ bool MergeTrigger::MergePartialFromCodedStream(
         break;
       }
 
+      // bytes right_data = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadBytes(
+                input, this->mutable_right_data()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -1887,6 +1907,12 @@ void MergeTrigger::SerializeWithCachedSizes(
       2, *this->right_desc_, output);
   }
 
+  // bytes right_data = 3;
+  if (this->right_data().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBytesMaybeAliased(
+      3, this->right_data(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.MergeTrigger)
@@ -1897,6 +1923,13 @@ size_t MergeTrigger::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // bytes right_data = 3;
+  if (this->right_data().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::BytesSize(
+        this->right_data());
+  }
 
   if (this->has_left_desc()) {
     total_size += 1 +
@@ -1929,6 +1962,10 @@ void MergeTrigger::MergeFrom(const MergeTrigger& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
+  if (from.right_data().size() > 0) {
+
+    right_data_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.right_data_);
+  }
   if (from.has_left_desc()) {
     mutable_left_desc()->::cockroach::roachpb::RangeDescriptor::MergeFrom(from.left_desc());
   }
@@ -1954,6 +1991,7 @@ void MergeTrigger::Swap(MergeTrigger* other) {
 }
 void MergeTrigger::InternalSwap(MergeTrigger* other) {
   using std::swap;
+  right_data_.Swap(&other->right_data_);
   swap(left_desc_, other->left_desc_);
   swap(right_desc_, other->right_desc_);
   _internal_metadata_.Swap(&other->_internal_metadata_);

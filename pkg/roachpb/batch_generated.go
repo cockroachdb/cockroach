@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-type reqCounts [40]int32
+type reqCounts [41]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -97,6 +97,8 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[38]++
 		case r.RefreshRange != nil:
 			counts[39]++
+		case r.Subsume != nil:
+			counts[40]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -145,6 +147,7 @@ var requestNames = []string{
 	"RecomputeStats",
 	"Refresh",
 	"RefreshRng",
+	"Subsume",
 }
 
 // Summary prints a short summary of the requests in a batch.
@@ -219,6 +222,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf37 []RecomputeStatsResponse
 	var buf38 []RefreshResponse
 	var buf39 []RefreshRangeResponse
+	var buf40 []SubsumeResponse
 
 	for i, r := range ba.Requests {
 		switch {
@@ -462,6 +466,12 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].RefreshRange = &buf39[0]
 			buf39 = buf39[1:]
+		case r.Subsume != nil:
+			if buf40 == nil {
+				buf40 = make([]SubsumeResponse, counts[40])
+			}
+			br.Responses[i].Subsume = &buf40[0]
+			buf40 = buf40[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
