@@ -132,6 +132,9 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 		}
 		res = append(res, row)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
