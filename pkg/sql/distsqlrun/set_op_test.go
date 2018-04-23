@@ -51,23 +51,22 @@ func setOpTestCaseToMergeJoinerTestCase(tc setOpTestCase) mergeJoinerTestCase {
 	}
 }
 
-func setOpTestCaseToHashJoinerTestCase(tc setOpTestCase) hashJoinerTestCase {
-	spec := HashJoinerSpec{Type: tc.setOpType}
+func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
 	outCols := make([]uint32, 0, len(tc.columnTypes))
 	for i := range tc.columnTypes {
 		outCols = append(outCols, uint32(i))
 	}
-	spec.LeftEqColumns = outCols
-	spec.RightEqColumns = outCols
 
-	return hashJoinerTestCase{
-		spec:       spec,
-		outCols:    outCols,
-		leftTypes:  tc.columnTypes,
-		leftInput:  tc.leftInput,
-		rightTypes: tc.columnTypes,
-		rightInput: tc.rightInput,
-		expected:   tc.expected,
+	return joinerTestCase{
+		leftEqCols:  outCols,
+		rightEqCols: outCols,
+		joinType:    tc.setOpType,
+		outCols:     outCols,
+		leftTypes:   tc.columnTypes,
+		leftInput:   tc.leftInput,
+		rightTypes:  tc.columnTypes,
+		rightInput:  tc.rightInput,
+		expected:    tc.expected,
 	}
 }
 
