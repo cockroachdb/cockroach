@@ -98,11 +98,7 @@ func (p *planner) maybeLogStatement(ctx context.Context, lbl string, rows int, e
 }
 
 func (p *planner) maybeLogStatementInternal(
-	ctx context.Context,
-	lbl string,
-	rows int,
-	err error,
-	startTime time.Time,
+	ctx context.Context, lbl string, rows int, err error, startTime time.Time,
 ) {
 	// Note: if you find the code below crashing because p.execCfg == nil,
 	// do not add a test "if p.execCfg == nil { do nothing }" !
