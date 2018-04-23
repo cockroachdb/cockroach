@@ -239,7 +239,13 @@ export PATH := $(abspath bin):$(PATH)
 # Setting the SHELL variable to a value other than the default (/bin/sh)
 # is one way to do this globally.
 # http://stackoverflow.com/questions/8941110/how-i-could-add-dir-to-path-in-makefile/13468229#13468229
-export SHELL := $(shell which bash)
+#
+# We also force the PWD environment variable to $(CURDIR), which ensures that
+# any programs invoked by Make see a physical CWD without any symlinks. The Go
+# toolchain does not support symlinks well (for one example, see
+# https://github.com/golang/go/issues/24359). This may be fixed when GOPATH is
+# deprecated, so revisit whether this workaround is necessary then.
+export SHELL := env PWD=$(CURDIR) bash
 ifeq ($(SHELL),)
 $(error bash is required)
 endif
