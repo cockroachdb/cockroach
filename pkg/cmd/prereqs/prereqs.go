@@ -65,6 +65,12 @@ func collectFiles(path string) ([]string, error) {
 		return nil, err
 	}
 
+	// Symlinks in cwd confuse the relative path computation in collectFilesImpl.
+	cwd, err = filepath.EvalSymlinks(cwd)
+	if err != nil {
+		return nil, err
+	}
+
 	srcDir := cwd // top-level relative imports are relative to cwd
 	return collectFilesImpl(cwd, path, srcDir, map[string]struct{}{})
 }
