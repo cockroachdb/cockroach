@@ -1361,6 +1361,30 @@ SELECT DECODE('123\000456', 'escape')::STRING
 ----
 \x31323300343536
 
+query TT
+SELECT ENCODE('abc', 'base64'), DECODE('YWJj', 'base64')
+----
+YWJj abc
+
+query T
+SELECT DECODE('padded==', 'base64')::STRING
+----
+\xa5a75d79
+
+query T
+SELECT DECODE('padded1=', 'base64')::STRING
+----
+\xa5a75d79dd
+
+query error illegal base64 data at input byte 4
+SELECT DECODE('invalid', 'base64')
+
+query error only 'hex', 'escape', and 'base64' formats are supported for ENCODE
+SELECT ENCODE('abc', 'fake')
+
+query error only 'hex', 'escape', and 'base64' formats are supported for DECODE
+SELECT DECODE('abc', 'fake')
+
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
 ----
