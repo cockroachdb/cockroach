@@ -713,6 +713,14 @@ var logging loggingT
 
 // SetClusterID stores the Cluster ID for further reference.
 func SetClusterID(clusterID string) {
+	// Ensure that the clusterID is logged with the same format as for
+	// new log files, even on the first log file. This ensures that grep
+	// will always find it.
+	file, line, _ := caller.Lookup(1)
+	logging.outputLogEntry(Severity_INFO, file, line,
+		fmt.Sprintf("[config] clusterID: %s", clusterID))
+
+	// Perform the change proper.
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 

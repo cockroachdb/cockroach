@@ -392,46 +392,51 @@ func BenchmarkTableReader(b *testing.B) {
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	const numRows = 10000
-	const numCols = 2
-	sqlutils.CreateTable(
-		b, sqlDB, "t",
-		"k INT PRIMARY KEY, v INT",
-		numRows,
-		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
-	)
-
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
+
 	flowCtx := FlowCtx{
 		EvalCtx:  evalCtx,
 		Settings: s.ClusterSettings(),
 		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
 	}
-	spec := TableReaderSpec{
-		Table: *tableDesc,
-		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
-	}
-	post := PostProcessSpec{}
-	b.SetBytes(numRows * numCols * 8)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
-		if err != nil {
-			b.Fatal(err)
-		}
-		tr.Start(context.Background())
-		for {
-			row, meta := tr.Next()
-			if meta != nil && meta.TxnMeta == nil {
-				b.Fatalf("unexpected metadata: %+v", meta)
+
+	const numCols = 2
+	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		tableName := fmt.Sprintf("t%d", numRows)
+		sqlutils.CreateTable(
+			b, sqlDB, tableName,
+			"k INT PRIMARY KEY, v INT",
+			numRows,
+			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
+		)
+		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
+			spec := TableReaderSpec{
+				Table: *tableDesc,
+				Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 			}
-			if row == nil {
-				break
+			post := PostProcessSpec{}
+
+			b.SetBytes(int64(numRows * numCols * 8))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
+				if err != nil {
+					b.Fatal(err)
+				}
+				tr.Start(context.Background())
+				for {
+					row, meta := tr.Next()
+					if meta != nil && meta.TxnMeta == nil {
+						b.Fatalf("unexpected metadata: %+v", meta)
+					}
+					if row == nil {
+						break
+					}
+				}
 			}
-		}
+		})
 	}
 }
