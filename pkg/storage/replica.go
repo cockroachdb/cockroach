@@ -339,6 +339,10 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// mergeComplete is non-nil if a merge is in-progress, in which case any
+		// requests should be held until the completion of the merge is signaled by
+		// the closing of the channel.
+		mergeComplete chan struct{}
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -773,10 +777,12 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// destroyData deletes all data associated with a replica, leaving a
-// tombstone. Requires that Replica.raftMu is held.
-func (r *Replica) destroyDataRaftMuLocked(
-	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
+// destroyRaftMuLocked deletes data associated with a replica, leaving a
+// tombstone. If `destroyData` is true, data in all of the range's keyspaces
+// will be deleted. Otherwise, only data in the range-ID local keyspace will be
+// deleted. Requires that Replica.raftMu is held.
+func (r *Replica) destroyRaftMuLocked(
+	ctx context.Context, consistentDesc roachpb.RangeDescriptor, destroyData bool,
 ) error {
 	startTime := timeutil.Now()
 
@@ -790,7 +796,8 @@ func (r *Replica) destroyDataRaftMuLocked(
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
 	desc := r.Desc()
-	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
+	err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch, destroyData)
+	if err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
@@ -2148,13 +2155,16 @@ func collectSpans(
 	return spans, nil
 }
 
-// beginCmds waits for any overlapping, already-executing commands via
-// the command queue and adds itself to queues based on keys affected by the
-// batched commands. This gates subsequent commands with overlapping keys or
-// key ranges. This method will block if there are any overlapping commands
-// already in the queue. Returns a cleanup function to be called when the
-// commands are done and can be removed from the queue, and whose returned
-// error is to be used in place of the supplied error.
+// beginCmds waits for any in-flight, conflicting commands to complete. This
+// includes merges in their critical phase or overlapping, already-executing
+// commands.
+//
+// More specifically, after waiting for in-flight merges, beginCmds adds the
+// request to the command queue based on keys affected by the batched commands.
+// This gates subsequent commands with overlapping keys or key ranges. It
+// returns a cleanup function to be called when the commands are done and can be
+// removed from the queue, and whose returned error is to be used in place of
+// the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*endCmds, error) {
@@ -2271,6 +2281,29 @@ func (r *Replica) beginCmds(
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueBeginExecuting)
+		}
+
+		r.mu.Lock()
+		mergeCompleteCh := r.mu.mergeComplete
+		r.mu.Unlock()
+		if mergeCompleteCh != nil {
+			// The replica is being merged into its left-hand neighbor. This request
+			// cannot proceed until the merge completes, signaled by the closing of
+			// the channel.
+			//
+			// It is very important that this check occur after the command queue has
+			// allowed us to proceed. Only after we exit the command queue are we
+			// guaranteed that we're not racing with a GetSnapshotForMerge command.
+			// (GetSnapshotForMerge commands declare a conflict with all other
+			// commands.)
+			select {
+			case <-mergeCompleteCh:
+				// Merge complete. Carry on.
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-r.store.stopper.ShouldQuiesce():
+				return nil, &roachpb.NodeUnavailableError{}
+			}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
@@ -2553,6 +2586,91 @@ func (r *Replica) limitTxnMaxTimestamp(
 	}
 }
 
+// maybeWatchForMerge checks whether a merge of this replica into its left
+// neighbor is in its critical phase and, if so, arranges to block all requests
+// until the merge completes.
+//
+// TODO(benesch): Ensure this is called in the lease acquisition path.
+func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+	desc := r.Desc()
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	_, intents, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+		false /* consistent */, nil /* txn */)
+	if err != nil {
+		return err
+	} else if len(intents) == 0 {
+		return nil
+	} else if len(intents) > 1 {
+		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
+	}
+	val, _, err := engine.MVCCGetAsTxn(
+		ctx, r.Engine(), descKey, intents[0].Txn.Timestamp, intents[0].Txn)
+	if err != nil {
+		return err
+	} else if val != nil {
+		return nil
+	}
+
+	// At this point, we know we have a deletion intent on our range descriptor.
+	// That means a merge is in progress. Block all commands until we can
+	// retrieve an updated range descriptor from meta2, which will indicate
+	// whether the merge succeeded or not.
+
+	mergeCompleteCh := make(chan struct{})
+	r.mu.Lock()
+	if r.mu.mergeComplete != nil {
+		// TODO(benesch): Is there a way this could legitimately happen? If so,
+		// what to do? Return and assume there's another goroutine that's doing
+		// the watching?
+		log.Fatalf(ctx, "maybeWatchForMerge called twice for the same merge")
+	}
+	r.mu.mergeComplete = mergeCompleteCh
+	r.mu.Unlock()
+
+	return r.store.stopper.RunAsyncTask(context.Background(), "wait-for-merge", func(ctx context.Context) {
+		rs, _, err := client.RangeLookup(ctx, r.DB().NonTransactionalSender(), desc.StartKey.AsRawKey(),
+			roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+		if err != nil {
+			select {
+			case <-r.store.stopper.ShouldQuiesce():
+				// The server is shutting down. The error while fetching the range
+				// descriptor was probably caused by the shutdown, so ignore it.
+				return
+			default:
+				// Otherwise, this replica is good and truly hosed because we couldn't
+				// determine its true range descriptor.
+				//
+				// TODO(benesch): a retry loop would be better than fataling, but we
+				// want to smoke out any unexpected errors at first.
+				log.Fatal(ctx, err)
+			}
+		}
+		if len(rs) != 1 {
+			log.Fatalf(ctx, "expected 1 range descriptor, got %d", len(rs))
+		}
+		replyDesc := rs[0]
+		if replyDesc.RangeID != desc.RangeID {
+			// Merge successful. Remove the replica.
+			err := r.store.RemoveReplica(ctx, r, *desc, RemoveOptions{DestroyData: true})
+			// It's not a problem if the replica is already gone. It may have been
+			// cleaned up when the merge transaction committed if it was collocated
+			// with a replica of the left-hand side of the merge.
+			if _, ok := err.(*roachpb.RangeNotFoundError); err != nil && !ok {
+				log.Fatalf(ctx, "unexpected error when removing merged replica: %s", err)
+			}
+
+			// TODO(benesch): drain the RHS txn wait queue.
+		}
+		// Unblock pending requests. If the merge committed, the requests will
+		// notice that the replica has been destroyed and return an appropriate
+		// error. If the merge aborted, the requests will be handled normally.
+		r.mu.Lock()
+		r.mu.mergeComplete = nil
+		close(mergeCompleteCh)
+		r.mu.Unlock()
+	})
+}
+
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
@@ -2617,6 +2735,12 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
+
+	if result.Local.DetachSetMerging() {
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
 
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
@@ -4953,7 +5077,7 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
-		return r.acquireMergeLock(&merge.MergeTrigger)
+		return r.acquireMergeLock(ctx, &merge.MergeTrigger)
 	}
 	return nil, nil
 }
@@ -5007,16 +5131,34 @@ func (r *Replica) acquireSplitLock(
 }
 
 func (r *Replica) acquireMergeLock(
-	merge *roachpb.MergeTrigger,
+	ctx context.Context, merge *roachpb.MergeTrigger,
 ) (func(storagebase.ReplicatedEvalResult), error) {
-	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
+	// The merge lock is the right-hand replica's raftMu. If the right-hand
+	// replica does not exist, we create an uninitialized replica. This is
+	// required for correctness: without the uninitialized replica, an incoming
+	// snapshot could create the right-hand replica before the merge trigger has a
+	// chance to widen the left-hand replica's end key. The merge trigger would
+	// then fatal the node upon realizing the right-hand replica already exists.
+	// With an uninitialized and locked right-hand replica in place, any snapshots
+	// for the right-hand range will block on raftMu, waiting for the merge to
+	// complete, after which the replica will realize it has been destroyed and
+	// reject the snapshot.
+	//
+	// TODO(benesch): if the right-hand replica splits, we could probably see a
+	// snapshot for the right-hand side of the right-hand side. The uninitialized
+	// replica this method installs will not block this snapshot from applying as
+	// the snapshot's range ID will be different. Add a placeholder to the
+	// replicasByKey map as well to be safe.
+	//
+	// TODO(benesch): make terminology for uninitialized replicas, which protect a
+	// range ID, and placeholder replicas, which protect a key range, consistent.
+	// Several code comments refer to "uninitialized placeholders," which is
+	// downright confusing.
+	rightRng, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
-	// right hand side of the merge can still race on reads. See #8630.
-	rightRng.raftMu.Lock()
 	return func(storagebase.ReplicatedEvalResult) {
 		rightRng.raftMu.Unlock()
 	}, nil

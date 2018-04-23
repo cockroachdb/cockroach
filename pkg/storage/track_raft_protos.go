@@ -51,6 +51,10 @@ func TrackRaftProtos() func() []reflect.Type {
 		// Compactions are suggested below Raft, but they are local to a store and
 		// thus not subject to Raft consistency requirements.
 		funcName((*compactor.Compactor).Suggest),
+		// Range merges destroy replicas beneath Raft and write replica tombstones,
+		// but tombstones are unreplicated and thus not subject to the strict
+		// consistency requirements.
+		funcName((*Replica).setTombstoneKey),
 	}
 
 	belowRaftProtos := struct {

@@ -2288,90 +2288,59 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	return s.processRangeDescriptorUpdateLocked(ctx, origRng)
 }
 
-// MergeRange expands the subsuming range to absorb the subsumed range. This
-// merge operation will fail if the two ranges are not collocated on the same
-// store.
-// The subsumed range's raftMu is assumed held.
+// MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
+// replica, identified by rightDesc. The right-hand replica must exist on this
+// store and the raftMus for both the left-hand and right-hand replicas must be
+// held.
 func (s *Store) MergeRange(
 	ctx context.Context,
-	subsumingRng *Replica,
+	leftRepl *Replica,
 	updatedEndKey roachpb.RKey,
-	subsumedRangeID roachpb.RangeID,
+	rightDesc roachpb.RangeDescriptor,
 ) error {
-	subsumingDesc := subsumingRng.Desc()
+	leftDesc := leftRepl.Desc()
 
-	if !subsumingDesc.EndKey.Less(updatedEndKey) {
+	if !leftDesc.EndKey.Less(updatedEndKey) {
 		return errors.Errorf("the new end key is not greater than the current one: %+v <= %+v",
-			updatedEndKey, subsumingDesc.EndKey)
+			updatedEndKey, leftDesc.EndKey)
 	}
 
-	subsumedRng, err := s.GetReplica(subsumedRangeID)
+	rightRepl, err := s.GetReplica(rightDesc.RangeID)
 	if err != nil {
-		return errors.Errorf("could not find the subsumed range: %d", subsumedRangeID)
-	}
-	subsumedDesc := subsumedRng.Desc()
-
-	if !replicaSetsEqual(subsumedDesc.Replicas, subsumingDesc.Replicas) {
-		return errors.Errorf("ranges are not on the same replicas sets: %+v != %+v",
-			subsumedDesc.Replicas, subsumingDesc.Replicas)
-	}
-
-	if subsumingRng.leaseholderStats != nil {
-		subsumingRng.leaseholderStats.resetRequestCounts()
-	}
-	if subsumingRng.writeStats != nil {
-		// Note: this could be drastically improved by adding a replicaStats method
-		// that merges stats. Resetting stats is typically bad for the rebalancing
-		// logic that depends on them.
-		subsumingRng.writeStats.resetRequestCounts()
-	}
-
-	if err := s.maybeMergeTimestampCaches(ctx, subsumingRng, subsumedRng); err != nil {
 		return err
 	}
 
-	// Remove and destroy the subsumed range. Note that we were called
-	// (indirectly) from raft processing so we must call removeReplicaImpl
-	// directly to avoid deadlocking on Replica.raftMu.
-	if err := s.removeReplicaImpl(ctx, subsumedRng, *subsumedDesc, false); err != nil {
-		return errors.Errorf("cannot remove range %s", err)
+	leftRepl.raftMu.AssertHeld()
+	rightRepl.raftMu.AssertHeld()
+
+	// Note that we were called (indirectly) from raft processing so we must
+	// call removeReplicaImpl directly to avoid deadlocking on the right-hand
+	// replica's raftMu.
+	if err := s.removeReplicaImpl(ctx, rightRepl, rightDesc, RemoveOptions{
+		DestroyData:       false,
+		AllowPlaceholders: true,
+	}); err != nil {
+		return errors.Errorf("cannot remove range: %s", err)
 	}
 
-	// Clear the RHS txn wait queue, to redirect to the LHS if
-	// appropriate.
-	subsumedRng.txnWaitQueue.Clear(false /* disable */)
+	if leftRepl.leaseholderStats != nil {
+		leftRepl.leaseholderStats.resetRequestCounts()
+	}
+	if leftRepl.writeStats != nil {
+		// Note: this could be drastically improved by adding a replicaStats method
+		// that merges stats. Resetting stats is typically bad for the rebalancing
+		// logic that depends on them.
+		leftRepl.writeStats.resetRequestCounts()
+	}
+
+	// TODO(benesch): drain the RHS txn wait queue.
+
+	// TODO(benesch): bump the timestamp cache of the LHS.
 
 	// Update the end key of the subsuming range.
-	copy := *subsumingDesc
+	copy := *leftDesc
 	copy.EndKey = updatedEndKey
-	return subsumingRng.setDesc(&copy)
-}
-
-// If the subsuming replica has the range lease, we update its timestamp cache
-// with the entries from the subsumed. Otherwise, then the timestamp cache
-// doesn't matter (in fact it should be empty, to save memory).
-func (s *Store) maybeMergeTimestampCaches(
-	ctx context.Context, subsumingRep *Replica, subsumedRep *Replica,
-) error {
-	subsumingRep.mu.Lock()
-	defer subsumingRep.mu.Unlock()
-	subsumingLease := subsumingRep.mu.state.Lease
-
-	subsumedRep.mu.Lock()
-	defer subsumedRep.mu.Unlock()
-	subsumedLease := *subsumedRep.mu.state.Lease
-
-	// Merge support is currently incomplete and incorrect. In particular, the
-	// lease holders must be colocated and the subsumed range appropriately
-	// quiesced. See also #2433.
-	now := s.Clock().Now()
-	if subsumedRep.isLeaseValidRLocked(subsumedLease, now) &&
-		subsumingLease.Replica.StoreID != subsumedLease.Replica.StoreID {
-		log.Fatalf(ctx, "cannot merge ranges with non-colocated leases. "+
-			"Subsuming lease: %s. Subsumed lease: %s.", subsumingLease, subsumedLease)
-	}
-
-	return nil
+	return leftRepl.setDesc(&copy)
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
@@ -2455,18 +2424,33 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	return nil
 }
 
+// RemoveOptions bundles boolean parameters for Store.RemoveReplica.
+type RemoveOptions struct {
+	DestroyData       bool
+	AllowPlaceholders bool
+}
+
 // RemoveReplica removes the replica from the store's replica map and
 // from the sorted replicasByKey btree. The version of the replica
 // descriptor that was used to make the removal decision is passed in,
 // and the removal is aborted if the replica ID has changed since
-// then. If `destroy` is true, all data belonging to the replica will be
-// deleted. In either case a tombstone record will be written.
+// then.
+//
+// If opts.DestroyData is true, data in all of the range's keyspaces
+// is deleted. Otherwise, only data in the range-ID local keyspace is
+// deleted. In either case a tombstone record is written.
+//
+// If opts.AllowPlaceholders is true, it is not an error if the replica
+// targeted for removal is an uninitialized placeholder.
 func (s *Store) RemoveReplica(
-	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, destroy bool,
+	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, opts RemoveOptions,
 ) error {
-	if destroy {
+	if opts.DestroyData {
 		// Destroying replica state is moderately expensive, so we serialize such
 		// operations with applying non-empty snapshots.
+		//
+		// TODO(benesch): I'm not sure this is true now that we use RocksDB range
+		// deletion tombstones for replicas with many keys.
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():
@@ -2480,14 +2464,14 @@ func (s *Store) RemoveReplica(
 	}
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
-	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
+	return s.removeReplicaImpl(ctx, rep, consistentDesc, opts)
 }
 
 // removeReplicaImpl is the implementation of RemoveReplica, which is sometimes
 // called directly when the necessary lock is already held. It requires that
 // Replica.raftMu is held and that s.mu is not held.
 func (s *Store) removeReplicaImpl(
-	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, destroyData bool,
+	ctx context.Context, rep *Replica, consistentDesc roachpb.RangeDescriptor, opts RemoveOptions,
 ) error {
 	log.Infof(ctx, "removing replica")
 
@@ -2514,12 +2498,14 @@ func (s *Store) removeReplicaImpl(
 		s.mu.Unlock()
 		return err
 	}
-	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
-		// This is a fatal error because uninitialized replicas shouldn't make it
-		// this far. This method will need some changes when we introduce GC of
-		// uninitialized replicas.
-		s.mu.Unlock()
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+	if !opts.AllowPlaceholders {
+		if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
+			// This is a fatal error because uninitialized replicas shouldn't make it
+			// this far. This method will need some changes when we introduce GC of
+			// uninitialized replicas.
+			s.mu.Unlock()
+			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+		}
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -2541,10 +2527,8 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
-	if destroyData {
-		if err := rep.destroyDataRaftMuLocked(ctx, consistentDesc); err != nil {
-			return err
-		}
+	if err := rep.destroyRaftMuLocked(ctx, consistentDesc, opts.DestroyData); err != nil {
+		return err
 	}
 
 	s.mu.Lock()
@@ -2555,10 +2539,12 @@ func (s *Store) removeReplicaImpl(
 	s.mu.replicas.Delete(int64(rep.RangeID))
 	delete(s.mu.uninitReplicas, rep.RangeID)
 	s.replicaQueues.Delete(int64(rep.RangeID))
-	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
-		// We already checked that our replica was present in replicasByKey
-		// above. Nothing should have been able to change that.
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+	if !opts.AllowPlaceholders {
+		if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
+			// We already checked that our replica was present in replicasByKey
+			// above. Nothing should have been able to change that.
+			log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+		}
 	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	// TODO(peter): Could release s.mu.Lock() here.
