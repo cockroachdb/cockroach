@@ -212,6 +212,12 @@ func (s *Server) Query(
 		}
 	}()
 
+	timespan := QueryTimespan{
+		StartNanos:          request.StartNanos,
+		EndNanos:            request.EndNanos,
+		SampleDurationNanos: sampleNanos,
+	}
+
 	// Start a task which is itself responsible for starting per-query worker
 	// tasks. This is needed because RunLimitedAsyncTask can block; in the
 	// case where a single request has more queries than the semaphore limit,
@@ -253,9 +259,7 @@ func (s *Server) Query(
 						ctx,
 						query,
 						Resolution10s,
-						sampleNanos,
-						request.StartNanos,
-						request.EndNanos,
+						timespan,
 						memContexts[queryIdx],
 					)
 					if err == nil {

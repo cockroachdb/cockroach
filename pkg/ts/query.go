@@ -761,51 +761,49 @@ func (ai aggregatingIterator) makeLeadingEdgeFilter(
 // query into multiple "chunks" as necessary according to the provided memory
 // budget. Chunks are queried sequentially, ensuring that the memory budget
 // applies to only a single chunk at any given time.
-//
-// In addition to the memory budget, an "expected source count" must be provided
-// to this function. This allows the query to better predict how many slabs
-// it will encounter when querying a time span.
 func (db *DB) QueryMemoryConstrained(
 	ctx context.Context,
 	query tspb.Query,
 	queryResolution Resolution,
-	sampleDuration, startNanos, endNanos int64,
+	timespan QueryTimespan,
 	mem QueryMemoryContext,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
-	maxTimespan, err := mem.GetMaxTimespan(queryResolution)
+	maxTimespanWidth, err := mem.GetMaxTimespan(queryResolution)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	totalTimespan := endNanos - startNanos
-	if maxTimespan >= totalTimespan {
+	timespan.normalize()
+	if maxTimespanWidth >= timespan.width() {
 		return db.Query(
 			ctx,
 			query,
 			queryResolution,
-			sampleDuration,
-			startNanos,
-			endNanos,
+			timespan,
 			mem,
 		)
 	}
 
 	allData := make([]tspb.TimeSeriesDatapoint, 0)
 	allSourcesMap := make(map[string]struct{})
-	for s, e := startNanos, startNanos+maxTimespan; s < endNanos; s, e = e, e+maxTimespan {
-		// End span is not inclusive for partial queries.
-		adjustedEnd := e - queryResolution.SampleDuration()
-		// Do not exceed the specified endNanos.
-		if adjustedEnd > endNanos {
-			adjustedEnd = endNanos
+	chunkTime := timespan
+	chunkTime.EndNanos = chunkTime.StartNanos + maxTimespanWidth
+	for ; chunkTime.StartNanos < timespan.EndNanos; chunkTime.slideForward() {
+		adjustedChunkTime := chunkTime
+		if adjustedChunkTime.EndNanos > timespan.EndNanos {
+			// Final chunk may be a smaller window.
+			adjustedChunkTime.EndNanos = timespan.EndNanos
+		} else {
+			// Before the final chunk, do not include the final sample (which will be
+			// queried by the subsequent chunk).
+			adjustedChunkTime.EndNanos -= adjustedChunkTime.SampleDurationNanos
 		}
+
 		data, sources, err := db.Query(
 			ctx,
 			query,
 			queryResolution,
-			sampleDuration,
-			s,
-			adjustedEnd,
+			adjustedChunkTime,
 			mem,
 		)
 		if err != nil {
@@ -863,49 +861,45 @@ func (db *DB) Query(
 	ctx context.Context,
 	query tspb.Query,
 	queryResolution Resolution,
-	sampleDuration, startNanos, endNanos int64,
+	timespan QueryTimespan,
 	mem QueryMemoryContext,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
-	resolutionSampleDuration := queryResolution.SampleDuration()
-	// Verify that sampleDuration is a multiple of
-	// queryResolution.SampleDuration().
-	if sampleDuration < resolutionSampleDuration {
-		return nil, nil, fmt.Errorf(
-			"sampleDuration %d was not less that queryResolution.SampleDuration %d",
-			sampleDuration,
-			resolutionSampleDuration,
-		)
+	if err := timespan.verifyDiskResolution(queryResolution); err != nil {
+		return nil, nil, err
 	}
-	if sampleDuration%resolutionSampleDuration != 0 {
-		return nil, nil, fmt.Errorf(
-			"sampleDuration %d is not a multiple of queryResolution.SampleDuration %d",
-			sampleDuration,
-			resolutionSampleDuration,
-		)
+
+	// Disallow queries in the future.
+	systemTime := timeutil.Now().UnixNano()
+	if timespan.StartNanos >= systemTime {
+		return nil, nil, nil
+	}
+	if timespan.EndNanos > systemTime {
+		timespan.EndNanos = systemTime
+	}
+
+	// If we are downsampling and the last sample period queried contains the
+	// system time, move endNanos back by one sample period. This avoids the
+	// situation where we return a data point which was downsampled from
+	// incomplete data which will later be complete.
+	queryResolutionSampleDuration := queryResolution.SampleDuration()
+	if timespan.SampleDurationNanos > queryResolutionSampleDuration &&
+		timespan.EndNanos+timespan.SampleDurationNanos > systemTime {
+		timespan.EndNanos -= timespan.SampleDurationNanos
+	}
+
+	// Verify that our time period still makes sense.
+	timespan.normalize()
+	if err := timespan.verifyBounds(); err != nil {
+		return nil, nil, err
 	}
 
 	// Create a local account to track memory usage local to this function.
 	localAccount := mem.workerMonitor.MakeBoundAccount()
 	defer localAccount.Close(ctx)
 
-	// Disallow queries in the future.
-	systemTime := timeutil.Now().UnixNano()
-	if startNanos > systemTime {
-		return nil, nil, nil
-	}
-	if endNanos > systemTime {
-		endNanos = systemTime
-	}
-
-	// Normalize startNanos to a sampleDuration boundary.
-	startNanos -= startNanos % sampleDuration
-
-	// If query is near the current moment and we are downsampling, normalize
-	// endNanos to avoid querying an incomplete datapoint.
-	if sampleDuration > resolutionSampleDuration &&
-		endNanos > systemTime-resolutionSampleDuration {
-		endNanos -= endNanos % sampleDuration
-	}
+	// Actual queried data should include the interpolation limit on either side.
+	queryTimespan := timespan
+	queryTimespan.expand(mem.InterpolationLimitNanos)
 
 	var rows []client.KeyValue
 	if len(query.Sources) == 0 {
@@ -914,10 +908,10 @@ func (db *DB) Query(
 		// the query. Query slightly before and after the actual queried range
 		// to allow interpolation of points at the start and end of the range.
 		startKey := MakeDataKey(
-			query.Name, "" /* source */, queryResolution, startNanos-mem.InterpolationLimitNanos,
+			query.Name, "" /* source */, queryResolution, queryTimespan.StartNanos,
 		)
 		endKey := MakeDataKey(
-			query.Name, "" /* source */, queryResolution, endNanos+mem.InterpolationLimitNanos,
+			query.Name, "" /* source */, queryResolution, queryTimespan.EndNanos,
 		).PrefixEnd()
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
@@ -931,10 +925,8 @@ func (db *DB) Query(
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
 		kd := queryResolution.SlabDuration()
-		startKeyNanos := startNanos - mem.InterpolationLimitNanos
-		startKeyNanos = startKeyNanos - (startKeyNanos % kd)
-		endKeyNanos := endNanos + mem.InterpolationLimitNanos
-		for currentTimestamp := startKeyNanos; currentTimestamp <= endKeyNanos; currentTimestamp += kd {
+		startTimestamp := queryTimespan.StartNanos - queryTimespan.StartNanos%kd
+		for currentTimestamp := startTimestamp; currentTimestamp <= queryTimespan.EndNanos; currentTimestamp += kd {
 			for _, source := range query.Sources {
 				key := MakeDataKey(query.Name, source, queryResolution, currentTimestamp)
 				b.Get(key)
@@ -955,7 +947,7 @@ func (db *DB) Query(
 
 	// Convert the queried source data into a set of data spans, one for each
 	// source.
-	sourceSpans, err := makeDataSpans(ctx, rows, startNanos, &localAccount)
+	sourceSpans, err := makeDataSpans(ctx, rows, timespan.StartNanos, &localAccount)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -978,14 +970,14 @@ func (db *DB) Query(
 	// list of all sources with data present in the query.
 	sources := make([]string, 0, len(sourceSpans))
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
-	maxDistance := int32(mem.InterpolationLimitNanos / sampleDuration)
+	maxDistance := int32(mem.InterpolationLimitNanos / timespan.SampleDurationNanos)
 	for name, span := range sourceSpans {
 		if err := mem.resultAccount.Grow(ctx, int64(len(name))); err != nil {
 			return nil, nil, err
 		}
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, 0, sampleDuration, maxDistance, extractor, downsampler, query.GetDerivative(),
+			*span, 0, timespan.SampleDurationNanos, maxDistance, extractor, downsampler, query.GetDerivative(),
 		))
 	}
 
@@ -1009,7 +1001,7 @@ func (db *DB) Query(
 
 	// Filter the result of the aggregation function through a leading edge
 	// filter.
-	cutoffNanos := timeutil.Now().UnixNano() - resolutionSampleDuration
+	cutoffNanos := timeutil.Now().UnixNano() - queryResolutionSampleDuration
 	valueFn := iters.makeLeadingEdgeFilter(aggFn, cutoffNanos)
 
 	// Iterate over all requested offsets, recording a value from the
@@ -1023,7 +1015,7 @@ func (db *DB) Query(
 	}
 
 	var responseData []tspb.TimeSeriesDatapoint
-	for iters.isValid() && iters.timestamp() <= endNanos {
+	for iters.isValid() && iters.timestamp() <= timespan.EndNanos {
 		if value, valid := valueFn(); valid {
 			if err := mem.resultAccount.Grow(ctx, sizeOfDataPoint); err != nil {
 				return nil, nil, err
@@ -1033,7 +1025,7 @@ func (db *DB) Query(
 				Value:          value,
 			}
 			if query.GetDerivative() != tspb.TimeSeriesQueryDerivative_NONE {
-				response.Value = response.Value / float64(sampleDuration) * float64(time.Second.Nanoseconds())
+				response.Value = response.Value / float64(timespan.SampleDurationNanos) * float64(time.Second.Nanoseconds())
 			}
 			responseData = append(responseData, response)
 		}
