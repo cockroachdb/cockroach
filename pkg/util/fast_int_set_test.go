@@ -240,10 +240,12 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 
 func TestFastIntSetAddRange(t *testing.T) {
 	assertSet := func(set *FastIntSet, from, to int) {
+		t.Helper()
 		// Iterate through the set and ensure that the values
 		// it contain are the values from 'from' to 'to' (inclusively).
 		expected := from
 		set.ForEach(func(actual int) {
+			t.Helper()
 			if actual > to {
 				t.Fatalf("expected last value in FastIntSet to be %d, got %d", to, actual)
 			}

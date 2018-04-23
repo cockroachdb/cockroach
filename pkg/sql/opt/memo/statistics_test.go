@@ -145,7 +145,7 @@ func TestTranslateColSet(t *testing.T) {
 		t.Helper()
 
 		actual := translateColSet(colSetIn, from, to)
-		if actual != expected {
+		if !actual.Equals(expected) {
 			t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
 		}
 	}
