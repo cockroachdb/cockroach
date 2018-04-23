@@ -391,8 +391,7 @@ func (f *Factory) neededCols2(left, right memo.GroupID) opt.ColSet {
 
 // neededCols3 unions the set of columns needed by any of the given groups.
 func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
-	cols := f.outerCols(group1)
-	cols.UnionWith(f.outerCols(group2))
+	cols := f.outerCols(group1).Union(f.outerCols(group2))
 	cols.UnionWith(f.outerCols(group3))
 	return cols
 }
