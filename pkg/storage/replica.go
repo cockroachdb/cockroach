@@ -339,6 +339,9 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// Merging ranges hold all commands until the intent on their range
+		// descriptor is resolved.
+		mergeComplete chan struct{}
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -650,6 +653,8 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
+	r.mu.mergeComplete = make(chan struct{})
+	close(r.mu.mergeComplete)
 	// Add replica pointer value. NB: this was historically useful for debugging
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
@@ -770,10 +775,12 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// destroyData deletes all data associated with a replica, leaving a
-// tombstone. Requires that Replica.raftMu is held.
-func (r *Replica) destroyDataRaftMuLocked(
-	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
+// destroyRaftMuLocked deletes data associated with a replica, leaving a
+// tombstone. If `onlyRangeIDMetadata` is true, only data in the range ID
+// metadata keyspace will be deleted. Otherwise, data in all of the range's
+// keyspaces will be deleted. Requires that Replica.raftMu is held.
+func (r *Replica) destroyRaftMuLocked(
+	ctx context.Context, consistentDesc roachpb.RangeDescriptor, onlyRangeIDMetadata bool,
 ) error {
 	startTime := timeutil.Now()
 
@@ -787,7 +794,8 @@ func (r *Replica) destroyDataRaftMuLocked(
 	// NB: this uses the local descriptor instead of the consistent one to match
 	// the data on disk.
 	desc := r.Desc()
-	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
+	err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch, onlyRangeIDMetadata)
+	if err != nil {
 		return err
 	}
 	clearTime := timeutil.Now()
@@ -2575,6 +2583,11 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, roachpb.NewError(err)
 	}
 
+	r.mu.Lock()
+	mergeCompleteCh := r.mu.mergeComplete
+	r.mu.Unlock()
+	<-mergeCompleteCh
+
 	log.Event(ctx, "waiting for read lock")
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
@@ -2611,6 +2624,10 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
+
+	if result.Local.DetachSetMerging() {
+		r.maybeWaitForMerge(ctx)
+	}
 
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
@@ -3127,6 +3144,11 @@ func (r *Replica) propose(
 	spans *spanset.SpanSet,
 ) (chan proposalResult, func() bool, func(), *roachpb.Error) {
 	noop := func() {}
+
+	r.mu.Lock()
+	mergeCompleteCh := r.mu.mergeComplete
+	r.mu.Unlock()
+	<-mergeCompleteCh
 
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
@@ -5052,7 +5074,11 @@ func (r *Replica) acquireMergeLock(
 	merge *roachpb.MergeTrigger,
 ) (func(storagebase.ReplicatedEvalResult), error) {
 	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
-	if err != nil {
+	if _, ok := err.(*roachpb.RangeNotFoundError); ok {
+		// No need to acquire the merge lock unless this store has a replica of the
+		// right-hand range.
+		return func(storagebase.ReplicatedEvalResult) {}, nil
+	} else if err != nil {
 		return nil, err
 	}
 

@@ -19,6 +19,7 @@ option go_package = "roachpb";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "util/tracing/recorded_span.proto";
@@ -1200,6 +1201,38 @@ message RefreshRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// SubsumeRequest is the argument to the Subsume() method, which notifies a
+// range that its left-hand neighbor has initiated a merge. It is the means by
+// which the merging ranges ensure there is no moment in time where they could
+// both process commands for the same keys.
+message SubsumeRequest {
+  option (gogoproto.equal) = true;
+
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The range ID of the left-hand side of the merge. This is used to rewrite
+  // the right-hand side's abort span keys.
+  int64 left_range_id = 2 [
+    (gogoproto.customname) = "LeftRangeID",
+    (gogoproto.casttype) = "RangeID"
+  ];
+}
+
+// SubsumeResponse is the response to a SubsumeRequest.
+message SubsumeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Data is a snapshot of the right-hand range's data in the form of a
+  // BatchRepr, a serialized RocksDB Batch.
+  bytes data = 2;
+
+  // MVCCStats are the MVCC statistics for data.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "MVCCStats"
+  ];
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -1254,6 +1287,7 @@ message RequestUnion {
   RecomputeStatsRequest recompute_stats = 39;
   RefreshRequest refresh = 40;
   RefreshRangeRequest refresh_range = 41;
+  SubsumeRequest subsume = 42;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1307,6 +1341,7 @@ message ResponseUnion {
   RecomputeStatsResponse recompute_stats = 39;
   RefreshResponse refresh = 40;
   RefreshRangeResponse refresh_range = 41;
+  SubsumeResponse subsume = 42;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

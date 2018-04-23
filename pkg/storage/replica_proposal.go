@@ -28,6 +28,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
@@ -810,6 +811,55 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	if (lResult != result.LocalResult{}) {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
+}
+
+func (r *Replica) maybeWaitForMerge(ctx context.Context) error {
+	desc := r.Desc()
+	key := keys.RangeDescriptorKey(desc.StartKey)
+	_, _, err := engine.MVCCGet(ctx, r.Engine(), key, r.Clock().Now(),
+		true /* consistent */, nil /* txn */)
+	if err == nil {
+		return nil
+	} else if _, ok := err.(*roachpb.WriteIntentError); !ok {
+		return err
+	}
+
+	// At this point, we know we have a write intent on our range descriptor. That
+	// means a merge is in progress. Block all commands until we can retrieve an
+	// updated range descriptor from meta2, which will indicate whether the merge
+	// succeeded or not.
+	//
+	// TODO(benesch): technically, a write intent on our range descriptor could
+	// indicate an in-progress split. This method should probably check for
+	// a *deletion* intent, not just an intent. That's not exposed through the
+	// MVCC API, though.
+
+	mergeCompleteCh := make(chan struct{}, 1)
+	r.mu.Lock()
+	r.mu.mergeComplete = mergeCompleteCh
+	r.mu.Unlock()
+
+	return r.store.stopper.RunAsyncTask(context.Background(), "wait-for-merge", func(ctx context.Context) {
+		rs, _, err := client.RangeLookupForVersion(ctx, r.store.ClusterSettings(), r.DB().GetSender(),
+			desc.StartKey.AsRawKey(), roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
+		if err != nil {
+			// This replica is good and truly hosed if we can't figure out its true
+			// range descriptor.
+			// TODO(benesch): maybe a retry loop would be better than fataling?
+			log.Fatal(ctx, err)
+		}
+		if len(rs) != 1 {
+			log.Fatalf(ctx, "expected 1 range descriptor, got %d", len(rs))
+		}
+		replyDesc := rs[0]
+		if replyDesc.RangeID != desc.RangeID {
+			// Merge successful. Remove the replica.
+			r.store.RemoveReplica(ctx, r, *r.Desc(), true /* destroy */)
+		} else {
+			// Merge unsuccessful. Continue serving requests.
+		}
+		close(mergeCompleteCh)
+	})
 }
 
 func (r *Replica) handleEvalResultRaftMuLocked(

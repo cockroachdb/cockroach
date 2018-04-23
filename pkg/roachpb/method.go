@@ -148,4 +148,8 @@ const (
 	// since the transaction orig timestamp and sets a new span in the
 	// timestamp cache at the current transaction timestamp.
 	RefreshRange
+	// SubsumeRequest notifies a range that its left-hand neighbor has initiated a
+	// merge. It is the means by which the merging ranges ensure there is no
+	// moment in time where they could both process commands for the same keys.
+	Subsume
 )
