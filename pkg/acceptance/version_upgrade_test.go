@@ -50,25 +50,36 @@ type versionStep interface {
 
 // binaryVersionUpgrade performs a rolling upgrade of all nodes in the cluster
 // up to its binary version.
-type binaryVersionUpgrade string
+type binaryVersionUpgrade struct {
+	newVersion string
+	nodes      []int
+}
 
 // sourceVersion corresponds to the source binary version.
 const sourceVersion = "source"
 
-func (bv binaryVersionUpgrade) name() string { return fmt.Sprintf("binary=%s", bv) }
+func (bv binaryVersionUpgrade) name() string { return fmt.Sprintf("binary=%s", bv.newVersion) }
 
 func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
 	t.Helper()
 
 	var newBin string
-	if string(bv) == sourceVersion {
+	if bv.newVersion == sourceVersion {
 		newBin = localcluster.SourceBinary()
 	} else {
-		newBin = GetBinary(ctx, t, string(bv))
+		newBin = GetBinary(ctx, t, bv.newVersion)
 	}
 	lc := c.(*localcluster.LocalCluster)
-	for i := 0; i < c.NumNodes(); i++ {
-		log.Infof(ctx, "upgrading node %d's binary to %s", i, string(bv))
+
+	if len(bv.nodes) == 0 {
+		bv.nodes = make([]int, c.NumNodes())
+		for i := 0; i < c.NumNodes(); i++ {
+			bv.nodes[i] = i
+		}
+	}
+
+	for _, i := range bv.nodes {
+		log.Infof(ctx, "upgrading node %d's binary to %s", i, bv.newVersion)
 		lc.ReplaceBinary(i, newBin)
 		if err := lc.Restart(ctx, i); err != nil {
 			t.Fatal(err)
@@ -104,8 +115,8 @@ func (bv binaryVersionUpgrade) checkNode(
 	).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != string(bv) && string(bv) != sourceVersion {
-		t.Fatalf("created node at v%s, but it is %s", string(bv), version)
+	if version != bv.newVersion && bv.newVersion != sourceVersion {
+		t.Fatalf("created node at v%s, but it is %s", bv.newVersion, version)
 	}
 }
 
@@ -212,23 +223,32 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 	time.Sleep(1 * time.Second)
 }
 
+func min(i, j int) int {
+	if i < j {
+		return i
+	}
+	return j
+}
+
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
 	steps := []versionStep{
-		binaryVersionUpgrade("v1.0.6"),
+		binaryVersionUpgrade{newVersion: "v1.0.6"},
 		// v1.1.0 is the first binary version that knows about cluster versions,
 		// but thinks it can only support up to 1.0-3.
-		binaryVersionUpgrade("v1.1.0"),
+		binaryVersionUpgrade{newVersion: "v1.1.0"},
 		clusterVersionUpgrade("1.0"),
 		clusterVersionUpgrade("1.0-3"),
 
-		binaryVersionUpgrade("v1.1.1"),
+		binaryVersionUpgrade{newVersion: "v1.1.1"},
 		clusterVersionUpgrade("1.1"),
 
-		binaryVersionUpgrade("v2.0.0"),
+		binaryVersionUpgrade{newVersion: "v2.0.0", nodes: []int{min(3, len(cfg.Nodes)) - 1}},
+
+		binaryVersionUpgrade{newVersion: "v2.0.0"},
 		clusterVersionUpgrade("1.1-6"),
 		clusterVersionUpgrade("2.0"),
 
-		binaryVersionUpgrade(sourceVersion),
+		binaryVersionUpgrade{newVersion: sourceVersion},
 		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()),
 	}
 
@@ -263,7 +283,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	startingBinVersion := steps[0].(binaryVersionUpgrade)
 	steps = steps[1:]
 	for i := range cfg.Nodes {
-		cfg.Nodes[i].Version = string(startingBinVersion)
+		cfg.Nodes[i].Version = startingBinVersion.newVersion
 	}
 
 	c := StartCluster(ctx, t, cfg)
