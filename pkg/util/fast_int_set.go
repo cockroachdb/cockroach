@@ -17,7 +17,6 @@ package util
 import (
 	"bytes"
 	"fmt"
-	math "math"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -43,6 +42,7 @@ func MakeFastIntSet(vals ...int) FastIntSet {
 }
 
 // We store bits for values smaller than this cutoff.
+// Note: this can be set to a smaller value, e.g. for testing.
 const smallCutoff = 64
 
 func (s *FastIntSet) toLarge() *intsets.Sparse {
@@ -94,7 +94,7 @@ func (s *FastIntSet) AddRange(from, to int) {
 	if from >= 0 && to < smallCutoff && s.large == nil {
 		nValues := to - from + 1
 		// Fast path.
-		s.small |= (math.MaxUint64 >> uint64(smallCutoff-nValues)) << uint64(from)
+		s.small |= (1<<uint64(nValues) - 1) << uint64(from)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (s *FastIntSet) Shift(delta int) FastIntSet {
 	if s.large == nil {
 		// Fast paths.
 		if delta > 0 {
-			if bits.LeadingZeros64(s.small) >= delta {
+			if bits.LeadingZeros64(s.small)-(64-smallCutoff) >= delta {
 				return FastIntSet{small: s.small << uint32(delta)}
 			}
 		} else {
