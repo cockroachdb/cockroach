@@ -841,6 +841,12 @@ class Percentiles : public ::google::protobuf::MessageLite /* @@protoc_insertion
   double p90() const;
   void set_p90(double value);
 
+  bool has_pmax() const;
+  void clear_pmax();
+  static const int kPMaxFieldNumber = 6;
+  double pmax() const;
+  void set_pmax(double value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Percentiles)
  private:
   void set_has_p10();
@@ -853,6 +859,8 @@ class Percentiles : public ::google::protobuf::MessageLite /* @@protoc_insertion
   void clear_has_p75();
   void set_has_p90();
   void clear_has_p90();
+  void set_has_pmax();
+  void clear_has_pmax();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -862,6 +870,7 @@ class Percentiles : public ::google::protobuf::MessageLite /* @@protoc_insertion
   double p50_;
   double p75_;
   double p90_;
+  double pmax_;
   friend struct protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2414,6 +2423,29 @@ inline void Percentiles::set_p90(double value) {
   set_has_p90();
   p90_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.p90)
+}
+
+inline bool Percentiles::has_pmax() const {
+  return (_has_bits_[0] & 0x00000020u) != 0;
+}
+inline void Percentiles::set_has_pmax() {
+  _has_bits_[0] |= 0x00000020u;
+}
+inline void Percentiles::clear_has_pmax() {
+  _has_bits_[0] &= ~0x00000020u;
+}
+inline void Percentiles::clear_pmax() {
+  pmax_ = 0;
+  clear_has_pmax();
+}
+inline double Percentiles::pmax() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Percentiles.pMax)
+  return pmax_;
+}
+inline void Percentiles::set_pmax(double value) {
+  set_has_pmax();
+  pmax_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Percentiles.pMax)
 }
 
 // -------------------------------------------------------------------
