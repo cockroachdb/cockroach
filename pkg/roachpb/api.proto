@@ -1177,7 +1177,7 @@ message RefreshRequest {
   bool write = 2;
 }
 
-// RefreshResponse is the response to the Udpate() operation.
+// RefreshResponse is the response to a Refresh() operation.
 message RefreshResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -1195,7 +1195,7 @@ message RefreshRangeRequest {
   bool write = 2;
 }
 
-// RefreshRangeResponse is the response to the Udpate() operation.
+// RefreshRangeResponse is the response to a RefreshRange() operation.
 message RefreshRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

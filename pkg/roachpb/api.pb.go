@@ -1796,7 +1796,7 @@ func (m *RefreshRequest) String() string            { return proto.CompactTextSt
 func (*RefreshRequest) ProtoMessage()               {}
 func (*RefreshRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{80} }
 
-// RefreshResponse is the response to the Udpate() operation.
+// RefreshResponse is the response to a Refresh() operation.
 type RefreshResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
@@ -1822,7 +1822,7 @@ func (m *RefreshRangeRequest) String() string            { return proto.CompactT
 func (*RefreshRangeRequest) ProtoMessage()               {}
 func (*RefreshRangeRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{82} }
 
-// RefreshRangeResponse is the response to the Udpate() operation.
+// RefreshRangeResponse is the response to a RefreshRange() operation.
 type RefreshRangeResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 }
