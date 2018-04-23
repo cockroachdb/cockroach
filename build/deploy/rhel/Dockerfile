@@ -2,7 +2,7 @@ FROM registry.access.redhat.com/rhel-atomic:latest
 
 LABEL name="cockroachdb/cockroach" \
       vendor="Cockroach Labs" \
-      version="2.0.0" \
+      version="2.0.1" \
       release="1" \
       summary="CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters." \
       description="CockroachDB is a distributed SQL database that uses the PostgreSQL wire protocol, so there are a huge variety of client drivers and ORMs that you can use to talk to it. To get started, see https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html" \
@@ -28,10 +28,10 @@ RUN chown -R 99:0 /cockroach && \
 
 # Set working directory so that relative paths
 # are resolved appropriately when passed as args.
-WORKDIR /cockroach/    
+WORKDIR /cockroach/
 
 # Expose TCP Ports
-EXPOSE 26257/tcp 8080/tcp    
+EXPOSE 26257/tcp 8080/tcp
 
 # Non-root runtime
 USER 99
@@ -39,4 +39,4 @@ USER 99
 ENV COCKROACH_CHANNEL=rhel-docker
 
 # Run the script to start up the CockroachDB process
-ENTRYPOINT ["/cockroach/cockroach.sh"] 
+ENTRYPOINT ["/cockroach/cockroach.sh"]
