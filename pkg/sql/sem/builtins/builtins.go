@@ -20,6 +20,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -580,11 +581,14 @@ var Builtins = map[string][]tree.Builtin{
 					return tree.NewDString(buf.String()), nil
 				case "escape":
 					return tree.NewDString(encodeEscape([]byte(data))), nil
+				case "base64":
+					enc := base64.StdEncoding.EncodeToString([]byte(data))
+					return tree.NewDString(enc), nil
 				default:
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' and 'escape' formats are supported for ENCODE")
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for ENCODE")
 				}
 			},
-			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" and \"escape\" are supported).",
+			Info: "Encodes `data` in the text format specified by `format` (only \"hex\", \"escape\", and \"base64\" are supported).",
 		},
 	},
 
@@ -607,11 +611,17 @@ var Builtins = map[string][]tree.Builtin{
 						return nil, err
 					}
 					return tree.NewDBytes(tree.DBytes(decoded)), nil
+				case "base64":
+					decoded, err := base64.StdEncoding.DecodeString(data)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(decoded)), nil
 				default:
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' and 'escape' formats are supported for DECODE")
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for DECODE")
 				}
 			},
-			Info: "Decodes `data` as the format specified by `format` (only \"hex\" and \"escape\" are supported).",
+			Info: "Decodes `data` as the format specified by `format` (only \"hex\", \"escape\", and \"base64\" are supported).",
 		},
 	},
 
