@@ -2137,7 +2137,10 @@ func (h oidHasher) TableOid(
 }
 
 func (h oidHasher) IndexOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(indexTypeTag)
 	h.writeDB(db)
@@ -2148,7 +2151,10 @@ func (h oidHasher) IndexOid(
 }
 
 func (h oidHasher) ColumnOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, column *sqlbase.ColumnDescriptor,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	column *sqlbase.ColumnDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(columnTypeTag)
 	h.writeDB(db)
@@ -2173,7 +2179,10 @@ func (h oidHasher) CheckConstraintOid(
 }
 
 func (h oidHasher) PrimaryKeyConstraintOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, pkey *sqlbase.IndexDescriptor,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	pkey *sqlbase.IndexDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(db)
@@ -2184,7 +2193,10 @@ func (h oidHasher) PrimaryKeyConstraintOid(
 }
 
 func (h oidHasher) ForeignKeyConstraintOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, fk *sqlbase.ForeignKeyReference,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	fk *sqlbase.ForeignKeyReference,
 ) *tree.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(db)
@@ -2195,7 +2207,10 @@ func (h oidHasher) ForeignKeyConstraintOid(
 }
 
 func (h oidHasher) UniqueConstraintOid(
-	db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	db *sqlbase.DatabaseDescriptor,
+	scName string,
+	table *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(db)
