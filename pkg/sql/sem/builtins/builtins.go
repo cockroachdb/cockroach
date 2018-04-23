@@ -2378,6 +2378,8 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// See also crdb_internal.generate_series_err() if you need an error to be
+	// generated after some rows.
 	"crdb_internal.force_error": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},

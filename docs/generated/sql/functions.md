@@ -856,6 +856,9 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>crdb_internal.generate_series_err(err_index: <a href="int.html">int</a>) &rarr; setof tuple{int}</code></td><td><span class="funcdesc"><p>Like generate_series(0, &lt;err_index&gt;), but it produces an error instead of the last row.</p>
+<p>This function is intended for testing purposes.</p>
+</span></td></tr>
 <tr><td><code>crdb_internal.unary_table() &rarr; setof tuple{}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
 <p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>

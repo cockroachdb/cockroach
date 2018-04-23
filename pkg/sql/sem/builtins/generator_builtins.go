@@ -16,6 +16,7 @@ package builtins
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -126,6 +127,16 @@ var Generators = map[string][]tree.Builtin{
 				"This function is used only by CockroachDB's developers for testing purposes.",
 		),
 	},
+	// See also crdb_internal.force_error().
+	"crdb_internal.generate_series_err": {
+		makeGeneratorBuiltin(
+			tree.ArgTypes{{"err_index", types.Int}},
+			seriesValueGeneratorType,
+			makeSeriesWithErrGenerator,
+			"Like generate_series(0, <err_index>), but it produces an error instead of the last row.\n\n"+
+				"This function is intended for testing purposes.",
+		),
+	},
 	"json_array_elements":       {jsonArrayElementsImpl},
 	"jsonb_array_elements":      {jsonArrayElementsImpl},
 	"json_array_elements_text":  {jsonArrayElementsTextImpl},
@@ -228,10 +239,12 @@ var keywordNames = func() []string {
 // with integer bounds.
 type seriesValueGenerator struct {
 	value, start, stop, step interface{}
-	nextOK                   bool
-	genType                  types.TTable
-	next                     func(*seriesValueGenerator) (bool, error)
-	genValue                 func(*seriesValueGenerator) tree.Datums
+	// If != -1, an error will be returned when the value gets to errIdx.
+	errIdx   int64
+	nextOK   bool
+	genType  types.TTable
+	next     func(*seriesValueGenerator) (bool, error)
+	genValue func(*seriesValueGenerator) tree.Datums
 }
 
 var seriesValueGeneratorType = types.TTable{
@@ -261,6 +274,9 @@ func seriesIntNext(s *seriesValueGenerator) (bool, error) {
 		return false, nil
 	}
 	s.value = start
+	if s.errIdx != -1 && s.errIdx == s.value {
+		return false, fmt.Errorf("testing error")
+	}
 	s.start, s.nextOK = tree.AddWithOverflow(start, step)
 	return true, nil
 }
@@ -313,6 +329,24 @@ func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGener
 		genType:  seriesValueGeneratorType,
 		genValue: seriesGenIntValue,
 		next:     seriesIntNext,
+		errIdx:   -1,
+	}, nil
+}
+
+func makeSeriesWithErrGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	errIdx := int64(tree.MustBeDInt(args[0]))
+	return &seriesValueGenerator{
+		value:    int64(0),
+		start:    int64(0),
+		stop:     int64(math.MaxInt64),
+		step:     int64(1),
+		nextOK:   true,
+		genType:  seriesValueGeneratorType,
+		genValue: seriesGenIntValue,
+		next:     seriesIntNext,
+		errIdx:   errIdx,
 	}, nil
 }
 
@@ -334,6 +368,7 @@ func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGen
 		genType:  seriesTSValueGeneratorType,
 		genValue: seriesGenTSValue,
 		next:     seriesTSNext,
+		errIdx:   -1,
 	}, nil
 }
 
