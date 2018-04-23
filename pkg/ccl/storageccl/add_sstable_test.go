@@ -12,11 +12,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,6 +39,39 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/kr/pretty"
 )
+
+var re = regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
+
+func extractIngestPath(spans string) (string, error) {
+	match := re.FindStringSubmatch(spans)
+	if len(match) != 2 {
+		return "", fmt.Errorf("failed to extract ingested path from message %q,\n got: %v", spans, match)
+	}
+	return match[1], nil
+}
+
+func buildNextIngestPath(spans string) (string, error) {
+	ingestPath, extractErr := extractIngestPath(spans)
+	if extractErr != nil {
+		return "", extractErr
+	}
+
+	dir, filename := filepath.Split(ingestPath)
+
+	// Extract index from ingestion filename. For example, extract 22 from "i22.t6.ingested".
+	pos := strings.Index(filename, ".")
+	indexPart := filename[:pos]
+	suffix := filename[pos:]
+	indexStr := indexPart[1:]
+
+	index, toIntErr := strconv.Atoi(indexStr)
+	if toIntErr != nil {
+		return "", toIntErr
+	}
+
+	index++
+	return filepath.Join(dir, "i"+strconv.Itoa(index)+suffix), nil
+}
 
 func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 	sst, err := engine.MakeRocksDBSstFileWriter()
@@ -118,15 +154,14 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 		if store != nil {
 			// Look for the ingested path and verify it still exists.
-			re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
-			match := re.FindStringSubmatch(formatted)
-			if len(match) != 2 {
-				t.Fatalf("failed to extract ingested path from message %q,\n got: %v", formatted, match)
-			}
 			// The on-disk paths have `.ingested` appended unlike in-memory.
+			ingestPath, err := extractIngestPath(formatted)
+			if err != nil {
+				t.Fatal(err)
+			}
 			suffix := ".ingested"
-			if _, err := os.Stat(strings.TrimSuffix(match[1], suffix)); err != nil {
-				t.Fatalf("%q file missing after ingest: %v", match[1], err)
+			if _, err := os.Stat(strings.TrimSuffix(ingestPath, suffix)); err != nil {
+				t.Fatalf("%q file missing after ingest: %v", ingestPath, err)
 			}
 		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
@@ -163,6 +198,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
+	var nextIngestPath string
 	{
 		key := engine.MVCCKey{Key: []byte("bc"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("3").RawBytes)
@@ -183,13 +219,21 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
+			formatted := tracing.FormatRecordedSpans(collect())
+			if err := testutils.MatchInOrder(formatted,
 				"evaluating AddSSTable",
 				"target key range not empty, will merge existing data with sstable",
 				"sideloadable proposal detected",
 				"ingested SSTable at index",
 			); err != nil {
 				t.Fatal(err)
+			}
+			if store != nil && i == 1 {
+				if path, err := buildNextIngestPath(formatted); err == nil {
+					nextIngestPath = path
+				} else {
+					t.Fatal(err)
+				}
 			}
 
 			if r, err := db.Get(ctx, "bb"); err != nil {
@@ -213,6 +257,50 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			if after := metrics.AddSSTableApplicationCopies.Count(); before >= after {
 				t.Fatalf("expected sst copies to increase, %d before %d after", before, after)
 			}
+		}
+	}
+
+	// Check that the double ingestion avoidance remove the existing ingestion
+	// file.
+	if store != nil {
+		shortKey := "bd"
+		// The SST file to be removed by the double ingestion avoidance should have
+		// a bigger size than the SST file to be ingested. Otherwise, the former
+		// will be overwritten completely by the latter. Consequently, this check
+		// will report no error even if the double ingestion avoidance does not
+		// exist. So here the key for the single KV in the former have a bigger
+		// size.
+		longKey := shortKey + "0123456789"
+		{
+			key := engine.MVCCKey{Key: []byte(longKey), Timestamp: hlc.Timestamp{WallTime: 1}}
+			data, err := singleKVSSTable(key, roachpb.MakeValueFromString("4").RawBytes)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if err := ioutil.WriteFile(nextIngestPath, data, 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		{
+			key := engine.MVCCKey{Key: []byte(shortKey), Timestamp: hlc.Timestamp{WallTime: 1}}
+			data, err := singleKVSSTable(key, roachpb.MakeValueFromString("5").RawBytes)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if err := db.AddSSTable(ctx, "b", "c", data); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}
+
+		if r, err := db.Get(ctx, longKey); err != nil {
+			t.Fatalf("%+v", err)
+		} else if r.Value != nil {
+			t.Errorf("expected nil, got %q", r.ValueBytes())
+		}
+		if r, err := db.Get(ctx, shortKey); err != nil {
+			t.Fatalf("%+v", err)
+		} else if expected := []byte("5"); !bytes.Equal(expected, r.ValueBytes()) {
+			t.Errorf("expected %q, got %q", expected, r.ValueBytes())
 		}
 	}
 
