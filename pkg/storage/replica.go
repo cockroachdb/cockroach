@@ -519,7 +519,9 @@ var _ KeyRange = &Replica{}
 // leader awoken). See handleRaftReady for an instance of where this value
 // varies.
 //
-// Requires that both Replica.mu and Replica.raftMu are held.
+// Requires that Replica.mu is held. Also requires that Replica.raftMu is held
+// if either the caller can't guarantee that r.mu.internalRaftGroup != nil or
+// the provided function requires Replica.raftMu.
 func (r *Replica) withRaftGroupLocked(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -535,9 +537,10 @@ func (r *Replica) withRaftGroupLocked(
 		return nil
 	}
 
-	ctx := r.AnnotateCtx(context.TODO())
-
 	if r.mu.internalRaftGroup == nil {
+		r.raftMu.Mutex.AssertHeld()
+
+		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
 			uint64(r.mu.replicaID),
@@ -578,7 +581,7 @@ func (r *Replica) withRaftGroupLocked(
 // messages (which may include MsgVotes from an election in progress,
 // and this election would be disrupted if we started our own).
 //
-// Requires that Replica.raftMu is held.
+// Has the same requirement for Replica.raftMu as withRaftGroupLocked.
 func (r *Replica) withRaftGroup(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -3504,20 +3507,27 @@ func (r *Replica) propose(
 		return nil, nil, roachpb.NewError(err)
 	}
 
-	// submitProposalLocked calls withRaftGroupLocked which requires that
-	// raftMu is held. In order to maintain our lock ordering we need to lock
-	// Replica.raftMu here before locking Replica.mu.
-	//
-	// TODO(peter): It appears that we only need to hold Replica.raftMu when
-	// calling raft.NewRawNode. We could get fancier with the locking here to
-	// optimize for the common case where Replica.mu.internalRaftGroup is
-	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
-	// has a tiny (~1%) performance hit for single-node block_writer testing.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
+	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
+	// locking Replica.raftMu in the common case where the raft group is
+	// non-nil, we lock only Replica.mu at first before checking the status of
+	// the internal raft group. If it equals nil then we fall back to the slow
+	// path of locking Replica.raftMu. However, in order to maintain our lock
+	// ordering we need to lock Replica.raftMu here before locking Replica.mu,
+	// so we unlock Replica.mu before locking them both again.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	if r.mu.internalRaftGroup == nil {
+		// Unlock first before locking in {raft,replica}mu order.
+		r.mu.Unlock()
+
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.mu.Lock()
+		log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	} else {
+		log.Event(proposal.ctx, "acquired replica mu")
+	}
 
 	// Add size of proposal to commandSizes map.
 	if r.mu.commandSizes != nil {
