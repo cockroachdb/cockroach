@@ -227,9 +227,6 @@ func (rgcq *replicaGCQueue) process(
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc, false); err != nil {
 			return err
 		}
-
-		// TODO(bdarnell): remove raft logs and other metadata (while leaving a
-		// tombstone). Add tests for GC of merged ranges.
 	} else {
 		// This replica is a current member of the raft group. Set the last replica
 		// GC check time to avoid re-processing for another check interval.

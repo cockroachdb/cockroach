@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -342,6 +341,8 @@ func evalEndTransaction(
 	// Update the existing txn with the supplied txn.
 	reply.Txn.Update(h.Txn)
 
+	var pd result.Result
+
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
@@ -366,6 +367,20 @@ func evalEndTransaction(
 		}
 
 		reply.Txn.Status = roachpb.COMMITTED
+
+		// Merge triggers must run before intent resolution as the merge trigger
+		// itself contains intents that will be owned and thus resolved by the new
+		// range.
+		if mt := args.InternalCommitTrigger.GetMergeTrigger(); mt != nil {
+			mergeResult, err := mergeTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
+				ms, mt, reply.Txn.Timestamp)
+			if err != nil {
+				return result.Result{}, err
+			}
+			if err := pd.MergeAndDestroy(mergeResult); err != nil {
+				return result.Result{}, err
+			}
+		}
 	} else {
 		reply.Txn.Status = roachpb.ABORTED
 	}
@@ -380,11 +395,14 @@ func evalEndTransaction(
 	}
 
 	// Run triggers if successfully committed.
-	var pd result.Result
 	if reply.Txn.Status == roachpb.COMMITTED {
-		var err error
-		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
+		triggerResult, err := runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
+			ms, *args, reply.Txn)
+		if err != nil {
 			return result.Result{}, NewReplicaCorruptionError(err)
+		}
+		if err := pd.MergeAndDestroy(triggerResult); err != nil {
+			return result.Result{}, err
 		}
 	}
 
@@ -485,12 +503,10 @@ func resolveLocalIntents(
 	txn *roachpb.Transaction,
 	evalCtx batcheval.EvalContext,
 ) ([]roachpb.Span, error) {
-	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which intents are local (note that for a split, we want to use the
 		// pre-split one instead because it's larger).
-		preMergeDesc = desc
 		desc = &mergeTrigger.LeftDesc
 	}
 
@@ -516,13 +532,6 @@ func resolveLocalIntents(
 					return nil
 				}
 				resolveMS := ms
-				if preMergeDesc != nil && !containsKey(*preMergeDesc, span.Key) {
-					// If this transaction included a merge and the intents
-					// are from the subsumed range, ignore the intent resolution
-					// stats, as they will already be accounted for during the
-					// merge trigger.
-					resolveMS = nil
-				}
 				resolveAllowance--
 				return engine.MVCCResolveWriteIntentUsingIter(ctx, batch, iterAndBuf, resolveMS, intent)
 			}
@@ -663,9 +672,6 @@ func runCommitTrigger(
 		*ms = newMS
 		return trigger, err
 	}
-	if ct.GetMergeTrigger() != nil {
-		return mergeTrigger(ctx, rec, batch, ms, ct.MergeTrigger, txn.Timestamp)
-	}
 	if crt := ct.GetChangeReplicasTrigger(); crt != nil {
 		return changeReplicasTrigger(ctx, rec, batch, crt), nil
 	}
@@ -709,6 +715,11 @@ func runCommitTrigger(
 		}
 		return pd, nil
 	}
+	if ct.GetMergeTrigger() != nil {
+		// Merge triggers were handled earlier, before intent resolution.
+		return result.Result{}, nil
+	}
+
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
 	return result.Result{}, nil
 }
@@ -1354,6 +1365,7 @@ func (r *Replica) AdminMerge(
 	}
 
 	updatedLeftDesc := *origLeftDesc
+	rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 
 	// Lookup right hand side range (subsumed). This really belongs
 	// inside the transaction for consistency, but it is important (for
@@ -1363,13 +1375,13 @@ func (r *Replica) AdminMerge(
 	// the new end key and then repeat the lookup inside the
 	// transaction.
 	{
-		rightRng := r.store.LookupReplica(origLeftDesc.EndKey, nil)
-		if rightRng == nil {
-			return reply, roachpb.NewErrorf("ranges not collocated")
+		var rightDesc roachpb.RangeDescriptor
+		if err := r.store.DB().GetProto(ctx, rightDescKey, &rightDesc); err != nil {
+			return reply, roachpb.NewErrorf("%s", err)
 		}
 
-		updatedLeftDesc.EndKey = rightRng.Desc().EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range", rightRng)
+		updatedLeftDesc.EndKey = rightDesc.EndKey
+		log.Infof(ctx, "initiating a merge of %s into this range", rightDesc)
 	}
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1391,7 +1403,6 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Do a consistent read of the right hand side's range descriptor.
-		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 		var rightDesc roachpb.RangeDescriptor
 		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
 			return err
@@ -1407,26 +1418,50 @@ func (r *Replica) AdminMerge(
 			// TODO(bdarnell): needs a test.
 			return errors.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
 		}
-		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return errors.Errorf("ranges not collocated")
-		}
 
 		b := txn.NewBatch()
+
+		// Update the meta addressing records. This must be done before the merge
+		// snapshot request.
+		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
+			return err
+		}
 
 		// Remove the range descriptor for the deleted range.
 		b.Del(rightDescKey)
 
-		if err := mergeRangeAddressing(b, origLeftDesc, &updatedLeftDesc); err != nil {
+		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
+
+		// Get a consistent view of the data from the right-hand range. If the merge
+		// commits, we'll write this data to the left-hand range in the merge
+		// trigger.
+		//
+		// Part of the contract of SubsumeRequest is that after it's processed
+		// the right-hand range has promised not to serve any more traffic unless
+		// the merge aborts.
+		br, pErr := client.SendWrapped(ctx, txn, &roachpb.SubsumeRequest{
+			Span:        roachpb.Span{Key: rightDesc.StartKey.AsRawKey()},
+			LeftRangeID: origLeftDesc.RangeID,
+		})
+		if pErr != nil {
+			return pErr.GoError()
+		}
+		rhsSnapshotRes := br.(*roachpb.SubsumeResponse)
+
+		b = txn.NewBatch()
+
 		// End the transaction manually instead of letting RunTransaction
 		// loop do it, in order to provide a merge trigger.
 		b.AddRawRequest(&roachpb.EndTransactionRequest{
 			Commit: true,
 			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
 				MergeTrigger: &roachpb.MergeTrigger{
-					LeftDesc:  updatedLeftDesc,
-					RightDesc: rightDesc,
+					LeftDesc:       updatedLeftDesc,
+					RightDesc:      rightDesc,
+					RightData:      rhsSnapshotRes.Data,
+					RightMVCCStats: rhsSnapshotRes.MVCCStats,
 				},
 			},
 		})
@@ -1463,64 +1498,10 @@ func mergeTrigger(
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
-	rightRangeID := merge.RightDesc.RangeID
-	if rightRangeID <= 0 {
-		return result.Result{}, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
-	}
-
-	// Compute stats for premerged range, including current transaction.
-	mergedMS := rec.GetMVCCStats()
-	mergedMS.Add(*ms)
-	// We will recompute the stats below and update the state, so when the
-	// batch commits it has already taken ms into account.
-	*ms = enginepb.MVCCStats{}
-
-	// Add in stats for right hand side of merge, excluding system-local
-	// stats, which will need to be recomputed.
-	rightMS, err := stateloader.Make(rec.ClusterSettings(), rightRangeID).LoadMVCCStats(ctx, batch)
-	if err != nil {
+	if err := batch.ApplyBatchRepr(merge.RightData, false /* sync */); err != nil {
 		return result.Result{}, err
 	}
-	rightMS.SysBytes, rightMS.SysCount = 0, 0
-	mergedMS.Add(rightMS)
-
-	// Copy the RHS range's AbortSpan to the new LHS one.
-	if _, err := rec.AbortSpan().CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
-		return result.Result{}, errors.Errorf("unable to copy AbortSpan to new split range: %s", err)
-	}
-
-	// Remove the RHS range's metadata. Note that we don't need to
-	// keep track of stats here, because we already set the right range's
-	// system-local stats contribution to 0.
-	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
-	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
-		return result.Result{}, errors.Errorf("cannot remove range metadata %s", err)
-	}
-
-	// Add in the stats for the RHS range's range keys.
-	iter := batch.NewIterator(engine.IterOptions{})
-	defer iter.Close()
-	localRangeKeyStart := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.StartKey))
-	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
-	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
-	if err != nil {
-		return result.Result{}, errors.Errorf("unable to compute RHS range's local stats: %s", err)
-	}
-	mergedMS.Add(msRange)
-
-	// Set stats for updated range.
-	if err := batcheval.MakeStateLoader(rec).SetMVCCStats(ctx, batch, &mergedMS); err != nil {
-		return result.Result{}, errors.Errorf("unable to write MVCC stats: %s", err)
-	}
-
-	// Clear the timestamp cache. In case both the LHS and RHS replicas
-	// held their respective range leases, we could merge the timestamp
-	// caches for efficiency. But it's unlikely and not worth the extra
-	// logic and potential for error.
-
-	*ms = rec.GetMVCCStats()
-	mergedMS.Subtract(*ms)
-	*ms = mergedMS
+	ms.Add(merge.RightMVCCStats)
 
 	var pd result.Result
 	pd.Replicated.BlockReads = true
