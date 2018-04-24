@@ -18,7 +18,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/jsonload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/singlequery"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/querybench"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"

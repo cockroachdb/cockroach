@@ -348,19 +348,6 @@ func HashForReporting(secret, appName string) string {
 	return hex.EncodeToString(hash.Sum(nil)[:4])
 }
 
-// ResetStatementStats resets the executor's collected statement statistics.
-func (e *Executor) ResetStatementStats(ctx context.Context) {
-	e.sqlStats.resetStats(ctx)
-}
-
-// LasStatementStatReset returns the time the stmt stats were last rest.
-func (e *Executor) LasStatementStatReset() time.Time {
-	e.sqlStats.Lock()
-	last := e.sqlStats.lastReset
-	e.sqlStats.Unlock()
-	return last
-}
-
 // FillErrorCounts fills the passed map with the executor's current
 // counts of how often individual unimplemented features have been encountered.
 func (e *Executor) FillErrorCounts(codes, unimplemented map[string]int64) {

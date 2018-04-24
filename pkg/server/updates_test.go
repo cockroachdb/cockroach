@@ -132,8 +132,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ts.sqlExecutor.ResetStatementStats(ctx)
-
 	const elemName = "somestring"
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
