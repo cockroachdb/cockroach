@@ -19,6 +19,7 @@ option go_package = "serverpb";
 import "build/info.proto";
 import "gossip/gossip.proto";
 import "roachpb/data.proto";
+import "server/diagnosticspb/diagnostics.proto";
 import "server/status/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/lease_status.proto";
@@ -547,13 +548,22 @@ message CommandQueueResponse {
   storage.storagebase.CommandQueuesSnapshot snapshot = 1 [(gogoproto.nullable) = false];
 }
 
+// DiagnosticsRequest requests a diagnostics report.
+message DiagnosticsRequest {
+  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
+  // figure out how to teach grpc-gateway about custom names.
+  //
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
       get: "/_status/certificates/{node_id}"
     };
   }
-
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
       get: "/_status/details/{node_id}"
@@ -672,6 +682,11 @@ service Status {
   rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
     option (google.api.http) = {
       get: "/_status/range/{range_id}/cmdqueue"
+    };
+  }
+  rpc Diagnostics(DiagnosticsRequest) returns (cockroach.server.diagnosticspb.DiagnosticReport) {
+    option (google.api.http) = {
+      get: "/_status/diagnostics/{node_id}"
     };
   }
 }
