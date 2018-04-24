@@ -168,7 +168,7 @@ func TestEscapeFormatRandom(t *testing.T) {
 
 func TestLPadRPad(t *testing.T) {
 	testCases := []struct {
-		padFn    func(string, int, string) string
+		padFn    func(*tree.EvalContext, string, int, string) (string, error)
 		str      string
 		length   int
 		fill     string
@@ -204,8 +204,12 @@ func TestLPadRPad(t *testing.T) {
 		{rpad, "Hello", 8, "世界", "Hello世界世"},
 		{rpad, "foo", -1, "世界", ""},
 	}
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, tc := range testCases {
-		out := tc.padFn(tc.str, tc.length, tc.fill)
+		out, err := tc.padFn(evalCtx, tc.str, tc.length, tc.fill)
+		if err != nil {
+			t.Errorf("Found err %v, expected nil", err)
+		}
 		if out != tc.expected {
 			t.Errorf("expected %s, found %s", tc.expected, out)
 		}

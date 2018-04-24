@@ -2486,10 +2486,17 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
-				return tree.NewDString(lpad(s, length, " ")), nil
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
+					return nil, err
+				}
+				ret, err := lpad(evalCtx, s, length, " ")
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
 			},
 			Category: categoryString,
 			Info: "Pads `string` to `length` by adding ' ' to the left of `string`." +
@@ -2498,11 +2505,15 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
 				fill := string(tree.MustBeDString(args[2]))
-				return tree.NewDString(lpad(s, length, fill)), nil
+				ret, err := lpad(evalCtx, s, length, fill)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
 			},
 			Category: categoryString,
 			Info: "Pads `string` by adding `fill` to the left of `string` to make it `length`. " +
@@ -2513,10 +2524,14 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
-				return tree.NewDString(rpad(s, length, " ")), nil
+				ret, err := rpad(evalCtx, s, length, " ")
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
 			},
 			Category: categoryString,
 			Info: "Pads `string` to `length` by adding ' ' to the right of string. " +
@@ -2525,11 +2540,15 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"string", types.String}, {"length", types.Int}, {"fill", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s := string(tree.MustBeDString(args[0]))
 				length := int(tree.MustBeDInt(args[1]))
 				fill := string(tree.MustBeDString(args[2]))
-				return tree.NewDString(rpad(s, length, fill)), nil
+				ret, err := rpad(evalCtx, s, length, fill)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ret), nil
 			},
 			Category: categoryString,
 			Info: "Pads `string` to `length` by adding `fill` to the right of `string`. " +
@@ -3863,10 +3882,13 @@ func padMaybeTruncate(s string, length int, fill string) (ok bool, slen int, ret
 	return false, slen, s
 }
 
-func lpad(s string, length int, fill string) string {
+func lpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string, error) {
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
 	if ok {
-		return ret
+		return ret, nil
+	}
+	if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
+		return "", err
 	}
 	var buf strings.Builder
 	fillRunes := []rune(fill)
@@ -3875,13 +3897,16 @@ func lpad(s string, length int, fill string) string {
 	}
 	buf.WriteString(s)
 
-	return buf.String()
+	return buf.String(), nil
 }
 
-func rpad(s string, length int, fill string) string {
+func rpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string, error) {
 	ok, slen, ret := padMaybeTruncate(s, length, fill)
 	if ok {
-		return ret
+		return ret, nil
+	}
+	if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(length)); err != nil {
+		return "", err
 	}
 	var buf strings.Builder
 	buf.WriteString(s)
@@ -3890,5 +3915,5 @@ func rpad(s string, length int, fill string) string {
 		buf.WriteRune(fillRunes[i%len(fillRunes)])
 	}
 
-	return buf.String()
+	return buf.String(), nil
 }
