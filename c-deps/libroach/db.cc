@@ -162,8 +162,11 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
     return ToDBStatus(hook_status);
   }
 
-  // TODO(mberhault): check available ciphers somehow?
-  // We may have a encrypted files in the registry file but running without encryption flags.
+  // TODO(mberhault):
+  // - check available ciphers somehow?
+  //   We may have a encrypted files in the registry file but running without encryption flags.
+  // - pass read-only flag though, we should not be modifying file/key registries (including key
+  //   rotation) in read-only mode.
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
