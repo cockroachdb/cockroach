@@ -93,6 +93,9 @@ const (
 	// fmtSymbolicVars indicates that IndexedVars must be pretty-printed
 	// using numeric notation (@123).
 	fmtSymbolicVars
+
+	// fmtUnicodeStrings prints strings and JSON in their unicode representation.
+	fmtUnicodeStrings
 )
 
 // Composite/derived flag definitions follow.
@@ -123,6 +126,10 @@ const (
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
 	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
+
+	// FmtParseDatums, if set, formats datums such that they can be round-tripped
+	// with their associated Parse func.
+	FmtParseDatums FmtFlags = FmtBareStrings | fmtUnicodeStrings
 )
 
 // FmtCtx is suitable for passing to Format() methods.

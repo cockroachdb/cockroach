@@ -919,7 +919,9 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtWithinArray) {
+	if f.HasFlags(fmtUnicodeStrings) {
+		buf.WriteString(string(*d))
+	} else if f.HasFlags(fmtWithinArray) {
 		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
@@ -2407,6 +2409,10 @@ func (d *DJSON) Format(ctx *FmtCtx) {
 	// TODO(justin): ideally the JSON string encoder should know it needs to
 	// escape things to be inside SQL strings in order to avoid this allocation.
 	s := d.JSON.String()
+	if ctx.flags.HasFlags(fmtUnicodeStrings) {
+		ctx.Buffer.WriteString(s)
+		return
+	}
 	lex.EncodeSQLStringWithFlags(ctx.Buffer, s, ctx.flags.EncodeFlags())
 }
 
