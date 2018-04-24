@@ -713,8 +713,8 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 }
 
 var procNameToLogTag = map[string]string{
-	aggregatorProcName:              "agg",
 	distinctProcName:                "distinct",
+	hashAggregatorProcName:          "hashAgg",
 	hashJoinerProcName:              "hashJoiner",
 	interleavedReaderJoinerProcName: "interleaveReaderJoiner",
 	joinReaderProcName:              "joinReader",
@@ -722,6 +722,7 @@ var procNameToLogTag = map[string]string{
 	metadataTestReceiverProcName:    "metaReceiver",
 	metadataTestSenderProcName:      "metaSender",
 	noopProcName:                    "noop",
+	orderedAggregatorProcName:       "orderedAgg",
 	samplerProcName:                 "sampler",
 	scrubTableReaderProcName:        "scrub",
 	sortAllProcName:                 "sortAll",
