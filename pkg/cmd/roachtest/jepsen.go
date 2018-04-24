@@ -161,7 +161,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 			logf("%s: running", testCfg)
 
 			// Reset the "latest" alias for the next run.
-			c.Run(ctx, controller, "rm -f jepsen/cockroachdb/store/latest")
+			c.Run(ctx, controller, "rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
 
 			errCh := make(chan error, 1)
 			go func() {
@@ -215,11 +215,11 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			if failed {
 				failures = append(failures, testCfg)
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
-				c.Run(ctx, controller, "tail -n 100 jepsen/cockroachdb/invoke.log")
+				c.Run(ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
 				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
 					// -h causes tar to follow symlinks; needed by the "latest" symlink.
 					// -f- sends the output to stdout, we read it and save it to a local file.
-					"tar -chj --ignore-failed-read -f- jepsen/cockroachdb/store/latest jepsen/cockroachdb/invoke.log /var/log/")
+					"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log /var/log/")
 				output, err := cmd.Output()
 				if err != nil {
 					t.Fatal(err)
@@ -234,7 +234,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				anyFailed := false
 				for _, file := range collectFiles {
 					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-						"jepsen/cockroachdb/store/latest/"+file,
+						"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 						filepath.Join(outputDir, file))
 					cmd.Stdout = c.l.stdout
 					cmd.Stderr = c.l.stderr
@@ -245,7 +245,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 				if anyFailed {
 					// Try to figure out why this is so common.
 					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-						"jepsen/cockroachdb/invoke.log",
+						"/mnt/data1/jepsen/cockroachdb/invoke.log",
 						filepath.Join(outputDir, "invoke.log"))
 					cmd.Stdout = c.l.stdout
 					cmd.Stderr = c.l.stderr
