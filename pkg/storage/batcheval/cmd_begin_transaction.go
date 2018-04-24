@@ -70,7 +70,8 @@ func BeginTransaction(
 	clonedTxn := h.Txn.Clone()
 	reply.Txn = &clonedTxn
 
-	// Verify transaction does not already exist.
+	// Check whether the transaction record already exists. If it already
+	// exists, check its current status and react accordingly.
 	tmpTxn := roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &tmpTxn)
 	if err != nil {
@@ -109,17 +110,25 @@ func BeginTransaction(
 		}
 	}
 
-	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
-
-	// Disallow creation of a transaction record if it's at a timestamp before
-	// the TxnSpanGCThreshold, as in that case our transaction may already have
-	// been aborted by a concurrent actor which encountered one of our intents
-	// (which may have been written before this entry).
+	// Disallow creation or modification of a transaction record if it's at a
+	// timestamp before the TxnSpanGCThreshold, as in that case our transaction
+	// may already have been aborted by a concurrent actor which encountered one
+	// of our intents (which may have been written before this entry).
 	//
 	// See #9265.
+	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
 	if reply.Txn.LastActive().Less(threshold) {
 		return result.Result{}, roachpb.NewTransactionAbortedError()
 	}
+
+	// Transaction heartbeats don't begin until after the transaction record
+	// has been laid down and the response has returned to the transaction
+	// coordinator. This poses a problem for BeginTxn requests that get
+	// delayed, because it's possible that the transaction records they
+	// write will look inactive immediately after being written. To avoid
+	// this situation resulting in transactions being aborted unnecessarily,
+	// we bump the record's heartbeat timestamp right before laying it down.
+	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
 	// Write the txn record.
 	reply.Txn.Writing = true
