@@ -428,3 +428,64 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		t.Fatal("flow ctx was not canceled")
 	}
 }
+
+func BenchmarkOutbox(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+
+	// Create a mock server that the outbox will connect and push rows to.
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	mockServer, addr, err := startMockDistSQLServer(stopper)
+	if err != nil {
+		b.Fatal(err)
+	}
+	st := cluster.MakeTestingClusterSettings()
+	for _, numCols := range []int{1, 2, 4, 8} {
+		row := sqlbase.EncDatumRow{}
+		for i := 0; i < numCols; i++ {
+			row = append(row, sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(2))))
+		}
+		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
+			flowID := FlowID{uuid.MakeV4()}
+			streamID := StreamID(42)
+			evalCtx := tree.MakeTestingEvalContext(st)
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				Settings: st,
+				stopper:  stopper,
+				EvalCtx:  evalCtx,
+				rpcCtx:   newInsecureRPCContext(stopper),
+			}
+			outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
+			outbox.init(makeIntCols(numCols))
+			var outboxWG sync.WaitGroup
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+			// Start the outbox. This should cause the stream to connect, even though
+			// we're not sending any rows.
+			outbox.start(ctx, &outboxWG, cancel)
+
+			// Wait for the outbox to connect the stream.
+			streamNotification := <-mockServer.inboundStreams
+			serverStream := streamNotification.stream
+			go func() {
+				for {
+					_, err := serverStream.Recv()
+					if err != nil {
+						break
+					}
+				}
+			}()
+
+			b.SetBytes(int64(numCols * 8))
+			for i := 0; i < b.N; i++ {
+				if err := outbox.addRow(ctx, row, nil); err != nil {
+					b.Fatal(err)
+				}
+			}
+			outbox.ProducerDone()
+			outboxWG.Wait()
+			streamNotification.donec <- nil
+		})
+	}
+}
