@@ -17,8 +17,9 @@ package tracing
 import (
 	"strings"
 
+	"fmt"
+
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // This file provides functionality to structure the storage and retrieval of
@@ -28,7 +29,7 @@ import (
 // Consumers of a trace with span tags may then use all tags prefixed with
 // statPrefix to get information on the associated stat.
 
-// statPrefix is a prefix used on
+// statPrefix is a prefix used for the span tags that are stats.
 const statPrefix = "stat."
 
 // SpanStatDescriptor describes a stat that could be stored in a span's tags.
@@ -43,13 +44,14 @@ type SpanStatDescriptor struct {
 // spanStatRegistry keeps track of all registered SpanStatDescriptors.
 var spanStatRegistry = make(map[string]SpanStatDescriptor)
 
-// RegisterStat adds stat to the registry.
+// RegisterStat adds a stat to the registry.
 func RegisterStat(stat SpanStatDescriptor) {
 	spanStatRegistry[stat.Name] = stat
 }
 
 // GetStat returns the SpanStatDescriptor associated with name. nil, false is
-// returned if a stat with that name has not been registered.
+// returned if a stat with that name has not been registered. It is valid to
+// pass in a name with or without the statPrefix.
 func GetStat(name string) (SpanStatDescriptor, bool) {
 	if strings.HasPrefix(name, statPrefix) {
 		name = name[len(statPrefix):]
@@ -60,15 +62,12 @@ func GetStat(name string) (SpanStatDescriptor, bool) {
 
 // SetStat checks the registry for the existence of a SpanStatDescriptor
 // associated with name and adds a tag to the opentracing span, overwriting the
-// tag if one already exists with that name.
+// tag if one already exists with that name. statPrefix will be added to name.
 func SetStat(os opentracing.Span, name string, value interface{}) error {
 	if _, ok := spanStatRegistry[name]; !ok {
-		return errors.New("adding unregistered stat")
+		return fmt.Errorf("adding unregistered stat: %s", name)
 	}
-	if !strings.HasPrefix(name, statPrefix) {
-		name = statPrefix + name
-	}
-	os.SetTag(name, value)
+	os.SetTag(statPrefix+name, value)
 	return nil
 }
 

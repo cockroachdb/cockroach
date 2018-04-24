@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -531,8 +532,8 @@ type processorBase struct {
 	// drained).
 	inputsToDrain []RowSource
 
-	// stats are the stats collected for a processor.
-	stats []StatSummarizer
+	// registry is the registry for the stats collected for a processor.
+	registry *metric.Registry
 }
 
 // procState represents the standard states that a processor can be in. These

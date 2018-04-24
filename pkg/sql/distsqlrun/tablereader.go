@@ -21,11 +21,14 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -53,6 +56,13 @@ var _ Processor = &tableReader{}
 var _ RowSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
+
+func init() {
+	tr := &tableReader{}
+	for _, statDescriptor := range tr.makeInputStats().ToSpanStatDescriptors() {
+		tracing.RegisterStat(statDescriptor)
+	}
+}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -189,11 +199,37 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	// If stats have been collected, output a summary to the trace.
-	if len(tr.stats) != 0 {
-		for _, stat := range tr.stats {
-			log.VEventf(tr.ctx, 2, stat.SummarizeStats())
-		}
+	// If stats have been collected, output a summary to the trace and add to span
+	// tags.
+	if tr.registry != nil {
+		tr.registry.Each(func(name string, val interface{}) {
+			sd, ok := tracing.GetStat(name)
+			if !ok {
+				// TODO(asubiotto) panic?
+				return
+			}
+
+			var unwrappedVal interface{}
+			switch m := val.(type) {
+			case *metric.Counter:
+				unwrappedVal = m.Count()
+			default:
+				panic(fmt.Sprintf("unsupported metric value type: %T", m))
+			}
+
+			log.VEventf(
+				tr.ctx,
+				2,
+				"%s: %s",
+				name,
+				sd.Render(fmt.Sprintf("%v", unwrappedVal)),
+			)
+			if sp := opentracing.SpanFromContext(tr.ctx); sp != nil {
+				if err := tracing.SetStat(sp, name, unwrappedVal); err != nil {
+					log.Warning(tr.ctx, errors.Wrap(err, "unable to set stat in span"))
+				}
+			}
+		})
 	}
 
 	if tr.flowCtx.txn.Type() == client.LeafTxn {
@@ -213,9 +249,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		isc := NewInputStatCollector(tr.input, "tableReader input")
-		tr.stats = append(tr.stats, isc)
-		tr.input = isc
+		tr.registry = tr.collectStats()
 	}
 
 	// Like every processor, the tableReader will have a context with a log tag
@@ -268,4 +302,28 @@ func (tr *tableReader) ConsumerDone() {
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	tr.internalClose()
+}
+
+// makeInputStats makes an InputStats struct for the tableReader.
+func (tr *tableReader) makeInputStats() InputStats {
+	return InputStats{
+		NumRows: metric.NewCounter(
+			metric.Metadata{
+				Name: "tablereader.input.rows",
+				Help: "Number of rows the tablereader has processed.",
+			},
+		),
+	}
+}
+
+// collectStats instruments the tableReader to collect stats and returns a
+// registry of all of these stats.
+func (tr *tableReader) collectStats() *metric.Registry {
+	r := metric.NewRegistry()
+
+	is := tr.makeInputStats()
+	r.AddMetricStruct(is)
+	tr.input = NewInputStatCollector(tr.input, is)
+
+	return r
 }
