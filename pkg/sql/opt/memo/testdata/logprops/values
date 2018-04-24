@@ -1,3 +1,12 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
 build
 SELECT * FROM (VALUES (1, 2), (3, 4), (NULL, 5))
 ----
@@ -13,3 +22,32 @@ values
  └── tuple [type=tuple{unknown, int}]
       ├── null [type=unknown]
       └── const: 5 [type=int]
+
+# Propagate outer columns.
+build
+SELECT (VALUES (x), (y+1)) FROM xy
+----
+project
+ ├── columns: column4:4(int)
+ ├── stats: [rows=1000]
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
+ └── projections [outer=(1,2)]
+      └── subquery [type=int, outer=(1,2)]
+           ├── max1-row
+           │    ├── columns: column1:3(int)
+           │    ├── outer: (1,2)
+           │    ├── stats: [rows=1]
+           │    └── values
+           │         ├── columns: column1:3(int)
+           │         ├── outer: (1,2)
+           │         ├── stats: [rows=2, distinct(3)=2]
+           │         ├── tuple [type=tuple{int}, outer=(1)]
+           │         │    └── variable: xy.x [type=int, outer=(1)]
+           │         └── tuple [type=tuple{int}, outer=(2)]
+           │              └── plus [type=int, outer=(2)]
+           │                   ├── variable: xy.y [type=int, outer=(2)]
+           │                   └── const: 1 [type=int]
+           └── variable: column1 [type=int, outer=(3)]

@@ -24,11 +24,11 @@ TABLE kuv
       └── k int not null
 
 build
-SELECT * FROM xyzs LIMIT 1
+SELECT * FROM xyzs OFFSET 1
 ----
-limit
+offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1]
+ ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
@@ -37,9 +37,9 @@ limit
  └── const: 1 [type=int]
 
 build
-SELECT * FROM xyzs LIMIT (SELECT 1)
+SELECT * FROM xyzs OFFSET (SELECT 1)
 ----
-limit
+offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
@@ -62,9 +62,9 @@ limit
       └── variable: column5 [type=int, outer=(5)]
 
 build
-SELECT * FROM xyzs LIMIT 0
+SELECT * FROM xyzs OFFSET 0
 ----
-limit
+offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
@@ -76,7 +76,7 @@ limit
 
 # Propagate outer columns.
 build
-SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
+SELECT (SELECT x FROM kuv OFFSET y) FROM xyzs
 ----
 project
  ├── columns: column8:8(int)
@@ -91,7 +91,7 @@ project
            │    ├── columns: xyzs.x:1(int)
            │    ├── outer: (1,2)
            │    ├── stats: [rows=1]
-           │    └── limit
+           │    └── offset
            │         ├── columns: xyzs.x:1(int)
            │         ├── outer: (1,2)
            │         ├── stats: [rows=1000]
