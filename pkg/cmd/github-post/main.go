@@ -46,7 +46,7 @@ const tagsEnv = "TAGS"
 const goFlagsEnv = "GOFLAGS"
 const cockroachPkgPrefix = "github.com/cockroachdb/cockroach/pkg/"
 
-var issueLabels = []string{"Robot", "test-failure"}
+var issueLabels = []string{"O-robot", "C-test-failure"}
 
 // Based on the following observed API response:
 //
