@@ -58,14 +58,14 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		key.writeColSet(cols)
 		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 9900}
 
-		inputStats := Statistics{Statistics: &opt.Statistics{
+		inputStatsBuilder := statisticsBuilder{s: &opt.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
-		s := &Statistics{}
-		s.init(ExprView{}, &evalCtx)
-		s.selectivity = s.applyConstraintSet(cs, &inputStats)
-		s.applySelectivity(inputStats.RowCount)
-		testStats(t, s, s.selectivity, expectedStats, expectedSelectivity)
+		sb := &statisticsBuilder{}
+		sb.init(&evalCtx, &opt.Statistics{}, ExprView{}, &keyBuffer{})
+		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		sb.applySelectivity(inputStatsBuilder.s.RowCount)
+		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
 
 	// Test that applyConstraintSet correctly updates the statistics for string
@@ -87,14 +87,14 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		key.writeColSet(cols)
 		multiColStats[key.String()] = &opt.ColumnStatistic{Cols: cols, DistinctCount: 100}
 
-		inputStats := Statistics{Statistics: &opt.Statistics{
+		inputStatsBuilder := statisticsBuilder{s: &opt.Statistics{
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
-		s := &Statistics{}
-		s.init(ExprView{}, &evalCtx)
-		s.selectivity = s.applyConstraintSet(cs, &inputStats)
-		s.applySelectivity(inputStats.RowCount)
-		testStats(t, s, s.selectivity, expectedStats, expectedSelectivity)
+		sb := &statisticsBuilder{}
+		sb.init(&evalCtx, &opt.Statistics{}, ExprView{}, &keyBuffer{})
+		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
+		sb.applySelectivity(inputStatsBuilder.s.RowCount)
+		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
 	}
 
 	c1 := constraint.ParseConstraint(&evalCtx, "/1: [/2 - /5] [/8 - /10]")
@@ -207,7 +207,7 @@ func TestTranslateColSet(t *testing.T) {
 
 func testStats(
 	t *testing.T,
-	s *Statistics,
+	sb *statisticsBuilder,
 	selectivity float64,
 	expectedStats string,
 	expectedSelectivity float64,
@@ -217,7 +217,7 @@ func testStats(
 	ev := ExprView{}
 
 	tp := treeprinter.New()
-	ev.formatStats(tp, s)
+	ev.formatStats(tp, sb.s)
 	actual := strings.TrimSpace(tp.String())
 
 	if actual != expectedStats {
