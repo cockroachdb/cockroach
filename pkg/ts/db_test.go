@@ -313,14 +313,13 @@ func (tm *testModelRunner) assertQuery(
 
 	memContext := tm.makeMemoryContext(interpolationLimit)
 	defer memContext.Close(context.TODO())
+	timespan := QueryTimespan{
+		StartNanos:          start,
+		EndNanos:            end,
+		SampleDurationNanos: sampleDuration,
+	}
 	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
-		context.TODO(),
-		q,
-		r,
-		sampleDuration,
-		start,
-		end,
-		memContext,
+		context.TODO(), q, r, timespan, memContext,
 	)
 	if err != nil {
 		tm.t.Fatal(err)

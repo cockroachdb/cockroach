@@ -841,8 +841,13 @@ func TestQueryDownsampling(t *testing.T) {
 	defer memContext.Close(context.TODO())
 
 	// Query with sampleDuration that is too small, expect error.
+	timespan := QueryTimespan{
+		SampleDurationNanos: 1,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, 1, 0, 10000, memContext,
+		context.TODO(), tspb.Query{}, Resolution10s, timespan, memContext,
 	)
 	if err == nil {
 		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
@@ -853,14 +858,16 @@ func TestQueryDownsampling(t *testing.T) {
 	}
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
-
+	timespan = QueryTimespan{
+		SampleDurationNanos: Resolution10s.SampleDuration() + 1,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err = tm.DB.Query(
 		context.TODO(),
 		tspb.Query{},
 		Resolution10s,
-		Resolution10s.SampleDuration()+1,
-		0,
-		10000,
+		timespan,
 		memContext,
 	)
 	if err == nil {
@@ -1089,13 +1096,16 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	memContext.BudgetBytes = 1000
 	memContext.EstimatedSources = 3
 	defer memContext.Close(context.TODO())
+	timespan := QueryTimespan{
+		SampleDurationNanos: 1,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err := tm.DB.QueryMemoryConstrained(
 		context.TODO(),
 		tspb.Query{Name: "test.metric"},
 		resolution1ns,
-		1,
-		0,
-		10000,
+		timespan,
 		memContext,
 	)
 	if errorStr := "insufficient"; !testutils.IsError(err, errorStr) {
@@ -1156,8 +1166,13 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 
 	memContext := tm.makeMemoryContext(0)
 	defer memContext.Close(context.TODO())
+	timespan := QueryTimespan{
+		SampleDurationNanos: 1,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, memContext,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, timespan, memContext,
 	)
 	if errorStr := "memory budget exceeded"; !testutils.IsError(err, errorStr) {
 		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
@@ -1177,8 +1192,13 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	)
 	runtime.ReadMemStats(&memStatsBefore)
 
+	timespan = QueryTimespan{
+		SampleDurationNanos: 1,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, 1, 0, 10000, memContext,
+		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, timespan, memContext,
 	)
 	if err != nil {
 		t.Fatalf("expected no error from query, got %v", err)
@@ -1202,11 +1222,16 @@ func TestQueryBadRequests(t *testing.T) {
 
 	// Query with a downsampler that is invalid, expect error.
 	downsampler := (tspb.TimeSeriesQueryAggregator)(999)
+	timespan := QueryTimespan{
+		SampleDurationNanos: 10,
+		StartNanos:          0,
+		EndNanos:            10000,
+	}
 	_, _, err := tm.DB.Query(
 		context.TODO(), tspb.Query{
 			Name:        "metric.test",
 			Downsampler: downsampler.Enum(),
-		}, resolution1ns, 10, 0, 10000, memContext,
+		}, resolution1ns, timespan, memContext,
 	)
 	errorStr := "unknown time series downsampler"
 	if !testutils.IsError(err, errorStr) {
@@ -1223,7 +1248,7 @@ func TestQueryBadRequests(t *testing.T) {
 		context.TODO(), tspb.Query{
 			Name:             "metric.test",
 			SourceAggregator: aggregator.Enum(),
-		}, resolution1ns, 10, 0, 10000, memContext,
+		}, resolution1ns, timespan, memContext,
 	)
 	errorStr = "unknown time series aggregator"
 	if !testutils.IsError(err, errorStr) {
@@ -1239,7 +1264,7 @@ func TestQueryBadRequests(t *testing.T) {
 	_, _, err = tm.DB.Query(
 		context.TODO(), tspb.Query{
 			Derivative: derivative.Enum(),
-		}, resolution1ns, 10, 0, 10000, memContext,
+		}, resolution1ns, timespan, memContext,
 	)
 	if !testutils.IsError(err, "") {
 		t.Fatalf("bad query got error %q, wanted no error", err.Error())

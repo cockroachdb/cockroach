@@ -308,9 +308,11 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			context.TODO(),
 			tspb.Query{Name: seriesName},
 			ts.Resolution10s,
-			ts.Resolution10s.SampleDuration(),
-			0,
-			now+ts.Resolution10s.SlabDuration(),
+			ts.QueryTimespan{
+				SampleDurationNanos: ts.Resolution10s.SampleDuration(),
+				StartNanos:          0,
+				EndNanos:            now + ts.Resolution10s.SlabDuration(),
+			},
 			memContext,
 		)
 		return dps, err
