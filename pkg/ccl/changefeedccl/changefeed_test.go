@@ -34,6 +34,7 @@ func init() {
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
+	t.Skip("#24717")
 
 	const testPollingInterval = 10 * time.Millisecond
 	defer func(oldInterval time.Duration) {
