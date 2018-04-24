@@ -153,7 +153,7 @@ Let’s look at a Lightstep trace of a SQL query (Lightstep is a
 distributed trace collector and viewer; see section on tracing
 below). Here’s the root span (trimmed):
 
-[contexts/sshot1.png](contexts/sshot1.png)
+![contexts/sshot1.png](contexts/sshot1.png)
 
 We can see log messages coming from the sql module and the kv module:
 the executor starts executing a `SELECT`, acquires a table lease,
@@ -166,7 +166,7 @@ corresponds to time spent in child spans; let’s look at these spans
 below:
 
 
-[contexts/sshot2.png](contexts/sshot2.png)
+![contexts/sshot2.png](contexts/sshot2.png)
 
 We can see two spans, one child of the other, related to performing an
 RPC. The `grpcTransport.SendNext` one corresponds to the client-side
