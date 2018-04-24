@@ -29,6 +29,7 @@ import (
 //       functions in order to keep the methods grouped and self-contained.
 type logicalPropsFactory struct {
 	evalCtx *tree.EvalContext
+	sb      statisticsBuilder
 }
 
 // constructProps is called by the memo group construction code in order to
@@ -108,8 +109,8 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initScan(def)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initScan(def)
 
 	return props
 }
@@ -131,8 +132,8 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initSelect(ev.Child(1), &inputProps.Stats)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initSelect(ev.Child(1), &inputProps.Stats)
 
 	return props
 }
@@ -163,8 +164,8 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = inputProps.WeakKeys
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initProject(&inputProps.Stats)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initProject(&inputProps.Stats)
 
 	return props
 }
@@ -226,10 +227,8 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initJoin(
-		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
-	)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
 
 	return props
 }
@@ -274,8 +273,8 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initGroupBy(&inputProps.Stats, groupingColSet)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initGroupBy(&inputProps.Stats, groupingColSet)
 
 	return props
 }
@@ -308,8 +307,8 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	// Outer columns from either side are outer columns for set operation.
 	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
 }
@@ -325,8 +324,8 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initValues()
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initValues()
 
 	return props
 }
@@ -346,8 +345,8 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initLimit(limit, &inputProps.Stats)
 
 	return props
 }
@@ -367,8 +366,8 @@ func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initOffset(offset, &inputProps.Stats)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initOffset(offset, &inputProps.Stats)
 
 	return props
 }
@@ -381,8 +380,8 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initMax1Row(&inputProps.Stats)
+	f.sb.init(&props.Relational.Stats, ev, f.evalCtx)
+	f.sb.initMax1Row(&inputProps.Stats)
 
 	return props
 }

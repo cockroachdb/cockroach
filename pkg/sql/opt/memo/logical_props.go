@@ -93,8 +93,8 @@ type RelationalProps struct {
 	OuterCols opt.ColSet
 
 	// Stats is the set of statistics that apply to this relational expression.
-	// See statistics.go for more details.
-	Stats Statistics
+	// See opt/statistics.go and statistics_builder.go for more details.
+	Stats opt.Statistics
 }
 
 // ScalarProps are the subset of logical properties that are computed for
