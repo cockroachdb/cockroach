@@ -124,18 +124,3 @@ func (wk *WeakKeys) Add(new ColSet) {
 	}
 	*wk = append((*wk)[:insert], new)
 }
-
-// ColumnStatistic is a collection of statistics that applies to a particular
-// set of columns. In theory, a table could have a ColumnStatistic object
-// for every possible subset of columns. In practice, it is only worth
-// maintaining statistics on a few columns and column sets that are frequently
-// used in predicates, group by columns, etc.
-type ColumnStatistic struct {
-	// Cols is the set of columns whose data are summarized by this
-	// ColumnStatistic struct.
-	Cols ColSet
-
-	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression.
-	DistinctCount uint64
-}

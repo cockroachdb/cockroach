@@ -374,7 +374,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	}
 }
 
-func (ev ExprView) formatStats(tp treeprinter.Node, s *Statistics) {
+func (ev ExprView) formatStats(tp treeprinter.Node, s *opt.Statistics) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "stats: [rows=%d", s.RowCount)
