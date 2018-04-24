@@ -128,7 +128,7 @@ module.exports = (distDir, ...additionalRoots) => ({
   devServer: {
     contentBase: path.join(__dirname, distDir),
     proxy: [{
-      context: ["/_admin", "/_status", "/ts"],
+      context: ["/_admin", "/_status", "/ts", "/_auth"],
       secure: false,
       target: process.env.TARGET,
     }],
