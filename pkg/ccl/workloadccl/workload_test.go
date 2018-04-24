@@ -23,6 +23,7 @@ import (
 
 func TestSetup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip("#24655")
 
 	get := func(name string) workload.Meta {
 		meta, err := workload.Get(name)
