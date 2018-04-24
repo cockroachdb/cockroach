@@ -174,7 +174,6 @@ func (p *planner) distinct(
 			source:     src,
 			sourceInfo: sqlbase.MakeMultiSourceInfo(src.info),
 		}
-		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(src.info.SourceColumns))
 		if err := p.initTargets(ctx, postRender, tree.SelectExprs{
 			tree.SelectExpr{
 				Expr: tree.StarExpr(),

@@ -6610,6 +6610,14 @@ d_expr:
     $$.val = tree.NewPlaceholder($1)
   }
 // TODO(knz/jordan): extend this for compound types. See explanation above.
+| '(' a_expr ')' '.' '*'
+  {
+    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), Star: true }
+  }
+| '(' a_expr ')' '.' unrestricted_name
+  {
+    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), ColName: $5 }
+  }
 | '(' a_expr ')'
   {
     $$.val = &tree.ParenExpr{Expr: $2.expr()}
