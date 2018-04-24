@@ -490,7 +490,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	})
 }
 
-func TestRangeTransferLease(t *testing.T) {
+func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cfg := storage.TestStoreConfig(nil)
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
