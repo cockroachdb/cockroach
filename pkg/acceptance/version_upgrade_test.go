@@ -276,3 +276,52 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		}
 	}
 }
+
+// TestJSONBUpgrade tests that adding a JSONB column from a binary-upgraded
+// 1.1 release works on the 2.0.x branch.
+func TestJSONBUpgrade(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	cfg := readConfigFromFlags()
+	RunLocal(t, func(t *testing.T) {
+		cfg.Nodes = cfg.Nodes[:1]
+
+		startingBinVersion := binaryVersionUpgrade("v1.1.8")
+		for i := range cfg.Nodes {
+			cfg.Nodes[i].Version = string(startingBinVersion)
+		}
+
+		c := StartCluster(ctx, t, cfg)
+		defer c.AssertAndStop(ctx, t)
+
+		exec := func(query string) error {
+			db := makePGClient(t, c.PGUrl(ctx, 0 /* nodeId */))
+			defer db.Close()
+
+			_, err := db.Exec(query)
+			return err
+		}
+
+		startingBinVersion.checkAll(ctx, t, c)
+		clusterVersionUpgrade("1.1").run(ctx, t, c)
+
+		if err := exec(`
+			CREATE DATABASE test;
+			CREATE TABLE test.t (a INT);
+		`); err != nil {
+			t.Fatal(err)
+		}
+
+		const alterSQL = "ALTER TABLE test.t ADD COLUMN j JSONB"
+		binaryVersionUpgrade(sourceVersion).run(ctx, t, c)
+		if err := exec(alterSQL); !testutils.IsError(err, "cluster version does not support JSONB") {
+			t.Fatalf("unexpected: %v", err)
+		}
+		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()).run(ctx, t, c)
+		if err := exec(alterSQL); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
