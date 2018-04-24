@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -658,6 +659,24 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
 	} else if a, e := cert.Data, nodeFile; !bytes.Equal(a, e) {
 		t.Errorf("mismatched contents: %s vs %s", a, e)
+	}
+}
+
+func TestDiagnosticsResponse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	var resp diagnosticspb.DiagnosticReport
+	if err := getStatusJSONProto(s, "diagnostics/local", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// The endpoint just serializes result of getReportingInfo() which is already
+	// tested elsewhere, so simply verify that we have a non-empty reply.
+	if expected, actual := s.NodeID(), resp.Node.NodeID; expected != actual {
+		t.Fatalf("expected %v got %v", expected, actual)
 	}
 }
 

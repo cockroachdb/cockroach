@@ -194,7 +194,11 @@ export default function Debug() {
             url="/_status/certificates/local"
             note="/_status/certificates/[node_id]"
           />
-          <DebugTableLink name="Diagnostics Reporting Data" url="/_admin/v1/diagnostics" />
+          <DebugTableLink
+            name="Diagnostics Reporting Data"
+            url="/_status/diagnostics/local"
+            note="/_status/diagnostics/[node_id]"
+          />
         </DebugTableRow>
         <DebugTableRow title="Sessions">
           <DebugTableLink name="Local Sessions" url="/_status/local_sessions" />
