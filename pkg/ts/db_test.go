@@ -285,80 +285,144 @@ func (tm *testModelRunner) prune(nowNanos int64, timeSeries ...timeSeriesResolut
 	}
 }
 
-// assertQuery generates a query result from the local test model and compares
-// it against the query returned from the server.
-//
-// My suggestion is to break down the model query into multiple, independently
-// verificable steps. These steps will not be memory or computationally
-// efficient, but will be conceptually easy to verify; then we can compare its
-// results against the real data store with more confidence.
-func (tm *testModelRunner) assertQuery(
-	name string,
-	sources []string,
-	downsample, agg *tspb.TimeSeriesQueryAggregator,
-	derivative *tspb.TimeSeriesQueryDerivative,
-	r Resolution,
-	sampleDuration, start, end, interpolationLimit int64,
-	expectedDatapointCount, expectedSourceCount int,
-) {
-	tm.t.Helper()
-	// Query the actual server.
-	q := tspb.Query{
-		Name:             name,
-		Downsampler:      downsample,
-		SourceAggregator: agg,
-		Derivative:       derivative,
-		Sources:          sources,
+// modelQuery encapsulates all of the parameters to execute a query along with
+// some context for executing that query. This structure is a useful abstraction
+// for tests, when tests utilize default values for most query fields but
+// *all* fields are modified in at least one test.
+type modelQuery struct {
+	tspb.Query
+	QueryTimespan
+	QueryMemoryOptions
+	diskResolution   Resolution
+	workerMemMonitor *mon.BytesMonitor
+	resultMemMonitor *mon.BytesMonitor
+	modelRunner      *testModelRunner
+}
+
+// makeQuery creates a new modelQuery which executes using this testModelRunner.
+// The new query executes against the given named metric and diskResolution,
+// querying between the provided start and end bounds. Useful defaults are set
+// for all other fields.
+func (tm *testModelRunner) makeQuery(
+	name string, diskResolution Resolution, startNanos, endNanos int64,
+) modelQuery {
+	currentEstimatedSources := tm.model.UniqueSourceCount()
+	if currentEstimatedSources == 0 {
+		currentEstimatedSources = 1
 	}
 
-	memContext := tm.makeMemoryContext(interpolationLimit)
-	defer memContext.Close(context.TODO())
-	timespan := QueryTimespan{
-		StartNanos:          start,
-		EndNanos:            end,
-		SampleDurationNanos: sampleDuration,
+	return modelQuery{
+
+		Query: tspb.Query{
+			Name: name,
+		},
+		QueryTimespan: QueryTimespan{
+			StartNanos:          startNanos,
+			EndNanos:            endNanos,
+			SampleDurationNanos: diskResolution.SampleDuration(),
+		},
+		QueryMemoryOptions: QueryMemoryOptions{
+			// Large budget, but not maximum to avoid overflows.
+			BudgetBytes:             math.MaxInt64 / 8,
+			EstimatedSources:        currentEstimatedSources,
+			InterpolationLimitNanos: 0,
+		},
+		diskResolution:   diskResolution,
+		workerMemMonitor: tm.workerMemMonitor,
+		resultMemMonitor: tm.resultMemMonitor,
+		modelRunner:      tm,
 	}
-	actualDatapoints, actualSources, err := tm.DB.QueryMemoryConstrained(
-		context.TODO(), q, r, timespan, memContext,
+}
+
+// setSourceAggregator sets the source aggregator of the query. This is a
+// convenience method to avoid having to call Enum().
+func (mq *modelQuery) setSourceAggregator(agg tspb.TimeSeriesQueryAggregator) {
+	mq.SourceAggregator = agg.Enum()
+}
+
+// setDownsampler sets the downsampler of the query. This is a convenience
+// method to avoid having to call Enum().
+func (mq *modelQuery) setDownsampler(agg tspb.TimeSeriesQueryAggregator) {
+	mq.Downsampler = agg.Enum()
+}
+
+// setDerivative sets the derivative function of the query. This is a
+// convenience method to avoid having to call Enum().
+func (mq *modelQuery) setDerivative(deriv tspb.TimeSeriesQueryDerivative) {
+	mq.Derivative = deriv.Enum()
+}
+
+// queryDB queries the real DB using the parameters of the query, returning
+// the results.
+func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
+	// Query the actual server.
+	memContext := MakeQueryMemoryContext(
+		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
 	)
+	defer memContext.Close(context.TODO())
+	return mq.modelRunner.DB.QueryMemoryConstrained(
+		context.TODO(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
+	)
+}
+
+// assertSuccess runs the query against both the real database and the model
+// database, ensuring that the query succeeds and that the real result matches
+// the model result. The two supplied parameters are a form of sanity check,
+// ensuring that the query actually performed the expected work (to avoid a
+// situation where both the model and the real database return the same
+// unexpected result because the query was incorrectly constructed).
+func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount int) {
+	mq.modelRunner.t.Helper()
+
+	// Query the real DB.
+	actualDatapoints, actualSources, err := mq.queryDB()
 	if err != nil {
-		tm.t.Fatal(err)
+		mq.modelRunner.t.Fatal(err)
 	}
 	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
-		tm.t.Logf("actual datapoints: %v", actualDatapoints)
-		tm.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
+		mq.modelRunner.t.Logf("actual datapoints: %v", actualDatapoints)
+		mq.modelRunner.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
 	}
 	if a, e := len(actualSources), expectedSourceCount; a != e {
-		tm.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
+		mq.modelRunner.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 
-	// Query the testmodel.
-	modelDatapoints := tm.model.Query(
-		name,
-		sources,
-		q.GetDownsampler(),
-		q.GetSourceAggregator(),
-		q.GetDerivative(),
-		r.SlabDuration(),
-		sampleDuration, start, end, interpolationLimit,
+	// Query the model.
+	modelDatapoints := mq.modelRunner.model.Query(
+		mq.Name,
+		mq.Sources,
+		mq.GetDownsampler(),
+		mq.GetSourceAggregator(),
+		mq.GetDerivative(),
+		mq.diskResolution.SlabDuration(),
+		mq.SampleDurationNanos,
+		mq.StartNanos,
+		mq.EndNanos,
+		mq.InterpolationLimitNanos,
 	)
 	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
 		for _, diff := range pretty.Diff(a, e) {
-			tm.t.Error(diff)
+			mq.modelRunner.t.Error(diff)
 		}
 	}
 }
 
-func (tm *testModelRunner) makeMemoryContext(interpolationLimitNanos int64) QueryMemoryContext {
-	return MakeQueryMemoryContext(
-		tm.workerMemMonitor,
-		tm.resultMemMonitor,
-		QueryMemoryOptions{
-			BudgetBytes:             tm.queryMemoryBudget,
-			EstimatedSources:        tm.model.UniqueSourceCount(),
-			InterpolationLimitNanos: interpolationLimitNanos,
-		},
-	)
+// assertError runs the query against the real database and asserts that the
+// database returns an error. The error's message must match the supplied
+// string.
+func (mq *modelQuery) assertError(errString string) {
+	mq.modelRunner.t.Helper()
+	_, _, err := mq.queryDB()
+	if err == nil {
+		mq.modelRunner.t.Fatalf(
+			"query got no error, wanted error with message matching  \"%s\"", errString,
+		)
+	}
+	if !testutils.IsError(err, errString) {
+		mq.modelRunner.t.Fatalf(
+			"query got error \"%s\", wanted error with message matching \"%s\"", err.Error(), errString,
+		)
+	}
 }
 
 // modelDataSource is used to create a mock DataSource. It returns a
