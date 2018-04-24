@@ -286,6 +286,9 @@ message DistinctSpec {
 // input has N columns and the right input has M columns, the first N columns
 // contain values from the left side and the following M columns contain values
 // from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
 message MergeJoinerSpec {
   // The streams must be ordered according to the columns that have equality
   // constraints. The first column of the left ordering is constrained to be
@@ -333,6 +336,9 @@ message MergeJoinerSpec {
 // contain values from the right side. If merged columns are present, they
 // occupy first E positions followed by N values from the left side and M values
 // from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
 message HashJoinerSpec {
   // The join constraints certain columns from the left stream to equal
   // corresponding columns on the right stream. These must have the same length.

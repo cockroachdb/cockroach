@@ -73,7 +73,7 @@ type planMaker interface {
 var _ planMaker = &planner{}
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
-// planNode.Start().
+// startPlan.
 type runParams struct {
 	// context.Context for this method call.
 	ctx context.Context

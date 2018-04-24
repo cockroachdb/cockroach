@@ -51,11 +51,14 @@ type joinPredicate struct {
 	// we need an IndexedVarHelper, the DataSourceInfo, a row buffer
 	// and the expression itself.
 	iVarHelper tree.IndexedVarHelper
-	info       *sqlbase.DataSourceInfo
 	curRow     tree.Datums
 	// The ON condition that needs to be evaluated (in addition to the
 	// equality columns).
 	onCond tree.TypedExpr
+
+	leftInfo  *sqlbase.DataSourceInfo
+	rightInfo *sqlbase.DataSourceInfo
+	info      *sqlbase.DataSourceInfo
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -131,13 +134,19 @@ func (p *joinPredicate) tryAddEqualityFilter(
 func makePredicate(
 	joinType sqlbase.JoinType, left, right *sqlbase.DataSourceInfo, usingColumns []usingColumn,
 ) (*joinPredicate, error) {
+	// For anti and semi joins, the right columns are omitted from the output (but
+	// they must be available internally for the ON condition evaluation).
+	omitRightColumns := joinType == sqlbase.JoinType_LEFT_SEMI || joinType == sqlbase.JoinType_LEFT_ANTI
+
 	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:
 	// - all the left columns,
-	// - then all the right columns,
+	// - then all the right columns (except for anti/semi join).
 	columns := make(sqlbase.ResultColumns, 0, len(left.SourceColumns)+len(right.SourceColumns))
 	columns = append(columns, left.SourceColumns...)
-	columns = append(columns, right.SourceColumns...)
+	if !omitRightColumns {
+		columns = append(columns, right.SourceColumns...)
+	}
 
 	// Compute the mappings from table aliases to column sets from
 	// both sides into a new alias-columnset mapping for the result
@@ -158,7 +167,9 @@ func makePredicate(
 		}
 	}
 	collectAliases(left.SourceAliases, 0)
-	collectAliases(right.SourceAliases, len(left.SourceColumns))
+	if !omitRightColumns {
+		collectAliases(right.SourceAliases, len(left.SourceColumns))
+	}
 	if !anonymousCols.Empty() {
 		aliases = append(aliases, sqlbase.SourceAlias{
 			Name:      sqlbase.AnonymousTable,
@@ -170,6 +181,8 @@ func makePredicate(
 		joinType:     joinType,
 		numLeftCols:  len(left.SourceColumns),
 		numRightCols: len(right.SourceColumns),
+		leftInfo:     left,
+		rightInfo:    right,
 		info: &sqlbase.DataSourceInfo{
 			SourceColumns: columns,
 			SourceAliases: aliases,
@@ -178,7 +191,8 @@ func makePredicate(
 	// We must initialize the indexed var helper in all cases, even when
 	// there is no on condition, so that getNeededColumns() does not get
 	// confused.
-	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(columns))
+	pred.curRow = make(tree.Datums, len(left.SourceColumns)+len(right.SourceColumns))
+	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(pred.curRow))
 
 	// Prepare the arrays populated below.
 	pred.leftEqualityIndices = make([]int, 0, len(usingColumns))
@@ -229,12 +243,18 @@ func (p *joinPredicate) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
-	return p.info.SourceColumns[idx].Typ
+	if idx < p.numLeftCols {
+		return p.leftInfo.SourceColumns[idx].Typ
+	}
+	return p.rightInfo.SourceColumns[idx-p.numLeftCols].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return p.info.NodeFormatter(idx)
+	if idx < p.numLeftCols {
+		return p.leftInfo.NodeFormatter(idx)
+	}
+	return p.rightInfo.NodeFormatter(idx - p.numLeftCols)
 }
 
 // eval for joinPredicate runs the on condition across the columns that do
@@ -242,11 +262,8 @@ func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // in the join algorithm already).
 // Returns true if there is no on condition or the on condition accepts the
 // row.
-func (p *joinPredicate) eval(
-	ctx *tree.EvalContext, result, leftRow, rightRow tree.Datums,
-) (bool, error) {
+func (p *joinPredicate) eval(ctx *tree.EvalContext, leftRow, rightRow tree.Datums) (bool, error) {
 	if p.onCond != nil {
-		p.curRow = result
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
 		ctx.PushIVarContainer(p.iVarHelper.Container())

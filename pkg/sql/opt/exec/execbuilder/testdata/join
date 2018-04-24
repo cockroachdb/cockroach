@@ -220,3 +220,86 @@ x:int  y:int  x:int  z:int
 1      10     NULL   NULL
 2      20     2      200
 3      30     NULL   NULL
+
+exec-raw
+CREATE TABLE t.c (u INT PRIMARY KEY, v INT);
+INSERT INTO t.c VALUES (2, 200), (3, 300), (4, 400)
+----
+
+exec-explain
+SELECT * FROM t.a WHERE EXISTS(SELECT * FROM t.c WHERE x = u)
+----
+join       0  join  ·         ·          (x, y)  ·
+ │         0  ·     type      semi       ·       ·
+ │         0  ·     equality  (x) = (u)  ·       ·
+ ├── scan  1  scan  ·         ·          (x, y)  ·
+ │         1  ·     table     a@primary  ·       ·
+ │         1  ·     spans     ALL        ·       ·
+ └── scan  1  scan  ·         ·          (u, v)  ·
+·          1  ·     table     c@primary  ·       ·
+·          1  ·     spans     ALL        ·       ·
+
+exec
+SELECT * FROM t.a WHERE EXISTS(SELECT * FROM t.c WHERE x = u)
+----
+x:int  y:int
+2      20
+3      30
+
+exec-explain
+SELECT * FROM t.a WHERE EXISTS(SELECT * FROM t.c WHERE x-1 = u)
+----
+join       0  join  ·      ·            (x, y)  ·
+ │         0  ·     type   semi         ·       ·
+ │         0  ·     pred   u = (x - 1)  ·       ·
+ ├── scan  1  scan  ·      ·            (x, y)  ·
+ │         1  ·     table  a@primary    ·       ·
+ │         1  ·     spans  ALL          ·       ·
+ └── scan  1  scan  ·      ·            (u, v)  ·
+·          1  ·     table  c@primary    ·       ·
+·          1  ·     spans  ALL          ·       ·
+
+exec
+SELECT * FROM t.a WHERE EXISTS(SELECT * FROM t.c WHERE x-1 = u)
+----
+x:int  y:int
+3      30
+
+exec-explain
+SELECT * FROM t.a WHERE NOT EXISTS(SELECT * FROM t.c WHERE x = u)
+----
+join       0  join  ·         ·          (x, y)  ·
+ │         0  ·     type      anti       ·       ·
+ │         0  ·     equality  (x) = (u)  ·       ·
+ ├── scan  1  scan  ·         ·          (x, y)  ·
+ │         1  ·     table     a@primary  ·       ·
+ │         1  ·     spans     ALL        ·       ·
+ └── scan  1  scan  ·         ·          (u, v)  ·
+·          1  ·     table     c@primary  ·       ·
+·          1  ·     spans     ALL        ·       ·
+
+exec
+SELECT * FROM t.a WHERE NOT EXISTS(SELECT * FROM t.c WHERE x = u)
+----
+x:int  y:int
+1      10
+
+exec-explain
+SELECT * FROM t.a WHERE NOT EXISTS(SELECT * FROM t.c WHERE x-1 = u)
+----
+join       0  join  ·      ·            (x, y)  ·
+ │         0  ·     type   anti         ·       ·
+ │         0  ·     pred   u = (x - 1)  ·       ·
+ ├── scan  1  scan  ·      ·            (x, y)  ·
+ │         1  ·     table  a@primary    ·       ·
+ │         1  ·     spans  ALL          ·       ·
+ └── scan  1  scan  ·      ·            (u, v)  ·
+·          1  ·     table  c@primary    ·       ·
+·          1  ·     spans  ALL          ·       ·
+
+exec
+SELECT * FROM t.a WHERE NOT EXISTS(SELECT * FROM t.c WHERE x-1 = u)
+----
+x:int  y:int
+1      10
+2      20
