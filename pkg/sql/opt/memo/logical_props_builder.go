@@ -27,6 +27,7 @@ import (
 // a parent expression's logical properties from those of its children.
 type logicalPropsBuilder struct {
 	evalCtx *tree.EvalContext
+	sb      statisticsBuilder
 }
 
 // buildProps is called by the memo group construction code in order to
@@ -36,14 +37,14 @@ type logicalPropsBuilder struct {
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (b logicalPropsBuilder) buildProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
 		return b.buildRelationalProps(ev)
 	}
 	return b.buildScalarProps(ev)
 }
 
-func (b logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		return b.buildScanProps(ev)
@@ -85,7 +86,7 @@ func (b logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (b logicalPropsBuilder) buildScanProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	md := ev.Metadata()
@@ -114,13 +115,13 @@ func (b logicalPropsBuilder) buildScanProps(ev ExprView) LogicalProps {
 	// basis for the logical props on a newly created memo group.
 	props.Relational.Cardinality = AnyCardinality
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initScan(def)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildScan(def)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -140,13 +141,13 @@ func (b logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
 	// Select filter can filter any or all rows.
 	props.Relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initSelect(ev.Child(1), &inputProps.Stats)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildSelect(ev.Child(1), &inputProps.Stats)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -175,13 +176,13 @@ func (b logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
 	// Inherit cardinality from input.
 	props.Relational.Cardinality = inputProps.Cardinality
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initProject(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildProject(&inputProps.Stats)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -243,15 +244,13 @@ func (b logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initJoin(
-		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
-	)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -301,13 +300,13 @@ func (b logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
 		props.Relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
 	}
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initGroupBy(&inputProps.Stats, groupingColSet)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildGroupBy(&inputProps.Stats, groupingColSet)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -340,13 +339,13 @@ func (b logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
 		ev, leftProps.Cardinality, rightProps.Cardinality,
 	)
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
@@ -361,13 +360,13 @@ func (b logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
 	card := uint32(ev.ChildCount())
 	props.Relational.Cardinality = Cardinality{Min: card, Max: card}
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initValues()
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildValues()
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildExplainProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	def := ev.Private().(*ExplainOpDef)
@@ -379,7 +378,7 @@ func (b logicalPropsBuilder) buildExplainProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (b logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -404,13 +403,13 @@ func (b logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildLimit(limit, &inputProps.Stats)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -436,13 +435,13 @@ func (b logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initOffset(offset, &inputProps.Stats)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildOffset(offset, &inputProps.Stats)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -453,13 +452,13 @@ func (b logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 	// Max1Row ensures that zero or one row is returned by input.
 	props.Relational.Cardinality = props.Relational.Cardinality.AtMost(1)
 
-	props.Relational.Stats.init(ev, b.evalCtx)
-	props.Relational.Stats.initMax1Row(&inputProps.Stats)
+	b.sb.init(b.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	b.sb.buildMax1Row(&inputProps.Stats)
 
 	return props
 }
 
-func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
+func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
 	switch ev.Operator() {
