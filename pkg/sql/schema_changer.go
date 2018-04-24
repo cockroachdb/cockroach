@@ -158,10 +158,6 @@ func isPermanentSchemaChangeError(err error) bool {
 			}
 		}
 	}
-	fmt.Printf("ERRR: %T %v\n", err, err)
-	if pg, ok := err.(*pgerror.Error); ok {
-		fmt.Printf("PGCODE: %#v\n", pg)
-	}
 	return true
 }
 
