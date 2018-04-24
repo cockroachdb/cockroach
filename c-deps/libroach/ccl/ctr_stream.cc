@@ -13,6 +13,10 @@
 #include "../plaintext_stream.h"
 #include "crypto_utils.h"
 
+using namespace cockroach;
+
+namespace cockroach {
+
 rocksdb::Status BuildCipherStream(const enginepbccl::EncryptionSettings& settings,
                                   const enginepbccl::SecretKey* key,
                                   std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
@@ -140,3 +144,5 @@ rocksdb::Status CTRCipherStream::DecryptBlock(uint64_t blockIndex, char* data, c
   // For CTR decryption & encryption are the same
   return EncryptBlock(blockIndex, data, scratch);
 }
+
+}  // namespace cockroach

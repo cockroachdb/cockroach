@@ -16,6 +16,10 @@
 #include "../fmt.h"
 #include "../utils.h"
 
+using namespace cockroach;
+
+namespace cockroach {
+
 FileRegistry::FileRegistry(rocksdb::Env* env, const std::string& db_dir)
     : env_(env), db_dir_(db_dir), registry_path_(db_dir_ + "/" + kFileRegistryFilename) {}
 
@@ -240,3 +244,5 @@ rocksdb::Status FileRegistry::PersistRegistryLocked(std::unique_ptr<enginepb::Fi
 
   return rocksdb::Status::OK();
 }
+
+}  // namespace cockroach

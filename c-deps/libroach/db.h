@@ -21,9 +21,9 @@
 #include <rocksdb/status.h>
 #include <rocksdb/write_batch.h>
 
-struct EnvManager;
-
 namespace cockroach {
+
+struct EnvManager;
 
 // DBOpenHook is called at the beginning of DBOpen. It can be implemented in CCL code.
 rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions opts, EnvManager* env_ctx);

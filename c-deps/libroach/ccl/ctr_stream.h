@@ -10,12 +10,13 @@
 
 #include <string>
 #include "../rocksdbutils/env_encryption.h"
-#include "../switching_provider.h"
 #include "key_manager.h"
+
+namespace cockroach {
 
 // CTRCipherStreamCreator creates a CTRCipherStream using a KeyManager.
 // Takes ownership of the KeyManager.
-class CTRCipherStreamCreator final : public CipherStreamCreator {
+class CTRCipherStreamCreator final : public rocksdb_utils::CipherStreamCreator {
  public:
   CTRCipherStreamCreator(KeyManager* key_mgr, enginepb::EnvType env_type)
       : key_manager_(key_mgr), env_type_(env_type) {}
@@ -66,3 +67,5 @@ class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {
   std::string nonce_;
   uint32_t counter_;
 };
+
+}  // namespace cockroach

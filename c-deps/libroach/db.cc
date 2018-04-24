@@ -35,7 +35,6 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
-#include "switching_provider.h"
 
 using namespace cockroach;
 
@@ -123,7 +122,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
 
   // Make the default options.env the default. It points to Env::Default which does not
   // need to be deleted.
-  std::unique_ptr<EnvManager> env_ctx(new EnvManager(options.env));
+  std::unique_ptr<cockroach::EnvManager> env_ctx(new cockroach::EnvManager(options.env));
 
   if (dir.len == 0) {
     // In-memory database: use a MemEnv as the base Env.
@@ -146,8 +145,8 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
       return ToDBStatus(status);
     }
 
-    // SwitchingProvider takes ownership of the file registry.
-    env_ctx->switching_provider.reset(new SwitchingProvider(std::move(file_registry)));
+    // EnvManager takes ownership of the file registry.
+    env_ctx->file_registry.swap(file_registry);
   } else {
     // Switching env format not enabled: check whether we have a registry file (we shouldn't).
     // The file_registry is not passed to anyone, it is deleted when it goes out of scope.
@@ -163,13 +162,8 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
     return ToDBStatus(hook_status);
   }
 
-  if (env_ctx->switching_provider != nullptr) {
-    // We are using the switching provider. Make sure the OpenHook sets all the needed env levels.
-    auto status = env_ctx->switching_provider->CheckEnvTypes();
-    if (!status.ok()) {
-      return ToDBStatus(status);
-    }
-  }
+  // TODO(mberhault): check available ciphers somehow?
+  // We may have a encrypted files in the registry file but running without encryption flags.
 
   // Register listener for tracking RocksDB stats.
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);

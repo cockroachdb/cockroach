@@ -7,7 +7,6 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 #include "../db.h"
-#include "../encoding.h"
 #include <iostream>
 #include <libroachccl.h>
 #include <memory>
@@ -17,9 +16,10 @@
 #include <rocksdb/write_batch.h>
 #include "../batch.h"
 #include "../comparator.h"
+#include "../encoding.h"
 #include "../env_manager.h"
+#include "../rocksdbutils/env_encryption.h"
 #include "../status.h"
-#include "../switching_provider.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "ctr_stream.h"
 #include "key_manager.h"
@@ -44,9 +44,6 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
         "on-disk version does not support encryption, but we found encryption flags");
   }
 
-  // Switching env enabled means we have a switching provider.
-  assert(env_mgr->switching_provider != nullptr);
-
   // Parse extra_options.
   cockroach::ccl::baseccl::EncryptionOptions opts;
   if (!opts.ParseFromArray(options.data, options.len)) {
@@ -68,17 +65,14 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // Create a cipher stream creator using the store_key_manager.
-  auto store_stream = std::unique_ptr<CTRCipherStreamCreator>(
-      new CTRCipherStreamCreator(store_key_manager, enginepb::Store));
+  auto store_stream = new CTRCipherStreamCreator(store_key_manager, enginepb::Store);
 
   // Construct an EncryptedEnv using this stream creator and the base_env (Default or Mem).
+  // It takes ownership of the stream.
   rocksdb::Env* store_keyed_env =
-      NewEncryptedEnv(env_mgr->base_env, env_mgr->switching_provider.get(), store_stream.get());
+      rocksdb_utils::NewEncryptedEnv(env_mgr->base_env, env_mgr->file_registry.get(), store_stream);
   // Transfer ownership to the env manager.
   env_mgr->TakeEnvOwnership(store_keyed_env);
-
-  // Register the stream creator with the switching provider. This transfers ownership.
-  env_mgr->switching_provider->RegisterCipherStreamCreator(std::move(store_stream));
 
   // Initialize data key manager using the stored-keyed-env.
   DataKeyManager* data_key_manager =
@@ -90,20 +84,15 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // Create a cipher stream creator using the data_key_manager.
-  // Register a CTR stream creator at the data level. It uses (and owns) the data key manager.
-  // The switching provider owns the stream creator.
-  auto data_stream = std::unique_ptr<CTRCipherStreamCreator>(
-      new CTRCipherStreamCreator(data_key_manager, enginepb::Data));
+  auto data_stream = new CTRCipherStreamCreator(data_key_manager, enginepb::Data);
 
   // Construct an EncryptedEnv using this stream creator and the base_env (Default or Mem).
+  // It takes ownership of the stream.
   rocksdb::Env* data_keyed_env =
-      NewEncryptedEnv(env_mgr->base_env, env_mgr->switching_provider.get(), data_stream.get());
+      rocksdb_utils::NewEncryptedEnv(env_mgr->base_env, env_mgr->file_registry.get(), data_stream);
   // Transfer ownership to the env manager and make it as the db_env.
   env_mgr->TakeEnvOwnership(data_keyed_env);
   env_mgr->db_env = data_keyed_env;
-
-  // Register the stream creator with the switching provider. This transfers ownership.
-  env_mgr->switching_provider->RegisterCipherStreamCreator(std::move(data_stream));
 
   // Fetch the current store key info.
   std::unique_ptr<enginepbccl::KeyInfo> store_key = store_key_manager->CurrentKeyInfo();
@@ -116,8 +105,8 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
   }
 
   // TODO(mberhault): enable at some point. We still want to make sure people do not use it.
-  return rocksdb::Status::InvalidArgument("encryption is not supported");
-  // return rocksdb::Status::OK();
+  // return rocksdb::Status::InvalidArgument("encryption is not supported");
+  return rocksdb::Status::OK();
 }
 
 }  // namespace cockroach

@@ -17,6 +17,8 @@
 #include "../testutils.h"
 #include "file_registry.h"
 
+using namespace cockroach;
+
 TEST(FileRegistry, TransformPath) {
   struct TestCase {
     std::string db_dir;
