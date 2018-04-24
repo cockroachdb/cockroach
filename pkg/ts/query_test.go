@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -685,7 +684,9 @@ func TestQuery(t *testing.T) {
 	})
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
+
+	query := tm.makeQuery("test.metric", resolution1ns, 0, 60)
+	query.assertSuccess(7, 1)
 
 	// Verify across multiple sources
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
@@ -715,19 +716,24 @@ func TestQuery(t *testing.T) {
 	tm.assertModelCorrect()
 
 	// Test default query: avg downsampler, sum aggregator, no derivative.
-	tm.assertQuery("test.multimetric", nil, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 8, 2)
+	query = tm.makeQuery("test.multimetric", resolution1ns, 0, 90)
+	query.assertSuccess(8, 2)
 	// Test with aggregator specified.
-	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), nil, nil,
-		resolution1ns, 1, 0, 90, 0, 8, 2)
+	query.setSourceAggregator(tspb.TimeSeriesQueryAggregator_MAX)
+	query.assertSuccess(8, 2)
 	// Test with aggregator and downsampler.
-	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MAX.Enum(), tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		resolution1ns, 1, 0, 90, 0, 8, 2)
+	query.setDownsampler(tspb.TimeSeriesQueryAggregator_AVG)
+	query.assertSuccess(8, 2)
 	// Test with derivative specified.
-	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_AVG.Enum(), nil,
-		tspb.TimeSeriesQueryDerivative_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 0, 7, 2)
+	query.Downsampler = nil
+	query.setDerivative(tspb.TimeSeriesQueryDerivative_DERIVATIVE)
+	query.assertSuccess(7, 2)
 	// Test with everything specified.
-	tm.assertQuery("test.multimetric", nil, tspb.TimeSeriesQueryAggregator_MIN.Enum(), tspb.TimeSeriesQueryAggregator_MAX.Enum(),
-		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(), resolution1ns, 1, 0, 90, 0, 7, 2)
+	query = tm.makeQuery("test.multimetric", resolution1ns, 0, 90)
+	query.setSourceAggregator(tspb.TimeSeriesQueryAggregator_MIN)
+	query.setDownsampler(tspb.TimeSeriesQueryAggregator_MAX)
+	query.setDerivative(tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE)
+	query.assertSuccess(7, 2)
 
 	// Test queries that return no data. Check with every
 	// aggregator/downsampler/derivative combination. This situation is
@@ -741,23 +747,14 @@ func TestQuery(t *testing.T) {
 		tspb.TimeSeriesQueryDerivative_NONE, tspb.TimeSeriesQueryDerivative_DERIVATIVE,
 		tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE,
 	}
+	query = tm.makeQuery("nodata", resolution1ns, 0, 90)
 	for _, downsampler := range aggs {
 		for _, agg := range aggs {
 			for _, deriv := range derivs {
-				tm.assertQuery(
-					"nodata",
-					nil,
-					downsampler.Enum(),
-					agg.Enum(),
-					deriv.Enum(),
-					resolution1ns,
-					1,
-					0,
-					90,
-					0,
-					0,
-					0,
-				)
+				query.setDownsampler(downsampler)
+				query.setSourceAggregator(agg)
+				query.setDerivative(deriv)
+				query.assertSuccess(0, 0)
 			}
 		}
 	}
@@ -822,11 +819,19 @@ func TestQuery(t *testing.T) {
 
 	// Assert querying data from subset of sources. Includes source with no
 	// data.
-	tm.assertQuery("test.specificmetric", []string{"source2", "source4", "source6"}, nil, nil, nil, resolution1ns, 1, 0, 90, 0, 7, 2)
+	query = tm.makeQuery("test.specificmetric", resolution1ns, 0, 90)
+	query.Sources = []string{"source2", "source4", "source6"}
+	query.assertSuccess(7, 2)
 
 	// Assert querying data over limited range for single source. Regression
 	// test for #4987.
-	tm.assertQuery("test.specificmetric", []string{"source4", "source5"}, nil, nil, nil, resolution1ns, 1, 5, 24, 0, 4, 2)
+	query.Sources = []string{"source4", "source5"}
+	query.QueryTimespan = QueryTimespan{
+		StartNanos:          5,
+		EndNanos:            24,
+		SampleDurationNanos: 1,
+	}
+	query.assertSuccess(4, 2)
 }
 
 // TestQueryDownsampling validates that query results match the expectation of
@@ -837,46 +842,14 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	memContext := tm.makeMemoryContext(0)
-	defer memContext.Close(context.TODO())
-
 	// Query with sampleDuration that is too small, expect error.
-	timespan := QueryTimespan{
-		SampleDurationNanos: 1,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{}, Resolution10s, timespan, memContext,
-	)
-	if err == nil {
-		t.Fatal("expected query to fail with sampleDuration less than resolution allows.")
-	}
-	errorStr := "was not less"
-	if !testutils.IsError(err, errorStr) {
-		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
-	}
+	query := tm.makeQuery("", Resolution10s, 0, 10000)
+	query.SampleDurationNanos = 1
+	query.assertError("was not less")
 
 	// Query with sampleDuration which is not an even multiple of the resolution.
-	timespan = QueryTimespan{
-		SampleDurationNanos: Resolution10s.SampleDuration() + 1,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err = tm.DB.Query(
-		context.TODO(),
-		tspb.Query{},
-		Resolution10s,
-		timespan,
-		memContext,
-	)
-	if err == nil {
-		t.Fatal("expected query to fail with sampleDuration not an even multiple of the query resolution.")
-	}
-	errorStr = "not a multiple"
-	if !testutils.IsError(err, errorStr) {
-		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
-	}
+	query.SampleDurationNanos = Resolution10s.SampleDuration() + 1
+	query.assertError("not a multiple")
 
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
 		{
@@ -913,9 +886,15 @@ func TestQueryDownsampling(t *testing.T) {
 	tm.assertKeyCount(9)
 	tm.assertModelCorrect()
 
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 6, 2)
-	tm.assertQuery("test.metric", []string{"source1"}, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 5, 1)
-	tm.assertQuery("test.metric", []string{"source2"}, nil, nil, nil, resolution1ns, 10, 0, 60, 0, 4, 1)
+	query = tm.makeQuery("test.metric", resolution1ns, 0, 60)
+	query.SampleDurationNanos = 10
+	query.assertSuccess(6, 2)
+
+	query.Sources = []string{"source1"}
+	query.assertSuccess(5, 1)
+
+	query.Sources = []string{"source2"}
+	query.assertSuccess(4, 1)
 }
 
 // TestInterpolationLimit validates that query results match the expectation of
@@ -959,9 +938,14 @@ func TestInterpolationLimit(t *testing.T) {
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
 
-	tm.assertQuery("metric.edgegaps", nil, nil, nil, nil, resolution1ns, 1, 14, 19, 10, 6, 2)
-	tm.assertQuery("metric.edgegaps", nil, nil, nil, nil, resolution1ns, 1, 14, 19, 0, 6, 2)
-	tm.assertQuery("metric.edgegaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 14, 19, 10, 6, 2)
+	{
+		query := tm.makeQuery("metric.edgegaps", resolution1ns, 14, 19)
+		query.assertSuccess(6, 2)
+		query.InterpolationLimitNanos = 10
+		query.assertSuccess(6, 2)
+		query.Sources = []string{"source1", "source2"}
+		query.assertSuccess(6, 2)
+	}
 
 	// Metric with inner gaps which may be effected by the interpolation limit.
 	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
@@ -995,35 +979,35 @@ func TestInterpolationLimit(t *testing.T) {
 	tm.assertKeyCount(7)
 	tm.assertModelCorrect()
 
-	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 0, 9, 2)
-	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 2, 9, 2)
-	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 3, 9, 2)
-	tm.assertQuery("metric.innergaps", nil, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
-	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 0, 9, 2)
-	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 2, 9, 2)
-	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 3, 9, 2)
-	tm.assertQuery("metric.innergaps", []string{"source1", "source2"}, nil, nil, nil, resolution1ns, 1, 0, 9, 10, 9, 2)
+	// Interpolation limit 0, 2, 3, and 10.
+	{
+		query := tm.makeQuery("metric.innergaps", resolution1ns, 0, 9)
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 2
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 3
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 10
+		query.assertSuccess(9, 2)
+	}
+
+	// With explicit source list.
+	{
+		query := tm.makeQuery("metric.innergaps", resolution1ns, 0, 9)
+		query.Sources = []string{"source1", "source2"}
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 2
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 3
+		query.assertSuccess(9, 2)
+		query.InterpolationLimitNanos = 10
+		query.assertSuccess(9, 2)
+	}
 }
 
 func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tm := newTestModelRunner(t)
-
-	// Swap model's memory monitor in order to adjust allocation size.
-	unlimitedMon := tm.workerMemMonitor
-	adjustedMon := mon.MakeMonitor(
-		"timeseries-test-worker-adjusted",
-		mon.MemoryResource,
-		nil,
-		nil,
-		1,
-		math.MaxInt64,
-		cluster.MakeTestingClusterSettings(),
-	)
-	tm.workerMemMonitor = &adjustedMon
-	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
-	defer tm.workerMemMonitor.Stop(context.TODO())
-
 	tm.Start()
 	defer tm.Stop()
 
@@ -1059,82 +1043,69 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 	tm.assertModelCorrect()
 
 	// Track the total maximum memory used for a query with no budget.
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 11, 109, 10, 99, 3)
-	memoryUsed := tm.workerMemMonitor.MaximumBytes()
+	{
+		// Swap model's memory monitor in order to adjust allocation size.
+		adjustedMon := mon.MakeMonitor(
+			"timeseries-test-worker-adjusted",
+			mon.MemoryResource,
+			nil,
+			nil,
+			1,
+			math.MaxInt64,
+			cluster.MakeTestingClusterSettings(),
+		)
+		adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+		defer adjustedMon.Stop(context.TODO())
 
-	for _, limit := range []int64{
-		memoryUsed,
-		memoryUsed / 2,
-		memoryUsed / 3,
-	} {
-		// Limit memory in use by model. Reset memory monitor to get new maximum.
-		tm.workerMemMonitor.Stop(context.TODO())
-		tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
-		if tm.workerMemMonitor.MaximumBytes() != 0 {
-			t.Fatalf("maximum bytes was %d, wanted zero", tm.workerMemMonitor.MaximumBytes())
-		}
+		query := tm.makeQuery("test.metric", resolution1ns, 11, 109)
+		query.workerMemMonitor = &adjustedMon
+		query.InterpolationLimitNanos = 10
+		query.assertSuccess(99, 3)
+		memoryUsed := adjustedMon.MaximumBytes()
 
-		tm.queryMemoryBudget = limit
+		for _, limit := range []int64{
+			memoryUsed,
+			memoryUsed / 2,
+			memoryUsed / 3,
+		} {
+			// Limit memory in use by model. Reset memory monitor to get new maximum.
+			adjustedMon.Stop(context.TODO())
+			adjustedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+			if adjustedMon.MaximumBytes() != 0 {
+				t.Fatalf("maximum bytes was %d, wanted zero", adjustedMon.MaximumBytes())
+			}
 
-		// Expected maximum usage may slightly exceed the budget due to the size of
-		// dataSpan structures which are not accounted for in getMaxTimespan.
-		expectedMaxUsage := limit + 3*(int64(len("source1"))+sizeOfDataSpan)
-		tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 11, 109, 10, 99, 3)
-		if a, e := tm.workerMemMonitor.MaximumBytes(), expectedMaxUsage; a > e {
-			t.Fatalf("memory usage for query was %d, exceeded set maximum limit %d", a, e)
-		}
+			query.BudgetBytes = limit
+			query.assertSuccess(99, 3)
 
-		// As an additional check, ensure that maximum bytes used was within 5% of memory budget;
-		// we want to use as much memory as we can to ensure the fastest possible queries.
-		if a, e := float64(tm.workerMemMonitor.MaximumBytes()), float64(tm.queryMemoryBudget)*0.95; a < e {
-			t.Fatalf("memory usage for query was %f, wanted at least %f", a, e)
+			// Expected maximum usage may slightly exceed the budget due to the size of
+			// dataSpan structures which are not accounted for in getMaxTimespan.
+			expectedMaxUsage := limit + 3*(int64(len("source1"))+sizeOfDataSpan)
+			if a, e := adjustedMon.MaximumBytes(), expectedMaxUsage; a > e {
+				t.Fatalf("memory usage for query was %d, exceeded set maximum limit %d", a, e)
+			}
+
+			// As an additional check, ensure that maximum bytes used was within 5% of memory budget;
+			// we want to use as much memory as we can to ensure the fastest possible queries.
+			if a, e := float64(adjustedMon.MaximumBytes()), float64(limit)*0.95; a < e {
+				t.Fatalf("memory usage for query was %f, wanted at least %f", a, e)
+			}
 		}
 	}
 
 	// Verify insufficient memory error bubbles up.
-	memContext := tm.makeMemoryContext(5)
-	memContext.BudgetBytes = 1000
-	memContext.EstimatedSources = 3
-	defer memContext.Close(context.TODO())
-	timespan := QueryTimespan{
-		SampleDurationNanos: 1,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err := tm.DB.QueryMemoryConstrained(
-		context.TODO(),
-		tspb.Query{Name: "test.metric"},
-		resolution1ns,
-		timespan,
-		memContext,
-	)
-	if errorStr := "insufficient"; !testutils.IsError(err, errorStr) {
-		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
+	{
+		query := tm.makeQuery("test.metric", resolution1ns, 0, 10000)
+		query.BudgetBytes = 1000
+		query.EstimatedSources = 3
+		query.InterpolationLimitNanos = 5
+		query.assertError("insufficient")
 	}
 }
 
 func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tm := newTestModelRunner(t)
-
-	memoryBudget := int64(100 * 1024)
-
-	// Swap model's memory monitor to install a limit.
-	unlimitedMon := tm.workerMemMonitor
-	limitedMon := mon.MakeMonitorWithLimit(
-		"timeseries-test-limited",
-		mon.MemoryResource,
-		memoryBudget,
-		nil,
-		nil,
-		100,
-		100,
-		cluster.MakeTestingClusterSettings(),
-	)
-	tm.workerMemMonitor = &limitedMon
-	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
-	defer tm.workerMemMonitor.Stop(context.TODO())
-
 	tm.Start()
 	defer tm.Stop()
 
@@ -1155,8 +1126,25 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	tm.assertKeyCount(4)
 	tm.assertModelCorrect()
 
+	// Create a limited bytes monitor.
+	memoryBudget := int64(100 * 1024)
+	limitedMon := mon.MakeMonitorWithLimit(
+		"timeseries-test-limited",
+		mon.MemoryResource,
+		memoryBudget,
+		nil,
+		nil,
+		100,
+		100,
+		cluster.MakeTestingClusterSettings(),
+	)
+	limitedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
+	defer limitedMon.Stop(context.TODO())
+
 	// Assert correctness with no memory pressure.
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
+	query := tm.makeQuery("test.metric", resolution1ns, 0, 60)
+	query.workerMemMonitor = &limitedMon
+	query.assertSuccess(7, 1)
 
 	// Assert failure with memory pressure.
 	acc := limitedMon.MakeBoundAccount()
@@ -1164,27 +1152,15 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	memContext := tm.makeMemoryContext(0)
-	defer memContext.Close(context.TODO())
-	timespan := QueryTimespan{
-		SampleDurationNanos: 1,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, timespan, memContext,
-	)
-	if errorStr := "memory budget exceeded"; !testutils.IsError(err, errorStr) {
-		t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
-	}
+	query.assertError("memory budget exceeded")
 
 	// Assert success again with memory pressure released.
 	acc.Close(context.TODO())
-	tm.assertQuery("test.metric", nil, nil, nil, nil, resolution1ns, 1, 0, 60, 0, 7, 1)
+	query.assertSuccess(7, 1)
 
 	// Start/Stop limited monitor to reset maximum allocation.
-	tm.workerMemMonitor.Stop(context.TODO())
-	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
+	limitedMon.Stop(context.TODO())
+	limitedMon.Start(context.TODO(), tm.workerMemMonitor, mon.BoundAccount{})
 
 	var (
 		memStatsBefore runtime.MemStats
@@ -1192,17 +1168,8 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	)
 	runtime.ReadMemStats(&memStatsBefore)
 
-	timespan = QueryTimespan{
-		SampleDurationNanos: 1,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{Name: "test.metric"}, resolution1ns, timespan, memContext,
-	)
-	if err != nil {
-		t.Fatalf("expected no error from query, got %v", err)
-	}
+	query.EndNanos = 10000
+	query.assertSuccess(7, 1)
 
 	runtime.ReadMemStats(&memStatsAfter)
 	t.Logf("total allocations for query: %d\n", memStatsAfter.TotalAlloc-memStatsBefore.TotalAlloc)
@@ -1217,56 +1184,27 @@ func TestQueryBadRequests(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	memContext := tm.makeMemoryContext(0)
-	defer memContext.Close(context.TODO())
-
 	// Query with a downsampler that is invalid, expect error.
-	downsampler := (tspb.TimeSeriesQueryAggregator)(999)
-	timespan := QueryTimespan{
-		SampleDurationNanos: 10,
-		StartNanos:          0,
-		EndNanos:            10000,
-	}
-	_, _, err := tm.DB.Query(
-		context.TODO(), tspb.Query{
-			Name:        "metric.test",
-			Downsampler: downsampler.Enum(),
-		}, resolution1ns, timespan, memContext,
-	)
-	errorStr := "unknown time series downsampler"
-	if !testutils.IsError(err, errorStr) {
-		if err == nil {
-			t.Fatalf("bad query got no error, wanted to match %q", errorStr)
-		} else {
-			t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
-		}
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 10000)
+		query.SampleDurationNanos = 10
+		query.setDownsampler((tspb.TimeSeriesQueryAggregator)(999))
+		query.assertError("unknown time series downsampler")
 	}
 
 	// Query with a aggregator that is invalid, expect error.
-	aggregator := (tspb.TimeSeriesQueryAggregator)(999)
-	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{
-			Name:             "metric.test",
-			SourceAggregator: aggregator.Enum(),
-		}, resolution1ns, timespan, memContext,
-	)
-	errorStr = "unknown time series aggregator"
-	if !testutils.IsError(err, errorStr) {
-		if err == nil {
-			t.Fatalf("bad query got no error, wanted to match %q", errorStr)
-		} else {
-			t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
-		}
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 10000)
+		query.SampleDurationNanos = 10
+		query.setSourceAggregator((tspb.TimeSeriesQueryAggregator)(999))
+		query.assertError("unknown time series aggregator")
 	}
 
-	// Query with an interpolator that is invalid, expect no error (default behavior is none).
-	derivative := (tspb.TimeSeriesQueryDerivative)(999)
-	_, _, err = tm.DB.Query(
-		context.TODO(), tspb.Query{
-			Derivative: derivative.Enum(),
-		}, resolution1ns, timespan, memContext,
-	)
-	if !testutils.IsError(err, "") {
-		t.Fatalf("bad query got error %q, wanted no error", err.Error())
+	// Query with a downsampler that is invalid, expect no error (default behavior is none).
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 10000)
+		query.SampleDurationNanos = 10
+		query.setDerivative((tspb.TimeSeriesQueryDerivative)(999))
+		query.assertSuccess(0, 0)
 	}
 }
