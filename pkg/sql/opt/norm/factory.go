@@ -172,6 +172,25 @@ func (f *Factory) listOnlyHasNulls(list memo.ListID) bool {
 	return true
 }
 
+// removeListItem returns a new list that is a copy of the given list, except
+// that it does not contain the given search item. If the list contains the item
+// multiple times, then only the first instance is removed. If the list does not
+// contain the item, then removeListItem will panic.
+func (f *Factory) removeListItem(list memo.ListID, search memo.GroupID) memo.ListID {
+	existingList := f.mem.LookupList(list)
+	newList := make([]memo.GroupID, len(existingList)-1)
+	for i, item := range existingList {
+		if item == search {
+			newList = append(newList[:i], existingList[i+1:]...)
+			break
+		}
+
+		// If the list does not contain the item, this will panic.
+		newList[i] = item
+	}
+	return f.mem.InternList(newList)
+}
+
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
@@ -336,14 +355,17 @@ func (f *Factory) outerCols(group memo.GroupID) opt.ColSet {
 	return f.lookupLogical(group).OuterCols()
 }
 
-// synthesizedCols returns the set of columns which have been added by the given
-// Project operator to its input columns. For example, the "x+1" column is a
-// synthesized column in "SELECT x, x+1 FROM a".
-func (f *Factory) synthesizedCols(project memo.GroupID) opt.ColSet {
-	synth := f.outputCols(project).Copy()
-	input := f.mem.NormExpr(project).AsProject().Input()
-	synth.DifferenceWith(f.outputCols(input))
-	return synth
+// hasOuterCols returns true if the given group has at least one outer column,
+// or in other words, a reference to a variable that is not bound within its
+// own scope. For example:
+//
+//   SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x)
+//
+// The a.x variable in the EXISTS subquery references a column outside the scope
+// of the subquery. It is an "outer column" for the subquery (see the comment on
+// RelationalProps.OuterCols for more details).
+func (f *Factory) hasOuterCols(group memo.GroupID) bool {
+	return !f.outerCols(group).Empty()
 }
 
 // onlyConstants returns true if the scalar expression is a "constant
@@ -369,6 +391,13 @@ func (f *Factory) hasSameCols(left, right memo.GroupID) bool {
 // the right group's output columns.
 func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).SubsetOf(f.outputCols(right))
+}
+
+// isScalarGroupBy returns true if the given grouping columns come from a
+// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
+// with any aggregate functions operating over the entire input expression.
+func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
+	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
 }
 
 // ----------------------------------------------------------------------
@@ -577,14 +606,8 @@ func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.Private
 //
 // ----------------------------------------------------------------------
 
-// emptyGroupingCols returns true if the given grouping columns for a GroupBy
-// operator are empty.
-func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(cols).(opt.ColSet).Empty()
-}
-
-// isCorrelated returns true if variables in the source expression reference
-// columns in the destination expression. For example:
+// isCorrelated returns true if any variable in the source expression references
+// a column from the destination expression. For example:
 //   (InnerJoin
 //     (Scan a)
 //     (Scan b)
@@ -598,22 +621,25 @@ func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 	return f.outerCols(src).Intersects(f.outputCols(dst))
 }
 
-// isCorrelatedCols is similar to isCorrelated, except that it checks whether
-// variables in the given expression reference any of the given columns. This:
+// isBoundBy returns true if all outer references in the source expression are
+// bound by the destination expression. For example:
 //
-//   (IsCorrelated $src $dst)
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Eq (Variable a.x) (Const 1))
+//   )
 //
-// is equivalent to this:
-//
-//   (IsCorrelatedCols $src (OutputCols $dts))
-//
-func (f *Factory) isCorrelatedCols(group memo.GroupID, cols opt.ColSet) bool {
-	return f.outerCols(group).Intersects(cols)
+// The (Eq) expression is fully bound by the (Scan a) expression because all of
+// its outer references are satisfied by the columns produced by the Scan.
+func (f *Factory) isBoundBy(src, dst memo.GroupID) bool {
+	return f.outerCols(src).SubsetOf(f.outputCols(dst))
 }
 
-// extractCorrelatedConditions returns a new list containing only those
-// expressions from the given list that are correlated with the given set of
-// columns. For example:
+// extractBoundConditions returns a new list containing only those expressions
+// from the given list that are fully bound by the given expression (i.e. all
+// outer references are satisfied by it). For example:
+//
 //   (InnerJoin
 //     (Scan a)
 //     (Scan b)
@@ -623,26 +649,27 @@ func (f *Factory) isCorrelatedCols(group memo.GroupID, cols opt.ColSet) bool {
 //     ])
 //   )
 //
-// Calling extractCorrelatedConditions with the filter conditions list and the
-// output columns of (Scan b) would extract the (Eq) expression, since it
-// references columns from b.
-func (f *Factory) extractCorrelatedConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
+// Calling extractBoundConditions with the filter conditions list and the output
+// columns of (Scan a) would extract the (Gt) expression, since its outer
+// references only reference columns from a.
+func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
 	extracted := make([]memo.GroupID, 0, list.Length)
 	for _, item := range f.mem.LookupList(list) {
-		if f.isCorrelatedCols(item, cols) {
+		if f.isBoundBy(item, group) {
 			extracted = append(extracted, item)
 		}
 	}
 	return f.mem.InternList(extracted)
 }
 
-// extractUncorrelatedConditions is the inverse of extractCorrelatedConditions.
-// Instead of extracting correlated expressions, it extracts list expressions
-// that are *not* correlated with the destination.
-func (f *Factory) extractUncorrelatedConditions(list memo.ListID, cols opt.ColSet) memo.ListID {
+// extractUnboundConditions is the inverse of extractBoundConditions. Instead of
+// extracting expressions that are bound by the given expression, it extracts
+// list expressions that have at least one outer reference that is *not* bound
+// by the given expression (i.e. it has a "free" variable).
+func (f *Factory) extractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
 	extracted := make([]memo.GroupID, 0, list.Length)
 	for _, item := range f.mem.LookupList(list) {
-		if !f.isCorrelatedCols(item, cols) {
+		if !f.isBoundBy(item, group) {
 			extracted = append(extracted, item)
 		}
 	}
@@ -710,6 +737,33 @@ func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 		}
 	}
 	return false
+}
+
+// ----------------------------------------------------------------------
+//
+// Join Rules
+//   Custom match and replace functions used with join.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// removeApply replaces an apply join operator type with the corresponding non-
+// apply join operator type. This is used when decorrelating subqueries.
+func (f *Factory) removeApply(op opt.Operator, left, right, filter memo.GroupID) memo.GroupID {
+	switch op {
+	case opt.InnerJoinApplyOp:
+		return f.ConstructInnerJoin(left, right, filter)
+	case opt.LeftJoinApplyOp:
+		return f.ConstructLeftJoin(left, right, filter)
+	case opt.RightJoinApplyOp:
+		return f.ConstructRightJoin(left, right, filter)
+	case opt.FullJoinApplyOp:
+		return f.ConstructFullJoin(left, right, filter)
+	case opt.SemiJoinApplyOp:
+		return f.ConstructSemiJoin(left, right, filter)
+	case opt.AntiJoinApplyOp:
+		return f.ConstructAntiJoin(left, right, filter)
+	}
+	panic(fmt.Sprintf("unexpected join operator: %v", op))
 }
 
 // ----------------------------------------------------------------------

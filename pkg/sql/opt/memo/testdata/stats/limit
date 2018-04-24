@@ -80,7 +80,7 @@ limit
  │    └── eq [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
  │         ├── variable: a.s [type=string, outer=(3)]
  │         └── const: 'foo' [type=string]
- └── subquery [type=int, outer=(5)]
+ └── subquery [type=int]
       ├── max1-row
       │    ├── columns: column5:5(int)
       │    ├── stats: [rows=1]

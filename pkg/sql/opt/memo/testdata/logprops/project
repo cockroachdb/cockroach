@@ -1,7 +1,7 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+CREATE TABLE xysd (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
 ----
-TABLE a
+TABLE xysd
  ├── x int not null
  ├── y int
  ├── s string
@@ -13,34 +13,97 @@ TABLE a
       ├── d decimal not null
       └── x int not null (storing)
 
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
 build
-SELECT a.y, a.x+1, 1, a.x FROM a
+SELECT y, x+1, 1, x FROM xysd
 ----
 project
  ├── columns: y:2(int) column5:5(int) column6:6(int) x:1(int!null)
  ├── stats: [rows=1000]
  ├── keys: (1)
- ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
-      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: xysd.y [type=int, outer=(2)]
       ├── plus [type=int, outer=(1)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: xysd.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       ├── const: 1 [type=int]
-      └── variable: a.x [type=int, outer=(1)]
+      └── variable: xysd.x [type=int, outer=(1)]
 
 build
-SELECT s FROM a
+SELECT s FROM xysd
 ----
 project
  ├── columns: s:3(string)
  ├── stats: [rows=1000]
- ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(3)]
-      └── variable: a.s [type=string, outer=(3)]
+      └── variable: xysd.s [type=string, outer=(3)]
+
+# Propagate outer columns.
+build
+SELECT * FROM xysd WHERE (SELECT (SELECT y) FROM kuv WHERE k=x) > 5
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=100]
+ ├── keys: (1) weak(3,4)
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
+ └── gt [type=bool, outer=(1,2)]
+      ├── subquery [type=int, outer=(1,2)]
+      │    ├── max1-row
+      │    │    ├── columns: column8:8(int)
+      │    │    ├── outer: (1,2)
+      │    │    ├── stats: [rows=1]
+      │    │    └── project
+      │    │         ├── columns: column8:8(int)
+      │    │         ├── outer: (1,2)
+      │    │         ├── stats: [rows=100]
+      │    │         ├── select
+      │    │         │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │    │         │    ├── outer: (1)
+      │    │         │    ├── stats: [rows=100]
+      │    │         │    ├── keys: (5)
+      │    │         │    ├── scan kuv
+      │    │         │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │    │         │    │    ├── stats: [rows=1000]
+      │    │         │    │    └── keys: (5)
+      │    │         │    └── eq [type=bool, outer=(1,5)]
+      │    │         │         ├── variable: kuv.k [type=int, outer=(5)]
+      │    │         │         └── variable: xysd.x [type=int, outer=(1)]
+      │    │         └── projections [outer=(2)]
+      │    │              └── subquery [type=int, outer=(2)]
+      │    │                   ├── max1-row
+      │    │                   │    ├── columns: xysd.y:2(int)
+      │    │                   │    ├── outer: (2)
+      │    │                   │    ├── stats: [rows=1]
+      │    │                   │    └── project
+      │    │                   │         ├── columns: xysd.y:2(int)
+      │    │                   │         ├── outer: (2)
+      │    │                   │         ├── stats: [rows=1]
+      │    │                   │         ├── values
+      │    │                   │         │    ├── stats: [rows=1]
+      │    │                   │         │    └── tuple [type=tuple{}]
+      │    │                   │         └── projections [outer=(2)]
+      │    │                   │              └── variable: xysd.y [type=int, outer=(2)]
+      │    │                   └── variable: xysd.y [type=int, outer=(2)]
+      │    └── variable: column8 [type=int, outer=(8)]
+      └── const: 5 [type=int]

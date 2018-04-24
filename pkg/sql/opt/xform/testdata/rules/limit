@@ -95,7 +95,7 @@ limit
  ├── columns: s:4(string)
  ├── scan a
  │    └── columns: a.s:4(string)
- └── subquery [type=int, outer=(6)]
+ └── subquery [type=int]
       ├── max1-row
       │    ├── columns: a.k:6(int!null)
       │    ├── keys: (6)

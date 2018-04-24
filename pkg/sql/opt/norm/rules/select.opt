@@ -67,12 +67,12 @@
 # rule which has the DetectCycle tag).
 [PushSelectIntoProject, Normalize]
 (Select
-    $project:(Project
+    (Project
         $input:*
         $projections:*
     )
     (Filters
-        $list:[ ... $condition:* & ^(IsCorrelatedCols $condition (SynthesizedCols $project)) ... ]
+        $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ]
     )
 )
 =>
@@ -80,11 +80,11 @@
     (ProjectNoCycle
         (Select
             $input
-            (Filters (ExtractUncorrelatedConditions $list (SynthesizedCols $project)))
+            (Filters (ExtractBoundConditions $list $input))
         )
         $projections
     )
-    (Filters (ExtractCorrelatedConditions $list (SynthesizedCols $project)))
+    (Filters (ExtractUnboundConditions $list $input))
 )
 
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
@@ -108,19 +108,19 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $right) ... ])
+    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $left
-            (Filters (ExtractUncorrelatedConditions $list (OutputCols $right)))
+            (Filters (ExtractBoundConditions $list $left))
         )
         $right
         $on
     )
-    (Filters (ExtractCorrelatedConditions $list (OutputCols $right)))
+    (Filters (ExtractUnboundConditions $list $left))
 )
 
 # PushSelectIntoJoinRight is symmetric with PushSelectIntoJoinLeft. It pushes
@@ -133,7 +133,7 @@
         $right:*
         $on:*
     )
-    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $left) ... ])
+    $filter:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
 )
 =>
 (Select
@@ -141,11 +141,11 @@
         $left
         (Select
             $right
-            (Filters (ExtractUncorrelatedConditions $list (OutputCols $left)))
+            (Filters (ExtractBoundConditions $list $right))
         )
         $on
     )
-    (Filters (ExtractCorrelatedConditions $list (OutputCols $left)))
+    (Filters (ExtractUnboundConditions $list $right))
 )
 
 # MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
@@ -175,9 +175,8 @@
 
 # PushSelectIntoGroupBy pushes a Select condition below a GroupBy in the case
 # where it does not reference any of the aggregation columns. This only works
-# if there are grouping columns. Otherwise, this is an instance of the "scalar"
-# GroupBy, which returns only one row, and which exhibits different behavior if
-# the input is empty:
+# if this is not an instance of the "scalar" GroupBy, which returns only one
+# row, and which exhibits different behavior if the input is empty:
 #   SELECT MAX(y) FROM a
 #
 # If "a" is empty, this returns a single row containing a null value. This is
@@ -191,19 +190,53 @@
     (GroupBy
         $input:*
         $aggregations:*
-        $groupingCols:* & ^(EmptyGroupingCols $groupingCols)
+        $groupingCols:* & ^(IsScalarGroupBy $groupingCols)
     )
-    (Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $aggregations) ... ])
+    (Filters $list:[ ... $condition:* & (IsBoundBy $condition $input) ... ])
 )
 =>
 (Select
     (GroupBy
         (Select
             $input
-            (Filters (ExtractUncorrelatedConditions $list (OutputCols $aggregations)))
+            (Filters (ExtractBoundConditions $list $input))
         )
         $aggregations
         $groupingCols
     )
-    (Filters (ExtractCorrelatedConditions $list (OutputCols $aggregations)))
+    (Filters (ExtractUnboundConditions $list $input))
+)
+
+# HoistSelectExists extracts existential subqueries from Select filters,
+# turning them into semi-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
+    )
+)
+=>
+(SemiJoinApply
+    $input
+    $subquery
+    (Filters (RemoveListItem $list $exists))
+)
+
+# HoistSelectNotExists extracts non-existential subqueries from Select filters,
+# turning them into anti-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectNotExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
+    )
+)
+=>
+(AntiJoinApply
+    (Select $input (Filters (RemoveListItem $list $exists)))
+    $subquery
+    (True)
 )

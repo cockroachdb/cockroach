@@ -7,48 +7,62 @@
 # Scalar - All operators in this file are marked with the Scalar tag, so they
 #          can be easily distinguished from Relational and Enforcer operators.
 
-# Subquery is a subquery in a single-row context such as
-# `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
-# In a single-row context, the outer query is only valid if the subquery
-# returns at most one row.
+# Subquery is a subquery in a single-row context. Here are some examples:
 #
-# Subqueries in a multi-row context such as
-# `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`
-# can be transformed to a single row context using the Any operator. (Note that
-# this is different from the SQL ANY operator. See the comment above the Any
-# operator for more details.)
+#   SELECT 1 = (SELECT 1)
+#   SELECT (1, 'a') = (SELECT 1, 'a')`
 #
-# We use the following transformations:
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# `<var> IN (<subquery>)`
-#    ==> `Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
-#
-# `<var> NOT IN (<subquery>)`
-#    ==> `NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
-#
-# `<var> <comp> {SOME|ANY}(<subquery>)`
-#    ==> `Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))`
-#
-# `<var> <comp> ALL(<subquery>)`
-#    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# In a single-row context, the outer query is only valid if the subquery returns
+# at most one row. Subqueries in a multi-row context can be transformed to a
+# single row context using the Any operator. See the comment above the Any
+# operator for more details.
 #
 # The Input field contains the subquery itself, which should be wrapped in a
 # Max1Row operator to enforce that the subquery can return at most one row
 # (Max1Row may be removed by the optimizer later if it can determine statically
-# that the subquery will always return at most one row). The Projection field
-# contains a single column representing the output of the subquery. For
-# example, `(SELECT 1, 'a')` would be represented by the following structure:
+# that the subquery will always return at most one row). In addition, the
+# subquery must project exactly one output column. If the subquery returns one
+# row, then that column is bound to the single column value in that row. If the
+# subquery returns zero rows, then that column is bound to NULL.
 #
-# (Subquery
-#   (Max1Row
-#     (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+# The Projection field contains a single expression that represents the output
+# of the Subquery operator. The expression can be of arbitrary complexity, and
+# can depend on the output column of the Input expression by using a Variable
+# operator. For example, `(SELECT 1, 'a')` would be represented by the following
+# structure:
+#
+#   (Subquery
+#     (Max1Row
+#       (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+#     )
+#     (Variable 3)
 #   )
-#   (Variable 3)
-# )
 #
-# Here Variable 3 refers to the projection from the Input,
-# (Tuple (Const 1) (Const 'a')).
+# Here Variable 3 refers to the projection from the Input expression, which is
+# (Tuple (Const 1) (Const 'a')). Here is an example with a more complex
+# Projection field, in which the Subquery evaluates to non-NULL even though its
+# Input expression returns zero rows:
+#
+#   (Subquery
+#     (Select (Scan a) (False))
+#     (IsNull (Variable 1))
+#   )
+#
+# Since the subquery returns zero rows, (Variable 1) is bound to NULL, and so
+# the IsNull operator returns True, which then becomes the final output of the
+# Subquery operator. It is equivalent to this formulation:
+#
+#   (IsNull
+#     (Subquery
+#       (Select (Scan a) (False))
+#       (Variable 1)
+#     )
+#   )
+#
+# These behaviors may seem unnecessary or arbitrary at first glance, but they're
+# designed to allow transformation rules to easily "bubble up" a subquery to the
+# root of a scalar expression tree, so that it can then be turned into one of
+# the JoinApply operators.
 [Scalar]
 define Subquery {
     Input      Expr
@@ -58,7 +72,23 @@ define Subquery {
 # Any is a special operator that does not exist in SQL. However, it is very
 # similar to the SQL ANY, and can be converted to the SQL ANY operator using
 # the following transformation:
-#  `Any(<subquery>)` ==> `True = ANY(<subquery>)`
+#
+#   Any(<subquery>) ==> True = ANY(<subquery>)
+#
+# The following transformations translate from various SQL operators into the
+# Any operator:
+#
+#   <var> IN (<subquery>)
+#   ==> Any(SELECT <var> = x FROM (<subquery>) AS q(x))
+#
+#   <var> NOT IN (<subquery>)
+#   ==> NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))
+#
+#   <var> <comp> {SOME|ANY}(<subquery>)
+#   ==> Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))
+#
+#   <var> <comp> ALL(<subquery>)
+#   ==> NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))
 #
 # Any expects the subquery to return a single boolean column. The semantics
 # are equivalent to the SQL ANY expression above on the right: Any returns true

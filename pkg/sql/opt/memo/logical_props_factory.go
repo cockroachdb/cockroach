@@ -75,7 +75,7 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 		return f.constructLimitProps(ev)
 
 	case opt.OffsetOp:
-		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
+		return f.constructOffsetProps(ev)
 
 	case opt.Max1RowOp:
 		return f.constructMax1RowProps(ev)
@@ -117,9 +117,18 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
+	filterProps := ev.childGroup(1).logical.Scalar
 
 	// Inherit input properties as starting point.
 	*props.Relational = *inputProps
+
+	// Any outer columns from the filter that are not bound by the input columns
+	// are outer columns for the Select expression, in addition to any outer
+	// columns inherited from the input expression.
+	if !filterProps.OuterCols.SubsetOf(inputProps.OutputCols) {
+		props.Relational.OuterCols = filterProps.OuterCols.Difference(inputProps.OutputCols)
+		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+	}
 
 	props.Relational.Stats.initSelect(f.evalCtx, ev.Child(1), &inputProps.Stats)
 
@@ -130,6 +139,7 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
+	projectionProps := ev.childGroup(1).logical.Scalar
 
 	// Use output columns from projection list.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Child(1).Private().(opt.ColList))
@@ -139,8 +149,13 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.NotNullCols = inputProps.NotNullCols
 	filterNullCols(props.Relational)
 
-	// Inherit outer columns from input.
-	props.Relational.OuterCols = inputProps.OuterCols
+	// Any outer columns from the projection list that are not bound by the input
+	// columns are outer columns from the Project expression, in addition to any
+	// outer columns inherited from the input expression.
+	if !projectionProps.OuterCols.SubsetOf(inputProps.OutputCols) {
+		props.Relational.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
+	}
+	props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 
 	// Inherit weak keys that are composed entirely of output columns.
 	props.Relational.WeakKeys = inputProps.WeakKeys
@@ -156,6 +171,7 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 
 	leftProps := ev.childGroup(0).logical.Relational
 	rightProps := ev.childGroup(1).logical.Relational
+	onProps := ev.childGroup(2).logical.Scalar
 
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
@@ -186,6 +202,24 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 		props.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
 	}
 
+	// Any outer columns from the filter that are not bound by the input columns
+	// are outer columns for the Join expression, in addition to any outer columns
+	// inherited from the input expressions.
+	inputCols := leftProps.OutputCols.Union(rightProps.OutputCols)
+	if !onProps.OuterCols.SubsetOf(inputCols) {
+		props.Relational.OuterCols = onProps.OuterCols.Difference(inputCols)
+	}
+	if ev.IsJoinApply() {
+		// Outer columns of right side of apply join can be bound by output
+		// columns of left side of apply join.
+		if !rightProps.OuterCols.SubsetOf(leftProps.OutputCols) {
+			props.Relational.OuterCols.UnionWith(rightProps.OuterCols.Difference(leftProps.OutputCols))
+		}
+	} else {
+		props.Relational.OuterCols.UnionWith(rightProps.OuterCols)
+	}
+	props.Relational.OuterCols.UnionWith(leftProps.OuterCols)
+
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
@@ -200,6 +234,7 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
+	aggProps := ev.childGroup(1).logical.Scalar
 
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
@@ -210,6 +245,11 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	// Propagate not null setting from input columns that are being grouped.
 	props.Relational.NotNullCols = inputProps.NotNullCols.Copy()
 	props.Relational.NotNullCols.IntersectionWith(groupingColSet)
+
+	// Any outer columns from aggregation expressions that are not bound by the
+	// input columns are outer columns.
+	props.Relational.OuterCols = aggProps.OuterCols.Difference(inputProps.OutputCols)
+	props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 
 	// Scalar group by has no grouping columns and always a single row.
 	if groupingColSet.Empty() {
@@ -262,6 +302,9 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	// Outer columns from either side are outer columns for set operation.
+	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
+
 	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
@@ -273,6 +316,11 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(ev.Private().(opt.ColList))
 
+	// Union outer columns from all row expressions.
+	for i := 0; i < ev.ChildCount(); i++ {
+		props.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
+	}
+
 	props.Relational.Stats.initValues(ev, &props.Relational.OutputCols)
 
 	return props
@@ -283,11 +331,34 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 
 	inputProps := ev.Child(0).Logical().Relational
 	limit := ev.Child(1)
+	limitProps := limit.Logical().Scalar
 
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
+	// Inherit outer columns from limit expression.
+	if !limitProps.OuterCols.Empty() {
+		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
+	}
+
 	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
+
+	return props
+}
+
+func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	offsetProps := ev.Child(1).Logical().Scalar
+
+	// Start with pass-through props from input.
+	*props.Relational = *inputProps
+
+	// Inherit outer columns from offset expression.
+	if !offsetProps.OuterCols.Empty() {
+		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
+	}
 
 	return props
 }
@@ -305,14 +376,6 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	return props
 }
 
-// passThroughRelationalProps returns the relational properties of the given
-// child group.
-func (f logicalPropsFactory) passThroughRelationalProps(ev ExprView, childIdx int) LogicalProps {
-	// Properties are immutable after construction, so just inherit relational
-	// props pointer from child.
-	return LogicalProps{Relational: ev.childGroup(childIdx).logical.Relational}
-}
-
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
@@ -320,6 +383,13 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	case opt.VariableOp:
 		// Variable introduces outer column.
 		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
+		return props
+
+	case opt.SubqueryOp:
+		inputProps := ev.childGroup(0).logical.Relational
+		projectionProps := ev.childGroup(1).logical.Scalar
+		props.Scalar.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
+		props.Scalar.OuterCols.UnionWith(inputProps.OuterCols)
 		return props
 	}
 
