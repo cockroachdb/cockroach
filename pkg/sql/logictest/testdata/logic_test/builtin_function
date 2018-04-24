@@ -1717,3 +1717,9 @@ query TT
 SELECT lpad('abc', 5, ''), rpad('abc', 5, '')
 ----
 abc  abc
+
+query error memory budget exceeded
+SELECT lpad('abc', 100000000000000)
+
+query error memory budget exceeded
+SELECT rpad('abc', 100000000000000)
