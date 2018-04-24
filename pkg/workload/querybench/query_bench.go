@@ -133,7 +133,7 @@ func (g *queryBench) Ops(
 }
 
 // getQueries returns the lines of a file as a string slice. Ignores lines
-// beginning with '#'.
+// beginning with '#' or '--'.
 func getQueries(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -145,7 +145,7 @@ func getQueries(path string) ([]string, error) {
 	var lines []string
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) > 0 && line[0] != '#' {
+		if len(line) > 0 && line[0] != '#' && !strings.HasPrefix(line, "--") {
 			lines = append(lines, line)
 		}
 	}
