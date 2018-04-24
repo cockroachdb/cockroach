@@ -29,6 +29,7 @@ import (
 //       functions in order to keep the methods grouped and self-contained.
 type logicalPropsFactory struct {
 	evalCtx *tree.EvalContext
+	sb      statisticsBuilder
 }
 
 // constructProps is called by the memo group construction code in order to
@@ -38,14 +39,14 @@ type logicalPropsFactory struct {
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (f logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
 		return f.constructRelationalProps(ev)
 	}
 	return f.constructScalarProps(ev)
 }
 
-func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		return f.constructScanProps(ev)
@@ -84,7 +85,7 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	md := ev.Metadata()
@@ -108,13 +109,13 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initScan(def)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildScan(def)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -131,13 +132,13 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initSelect(ev.Child(1), &inputProps.Stats)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildSelect(ev.Child(1), &inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -163,13 +164,13 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = inputProps.WeakKeys
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initProject(&inputProps.Stats)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildProject(&inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -226,15 +227,13 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initJoin(
-		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
-	)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
 
 	return props
 }
 
-func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -274,13 +273,13 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 		}
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initGroupBy(&inputProps.Stats, groupingColSet)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildGroupBy(&inputProps.Stats, groupingColSet)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -308,13 +307,13 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	// Outer columns from either side are outer columns for set operation.
 	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
@@ -325,13 +324,13 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initValues()
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildValues()
 
 	return props
 }
 
-func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -346,13 +345,13 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildLimit(limit, &inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -367,13 +366,13 @@ func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initOffset(offset, &inputProps.Stats)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildOffset(offset, &inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -381,13 +380,13 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
-	props.Relational.Stats.init(ev, f.evalCtx)
-	props.Relational.Stats.initMax1Row(&inputProps.Stats)
+	f.sb.init(f.evalCtx, &props.Relational.Stats, ev, &keyBuffer{})
+	f.sb.buildMax1Row(&inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
 	switch ev.Operator() {
