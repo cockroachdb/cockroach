@@ -16,6 +16,8 @@
 
 #include "rocksdbutils/env_encryption.h"
 
+namespace cockroach {
+
 // PlaintextStream is a no-op stream cipher used for plaintext content.
 class PlaintextStream final : public rocksdb_utils::BlockAccessCipherStream {
  public:
@@ -39,3 +41,5 @@ class PlaintextStream final : public rocksdb_utils::BlockAccessCipherStream {
     return rocksdb::Status::OK();
   }
 };
+
+}  // namespace cockroach

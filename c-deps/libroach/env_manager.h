@@ -17,11 +17,10 @@
 #include <rocksdb/env.h>
 #include "file_registry.h"
 #include "rocksdbutils/env_encryption.h"
-#include "switching_provider.h"
 
-class SwitchingProvider;
+namespace cockroach {
 
-// EnvManager manages all created Envs, as well as the switching provider.
+// EnvManager manages all created Envs, as well as the file registry.
 // Rocksdb owns Env::Default (global static). All other envs are owned by EnvManager.
 //
 // Some useful envs are kept:
@@ -35,6 +34,8 @@ struct EnvManager {
 
   rocksdb::Env* base_env;
   rocksdb::Env* db_env;
-  std::unique_ptr<SwitchingProvider> switching_provider;
+  std::unique_ptr<FileRegistry> file_registry;
   std::vector<std::unique_ptr<rocksdb::Env>> envs;
 };
+
+}  // namespace cockroach

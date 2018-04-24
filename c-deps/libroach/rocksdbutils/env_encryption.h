@@ -24,20 +24,21 @@
 
 #include <string>
 
+#include "../file_registry.h"
 #include "../protos/storage/engine/enginepb/file_registry.pb.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
 namespace enginepb = cockroach::storage::engine::enginepb;
-class CipherStreamCreator;
 
 namespace rocksdb_utils {
 
-class EncryptionProvider;
+class CipherStreamCreator;
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider,
+// The env takes ownership of the CipherStreamCreator.
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, cockroach::FileRegistry* file_registry,
                               CipherStreamCreator* creator);
 
 // BlockAccessCipherStream is the base class for any cipher stream that
@@ -88,20 +89,27 @@ class BlockCipher {
   virtual rocksdb::Status Decrypt(char* data) = 0;
 };
 
-// The encryption provider is used to create a cipher stream for a specific file.
-// The returned cipher stream will be used for actual encryption/decryption
-// actions.
-class EncryptionProvider {
+// CipherStreamCreator is the abstract class used by EncryptedEnv.
+// It performs two functions:
+// * initializes encryption settings and create a cipher stream with them
+// * creates a cipher stream given encryption settings
+class CipherStreamCreator {
  public:
-  virtual ~EncryptionProvider() {}
+  virtual ~CipherStreamCreator() {}
+  // Create new encryption settings and a cipher stream using them.
+  // Assigns new objects to 'settings' and 'result'.
+  // If plaintext, settings will be nullptr.
+  virtual rocksdb::Status
+  InitSettingsAndCreateCipherStream(std::string* settings,
+                                    std::unique_ptr<BlockAccessCipherStream>* result) = 0;
 
-  virtual rocksdb::Status CreateCipherStream(CipherStreamCreator* creator, const std::string& fname,
-                                             bool new_file,
-                                             std::unique_ptr<BlockAccessCipherStream>* result) = 0;
+  // Create a cipher stream given encryption settings.
+  virtual rocksdb::Status
+  CreateCipherStreamFromSettings(const std::string& settings,
+                                 std::unique_ptr<BlockAccessCipherStream>* result) = 0;
 
-  virtual rocksdb::Status DeleteFile(const std::string& fname) = 0;
-  virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) = 0;
-  virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) = 0;
+  // Return the EnvType for this stream creator. It should match files being operated on.
+  virtual enginepb::EnvType GetEnvType() = 0;
 };
 
 }  // namespace rocksdb_utils

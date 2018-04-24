@@ -21,6 +21,8 @@
 
 namespace enginepb = cockroach::storage::engine::enginepb;
 
+namespace cockroach {
+
 // Name of the registry file.
 static const std::string kFileRegistryFilename = "COCKROACHDB_REGISTRY";
 
@@ -86,3 +88,5 @@ class FileRegistry {
   std::mutex mu_;
   std::unique_ptr<enginepb::FileRegistry> registry_;
 };
+
+}  // namespace cockroach

@@ -22,9 +22,13 @@
 
 #include <algorithm>
 
-#include "../switching_provider.h"
+#include "../file_registry.h"
+#include "../fmt.h"
+#include "../plaintext_stream.h"
 #include "aligned_buffer.h"
 #include "env_encryption.h"
+
+using namespace cockroach;
 
 namespace rocksdb_utils {
 
@@ -319,8 +323,8 @@ class EncryptedRandomRWFile : public rocksdb::RandomRWFile {
 // EncryptedEnv implements an Env wrapper that adds encryption to files stored on disk.
 class EncryptedEnv : public rocksdb::EnvWrapper {
  public:
-  EncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider, CipherStreamCreator* creator)
-      : rocksdb::EnvWrapper(base_env), provider_(provider), stream_creator_(creator) {}
+  EncryptedEnv(rocksdb::Env* base_env, FileRegistry* file_registry, CipherStreamCreator* creator)
+      : rocksdb::EnvWrapper(base_env), file_registry_(file_registry), stream_creator_(creator) {}
 
   // NewSequentialFile opens a file for sequential reading.
   virtual rocksdb::Status NewSequentialFile(const std::string& fname,
@@ -339,7 +343,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(stream_creator_, fname, false /* new_file */, &stream);
+    status = CreateCipherStream(fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -365,7 +369,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(stream_creator_, fname, false /* new_file */, &stream);
+    status = CreateCipherStream(fname, false /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -391,7 +395,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
+    status = CreateCipherStream(fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -423,7 +427,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
+    status = CreateCipherStream(fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -450,7 +454,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status = provider_->CreateCipherStream(stream_creator_, fname, true /* new_file */, &stream);
+    status = CreateCipherStream(fname, true /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -483,8 +487,7 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
 
     // Create cipher stream, indicating whether this is a new file.
     std::unique_ptr<BlockAccessCipherStream> stream;
-    status =
-        provider_->CreateCipherStream(stream_creator_, fname, isNewFile /* new_file */, &stream);
+    status = CreateCipherStream(fname, isNewFile /* new_file */, &stream);
     if (!status.ok()) {
       return status;
     }
@@ -494,14 +497,14 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
   }
 
   virtual rocksdb::Status DeleteFile(const std::string& fname) override {
-    auto status = provider_->DeleteFile(fname);
+    auto status = file_registry_->MaybeDeleteEntry(fname);
     if (!status.ok()) {
       return status;
     }
     return EnvWrapper::DeleteFile(fname);
   }
   virtual rocksdb::Status RenameFile(const std::string& src, const std::string& target) override {
-    auto status = provider_->RenameFile(src, target);
+    auto status = file_registry_->MaybeRenameEntry(src, target);
     if (!status.ok()) {
       return status;
     }
@@ -509,23 +512,90 @@ class EncryptedEnv : public rocksdb::EnvWrapper {
   }
 
   virtual rocksdb::Status LinkFile(const std::string& src, const std::string& target) override {
-    auto status = provider_->LinkFile(src, target);
+    auto status = file_registry_->MaybeLinkEntry(src, target);
     if (!status.ok()) {
       return status;
     }
     return EnvWrapper::LinkFile(src, target);
   }
 
+  rocksdb::Status
+  CreateCipherStream(const std::string& fname, bool new_file,
+                     std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) {
+    if (new_file) {
+      return InitAndCreateCipherStream(fname, result);
+    } else {
+      return LookupAndCreateCipherStream(fname, result);
+    }
+  }
+
+  rocksdb::Status LookupAndCreateCipherStream(const std::string& fname,
+                                              std::unique_ptr<BlockAccessCipherStream>* result) {
+
+    // Look for file in registry.
+    auto file_entry = file_registry_->GetFileEntry(fname);
+    if (file_entry == nullptr) {
+      // No entry: plaintext.
+      (*result) = std::unique_ptr<BlockAccessCipherStream>(new PlaintextStream());
+      return rocksdb::Status::OK();
+    }
+
+    // File entry exists: check that the env_type corresponds to the requested one.
+    if (file_entry->env_type() != stream_creator_->GetEnvType()) {
+      return rocksdb::Status::InvalidArgument(
+          fmt::StringPrintf("file %s was written using env_type %d, but we are trying to read it "
+                            "using env_type %d: problems will occur",
+                            fname.c_str(), file_entry->env_type(), stream_creator_->GetEnvType()));
+    }
+
+    return stream_creator_->CreateCipherStreamFromSettings(file_entry->encryption_settings(),
+                                                           result);
+  }
+
+  rocksdb::Status InitAndCreateCipherStream(const std::string& fname,
+                                            std::unique_ptr<BlockAccessCipherStream>* result) {
+
+    // Look for file in registry.
+    auto file_entry = file_registry_->GetFileEntry(fname);
+    if (file_entry != nullptr && file_entry->env_type() != stream_creator_->GetEnvType()) {
+      // File entry exists but the env_type does not match the requested one.
+      return rocksdb::Status::InvalidArgument(
+          fmt::StringPrintf("file %s was written using env_type %d, but we are overwriting it "
+                            "using env_type %d: problems will occur",
+                            fname.c_str(), file_entry->env_type(), stream_creator_->GetEnvType()));
+    }
+
+    std::string encryption_settings;
+    auto status = stream_creator_->InitSettingsAndCreateCipherStream(&encryption_settings, result);
+    if (!status.ok()) {
+      return status;
+    }
+
+    if (encryption_settings.size() == 0) {
+      // Plaintext: delete registry entry if is exists.
+      return file_registry_->MaybeDeleteEntry(fname);
+    } else {
+      // Encryption settings specified: create a FileEntry and save it, overwriting any existing
+      // one.
+      std::unique_ptr<enginepb::FileEntry> new_entry(new enginepb::FileEntry());
+      new_entry->set_env_type(stream_creator_->GetEnvType());
+      new_entry->set_encryption_settings(encryption_settings);
+      return file_registry_->SetFileEntry(fname, std::move(new_entry));
+    }
+
+    return rocksdb::Status::OK();
+  }
+
  private:
-  EncryptionProvider* provider_;
-  CipherStreamCreator* stream_creator_;
+  FileRegistry* file_registry_;
+  std::unique_ptr<CipherStreamCreator> stream_creator_;
 };
 
 // Returns an Env that encrypts data when stored on disk and decrypts data when
 // read from disk.
-rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, EncryptionProvider* provider,
+rocksdb::Env* NewEncryptedEnv(rocksdb::Env* base_env, FileRegistry* file_registry,
                               CipherStreamCreator* creator) {
-  return new EncryptedEnv(base_env, provider, creator);
+  return new EncryptedEnv(base_env, file_registry, creator);
 }
 
 // Encrypt one or more (partial) blocks of data at the file offset.

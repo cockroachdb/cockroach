@@ -47,9 +47,9 @@ struct DBEngine {
   DBString GetUserProperties();
 };
 
-struct EnvManager;
-
 namespace cockroach {
+
+struct EnvManager;
 
 struct DBImpl : public DBEngine {
   std::unique_ptr<EnvManager> env_mgr;
