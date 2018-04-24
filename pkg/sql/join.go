@@ -378,6 +378,7 @@ type joinRun struct {
 
 	// emptyRight contain tuples of NULL values to use on the right for left and
 	// full outer joins when the on condition fails.
+	// This is also used for semi and anti joins, in which case it is always nil.
 	emptyRight tree.Datums
 
 	// emptyLeft contains tuples of NULL values to use on the left for right and
@@ -458,7 +459,9 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		return false, nil
 	}
 
-	wantUnmatchedLeft := n.joinType == sqlbase.LeftOuterJoin || n.joinType == sqlbase.FullOuterJoin
+	wantUnmatchedLeft := n.joinType == sqlbase.LeftOuterJoin ||
+		n.joinType == sqlbase.FullOuterJoin ||
+		n.joinType == sqlbase.LeftAntiJoin
 	wantUnmatchedRight := n.joinType == sqlbase.RightOuterJoin || n.joinType == sqlbase.FullOuterJoin
 
 	if len(n.run.buckets.Buckets()) == 0 {
@@ -489,9 +492,9 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			return false, err
 		}
 
-		// We make the explicit check for whether or not lrow contained a NULL
-		// tuple. The reasoning here is because of the way we expect NULL
-		// equality checks to behave (i.e. NULL != NULL) and the fact that we
+		// We make the explicit check for whether or not lrow contained a NULL value
+		// on an equality column. The reasoning here is because of the way we expect
+		// NULL equality checks to behave (i.e. NULL != NULL) and the fact that we
 		// use the encoding of any given row as key into our bucket. Thus if we
 		// encountered a NULL row when building the hashmap we have to store in
 		// order to use it for RIGHT OUTER joins but if we encounter another
@@ -568,7 +571,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(params.EvalContext(), n.run.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(params.EvalContext(), lrow, rrow)
 			if err != nil {
 				return false, err
 			}
@@ -577,8 +580,18 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 				continue
 			}
 			foundMatch = true
+			if n.joinType == sqlbase.JoinType_LEFT_ANTI {
+				// For anti-join, we want to output the left rows that don't have a
+				// match. Since we found a match, we can skip this row.
+				break
+			}
 
-			n.pred.prepareRow(n.run.output, lrow, rrow)
+			if n.joinType == sqlbase.JoinType_LEFT_SEMI {
+				// Semi-joins only output the left row.
+				n.pred.prepareRow(n.run.output, lrow, nil)
+			} else {
+				n.pred.prepareRow(n.run.output, lrow, rrow)
+			}
 			if wantUnmatchedRight {
 				// Mark the row as seen if we need to retrieve the rows
 				// without matches for right or full joins later.
@@ -587,11 +600,16 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err
 			}
+			if n.joinType == sqlbase.JoinType_LEFT_SEMI {
+				// For semi-joins, we only output the left row once, even if it matches
+				// multiple rows.
+				break
+			}
 		}
 		if !foundMatch && wantUnmatchedLeft {
 			// If none of the rows matched the on condition and we are computing a
-			// left or full outer join, we need to add a row with an empty
-			// right side.
+			// left outer, full outer, or anti join, we need to add a row with an
+			// empty right side.
 			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
 			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err

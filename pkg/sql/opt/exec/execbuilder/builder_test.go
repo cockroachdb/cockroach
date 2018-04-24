@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// TestBuilder runs data-driven testcases of the form
+// TestExecBuild runs data-driven testcases of the form
 //
 //   <command> [<args]...
 //   <SQL statement>
@@ -73,7 +73,7 @@ import (
 //
 //    Prints information about a table, retrieved through the Catalog interface.
 //
-func TestBuild(t *testing.T) {
+func TestExecBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
