@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -531,8 +532,10 @@ type processorBase struct {
 	// drained).
 	inputsToDrain []RowSource
 
-	// stats are the stats collected for a processor.
-	stats []StatSummarizer
+	// registry is the registry for the stats collected for a processor. It is
+	// often nil because it is only set when collecting stats to record in a
+	// trace.
+	registry *metric.Registry
 }
 
 // procState represents the standard states that a processor can be in. These
@@ -670,6 +673,18 @@ func (pb *processorBase) popTrailingMeta() *ProducerMetadata {
 func (pb *processorBase) moveToTrailingMeta() {
 	if pb.state == stateTrailingMeta || pb.state == stateExhausted {
 		log.Fatalf(pb.ctx, "moveToTrailingMeta called in state: %s", pb.state)
+	}
+
+	// If stats have been collected, output a summary to the trace and add to span
+	// tags.
+	if sp := opentracing.SpanFromContext(pb.ctx); sp != nil && pb.registry != nil {
+		pb.registry.Each(func(name string, val interface{}) {
+			counter, ok := val.(*metric.Counter)
+			if !ok {
+				log.Fatalf(pb.ctx, "unsupported metric type %T", val)
+			}
+			tracing.SetSpanStat(sp, name, counter.Count())
+		})
 	}
 
 	pb.state = stateTrailingMeta

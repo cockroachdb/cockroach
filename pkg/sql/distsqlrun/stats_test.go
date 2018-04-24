@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // TestInputStatCollector verifies that an InputStatCollector correctly collects
@@ -28,11 +29,13 @@ func TestInputStatCollector(t *testing.T) {
 	const numRows = 100
 
 	isc := NewInputStatCollector(
-		NewRowBuffer(oneIntCol, makeIntRows(numRows, 1), RowBufferArgs{}), "row buffer",
+		NewRowBuffer(oneIntCol, makeIntRows(numRows, 1), RowBufferArgs{}),
+		InputStats{NumRows: metric.NewCounter(metric.Metadata{})},
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}
-	if isc.NumRows != numRows {
-		t.Fatalf("counted %d rows but expected %d", isc.NumRows, numRows)
+	count := isc.NumRows.Count()
+	if count != numRows {
+		t.Fatalf("counted %d rows but expected %d", count, numRows)
 	}
 }
