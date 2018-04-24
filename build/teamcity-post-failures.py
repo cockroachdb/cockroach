@@ -110,7 +110,7 @@ The following tests appear to have failed:
 
 Please assign, take a look and update the issue accordingly.
 '''.format(build_id, ''.join(t[1] for t in failed_tests)),
-        'labels': ['test-failure', 'Robot'],
+        'labels': ['C-test-failure', 'O-robot'],
         'milestone': get_probable_milestone(),
     }
 
