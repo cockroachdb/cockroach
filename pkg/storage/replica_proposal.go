@@ -377,7 +377,7 @@ func addSSTablePreApply(
 					log.Fatalf(ctx, "failed to move ingest sst: %v", rmErr)
 				}
 				const seqNoMsg = "Global seqno is required, but disabled"
-				if err, ok := err.(*engine.RocksDBError); ok && !strings.Contains(err.Error(), seqNoMsg) {
+				if err, ok := ingestErr.(*engine.RocksDBError); ok && !strings.Contains(ingestErr.Error(), seqNoMsg) {
 					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, err)
 				}
 			}
