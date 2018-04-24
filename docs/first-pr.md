@@ -47,7 +47,7 @@ reading [CONTRIBUTING.md] in full. This file covers how to set up a new
 development machine to build CockroachDB from source and the basics of the code
 review workflow.
 
-Then, look at [STYLE.md] and the [Google Go Code
+Then, look at [docs/style.md] and the [Google Go Code
 Review](https://code.google.com/p/go-wiki/wiki/CodeReviewComments) guide it
 links to. These are linked to from [CONTRIBUTING.md], but they're easy to miss.
 If you haven't written any Go before CockroachDB, you may want to hold off on
@@ -296,7 +296,7 @@ for ~slaughter~ review.
 
 ### Fix your style violations
 
-First, read [STYLE.md] again, looking for any style violations. It's easier to
+First, read [docs/style.md] again, looking for any style violations. It's easier to
 remember a style rule once you've violated it.
 
 Then, run our suite of linters:
@@ -599,7 +599,7 @@ Here's a checklist of action items to keep you sane:
 + [ ] Submitting your first PR
     + [ ] Push to a feature branch on your personal fork
     + [ ] Verify you've followed [CONTRIBUTING.md]
-    + [ ] Verify you've followed [STYLE.md]
+    + [ ] Verify you've followed [docs/style.md]
     + [ ] Ensure files you've added, if any, have a license block
     + [ ] Run make check
     + [ ] Split your change into logical commits with good messages
@@ -632,7 +632,7 @@ Here's a checklist of action items to keep you sane:
 [production-ready code]: #production-ready-code
 [Reviewable]: https://reviewable.io
 [RocksDB]: http://rocksdb.org
-[STYLE.md]: /STYLE.md
+[docs/style.md]: /docs/style.md
 [this repository's wiki]: https://github.com/cockroachdb/cockroach/wiki/Jargon
 [by humans for humans]: https://mtlynch.io/human-code-reviews-1/
 [minimally nice maintainer]: https://brson.github.io/2017/04/05/minimally-nice-maintainer
