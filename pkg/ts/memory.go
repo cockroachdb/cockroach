@@ -36,8 +36,17 @@ var (
 
 // QueryMemoryOptions represents the adjustable options of a QueryMemoryContext.
 type QueryMemoryOptions struct {
-	BudgetBytes             int64
-	EstimatedSources        int64
+	// BudgetBytes is the maximum number of bytes that should be reserved by this
+	// query at any one time.
+	BudgetBytes int64
+	// EstimatedSources is an estimate of the number of distinct sources that this
+	// query will encounter on disk. This is needed to better estimate how much
+	// memory a query will actually consume.
+	EstimatedSources int64
+	// InterpolationLimitNanos determines the maximum gap size for which missing
+	// values will be interpolated. By making this limit explicit, we can put a
+	// hard limit on the timespan that needs to be read from disk to satisfy
+	// a query.
 	InterpolationLimitNanos int64
 }
 
