@@ -505,6 +505,12 @@ type processorBase struct {
 
 	state procState
 
+	// finishTrace, if set, will be called before getting the trace data from
+	// the span and adding the recording to the trailing metadata. Useful for
+	// adding any extra information (e.g. stats) that should be captured in a
+	// trace.
+	finishTrace func()
+
 	// trailingMetaCallback, if set, will be called by moveToTrailingMeta(). The
 	// callback is expected to close all inputs, do other cleanup on the processor
 	// (including calling internalClose()) and generate the trailing meta that
@@ -530,9 +536,6 @@ type processorBase struct {
 	// one by one (in stateDraining, inputsToDrain[0] is the one currently being
 	// drained).
 	inputsToDrain []RowSource
-
-	// stats are the stats collected for a processor.
-	stats []StatSummarizer
 }
 
 // procState represents the standard states that a processor can be in. These
@@ -670,6 +673,10 @@ func (pb *processorBase) popTrailingMeta() *ProducerMetadata {
 func (pb *processorBase) moveToTrailingMeta() {
 	if pb.state == stateTrailingMeta || pb.state == stateExhausted {
 		log.Fatalf(pb.ctx, "moveToTrailingMeta called in state: %s", pb.state)
+	}
+
+	if pb.finishTrace != nil {
+		pb.finishTrace()
 	}
 
 	pb.state = stateTrailingMeta
