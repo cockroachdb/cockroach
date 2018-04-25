@@ -8939,17 +8939,13 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	ba.Add(&etArgs)
 	// Get a reference to the txn's replica.
 	stores := s.GetStores().(*Stores)
-	rangeID, _, err := stores.LookupReplica(rkey, nil /* end */)
-	if err != nil {
-		t.Fatal(err)
-	}
 	store, err := stores.GetStore(s.GetFirstStoreID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	repl, err := store.GetReplica(rangeID)
-	if err != nil {
-		t.Fatal(err)
+	repl := store.LookupReplica(rkey, nil /* end */)
+	if repl == nil {
+		t.Fatalf("replica for key %s not found", rkey)
 	}
 
 	exLease, _ := repl.GetLease()
