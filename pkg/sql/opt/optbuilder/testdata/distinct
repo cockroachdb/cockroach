@@ -1,7 +1,7 @@
 # tests adapted from logictest -- aggregate and distinct
 
 exec-ddl
-CREATE TABLE t.xyz (
+CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
   z FLOAT,
@@ -27,7 +27,7 @@ TABLE xyz
       └── x int not null
 
 build
-SELECT y, z FROM t.xyz
+SELECT y, z FROM xyz
 ----
 project
  ├── columns: y:2(int) z:3(float)
@@ -38,7 +38,7 @@ project
       └── variable: xyz.z [type=float]
 
 build
-SELECT DISTINCT y, z FROM t.xyz
+SELECT DISTINCT y, z FROM xyz
 ----
 group-by
  ├── columns: y:2(int) z:3(float)
@@ -53,7 +53,7 @@ group-by
  └── aggregations
 
 build
-SELECT y FROM (SELECT DISTINCT y, z FROM t.xyz)
+SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
 ----
 project
  ├── columns: y:2(int)
@@ -195,7 +195,7 @@ sort
       └── aggregations
 
 build
-SELECT DISTINCT (y,z) FROM t.xyz
+SELECT DISTINCT (y,z) FROM xyz
 ----
 group-by
  ├── columns: column4:4(tuple{int, float})
@@ -211,7 +211,7 @@ group-by
  └── aggregations
 
 build
-SELECT COUNT(*) FROM (SELECT DISTINCT y FROM t.xyz)
+SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 group-by
  ├── columns: column4:4(int)
@@ -231,7 +231,7 @@ group-by
       └── function: count_rows [type=int]
 
 build
-SELECT DISTINCT x FROM t.xyz WHERE x > 0
+SELECT DISTINCT x FROM xyz WHERE x > 0
 ----
 group-by
  ├── columns: x:1(int!null)
@@ -250,7 +250,7 @@ group-by
  └── aggregations
 
 build
-SELECT DISTINCT z FROM t.xyz WHERE x > 0
+SELECT DISTINCT z FROM xyz WHERE x > 0
 ----
 group-by
  ├── columns: z:3(float)

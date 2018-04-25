@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
 TABLE a
  ├── x int not null
@@ -8,7 +8,7 @@ TABLE a
       └── x int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT, y FLOAT)
+CREATE TABLE b (x INT, y FLOAT)
 ----
 TABLE b
  ├── x int
@@ -18,7 +18,7 @@ TABLE b
       └── rowid int not null (hidden)
 
 exec-ddl
-CREATE TABLE t.c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.a (x))
+CREATE TABLE c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES a (x))
 ----
 TABLE c
  ├── x int
@@ -29,7 +29,7 @@ TABLE c
       └── rowid int not null (hidden)
 
 build
-SELECT * FROM t.a, t.b
+SELECT * FROM a, b
 ----
 project
  ├── columns: x:1(int!null) y:2(float) x:3(int) y:4(float)
@@ -47,7 +47,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT a.x, b.y FROM t.a, t.b WHERE a.x = b.x
+SELECT a.x, b.y FROM a, b WHERE a.x = b.x
 ----
 project
  ├── columns: x:1(int!null) y:4(float)
@@ -68,7 +68,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT * FROM t.c, t.b, t.a WHERE c.x = a.x AND b.x = a.x
+SELECT * FROM c, b, a WHERE c.x = a.x AND b.x = a.x
 ----
 project
  ├── columns: x:1(int) y:2(float) z:3(string) x:5(int) y:6(float) x:8(int!null) y:9(float)
@@ -101,3 +101,69 @@ project
       ├── variable: b.y [type=float]
       ├── variable: a.x [type=int]
       └── variable: a.y [type=float]
+
+exec-ddl
+CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ ├── z string
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE db2.a (x INT PRIMARY KEY, y FLOAT)
+----
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
+
+build fully-qualify-names
+SELECT a.x FROM db1.a, db2.a
+----
+error: ambiguous source name: "a"
+
+build fully-qualify-names
+SELECT x FROM a, b
+----
+error: column reference "x" is ambiguous (candidates: a.x, b.x)
+
+build fully-qualify-names
+SELECT * FROM db1.a, db2.a
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(float) z:3(string) x:4(int!null) y:5(float)
+ ├── scan a
+ │    └── columns: db1.public.a.x:1(int!null) db1.public.a.y:2(float) db1.public.a.z:3(string)
+ ├── scan a
+ │    └── columns: db2.public.a.x:4(int!null) db2.public.a.y:5(float)
+ └── true [type=bool]
+
+build fully-qualify-names
+SELECT * FROM a, a
+----
+error: cannot join columns from the same source name "a" (missing AS clause)
+
+build fully-qualify-names
+SELECT * FROM t.a, a
+----
+error: cannot join columns from the same source name "a" (missing AS clause)
+
+build fully-qualify-names
+SELECT * FROM t.a, a AS a
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
+ ├── scan a
+ │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
+ ├── scan a
+ │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
+ └── true [type=bool]
+
+build fully-qualify-names
+SELECT a.* FROM t.a, a AS a
+----
+error: ambiguous source name: "a"

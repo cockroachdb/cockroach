@@ -71,7 +71,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 // renameSource applies an AS clause to the columns in scope.
 func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
-	var tableAlias tree.Name
+	var tableAlias tree.TableName
 	colAlias := as.Cols
 
 	if as.Alias != "" {
@@ -79,9 +79,9 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// functions with just one column.
 
 		// If an alias was specified, use that.
-		tableAlias = as.Alias
+		tableAlias = tree.MakeUnqualifiedTableName(as.Alias)
 		for i := range scope.cols {
-			scope.cols[i].table.TableName = tableAlias
+			scope.cols[i].table = tableAlias
 		}
 	}
 
@@ -89,9 +89,10 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(scope.cols) {
+				srcName := tree.ErrString(&tableAlias)
 				panic(errorf(
 					"source %q has %d columns available but %d columns specified",
-					tableAlias, aliasIdx, len(colAlias)))
+					srcName, aliasIdx, len(colAlias)))
 			}
 			if scope.cols[colIdx].hidden {
 				continue
@@ -108,7 +109,8 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (outScope *scope) {
-	tabID := b.factory.Metadata().AddTable(tab)
+	tabName := tree.AsStringWithFlags(tn, b.FmtFlags)
+	tabID := b.factory.Metadata().AddTableWithName(tab, tabName)
 	scanOpDef := memo.ScanOpDef{Table: tabID}
 
 	outScope = inScope.push()
@@ -233,6 +235,9 @@ func (b *Builder) buildSelectClause(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) (outScope *scope) {
+	var joinTables map[string]struct{}
+	colsAdded := 0
+
 	for _, table := range from.Tables {
 		tableScope := b.buildTable(table, inScope)
 
@@ -240,6 +245,18 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 			outScope = tableScope
 			continue
 		}
+
+		// Build a map of the table names in the join.
+		if joinTables == nil {
+			joinTables = make(map[string]struct{})
+		}
+		for _, col := range outScope.cols[colsAdded:] {
+			joinTables[col.table.FQString()] = exists
+		}
+		colsAdded = len(outScope.cols)
+
+		// Check that the same table name is not used multiple times.
+		b.validateJoinTableNames(joinTables, tableScope)
 
 		outScope.appendColumns(tableScope)
 		outScope.group = b.factory.ConstructInnerJoin(

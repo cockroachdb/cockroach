@@ -54,6 +54,14 @@ type Builder struct {
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
 
+	// FmtFlags controls the way column names are formatted in test output. For
+	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
+	// the table name in all column labels before adding them to the metadata.
+	// This flag allows us to test that name resolution works correctly, and
+	// avoids cluttering test output with schema and catalog names in the general
+	// case.
+	FmtFlags tree.FmtFlags
+
 	factory *norm.Factory
 	stmt    tree.Statement
 

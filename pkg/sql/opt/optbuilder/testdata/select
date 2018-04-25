@@ -871,7 +871,7 @@ project
                                └── variable: column3 [type=tuple{int, int}]
 
 exec-ddl
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
 TABLE a
  ├── x int not null
@@ -880,13 +880,13 @@ TABLE a
       └── x int not null
 
 build
-SELECT * FROM t.a
+SELECT * FROM a
 ----
 scan a
  └── columns: x:1(int!null) y:2(float)
 
 build
-SELECT * FROM t.a WHERE x > 10
+SELECT * FROM a WHERE x > 10
 ----
 select
  ├── columns: x:1(int!null) y:2(float)
@@ -897,7 +897,7 @@ select
       └── const: 10 [type=int]
 
 build
-SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
+SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
 ----
 select
  ├── columns: x:1(int!null) y:2(float)
@@ -916,7 +916,7 @@ select
                 └── const: 13 [type=int]
 
 build
-SELECT * FROM t.a WHERE x IN (1, 2, 3)
+SELECT * FROM a WHERE x IN (1, 2, 3)
 ----
 select
  ├── columns: x:1(int!null) y:2(float)
@@ -930,13 +930,13 @@ select
            └── const: 3 [type=int]
 
 build
-SELECT * FROM t.a AS A(X, Y)
+SELECT * FROM a AS A(X, Y)
 ----
 scan a
  └── columns: x:1(int!null) y:2(float)
 
 build
-SELECT @1, @2 FROM t.a
+SELECT @1, @2 FROM a
 ----
 project
  ├── columns: column3:3(int) column4:4(float)
@@ -947,7 +947,7 @@ project
       └── variable: a.y [type=float]
 
 build
-SELECT * FROM t.a WHERE (x > 10)::bool
+SELECT * FROM a WHERE (x > 10)::bool
 ----
 select
  ├── columns: x:1(int!null) y:2(float)
@@ -959,6 +959,17 @@ select
            └── const: 10 [type=int]
 
 build
-SELECT * FROM t.a WHERE (x > 10)::INT[]
+SELECT * FROM a WHERE (x > 10)::INT[]
 ----
 error: invalid cast: bool -> INT[]
+
+build
+SELECT * FROM a WHERE x = $1
+----
+select
+ ├── columns: x:1(int!null) y:2(float)
+ ├── scan a
+ │    └── columns: a.x:1(int!null) a.y:2(float)
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── placeholder: $1 [type=int]
