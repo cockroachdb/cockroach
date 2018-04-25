@@ -47,6 +47,14 @@ $ make watch TARGET=<target-cluster-http-uri>
 
 then navigate to `http://localhost:3000` to access the UI.
 
+To proxy to a cluster started up in secure mode, use:
+
+```shell
+$ make watch-secure TARGET=<target-cluster-https-uri>
+```
+
+then navigate to `https://localhost:3000` to access the UI.
+
 While the proxy is running, any changes you make in the `src` directory will
 trigger an automatic recompilation of the UI. This recompilation should be much
 faster than a cold compile—usually less than one second—as Webpack can reuse
