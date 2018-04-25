@@ -383,7 +383,9 @@ SELECT NULL IS NULL
 ----
 project
  ├── columns: column1:1(bool)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       └── true [type=bool]
@@ -396,7 +398,9 @@ SELECT 1 IS NULL
 ----
 project
  ├── columns: column1:1(bool)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       └── false [type=bool]
@@ -409,7 +413,9 @@ SELECT NULL IS NOT NULL, NULL IS NOT TRUE
 ----
 project
  ├── columns: column1:1(bool) column2:2(bool)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       ├── false [type=bool]
@@ -446,7 +452,9 @@ SELECT NULL IS NOT TRUE, NULL IS TRUE
 ----
 project
  ├── columns: column1:1(bool) column2:2(bool)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       ├── true [type=bool]

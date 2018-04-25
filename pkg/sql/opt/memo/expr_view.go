@@ -217,6 +217,9 @@ const (
 	// ExprFmtHideOuterCols does not show outer columns in the output.
 	ExprFmtHideOuterCols ExprFmtFlags = 1 << (iota - 1)
 
+	// ExprFmtHideRowCard does not show row cardinality in the output.
+	ExprFmtHideRowCard
+
 	// ExprFmtHideStats does not show statistics in the output.
 	ExprFmtHideStats
 
@@ -340,6 +343,13 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	if !flags.HasFlags(ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
 		tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
+	}
+
+	if !flags.HasFlags(ExprFmtHideRowCard) && logProps.Relational.Cardinality != AnyCardinality {
+		// Suppress cardinality for Scan ops if it's redundant with Limit field.
+		if ev.Operator() != opt.ScanOp || logProps.Relational.Cardinality.Min != 0 {
+			tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
+		}
 	}
 
 	if !flags.HasFlags(ExprFmtHideStats) {

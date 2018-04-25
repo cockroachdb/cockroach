@@ -353,17 +353,28 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 // count limited. This is only possible when there is no existing limit and
 // when the required ordering of the rows to be limited can be satisfied by the
 // scan operator.
-func (e *explorer) canLimitScan(def memo.PrivateID, ordering memo.PrivateID) bool {
+func (e *explorer) canLimitScan(def, limit, ordering memo.PrivateID) bool {
+	limitVal := int64(*e.mem.LookupPrivate(limit).(*tree.DInt))
+	if limitVal <= 0 {
+		// Can't push limit into scan if it's zero or negative.
+		return false
+	}
+
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
+	if scanOpDef.HardLimit != 0 {
+		// Can't push limit into scan if scan is already limited.
+		return false
+	}
+
 	required := e.mem.LookupPrivate(ordering).(memo.Ordering)
-	return scanOpDef.HardLimit == 0 && scanOpDef.CanProvideOrdering(e.mem.Metadata(), required)
+	return scanOpDef.CanProvideOrdering(e.mem.Metadata(), required)
 }
 
 // limitScanDef constructs a new ScanOpDef private value that is based on the
 // given ScanOpDef. The new def's HardLimit is set to the given limit, which
 // must be a constant int datum value. The other fields are inherited from the
 // existing def.
-func (e *explorer) limitScanDef(def memo.PrivateID, limit memo.PrivateID) memo.PrivateID {
+func (e *explorer) limitScanDef(def, limit memo.PrivateID) memo.PrivateID {
 	defCopy := *e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	defCopy.HardLimit = int64(*e.mem.LookupPrivate(limit).(*tree.DInt))
 	return e.mem.InternScanOpDef(&defCopy)
