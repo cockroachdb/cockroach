@@ -163,25 +163,18 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 }
 
 // Send implements the client.Sender interface. The store is looked up from the
-// store map if specified by the request; otherwise, the command is being
-// executed locally, and the replica is determined via lookup through each
-// store's LookupRange method. The latter path is taken only by unit tests.
+// store map using the ID specified in the request.
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If we aren't given a Replica, then a little bending over
-	// backwards here. This case applies exclusively to unittests.
-	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		rs, err := keys.Range(ba)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		rangeID, repDesc, err := ls.LookupReplica(rs.Key, rs.EndKey)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		ba.RangeID = rangeID
-		ba.Replica = repDesc
+	// To simplify tests, this function used to perform its own range routing if
+	// the request was missing its range or store IDs. It was too easy to rely on
+	// this in production code paths, though, so it's now a fatal error if either
+	// the range or store ID is missing.
+	if ba.RangeID == 0 {
+		log.Fatal(ctx, "batch request missing range ID")
+	} else if ba.Replica.StoreID == 0 {
+		log.Fatal(ctx, "batch request missing store ID")
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)

@@ -188,9 +188,16 @@ func bootstrapCluster(
 	tr := cfg.Settings.Tracer
 	defer tr.Close()
 	cfg.AmbientCtx.Tracer = tr
-	// Create a KV DB with a local sender.
+	// Create a KV DB with a sender that routes all requests to the first range
+	// and first local store.
 	stores := storage.NewStores(cfg.AmbientCtx, cfg.Clock, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
-	tcsFactory := kv.NewTxnCoordSenderFactory(cfg.AmbientCtx, cfg.Settings, stores, cfg.Clock, false /* linearizable */, stopper, txnMetrics)
+	localSender := client.Wrap(stores, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+		ba.RangeID = 1
+		ba.Replica.StoreID = 1
+		return ba
+	})
+	tcsFactory := kv.NewTxnCoordSenderFactory(cfg.AmbientCtx, cfg.Settings, localSender, cfg.Clock,
+		false /* linearizable */, stopper, txnMetrics)
 	cfg.DB = client.NewDB(tcsFactory, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {

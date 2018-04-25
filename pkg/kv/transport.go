@@ -377,8 +377,10 @@ func (h byHealth) Less(i, j int) bool { return h[i].healthy && !h[j].healthy }
 // without a full RPC stack.
 func SenderTransportFactory(tracer opentracing.Tracer, sender client.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *rpc.Context, _ ReplicaSlice, args roachpb.BatchRequest,
+		_ SendOptions, _ *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
 	) (Transport, error) {
+		// Always send to the first replica.
+		args.Replica = replicas[0].ReplicaDescriptor
 		return &senderTransport{tracer, sender, args, false}, nil
 	}
 }
