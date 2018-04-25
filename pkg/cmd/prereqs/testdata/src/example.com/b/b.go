@@ -14,6 +14,7 @@
 
 package b
 
-import "foo.com/foo"
-
-var Sym = foo.Sym
+import (
+	_ "foo.com/bar"
+	_ "foo.com/foo"
+)
