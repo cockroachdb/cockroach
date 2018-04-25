@@ -685,10 +685,10 @@ func (l *leaseTransferTest) ensureLeaderAndRaftState(t *testing.T, leader *stora
 
 func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	l := setupLeaseTransferTest(t)
-	defer l.mtc.Stop()
 
 	t.Run("Transfer", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		origLease, _ := l.replica0.GetLease()
 		{
 			// Transferring the lease to ourself should be a no-op.
@@ -745,6 +745,8 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	// that. Test that the transfer still happens (it'll wait until the extension
 	// is done).
 	t.Run("TransferWithExtension", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// Ensure that replica1 has the lease.
 		if err := l.replica0.AdminTransferLease(context.Background(), l.replica1Desc.StoreID); err != nil {
 			t.Fatal(err)
@@ -793,6 +795,8 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	// DrainTransfer verifies that a draining store attempts to transfer away
 	// range leases owned by its replicas.
 	t.Run("DrainTransfer", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// We have to ensure that replica0 is the raft leader and that replica1 has
 		// caught up to replica0 as draining code doesn't transfer leases to
 		// behind replicas.
@@ -820,6 +824,8 @@ func TestRangeTransferLeaseExpirationBased(t *testing.T) {
 	// in-progress lease requests to complete before transferring away the new
 	// lease.
 	t.Run("DrainTransferWithExtension", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// Ensure that replica1 has the lease.
 		if err := l.replica0.AdminTransferLease(context.Background(), l.replica1Desc.StoreID); err != nil {
 			t.Fatal(err)
