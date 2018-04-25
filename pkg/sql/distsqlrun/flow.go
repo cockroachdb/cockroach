@@ -81,7 +81,9 @@ type FlowCtx struct {
 	// of the transaction in which the flow's query is running.
 	clientDB *client.DB
 
-	// executor is used to run internal SQL statements.
+	// Executor can be used to run "internal queries". Note that Flows also have
+	// access to an executor in the EvalContext. That one is "session bound"
+	// whereas this one isn't.
 	executor sqlutil.InternalExecutor
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx

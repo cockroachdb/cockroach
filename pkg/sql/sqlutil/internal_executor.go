@@ -26,6 +26,9 @@ import (
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sql/util" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
+//
+// Note that implementations might be "session bound" - meaning they inherit
+// session variables from a parent session - or not.
 type InternalExecutor interface {
 	// Exec executes the supplied SQL statement. Statements are currently executed
 	// as the root user with the system database as current database.

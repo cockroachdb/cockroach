@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 
 	"github.com/elazarl/go-bindata-assetfs"
@@ -590,11 +592,29 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.HistogramWindowInterval(),
 		&execCfg,
 	)
+
+	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
+	// circular dependency between the distsqlrun.Server and sql.Server and set
+	// SessionBoundInternalExecutorCtor.
+	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
+		func(
+			ctx context.Context, sessionData *sessiondata.SessionData,
+		) sqlutil.InternalExecutor {
+			ie := sql.MakeSessionBoundInternalExecutor(
+				ctx,
+				sessionData,
+				s.pgServer.SQLServer,
+				s.sqlMemMetrics,
+				s.st,
+			)
+			return &ie
+		}
+
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
 	s.registry.AddMetricStruct(s.pgServer.StatementCounters())
 	s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
 	*internalExecutor = sql.MakeInternalExecutor(
-		ctx, s.pgServer.SQLServer, &s.internalMemMetrics, s.ClusterSettings(),
+		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings(),
 	)
 	s.internalExecutor = internalExecutor
 	execCfg.InternalExecutor = internalExecutor
