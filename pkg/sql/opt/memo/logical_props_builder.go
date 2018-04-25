@@ -437,6 +437,7 @@ func (b logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
+	// TODO(andyk): Set HasCorrelatedSubquery flag for Exists and Any operators.
 	switch ev.Operator() {
 	case opt.VariableOp:
 		// Variable introduces outer column.
@@ -448,6 +449,9 @@ func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 		projectionProps := ev.childGroup(1).logical.Scalar
 		props.Scalar.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
 		props.Scalar.OuterCols.UnionWith(inputProps.OuterCols)
+		if !props.Scalar.OuterCols.Empty() {
+			props.Scalar.HasCorrelatedSubquery = true
+		}
 		return props
 	}
 
@@ -458,6 +462,11 @@ func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
 		} else {
 			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
+		}
+
+		// Propagate HasCorrelatedSubquery up the scalar expression tree.
+		if logical.Scalar != nil && logical.Scalar.HasCorrelatedSubquery {
+			props.Scalar.HasCorrelatedSubquery = true
 		}
 	}
 
