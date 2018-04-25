@@ -92,6 +92,12 @@ type RelationalProps struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
+	// Cardinality is the number of rows that can be returned from this relational
+	// expression. The number of rows will always be between the inclusive Min and
+	// Max bounds. If Max=math.MaxUint32, then there is no limit to the number of
+	// rows returned by the expression.
+	Cardinality Cardinality
+
 	// Stats is the set of statistics that apply to this relational expression.
 	// See statistics.go for more details.
 	Stats Statistics

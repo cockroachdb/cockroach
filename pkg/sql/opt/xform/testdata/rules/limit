@@ -64,9 +64,11 @@ SELECT s FROM (SELECT s, i FROM a ORDER BY s LIMIT 10) a ORDER BY s, i LIMIT 1
 ----
 limit
  ├── columns: s:4(string)
+ ├── cardinality: [0 - 1]
  ├── ordering: +4,+2
  ├── sort
  │    ├── columns: a.i:2(int) a.s:4(string)
+ │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
  │    └── scan a@s_idx
  │         ├── columns: a.i:2(int) a.s:4(string)
@@ -79,6 +81,7 @@ SELECT s FROM a ORDER BY f LIMIT 1
 ----
 limit
  ├── columns: s:4(string)
+ ├── cardinality: [0 - 1]
  ├── ordering: +3
  ├── sort
  │    ├── columns: a.f:3(float) a.s:4(string)
@@ -96,13 +99,10 @@ limit
  ├── scan a
  │    └── columns: a.s:4(string)
  └── subquery [type=int]
-      ├── max1-row
+      ├── scan a
       │    ├── columns: a.k:6(int!null)
-      │    ├── keys: (6)
-      │    └── scan a
-      │         ├── columns: a.k:6(int!null)
-      │         ├── limit: 1
-      │         └── keys: (6)
+      │    ├── limit: 1
+      │    └── keys: (6)
       └── variable: a.k [type=int, outer=(6)]
 
 memo

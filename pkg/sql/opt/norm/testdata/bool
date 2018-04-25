@@ -37,7 +37,9 @@ SELECT False OR False
 ----
 project
  ├── columns: column1:1(bool)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       └── false [type=bool]
