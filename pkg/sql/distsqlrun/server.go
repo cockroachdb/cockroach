@@ -114,7 +114,10 @@ type ServerConfig struct {
 	Settings *cluster.Settings
 
 	// DB is a handle to the cluster.
-	DB       *client.DB
+	DB *client.DB
+	// Executor can be used to run "internal queries". Note that Flows also have
+	// access to an executor in the EvalContext. That one is "session bound"
+	// whereas this one isn't.
 	Executor sqlutil.InternalExecutor
 
 	// FlowDB is the DB that flows should use for interacting with the database.
@@ -148,6 +151,13 @@ type ServerConfig struct {
 	// A handle to gossip used to broadcast the node's DistSQL version and
 	// draining state.
 	Gossip *gossip.Gossip
+
+	// SessionBoundInternalExecutorFactory is used to construct session-bound
+	// executors. The idea is that a higher-layer binds some of the arguments
+	// required, so that users of ServerConfig don't have to care about them.
+	SessionBoundInternalExecutorFactory func(
+		ctx context.Context, sessionData *sessiondata.SessionData,
+	) sqlutil.InternalExecutor
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -316,16 +326,20 @@ func (ds *ServerImpl) setupFlow(
 		tracing.FinishSpan(sp)
 		return ctx, nil, err
 	}
+
+	sd := &sessiondata.SessionData{
+		ApplicationName: req.EvalContext.ApplicationName,
+		Location:        location,
+		Database:        req.EvalContext.Database,
+		User:            req.EvalContext.User,
+		SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+		SequenceState:   sessiondata.NewSequenceState(),
+	}
+	ie := ds.SessionBoundInternalExecutorFactory(ctx, sd)
+
 	evalCtx := tree.EvalContext{
-		Settings: ds.ServerConfig.Settings,
-		SessionData: &sessiondata.SessionData{
-			ApplicationName: req.EvalContext.ApplicationName,
-			Location:        location,
-			Database:        req.EvalContext.Database,
-			User:            req.EvalContext.User,
-			SearchPath:      sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
-			SequenceState:   sessiondata.NewSequenceState(),
-		},
+		Settings:     ds.ServerConfig.Settings,
+		SessionData:  sd,
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,
@@ -333,10 +347,11 @@ func (ds *ServerImpl) setupFlow(
 		ActiveMemAcc: &acc,
 		// TODO(andrei): This is wrong. Each processor should override Ctx with its
 		// own context.
-		CtxProvider: simpleCtxProvider{ctx: ctx},
-		Txn:         txn,
-		Planner:     &dummyEvalPlanner{},
-		Sequence:    &dummySequenceOperators{},
+		CtxProvider:      simpleCtxProvider{ctx: ctx},
+		Txn:              txn,
+		Planner:          &dummyEvalPlanner{},
+		Sequence:         &dummySequenceOperators{},
+		InternalExecutor: ie,
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
@@ -544,12 +559,7 @@ var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
 type dummyEvalPlanner struct {
 }
 
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) QueryRow(
-	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
-	return nil, errEvalPlanner
-}
+var _ tree.EvalPlanner = &dummyEvalPlanner{}
 
 // Implements the tree.EvalDatabase interface.
 func (ep *dummyEvalPlanner) ParseQualifiedTableName(

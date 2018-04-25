@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -344,69 +343,6 @@ func (p *planner) ParseQualifiedTableName(
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
 	_, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
 	return err
-}
-
-// QueryRow implements the tree.EvalPlanner interface.
-//
-// TODO(andrei): make this use the InternalExecutor. Figure out a way to pass
-// the SessionData to it. Even better if this method doesn't exist, and users
-// get access to the InternalExecutor (perhaps through sqlutil.InternalExecutor)
-// in some other way than through a planner.
-func (p *planner) QueryRow(
-	ctx context.Context, sql string, args ...interface{},
-) (retRow tree.Datums, retErr error) {
-	origP := p
-	p, cleanup := newInternalPlanner("query rows", p.Txn(), p.User(), p.ExtendedEvalContext().MemMetrics, p.ExecCfg())
-	defer cleanup()
-	*p.SessionData() = *origP.SessionData()
-
-	stmt, err := parser.ParseOne(sql)
-	if err != nil {
-		return nil, err
-	}
-	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
-	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
-	startTime := timeutil.Now()
-	if err := p.makePlan(ctx, Statement{AST: stmt}); err != nil {
-		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return nil, err
-	}
-	defer p.curPlan.close(ctx)
-	defer func() {
-		rows := 1
-		if retRow == nil {
-			rows = 0
-		}
-		p.maybeLogStatementInternal(ctx, "internal-exec", rows, retErr, startTime)
-	}()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := p.curPlan.start(params); err != nil {
-		return nil, err
-	}
-	var rows []tree.Datums
-	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
-		if values != nil {
-			valCopy := append(tree.Datums(nil), values...)
-			rows = append(rows, valCopy)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	switch len(rows) {
-	case 0:
-		return nil, nil
-	case 1:
-		return rows[0], nil
-	default:
-		return nil, &tree.MultipleResultsError{SQL: sql}
-	}
 }
 
 func (p *planner) lookupFKTable(
