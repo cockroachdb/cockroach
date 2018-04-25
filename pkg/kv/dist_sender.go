@@ -385,9 +385,6 @@ func (ds *DistSender) sendRPC(
 			fmt.Sprintf("no replica node addresses available via gossip for r%d", rangeID))
 	}
 
-	// TODO(pmattis): This needs to be tested. If it isn't set we'll
-	// still route the request appropriately by key, but won't receive
-	// RangeNotFoundErrors.
 	ba.RangeID = rangeID
 
 	tracing.AnnotateTrace()
