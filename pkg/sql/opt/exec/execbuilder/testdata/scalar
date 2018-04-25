@@ -3,8 +3,7 @@
 # correctly.
 
 exec-raw
-CREATE DATABASE t;
-CREATE TABLE t.t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
+CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
 ----
 
 exec-explain
@@ -48,7 +47,7 @@ render       0  render  ·         ·                 (column1)  ·
 ·            1  ·       size      0 columns, 1 row  ·          ·
 
 exec-explain
-SELECT 1 + 2 FROM t.t
+SELECT 1 + 2 FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  3          ·          ·
@@ -57,7 +56,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT a + 2 FROM t.t
+SELECT a + 2 FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  a + 2      ·          ·
@@ -66,7 +65,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT a >= 5 AND b <= 10 AND c < 4 FROM t.t
+SELECT a >= 5 AND b <= 10 AND c < 4 FROM t
 ----
 render     0  render  ·         ·                                     (column8)  ·
  │         0  ·       render 0  ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
@@ -75,7 +74,7 @@ render     0  render  ·         ·                                     (column8
 ·          1  ·       spans     ALL                                   ·          ·
 
 exec-explain
-SELECT a >= 5 OR b <= 10 OR c < 4  FROM t.t
+SELECT a >= 5 OR b <= 10 OR c < 4  FROM t
 ----
 render     0  render  ·         ·                                   (column8)  ·
  │         0  ·       render 0  ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
@@ -84,7 +83,7 @@ render     0  render  ·         ·                                   (column8) 
 ·          1  ·       spans     ALL                                 ·          ·
 
 exec-explain
-SELECT NOT (a = 5) FROM t.t
+SELECT NOT (a = 5) FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  a != 5     ·          ·
@@ -93,7 +92,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT NOT (a > 5 AND b >= 10) FROM t.t
+SELECT NOT (a > 5 AND b >= 10) FROM t
 ----
 render     0  render  ·         ·                     (column8)  ·
  │         0  ·       render 0  (a <= 5) OR (b < 10)  ·          ·
@@ -102,7 +101,7 @@ render     0  render  ·         ·                     (column8)  ·
 ·          1  ·       spans     ALL                   ·          ·
 
 exec-explain
-SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) FROM t.t
+SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) FROM t
 ----
 render     0  render  ·         ·                                                    (column8)  ·
  │         0  ·       render 0  ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
@@ -111,7 +110,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                                  ·          ·
 
 exec-explain
-SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) FROM t.t
+SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) FROM t
 ----
 render     0  render  ·         ·                                    (column8)  ·
  │         0  ·       render 0  ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
@@ -120,7 +119,7 @@ render     0  render  ·         ·                                    (column8)
 ·          1  ·       spans     ALL                                  ·          ·
 
 exec-explain
-SELECT (a, b) = (1, 2)  FROM t.t
+SELECT (a, b) = (1, 2)  FROM t
 ----
 render     0  render  ·         ·                    (column8)  ·
  │         0  ·       render 0  (a = 1) AND (b = 2)  ·          ·
@@ -129,7 +128,7 @@ render     0  render  ·         ·                    (column8)  ·
 ·          1  ·       spans     ALL                  ·          ·
 
 exec-explain
-SELECT a IN (1, 2) FROM t.t
+SELECT a IN (1, 2) FROM t
 ----
 render     0  render  ·         ·            (column8)  ·
  │         0  ·       render 0  a IN (1, 2)  ·          ·
@@ -138,7 +137,7 @@ render     0  render  ·         ·            (column8)  ·
 ·          1  ·       spans     ALL          ·          ·
 
 exec-explain
-SELECT (a, b) IN ((1, 2), (3, 4)) FROM t.t
+SELECT (a, b) IN ((1, 2), (3, 4)) FROM t
 ----
 render     0  render  ·         ·                           (column8)  ·
  │         0  ·       render 0  (a, b) IN ((1, 2), (3, 4))  ·          ·
@@ -147,7 +146,7 @@ render     0  render  ·         ·                           (column8)  ·
 ·          1  ·       spans     ALL                         ·          ·
 
 exec-explain
-SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t.t
+SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t
 ----
 render     0  render  ·         ·                                                                (column8)     ·
  │         0  ·       render 0  ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
@@ -156,7 +155,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                                              ·             ·
 
 exec-explain
-SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  FROM t.t
+SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  FROM t
 ----
 render     0  render  ·         ·                                                (column8)     ·
  │         0  ·       render 0  (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
@@ -165,7 +164,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                              ·             ·
 
 exec-explain
-SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) FROM t.t
+SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) FROM t
 ----
 render     0  render  ·         ·                                                                                      (column8)     ·
  │         0  ·       render 0  (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
@@ -174,7 +173,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                                                                    ·             ·
 
 exec-explain
-SELECT a IS NULL FROM t.t
+SELECT a IS NULL FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  a IS NULL  ·          ·
@@ -183,7 +182,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT a IS NOT DISTINCT FROM NULL FROM t.t
+SELECT a IS NOT DISTINCT FROM NULL FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  a IS NULL  ·          ·
@@ -192,7 +191,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT a IS NOT DISTINCT FROM b FROM t.t
+SELECT a IS NOT DISTINCT FROM b FROM t
 ----
 render     0  render  ·         ·                         (column8)  ·
  │         0  ·       render 0  a IS NOT DISTINCT FROM b  ·          ·
@@ -201,7 +200,7 @@ render     0  render  ·         ·                         (column8)  ·
 ·          1  ·       spans     ALL                       ·          ·
 
 exec-explain
-SELECT a IS NOT NULL FROM t.t
+SELECT a IS NOT NULL FROM t
 ----
 render     0  render  ·         ·              (column8)  ·
  │         0  ·       render 0  a IS NOT NULL  ·          ·
@@ -210,7 +209,7 @@ render     0  render  ·         ·              (column8)  ·
 ·          1  ·       spans     ALL            ·          ·
 
 exec-explain
-SELECT a IS DISTINCT FROM NULL FROM t.t
+SELECT a IS DISTINCT FROM NULL FROM t
 ----
 render     0  render  ·         ·              (column8)  ·
  │         0  ·       render 0  a IS NOT NULL  ·          ·
@@ -219,7 +218,7 @@ render     0  render  ·         ·              (column8)  ·
 ·          1  ·       spans     ALL            ·          ·
 
 exec-explain
-SELECT a IS DISTINCT FROM b FROM t.t
+SELECT a IS DISTINCT FROM b FROM t
 ----
 render     0  render  ·         ·                     (column8)  ·
  │         0  ·       render 0  a IS DISTINCT FROM b  ·          ·
@@ -228,7 +227,7 @@ render     0  render  ·         ·                     (column8)  ·
 ·          1  ·       spans     ALL                   ·          ·
 
 exec-explain
-SELECT +a + (-b) FROM t.t
+SELECT +a + (-b) FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  a + (-b)   ·          ·
@@ -237,7 +236,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t.t
+SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t
 ----
 render     0  render  ·         ·                                              (column8)  ·
  │         0  ·       render 0  CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·          ·
@@ -246,7 +245,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                            ·          ·
 
 exec-explain
-SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t.t
+SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t
 ----
 render     0  render  ·         ·                                  (column8)  ·
  │         0  ·       render 0  CASE WHEN a = 2 THEN 1 ELSE 2 END  ·          ·
@@ -255,7 +254,7 @@ render     0  render  ·         ·                                  (column8)  
 ·          1  ·       spans     ALL                                ·          ·
 
 exec-explain
-SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END FROM t.t
+SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END FROM t
 ----
 render     0  render  ·         ·                                                           (column8)  ·
  │         0  ·       render 0  CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·          ·
@@ -265,7 +264,7 @@ render     0  render  ·         ·                                             
 
 # Tests for CASE with no ELSE statement
 exec-explain
-SELECT CASE WHEN a = 2 THEN 1 END FROM t.t
+SELECT CASE WHEN a = 2 THEN 1 END FROM t
 ----
 render     0  render  ·         ·                           (column8)  ·
  │         0  ·       render 0  CASE WHEN a = 2 THEN 1 END  ·          ·
@@ -274,7 +273,7 @@ render     0  render  ·         ·                           (column8)  ·
 ·          1  ·       spans     ALL                         ·          ·
 
 exec-explain
-SELECT CASE a WHEN 2 THEN 1 END FROM t.t
+SELECT CASE a WHEN 2 THEN 1 END FROM t
 ----
 render     0  render  ·         ·                         (column8)  ·
  │         0  ·       render 0  CASE a WHEN 2 THEN 1 END  ·          ·
@@ -283,16 +282,16 @@ render     0  render  ·         ·                         (column8)  ·
 ·          1  ·       spans     ALL                       ·          ·
 
 exec-explain allow-unsupported
-SELECT a FROM t.t WHERE a IS OF (INT)
+SELECT a FROM t WHERE a IS OF (INT)
 ----
-filter     0  filter  ·       ·                         (a)  ·
- │         0  ·       filter  t.public.t.a IS OF (INT)  ·    ·
- └── scan  1  scan    ·       ·                         (a)  ·
-·          1  ·       table   t@primary                 ·    ·
-·          1  ·       spans   ALL                       ·    ·
+filter     0  filter  ·       ·                (a)  ·
+ │         0  ·       filter  t.a IS OF (INT)  ·    ·
+ └── scan  1  scan    ·       ·                (a)  ·
+·          1  ·       table   t@primary        ·    ·
+·          1  ·       spans   ALL              ·    ·
 
 exec-explain
-SELECT LENGTH(s) FROM t.t
+SELECT LENGTH(s) FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  length(s)  ·          ·
@@ -302,12 +301,12 @@ render     0  render  ·         ·          (column8)  ·
 
 # Verify that the built function can be executed.
 exec-raw
-CREATE TABLE t.str (s STRING);
-INSERT INTO t.str VALUES ('a'), ('ab'), ('abc')
+CREATE TABLE str (s STRING);
+INSERT INTO str VALUES ('a'), ('ab'), ('abc')
 ----
 
 exec
-SELECT LENGTH(s) FROM t.str
+SELECT LENGTH(s) FROM str
 ----
 column3:int
 1
@@ -315,7 +314,7 @@ column3:int
 3
 
 exec-explain
-SELECT j @> '{"a": 1}' FROM t.t
+SELECT j @> '{"a": 1}' FROM t
 ----
 render     0  render  ·         ·                (column8)  ·
  │         0  ·       render 0  j @> '{"a": 1}'  ·          ·
@@ -324,7 +323,7 @@ render     0  render  ·         ·                (column8)  ·
 ·          1  ·       spans     ALL              ·          ·
 
 exec-explain
-SELECT '{"a": 1}' <@ j FROM t.t
+SELECT '{"a": 1}' <@ j FROM t
 ----
 render     0  render  ·         ·                (column8)  ·
  │         0  ·       render 0  j @> '{"a": 1}'  ·          ·
@@ -333,7 +332,7 @@ render     0  render  ·         ·                (column8)  ·
 ·          1  ·       spans     ALL              ·          ·
 
 exec-explain
-SELECT j->>'a' FROM t.t
+SELECT j->>'a' FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  j->>'a'    ·          ·
@@ -342,7 +341,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT j->'a' FROM t.t
+SELECT j->'a' FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  j->'a'     ·          ·
@@ -351,7 +350,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT j ? 'a' FROM t.t
+SELECT j ? 'a' FROM t
 ----
 render     0  render  ·         ·          (column8)  ·
  │         0  ·       render 0  j ? 'a'    ·          ·
@@ -360,7 +359,7 @@ render     0  render  ·         ·          (column8)  ·
 ·          1  ·       spans     ALL        ·          ·
 
 exec-explain
-SELECT j ?| ARRAY['a', 'b', 'c'] FROM t.t
+SELECT j ?| ARRAY['a', 'b', 'c'] FROM t
 ----
 render     0  render  ·         ·                          (column8)  ·
  │         0  ·       render 0  j ?| ARRAY['a', 'b', 'c']  ·          ·
@@ -369,7 +368,7 @@ render     0  render  ·         ·                          (column8)  ·
 ·          1  ·       spans     ALL                        ·          ·
 
 exec-explain
-SELECT j ?& ARRAY['a', 'b', 'c'] FROM t.t
+SELECT j ?& ARRAY['a', 'b', 'c'] FROM t
 ----
 render     0  render  ·         ·                          (column8)  ·
  │         0  ·       render 0  j ?& ARRAY['a', 'b', 'c']  ·          ·
@@ -378,7 +377,7 @@ render     0  render  ·         ·                          (column8)  ·
 ·          1  ·       spans     ALL                        ·          ·
 
 exec-explain
-SELECT j#>ARRAY['a'] FROM t.t
+SELECT j#>ARRAY['a'] FROM t
 ----
 render     0  render  ·         ·              (column8)  ·
  │         0  ·       render 0  j#>ARRAY['a']  ·          ·
@@ -387,7 +386,7 @@ render     0  render  ·         ·              (column8)  ·
 ·          1  ·       spans     ALL            ·          ·
 
 exec-explain
-SELECT j#>>ARRAY['a'] FROM t.t
+SELECT j#>>ARRAY['a'] FROM t
 ----
 render     0  render  ·         ·               (column8)  ·
  │         0  ·       render 0  j#>>ARRAY['a']  ·          ·
@@ -397,7 +396,7 @@ render     0  render  ·         ·               (column8)  ·
 
 
 exec-explain
-SELECT CAST(a AS string), b::float FROM t.t
+SELECT CAST(a AS string), b::float FROM t
 ----
 render     0  render  ·         ·          (column8, column9)  ·
  │         0  ·       render 0  a::STRING  ·                   ·
@@ -407,7 +406,7 @@ render     0  render  ·         ·          (column8, column9)  ·
 ·          1  ·       spans     ALL        ·                   ·
 
 exec-explain
-SELECT CAST(a + b + c AS string) FROM t.t
+SELECT CAST(a + b + c AS string) FROM t
 ----
 render     0  render  ·         ·                      (column8)  ·
  │         0  ·       render 0  (c + (a + b))::STRING  ·          ·
@@ -416,7 +415,7 @@ render     0  render  ·         ·                      (column8)  ·
 ·          1  ·       spans     ALL                    ·          ·
 
 exec
-SELECT LENGTH(s)::float, s FROM t.str
+SELECT LENGTH(s)::float, s FROM str
 ----
 column3:float  s:string
 1.0            a
@@ -478,7 +477,7 @@ column4:int
 NULL
 
 exec-explain
-SELECT a FROM t.t WHERE a BETWEEN b AND d
+SELECT a FROM t WHERE a BETWEEN b AND d
 ----
 render          0  render  ·         ·                      (a)        ·
  │              0  ·       render 0  a                      ·          ·
@@ -489,7 +488,7 @@ render          0  render  ·         ·                      (a)        ·
 ·               2  ·       spans     ALL                    ·          ·
 
 exec-explain
-SELECT a FROM t.t WHERE a NOT BETWEEN b AND d
+SELECT a FROM t WHERE a NOT BETWEEN b AND d
 ----
 render          0  render  ·         ·                   (a)        ·
  │              0  ·       render 0  a                   ·          ·
@@ -500,7 +499,7 @@ render          0  render  ·         ·                   (a)        ·
 ·               2  ·       spans     ALL                 ·          ·
 
 exec-explain
-SELECT a BETWEEN SYMMETRIC b AND d FROM t.t
+SELECT a BETWEEN SYMMETRIC b AND d FROM t
 ----
 render     0  render  ·         ·                                                   (column8)  ·
  │         0  ·       render 0  ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
@@ -509,7 +508,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                                 ·          ·
 
 exec-explain
-SELECT a NOT BETWEEN SYMMETRIC b AND d FROM t.t
+SELECT a NOT BETWEEN SYMMETRIC b AND d FROM t
 ----
 render     0  render  ·         ·                                              (column8)  ·
  │         0  ·       render 0  ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
@@ -518,7 +517,7 @@ render     0  render  ·         ·                                             
 ·          1  ·       spans     ALL                                            ·          ·
 
 exec-explain
-SELECT ARRAY[a + 1, 2, 3] FROM t.t
+SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
 render     0  render  ·         ·                   (column8)  ·
  │         0  ·       render 0  ARRAY[a + 1, 2, 3]  ·          ·

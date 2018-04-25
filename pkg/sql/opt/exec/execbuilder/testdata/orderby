@@ -1,7 +1,6 @@
 # tests adapted from logictest -- order_by
 
 exec-raw
-CREATE DATABASE t;
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,

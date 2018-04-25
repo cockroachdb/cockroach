@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT)
 ----
 TABLE a
  ├── x int not null
@@ -8,7 +8,7 @@ TABLE a
       └── x int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT, y FLOAT)
+CREATE TABLE b (x INT, y FLOAT)
 ----
 TABLE b
  ├── x int
@@ -28,7 +28,7 @@ project
       └── const: 5 [type=int]
 
 build
-SELECT a.x FROM t.a
+SELECT a.x FROM a
 ----
 project
  ├── columns: x:1(int!null)
@@ -38,13 +38,13 @@ project
       └── variable: a.x [type=int]
 
 build
-SELECT a.x, a.y FROM t.a
+SELECT a.x, a.y FROM a
 ----
 scan a
  └── columns: x:1(int!null) y:2(float)
 
 build
-SELECT a.y, a.x FROM t.a
+SELECT a.y, a.x FROM a
 ----
 project
  ├── columns: y:2(float) x:1(int!null)
@@ -55,7 +55,7 @@ project
       └── variable: a.x [type=int]
 
 build
-SELECT * FROM t.a
+SELECT * FROM a
 ----
 scan a
  └── columns: x:1(int!null) y:2(float)
@@ -63,7 +63,7 @@ scan a
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
 build
-SELECT * FROM t.b
+SELECT * FROM b
 ----
 project
  ├── columns: x:1(int) y:2(float)
@@ -74,7 +74,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT (a.x + 3) AS "X", false AS "Y" FROM t.a
+SELECT (a.x + 3) AS "X", false AS "Y" FROM a
 ----
 project
  ├── columns: X:3(int) Y:4(bool)
@@ -87,7 +87,7 @@ project
       └── false [type=bool]
 
 build
-SELECT *, ((x < y) OR x > 1000) FROM t.a
+SELECT *, ((x < y) OR x > 1000) FROM a
 ----
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool)
@@ -105,7 +105,7 @@ project
                 └── const: 1000 [type=int]
 
 build
-SELECT a.*, true FROM t.a
+SELECT a.*, true FROM a
 ----
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool)
@@ -117,7 +117,7 @@ project
       └── true [type=bool]
 
 build
-SELECT u + 1, v + 1 FROM (SELECT a.x + 3, a.y + 1.0 FROM t.a) AS foo(u, v)
+SELECT u + 1, v + 1 FROM (SELECT a.x + 3, a.y + 1.0 FROM a) AS foo(u, v)
 ----
 project
  ├── columns: column5:5(int) column6:6(float)
@@ -266,3 +266,27 @@ build
 SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
 ----
 error: column name "c" not found
+
+build fully-qualify-names
+SELECT t.kv.k FROM abc AS kv
+----
+error: no data source matches prefix: t.kv
+
+exec-ddl
+CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+build fully-qualify-names
+SELECT t.kv.k FROM kv
+----
+project
+ ├── columns: k:1(int!null)
+ ├── scan kv
+ │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
+ └── projections
+      └── variable: t.public.kv.k [type=int]

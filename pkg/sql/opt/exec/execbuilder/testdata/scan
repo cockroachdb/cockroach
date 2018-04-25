@@ -1,14 +1,10 @@
 exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT, s STRING);
-INSERT INTO t.a VALUES (1, 1.0, 'apple'), (2, 2.0, 'banana'), (3, 3.0, 'cherry')
+CREATE TABLE a (x INT PRIMARY KEY, y FLOAT, s STRING);
+INSERT INTO a VALUES (1, 1.0, 'apple'), (2, 2.0, 'banana'), (3, 3.0, 'cherry')
 ----
 
 opt
-SELECT * FROM t.a
+SELECT * FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(float) s:3(string)
@@ -17,14 +13,14 @@ scan a
  └── keys: (1)
 
 exec-explain
-SELECT * FROM t.a
+SELECT * FROM a
 ----
 scan  0  scan  ·      ·          (x, y, s)  ·
 ·     0  ·     table  a@primary  ·          ·
 ·     0  ·     spans  ALL        ·          ·
 
 exec
-SELECT * FROM t.a
+SELECT * FROM a
 ----
 x:int  y:float  s:string
 1      1.0      apple
@@ -33,7 +29,7 @@ x:int  y:float  s:string
 
 # Test projecting subset of table columns.
 opt
-SELECT s, x FROM t.a
+SELECT s, x FROM a
 ----
 scan a
  ├── columns: s:3(string) x:1(int!null)
@@ -42,7 +38,7 @@ scan a
  └── keys: (1)
 
 exec-explain
-SELECT s, x FROM t.a
+SELECT s, x FROM a
 ----
 render     0  render  ·         ·          (s, x)  ·
  │         0  ·       render 0  s          ·       ·
@@ -52,7 +48,7 @@ render     0  render  ·         ·          (s, x)  ·
 ·          1  ·       spans     ALL        ·       ·
 
 exec
-SELECT s, x FROM t.a
+SELECT s, x FROM a
 ----
 s:string  x:int
 apple     1
@@ -61,12 +57,12 @@ cherry    3
 
 # Test with a hidden column.
 exec-raw
-CREATE TABLE t.b (x INT, y INT, s STRING);
-INSERT INTO t.b VALUES (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry')
+CREATE TABLE b (x INT, y INT, s STRING);
+INSERT INTO b VALUES (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry')
 ----
 
 opt
-SELECT s, x FROM t.b
+SELECT s, x FROM b
 ----
 scan b
  ├── columns: s:3(string) x:1(int)
@@ -74,7 +70,7 @@ scan b
  └── cost: 1000.00
 
 exec
-SELECT s, x FROM t.b
+SELECT s, x FROM b
 ----
 s:string  x:int
 apple     1
@@ -82,7 +78,7 @@ banana    2
 cherry    3
 
 exec-explain
-SELECT s, x FROM t.b
+SELECT s, x FROM b
 ----
 render     0  render  ·         ·          (s, x)  ·
  │         0  ·       render 0  s          ·       ·

@@ -1,7 +1,7 @@
 # tests adapted from logictest -- aggregate
 
 exec-ddl
-CREATE TABLE t.kv (
+CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
@@ -18,7 +18,7 @@ TABLE kv
 
 # Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
 build
-SELECT 3 FROM t.kv HAVING TRUE
+SELECT 3 FROM kv HAVING TRUE
 ----
 project
  ├── columns: column5:5(int)
@@ -34,7 +34,7 @@ project
       └── const: 3 [type=int]
 
 build
-SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
+SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
 ----
 select
  ├── columns: s:4(string) column5:5(int)
@@ -54,7 +54,7 @@ select
       └── const: 1 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM t.kv HAVING MIN(v) > 2
+SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
 ----
 project
  ├── columns: column6:6(int) column5:5(int)
@@ -82,7 +82,7 @@ project
       └── variable: column5 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(v) > 2
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 ----
 project
  ├── columns: column6:6(int) column7:7(int)
@@ -112,35 +112,35 @@ project
       └── variable: column7 [type=int]
 
 build
-SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(MIN(v)) > 2
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
 ----
 error: aggregate functions are not allowed in the argument of max()
 
 build
-SELECT MAX(k), MIN(v) FROM t.kv HAVING k
+SELECT MAX(k), MIN(v) FROM kv HAVING k
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
 build
-SELECT 3 FROM t.kv GROUP BY v HAVING k > 5
+SELECT 3 FROM kv GROUP BY v HAVING k > 5
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # pg has a special case for grouping on primary key, which would allow this, but we do not.
 # See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
 build
-SELECT 3 FROM t.kv GROUP BY k HAVING v > 2
+SELECT 3 FROM kv GROUP BY k HAVING v > 2
 ----
-error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "kv.v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT k FROM t.kv HAVING k > 7
+SELECT k FROM kv HAVING k > 7
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
-SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+w) > 5
+SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 project
  ├── columns: column6:6(int) column5:5(int)
@@ -169,9 +169,9 @@ project
       └── variable: column5 [type=int]
 
 build
-SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+v) > 5
+SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+v) > 5
 ----
-error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Check that everything still works with differently qualified names
 build
@@ -257,40 +257,40 @@ project
  └── projections
       └── variable: column6 [type=decimal]
 
-build
+build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
 ----
 project
  ├── columns: v:2(int)
  ├── select
- │    ├── columns: kv.v:2(int) column5:5(int)
+ │    ├── columns: t.public.kv.v:2(int) column5:5(int)
  │    ├── group-by
- │    │    ├── columns: kv.v:2(int) column5:5(int)
- │    │    ├── grouping columns: kv.v:2(int) column5:5(int)
+ │    │    ├── columns: t.public.kv.v:2(int) column5:5(int)
+ │    │    ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
  │    │    ├── project
- │    │    │    ├── columns: kv.v:2(int) column5:5(int)
+ │    │    │    ├── columns: t.public.kv.v:2(int) column5:5(int)
  │    │    │    ├── scan kv
- │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
  │    │    │    └── projections
- │    │    │         ├── variable: kv.v [type=int]
+ │    │    │         ├── variable: t.public.kv.v [type=int]
  │    │    │         └── mult [type=int]
- │    │    │              ├── variable: kv.k [type=int]
- │    │    │              └── variable: kv.w [type=int]
+ │    │    │              ├── variable: t.public.kv.k [type=int]
+ │    │    │              └── variable: t.public.kv.w [type=int]
  │    │    └── aggregations
  │    └── gt [type=bool]
  │         ├── mult [type=int]
- │         │    ├── variable: kv.k [type=int]
- │         │    └── variable: kv.w [type=int]
+ │         │    ├── variable: t.public.kv.k [type=int]
+ │         │    └── variable: t.public.kv.w [type=int]
  │         └── const: 5 [type=int]
  └── projections
-      └── variable: kv.v [type=int]
+      └── variable: t.public.kv.v [type=int]
 
-build
+build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
 ----
-error: column "t.kv.w" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.public.kv.w" must appear in the GROUP BY clause or be used in an aggregate function
 
-build
+build fully-qualify-names
 SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
 ----
 select
@@ -299,16 +299,16 @@ select
  │    ├── columns: column5:5(string) column6:6(int) column7:7(int)
  │    ├── grouping columns: column5:5(string)
  │    ├── project
- │    │    ├── columns: column5:5(string) kv.s:4(string)
+ │    │    ├── columns: column5:5(string) t.public.kv.s:4(string)
  │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
  │    │    └── projections
  │    │         ├── function: upper [type=string]
- │    │         │    └── variable: kv.s [type=string]
- │    │         └── variable: kv.s [type=string]
+ │    │         │    └── variable: t.public.kv.s [type=string]
+ │    │         └── variable: t.public.kv.s [type=string]
  │    └── aggregations
  │         ├── function: count [type=int]
- │         │    └── variable: kv.s [type=string]
+ │         │    └── variable: t.public.kv.s [type=string]
  │         └── function: count [type=int]
  │              └── variable: column5 [type=string]
  └── gt [type=bool]

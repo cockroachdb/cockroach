@@ -1,5 +1,5 @@
 exec-ddl
-CREATE TABLE t.a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
 ----
 TABLE a
  ├── x int not null
@@ -10,7 +10,7 @@ TABLE a
       └── x int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
+CREATE TABLE b (x INT PRIMARY KEY, z INT)
 ----
 TABLE b
  ├── x int not null
@@ -24,7 +24,7 @@ TABLE b
 
 # Same order, same names.
 opt
-SELECT x, y FROM t.a
+SELECT x, y FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int)
@@ -32,7 +32,7 @@ scan a
 
 # Different order, aliased names.
 opt
-SELECT a.y AS aliasy, a.x FROM t.a
+SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
  ├── columns: aliasy:2(int) x:1(int!null)
@@ -40,7 +40,7 @@ scan a
 
 # Reordered, duplicate, aliased columns.
 opt
-SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM t.a
+SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
  ├── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
@@ -48,7 +48,7 @@ scan a
 
 # Added column (projection should not be eliminated).
 opt
-SELECT *, 1 FROM t.a
+SELECT *, 1 FROM a
 ----
 project
  ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) column5:5(int)
@@ -95,7 +95,7 @@ project
 
 # Discard some of columns.
 opt
-SELECT x FROM (SELECT x, y+1 FROM t.a) a
+SELECT x FROM (SELECT x, y+1 FROM a) a
 ----
 scan a
  ├── columns: x:1(int!null)
@@ -103,7 +103,7 @@ scan a
 
 # Discard all columns.
 opt
-SELECT 1 FROM (SELECT y+1, x FROM t.a) a
+SELECT 1 FROM (SELECT y+1, x FROM a) a
 ----
 project
  ├── columns: column6:6(int)
@@ -113,7 +113,7 @@ project
 
 # Use column values within computed column.
 opt
-SELECT x+y FROM (SELECT y, x, s || 'foo' FROM t.a) a
+SELECT x+y FROM (SELECT y, x, s || 'foo' FROM a) a
 ----
 project
  ├── columns: column6:6(int)
@@ -169,7 +169,7 @@ project
 
 # Project subset of columns.
 opt
-SELECT x FROM t.a
+SELECT x FROM a
 ----
 scan a
  ├── columns: x:1(int!null)
@@ -177,7 +177,7 @@ scan a
 
 # Project subset of columns, some used in computed columns.
 opt
-SELECT x, x+1, y+1 FROM t.a
+SELECT x, x+1, y+1 FROM a
 ----
 project
  ├── columns: x:1(int!null) column5:5(int) column6:6(int)
@@ -196,7 +196,7 @@ project
 
 # Use columns only in computed columns.
 opt
-SELECT x+y FROM t.a
+SELECT x+y FROM a
 ----
 project
  ├── columns: column5:5(int)
@@ -210,7 +210,7 @@ project
 
 # Use no scan columns.
 opt
-SELECT 1 FROM t.a
+SELECT 1 FROM a
 ----
 project
  ├── columns: column5:5(int)
@@ -224,7 +224,7 @@ project
 
 # Columns used only by projection or filter, but not both.
 opt
-SELECT x FROM t.a WHERE y<5
+SELECT x FROM a WHERE y<5
 ----
 project
  ├── columns: x:1(int!null)
@@ -244,7 +244,7 @@ project
 
 # Columns used by both projection and filter.
 opt
-SELECT x, y FROM t.a WHERE x=1 AND y<5
+SELECT x, y FROM a WHERE x=1 AND y<5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
@@ -260,7 +260,7 @@ select
 
 # No needed select columns.
 opt
-SELECT 1 FROM t.a WHERE now()<'2000-01-01T02:00:00'::timestamp
+SELECT 1 FROM a WHERE now()<'2000-01-01T02:00:00'::timestamp
 ----
 project
  ├── columns: column5:5(int)
@@ -275,7 +275,7 @@ project
 
 # Select columns used in computed columns.
 opt
-SELECT y-1, x*x FROM t.a WHERE x+1<5 AND s||'o'='foo'
+SELECT y-1, x*x FROM a WHERE x+1<5 AND s||'o'='foo'
 ----
 project
  ├── columns: column5:5(int) column6:6(int)
@@ -366,7 +366,7 @@ project
 
 # The projection on top of Limit should trickle down and we shouldn't scan f.
 opt
-SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10)
+SELECT x FROM (SELECT x, y, f FROM a ORDER BY y LIMIT 10)
 ----
 project
  ├── columns: x:1(int!null)
@@ -387,7 +387,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+SELECT s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
@@ -400,7 +400,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+SELECT x, s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
@@ -444,7 +444,7 @@ project
 # --------------------------------------------------
 
 opt
-SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y OFFSET 10)
+SELECT x FROM (SELECT x, y, f FROM a ORDER BY y OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null)
@@ -465,7 +465,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+SELECT s FROM (SELECT x, y, f, s FROM a ORDER BY x, y OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -482,7 +482,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+SELECT x, s FROM (SELECT x, y, f, s FROM a ORDER BY x, y OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
@@ -530,7 +530,7 @@ project
 # --------------------------------------------------
 
 opt
-SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10 OFFSET 10)
+SELECT x FROM (SELECT x, y, f FROM a ORDER BY y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null)
@@ -556,7 +556,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+SELECT s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
@@ -578,7 +578,7 @@ project
 
 # We should scan x, y, s.
 opt
-SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+SELECT x, s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
@@ -635,7 +635,7 @@ project
 
 # Columns used only by projection or on condition, but not both.
 opt
-SELECT a.y, b.* FROM t.a INNER JOIN t.b ON a.x=b.x
+SELECT a.y, b.* FROM a INNER JOIN b ON a.x=b.x
 ----
 project
  ├── columns: y:2(int) x:5(int!null) z:6(int)
@@ -658,7 +658,7 @@ project
 
 # Columns used by both projection and on condition, left join.
 opt
-SELECT a.x, a.y, b.* FROM t.a LEFT JOIN t.b ON a.x=b.x AND a.y<5
+SELECT a.x, a.y, b.* FROM a LEFT JOIN b ON a.x=b.x AND a.y<5
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int) x:5(int) z:6(int)
@@ -678,7 +678,7 @@ left-join
 
 # Columns only used by on condition, right join
 opt
-SELECT b.* FROM t.a RIGHT JOIN t.b ON a.x=b.x
+SELECT b.* FROM a RIGHT JOIN b ON a.x=b.x
 ----
 project
  ├── columns: x:5(int!null) z:6(int)
@@ -700,7 +700,7 @@ project
 
 # Columns needed only by projection, full join.
 opt
-SELECT a.x+1, b.* FROM t.a FULL JOIN t.b ON True
+SELECT a.x+1, b.* FROM a FULL JOIN b ON True
 ----
 project
  ├── columns: column7:7(int) x:5(int) z:6(int)
@@ -722,7 +722,7 @@ project
 
 # No columns needed from left side of join.
 opt
-SELECT b.* FROM t.a, t.b
+SELECT b.* FROM a, b
 ----
 inner-join
  ├── columns: x:5(int!null) z:6(int)
@@ -734,7 +734,7 @@ inner-join
 
 # Computed columns.
 opt
-SELECT a.x+1, a.y/2, b.* FROM t.a INNER JOIN t.b ON a.x*a.x=b.x AND a.s||'o'='foo'
+SELECT a.x+1, a.y/2, b.* FROM a INNER JOIN b ON a.x*a.x=b.x AND a.s||'o'='foo'
 ----
 project
  ├── columns: column7:7(int) column8:8(decimal) x:5(int!null) z:6(int)
@@ -826,7 +826,7 @@ project
 
 # Columns used only by projection or on condition, but not both.
 opt
-SELECT b.*, a.y FROM t.b INNER JOIN t.a ON b.x=a.x
+SELECT b.*, a.y FROM b INNER JOIN a ON b.x=a.x
 ----
 project
  ├── columns: x:1(int!null) z:2(int) y:4(int)
@@ -849,7 +849,7 @@ project
 
 # Columns used by both projection and on condition, left join.
 opt
-SELECT b.*, a.x, a.y FROM t.b LEFT JOIN t.a ON b.x=a.x AND a.y<b.x
+SELECT b.*, a.x, a.y FROM b LEFT JOIN a ON b.x=a.x AND a.y<b.x
 ----
 left-join
  ├── columns: x:1(int!null) z:2(int) x:3(int) y:4(int)
@@ -869,7 +869,7 @@ left-join
 
 # Columns only used by on condition, right join
 opt
-SELECT b.* FROM t.b RIGHT JOIN t.a ON b.x=a.x
+SELECT b.* FROM b RIGHT JOIN a ON b.x=a.x
 ----
 project
  ├── columns: x:1(int) z:2(int)
@@ -891,7 +891,7 @@ project
 
 # Columns needed only by projection, full join.
 opt
-SELECT b.*, a.x+1 FROM t.b FULL JOIN t.a ON True
+SELECT b.*, a.x+1 FROM b FULL JOIN a ON True
 ----
 project
  ├── columns: x:1(int) z:2(int) column7:7(int)
@@ -913,7 +913,7 @@ project
 
 # No columns needed from right side of join.
 opt
-SELECT b.* FROM t.b, t.a
+SELECT b.* FROM b, a
 ----
 inner-join
  ├── columns: x:1(int!null) z:2(int)
@@ -925,7 +925,7 @@ inner-join
 
 # Computed columns.
 opt
-SELECT b.*, a.x+1, a.y/2 FROM t.b INNER JOIN t.a ON b.x=a.x*a.x AND a.s||'o'='foo'
+SELECT b.*, a.x+1, a.y/2 FROM b INNER JOIN a ON b.x=a.x*a.x AND a.s||'o'='foo'
 ----
 project
  ├── columns: x:1(int!null) z:2(int) column7:7(int) column8:8(decimal)
