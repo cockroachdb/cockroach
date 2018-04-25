@@ -70,6 +70,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "mvccValueBytesCount", display: "MVCC Value Bytes/Count", compareToLeader: true },
   { variable: "mvccIntentBytesCount", display: "MVCC Intent Bytes/Count", compareToLeader: true },
   { variable: "mvccSystemBytesCount", display: "MVCC System Bytes/Count", compareToLeader: true },
+  { variable: "rangeMaxBytes", display: "Max Range Size Before Split", compareToLeader: false },
   { variable: "cmdQWrites", display: "CmdQ Writes Local/Global", compareToLeader: false },
   { variable: "cmdQReads", display: "CmdQ Reads Local/Global", compareToLeader: false },
   { variable: "cmdQMaxOverlapsSeen", display: "CmdQ Max Overlaps Local/Global", compareToLeader: false },
@@ -476,6 +477,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         mvccValueBytesCount: this.contentMVCC(FixLong(mvcc.val_bytes), FixLong(mvcc.val_count)),
         mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
         mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
+        rangeMaxBytes: this.createContent(FixLong(info.state.range_max_bytes)),
         cmdQWrites: this.contentCommandQueue(
           FixLong(info.cmd_q_local.write_commands),
           FixLong(info.cmd_q_global.write_commands),
