@@ -32,6 +32,34 @@ func TestLogicalPropsBuilder(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost)
 }
 
+// Test HasCorrelatedSubquery flag in isolation since it's not important enough
+// to add to the ExprView string representation.
+func TestHasCorrelatedSubquery(t *testing.T) {
+	cat := createLogPropsCatalog(t)
+
+	test := func(sql string, expected bool) {
+		tester := testutils.NewOptTester(cat, sql)
+		ev, err := tester.OptBuild()
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+
+		// Dig down through input of Project operator and get Select filter.
+		child := ev.Child(0).Child(1)
+		if child.Logical().Scalar.HasCorrelatedSubquery != expected {
+			t.Errorf("expected HasCorrelatedSubquery to be %v, got %v", expected, !expected)
+		}
+	}
+
+	test("SELECT y FROM a WHERE 1=1", false /* expected */)
+	test("SELECT y FROM a WHERE (SELECT COUNT(*) FROM b) > 0", false /* expected */)
+	test("SELECT y FROM a WHERE (SELECT y) > 5", true /* expected */)
+	test("SELECT y FROM a WHERE (SELECT True FROM b WHERE z=y)", true /* expected */)
+	test("SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", true /* expected */)
+	test("SELECT y FROM a WHERE 1=1 AND (SELECT z FROM b WHERE z=y)+1 = 10", true /* expected */)
+	test("SELECT (SELECT z FROM b WHERE z=y) FROM a WHERE False", false /* expected */)
+}
+
 // Test joins that cannot yet be tested using SQL syntax + optimizer.
 func TestLogicalJoinProps(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
