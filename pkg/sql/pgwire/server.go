@@ -121,20 +121,17 @@ type ServerMetrics struct {
 	Conns          *metric.Gauge
 	ConnMemMetrics sql.MemoryMetrics
 	SQLMemMetrics  sql.MemoryMetrics
-
-	internalMemMetrics *sql.MemoryMetrics
 }
 
 func makeServerMetrics(
-	internalMemMetrics *sql.MemoryMetrics, histogramWindow time.Duration,
+	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) ServerMetrics {
 	return ServerMetrics{
-		BytesInCount:       metric.NewCounter(MetaBytesIn),
-		BytesOutCount:      metric.NewCounter(MetaBytesOut),
-		Conns:              metric.NewGauge(MetaConns),
-		ConnMemMetrics:     sql.MakeMemMetrics("conns", histogramWindow),
-		SQLMemMetrics:      sql.MakeMemMetrics("client", histogramWindow),
-		internalMemMetrics: internalMemMetrics,
+		BytesInCount:   metric.NewCounter(MetaBytesIn),
+		BytesOutCount:  metric.NewCounter(MetaBytesOut),
+		Conns:          metric.NewGauge(MetaConns),
+		ConnMemMetrics: sql.MakeMemMetrics("conns", histogramWindow),
+		SQLMemMetrics:  sqlMemMetrics,
 	}
 }
 
@@ -156,7 +153,7 @@ func MakeServer(
 	cfg *base.Config,
 	st *cluster.Settings,
 	executor *sql.Executor,
-	internalMemMetrics *sql.MemoryMetrics,
+	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
@@ -166,7 +163,7 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 		executor:   executor,
-		metrics:    makeServerMetrics(internalMemMetrics, histogramWindow),
+		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
 		mon.MemoryResource,
