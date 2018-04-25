@@ -7949,7 +7949,7 @@ func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []
 	// Note: sending through the store, not directly through the replica, for
 	// intent resolution to kick in. Use max user priority to ensure we push
 	// any residual intent.
-	resp, pErr := client.SendWrappedWith(ctx, tc.store.testSender(), roachpb.Header{
+	resp, pErr := client.SendWrappedWith(ctx, tc.store.TestSender(), roachpb.Header{
 		UserPriority: roachpb.MaxUserPriority,
 	}, &gArgs)
 	if pErr != nil {

@@ -176,7 +176,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	// Perform a split, which has special metrics handling.
 	splitArgs := adminSplitArgs(roachpb.Key("m"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
