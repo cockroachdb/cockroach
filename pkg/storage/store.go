@@ -974,6 +974,8 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
+// The maximum amount of time waited for leadership shedding before commencing
+// to drain a store.
 const raftLeadershipTransferWait = 5 * time.Second
 
 // SetDraining (when called with 'true') causes incoming lease transfers to be
@@ -995,83 +997,116 @@ func (s *Store) SetDraining(drain bool) {
 	var wg sync.WaitGroup
 
 	ctx := log.WithLogTag(context.Background(), "drain", nil)
-	// Limit the number of concurrent lease transfers.
-	sem := make(chan struct{}, 100)
-	sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		wg.Add(1)
-		if err := s.stopper.RunLimitedAsyncTask(
-			r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
-			func(ctx context.Context) {
-				defer wg.Done()
+	transferAllAway := func() int {
+		// Limit the number of concurrent lease transfers.
+		sem := make(chan struct{}, 100)
+		var transferCount int32 // atomically incremented for each non-follower or leaseholder
+		sysCfg, sysCfgSet := s.cfg.Gossip.GetSystemConfig()
+		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+			wg.Add(1)
+			if err := s.stopper.RunLimitedAsyncTask(
+				r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
+				func(ctx context.Context) {
+					defer wg.Done()
 
-				r.mu.Lock()
-				r.mu.draining = true
-				r.mu.Unlock()
-
-				var drainingLease roachpb.Lease
-				for {
-					var llHandle *leaseRequestHandle
 					r.mu.Lock()
-					lease, nextLease := r.getLeaseRLocked()
-					if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
-						llHandle = r.mu.pendingLeaseRequest.JoinRequest()
-					}
+					r.mu.draining = true
+					status := *r.raftStatusRLocked()
+					// isFollower is true when no Raft status is present, or if it
+					// indicates follower status, or if it indicates a single-replica Raft
+					// group (in which case we can't transfer the lease anywhere).
+					isFollower := (status.RaftState == raft.StateFollower && status.Lead != 0) || len(status.Progress) <= 1
 					r.mu.Unlock()
 
-					if llHandle != nil {
-						<-llHandle.C()
-						continue
-					}
-					drainingLease = lease
-					break
-				}
-
-				if drainingLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(drainingLease, s.Clock().Now()) {
-					desc := r.Desc()
-					zone := config.DefaultZoneConfig()
-					if sysCfgSet {
-						var err error
-						zone, err = sysCfg.GetZoneConfigForKey(desc.StartKey)
-						if log.V(1) && err != nil {
-							log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
+					var drainingLease roachpb.Lease
+					for {
+						var llHandle *leaseRequestHandle
+						r.mu.Lock()
+						lease, nextLease := r.getLeaseRLocked()
+						if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
+							llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 						}
+						r.mu.Unlock()
+
+						if llHandle != nil {
+							<-llHandle.C()
+							continue
+						}
+						drainingLease = lease
+						break
 					}
-					transferred, err := s.replicateQueue.transferLease(
-						ctx,
-						r,
-						desc,
-						zone,
-						transferLeaseOptions{},
-					)
-					if log.V(1) {
+
+					if !isFollower {
+						atomic.AddInt32(&transferCount, 1)
+					}
+
+					ownsValidLease := drainingLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(drainingLease, s.Clock().Now())
+					if ownsValidLease {
+						desc := r.Desc()
+						zone := config.DefaultZoneConfig()
+						if sysCfgSet {
+							var err error
+							zone, err = sysCfg.GetZoneConfigForKey(desc.StartKey)
+							if log.V(1) && err != nil {
+								log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
+							}
+						}
+						transferred, err := s.replicateQueue.transferLease(
+							ctx,
+							r,
+							desc,
+							zone,
+							transferLeaseOptions{},
+						)
 						if transferred {
-							log.Infof(ctx, "transferred lease %s for replica %s", drainingLease, desc)
-						} else {
+							// Bump the counter so that we check this replica again next time.
+							// The replica is usually Raft leader and so we will check again
+							// anyway, but this doesn't have to be true -- we could be
+							// follower (though that means that nothing will be checked in
+							// the next iteration).
+							atomic.AddInt32(&transferCount, 1)
+						} else if !isFollower {
+							// If we didn't manage to transfer but added to the counter earlier
+							// due to being Raft leader, undo that. If we can't transfer the
+							// lease away, we don't want to wait for this replica.
+							atomic.AddInt32(&transferCount, -1)
+						}
+						if log.V(1) && !transferred {
 							// Note that a nil error means that there were no suitable
 							// candidates.
 							log.Errorf(
 								ctx,
-								"did not transfer lease %s for replica %s when draining: %s",
+								"did not transfer lease %s for replica %s when draining: %v",
 								drainingLease,
 								desc,
 								err,
 							)
 						}
 					}
+				}); err != nil {
+				if log.V(1) {
+					log.Errorf(ctx, "error running draining task: %s", err)
 				}
-			}); err != nil {
-			if log.V(1) {
-				log.Errorf(ctx, "error running draining task: %s", err)
+				wg.Done()
+				return false
 			}
-			wg.Done()
-			return false
-		}
-		return true
-	})
-	wg.Wait()
-	if drain {
-		time.Sleep(raftLeadershipTransferWait)
+			return true
+		})
+		wg.Wait()
+		return int(transferCount)
+	}
+
+	transferAllAway()
+	if err := retry.ForDuration(
+		raftLeadershipTransferWait, func() error {
+			if numRemaining := transferAllAway(); numRemaining > 0 {
+				return errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
+			}
+			return nil
+		}); err != nil {
+		// You expect this message when shutting down a server in an unhealthy
+		// cluster, but outside of that, transferring the leaders away should work.
+		log.Warning(ctx, "unable to drain cleanly within %s, service might briefly deteriorate: %s", raftLeadershipTransferWait, err)
 	}
 }
 
