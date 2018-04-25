@@ -81,7 +81,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 	get := func(store *storage.Store, rangeID roachpb.RangeID, key roachpb.Key) int64 {
 		args := getArgs(key)
-		resp, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+		resp, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 			RangeID: rangeID,
 		}, args)
 		if err != nil {
@@ -107,7 +107,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 
 		increment := func(rangeID roachpb.RangeID, key roachpb.Key, value int64) (*roachpb.IncrementResponse, *roachpb.Error) {
 			args := incrementArgs(key, value)
-			resp, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+			resp, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 				RangeID: rangeID,
 			}, args)
 			incResp, _ := resp.(*roachpb.IncrementResponse)
@@ -121,7 +121,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 			t.Fatal(err)
 		}
 		splitArgs := adminSplitArgs(splitKey)
-		if _, err := client.SendWrapped(context.Background(), rg1(store), splitArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), store.TestSender(), splitArgs); err != nil {
 			t.Fatal(err)
 		}
 		rangeID2 = store.LookupReplica(roachpb.RKey(key2), nil).RangeID
@@ -145,11 +145,11 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 	// Raft processing is initialized lazily; issue a no-op write request on each key to
 	// ensure that is has been started.
 	incArgs := incrementArgs(key1, 0)
-	if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), store.TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	incArgs = incrementArgs(key2, 0)
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{
 		RangeID: rangeID2,
 	}, incArgs); err != nil {
 		t.Fatal(err)
@@ -189,14 +189,14 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 
 		// Write a bytes value so the increment will fail.
 		putArgs := putArgs(keyA, []byte("asdf"))
-		if _, err := client.SendWrapped(context.Background(), rg1(store), putArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), store.TestSender(), putArgs); err != nil {
 			t.Fatal(err)
 		}
 
 		// Try and fail to increment the key. It is important for this test that the
 		// failure be the last thing in the raft log when the store is stopped.
 		incArgs := incrementArgs(keyA, 42)
-		if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err == nil {
+		if _, err := client.SendWrapped(context.Background(), store.TestSender(), incArgs); err == nil {
 			t.Fatal("did not get expected error")
 		}
 	}()
@@ -214,7 +214,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	// Issue a no-op write to lazily initialize raft on the range.
 	keyB := roachpb.Key("b")
 	incArgs := incrementArgs(keyB, 0)
-	if _, err := client.SendWrapped(context.Background(), rg1(store), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), store.TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,7 +234,7 @@ func TestReplicateRange(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -286,7 +286,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify that the same data is available on the replica.
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[1]), roachpb.Header{
+		if reply, err := client.SendWrappedWith(context.Background(), mtc.stores[1].TestSender(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, getArgs); err != nil {
 			return errors.Errorf("failed to read data: %s", err)
@@ -321,7 +321,7 @@ func TestRestoreReplicas(t *testing.T) {
 	// Perform an increment before replication to ensure that commands are not
 	// repeated on restarts.
 	incArgs := incrementArgs([]byte("a"), 23)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -354,26 +354,26 @@ func TestRestoreReplicas(t *testing.T) {
 	// Send a command on each store. The original store (the lease holder still)
 	// will succeed.
 	incArgs = incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	// The follower will return a not lease holder error, indicating the command
 	// should be forwarded to the lease holder.
 	incArgs = incrementArgs([]byte("a"), 11)
 	{
-		_, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[1]), incArgs)
+		_, pErr := client.SendWrapped(context.Background(), mtc.stores[1].TestSender(), incArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 			t.Fatalf("expected not lease holder error; got %s", pErr)
 		}
 	}
 	// Send again, this time to first store.
-	if _, pErr := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[1]), roachpb.Header{
+		if reply, err := client.SendWrappedWith(context.Background(), mtc.stores[1].TestSender(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, getArgs); err != nil {
 			return errors.Errorf("failed to read data: %s", err)
@@ -501,7 +501,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 
 	// Issue a command on the first node before replicating.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -514,13 +514,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this includes
 	// the increment).
 	truncArgs := truncateLogArgs(index+1, 1)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	// Issue a second command post-truncation.
 	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -542,7 +542,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Once it catches up, the effects of both commands can be seen.
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[1]), roachpb.Header{
+		if reply, err := client.SendWrappedWith(context.Background(), mtc.stores[1].TestSender(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, getArgs); err != nil {
 			return errors.Errorf("failed to read data: %s", err)
@@ -567,13 +567,13 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
 	incArgs = incrementArgs([]byte("a"), 23)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[1]), roachpb.Header{
+		if reply, err := client.SendWrappedWith(context.Background(), mtc.stores[1].TestSender(), roachpb.Header{
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, getArgs); err != nil {
 			return errors.Errorf("failed to read data: %s", err)
@@ -601,7 +601,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	key := []byte("a")
 	incArgs := incrementArgs(key, 5)
 	if _, err := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+		context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -634,7 +634,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 
 	truncArgs := truncateLogArgs(index+1, 1)
 	if _, err := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+		context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -670,7 +670,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			// key and truncate the raft logs from that command after killing one of the
 			// nodes to check that it gets the new value after it comes up.
 			incArgs := incrementArgs(key, incA)
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -683,7 +683,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			mtc.stopStore(stoppedStore)
 
 			incArgs = incrementArgs(key, incB)
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -697,7 +697,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			// Truncate the log at index+1 (log entries < N are removed, so this
 			// includes the increment).
 			truncArgs := truncateLogArgs(index+1, 1)
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -869,7 +869,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	// key and truncate the raft logs from that command after killing one of the
 	// nodes to check that it gets the new value after it comes up.
 	incArgs := incrementArgs(key, incA)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -883,7 +883,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	mtc.stopStore(2)
 
 	incArgs = incrementArgs(key, incB)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -897,7 +897,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
 	truncArgs := truncateLogArgs(index+1, 1)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 		t.Fatal(err)
 	}
 	mtc.restartStore(1)
@@ -1023,7 +1023,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 
 			// Put some data in the range so we'll have something to test for.
 			incArgs := incrementArgs([]byte("a"), 5)
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1033,7 +1033,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Stop node 2; while it is down write some more data.
 			mtc.stopStore(2)
 
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1050,7 +1050,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Truncate the log at index+1 (log entries < N are removed, so this includes
 			// the increment).
 			truncArgs := truncateLogArgs(index+1, rangeID)
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1115,7 +1115,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 			// Send an increment to the restarted node. If we don't refresh pending
 			// commands appropriately, the range lease command will not get
 			// re-proposed when we discover the new leader.
-			if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[2]), incArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), mtc.stores[2].TestSender(), incArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1292,7 +1292,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 		})
 
 		args := putArgs(roachpb.Key("any write"), []byte("should mark as corrupted"))
-		if _, err := client.SendWrapped(ctx, rg1(store0), args); err != nil {
+		if _, err := client.SendWrapped(ctx, store0.TestSender(), args); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1478,7 +1478,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	mtc.replicateRange(rangeID, 1, 2)
 
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1504,7 +1504,7 @@ func TestProgressWithDownNode(t *testing.T) {
 	// Stop one of the replicas and issue a new increment.
 	mtc.stopStore(1)
 	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1557,7 +1557,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 
 	// Verify that the first increment propagates to all the engines.
 	incArgs := incrementArgs(key, 2)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(key, []int64{2, 2, 2})
@@ -1583,14 +1583,14 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		// Truncate the log at index+1 (log entries < N are removed, so this includes
 		// the increment).
 		truncArgs := truncateLogArgs(index+1, rangeID)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), truncArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), truncArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Ensure that store can catch up with the rest of the group.
 	incArgs = incrementArgs(key, 3)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1654,7 +1654,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	inc1 := int64(5)
 	{
 		incArgs := incrementArgs(key, inc1)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1688,7 +1688,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	inc2 := int64(11)
 	{
 		incArgs := incrementArgs(key, inc2)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1708,7 +1708,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 	inc3 := int64(23)
 	{
 		incArgs := incrementArgs(key, inc3)
-		if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+		if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -2052,7 +2052,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// Send a command to ensure Raft is aware of lost follower so that it won't
 	// quiesce (which would prevent heartbeats).
 	if _, err := client.SendWrappedWith(
-		context.Background(), rg1(mtc.stores[0]), roachpb.Header{RangeID: rangeID},
+		context.Background(), mtc.stores[0].TestSender(), roachpb.Header{RangeID: rangeID},
 		incrementArgs(roachpb.Key("a"), 1)); err != nil {
 		t.Fatal(err)
 	}
@@ -2136,7 +2136,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	store0 := mtc.stores[0]
 	// Make the split
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(store0), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), store0.TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2146,7 +2146,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	}
 	// Issue an increment for later check.
 	incArgs := incrementArgs(key, 11)
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store0), roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), store0.TestSender(), roachpb.Header{
 		RangeID: rangeID2,
 	}, incArgs); err != nil {
 		t.Fatal(err)
@@ -2161,7 +2161,7 @@ func TestReplicateAfterSplit(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		getArgs := getArgs(key)
 		// Reading on non-lease holder replica should use inconsistent read
-		if reply, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[1]), roachpb.Header{
+		if reply, err := client.SendWrappedWith(context.Background(), mtc.stores[1].TestSender(), roachpb.Header{
 			RangeID:         rangeID2,
 			ReadConsistency: roachpb.INCONSISTENT,
 		}, getArgs); err != nil {
@@ -2208,7 +2208,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			// Make the split.
 			splitArgs := adminSplitArgs(splitKey)
-			if _, err := client.SendWrapped(context.Background(), rg1(store0), splitArgs); err != nil {
+			if _, err := client.SendWrapped(context.Background(), store0.TestSender(), splitArgs); err != nil {
 				t.Fatal(err)
 			}
 
@@ -2279,7 +2279,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 
 	// Make the split.
 	splitArgs := adminSplitArgs(roachpb.Key("b"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2752,7 +2752,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 	// Put some data in the range so we'll have something to test for.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2766,7 +2766,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 	// Make a write on node 0; this will not be replicated because 0 is the only node left.
 	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3038,7 +3038,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 	// Put some data in the range so we'll have something to test for.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Wait for all nodes to catch up.
@@ -3056,7 +3056,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 
 	// Perform another write.
 	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 16, 5})
@@ -3106,7 +3106,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	// gossip system table data.
 	splitKey := keys.UserTableDataMin
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3148,7 +3148,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 	// Put some data in the range so we'll have something to test for.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3162,7 +3162,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 
 	// Perform another write.
 	incArgs = incrementArgs([]byte("a"), 11)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("a"), []int64{16, 16, 5})
@@ -3203,7 +3203,7 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 
 	// Expect that we can still successfully do a get on the range.
 	getArgs := getArgs([]byte("a"))
-	_, pErr := client.SendWrappedWith(context.Background(), rg1(leaseHolder), roachpb.Header{}, getArgs)
+	_, pErr := client.SendWrappedWith(context.Background(), leaseHolder.TestSender(), roachpb.Header{}, getArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3235,7 +3235,7 @@ func TestRemovedReplicaError(t *testing.T) {
 	// errors to avoid the occasional test flake.
 	getArgs := getArgs([]byte("a"))
 	for {
-		_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{}, getArgs)
+		_, pErr := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{}, getArgs)
 		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); ok {
 			break
 		} else if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); ok {
@@ -3486,7 +3486,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	// Create 2 ranges by splitting range 1.
 	splitArgs := adminSplitArgs(roachpb.Key("b"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3522,7 +3522,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 
 	// Verify we can still perform operations on the non-blocked replica.
 	incArgs := incrementArgs([]byte("a"), 5)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), incArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), incArgs); err != nil {
 		t.Fatal(err)
 	}
 	mtc.waitForValues(roachpb.Key("a"), []int64{5, 5, 5})
@@ -3612,7 +3612,7 @@ func TestInitRaftGroupOnRequest(t *testing.T) {
 	// gossip system table data.
 	splitKey := keys.UserTableDataMin
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
