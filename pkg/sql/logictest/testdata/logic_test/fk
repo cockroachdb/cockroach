@@ -1312,3 +1312,17 @@ CREATE TABLE no_default_table (
 # Clean up after the test.
 statement ok
 DROP TABLE a;
+
+subtest 24664
+
+statement ok
+CREATE TABLE t (a INT, b INT, UNIQUE INDEX (a), UNIQUE INDEX (a, b))
+
+statement ok
+ALTER TABLE t ADD FOREIGN KEY (a) REFERENCES t (a)
+
+statement error column "a" cannot be used by multiple foreign key constraints
+ALTER TABLE t ADD FOREIGN KEY (a, b) REFERENCES t (a, b)
+
+statement ok
+DROP TABLE t
