@@ -16,6 +16,7 @@ package memo
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -105,6 +106,13 @@ func (f logicalPropsBuilder) buildScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
+	// Derive cardinality from HardLimit, if it's set.
+	if def.HardLimit <= 0 || def.HardLimit >= math.MaxUint32 {
+		props.Relational.Cardinality = AnyCardinality
+	} else {
+		props.Relational.Cardinality = Cardinality{Max: uint32(def.HardLimit)}
+	}
+
 	props.Relational.Stats.initScan(f.evalCtx, md, def, tab)
 
 	return props
@@ -126,6 +134,9 @@ func (f logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = filterProps.OuterCols.Difference(inputProps.OutputCols)
 		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 	}
+
+	// Select filter can filter any or all rows.
+	props.Relational.Cardinality = inputProps.Cardinality.Filter(0)
 
 	props.Relational.Stats.initSelect(f.evalCtx, ev.Child(1), &inputProps.Stats)
 
@@ -157,6 +168,9 @@ func (f logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
 	// Inherit weak keys that are composed entirely of output columns.
 	props.Relational.WeakKeys = inputProps.WeakKeys
 	filterWeakKeys(props.Relational)
+
+	// Inherit cardinality from input.
+	props.Relational.Cardinality = inputProps.Cardinality
 
 	props.Relational.Stats.initProject(&inputProps.Stats, &props.Relational.OutputCols)
 
@@ -220,6 +234,11 @@ func (f logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
+	// Calculate cardinality of each join type.
+	props.Relational.Cardinality = calcJoinCardinality(
+		ev, leftProps.Cardinality, rightProps.Cardinality,
+	)
+
 	props.Relational.Stats.initJoin(
 		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
 	)
@@ -267,6 +286,16 @@ func (f logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	if groupingColSet.Empty() {
+		// Scalar GroupBy returns exactly one row.
+		props.Relational.Cardinality = OneCardinality
+	} else {
+		// GroupBy acts like a filter, never returning more rows than input has.
+		// However, if the input has at least one row, then at least one row will
+		// also be returned by GroupBy.
+		props.Relational.Cardinality = inputProps.Cardinality.Filter(1)
+	}
+
 	props.Relational.Stats.initGroupBy(
 		&inputProps.Stats, &groupingColSet, &props.Relational.OutputCols,
 	)
@@ -302,6 +331,11 @@ func (f logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
 	// Outer columns from either side are outer columns for set operation.
 	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
+	// Calculate cardinality of the set operator.
+	props.Relational.Cardinality = calcSetCardinality(
+		ev, leftProps.Cardinality, rightProps.Cardinality,
+	)
+
 	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
@@ -317,6 +351,10 @@ func (f logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
 	for i := 0; i < ev.ChildCount(); i++ {
 		props.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
+
+	// Cardinality is number of tuples in the Values operator.
+	card := uint32(ev.ChildCount())
+	props.Relational.Cardinality = Cardinality{Min: card, Max: card}
 
 	props.Relational.Stats.initValues(ev, &props.Relational.OutputCols)
 
@@ -338,6 +376,16 @@ func (f logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Limit puts cap on number of rows returned by input.
+	if limit.Operator() == opt.ConstOp {
+		constLimit := int64(*ExtractConstDatum(limit).(*tree.DInt))
+		if constLimit <= 0 {
+			props.Relational.Cardinality = ZeroCardinality
+		} else if constLimit < math.MaxUint32 {
+			props.Relational.Cardinality = props.Relational.Cardinality.AtMost(uint32(constLimit))
+		}
+	}
+
 	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
 
 	return props
@@ -347,7 +395,8 @@ func (f logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
-	offsetProps := ev.Child(1).Logical().Scalar
+	offset := ev.Child(1)
+	offsetProps := offset.Logical().Scalar
 
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
@@ -355,6 +404,17 @@ func (f logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 	// Inherit outer columns from offset expression.
 	if !offsetProps.OuterCols.Empty() {
 		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
+	}
+
+	// Offset decreases number of rows that are passed through from input.
+	if offset.Operator() == opt.ConstOp {
+		constOffset := int64(*ExtractConstDatum(offset).(*tree.DInt))
+		if constOffset > 0 {
+			if constOffset > math.MaxUint32 {
+				constOffset = math.MaxUint32
+			}
+			props.Relational.Cardinality = inputProps.Cardinality.Skip(uint32(constOffset))
+		}
 	}
 
 	return props
@@ -367,6 +427,9 @@ func (f logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
+
+	// Max1Row ensures that the zero or one row is returned by input.
+	props.Relational.Cardinality = props.Relational.Cardinality.AtMost(1)
 
 	props.Relational.Stats.initMax1Row(&inputProps.Stats)
 
@@ -438,4 +501,60 @@ func filterWeakKeys(props *RelationalProps) {
 	if filtered != nil {
 		props.WeakKeys = filtered
 	}
+}
+
+func calcJoinCardinality(ev ExprView, left, right Cardinality) Cardinality {
+	var card Cardinality
+	switch ev.Operator() {
+	case opt.SemiJoinOp, opt.AntiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		// Semi/Anti cardinality never exceeds left input cardinality.
+		card = left.Product(right.AtMost(1))
+
+	default:
+		// Other join types can return up to cross product of rows.
+		card = left.Product(right)
+	}
+
+	// Outer joins return minimum number of rows, depending on type.
+	switch ev.Operator() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AtLeast(left.Min)
+	}
+	switch ev.Operator() {
+	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AtLeast(right.Min)
+	}
+
+	// Apply filter to cardinality.
+	if ev.Child(2).Operator() == opt.TrueOp {
+		return card
+	}
+	return card.Filter(0)
+}
+
+func calcSetCardinality(ev ExprView, left, right Cardinality) Cardinality {
+	var card Cardinality
+	switch ev.Operator() {
+	case opt.UnionOp, opt.UnionAllOp:
+		// Add cardinality of left and right inputs.
+		card = left.Add(right)
+
+	case opt.IntersectOp, opt.IntersectAllOp:
+		// Use minimum of left and right Max cardinality.
+		card = Cardinality{Min: 0, Max: left.Max}
+		card = card.AtMost(right.Max)
+
+	case opt.ExceptOp, opt.ExceptAllOp:
+		// Use left Max cardinality.
+		card = Cardinality{Min: 0, Max: left.Max}
+	}
+	switch ev.Operator() {
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
+		// Removing distinct values results in at least one row if input has at
+		// least one row.
+		if card.Min > 1 {
+			card.Min = 1
+		}
+	}
+	return card
 }
