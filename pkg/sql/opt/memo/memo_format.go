@@ -263,6 +263,9 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 		case opt.ColumnID:
 			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
+		case *LookupJoinDef:
+			fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
+
 		case opt.ColSet, opt.ColList:
 			// Don't show anything, because it's mostly redundant.
 
@@ -283,6 +286,9 @@ func (f exprFormatter) formatScanPrivate(def *ScanOpDef, short bool) {
 
 	// Add additional fields when short=false.
 	if !short {
+		if tab.ColumnCount() != def.Cols.Len() {
+			fmt.Fprintf(f.buf, ",cols=%s", def.Cols)
+		}
 		if def.Constraint != nil {
 			fmt.Fprintf(f.buf, ",constrained")
 		}

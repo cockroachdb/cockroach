@@ -105,6 +105,21 @@ func (md *Metadata) NumColumns() int {
 	return len(md.cols) - 1
 }
 
+// IndexColumns returns the set of columns in the given index.
+// TODO(justin): cache this value in the table metadata.
+func (md *Metadata) IndexColumns(tableID TableID, indexOrdinal int) ColSet {
+	tab := md.Table(tableID)
+	index := tab.Index(indexOrdinal)
+
+	var indexCols ColSet
+	for i := 0; i < index.ColumnCount(); i++ {
+		ord := index.Column(i).Ordinal
+		indexCols.Add(int(md.TableColumn(tableID, ord)))
+	}
+
+	return indexCols
+}
+
 // ColumnLabel returns the label of the given column. It is used for pretty-
 // printing and debugging.
 func (md *Metadata) ColumnLabel(id ColumnID) string {
