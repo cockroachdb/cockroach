@@ -872,6 +872,7 @@ func (n *AlterTable) String() string                { return AsString(n) }
 func (n *AlterTableCmds) String() string            { return AsString(n) }
 func (n *AlterTableAddColumn) String() string       { return AsString(n) }
 func (n *AlterTableAddConstraint) String() string   { return AsString(n) }
+func (n *AlterTableAlterColumnType) String() string { return AsString(n) }
 func (n *AlterTableDropColumn) String() string      { return AsString(n) }
 func (n *AlterTableDropConstraint) String() string  { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string     { return AsString(n) }

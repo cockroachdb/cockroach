@@ -722,7 +722,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.SelectStatement> select_clause select_with_parens simple_select values_clause table_clause simple_select_clause
 %type <tree.SelectStatement> set_operation
 
-%type <empty> alter_using
 %type <tree.Expr> alter_column_default
 %type <tree.Direction> opt_asc_desc
 
@@ -819,7 +818,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_unique opt_column
 %type <bool> opt_using_gin
 
-%type <empty> opt_set_data
+%type <bool> opt_set_data
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr>  select_limit_value
@@ -934,6 +933,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.AuditMode> audit_mode
 
 %type <str> relocate_kw ranges_kw
+
+%type <str> opt_alter_column_collate
+%type <tree.Expr> opt_alter_column_using
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -1093,6 +1095,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... DROP CONSTRAINT [IF EXISTS] <constraintname> [RESTRICT | CASCADE]
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET DEFAULT <expr> | DROP DEFAULT}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
+//   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
@@ -1387,9 +1390,21 @@ alter_table_cmd:
       DropBehavior: $4.dropBehavior(),
     }
   }
-  // ALTER TABLE <name> ALTER [COLUMN] <colname> [SET DATA] TYPE <typename>
+  // ALTER TABLE <name> ALTER [COLUMN] <colname>
+  //     [SET DATA] TYPE <typename>
+  //     [ COLLATE collation ]
   //     [ USING <expression> ]
-| ALTER opt_column column_name opt_set_data TYPE typename opt_collate_clause alter_using { return unimplemented(sqllex, "alter set type") }
+| ALTER opt_column column_name opt_set_data TYPE typename opt_alter_column_collate opt_alter_column_using
+  {
+    $$.val = &tree.AlterTableAlterColumnType{
+      ColumnKeyword: $2.bool(),
+      Column: tree.Name($3),
+      SetDataKeyword: $4.bool(),
+      ToType: $6.colType(),
+      Collation: $7,
+      Using: $8.expr(),
+    }
+  }
   // ALTER TABLE <name> ADD CONSTRAINT ...
 | ADD table_constraint opt_validate_behavior
   {
@@ -1477,6 +1492,17 @@ alter_column_default:
     $$.val = nil
   }
 
+// The opt_collate and opt_collate_clause rules are currently used to
+// block on various issues.
+opt_alter_column_collate:
+  COLLATE collation_name { $$ = $2 }
+| /* EMPTY */ {}
+
+opt_alter_column_using:
+  USING a_expr { $$ = $2 }
+| /* EMPTY */ {}
+
+
 opt_drop_behavior:
   CASCADE
   {
@@ -1503,10 +1529,6 @@ opt_validate_behavior:
 
 opt_collate_clause:
   COLLATE collation_name { return unimplementedWithIssue(sqllex, 9851) }
-| /* EMPTY */ {}
-
-alter_using:
-  USING a_expr { return unimplemented(sqllex, "alter using") }
 | /* EMPTY */ {}
 
 // %Help: BACKUP - back up data to external storage
@@ -4290,8 +4312,8 @@ opt_column:
   }
 
 opt_set_data:
-  SET DATA {}
-| /* EMPTY */ {}
+  SET DATA { $$.val = true }
+| /* EMPTY */ { $$.val = false }
 
 // %Help: RELEASE - complete a retryable block
 // %Category: Txn
