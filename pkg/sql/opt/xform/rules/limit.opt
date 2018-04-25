@@ -11,7 +11,7 @@
 (Limit
     (Scan $def:*)
     (Const $limit:*)
-    $ordering:* & (CanLimitScan $def $ordering)
+    $ordering:* & (CanLimitScan $def $limit $ordering)
 )
 =>
 (Scan

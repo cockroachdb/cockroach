@@ -338,7 +338,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 			bestHeader(os.exprView(), "Initial expression\n")
 			indent(next)
 			prevBest = next
-		} else if next == prev {
+		} else if next == prev || next == prevBest {
 			altHeader("%s (no changes)\n", os.lastRuleName())
 		} else {
 			var diff difflib.UnifiedDiff

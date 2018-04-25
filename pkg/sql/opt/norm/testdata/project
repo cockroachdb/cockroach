@@ -370,9 +370,11 @@ SELECT x FROM (SELECT x, y, f FROM a ORDER BY y LIMIT 10)
 ----
 project
  ├── columns: x:1(int!null)
+ ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── cardinality: [0 - 10]
  │    ├── keys: (1)
  │    ├── sort
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
@@ -391,6 +393,7 @@ SELECT s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
+ ├── cardinality: [0 - 10]
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
  │    ├── limit: 10
@@ -404,6 +407,7 @@ SELECT x, s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
+ ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
@@ -419,8 +423,10 @@ SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
 ----
 project
  ├── columns: f:3(float) column5:5(float)
+ ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: a.f:3(float)
+ │    ├── cardinality: [0 - 5]
  │    ├── project
  │    │    ├── columns: a.f:3(float)
  │    │    ├── group-by
@@ -534,9 +540,11 @@ SELECT x FROM (SELECT x, y, f FROM a ORDER BY y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null)
+ ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── cardinality: [0 - 10]
  │    ├── keys: (1)
  │    ├── offset
  │    │    ├── columns: a.x:1(int!null) a.y:2(int)
@@ -560,8 +568,10 @@ SELECT s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
+ ├── cardinality: [0 - 10]
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── cardinality: [0 - 10]
  │    ├── keys: (1)
  │    ├── offset
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
@@ -582,9 +592,11 @@ SELECT x, s FROM (SELECT x, y, f, s FROM a ORDER BY x, y LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: x:1(int!null) s:4(string)
+ ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── cardinality: [0 - 10]
  │    ├── keys: (1)
  │    ├── offset
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
@@ -606,8 +618,10 @@ SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 ----
 project
  ├── columns: f:3(float) column5:5(float)
+ ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: a.f:3(float)
+ │    ├── cardinality: [0 - 5]
  │    ├── offset
  │    │    ├── columns: a.f:3(float)
  │    │    ├── project
@@ -1146,6 +1160,7 @@ SELECT MIN(y), MAX(x), MAX(x) FROM a
 ----
 group-by
  ├── columns: column5:5(int) column6:6(int) column6:6(int)
+ ├── cardinality: [1 - 1]
  ├── keys: ()
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
@@ -1212,6 +1227,7 @@ SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
 ----
 values
  ├── columns: column1:1(int)
+ ├── cardinality: [2 - 2]
  ├── tuple [type=tuple{int}]
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int}]
@@ -1223,6 +1239,7 @@ SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
 ----
 values
  ├── columns: column2:2(int)
+ ├── cardinality: [2 - 2]
  ├── tuple [type=tuple{int}]
  │    └── const: 2 [type=int]
  └── tuple [type=tuple{int}]
@@ -1234,6 +1251,7 @@ SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')
 ----
 values
  ├── columns: column3:3(string)
+ ├── cardinality: [2 - 2]
  ├── tuple [type=tuple{string}]
  │    └── const: 'baz' [type=string]
  └── tuple [type=tuple{string}]
@@ -1245,7 +1263,9 @@ SELECT 1 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 project
  ├── columns: column4:4(int)
+ ├── cardinality: [2 - 2]
  ├── values
+ │    ├── cardinality: [2 - 2]
  │    ├── tuple [type=tuple{}]
  │    └── tuple [type=tuple{}]
  └── projections

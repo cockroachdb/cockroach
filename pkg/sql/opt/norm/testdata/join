@@ -484,6 +484,7 @@ semi-join-apply
  ├── values
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
+ │    ├── cardinality: [2 - 2]
  │    ├── tuple [type=tuple{int}, outer=(1)]
  │    │    └── variable: a.k [type=int, outer=(1)]
  │    └── tuple [type=tuple{int}, outer=(2)]
@@ -504,6 +505,7 @@ anti-join-apply
  ├── values
  │    ├── columns: column1:6(int)
  │    ├── outer: (1,2)
+ │    ├── cardinality: [2 - 2]
  │    ├── tuple [type=tuple{int}, outer=(1)]
  │    │    └── variable: a.k [type=int, outer=(1)]
  │    └── tuple [type=tuple{int}, outer=(2)]
@@ -527,10 +529,12 @@ semi-join-apply
  ├── select
  │    ├── columns: b.x:6(int!null) b.z:7(int)
  │    ├── outer: (1)
+ │    ├── cardinality: [0 - 1]
  │    ├── keys: (6)
  │    ├── limit
  │    │    ├── columns: b.x:6(int!null) b.z:7(int)
  │    │    ├── outer: (1)
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── keys: (6)
  │    │    ├── select
  │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
@@ -562,10 +566,12 @@ anti-join-apply
  ├── select
  │    ├── columns: b.x:6(int!null) b.z:7(int)
  │    ├── outer: (1)
+ │    ├── cardinality: [0 - 1]
  │    ├── keys: (6)
  │    ├── limit
  │    │    ├── columns: b.x:6(int!null) b.z:7(int)
  │    │    ├── outer: (1)
+ │    │    ├── cardinality: [0 - 1]
  │    │    ├── keys: (6)
  │    │    ├── select
  │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
