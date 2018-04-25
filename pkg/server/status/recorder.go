@@ -94,7 +94,7 @@ type MetricsRecorder struct {
 	settings     *cluster.Settings
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		// prometheusExporter merges metrics into families and generates the
 		// prometheus text format.
 		prometheusExporter metric.PrometheusExporter
@@ -188,8 +188,8 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 // MarshalJSON returns an appropriate JSON representation of the current values
 // of the metrics being tracked by this recorder.
 func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
@@ -241,8 +241,8 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 // lockAndPrintAsText grabs the recorder lock and generates the prometheus
 // metrics page.
 func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 	mr.scrapePrometheusLocked()
 	return mr.mu.prometheusExporter.PrintAsText(w)
 }
@@ -250,8 +250,8 @@ func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 // GetTimeSeriesData serializes registered metrics for consumption by
 // CockroachDB's time series system.
 func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
@@ -335,14 +335,13 @@ func (mr *MetricsRecorder) getNetworkActivity(
 func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
 	activity := mr.getNetworkActivity(ctx)
 
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
+	mr.mu.RLock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
 			log.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
 		}
+		mr.mu.RUnlock()
 		return nil
 	}
 
@@ -393,11 +392,16 @@ func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
 			Metrics: storeMetrics,
 		})
 	}
+	mr.mu.RUnlock()
+
+	mr.mu.Lock()
 	mr.mu.lastSummaryCount = len(nodeStat.StoreStatuses)
 	mr.mu.lastNodeMetricCount = len(nodeStat.Metrics)
 	if len(nodeStat.StoreStatuses) > 0 {
 		mr.mu.lastStoreMetricCount = len(nodeStat.StoreStatuses[0].Metrics)
 	}
+	mr.mu.Unlock()
+
 	return nodeStat
 }
 
