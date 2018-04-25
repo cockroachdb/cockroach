@@ -1134,11 +1134,15 @@ $(UI_ROOT)/yarn.opt.installed:
 	$(NODE_RUN) -C $(UI_ROOT)/opt yarn install
 	touch $@
 
+.PHONY: ui-watch-secure
+ui-watch-secure: override WEBPACK_DEV_SERVER_FLAGS += --https
+ui-watch-secure: export TARGET ?= https://localhost:8080/
+
 .PHONY: ui-watch
-ui-watch: export TARGET ?= https://localhost:8080
-ui-watch: PORT := 3000
-ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
-	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT) --https
+ui-watch: export TARGET ?= http://localhost:8080
+ui-watch ui-watch-secure: PORT := 3000
+ui-watch ui-watch-secure: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
+	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT) $(WEBPACK_DEV_SERVER_FLAGS)
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
