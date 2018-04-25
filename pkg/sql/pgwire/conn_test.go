@@ -747,7 +747,7 @@ func TestMaliciousInputs(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeServerMetrics(&sqlMetrics, time.Second /* histogramWindow */)
+			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
 			conn := newConn(r, sql.SessionArgs{}, &metrics, nil /* execCfg */)
 			// Ignore the error from serveImpl. There might be one when the client
