@@ -99,6 +99,7 @@ crdb_folk = set([
     "Radu Berinde",
     "Raphael 'kena' Poss",
     "Rebecca Taft",
+    "Rich Loveland",
     "Richard Wu",
     "Sean Loiselle",
     "Solon Gordon",
