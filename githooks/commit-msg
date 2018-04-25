@@ -139,6 +139,11 @@ else
                 esac
             done
         fi
+	# Do some linting on the message itself.
+	msg=$(echo "$rnote" | cut -d':' -f1-)
+	if echo "$msg" | $grep -qiE ' *([cC]loses?|[fF]ix(es)?) *#[0-9]+\.? *'; then
+	    hint "don't just close or fix. Explain."
+	fi
     done
     if test -n "$informed"; then echo >&2; fi
 fi
