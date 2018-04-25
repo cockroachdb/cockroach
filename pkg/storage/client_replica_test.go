@@ -1129,6 +1129,11 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	s := srv.(*server.TestServer)
 	defer s.Stopper().Stop(context.TODO())
 
+	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Start a read and wait for it to block.
 	key := roachpb.Key("a")
 	errChan := make(chan error)
@@ -1154,9 +1159,13 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, repDesc, err := s.Stores().LookupReplica(rKey, nil)
-		if err != nil {
-			t.Fatal(err)
+		repl := store.LookupReplica(rKey, nil)
+		if repl == nil {
+			t.Fatalf("replica for key %s not found", rKey)
+		}
+		replDesc, found := repl.Desc().GetReplicaDescriptor(store.StoreID())
+		if !found {
+			t.Fatalf("replica descriptor for key %s not found", rKey)
 		}
 
 		curLease, _, err := s.GetRangeLease(context.TODO(), key)
@@ -1171,7 +1180,7 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 			Lease: roachpb.Lease{
 				Start:      s.Clock().Now(),
 				Expiration: s.Clock().Now().Add(time.Second.Nanoseconds(), 0).Clone(),
-				Replica:    repDesc,
+				Replica:    replDesc,
 			},
 			PrevLease: curLease,
 		}
