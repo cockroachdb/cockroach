@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,8 +45,22 @@ var _ sqlutil.InternalExecutor = &InternalExecutor{}
 // InternalExecutor can execute one statement at a time. As of 03/2018, it
 // doesn't offer a session interface for maintaining session state or for
 // running explicit SQL transactions. However, it supports running SQL
-// statements inside a higher-lever (KV) txn.
+// statements inside a higher-lever (KV) txn and inheriting session variables
+// from another session (for the latter see SessionBoundInternalExecutor).
 type InternalExecutor struct {
+	internalExecutorImpl
+}
+
+// SessionBoundInternalExecutor is like InternalExecutor, except that it is
+// initialized with values for session variables. Conversely, it doesn't offer
+// the *WithSessionArgs methods of the InternalExecutor.
+type SessionBoundInternalExecutor struct {
+	impl internalExecutorImpl
+}
+
+// internalExecutorImpl supports the implementation of InternalExecutor and
+// SessionBoundInternalExecutor.
+type internalExecutorImpl struct {
 	s *Server
 
 	// mon is the monitor used by all queries executed through the
@@ -54,12 +69,24 @@ type InternalExecutor struct {
 
 	// memMetrics is the memory metrics that queries executed through the
 	// InternalExecutor will contribute to.
-	memMetrics *MemoryMetrics
+	memMetrics MemoryMetrics
+
+	// sessionData, if not nil, represents the session variables used by
+	// statements executed on this internalExecutor. This field supports the
+	// implementation of SessionBoundInternalExecutor. Note that different
+	// executors never share sessionData; instead they make copies. Updating the
+	// sessionData through an internalExecutor doesn't affect the real client
+	// session from whence it came (and thus updating this data is probably not
+	// what you want).
+	// NOTE: We could consider allowing an internalExecutor to share/update the
+	// parent session state if need be, but then we'd need to share a
+	// sessionDataMutator.
+	sessionData *sessiondata.SessionData
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
 func MakeInternalExecutor(
-	ctx context.Context, s *Server, memMetrics *MemoryMetrics, settings *cluster.Settings,
+	ctx context.Context, s *Server, memMetrics MemoryMetrics, settings *cluster.Settings,
 ) InternalExecutor {
 	monitor := mon.MakeUnlimitedMonitor(
 		ctx,
@@ -71,19 +98,56 @@ func MakeInternalExecutor(
 		settings,
 	)
 	return InternalExecutor{
-		s:          s,
-		mon:        &monitor,
-		memMetrics: memMetrics,
+		internalExecutorImpl: internalExecutorImpl{
+			s:          s,
+			mon:        &monitor,
+			memMetrics: memMetrics,
+		},
+	}
+}
+
+// MakeSessionBoundInternalExecutor creates a SessionBoundInternalExecutor.
+func MakeSessionBoundInternalExecutor(
+	ctx context.Context,
+	sessionData *sessiondata.SessionData,
+	s *Server,
+	memMetrics MemoryMetrics,
+	settings *cluster.Settings,
+) SessionBoundInternalExecutor {
+	monitor := mon.MakeUnlimitedMonitor(
+		ctx,
+		"internal SQL executor",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount,
+		memMetrics.MaxBytesHist,
+		math.MaxInt64, /* noteworthy */
+		settings,
+	)
+	return SessionBoundInternalExecutor{
+		impl: internalExecutorImpl{
+			s:          s,
+			mon:        &monitor,
+			memMetrics: memMetrics,
+			// The internal executor gets a copy of the session data, so it can't
+			// update the parent session.
+			sessionData: sessionData.Copy(),
+		},
 	}
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
 // returns a StmtBuf into which commands can be pushed and a WaitGroup that will
 // be signaled when connEx.run() returns.
-func (ie *InternalExecutor) initConnEx(
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// sargs, if not nil, is used to initialize the executor's session data. If nil,
+// then ie.sessionData must be set and it will be used (i.e. the executor must
+// be "session bound").
+func (ie *internalExecutorImpl) initConnEx(
 	ctx context.Context,
 	txn *client.Txn,
-	sargs SessionArgs,
+	sargs *SessionArgs,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
 ) (*StmtBuf, *sync.WaitGroup) {
@@ -93,12 +157,22 @@ func (ie *InternalExecutor) initConnEx(
 		lastDelivered: -1,
 	}
 
+	var sp sessionParams
+	if sargs != nil {
+		sp.args = sargs
+	} else {
+		if ie.sessionData == nil {
+			log.Fatal(ctx, "initConnEx called with no sargs, and the executor is also not session bound")
+		}
+		sp.data = ie.sessionData
+	}
+
 	stmtBuf := NewStmtBuf()
 	var ex *connExecutor
 	if txn == nil {
 		ex = ie.s.newConnExecutor(
 			ctx,
-			sargs,
+			sp,
 			stmtBuf,
 			clientComm,
 			ie.mon,
@@ -107,7 +181,7 @@ func (ie *InternalExecutor) initConnEx(
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
 			ctx,
-			sargs,
+			sp,
 			stmtBuf,
 			clientComm,
 			ie.mon,
@@ -145,8 +219,21 @@ func (ie *InternalExecutor) initConnEx(
 func (ie *InternalExecutor) Query(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	res, err := ie.execInternal(
-		ctx, opName, txn, SessionArgs{User: security.RootUser, Database: "system"}, stmt, qargs...)
+	return ie.queryInternal(
+		ctx, opName, txn,
+		&SessionArgs{User: security.RootUser, Database: "system"},
+		stmt, qargs...)
+}
+
+func (ie *internalExecutorImpl) queryInternal(
+	ctx context.Context,
+	opName string,
+	txn *client.Txn,
+	sargs *SessionArgs,
+	stmt string,
+	qargs ...interface{},
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
+	res, err := ie.execInternal(ctx, opName, txn, sargs, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -163,11 +250,7 @@ func (ie *InternalExecutor) QueryWithSessionArgs(
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	res, err := ie.execInternal(ctx, opName, txn, sargs, stmt, qargs...)
-	if err != nil {
-		return nil, nil, err
-	}
-	return res.rows, res.cols, res.err
+	return ie.queryInternal(ctx, opName, txn, &sargs, stmt, qargs...)
 }
 
 // QueryRow is like Query, except it returns a single row, or nil if not row is
@@ -199,7 +282,7 @@ func (ie *InternalExecutor) Exec(
 	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
 ) (int, error) {
 	res, err := ie.execInternal(
-		ctx, opName, txn, SessionArgs{User: security.RootUser, Database: "system"}, stmt, qargs...,
+		ctx, opName, txn, &SessionArgs{User: security.RootUser, Database: "system"}, stmt, qargs...,
 	)
 	if err != nil {
 		return 0, err
@@ -217,7 +300,61 @@ func (ie *InternalExecutor) ExecWithSessionArgs(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	res, err := ie.execInternal(ctx, opName, txn, sargs, stmt, qargs...)
+	res, err := ie.execInternal(ctx, opName, txn, &sargs, stmt, qargs...)
+	if err != nil {
+		return 0, err
+	}
+	return res.rowsAffected, res.err
+}
+
+// Query executes the supplied SQL statement and returns the resulting rows.
+// The statement is executed as the root user.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+func (ie *SessionBoundInternalExecutor) Query(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
+	return ie.impl.queryInternal(
+		ctx, opName, txn,
+		nil, // sargs - the executor will use the bound session
+		stmt, qargs...)
+}
+
+// QueryRow is like Query, except it returns a single row, or nil if not row is
+// found, or an error if more that one row is returned.
+func (ie *SessionBoundInternalExecutor) QueryRow(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	rows, _ /* cols */, err := ie.impl.queryInternal(
+		ctx, opName, txn,
+		nil, // sargs - the executor will use the bound session
+		stmt, qargs...)
+	if err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, nil
+	case 1:
+		return rows[0], nil
+	default:
+		return nil, &tree.MultipleResultsError{SQL: stmt}
+	}
+}
+
+// Exec executes the supplied SQL statement.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// Returns the number of rows affected.
+func (ie *SessionBoundInternalExecutor) Exec(
+	ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+) (int, error) {
+	res, err := ie.impl.execInternal(
+		ctx, opName, txn,
+		nil, // sargs - the executor will use the bound session
+		stmt, qargs...,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -231,20 +368,28 @@ type result struct {
 	err          error
 }
 
-func (ie *InternalExecutor) execInternal(
+// execInternal executes a statement.
+//
+// sargs, if not nil, is used to initialize the executor's session data. If nil,
+// then ie.sessionData must be set and it will be used (i.e. the executor must
+// be "session bound").
+func (ie *internalExecutorImpl) execInternal(
 	ctx context.Context,
 	opName string,
 	txn *client.Txn,
-	sargs SessionArgs,
+	sargs *SessionArgs,
 	stmt string,
 	qargs ...interface{},
 ) (retRes result, retErr error) {
 
 	defer func() {
-		if retErr != nil {
+		// We wrap errors with the opName, but not if they're retriable - in that
+		// case we need to leave the error intact so that it can be retried at a
+		// higher level.
+		if retErr != nil && !errIsRetriable(retErr) {
 			retErr = errors.Wrap(retErr, opName)
 		}
-		if retRes.err != nil {
+		if retRes.err != nil && !errIsRetriable(retRes.err) {
 			retRes.err = errors.Wrap(retRes.err, opName)
 		}
 	}()

@@ -152,8 +152,10 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
 		DistsqlBlacklist: true,
 		ReturnType:       tree.FixedReturnType(types.String),
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			r, err := ctx.Planner.QueryRow(
-				ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
+			r, err := ctx.InternalExecutor.QueryRow(
+				ctx.Ctx(), "makePGGetViewDef",
+				ctx.Txn,
+				"SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
 					"c.relname=v.viewname WHERE oid=$1", args[0])
 			if err != nil {
 				return nil, err
@@ -174,8 +176,10 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
 		DistsqlBlacklist: true,
 		ReturnType:       tree.FixedReturnType(types.String),
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			r, err := ctx.Planner.QueryRow(
-				ctx.Ctx(), "SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
+			r, err := ctx.InternalExecutor.QueryRow(
+				ctx.Ctx(), "makePGGetConstraintDef",
+				ctx.Txn,
+				"SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
 			if err != nil {
 				return nil, err
 			}
@@ -302,7 +306,7 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 	default:
 		log.Fatalf(ctx.Ctx(), "unexpected arg type %T", t)
 	}
-	r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, arg)
+	r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "getNameForArg", ctx.Txn, query, arg)
 	if err != nil || r == nil {
 		return "", err
 	}
@@ -330,8 +334,9 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		}
 		return tn, nil
 	case *tree.DOid:
-		r, err := ctx.Planner.QueryRow(ctx.Ctx(), `
-			SELECT n.nspname, c.relname FROM pg_class c
+		r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "getTableNameForArg",
+			ctx.Txn,
+			`SELECT n.nspname, c.relname FROM pg_class c
 			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 			WHERE c.oid = $1`, t)
 		if err != nil || r == nil {
@@ -414,7 +419,7 @@ func evalPrivilegeCheck(
 			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
 			FROM information_schema.%s WHERE grantee = $1 AND %s`,
 			privilege.ALL, p, infoTable, pred)
-		r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, user)
+		r, err := ctx.InternalExecutor.QueryRow(ctx.Ctx(), "evalPrivilegeCheck", ctx.Txn, query, user)
 		if err != nil {
 			return nil, err
 		}
@@ -510,8 +515,10 @@ var pgBuiltins = map[string][]tree.Builtin{
 			DistsqlBlacklist: true,
 			ReturnType:       tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				r, err := ctx.Planner.QueryRow(
-					ctx.Ctx(), "SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_indexdef",
+					ctx.Txn,
+					"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
 				if err != nil {
 					return nil, err
 				}
@@ -554,8 +561,10 @@ var pgBuiltins = map[string][]tree.Builtin{
 			ReturnType:       tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
-				t, err := ctx.Planner.QueryRow(
-					ctx.Ctx(), "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
+				t, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_userbyid",
+					ctx.Txn,
+					"SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
 				if err != nil {
 					return nil, err
 				}
@@ -579,9 +588,11 @@ var pgBuiltins = map[string][]tree.Builtin{
 			DistsqlBlacklist: true,
 			ReturnType:       tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				r, err := ctx.Planner.QueryRow(
-					ctx.Ctx(), `SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid
-FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_sequence_parameters",
+					ctx.Txn,
+					`SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid `+
+						`FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 				if err != nil {
 					return nil, err
 				}
@@ -713,7 +724,9 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
-				t, err := ctx.Planner.QueryRow(ctx.Ctx(),
+				t, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_table_is_visible",
+					ctx.Txn,
 					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
 						"WHERE c.oid=$1 AND nspname=ANY(current_schemas(true));", oid)
 				if err != nil {
@@ -846,7 +859,10 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 					log.Fatalf(ctx.Ctx(), "expected arg type %T", t)
 				}
 
-				if r, err := ctx.Planner.QueryRow(ctx.Ctx(), fmt.Sprintf(`
+				if r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "has_column_privilege",
+					ctx.Txn,
+					fmt.Sprintf(`
 					SELECT column_name FROM information_schema.columns
 					WHERE %s AND %s`, pred, colPred), colArg); err != nil {
 					return nil, err
@@ -1108,9 +1124,11 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 				retNull = true
 			} else {
 				// Verify that the table name is actually a sequence.
-				if r, err := ctx.Planner.QueryRow(ctx.Ctx(), `
-					SELECT sequence_name FROM information_schema.sequences
-					WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
+				if r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "has_sequence_privilege",
+					ctx.Txn,
+					`SELECT sequence_name FROM information_schema.sequences `+
+						`WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
 					tn.CatalogName, tn.SchemaName, tn.TableName); err != nil {
 					return nil, err
 				} else if r == nil {
