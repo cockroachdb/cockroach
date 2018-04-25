@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// physicalPropsFactory determines what physical properties a given expression
+// physicalPropsBuilder determines what physical properties a given expression
 // provides and constructs the physical properties required of its children
 // based on those properties. The optimizer calls the canProvide methods to
 // determine whether an expression provides a required physical property. If it
@@ -28,16 +28,14 @@ import (
 // provide a required physical property, but do "pass through" the requirement
 // to their input. Operators that do this should return true from the
 // appropriate canProvide method and then pass through that property in the
-// constructChildProps method.
-// NOTE: The factory is defined as an empty struct with methods rather than as
-//       functions in order to keep the methods grouped and self-contained.
-type physicalPropsFactory struct {
+// buildChildProps method.
+type physicalPropsBuilder struct {
 	mem *memo.Memo
 }
 
 // canProvide returns true if the given expression can provide the required
 // physical properties.
-func (f physicalPropsFactory) canProvide(eid memo.ExprID, required memo.PhysicalPropsID) bool {
+func (f physicalPropsBuilder) canProvide(eid memo.ExprID, required memo.PhysicalPropsID) bool {
 	requiredProps := f.mem.LookupPhysicalProps(required)
 
 	if requiredProps.Presentation.Defined() {
@@ -58,7 +56,7 @@ func (f physicalPropsFactory) canProvide(eid memo.ExprID, required memo.Physical
 // canProvidePresentation returns true if the given expression can provide the
 // required presentation property. Currently, all relational operators are
 // capable of doing this.
-func (f physicalPropsFactory) canProvidePresentation(
+func (f physicalPropsBuilder) canProvidePresentation(
 	eid memo.ExprID, required memo.Presentation,
 ) bool {
 	mexpr := f.mem.Expr(eid)
@@ -72,7 +70,7 @@ func (f physicalPropsFactory) canProvidePresentation(
 
 // canProvideOrdering returns true if the given expression can provide the
 // required ordering property.
-func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
+func (f physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
 	mexpr := f.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("ordering property doesn't apply to non-relational operators")
@@ -116,12 +114,11 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 	return false
 }
 
-// constructChildProps returns the set of physical properties required of the
-// nth child, based upon the properties required of the parent. For example,
-// the Project operator passes through any ordering requirement to its child,
-// but provides any presentation requirement. This method is heavily called
-// during ExprView traversal, so performance is important.
-func (f physicalPropsFactory) constructChildProps(
+// buildChildProps returns the set of physical properties required of the nth
+// child, based upon the properties required of the parent. For example, the
+// Project operator passes through any ordering requirement to its child, but
+// provides any presentation requirement.
+func (f physicalPropsBuilder) buildChildProps(
 	parent memo.ExprID, required memo.PhysicalPropsID, nth int,
 ) memo.PhysicalPropsID {
 	mexpr := f.mem.Expr(parent)
