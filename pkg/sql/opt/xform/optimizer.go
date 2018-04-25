@@ -361,7 +361,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	physPropsFactory := &physicalPropsFactory{mem: o.mem}
+	physPropsFactory := &physicalPropsBuilder{mem: o.mem}
 	if physPropsFactory.canProvide(eid, required) {
 		e := o.mem.Expr(eid)
 		candidateBest := memo.MakeBestExpr(e.Operator(), eid, required)
@@ -370,7 +370,7 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 
 			// Given required parent properties, get the properties required from
 			// the nth child.
-			childRequired := physPropsFactory.constructChildProps(eid, required, child)
+			childRequired := physPropsFactory.buildChildProps(eid, required, child)
 
 			// Recursively optimize the child group with respect to that set of
 			// properties.

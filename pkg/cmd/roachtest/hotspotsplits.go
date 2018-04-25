@@ -18,7 +18,9 @@ package main
 import (
 	"context"
 	"fmt"
-
+	"io/ioutil"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -26,9 +28,6 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
-	"io/ioutil"
-	"os"
-	"strconv"
 )
 
 func registerHotSpotSplits(r *registry) {
