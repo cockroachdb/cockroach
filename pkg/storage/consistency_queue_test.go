@@ -84,7 +84,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 
 	// Write something to the DB.
 	putArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), putArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), putArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 			EndKey: []byte("aa"),
 		},
 	}
-	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{
+	if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{
 		Timestamp: mtc.stores[0].Clock().Now(),
 	}, &checkArgs); err != nil {
 		t.Fatal(err)
@@ -146,11 +146,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write something to the DB.
 	pArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 	pArgs = putArgs([]byte("c"), []byte("d"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), pArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), pArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -172,7 +172,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			EndKey: []byte("z"),
 		},
 	}
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), &checkArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs); err != nil {
 		t.Fatal(err)
 	}
 	select {

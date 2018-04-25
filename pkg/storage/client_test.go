@@ -67,19 +67,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// rg1 returns a wrapping sender that changes all requests to range 0 to
-// requests to range 1.
-// This function is DEPRECATED. Send your requests to the right range by
-// properly initializing the request header.
-func rg1(s *storage.Store) client.Sender {
-	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		if ba.RangeID == 0 {
-			ba.RangeID = 1
-		}
-		return ba
-	})
-}
-
 // createTestStore creates a test store using an in-memory
 // engine.
 func createTestStore(t testing.TB, stopper *stop.Stopper) (*storage.Store, *hlc.ManualClock) {

@@ -72,7 +72,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	manuals[0].Increment(int64(500 * time.Millisecond))
 	incArgs := incrementArgs([]byte("a"), 5)
 	ts := clocks[0].Now()
-	if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
+	if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +125,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	clockOffset := clock.MaxOffset() / numCmds
 	for i := int64(1); i <= numCmds; i++ {
 		ts := ts1.Add(i*clockOffset.Nanoseconds(), 0)
-		if _, err := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
+		if _, err := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -136,7 +136,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	}
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
-	_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
+	_, pErr := client.SendWrappedWith(context.Background(), mtc.stores[0].TestSender(), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
 	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Fatalf("unexpected error %v", pErr)
 	}
@@ -310,7 +310,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		UserPriority: priority,
 	}
 	if _, err := client.SendWrappedWith(
-		context.Background(), rg1(store), h, &roachpb.GetRequest{Span: requestHeader},
+		context.Background(), store.TestSender(), h, &roachpb.GetRequest{Span: requestHeader},
 	); err != nil {
 		t.Fatalf("failed to get: %s", err)
 	}
@@ -319,7 +319,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 		Span:  roachpb.Span{Key: roachpb.Key(restartKey)},
 		Value: roachpb.MakeValueFromBytes([]byte("restart-value")),
 	}
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), h, putReq); err != nil {
+	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}
 
@@ -335,11 +335,11 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 	h.Timestamp = cfg.Clock.Now()
 	if _, err := client.SendWrappedWith(
-		context.Background(), rg1(store), h, &roachpb.GetRequest{Span: requestHeader},
+		context.Background(), store.TestSender(), h, &roachpb.GetRequest{Span: requestHeader},
 	); err == nil {
 		t.Fatal("unexpected success of get")
 	}
-	if _, err := client.SendWrappedWith(context.Background(), rg1(store), h, putReq); err != nil {
+	if _, err := client.SendWrappedWith(context.Background(), store.TestSender(), h, putReq); err != nil {
 		t.Fatalf("failed to put: %s", err)
 	}
 
@@ -371,7 +371,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	for _, split := range splits {
-		_, pErr := client.SendWrapped(context.Background(), rg1(store), split)
+		_, pErr := client.SendWrapped(context.Background(), store.TestSender(), split)
 		if pErr != nil {
 			t.Fatalf("%q: split unexpected error: %s", split.SplitKey, pErr)
 		}
@@ -385,7 +385,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 		},
 	}
 	testutils.SucceedsSoon(t, func() error {
-		_, pErr := client.SendWrapped(context.Background(), rg1(store), &scanArgs)
+		_, pErr := client.SendWrapped(context.Background(), store.TestSender(), &scanArgs)
 		return pErr.GoError()
 	})
 
@@ -462,7 +462,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 					lookup = client.LegacyRangeLookup
 				}
 
-				rs, preRs, err := lookup(context.Background(), rg1(store), test.key.AsRawKey(),
+				rs, preRs, err := lookup(context.Background(), store.TestSender(), test.key.AsRawKey(),
 					roachpb.INCONSISTENT, test.maxResults-1, true /* prefetchReverse */)
 				if err != nil {
 					t.Fatalf("LookupRange error: %s", err)
@@ -945,7 +945,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), splitArgs,
+		context.Background(), mtc.stores[0].TestSender(), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1043,7 +1043,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send a read, to acquire a lease.
 	getArgs := getArgs([]byte("a"))
-	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1072,7 +1072,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send another read and check that the pre-existing lease has not been used.
 	// Concretely, we check that a new lease is requested.
-	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, mtc.stores[0].TestSender(), getArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the Send above triggered a lease acquisition.
@@ -1349,7 +1349,7 @@ func TestRangeInfo(t *testing.T) {
 	splitKey := roachpb.RKey("a")
 	splitArgs := adminSplitArgs(splitKey.AsRawKey())
 	if _, pErr := client.SendWrapped(
-		context.Background(), rg1(mtc.stores[0]), splitArgs,
+		context.Background(), mtc.stores[0].TestSender(), splitArgs,
 	); pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1529,7 +1529,7 @@ func TestCampaignOnLazyRaftGroupInitialization(t *testing.T) {
 	// We use UserTableDataMin to avoid having the range activated to
 	// gossip system table data.
 	splitArgs := adminSplitArgs(splitKey)
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), splitArgs); err != nil {
+	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), splitArgs); err != nil {
 		t.Fatal(err)
 	}
 
