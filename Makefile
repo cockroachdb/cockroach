@@ -1135,10 +1135,10 @@ $(UI_ROOT)/yarn.opt.installed:
 	touch $@
 
 .PHONY: ui-watch
-ui-watch: export TARGET ?= http://localhost:8080
+ui-watch: export TARGET ?= https://localhost:8080
 ui-watch: PORT := 3000
 ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
-	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT)
+	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT) --https
 
 .PHONY: ui-clean
 ui-clean: ## Remove build artifacts.
