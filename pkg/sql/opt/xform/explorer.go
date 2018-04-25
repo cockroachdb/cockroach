@@ -220,20 +220,44 @@ func (e *explorer) canGenerateIndexScans(def memo.PrivateID) bool {
 // generateIndexScans enumerates all indexes on the scan operator's table and
 // generates an alternate scan operator for each index that includes the set of
 // needed columns.
-// TODO(andyk): Create join with primary index in non-covering case.
 func (e *explorer) generateIndexScans(def memo.PrivateID) []memo.Expr {
 	e.exprs = e.exprs[:0]
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	tab := e.mem.Metadata().Table(scanOpDef.Table)
+	md := e.mem.Metadata()
+	tab := md.Table(scanOpDef.Table)
+
+	pkCols := md.IndexColumns(scanOpDef.Table, 0)
 
 	// Iterate over all secondary indexes (index 0 is the primary index).
 	for i := 1; i < tab.IndexCount(); i++ {
+		indexCols := md.IndexColumns(scanOpDef.Table, i)
+
 		// If the alternate index includes the set of needed columns (def.Cols),
 		// then construct a new Scan operator using that index.
-		if scanOpDef.AltIndexHasCols(e.mem.Metadata(), i) {
+		if scanOpDef.Cols.SubsetOf(indexCols) {
 			newDef := &memo.ScanOpDef{Table: scanOpDef.Table, Index: i, Cols: scanOpDef.Cols}
 			indexScan := memo.MakeScanExpr(e.mem.InternScanOpDef(newDef))
 			e.exprs = append(e.exprs, memo.Expr(indexScan))
+		} else {
+			// The alternate index was missing columns, so in order to satisfy the
+			// requirements, we need to perform an index join with the primary index.
+
+			indexScanOpDef := e.mem.InternScanOpDef(&memo.ScanOpDef{
+				Table: scanOpDef.Table,
+				Index: i,
+				Cols:  indexCols.Intersection(scanOpDef.Cols).Union(pkCols),
+			})
+
+			input := e.f.ConstructScan(indexScanOpDef)
+
+			def := e.mem.InternLookupJoinDef(&memo.LookupJoinDef{
+				Table: scanOpDef.Table,
+				Cols:  scanOpDef.Cols,
+			})
+
+			join := memo.MakeLookupJoinExpr(input, def)
+
+			e.exprs = append(e.exprs, memo.Expr(join))
 		}
 	}
 
