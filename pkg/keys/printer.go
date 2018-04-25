@@ -121,8 +121,7 @@ var (
 			},
 		}},
 		{name: "/Table", start: TableDataMin, end: TableDataMax, entries: []dictEntry{
-			{name: "", prefix: nil, ppFunc: decodeKeyPrint,
-				psFunc: parseUnsupported},
+			{name: "", prefix: nil, ppFunc: decodeKeyPrint, psFunc: tableKeyParse},
 		}},
 	}
 
@@ -217,12 +216,39 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 			return
 		}
 	}
-	slashPos := strings.IndexByte(input[1:], '/')
+	input = mustShiftSlash(input)
+	slashPos := strings.IndexByte(input, '/')
 	if slashPos < 0 {
 		slashPos = len(input)
 	}
-	remainder = input[:slashPos] // `/something/else` -> `/else`
-	output = roachpb.Key(input[1:slashPos])
+	remainder = input[slashPos:] // `/something/else` -> `/else`
+	output = roachpb.Key(input[:slashPos])
+	return
+}
+
+const strSystemConfigSpan = "SystemConfigSpan"
+const strSystemConfigSpanStart = "Start"
+
+func tableKeyParse(input string) (remainder string, output roachpb.Key) {
+	input = mustShiftSlash(input)
+	slashPos := strings.Index(input, "/")
+	if slashPos < 0 {
+		slashPos = len(input)
+	}
+	remainder = input[slashPos:] // `/something/else` -> `/else`
+	tableIDStr := input[:slashPos]
+	if tableIDStr == strSystemConfigSpan {
+		if remainder[1:] == strSystemConfigSpanStart {
+			remainder = ""
+		}
+		output = SystemConfigSpan.Key
+		return
+	}
+	tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
+	if err != nil {
+		panic(&errUglifyUnsupported{err})
+	}
+	output = roachpb.Key(MakeTablePrefix(uint32(tableID)))
 	return
 }
 
@@ -606,7 +632,9 @@ func UglyPrint(input string) (_ roachpb.Key, rErr error) {
 		if err == nil {
 			err = errIllegalInput
 		}
-		return nil, errors.Errorf(`can't parse "%s" after reading %s: %s`, input, origInput[:len(origInput)-len(input)], err)
+		err = errors.Errorf(`can't parse "%s" after reading %s: %s`,
+			input, origInput[:len(origInput)-len(input)], err)
+		return nil, &errUglifyUnsupported{err}
 	}
 
 	var entries []dictEntry // nil if not pinned to a subrange
