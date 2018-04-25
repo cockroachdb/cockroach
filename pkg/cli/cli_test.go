@@ -1836,9 +1836,7 @@ func TestCLITimeout(t *testing.T) {
 		}
 
 		const exp = `node status 1 --timeout 1ns
-operation timed out.
-
-context deadline exceeded
+pq: query execution canceled due to statement timeout
 `
 		if out != exp {
 			err := errors.Errorf("unexpected output:\n%q\nwanted:\n%q", out, exp)
