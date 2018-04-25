@@ -336,6 +336,7 @@ Initial expression
 ================================================================================
   limit
    ├── columns: i:2(int) column8:8(int)
+   ├── cardinality: [0 - 5]
    ├── ordering: +2
    ├── offset
    │    ├── columns: a.i:2(int) column8:8(int)
@@ -374,6 +375,7 @@ EnsureJoinFilters
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -416,6 +418,7 @@ EnsureSelectFilters
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -459,6 +462,7 @@ FilterUnusedSelectCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -516,6 +520,7 @@ FilterUnusedJoinLeftCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -563,6 +568,7 @@ FilterUnusedJoinRightCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -609,6 +615,7 @@ PushSelectIntoProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -671,6 +678,7 @@ EliminateEmptyAnd
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -719,6 +727,7 @@ EliminateSelect
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -786,6 +795,7 @@ EliminateProjectProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -847,6 +857,7 @@ FilterUnusedSelectCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -908,6 +919,7 @@ EliminateProjectProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -969,6 +981,7 @@ PushOffsetIntoProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
   - ├── offset
   + ├── project
@@ -1039,6 +1052,7 @@ FilterUnusedOffsetCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── project
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -1104,11 +1118,13 @@ PushLimitIntoProject
   -limit
   +project
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
   - ├── project
   - │    ├── columns: a.i:2(int) column8:8(int)
   + ├── limit
   + │    ├── columns: a.i:2(int)
+  + │    ├── cardinality: [0 - 5]
     │    ├── ordering: +2
     │    ├── offset
     │    │    ├── columns: a.i:2(int)
@@ -1163,9 +1179,11 @@ Final best expression
 ================================================================================
   project
    ├── columns: i:2(int) column8:8(int)
+   ├── cardinality: [0 - 5]
    ├── ordering: +2
    ├── limit
    │    ├── columns: a.i:2(int)
+   │    ├── cardinality: [0 - 5]
    │    ├── ordering: +2
    │    ├── offset
    │    │    ├── columns: a.i:2(int)

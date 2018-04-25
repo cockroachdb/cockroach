@@ -267,7 +267,9 @@ SELECT null::int, null::timestamptz
 ----
 project
  ├── columns: column1:1(int) column2:2(timestamptz)
+ ├── cardinality: [1 - 1]
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       ├── null [type=int]
@@ -461,6 +463,7 @@ select
       └── exists [type=bool]
            └── group-by
                 ├── columns: column13:13(string)
+                ├── cardinality: [1 - 1]
                 ├── keys: ()
                 ├── scan a
                 │    ├── columns: a.s:10(string)

@@ -25,6 +25,7 @@ LIMIT 10
 ----
 limit
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
+ ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 127000.00
  ├── ordering: +2
@@ -81,11 +82,13 @@ LIMIT 10
 ----
 project
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
+ ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 4600.00
  ├── ordering: +2
  ├── limit
  │    ├── columns: a.y:2(int) b.x:3(string!null)
+ │    ├── cardinality: [0 - 10]
  │    ├── stats: [rows=10]
  │    ├── cost: 4600.00
  │    ├── ordering: +2
