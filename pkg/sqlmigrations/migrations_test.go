@@ -528,10 +528,48 @@ func TestAdminUserExists(t *testing.T) {
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
 		sqlbase.AdminRole)
 
-	e := `cannot create role "admin", a user with that name exists.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Errorf("expected succcess, got %q", e)
+		t.Errorf("expected success, got %q", err)
+	}
+}
+
+func TestPublicRoleExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "disallow public user or role name")
+	mt.start(t, base.TestServerArgs{})
+
+	// Create a user (we check for user or role) named "public".
+	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
+		sqlbase.PublicRole)
+
+	e := `found a user named public which is now a reserved name.`
+	// The revised migration in v2.1 upserts the admin user, so this should succeed.
+	if err := mt.runMigration(ctx, migration); !testutils.IsError(err, e) {
+		t.Errorf("expected error %q got %q", e, err)
+	}
+
+	// Now try with a role instead of a user.
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
+		sqlbase.PublicRole)
+
+	e = `found a role named public which is now a reserved name.`
+	// The revised migration in v2.1 upserts the admin user, so this should succeed.
+	if err := mt.runMigration(ctx, migration); !testutils.IsError(err, e) {
+		t.Errorf("expected error %q got %q", e, err)
+	}
+
+	// Drop it and try again.
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Errorf("expected success, got %q", err)
 	}
 }
 
