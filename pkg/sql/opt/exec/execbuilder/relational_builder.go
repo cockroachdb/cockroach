@@ -274,19 +274,27 @@ func (b *Builder) buildJoin(ev memo.ExprView, joinType sqlbase.JoinType) (execPl
 	// Calculate the outputCols map for the join plan: the first numLeftCols
 	// correspond to the columns from the left, the rest correspond to columns
 	// from the right (except for Anti and Semi joins).
-	var ep execPlan
 	numLeftCols := left.outputCols.Len()
-	ep.outputCols = left.outputCols.Copy()
-	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
-		right.outputCols.ForEach(func(colIdx, rightIdx int) {
-			ep.outputCols.Set(colIdx, rightIdx+numLeftCols)
-		})
-	}
+	inputCols := left.outputCols.Copy()
+	right.outputCols.ForEach(func(colIdx, rightIdx int) {
+		inputCols.Set(colIdx, rightIdx+numLeftCols)
+	})
 
-	ctx := ep.makeBuildScalarCtx()
+	ctx := buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, inputCols.Len()),
+		ivarMap: inputCols,
+	}
 	onExpr, err := b.buildScalar(&ctx, ev.Child(2))
 	if err != nil {
 		return execPlan{}, err
+	}
+
+	var ep execPlan
+	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
+		// For semi and anti join, only the left columns are output.
+		ep.outputCols = left.outputCols
+	} else {
+		ep.outputCols = inputCols
 	}
 	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
 	if err != nil {
