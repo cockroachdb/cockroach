@@ -1756,7 +1756,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			//      -v http://localhost:8080/favicon.ico > /dev/null
 			//
 			// which results in a 304 Not Modified.
-			if err := gzw.Close(); err != http.ErrBodyNotAllowed {
+			if err := gzw.Close(); err != nil && err != http.ErrBodyNotAllowed {
 				ctx := s.AnnotateCtx(r.Context())
 				log.Warningf(ctx, "error closing gzip response writer: %v", err)
 			}
