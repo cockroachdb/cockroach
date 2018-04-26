@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -138,12 +139,23 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 	return res, nil
 }
 
+func maxtrixToStr(rows [][]string) string {
+	res := strings.Builder{}
+	for _, row := range rows {
+		res.WriteString(strings.Join(row, ", "))
+		res.WriteRune('\n')
+	}
+	return res.String()
+}
+
 // CheckQueryResults checks that the rows returned by a query match the expected
 // response.
 func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]string) {
 	t.Helper()
 	res := sr.QueryStr(t, query)
 	if !reflect.DeepEqual(res, expected) {
-		t.Errorf("query '%s': expected:\n%v\ngot:%v\n", query, expected, res)
+		t.Errorf("query '%s': expected:\n%v\ngot:\n%v\n",
+			query, maxtrixToStr(expected), maxtrixToStr(res),
+		)
 	}
 }

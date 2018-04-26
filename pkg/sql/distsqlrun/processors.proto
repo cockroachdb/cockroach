@@ -122,6 +122,7 @@ message ProcessorCoreUnion {
   optional BackfillerSpec backfiller = 11;
   optional ReadCSVSpec readCSV = 13;
   optional SSTWriterSpec SSTWriter = 14;
+  optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
   optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
@@ -551,6 +552,20 @@ message SSTWriterSpec {
   optional JobProgress progress = 5 [(gogoproto.nullable) = false];
 
   reserved 2;
+}
+
+
+// CSVWriterSpec is the specification for a processor that consumes rows and
+// writes them to CSV files at uri. It outputs a row per file written with
+// the file name, row count and byte size.
+message CSVWriterSpec {
+  // destination as a storageccl.ExportStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  optional string name_pattern = 2 [(gogoproto.nullable) = false];
+  optional roachpb.CSVOptions options = 3 [(gogoproto.nullable) = false];
+  // chunk_rows is num rows to write per file. 0 = no limit.
+  optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
 }
 
 enum SketchType {
