@@ -101,14 +101,6 @@ module.exports = (distDir, ...additionalRoots) => ({
 
   plugins: [
     new RemoveBrokenDependenciesPlugin(),
-    new HtmlWebpackPlugin({
-      title: title,
-      template: require("html-webpack-template"),
-      scripts: ["protos.dll.js", "vendor.dll.js"],
-      favicon: "favicon.ico",
-      inject: false,
-      appMountId: "react-layout",
-    }),
     // See "DLLs for speedy builds" in the README for details.
     new webpack.DllReferencePlugin({
       manifest: require("./protos-manifest.json"),

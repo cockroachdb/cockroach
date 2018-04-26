@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
@@ -33,10 +34,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-
-	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -60,6 +57,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -79,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/elazarl/go-bindata-assetfs"
 )
 
 var (
@@ -1154,15 +1154,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	// Also throw the landing page in there. It won't work well, but it's better than a 404.
-	// The remaining endpoints will be opened late, when we're sure that the subsystems they
-	// talk to are functional.
-	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
-		Asset:     ui.Asset,
-		AssetDir:  ui.AssetDir,
-		AssetInfo: ui.AssetInfo,
-	}))
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1184,7 +1175,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	var authHandler http.Handler = gwMux
 	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
+		authHandler = newAuthenticationMux(s.authentication, authHandler, true)
 	}
 
 	// Setup HTTP<->gRPC handlers.
@@ -1455,6 +1446,45 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle(authPrefix, gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
+
+	// Also throw the landing page in there. It won't work well, but it's better than a 404.
+	// The remaining endpoints will be opened late, when we're sure that the subsystems they
+	// talk to are functional.
+	fileServer := http.FileServer(&assetfs.AssetFS{
+		Asset:     ui.Asset,
+		AssetDir:  ui.AssetDir,
+		AssetInfo: ui.AssetInfo,
+	})
+
+	assetsHandler := func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/" {
+			fileServer.ServeHTTP(writer, request)
+			return
+		}
+
+		tmplArgs := ui.IndexHTMLArgs{}
+
+		loggedInUser, ok := request.Context().Value(loggedInUserKey{}).(string)
+		if ok && loggedInUser != "" {
+			tmplArgs.SomeoneLoggedIn = true
+			tmplArgs.LoggedInUser = loggedInUser
+		}
+
+		buf := bytes.NewBufferString("")
+		err := ui.IndexHTMLTemplate.Execute(buf, tmplArgs)
+		if err != nil {
+			wrappedErr := errors.Wrap(err, "templating index.html")
+			log.Error(ctx, wrappedErr)
+			writer.WriteHeader(500)
+			fmt.Fprint(writer, wrappedErr.Error())
+			return
+		}
+		writer.Header().Add("Content-Type", "text/html")
+		buf.WriteTo(writer)
+	}
+
+	maybeAuthMux := newAuthenticationMux(s.authentication, http.HandlerFunc(assetsHandler), false)
+	s.mux.Handle("/", maybeAuthMux)
 
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
