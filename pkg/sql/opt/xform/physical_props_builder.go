@@ -169,6 +169,11 @@ func (b physicalPropsBuilder) buildChildProps(
 			}
 			childProps.Ordering = b.mem.LookupPrivate(ordering).(memo.Ordering)
 		}
+
+	case opt.ExplainOp:
+		if nth == 0 {
+			childProps = b.mem.LookupPrivate(mexpr.AsExplain().Def()).(*memo.ExplainOpDef).Props
+		}
 	}
 
 	// If properties haven't changed, no need to re-intern them.
