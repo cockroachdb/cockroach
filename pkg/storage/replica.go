@@ -1786,6 +1786,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
+	ri.RangeMaxBytes = r.mu.maxBytes
 	return ri
 }
 
