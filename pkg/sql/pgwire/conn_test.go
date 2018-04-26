@@ -317,7 +317,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, err
 	}
 
-	metrics := makeServerMetrics(nil /* internalMemMetrics */, metric.TestSampleInterval)
+	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
 	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, &sql.ExecutorConfig{})
 	return pgwireConn, nil
 }
