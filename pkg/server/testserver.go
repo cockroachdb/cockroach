@@ -731,6 +731,11 @@ func (ts *TestServer) GetRangeLease(
 
 }
 
+// ExecutorConfig is part of the TestServerInterface.
+func (ts *TestServer) ExecutorConfig() interface{} {
+	return *ts.execCfg
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

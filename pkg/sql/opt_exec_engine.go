@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -36,7 +37,7 @@ var _ exec.TestEngineFactory = &Executor{}
 // NewTestEngine is part of the exec.TestEngineFactory interface.
 func (e *Executor) NewTestEngine(defaultDatabase string) exec.TestEngine {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
-	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{}, &e.cfg)
+	p, cleanup := newInternalPlanner("opt", txn, security.RootUser, &MemoryMetrics{}, &e.cfg)
 	// TODO(radu): Setting this directly is a hack.
 	p.extendedEvalCtx.SessionData.Database = defaultDatabase
 	return newExecEngine(p, cleanup)
