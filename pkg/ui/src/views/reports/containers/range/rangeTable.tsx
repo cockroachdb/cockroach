@@ -8,6 +8,7 @@ import React from "react";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
+import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
 import Print from "src/views/reports/containers/range/print";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
@@ -70,6 +71,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "mvccValueBytesCount", display: "MVCC Value Bytes/Count", compareToLeader: true },
   { variable: "mvccIntentBytesCount", display: "MVCC Intent Bytes/Count", compareToLeader: true },
   { variable: "mvccSystemBytesCount", display: "MVCC System Bytes/Count", compareToLeader: true },
+  { variable: "rangeMaxBytes", display: "Max Range Size Before Split", compareToLeader: true },
   { variable: "cmdQWrites", display: "CmdQ Writes Local/Global", compareToLeader: false },
   { variable: "cmdQReads", display: "CmdQ Reads Local/Global", compareToLeader: false },
   { variable: "cmdQMaxOverlapsSeen", display: "CmdQ Max Overlaps Local/Global", compareToLeader: false },
@@ -131,7 +133,20 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentMVCC(bytes: Long, count: Long): RangeTableCellContent {
-    return this.createContent(`${bytes.toString()} bytes / ${count.toString()} count`);
+    const humanizedBytes = Bytes(bytes.toNumber());
+    return {
+      value: [`${humanizedBytes} / ${count.toString()} count`],
+      title: [`${humanizedBytes} / ${count.toString()} count`,
+              `${bytes.toString()} bytes / ${count.toString()} count`],
+    };
+  }
+
+  contentBytes(bytes: Long): RangeTableCellContent {
+    const humanized = Bytes(bytes.toNumber());
+    return {
+      value: [humanized],
+      title: [humanized, bytes.toString()],
+    };
   }
 
   createContent(value: string | Long | number, className: string = null): RangeTableCellContent {
@@ -219,7 +234,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     leaderCell?: RangeTableCellContent,
   ) {
     const title = _.join(_.isNil(cell.title) ? cell.value : cell.title, "\n");
-    const differentFromLeader = !dormant && !_.isNil(leaderCell) && row.compareToLeader && !_.isEqual(cell.value, leaderCell.value);
+    const differentFromLeader = !dormant && !_.isNil(leaderCell) && row.compareToLeader && (!_.isEqual(cell.value, leaderCell.value) || !_.isEqual(cell.title, leaderCell.title));
     const className = classNames(
       "range-table__cell",
       {
@@ -457,7 +472,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         applied: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.applied))),
         commit: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.commit))),
         lastIndex: this.createContent(FixLong(info.state.last_index)),
-        logSize: this.createContent(FixLong(info.state.raft_log_size)),
+        logSize: this.contentBytes(FixLong(info.state.raft_log_size)),
         leaseHolderQPS: leaseHolder ? this.createContent(info.stats.queries_per_second.toFixed(4)) : rangeTableEmptyContent,
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
         approxProposalQuota: raftLeader ? this.createContent(FixLong(info.state.approximate_proposal_quota)) : rangeTableEmptyContent,
@@ -476,6 +491,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         mvccValueBytesCount: this.contentMVCC(FixLong(mvcc.val_bytes), FixLong(mvcc.val_count)),
         mvccIntentBytesCount: this.contentMVCC(FixLong(mvcc.intent_bytes), FixLong(mvcc.intent_count)),
         mvccSystemBytesCount: this.contentMVCC(FixLong(mvcc.sys_bytes), FixLong(mvcc.sys_count)),
+        rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
         cmdQWrites: this.contentCommandQueue(
           FixLong(info.cmd_q_local.write_commands),
           FixLong(info.cmd_q_global.write_commands),
