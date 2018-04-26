@@ -317,3 +317,9 @@ define Offset {
 define Max1Row {
     Input Expr
 }
+
+[Relational]
+define Explain {
+    Input Expr
+    Def   ExplainOpDef
+}
