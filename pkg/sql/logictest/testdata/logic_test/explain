@@ -24,18 +24,20 @@ render     ·      ·
 ·          spans  ALL
 
 query TITTTTT colnames
-EXPLAIN (PLAN, METADATA) SELECT 1
+EXPLAIN (PLAN, VERBOSE) SELECT 1
 ----
-Tree           Level  Type      Field  Description  Columns  Ordering
-render         0      render    ·      ·            ("1")    "1"=CONST
- └── emptyrow  1      emptyrow  ·      ·            ()       ·
+Tree           Level  Type      Field     Description  Columns  Ordering
+render         0      render    ·         ·            ("1")    "1"=CONST
+ │             0      ·         render 0  1            ·        ·
+ └── emptyrow  1      emptyrow  ·         ·            ()       ·
 
 query TITTTTT colnames
-EXPLAIN (METADATA,PLAN) SELECT 1
+EXPLAIN (VERBOSE,PLAN) SELECT 1
 ----
-Tree           Level  Type      Field  Description  Columns  Ordering
-render         0      render    ·      ·            ("1")    "1"=CONST
- └── emptyrow  1      emptyrow  ·      ·            ()       ·
+Tree           Level  Type      Field     Description  Columns  Ordering
+render         0      render    ·         ·            ("1")    "1"=CONST
+ │             0      ·         render 0  1            ·        ·
+ └── emptyrow  1      emptyrow  ·         ·            ()       ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
@@ -73,17 +75,36 @@ render         0      render    ·         ·                         ("$1::INT"
 
 # Ensure that tracing results are sorted after gathering
 query TITTTTT
-EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
+EXPLAIN (VERBOSE) SHOW TRACE FOR SELECT 1
 ----
-sort                                         0  sort            ·      ·             ("timestamp", age, message, tag, loc, operation, span)                        +"timestamp"
- │                                           0  ·               order  +"timestamp"  ·                                                                             ·
- └── window                                  1  window          ·      ·             ("timestamp", age, message, tag, loc, operation, span)                        ·
-      └── render                             2  render          ·      ·             ("timestamp", """timestamp""", message, tag, loc, operation, span)            "timestamp"="""timestamp"""
-           └── window                        3  window          ·      ·             ("timestamp", message, tag, loc, operation, span)                             ·
-                └── render                   4  render          ·      ·             ("timestamp", message, tag, loc, operation, span, message_idx)                ·
-                     └── show trace for      5  show trace for  ·      ·             (span_idx, message_idx, "timestamp", duration, operation, loc, tag, message)  ·
-                          └── render         6  render          ·      ·             ("1")                                                                         "1"=CONST
-                               └── emptyrow  7  emptyrow        ·      ·             ()                                                                            ·
+sort                                         0  sort            ·         ·                                                                                                                                                                            ("timestamp", age, message, tag, loc, operation, span)                        +"timestamp"
+ │                                           0  ·               order     +"timestamp"                                                                                                                                                                 ·                                                                             ·
+ └── window                                  1  window          ·         ·                                                                                                                                                                            ("timestamp", age, message, tag, loc, operation, span)                        ·
+      │                                      1  ·               window 0  first_value("timestamp") OVER (ORDER BY "timestamp")                                                                                                                         ·                                                                             ·
+      │                                      1  ·               render 1  "timestamp" - first_value("timestamp") OVER (ORDER BY "timestamp")                                                                                                           ·                                                                             ·
+      └── render                             2  render          ·         ·                                                                                                                                                                            ("timestamp", """timestamp""", message, tag, loc, operation, span)            "timestamp"="""timestamp"""
+           │                                 2  ·               render 0  "timestamp"                                                                                                                                                                  ·                                                                             ·
+           │                                 2  ·               render 1  "timestamp"                                                                                                                                                                  ·                                                                             ·
+           │                                 2  ·               render 2  message                                                                                                                                                                      ·                                                                             ·
+           │                                 2  ·               render 3  tag                                                                                                                                                                          ·                                                                             ·
+           │                                 2  ·               render 4  loc                                                                                                                                                                          ·                                                                             ·
+           │                                 2  ·               render 5  operation                                                                                                                                                                    ·                                                                             ·
+           │                                 2  ·               render 6  span                                                                                                                                                                         ·                                                                             ·
+           └── window                        3  window          ·         ·                                                                                                                                                                            ("timestamp", message, tag, loc, operation, span)                             ·
+                │                            3  ·               window 0  first_value(test.crdb_internal.session_trace.operation) OVER (PARTITION BY test.crdb_internal.session_trace.span_idx ORDER BY test.crdb_internal.session_trace.message_idx)  ·                                                                             ·
+                │                            3  ·               render 4  first_value(test.crdb_internal.session_trace.operation) OVER (PARTITION BY test.crdb_internal.session_trace.span_idx ORDER BY test.crdb_internal.session_trace.message_idx)  ·                                                                             ·
+                └── render                   4  render          ·         ·                                                                                                                                                                            ("timestamp", message, tag, loc, operation, span, message_idx)                ·
+                     │                       4  ·               render 0  test.crdb_internal.session_trace."timestamp"                                                                                                                                 ·                                                                             ·
+                     │                       4  ·               render 1  test.crdb_internal.session_trace.message                                                                                                                                     ·                                                                             ·
+                     │                       4  ·               render 2  test.crdb_internal.session_trace.tag                                                                                                                                         ·                                                                             ·
+                     │                       4  ·               render 3  test.crdb_internal.session_trace.loc                                                                                                                                         ·                                                                             ·
+                     │                       4  ·               render 4  test.crdb_internal.session_trace.operation                                                                                                                                   ·                                                                             ·
+                     │                       4  ·               render 5  test.crdb_internal.session_trace.span_idx                                                                                                                                    ·                                                                             ·
+                     │                       4  ·               render 6  test.crdb_internal.session_trace.message_idx                                                                                                                                 ·                                                                             ·
+                     └── show trace for      5  show trace for  ·         ·                                                                                                                                                                            (span_idx, message_idx, "timestamp", duration, operation, loc, tag, message)  ·
+                          └── render         6  render          ·         ·                                                                                                                                                                            ("1")                                                                         "1"=CONST
+                               │             6  ·               render 0  1                                                                                                                                                                            ·                                                                             ·
+                               └── emptyrow  7  emptyrow        ·         ·                                                                                                                                                                            ()                                                                            ·
 
 # Ensure that all relevant statement types can be explained
 query TTT
@@ -136,7 +157,7 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 alter table  ·  ·
 
 query TTT
-EXPLAIN (EXPRS) ALTER TABLE foo SPLIT AT VALUES (42)
+SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
 ----
 split        ·              ·
  └── values  ·              ·

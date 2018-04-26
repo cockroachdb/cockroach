@@ -612,25 +612,29 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 14.0
 
 query TTT
-EXPLAIN (EXPRS) SELECT COUNT(k) FROM kv
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
+]
 ----
 group           ·            ·
  │              aggregate 0  count(k)
  └── render     ·            ·
-      │         render 0     k
+      │         render 0     test.public.kv.k
       └── scan  ·            ·
 ·               table        kv@primary
 ·               spans        ALL
 
 query TTT
-EXPLAIN (EXPRS) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+]
 ----
 group           ·            ·
  │              aggregate 0  count(k)
  │              aggregate 1  sum(k)
  │              aggregate 2  max(k)
  └── render     ·            ·
-      │         render 0     k
+      │         render 0     test.public.kv.k
       └── scan  ·            ·
 ·               table        kv@primary
 ·               spans        ALL
@@ -647,12 +651,14 @@ statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+]
 ----
 group           ·            ·
  │              aggregate 0  min(a)
  └── render     ·            ·
-      │         render 0     a
+      │         render 0     test.public.abc.a
       └── scan  ·            ·
 ·               table        abc@primary
 ·               spans        ALL
@@ -727,12 +733,14 @@ SELECT MIN(x) FROM xyz
 1
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
+]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
  └── render     ·            ·
-      │         render 0     x
+      │         render 0     test.public.xyz.x
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        ALL
@@ -744,12 +752,14 @@ SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 4
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
  └── render     ·            ·
-      │         render 0     x
+      │         render 0     test.public.xyz.x
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        /0-/1 /4-/5 /7-/8
@@ -761,12 +771,14 @@ SELECT MAX(x) FROM xyz
 7
 
 query TTT
-EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
+]
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
  └── render        ·            ·
-      │            render 0     x
+      │            render 0     test.public.xyz.x
       └── revscan  ·            ·
 ·                  table        xyz@xy
 ·                  spans        ALL
@@ -778,12 +790,14 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 2
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
+]
 ----
 group           ·            ·
  │              aggregate 0  min(y)
  └── render     ·            ·
-      │         render 0     y
+      │         render 0     test.public.xyz.y
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        /1/!NULL-/2
@@ -795,12 +809,14 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 2
 
 query TTT
-EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
+]
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
  └── render        ·            ·
-      │            render 0     y
+      │            render 0     test.public.xyz.y
       └── revscan  ·            ·
 ·                  table        xyz@xy
 ·                  spans        /1/!NULL-/2
@@ -812,12 +828,14 @@ SELECT MIN(y) FROM xyz WHERE x = 7
 NULL
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
+]
 ----
 group           ·            ·
  │              aggregate 0  min(y)
  └── render     ·            ·
-      │         render 0     y
+      │         render 0     test.public.xyz.y
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        /7/!NULL-/8
@@ -829,12 +847,14 @@ SELECT MAX(y) FROM xyz WHERE x = 7
 NULL
 
 query TTT
-EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
+]
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
  └── render        ·            ·
-      │            render 0     y
+      │            render 0     test.public.xyz.y
       └── revscan  ·            ·
 ·                  table        xyz@xy
 ·                  spans        /7/!NULL-/8
@@ -846,12 +866,14 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 1
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
  └── render     ·            ·
-      │         render 0     x
+      │         render 0     test.public.xyz.x
       └── scan  ·            ·
 ·               table        xyz@zyx
 ·               spans        /3/2-/3/3
@@ -870,12 +892,14 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 1
 
 query TTT
-EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+]
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
  └── render        ·            ·
-      │            render 0     x
+      │            render 0     test.public.xyz.x
       └── revscan  ·            ·
 ·                  table        xyz@zyx
 ·                  spans        /3/2-/3/3
@@ -913,12 +937,14 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 NULL
 
 query TTT
-EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+]
 ----
 group           ·            ·
  │              aggregate 0  variance(x)
  └── render     ·            ·
-      │         render 0     x
+      │         render 0     test.public.xyz.x
       └── scan  ·            ·
 ·               table        xyz@xy
 ·               spans        /1-/2
@@ -1068,12 +1094,14 @@ INSERT INTO ab VALUES
   (5, 50)
 
 query TTT
-EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+]
 ----
 group           ·            ·
  │              aggregate 0  min(a)
  └── render     ·            ·
-      │         render 0     a
+      │         render 0     test.public.abc.a
       └── scan  ·            ·
 ·               table        abc@primary
 ·               spans        ALL
@@ -1089,12 +1117,14 @@ fetched: /ab/primary/1/b -> 10
 output row: [1]
 
 query TTT
-EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MAX(a) FROM abc
+]
 ----
 group              ·            ·
  │                 aggregate 0  max(a)
  └── render        ·            ·
-      │            render 0     a
+      │            render 0     test.public.abc.a
       └── revscan  ·            ·
 ·                  table        abc@primary
 ·                  spans        ALL
@@ -1110,7 +1140,9 @@ fetched: /ab/primary/5 -> NULL
 output row: [5]
 
 query TTT
-EXPLAIN (EXPRS) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+]
 ----
 sort                 ·            ·
  │                   order        +count
@@ -1119,14 +1151,16 @@ sort                 ·            ·
       │              aggregate 1  count(k)
       │              group by     @1
       └── render     ·            ·
-           │         render 0     v
-           │         render 1     k
+           │         render 0     test.public.kv.v
+           │         render 1     test.public.kv.k
            └── scan  ·            ·
 ·                    table        kv@primary
 ·                    spans        ALL
 
 query TTT
-EXPLAIN (EXPRS) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+]
 ----
 sort                 ·            ·
  │                   order        +count
@@ -1135,13 +1169,15 @@ sort                 ·            ·
       │              aggregate 1  count_rows()
       │              group by     @1
       └── render     ·            ·
-           │         render 0     v
+           │         render 0     test.public.kv.v
            └── scan  ·            ·
 ·                    table        kv@primary
 ·                    spans        ALL
 
 query TTT
-EXPLAIN (EXPRS) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+]
 ----
 sort                 ·            ·
  │                   order        +count
@@ -1150,7 +1186,7 @@ sort                 ·            ·
       │              aggregate 1  count(1)
       │              group by     @1
       └── render     ·            ·
-           │         render 0     v
+           │         render 0     test.public.kv.v
            │         render 1     1
            └── scan  ·            ·
 ·                    table        kv@primary
@@ -1158,14 +1194,16 @@ sort                 ·            ·
 
 # Check that filters propagate through no-op aggregation.
 query TTT
-EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
+]
 ----
 group           ·            ·
  │              aggregate 0  v
  │              aggregate 1  count(1)
  │              group by     @1
  └── render     ·            ·
-      │         render 0     v
+      │         render 0     test.public.kv.v
       │         render 1     1
       └── scan  ·            ·
 ·               table        kv@primary
@@ -1219,15 +1257,17 @@ SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
 
 # Check that filter expressions are only rendered once.
 query TTT
-EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+]
 ----
 group           ·            ·
  │              aggregate 0  count_rows() FILTER (WHERE k > 5)
  │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
  │              group by     @1
  └── render     ·            ·
-      │         render 0     v
-      │         render 1     k > 5
+      │         render 0     test.public.filter_test.v
+      │         render 1     test.public.filter_test.k > 5
       └── scan  ·            ·
 ·               table        filter_test@primary
 ·               spans        ALL
@@ -1247,7 +1287,9 @@ group           0  group   ·            ·                                  (co
 
 # Tests with * inside GROUP BY.
 query TTT
-EXPLAIN (EXPRS) SELECT 1 FROM kv GROUP BY kv.*;
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*
+]
 ----
 render          ·         ·
  │              render 0  1
@@ -1258,7 +1300,7 @@ render          ·         ·
 ·               spans     ALL
 
 query I
-SELECT 1 FROM kv GROUP BY kv.*;
+SELECT 1 FROM kv GROUP BY kv.*
 ----
 1
 1
@@ -1268,17 +1310,19 @@ SELECT 1 FROM kv GROUP BY kv.*;
 1
 
 query TTT
-EXPLAIN (EXPRS) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
+]
 ----
 group                ·            ·
  │                   aggregate 0  sum(d)
  │                   group by     @1-@4
  └── render          ·            ·
-      │              render 0     k
-      │              render 1     v
-      │              render 2     w
-      │              render 3     s
-      │              render 4     d
+      │              render 0     test.public.kv.k
+      │              render 1     test.public.kv.v
+      │              render 2     test.public.kv.w
+      │              render 3     test.public.kv.s
+      │              render 4     test.public.abc.d
       └── join       ·            ·
            │         type         inner
            │         pred         test.public.kv.k >= test.public.abc.d
@@ -1290,7 +1334,7 @@ group                ·            ·
 ·                    spans        ALL
 
 query R rowsort
-SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
+SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 1.1
 6.1
@@ -1434,7 +1478,9 @@ SELECT (b, a) FROM ab GROUP BY (b, a)
 (4,3)
 
 query TTT
-EXPLAIN(EXPRS) SELECT (b, a) FROM ab GROUP BY (b, a)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
+]
 ----
 render               ·            ·
  │                   render 0     (agg0, agg1)
@@ -1443,8 +1489,8 @@ render               ·            ·
       │              aggregate 1  a
       │              group by     @1-@2
       └── render     ·            ·
-           │         render 0     b
-           │         render 1     a
+           │         render 0     test.public.ab.b
+           │         render 1     test.public.ab.a
            └── scan  ·            ·
 ·                    table        ab@primary
 ·                    spans        ALL
@@ -1459,9 +1505,11 @@ b  (4,3)
 d  (4,3)
 
 query TTT
-EXPLAIN(EXPRS)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE)
    SELECT MIN(y), (b, a)
      FROM ab, xy GROUP BY (x, (a, b))
+]
 ----
 render                    ·            ·
  │                        render 0     agg0
@@ -1472,10 +1520,10 @@ render                    ·            ·
       │                   aggregate 2  a
       │                   group by     @1-@3
       └── render          ·            ·
-           │              render 0     x
-           │              render 1     a
-           │              render 2     b
-           │              render 3     y
+           │              render 0     test.public.xy.x
+           │              render 1     test.public.ab.a
+           │              render 2     test.public.ab.b
+           │              render 3     test.public.xy.y
            └── join       ·            ·
                 │         type         cross
                 ├── scan  ·            ·

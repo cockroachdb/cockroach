@@ -603,7 +603,9 @@ INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 # Check that INSERT supports ORDER BY (MySQL extension)
 
 query TTT
-EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+]
 ----
 count                     ·          ·
  └── insert               ·          ·
@@ -614,8 +616,8 @@ count                     ·          ·
       └── sort            ·          ·
            │              order      -v
            └── render     ·          ·
-                │         render 0   x
-                │         render 1   v
+                │         render 0   test.public.select_t.x
+                │         render 1   test.public.select_t.v
                 └── scan  ·          ·
 ·                         table      select_t@primary
 ·                         spans      ALL
@@ -634,7 +636,9 @@ statement ok
 TRUNCATE TABLE insert_t
 
 query TTT
-EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
+]
 ----
 count                     ·          ·
  └── insert               ·          ·
@@ -645,8 +649,8 @@ count                     ·          ·
       └── limit           ·          ·
            │              count      1
            └── render     ·          ·
-                │         render 0   x
-                │         render 1   v
+                │         render 0   test.public.select_t.x
+                │         render 1   test.public.select_t.v
                 └── scan  ·          ·
 ·                         table      select_t@primary
 ·                         spans      ALL

@@ -400,11 +400,13 @@ x  x  y  b  d  e
 
 # Check EXPLAIN.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn USING(x)
+]
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  y
+ │              render 0  test.public.onecolumn.x
+ │              render 1  test.public.twocolumn.y
  └── join       ·         ·
       │         type      inner
       │         equality  (x) = (x)
@@ -417,13 +419,15 @@ render          ·         ·
 
 # Check EXPLAIN.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
+]
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  y
- │              render 2  x
- │              render 3  y
+ │              render 0  a.x
+ │              render 1  a.y
+ │              render 2  b.x
+ │              render 3  b.y
  └── join       ·         ·
       │         type      inner
       │         equality  (x) = (y)
@@ -436,13 +440,15 @@ render          ·         ·
 
 # Check EXPLAIN.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
+]
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  y
- │              render 2  x
- │              render 3  y
+ │              render 0  a.x
+ │              render 1  a.y
+ │              render 2  b.x
+ │              render 3  b.y
  └── join       ·         ·
       │         type      cross
       ├── scan  ·         ·
@@ -455,12 +461,14 @@ render          ·         ·
 
 # Check EXPLAIN.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
+]
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  x
- │              render 2  y
+ │              render 0  a.x
+ │              render 1  b.x
+ │              render 2  b.y
  └── join       ·         ·
       │         type      inner
       │         equality  (x) = (y)
@@ -473,12 +481,14 @@ render          ·         ·
 
 # Check EXPLAIN.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
+]
 ----
 render          ·         ·
- │              render 0  x
- │              render 1  x
- │              render 2  y
+ │              render 0  test.public.onecolumn.x
+ │              render 1  test.public.twocolumn.x
+ │              render 2  test.public.twocolumn.y
  └── join       ·         ·
       │         type      inner
       │         equality  (x) = (y)
@@ -491,17 +501,19 @@ render          ·         ·
 
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
+]
 ----
 limit                          ·         ·
  │                             count     1
  └── render                    ·         ·
-      │                        render 0  x
-      │                        render 1  x
-      │                        render 2  y
-      │                        render 3  b
-      │                        render 4  d
-      │                        render 5  e
+      │                        render 0  test.public.onecolumn.x
+      │                        render 1  test.public.twocolumn.x
+      │                        render 2  test.public.twocolumn.y
+      │                        render 3  a.b
+      │                        render 4  c.d
+      │                        render 5  c.e
       └── join                 ·         ·
            │                   type      inner
            │                   equality  (b, x) = (d, d)
@@ -611,22 +623,25 @@ CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(
 
 # THe following queries verify that only the necessary columns are scanned.
 query TITTTTT
-EXPLAIN (METADATA) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
+EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-render          0  render  ·      ·                  (x, y)                                                                        ·
- └── join       1  join    ·      ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
-      │         1  ·       type   cross              ·                                                                             ·
-      ├── scan  2  scan    ·      ·                  (x, y[omitted], rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
-      │         2  ·       table  twocolumn@primary  ·                                                                             ·
-      │         2  ·       spans  ALL                ·                                                                             ·
-      └── scan  2  scan    ·      ·                  (x[omitted], y, rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
-·               2  ·       table  twocolumn@primary  ·                                                                             ·
-·               2  ·       spans  ALL                ·                                                                             ·
+render          0  render  ·         ·                  (x, y)                                                                        ·
+ │              0  ·       render 0  a.x                ·                                                                             ·
+ │              0  ·       render 1  b.y                ·                                                                             ·
+ └── join       1  join    ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
+      │         1  ·       type      cross              ·                                                                             ·
+      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
+      │         2  ·       table     twocolumn@primary  ·                                                                             ·
+      │         2  ·       spans     ALL                ·                                                                             ·
+      └── scan  2  scan    ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
+·               2  ·       table     twocolumn@primary  ·                                                                             ·
+·               2  ·       spans     ALL                ·                                                                             ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
+EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
 render          0  render  ·         ·                  (y)                                                                                    ·
+ │              0  ·       render 0  b.y                ·                                                                                      ·
  └── join       1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
       │         1  ·       type      inner              ·                                                                                      ·
       │         1  ·       equality  (x) = (x)          ·                                                                                      ·
@@ -638,9 +653,10 @@ render          0  render  ·         ·                  (y)                   
 ·               2  ·       spans     ALL                ·                                                                                      ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
+EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
 render          0  render  ·         ·                  (y)                                                                                    ·
+ │              0  ·       render 0  b.y                ·                                                                                      ·
  └── join       1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
       │         1  ·       type      inner              ·                                                                                      ·
       │         1  ·       equality  (x) = (x)          ·                                                                                      ·
@@ -652,36 +668,53 @@ render          0  render  ·         ·                  (y)                   
 ·               2  ·       spans     ALL                ·                                                                                      ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
+EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-render          0  render  ·      ·                  (x)                                                                                    ·
- └── join       1  join    ·      ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
-      │         1  ·       type   inner              ·                                                                                      ·
-      ├── scan  2  scan    ·      ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-      │         2  ·       table  twocolumn@primary  ·                                                                                      ·
-      │         2  ·       spans  ALL                ·                                                                                      ·
-      └── scan  2  scan    ·      ·                  (x[omitted], y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-·               2  ·       table  twocolumn@primary  ·                                                                                      ·
-·               2  ·       spans  ALL                ·                                                                                      ·
+render          0  render  ·         ·                  (x)                                                                                    ·
+ │              0  ·       render 0  a.x                ·                                                                                      ·
+ └── join       1  join    ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
+      │         1  ·       type      inner              ·                                                                                      ·
+      │         1  ·       pred      a.x < b.y          ·                                                                                      ·
+      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+      │         2  ·       table     twocolumn@primary  ·                                                                                      ·
+      │         2  ·       spans     ALL                ·                                                                                      ·
+      └── scan  2  scan    ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+·               2  ·       table     twocolumn@primary  ·                                                                                      ·
+·               2  ·       spans     ALL                ·                                                                                      ·
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
-                INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
+                  INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-sort                             0  sort    ·         ·                  (k, u, w)                     +u
- │                               0  ·       order     +u                 ·                             ·
- └── render                      1  render  ·         ·                  (k, u, w)                     ·
-      └── render                 2  render  ·         ·                  (k, u, k[hidden,omitted], w)  ·
-           └── join              3  join    ·         ·                  (u, k, k[omitted], w)         ·
-                │                3  ·       type      inner              ·                             ·
-                │                3  ·       equality  (k) = (k)          ·                             ·
-                ├── sort         4  sort    ·         ·                  (u, k)                        +k
-                │    │           4  ·       order     +k                 ·                             ·
-                │    └── values  5  values  ·         ·                  (u, k)                        ·
-                │                5  ·       size      2 columns, 2 rows  ·                             ·
-                └── values       4  values  ·         ·                  (column1, column2)            ·
-·                                4  ·       size      2 columns, 2 rows  ·                             ·
+sort                             0  sort    ·              ·                  (k, u, w)                     +u
+ │                               0  ·       order          +u                 ·                             ·
+ └── render                      1  render  ·              ·                  (k, u, w)                     ·
+      │                          1  ·       render 0       k                  ·                             ·
+      │                          1  ·       render 1       u                  ·                             ·
+      │                          1  ·       render 2       b.w                ·                             ·
+      └── render                 2  render  ·              ·                  (k, u, k[hidden,omitted], w)  ·
+           │                     2  ·       render 0       k                  ·                             ·
+           │                     2  ·       render 1       u                  ·                             ·
+           │                     2  ·       render 2       NULL               ·                             ·
+           │                     2  ·       render 3       b.w                ·                             ·
+           └── join              3  join    ·              ·                  (u, k, k[omitted], w)         ·
+                │                3  ·       type           inner              ·                             ·
+                │                3  ·       equality       (k) = (k)          ·                             ·
+                ├── sort         4  sort    ·              ·                  (u, k)                        +k
+                │    │           4  ·       order          +k                 ·                             ·
+                │    └── values  5  values  ·              ·                  (u, k)                        ·
+                │                5  ·       size           2 columns, 2 rows  ·                             ·
+                │                5  ·       row 0, expr 0  9                  ·                             ·
+                │                5  ·       row 0, expr 1  1                  ·                             ·
+                │                5  ·       row 1, expr 0  8                  ·                             ·
+                │                5  ·       row 1, expr 1  2                  ·                             ·
+                └── values       4  values  ·              ·                  (column1, column2)            ·
+·                                4  ·       size           2 columns, 2 rows  ·                             ·
+·                                4  ·       row 0, expr 0  1                  ·                             ·
+·                                4  ·       row 0, expr 1  1                  ·                             ·
+·                                4  ·       row 1, expr 0  2                  ·                             ·
+·                                4  ·       row 1, expr 1  2                  ·                             ·
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
@@ -1078,18 +1111,20 @@ SELECT *
 4  6  NULL  NULL
 
 query TTT
-EXPLAIN(EXPRS)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
+]
 ----
 render               ·         ·
- │                   render 0  a
- │                   render 1  b
- │                   render 2  n
- │                   render 3  sq
+ │                   render 0  test.public.pairs.a
+ │                   render 1  test.public.pairs.b
+ │                   render 2  test.public.square.n
+ │                   render 3  test.public.square.sq
  └── filter          ·         ·
-      │              filter    ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+      │              filter    ((test.public.square.n IS NULL) OR (test.public.square.n > 1)) AND ((test.public.square.n IS NULL) OR (test.public.pairs.a < test.public.square.sq))
       └── join       ·         ·
            │         type      left outer
            │         equality  (b) = (sq)
@@ -1115,18 +1150,20 @@ NULL  NULL  5  25
 NULL  NULL  6  36
 
 query TTT
-EXPLAIN(EXPRS)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
+]
 ----
 render               ·         ·
- │                   render 0  a
- │                   render 1  b
- │                   render 2  n
- │                   render 3  sq
+ │                   render 0  test.public.pairs.a
+ │                   render 1  test.public.pairs.b
+ │                   render 2  test.public.square.n
+ │                   render 3  test.public.square.sq
  └── filter          ·         ·
-      │              filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      │              filter    ((test.public.pairs.a IS NULL) OR (test.public.pairs.a > 2)) AND ((test.public.pairs.a IS NULL) OR (test.public.pairs.a < test.public.square.sq))
       └── join       ·         ·
            │         type      right outer
            │         equality  (b) = (sq)
@@ -1141,16 +1178,18 @@ render               ·         ·
 
 # The simpler plan for an inner join, to compare.
 query TTT
-EXPLAIN(EXPRS)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs JOIN square ON b = sq AND a > 1 AND n < 6)
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  n
- │              render 3  sq
+ │              render 0  test.public.pairs.a
+ │              render 1  test.public.pairs.b
+ │              render 2  test.public.square.n
+ │              render 3  test.public.square.sq
  └── join       ·         ·
       │         type      inner
       │         equality  (b) = (sq)
@@ -2065,13 +2104,15 @@ INSERT INTO bar VALUES
 
 # Only a and c can be equality columns.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo NATURAL JOIN bar
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a, c) = (a, c)
@@ -2092,26 +2133,28 @@ SELECT * FROM foo NATURAL JOIN bar
 
 # b can't be an equality column.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (b)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
+]
 ----
 render               ·         ·
- │                   render 0  b
- │                   render 1  a
- │                   render 2  c
- │                   render 3  d
- │                   render 4  a
- │                   render 5  c
- │                   render 6  d
+ │                   render 0  test.public.foo.b
+ │                   render 1  test.public.foo.a
+ │                   render 2  test.public.foo.c
+ │                   render 3  test.public.foo.d
+ │                   render 4  test.public.bar.a
+ │                   render 5  test.public.bar.c
+ │                   render 6  test.public.bar.d
  └── render          ·         ·
-      │              render 0  b
-      │              render 1  a
-      │              render 2  c
-      │              render 3  d
+      │              render 0  test.public.foo.b
+      │              render 1  test.public.foo.a
+      │              render 2  test.public.foo.c
+      │              render 3  test.public.foo.d
       │              render 4  NULL
-      │              render 5  a
+      │              render 5  test.public.bar.a
       │              render 6  NULL
-      │              render 7  c
-      │              render 8  d
+      │              render 7  test.public.bar.c
+      │              render 8  test.public.bar.d
       │              render 9  NULL
       └── join       ·         ·
            │         type      inner
@@ -2132,15 +2175,17 @@ SELECT * FROM foo JOIN bar USING (b)
 
 # Only a can be an equality column.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a, b)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  c
- │              render 5  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.c
+ │              render 5  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a) = (a)
@@ -2161,14 +2206,16 @@ SELECT * FROM foo JOIN bar USING (a, b)
 
 # Only a and c can be equality columns.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a, b, c)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a, c) = (a, c)
@@ -2189,17 +2236,19 @@ SELECT * FROM foo JOIN bar USING (a, b, c)
 
 # b can't be an equality column.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar ON foo.b = bar.b
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  a
- │              render 5  b
- │              render 6  c
- │              render 7  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.a
+ │              render 5  test.public.bar.b
+ │              render 6  test.public.bar.c
+ │              render 7  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         pred      test.public.foo.b = test.public.bar.b
@@ -2219,17 +2268,19 @@ SELECT * FROM foo JOIN bar ON foo.b = bar.b
 
 # Only a can be an equality column.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  a
- │              render 5  b
- │              render 6  c
- │              render 7  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.a
+ │              render 5  test.public.bar.b
+ │              render 6  test.public.bar.c
+ │              render 7  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a) = (a)
@@ -2249,17 +2300,19 @@ SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 3  3  3  3  3  3  3  3
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo, bar WHERE foo.b = bar.b
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  a
- │              render 5  b
- │              render 6  c
- │              render 7  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.a
+ │              render 5  test.public.bar.b
+ │              render 6  test.public.bar.c
+ │              render 7  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         pred      test.public.foo.b = test.public.bar.b
@@ -2279,17 +2332,19 @@ SELECT * FROM foo, bar WHERE foo.b = bar.b
 
 # Only a can be an equality column.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  a
- │              render 5  b
- │              render 6  c
- │              render 7  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.a
+ │              render 5  test.public.bar.b
+ │              render 6  test.public.bar.c
+ │              render 7  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a) = (a)
@@ -2310,15 +2365,17 @@ SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 
 # Only a and c can be equality columns.
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
+]
 ----
 render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  c
- │              render 3  d
- │              render 4  c
- │              render 5  d
+ │              render 0  test.public.foo.a
+ │              render 1  test.public.foo.b
+ │              render 2  test.public.foo.c
+ │              render 3  test.public.foo.d
+ │              render 4  test.public.bar.c
+ │              render 5  test.public.bar.d
  └── join       ·         ·
       │         type      inner
       │         equality  (a, c) = (a, c)

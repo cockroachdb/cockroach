@@ -30,7 +30,9 @@ INSERT INTO t VALUES
   (9, 3, 3, '33')
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE b = 2 AND c % 2 = 0
+]
 ----
 index-join  ·       ·
  ├── scan   ·       ·
@@ -55,7 +57,9 @@ fetched: /t/primary/5/s -> '22'
 output row: [5 2 2 '22']
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM t WHERE b = 2 AND c != b
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE b = 2 AND c != b
+]
 ----
 index-join  ·       ·
  ├── scan   ·       ·
