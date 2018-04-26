@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
@@ -42,7 +41,8 @@ func (p *planner) showStateMachineSetting(
 	// immediately while at the same time guaranteeing that a node reporting a certain version has
 	// also processed the corresponding Gossip update (which is important as only then does the node
 	// update its persisted state; see #22796).
-	if err := retry.ForDuration(10*time.Second, func() error {
+	const maxAttempts = 10
+	if err := retry.WithMaxAttempts(ctx, retry.Options{}, maxAttempts, func() error {
 		datums, err := p.queryRow(ctx, "SELECT value FROM system.settings WHERE name = $1", name)
 		if err != nil {
 			return err
