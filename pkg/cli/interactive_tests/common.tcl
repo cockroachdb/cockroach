@@ -104,6 +104,12 @@ proc stop_server {argv} {
               sleep 1
             done
             echo 'server still running?'
+            # Send an unclean shutdown signal to trigger a stack trace dump.
+            kill -ABRT `cat server_pid`
+            # Sleep to increase the probability that the stack trace actually
+            # makes it to disk before we force-kill the process.
+            sleep 1
+            kill -KILL `cat server_pid`
             exit 1"
 
     report "END STOP SERVER"
