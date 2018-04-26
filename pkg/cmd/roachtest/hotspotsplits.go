@@ -23,11 +23,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerHotSpotSplits(r *registry) {
@@ -107,12 +108,13 @@ func registerHotSpotSplits(r *registry) {
 	concurrency := 100
 
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Nodes: nodes(4),
+		SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25036",
+		Name:           fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Nodes:          nodes(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
-				fmt.Printf("running with duration=%s in local mode\n", minutes)
 				concurrency = 50
+				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
 			runHotSpot(ctx, t, c, numNodes, minutes, concurrency)
 		},
