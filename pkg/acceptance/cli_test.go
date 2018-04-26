@@ -57,7 +57,6 @@ func TestDockerCLI(t *testing.T) {
 		t.Fatalf("no testfiles found (%v)", testGlob)
 	}
 
-	verbose := testing.Verbose() || log.V(1)
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
@@ -77,7 +76,7 @@ func TestDockerCLI(t *testing.T) {
 			// remain forever in the zombie state. Unfortunately, Expect
 			// does not contain code to do this. Bash does.
 			cmd := "(expect"
-			if verbose {
+			if log.V(2) {
 				cmd = cmd + " -d"
 			}
 			cmd = cmd + " -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"
