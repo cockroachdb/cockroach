@@ -43,6 +43,18 @@ func NewSequenceState() *SequenceState {
 	return &ss
 }
 
+// copy performs a deep copy of SequenceState.
+func (ss *SequenceState) copy() *SequenceState {
+	cp := NewSequenceState()
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	for k, v := range ss.mu.latestValues {
+		cp.mu.latestValues[k] = v
+	}
+	cp.mu.lastSequenceIncremented = ss.mu.lastSequenceIncremented
+	return ss
+}
+
 // NextVal ever called returns true if a sequence has ever been incremented on
 // this session.
 func (ss *SequenceState) nextValEverCalledLocked() bool {

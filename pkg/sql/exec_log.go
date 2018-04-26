@@ -119,7 +119,7 @@ func (p *planner) maybeLogStatementInternal(
 
 	// label passed as argument.
 
-	appName := s.ApplicationName()
+	appName := p.EvalContext().SessionData.ApplicationName
 
 	logTrigger := "{}"
 	if auditEventsDetected {

@@ -21,12 +21,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
 // A SQL Session changes fields in SessionData through sql.sessionDataMutator.
 type SessionData struct {
+	// ApplicationName is the name of the application running the
+	// current session. This can be used for logging and per-application
+	// statistics.
+	ApplicationName string
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
@@ -60,39 +63,24 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
-	// SequenceState gives access to the SQL sequences that have been manipulated
-	// by the session.
-	SequenceState *SequenceState
-	RemoteAddr    net.Addr
+	RemoteAddr  net.Addr
 	// ZigzagJoinEnabled indicates whether the planner should try and plan a
 	// zigzag join. Will emit a warning if a zigzag join can't be planned.
 	ZigzagJoinEnabled bool
 
-	mu struct {
-		syncutil.Mutex
-
-		// applicationName is the name of the application running the
-		// current session. This can be used for logging and per-application
-		// statistics.
-		//
-		// applicationName is protected by a mutex because session serialization
-		// needs to access it concurrently with the session.
-		applicationName string
-	}
+	// SequenceState gives access to the SQL sequences that have been manipulated
+	// by the session.
+	SequenceState *SequenceState
 }
 
-// ApplicationName returns the identifier that the client used.
-func (s *SessionData) ApplicationName() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.applicationName
-}
+// Copy() is not used yet.
+var _ = (*SessionData).Copy
 
-// SetApplicationName sets the current application name.
-func (s *SessionData) SetApplicationName(name string) {
-	s.mu.Lock()
-	s.mu.applicationName = name
-	s.mu.Unlock()
+// Copy performs a deep copy of SessionData.
+func (s *SessionData) Copy() SessionData {
+	cp := *s
+	cp.SequenceState = s.SequenceState.copy()
+	return cp
 }
 
 // DistSQLExecMode controls if and when the Executor uses DistSQL.

@@ -25,7 +25,7 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.SessionData.Database,
 		User:               evalCtx.SessionData.User,
-		ApplicationName:    evalCtx.SessionData.ApplicationName(),
+		ApplicationName:    evalCtx.SessionData.ApplicationName,
 	}
 
 	// Populate the search path.
