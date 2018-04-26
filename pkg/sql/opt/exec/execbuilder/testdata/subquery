@@ -8,9 +8,11 @@ SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 project
  ├── columns: column4:4(bool)
+ ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1101.00
  ├── values
+ │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── cost: 1.00
  │    └── tuple [type=tuple{}]

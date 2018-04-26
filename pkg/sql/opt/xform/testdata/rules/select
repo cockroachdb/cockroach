@@ -267,6 +267,7 @@ SELECT k FROM (SELECT k FROM a ORDER BY u LIMIT 1) a WHERE k = 1
 ----
 select
  ├── columns: k:1(int!null)
+ ├── cardinality: [0 - 1]
  ├── keys: (1)
  ├── scan a@u
  │    ├── columns: a.k:1(int!null) a.u:2(int)

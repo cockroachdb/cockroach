@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// physicalPropsFactory determines what physical properties a given expression
+// physicalPropsBuilder determines what physical properties a given expression
 // provides and constructs the physical properties required of its children
 // based on those properties. The optimizer calls the canProvide methods to
 // determine whether an expression provides a required physical property. If it
@@ -28,26 +28,24 @@ import (
 // provide a required physical property, but do "pass through" the requirement
 // to their input. Operators that do this should return true from the
 // appropriate canProvide method and then pass through that property in the
-// constructChildProps method.
-// NOTE: The factory is defined as an empty struct with methods rather than as
-//       functions in order to keep the methods grouped and self-contained.
-type physicalPropsFactory struct {
+// buildChildProps method.
+type physicalPropsBuilder struct {
 	mem *memo.Memo
 }
 
 // canProvide returns true if the given expression can provide the required
 // physical properties.
-func (f physicalPropsFactory) canProvide(eid memo.ExprID, required memo.PhysicalPropsID) bool {
-	requiredProps := f.mem.LookupPhysicalProps(required)
+func (b physicalPropsBuilder) canProvide(eid memo.ExprID, required memo.PhysicalPropsID) bool {
+	requiredProps := b.mem.LookupPhysicalProps(required)
 
 	if requiredProps.Presentation.Defined() {
-		if !f.canProvidePresentation(eid, requiredProps.Presentation) {
+		if !b.canProvidePresentation(eid, requiredProps.Presentation) {
 			return false
 		}
 	}
 
 	if requiredProps.Ordering.Defined() {
-		if !f.canProvideOrdering(eid, requiredProps.Ordering) {
+		if !b.canProvideOrdering(eid, requiredProps.Ordering) {
 			return false
 		}
 	}
@@ -58,10 +56,10 @@ func (f physicalPropsFactory) canProvide(eid memo.ExprID, required memo.Physical
 // canProvidePresentation returns true if the given expression can provide the
 // required presentation property. Currently, all relational operators are
 // capable of doing this.
-func (f physicalPropsFactory) canProvidePresentation(
+func (b physicalPropsBuilder) canProvidePresentation(
 	eid memo.ExprID, required memo.Presentation,
 ) bool {
-	mexpr := f.mem.Expr(eid)
+	mexpr := b.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("presentation property doesn't apply to non-relational operators")
 	}
@@ -72,8 +70,8 @@ func (f physicalPropsFactory) canProvidePresentation(
 
 // canProvideOrdering returns true if the given expression can provide the
 // required ordering property.
-func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
-	mexpr := f.mem.Expr(eid)
+func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
+	mexpr := b.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("ordering property doesn't apply to non-relational operators")
 	}
@@ -86,25 +84,25 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 	case opt.ProjectOp:
 		// Project operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
-		return f.orderingBoundBy(required, mexpr.AsProject().Input())
+		return b.orderingBoundBy(required, mexpr.AsProject().Input())
 
 	case opt.LookupJoinOp:
 		// Index Join operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
-		return f.orderingBoundBy(required, mexpr.AsLookupJoin().Input())
+		return b.orderingBoundBy(required, mexpr.AsLookupJoin().Input())
 
 	case opt.ScanOp:
 		// Scan naturally orders according to the order of the scanned index.
-		def := mexpr.Private(f.mem).(*memo.ScanOpDef)
-		return def.CanProvideOrdering(f.mem.Metadata(), required)
+		def := mexpr.Private(b.mem).(*memo.ScanOpDef)
+		return def.CanProvideOrdering(b.mem.Metadata(), required)
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
-		return f.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering).Provides(required)
 
 	case opt.OffsetOp:
 		// Offset can provide the same ordering it requires of its input.
-		return f.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering).Provides(required)
 	}
 
 	return false
@@ -112,8 +110,8 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 
 // orderingBoundBy returns whether or not input provides all columns present in
 // ordering.
-func (f physicalPropsFactory) orderingBoundBy(ordering memo.Ordering, input memo.GroupID) bool {
-	inputCols := f.mem.GroupProperties(input).Relational.OutputCols
+func (b physicalPropsBuilder) orderingBoundBy(ordering memo.Ordering, input memo.GroupID) bool {
+	inputCols := b.mem.GroupProperties(input).Relational.OutputCols
 	for _, colOrder := range ordering {
 		if colOrder < 0 {
 			// Descending order, so recover original index.
@@ -126,15 +124,14 @@ func (f physicalPropsFactory) orderingBoundBy(ordering memo.Ordering, input memo
 	return true
 }
 
-// constructChildProps returns the set of physical properties required of the
-// nth child, based upon the properties required of the parent. For example,
-// the Project operator passes through any ordering requirement to its child,
-// but provides any presentation requirement. This method is heavily called
-// during ExprView traversal, so performance is important.
-func (f physicalPropsFactory) constructChildProps(
+// buildChildProps returns the set of physical properties required of the nth
+// child, based upon the properties required of the parent. For example, the
+// Project operator passes through any ordering requirement to its child, but
+// provides any presentation requirement.
+func (b physicalPropsBuilder) buildChildProps(
 	parent memo.ExprID, required memo.PhysicalPropsID, nth int,
 ) memo.PhysicalPropsID {
-	mexpr := f.mem.Expr(parent)
+	mexpr := b.mem.Expr(parent)
 
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
@@ -146,7 +143,7 @@ func (f physicalPropsFactory) constructChildProps(
 		}
 	}
 
-	parentProps := f.mem.LookupPhysicalProps(required)
+	parentProps := b.mem.LookupPhysicalProps(required)
 
 	var childProps memo.PhysicalProps
 
@@ -170,7 +167,7 @@ func (f physicalPropsFactory) constructChildProps(
 			} else {
 				ordering = mexpr.AsOffset().Ordering()
 			}
-			childProps.Ordering = f.mem.LookupPrivate(ordering).(memo.Ordering)
+			childProps.Ordering = b.mem.LookupPrivate(ordering).(memo.Ordering)
 		}
 	}
 
@@ -179,5 +176,5 @@ func (f physicalPropsFactory) constructChildProps(
 		return required
 	}
 
-	return f.mem.InternPhysicalProps(&childProps)
+	return b.mem.InternPhysicalProps(&childProps)
 }

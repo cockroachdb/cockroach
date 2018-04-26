@@ -784,9 +784,11 @@ SELECT * FROM (SELECT COUNT(*) c FROM a) a WHERE now()<'2000-01-01T10:00:00' AND
 ----
 select
  ├── columns: c:6(int)
+ ├── cardinality: [0 - 1]
  ├── keys: ()
  ├── group-by
  │    ├── columns: c:6(int)
+ │    ├── cardinality: [1 - 1]
  │    ├── keys: ()
  │    ├── scan a
  │    └── aggregations
