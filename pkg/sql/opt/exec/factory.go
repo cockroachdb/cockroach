@@ -107,6 +107,12 @@ type Factory interface {
 	// ConstructPlan creates a plan enclosing the given plan and (optionally)
 	// subqueries.
 	ConstructPlan(root Node, subqueries []Subquery) (Plan, error)
+
+	// ConstructExplain returns a node that implements EXPLAIN, showing
+	// information about the given plan.
+	//
+	// TODO(radu): add flags, for now we assume VERBOSE.
+	ConstructExplain(plan Plan) (Node, error)
 }
 
 // Subquery encapsulates information about a subquery that is part of a plan.
