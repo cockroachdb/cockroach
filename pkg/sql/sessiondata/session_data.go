@@ -27,6 +27,43 @@ import (
 // SessionData contains session parameters. They are all user-configurable.
 // A SQL Session changes fields in SessionData through sql.sessionDataMutator.
 type SessionData struct {
+	DataFields
+
+	// SequenceState gives access to the SQL sequences that have been manipulated
+	// by the session.
+	SequenceState *SequenceState
+
+	mu struct {
+		syncutil.Mutex
+
+		// applicationName is the name of the application running the
+		// current session. This can be used for logging and per-application
+		// statistics.
+		//
+		// applicationName is protected by a mutex because session serialization
+		// needs to access it concurrently with the session.
+		applicationName string
+	}
+}
+
+// Copy() is not used yet.
+var _ = (*SessionData).Copy
+
+// Copy performs a deep copy of SessionData.
+func (s *SessionData) Copy() *SessionData {
+	cp := SessionData{
+		DataFields:    s.DataFields,
+		SequenceState: s.SequenceState.copy(),
+	}
+	cp.mu.applicationName = s.ApplicationName()
+	return &cp
+}
+
+// DataFields groups all the copy-able fields of SessionData. This facilitates
+// the implementation of SessionData.Copy().
+// The type is exported so that other packages can use initializers for
+// SessionData.
+type DataFields struct {
 	// Database indicates the "current" database for the purpose of
 	// resolving names. See searchAndQualifyDatabase() for details.
 	Database string
@@ -60,25 +97,10 @@ type SessionData struct {
 	// SafeUpdates causes errors when the client
 	// sends syntax that may have unwanted side effects.
 	SafeUpdates bool
-	// SequenceState gives access to the SQL sequences that have been manipulated
-	// by the session.
-	SequenceState *SequenceState
-	RemoteAddr    net.Addr
+	RemoteAddr  net.Addr
 	// ZigzagJoinEnabled indicates whether the planner should try and plan a
 	// zigzag join. Will emit a warning if a zigzag join can't be planned.
 	ZigzagJoinEnabled bool
-
-	mu struct {
-		syncutil.Mutex
-
-		// applicationName is the name of the application running the
-		// current session. This can be used for logging and per-application
-		// statistics.
-		//
-		// applicationName is protected by a mutex because session serialization
-		// needs to access it concurrently with the session.
-		applicationName string
-	}
 }
 
 // ApplicationName returns the identifier that the client used.

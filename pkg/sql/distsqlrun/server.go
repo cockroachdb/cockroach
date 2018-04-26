@@ -319,10 +319,13 @@ func (ds *ServerImpl) setupFlow(
 	evalCtx := tree.EvalContext{
 		Settings: ds.ServerConfig.Settings,
 		SessionData: &sessiondata.SessionData{
-			Location:   location,
-			Database:   req.EvalContext.Database,
-			User:       req.EvalContext.User,
-			SearchPath: sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+			DataFields: sessiondata.DataFields{
+				Location:   location,
+				Database:   req.EvalContext.Database,
+				User:       req.EvalContext.User,
+				SearchPath: sessiondata.MakeSearchPath(req.EvalContext.SearchPath),
+			},
+			SequenceState: sessiondata.NewSequenceState(),
 		},
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
@@ -339,7 +342,6 @@ func (ds *ServerImpl) setupFlow(
 	evalCtx.SessionData.SetApplicationName(req.EvalContext.ApplicationName)
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-	evalCtx.SessionData.SequenceState = sessiondata.NewSequenceState()
 	var haveSequences bool
 	for _, seq := range req.EvalContext.SeqState.Seqs {
 		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)

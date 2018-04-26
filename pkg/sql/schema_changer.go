@@ -1236,17 +1236,19 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 	evalCtx := extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			SessionData: &sessiondata.SessionData{
-				SearchPath: sqlbase.DefaultSearchPath,
-				Location:   dummyLocation,
-				// The database is not supposed to be needed in schema changes, as there
-				// shouldn't be unqualified identifiers in backfills, and the pure functions
-				// that need it should have already been evaluated.
-				//
-				// TODO(andrei): find a way to assert that this field is indeed not used.
-				// And in fact it is used by `current_schemas()`, which, although is a pure
-				// function, takes arguments which might be impure (so it can't always be
-				// pre-evaluated).
-				Database:      "",
+				DataFields: sessiondata.DataFields{
+					SearchPath: sqlbase.DefaultSearchPath,
+					Location:   dummyLocation,
+					// The database is not supposed to be needed in schema changes, as there
+					// shouldn't be unqualified identifiers in backfills, and the pure functions
+					// that need it should have already been evaluated.
+					//
+					// TODO(andrei): find a way to assert that this field is indeed not used.
+					// And in fact it is used by `current_schemas()`, which, although is a pure
+					// function, takes arguments which might be impure (so it can't always be
+					// pre-evaluated).
+					Database: "",
+				},
 				SequenceState: sessiondata.NewSequenceState(),
 			},
 		},
