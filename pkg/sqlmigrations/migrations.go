@@ -169,6 +169,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "repeat: ensure admin role privileges in all descriptors",
 		workFn: ensureMaxPrivileges,
 	},
+	{
+		// Introduced in v2.1.
+		// TODO(mberhault): bake into v2.2.
+		name:   "disallow public user or role name",
+		workFn: disallowPublicUserOrRole,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -714,6 +720,56 @@ func upgradeDescsWithFn(
 		}); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func disallowPublicUserOrRole(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Check whether a user or role named "public" exists.
+	const selectPublicStmt = `
+          SELECT username, "isRole" from system.users WHERE username = $1
+          `
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.PublicRole))
+
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, selectPublicStmt, &pl, 1)
+		if err != nil {
+			continue
+		}
+		defer res.Close(ctx)
+
+		if len(res.ResultList) == 0 || res.ResultList[0].Rows.Len() == 0 {
+			// No such user.
+			return nil
+		}
+
+		if res.ResultList[0].Rows.Len() != 1 {
+			log.Fatalf(context.Background(), "more than one system.users entry for username=%s: %v",
+				sqlbase.PublicRole, res.ResultList)
+		}
+
+		firstRow := res.ResultList[0].Rows.At(0)
+
+		isRole, ok := tree.AsDBool(firstRow[1])
+		if !ok {
+			log.Fatalf(context.Background(), "expected 'isRole' column of system.users to be of type bool, got %v",
+				firstRow)
+		}
+
+		if isRole {
+			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
+				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
+				sqlbase.PublicRole, sqlbase.PublicRole)
+		}
+		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
+			`(DROP USER %s) using a previous version of CockroachDB and try again`,
+			sqlbase.PublicRole, sqlbase.PublicRole)
 	}
 	return nil
 }

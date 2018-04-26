@@ -89,6 +89,11 @@ func (p *planner) CheckPrivilege(
 		return nil
 	}
 
+	// Check if the 'public' pseudo-role has privileges.
+	if privs.CheckPrivilege(sqlbase.PublicRole, privilege) {
+		return nil
+	}
+
 	// Expand role memberships.
 	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
@@ -108,15 +113,16 @@ func (p *planner) CheckPrivilege(
 
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
-	if isVirtualDescriptor(descriptor) {
-		return nil
-	}
-
 	user := p.SessionData().User
 	privs := descriptor.GetPrivileges()
 
 	// Check if 'user' itself has privileges.
 	if privs.AnyPrivilege(user) {
+		return nil
+	}
+
+	// Check if 'public' has privileges.
+	if privs.AnyPrivilege(sqlbase.PublicRole) {
 		return nil
 	}
 

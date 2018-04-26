@@ -64,6 +64,11 @@ func (p *planner) changePrivileges(
 	if err != nil {
 		return nil, err
 	}
+
+	// We're allowed to grant/revoke privileges to/from the "public" role even though
+	// it does not exist: add it to the list of all users and roles.
+	users[sqlbase.PublicRole] = true // isRole
+
 	for _, grantee := range grantees {
 		if _, ok := users[string(grantee)]; !ok {
 			return nil, errors.Errorf("user or role %s does not exist", &grantee)
