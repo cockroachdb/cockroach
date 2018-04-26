@@ -42,7 +42,8 @@ var (
 )
 
 type testSpec struct {
-	Name string
+	SkippedBecause string // if nonzero, test will be skipped
+	Name           string
 	// TODO(peter): Help string
 	Nodes []nodeSpec
 	Run   func(ctx context.Context, t *test, c *cluster)
@@ -453,10 +454,16 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 						)
 					}
 					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
-				} else {
+				} else if t.spec.SkippedBecause == "" {
 					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
+				} else {
+					if teamCity {
+						fmt.Fprintf(out, "##teamcity[testIgnored name='%s' message='%s']\n",
+							t.Name(), t.spec.SkippedBecause)
+					}
+					fmt.Fprintf(out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.SkippedBecause)
 				}
 
 				if teamCity {
@@ -473,6 +480,11 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 		}()
 
 		t.start = timeutil.Now()
+
+		if t.spec.SkippedBecause != "" {
+			return
+		}
+
 		if !dryrun {
 			ctx := context.Background()
 			c := newCluster(ctx, t, t.spec.Nodes)
