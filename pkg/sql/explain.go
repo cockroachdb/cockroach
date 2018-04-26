@@ -75,13 +75,6 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 
 			case "symvars":
 				flags.symbolicVars = true
-
-			case "metadata":
-				flags.showMetadata = true
-
-			case "qualify":
-				flags.qualifyNames = true
-
 			case "verbose":
 				// VERBOSE implies EXPRS.
 				flags.showExprs = true
@@ -89,9 +82,6 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 				flags.qualifyNames = true
 				// VERBOSE implies METADATA.
 				flags.showMetadata = true
-
-			case "exprs":
-				flags.showExprs = true
 
 			case "noexpand":
 				expanded = false

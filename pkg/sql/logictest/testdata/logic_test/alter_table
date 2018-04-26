@@ -655,16 +655,19 @@ CREATE TABLE s (k1 INT, k2 INT, v INT, PRIMARY KEY (k1,k2))
 
 # Verify limits and orderings are propagated correctly to the select.
 query TITTTTT colnames
-EXPLAIN (METADATA) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
+EXPLAIN (VERBOSE) ALTER TABLE s SPLIT AT SELECT k1,k2 FROM s ORDER BY k1 LIMIT 3
 ----
-Tree                 Level  Type    Field  Description  Columns               Ordering
-split                0      split   ·      ·            (key, pretty)         ·
- └── limit           1      limit   ·      ·            (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-      └── render     2      render  ·      ·            (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
-           └── scan  3      scan    ·      ·            (k1, k2, v[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
-·                    3      ·       table  s@primary    ·                     ·
-·                    3      ·       spans  ALL          ·                     ·
-·                    3      ·       limit  3            ·                     ·
+Tree                 Level  Type    Field     Description       Columns               Ordering
+split                0      split   ·         ·                 (key, pretty)         ·
+ └── limit           1      limit   ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
+      │              1      ·       count     3                 ·                     ·
+      └── render     2      render  ·         ·                 (k1, k2)              k1!=NULL; k2!=NULL; key(k1,k2); +k1
+           │         2      ·       render 0  test.public.s.k1  ·                     ·
+           │         2      ·       render 1  test.public.s.k2  ·                     ·
+           └── scan  3      scan    ·         ·                 (k1, k2, v[omitted])  k1!=NULL; k2!=NULL; key(k1,k2); +k1
+·                    3      ·       table     s@primary         ·                     ·
+·                    3      ·       spans     ALL               ·                     ·
+·                    3      ·       limit     3                 ·                     ·
 
 # Verify that impure defaults are evaluated separately on each row
 # (#14352)
