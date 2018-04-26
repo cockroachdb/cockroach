@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -256,9 +257,9 @@ func TestSemiAntiJoin(t *testing.T) {
 					return err
 				}
 
+				execCfg := s.ExecutorConfig().(ExecutorConfig)
 				p, cleanup := newInternalPlanner(
-					"", txn, "root", &MemoryMetrics{},
-					s.InternalExecutor().(*InternalExecutor).ExecCfg,
+					"TestSemiAntiJoin", txn, security.RootUser, &MemoryMetrics{}, &execCfg,
 				)
 				defer cleanup()
 				leftSrc := planDataSource{
