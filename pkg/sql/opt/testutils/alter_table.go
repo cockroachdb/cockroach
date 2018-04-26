@@ -17,7 +17,6 @@ package testutils
 import (
 	gojson "encoding/json"
 	"fmt"
-
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

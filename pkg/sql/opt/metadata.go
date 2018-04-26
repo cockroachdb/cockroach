@@ -15,10 +15,9 @@
 package opt
 
 import (
-	"fmt"
-
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -241,14 +240,20 @@ func (md *Metadata) TableStatistics(tabID TableID) *Statistics {
 					key := ColumnID(col)
 
 					if _, ok := mdTab.statistics.ColStats[key]; !ok {
-						mdTab.statistics.ColStats[key] = &ColumnStatistic{Cols: cols, DistinctCount: stat.DistinctCount()}
+						mdTab.statistics.ColStats[key] = &ColumnStatistic{
+							Cols:          cols,
+							DistinctCount: stat.DistinctCount(),
+						}
 					}
 				} else {
 					// Get a unique key for this column set.
 					key := writeColSet(cols)
 
 					if _, ok := mdTab.statistics.MultiColStats[key]; !ok {
-						mdTab.statistics.MultiColStats[key] = &ColumnStatistic{Cols: cols, DistinctCount: stat.DistinctCount()}
+						mdTab.statistics.MultiColStats[key] = &ColumnStatistic{
+							Cols:          cols,
+							DistinctCount: stat.DistinctCount(),
+						}
 					}
 				}
 			}

@@ -57,6 +57,12 @@ ALTER TABLE a INJECT STATISTICS '[
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 3000,
     "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 3000,
+    "distinct_count": 2
   }
 ]'
 ----
@@ -105,3 +111,17 @@ group-by
  │    └── keys: (1)
  └── aggregations
       └── function: count_rows [type=int]
+
+# Test calculation of multi-column stats.
+opt
+SELECT y, s FROM a GROUP BY y, s
+----
+group-by
+ ├── columns: y:2(int) s:3(string)
+ ├── grouping columns: a.y:2(int) a.s:3(string)
+ ├── stats: [rows=1000, distinct(2,3)=1000]
+ ├── keys: weak(2,3)
+ ├── scan a
+ │    ├── columns: a.y:2(int) a.s:3(string)
+ │    └── stats: [rows=3000, distinct(2,3)=1000]
+ └── aggregations
