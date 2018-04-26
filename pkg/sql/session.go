@@ -401,11 +401,13 @@ func NewSession(
 
 	s := &Session{
 		data: sessiondata.SessionData{
-			Database:      args.Database,
-			DistSQLMode:   distSQLMode,
-			SearchPath:    sqlbase.DefaultSearchPath,
-			Location:      time.UTC,
-			User:          args.User,
+			DataFields: sessiondata.DataFields{
+				Database:    args.Database,
+				DistSQLMode: distSQLMode,
+				SearchPath:  sqlbase.DefaultSearchPath,
+				Location:    time.UTC,
+				User:        args.User,
+			},
 			SequenceState: sessiondata.NewSequenceState(),
 		},
 		execCfg:          &e.cfg,

@@ -205,10 +205,12 @@ func newInternalPlanner(
 
 	s := &Session{
 		data: sessiondata.SessionData{
-			SearchPath:    sqlbase.DefaultSearchPath,
-			Location:      time.UTC,
-			User:          user,
-			Database:      "system",
+			DataFields: sessiondata.DataFields{
+				SearchPath: sqlbase.DefaultSearchPath,
+				Location:   time.UTC,
+				User:       user,
+				Database:   "system",
+			},
 			SequenceState: sessiondata.NewSequenceState(),
 		},
 		TxnState: txnState{Ctx: ctx, implicitTxn: true},

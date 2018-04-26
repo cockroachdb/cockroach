@@ -419,14 +419,16 @@ func (s *Server) ServeConn(
 		clientComm: clientComm,
 		mon:        &sessionRootMon,
 		sessionMon: &sessionMon,
-		sessionData: sessiondata.SessionData{
-			Database:      args.Database,
-			DistSQLMode:   distSQLMode,
-			SearchPath:    sqlbase.DefaultSearchPath,
-			Location:      time.UTC,
-			User:          args.User,
+		sessionData: &sessiondata.SessionData{
+			DataFields: sessiondata.DataFields{
+				Database:    args.Database,
+				DistSQLMode: distSQLMode,
+				SearchPath:  sqlbase.DefaultSearchPath,
+				Location:    time.UTC,
+				User:        args.User,
+				RemoteAddr:  args.RemoteAddr,
+			},
 			SequenceState: sessiondata.NewSequenceState(),
-			RemoteAddr:    args.RemoteAddr,
 		},
 		prepStmtsNamespace: prepStmtNamespace{
 			prepStmts: make(map[string]prepStmtEntry),
@@ -463,7 +465,7 @@ func (s *Server) ServeConn(
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.dataMutator = sessionDataMutator{
-		data: &ex.sessionData,
+		data: ex.sessionData,
 		defaults: sessionDefaults{
 			applicationName: args.ApplicationName,
 			database:        args.Database,
@@ -709,7 +711,7 @@ type connExecutor struct {
 	}
 
 	// sessionData contains the user-configurable connection variables.
-	sessionData sessiondata.SessionData
+	sessionData *sessiondata.SessionData
 	dataMutator sessionDataMutator
 	// appStats tracks per-application SQL usage statistics. It is maintained to
 	// represent statistrics for the application currently identified by
@@ -1584,7 +1586,7 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContex
 			StmtTimestamp: stmtTS,
 
 			Txn:             txn,
-			SessionData:     &ex.sessionData,
+			SessionData:     ex.sessionData,
 			ApplicationName: ex.dataMutator.ApplicationName(),
 			TxnState:        ex.getTransactionState(),
 			TxnReadOnly:     ex.state.readOnly,
