@@ -6,6 +6,7 @@ import { Store } from "redux";
 import * as protos from "src/js/protos";
 import { versionsSelector } from "src/redux/alerts";
 import { store, history, AdminUIState } from "src/redux/state";
+import { COCKROACHLABS_ADDR } from "src/util/cockroachlabsAPI";
 
 type ClusterResponse = protos.cockroach.server.serverpb.IClusterResponse;
 
@@ -243,7 +244,10 @@ export class AnalyticsSync {
 // Create a global instance of AnalyticsSync which can be used from various
 // packages. If enabled, this instance will push to segment using the following
 // analytics key.
-const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb");
+const analyticsOpts = {
+  host: COCKROACHLABS_ADDR + "/api/segment",
+};
+const analyticsInstance = new Analytics("5Vbp8WMYDmZTfCwE0uiUqEdAcTiZWFDb", analyticsOpts);
 export const analytics = new AnalyticsSync(analyticsInstance, store, defaultRedactions);
 
 // Attach a listener to the history object which will track a 'page' event
