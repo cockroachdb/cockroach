@@ -649,6 +649,15 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 	}
 }
 
+// Install a package in a node
+func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
+	err := execCmd(ctx, c.l,
+		append([]string{"roachprod", "install", c.makeNodes(node), "--"}, args...)...)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 // RunE runs a command on the specified node, returning an error.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
 	return c.RunL(ctx, c.l, node, args...)
