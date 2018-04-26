@@ -709,3 +709,23 @@ REVOKE ALL ON DATABASE db2 FROM newgroup
 
 statement ok
 DROP ROLE newgroup
+
+# Test the "public" pseudo-role.
+
+statement error public is a reserved role name
+CREATE USER public
+
+statement error public is a reserved role name
+CREATE ROLE public
+
+statement error cannot drop special role public
+DROP USER public
+
+statement error cannot drop special role public
+DROP ROLE public
+
+statement error role public does not exist
+GRANT public TO testuser
+
+statement error user or role public does not exist
+GRANT admin TO public
