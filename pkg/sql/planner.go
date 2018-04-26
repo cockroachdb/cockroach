@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -198,55 +199,36 @@ func NewInternalPlanner(
 func newInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (*planner, func()) {
-	// init with an empty session. We can't leave this nil because too much code
-	// looks in the session for the current database.
+	// We need a context that outlives all the uses of the planner (since the
+	// planner captures it in the EvalCtx, and so does the cleanup function that
+	// we're going to return. We just create one here instead of asking the caller
+	// for a ctx with this property. This is really ugly, but the alternative of
+	// asking the caller for one is hard to explain. What we need is better and
+	// separate interfaces for planning and running plans, which could take
+	// suitable contexts.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
 
-	s := &Session{
-		data: sessiondata.SessionData{
-			SearchPath:    sqlbase.DefaultSearchPath,
-			Location:      time.UTC,
-			User:          user,
-			Database:      "system",
-			SequenceState: sessiondata.NewSequenceState(),
-		},
-		TxnState: txnState{Ctx: ctx, implicitTxn: true},
-		context:  ctx,
-		tables: TableCollection{
-			leaseMgr:      execCfg.LeaseManager,
-			databaseCache: newDatabaseCache(config.SystemConfig{}),
-		},
-		execCfg:        execCfg,
-		distSQLPlanner: execCfg.DistSQLPlanner,
+	sd := &sessiondata.SessionData{
+		SearchPath:    sqlbase.DefaultSearchPath,
+		Location:      time.UTC,
+		User:          user,
+		Database:      "system",
+		SequenceState: sessiondata.NewSequenceState(),
 	}
-	s.dataMutator = sessionDataMutator{
-		data: &s.data,
+	tables := &TableCollection{
+		leaseMgr:      execCfg.LeaseManager,
+		databaseCache: newDatabaseCache(config.SystemConfig{}),
+	}
+	txnReadOnly := new(bool)
+	dataMutator := &sessionDataMutator{
+		data: sd,
 		defaults: sessionDefaults{
 			applicationName: "crdb-internal",
 			database:        "system",
 		},
 		settings:       execCfg.Settings,
-		curTxnReadOnly: &s.TxnState.readOnly,
+		curTxnReadOnly: txnReadOnly,
 	}
-	s.mon = mon.MakeUnlimitedMonitor(ctx,
-		"internal-root",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
-
-	s.sessionMon = mon.MakeMonitor("internal-session",
-		mon.MemoryResource,
-		memMetrics.SessionCurBytesCount,
-		memMetrics.SessionMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5, execCfg.Settings)
-	s.sessionMon.Start(ctx, &s.mon, mon.BoundAccount{})
-
-	s.TxnState.mon = mon.MakeMonitor("internal-txn",
-		mon.MemoryResource,
-		memMetrics.TxnCurBytesCount,
-		memMetrics.TxnMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5, execCfg.Settings)
-	s.TxnState.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	var ts time.Time
 	if txn != nil {
@@ -256,22 +238,91 @@ func newInternalPlanner(
 		}
 		ts = origTimestamp.GoTime()
 	}
-	p := s.newPlanner(
-		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
-		nil /* reCache */, s.statsCollector())
+
+	p := &planner{execCfg: execCfg}
+
+	p.txn = txn
+	p.stmt = nil
+	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+
+	p.semaCtx = tree.MakeSemaContext(sd.User == security.RootUser /* privileged */)
+	p.semaCtx.Location = &sd.Location
+	p.semaCtx.SearchPath = sd.SearchPath
+
+	plannerMon := mon.MakeUnlimitedMonitor(ctx,
+		"internal-planner",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+
+	p.extendedEvalCtx = internalExtendedEvalCtx(
+		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, &plannerMon,
+	)
+	p.extendedEvalCtx.Planner = p
+	p.extendedEvalCtx.Sequence = p
+	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
+
+	p.sessionDataMutator = dataMutator
+	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
-	p.extendedEvalCtx.Tables = &s.tables
-	acc := s.mon.MakeBoundAccount()
+	p.extendedEvalCtx.Tables = tables
+
+	acc := plannerMon.MakeBoundAccount()
 	p.extendedEvalCtx.ActiveMemAcc = &acc
 
 	return p, func() {
+		// Note that we capture ctx here. This is only valid as long as we create
+		// the context as explained at the top of the method.
 		acc.Close(ctx)
-		s.TxnState.mon.Stop(ctx)
-		s.sessionMon.Stop(ctx)
-		s.mon.Stop(ctx)
+		plannerMon.Stop(ctx)
+	}
+}
+
+// internalExtendedEvalCtx creates an evaluation context for an "internal
+// planner". Since the eval context is supposed to be tied to a session and
+// there's no session to speak of here, different fields are filled in here to
+// keep the tests using the internal planner passing.
+func internalExtendedEvalCtx(
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	dataMutator *sessionDataMutator,
+	tables *TableCollection,
+	txn *client.Txn,
+	txnTimestamp time.Time,
+	stmtTimestamp time.Time,
+	execCfg *ExecutorConfig,
+	plannerMon *mon.BytesMonitor,
+) extendedEvalContext {
+	var evalContextTestingKnobs tree.EvalContextTestingKnobs
+	var statusServer serverpb.StatusServer
+	evalContextTestingKnobs = execCfg.EvalContextTestingKnobs
+	statusServer = execCfg.StatusServer
+
+	return extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			Txn:           txn,
+			SessionData:   sd,
+			TxnReadOnly:   *dataMutator.curTxnReadOnly,
+			TxnImplicit:   true,
+			Settings:      execCfg.Settings,
+			CtxProvider:   tree.FixedCtxProvider{Context: ctx},
+			Mon:           plannerMon,
+			TestingKnobs:  evalContextTestingKnobs,
+			StmtTimestamp: stmtTimestamp,
+			TxnTimestamp:  txnTimestamp,
+		},
+		SessionMutator:  dataMutator,
+		VirtualSchemas:  execCfg.VirtualSchemas,
+		Tracing:         &dataMutator.sessionTracing,
+		StatusServer:    statusServer,
+		Tables:          tables,
+		ExecCfg:         execCfg,
+		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
+		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
 
