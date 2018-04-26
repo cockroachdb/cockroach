@@ -412,9 +412,11 @@ func evalPrivilegeCheck(
 	for _, p := range privChecks {
 		query := fmt.Sprintf(`
 			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE
-			FROM information_schema.%s WHERE grantee = $1 AND %s`,
+			FROM information_schema.%s WHERE grantee IN ($1, $2) AND %s`,
 			privilege.ALL, p, infoTable, pred)
-		r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, user)
+		// TODO(mberhault): "public" is a constant defined in sql/sqlbase, but importing that
+		// would cause a dependency cycle sqlbase -> sem/transform -> sem/builtins -> sqlbase
+		r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, "public", user)
 		if err != nil {
 			return nil, err
 		}
