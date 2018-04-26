@@ -52,10 +52,6 @@
     component-type "^1.2.1"
     join-component "^1.1.0"
 
-"@types/analytics-node@^0.0.30":
-  version "0.0.30"
-  resolved "https://registry.yarnpkg.com/@types/analytics-node/-/analytics-node-0.0.30.tgz#8d9dfc7f7c2fe2344e825d2acc5061c442067229"
-
 "@types/bytebuffer@^5.0.33":
   version "5.0.34"
   resolved "https://registry.yarnpkg.com/@types/bytebuffer/-/bytebuffer-5.0.34.tgz#43f7140503a593acc700f818fe23343ae911bcdf"
