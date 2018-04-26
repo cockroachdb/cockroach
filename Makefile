@@ -876,7 +876,7 @@ upload-coverage: $(BOOTSTRAP_TARGET)
 acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
 acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
 acceptance: ## Run acceptance tests.
-	@pkg/acceptance/run.sh
+	+@pkg/acceptance/run.sh
 
 .PHONY: dupl
 dupl: $(BOOTSTRAP_TARGET)
