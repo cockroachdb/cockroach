@@ -319,24 +319,17 @@ func runRR(r io.Reader, railroadJar string) ([]byte, error) {
 }
 
 var specs = []stmtSpec{
-	// TODO(mjibson): improve SET filtering
-	// TODO(mjibson): improve SELECT display
 	{
 		name:   "add_column",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'ADD' ('COLUMN')? ?('IF' 'NOT' 'EXISTS')? ?column_name")},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_def", "col_qual_list"},
+		regreplace: map[string]string{
+			` \( \( col_qualification \) \)\* .*`: `( ( col_qualification ) )*`,
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("'ADD' ('COLUMN')? ?('IF' 'NOT' 'EXISTS')? ?column_name")},
 		replace: map[string]string{
-			" | 'ALTER' opt_column column_name alter_column_default" +
-				" | 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'" +
-				" | 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior" +
-				" | 'DROP' opt_column column_name opt_drop_behavior" +
-				" | 'ADD' table_constraint opt_validate_behavior" +
-				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
-				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
-				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior": "",
 			"relation_expr": "table_name",
-			"col_qual_list": "( col_qualification | )"},
+		},
 		unlink: []string{"table_name"},
 	},
 	{
@@ -349,23 +342,13 @@ var specs = []stmtSpec{
 		name:   "alter_column",
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "alter_column_default"},
-		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
+		regreplace: map[string]string{
+			regList: "",
+		},
+		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'ALTER' ")},
 		replace: map[string]string{
-			"( ',' (" +
-				" 'ADD' column_def" +
-				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ADD' 'COLUMN' column_def" +
-				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ALTER' ( 'COLUMN' |  ) column_name ( 'SET' 'DEFAULT' a_expr | 'DROP' 'DEFAULT' )" +
-				" | 'ALTER' ( 'COLUMN' |  ) column_name 'DROP' 'NOT' 'NULL'" +
-				" | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' column_name opt_drop_behavior" +
-				" | 'DROP' ( 'COLUMN' |  ) column_name opt_drop_behavior" +
-				" | 'ADD' table_constraint opt_validate_behavior" +
-				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
-				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
-				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior" +
-				" ) )*": "",
-			"relation_expr": "table_name"},
+			"relation_expr": "table_name",
+		},
 		unlink: []string{"table_name"},
 	},
 	{
@@ -552,47 +535,27 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'DROP' 'COLUMN'")},
+		regreplace: map[string]string{
+			regList: "",
+		},
 		replace: map[string]string{
-			"( ',' (" +
-				" 'ADD' column_def" +
-				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ADD' 'COLUMN' column_def" +
-				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ALTER' ( 'COLUMN' |  ) column_name alter_column_default" +
-				" | 'ALTER' ( 'COLUMN' |  ) column_name 'DROP' 'NOT' 'NULL'" +
-				" | 'DROP' ( 'COLUMN' |  ) 'IF' 'EXISTS' column_name ( 'CASCADE' | 'RESTRICT' |  )" +
-				" | 'DROP' ( 'COLUMN' |  ) column_name ( 'CASCADE' | 'RESTRICT' |  )" +
-				" | 'ADD' table_constraint opt_validate_behavior" +
-				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
-				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name ( 'CASCADE' | 'RESTRICT' |  )" +
-				" | 'DROP' 'CONSTRAINT' constraint_name ( 'CASCADE' | 'RESTRICT' |  )" +
-				" ) )*": "",
-			"'COLUMN'":      "( 'COLUMN' | )",
-			"relation_expr": "table_name"},
-		unlink: []string{"table_name"},
+			"relation_expr": "table_name",
+			"column_name":   "name",
+		},
+		unlink: []string{"table_name", "name"},
 	},
 	{
 		name:   "drop_constraint",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("relation_expr 'DROP' 'CONSTRAINT'")},
+		regreplace: map[string]string{
+			regList: "",
+		},
 		replace: map[string]string{
-			"opt_drop_behavior ( ',' (" +
-				" 'ADD' column_def" +
-				" | 'ADD' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ADD' 'COLUMN' column_def" +
-				" | 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def" +
-				" | 'ALTER' opt_column column_name alter_column_default" +
-				" | 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'" +
-				" | 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior" +
-				" | 'DROP' opt_column column_name opt_drop_behavior" +
-				" | 'ADD' table_constraint opt_validate_behavior" +
-				" | 'VALIDATE' 'CONSTRAINT' constraint_name" +
-				" | 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior" +
-				" | 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior" +
-				" ) )*": "",
-			"'CONSTRAINT'":  "( 'CONSTRAINT' | )",
-			"relation_expr": "table_name"},
+			"relation_expr":   "table_name",
+			"constraint_name": "name",
+		},
 		unlink: []string{"table_name"},
 	},
 	{
@@ -602,11 +565,17 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'DATABASE'")},
 	},
 	{
-		name:    "drop_index",
-		stmt:    "drop_index_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'DROP' 'INDEX'")},
-		inline:  []string{"opt_drop_behavior", "table_name_with_index_list", "table_name_with_index"},
-		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"}, unlink: []string{"table_name", "index_name"},
+		name:   "drop_index",
+		stmt:   "drop_index_stmt",
+		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'INDEX'")},
+		inline: []string{"opt_drop_behavior", "table_name_with_index_list", "table_name_with_index"},
+		regreplace: map[string]string{
+			regList: "",
+		},
+		replace: map[string]string{
+			"qualified_name": "table_name",
+		},
+		unlink: []string{"table_name", "index_name"},
 	},
 	{
 		name:    "drop_role_stmt",
@@ -1093,9 +1062,6 @@ var specs = []stmtSpec{
 		inline:  []string{"opt_table", "relation_expr_list", "opt_drop_behavior"},
 		replace: map[string]string{"relation_expr": "table_name"},
 		unlink:  []string{"table_name"},
-		//inline:  []string{"opt_table", "relation_expr_list", "relation_expr", "opt_drop_behavior"},
-		//replace: map[string]string{"'ONLY' '(' qualified_name ')'": "", "'ONLY' qualified_name": "", "qualified_name": "table_name", "'*'": "", "'CASCADE'": "", "'RESTRICT'": ""},
-		//unlink:  []string{"table_name"},
 	},
 	{
 		name:    "unique_column_level",
@@ -1153,3 +1119,7 @@ var specs = []stmtSpec{
 		unlink:  []string{"constraint_name", "table_name"},
 	},
 }
+
+// regList is a common regex used when removing loops from alter and drop
+// statements.
+const regList = ` \( \( ',' .* \) \)\*`
