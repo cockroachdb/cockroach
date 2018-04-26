@@ -57,7 +57,6 @@ func TestDockerCLI(t *testing.T) {
 		t.Fatalf("no testfiles found (%v)", testGlob)
 	}
 
-	verbose := testing.Verbose() || log.V(1)
 	for _, p := range paths {
 		testFile := filepath.Base(p)
 		testPath := filepath.Join(containerPath, testFile)
@@ -68,6 +67,12 @@ func TestDockerCLI(t *testing.T) {
 		t.Run(testFile, func(t *testing.T) {
 			log.Infof(ctx, "-- starting tests from: %s", testFile)
 
+			// Symlink the logs directory to /logs, which is visible outside of the
+			// container and preserved if the test fails. (They don't write to /logs
+			// directly because they are often run manually outside of Docker, where
+			// /logs is unlikely to exist.)
+			cmd := "ln -s /logs logs"
+
 			// We run the expect command using `bash -c "(expect ...)"`.
 			//
 			// We cannot run `expect` directly, nor `bash -c "expect ..."`,
@@ -76,8 +81,8 @@ func TestDockerCLI(t *testing.T) {
 			// upon by the PID 1 process when they terminate, lest they
 			// remain forever in the zombie state. Unfortunately, Expect
 			// does not contain code to do this. Bash does.
-			cmd := "(expect"
-			if verbose {
+			cmd += "; (expect"
+			if log.V(2) {
 				cmd = cmd + " -d"
 			}
 			cmd = cmd + " -f " + testPath + " " + cluster.CockroachBinaryInContainer + ")"

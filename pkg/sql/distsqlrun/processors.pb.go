@@ -488,6 +488,9 @@ func (*DistinctSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcess
 // input has N columns and the right input has M columns, the first N columns
 // contain values from the left side and the following M columns contain values
 // from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
 type MergeJoinerSpec struct {
 	// The streams must be ordered according to the columns that have equality
 	// constraints. The first column of the left ordering is constrained to be
@@ -537,6 +540,9 @@ func (*MergeJoinerSpec) Descriptor() ([]byte, []int) { return fileDescriptorProc
 // contain values from the right side. If merged columns are present, they
 // occupy first E positions followed by N values from the left side and M values
 // from the right side.
+//
+// In the case of semi-join and anti-join, the processor core outputs only the
+// left columns.
 type HashJoinerSpec struct {
 	// The join constraints certain columns from the left stream to equal
 	// corresponding columns on the right stream. These must have the same length.
