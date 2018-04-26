@@ -1308,18 +1308,38 @@ func getMessagesForSubtrace(
 	if _, ok := seenSpans[span.SpanID]; ok {
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
+	var metaLogs []logRecordRow
 	var allLogs []logRecordRow
 	const spanStartMsgTemplate = "=== SPAN START: %s ==="
 
 	// Add a dummy log message marking the beginning of the span, to indicate
 	// the start time and duration of span.
-	allLogs = append(allLogs,
+	metaLogs = append(metaLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
 			msg:       fmt.Sprintf(spanStartMsgTemplate, span.Operation),
 			span:      span,
 			index:     0,
 		})
+
+	// Add the stats.
+	for name, value := range span.Tags {
+		if !strings.HasPrefix(name, tracing.SpanStatPrefix) {
+			// Not a stat.
+			continue
+		}
+		metaLogs = append(
+			metaLogs,
+			logRecordRow{
+				timestamp: span.StartTime,
+				msg:       fmt.Sprintf("%s: %s", name, value),
+				span:      span,
+				index:     len(metaLogs),
+			},
+		)
+	}
+
+	allLogs = append(allLogs, metaLogs...)
 
 	seenSpans[span.SpanID] = struct{}{}
 	childSpans := getOrderedChildSpans(span.SpanID, allSpans)
@@ -1343,8 +1363,9 @@ func getMessagesForSubtrace(
 					timestamp: logTime,
 					msg:       extractMsgFromRecord(span.Logs[i]),
 					span:      span,
-					// Add 1 to the index to account for the first dummy message in a span.
-					index: i + 1,
+					// Add the length of the meta logs to account for the meta messages in
+					// a span.
+					index: i + len(metaLogs),
 				})
 			i++
 		} else {
