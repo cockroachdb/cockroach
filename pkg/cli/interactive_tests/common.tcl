@@ -88,7 +88,9 @@ proc send_eof {} {
 # in `server_pid`.
 proc start_server {argv} {
     report "BEGIN START SERVER"
-    system "mkfifo pid_fifo || true; $argv start --insecure --pid-file=pid_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
+    system "mkfifo pid_fifo || true;
+            $argv start --insecure --pid-file=pid_fifo --background -s=path=logs/db >>logs/expect-cmd.log 2>&1 &
+            cat pid_fifo > server_pid"
     report "START SERVER DONE"
 }
 proc stop_server {argv} {
@@ -96,7 +98,13 @@ proc stop_server {argv} {
     # Trigger a normal shutdown.
     system "$argv quit"
     # If after 5 seconds the server hasn't shut down, trigger an error.
-    system "for i in `seq 1 5`; do kill -CONT `cat server_pid` 2>/dev/null || exit 0; echo still waiting; sleep 1; done; echo 'server still running?'; exit 1"
+    system "for i in `seq 1 5`; do
+              kill -CONT `cat server_pid` 2>/dev/null || exit 0
+              echo still waiting
+              sleep 1
+            done
+            echo 'server still running?'
+            exit 1"
 
     report "END STOP SERVER"
 }
@@ -105,12 +113,25 @@ proc flush_server_logs {} {
     report "BEGIN FLUSH LOGS"
     system "kill -HUP `cat server_pid` 2>/dev/null"
     # Wait for flush to occur.
-    system "for i in `seq 1 3`; do grep 'hangup received, flushing logs' logs/db/logs/cockroach.log && exit 0; echo still waiting; sleep 1; done; echo 'server failed to flush logs?'; exit 1"
+    system "for i in `seq 1 3`; do
+              grep 'hangup received, flushing logs' logs/db/logs/cockroach.log && exit 0;
+              echo still waiting
+              sleep 1
+            done
+            echo 'server failed to flush logs?'
+            exit 1"
     report "END FLUSH LOGS"
 }
 
 proc force_stop_server {argv} {
     report "BEGIN FORCE STOP SERVER"
-    system "$argv quit & sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -TERM `cat server_pid`; sleep 1; if kill -CONT `cat server_pid` 2>/dev/null; then kill -KILL `cat server_pid`; fi; fi"
+    system "$argv quit & sleep 1
+            if kill -CONT `cat server_pid` 2>/dev/null; then
+              kill -TERM `cat server_pid`
+              sleep 1
+              if kill -CONT `cat server_pid` 2>/dev/null; then
+                kill -KILL `cat server_pid`
+              fi
+            fi"
     report "END FORCE STOP SERVER"
 }
