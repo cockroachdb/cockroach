@@ -242,7 +242,7 @@ project
  │    │         ├── variable: a.x [type=int, outer=(1)]
  │    │         └── variable: b.z [type=int, outer=(6)]
  │    └── aggregations [outer=(6)]
- │         └── function: sum [type=decimal, outer=(6)]
+ │         └── sum [type=decimal, outer=(6)]
  │              └── variable: b.z [type=int, outer=(6)]
  └── projections [outer=(1,6,8)]
       ├── variable: column8 [type=decimal, outer=(8)]
