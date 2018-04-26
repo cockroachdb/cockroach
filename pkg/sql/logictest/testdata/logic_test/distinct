@@ -205,15 +205,16 @@ SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT x FROM xyz
+EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
 ----
-render     0  render  ·      ·            (x)                          x!=NULL; key(x)
- └── scan  1  scan    ·      ·            (x, y[omitted], z[omitted])  x!=NULL; key(x)
-·          1  ·       table  xyz@primary  ·                            ·
-·          1  ·       spans  ALL          ·                            ·
+render     0  render  ·         ·                  (x)                          x!=NULL; key(x)
+ │         0  ·       render 0  test.public.xyz.x  ·                            ·
+ └── scan  1  scan    ·         ·                  (x, y[omitted], z[omitted])  x!=NULL; key(x)
+·          1  ·       table     xyz@primary        ·                            ·
+·          1  ·       spans     ALL                ·                            ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT x, y, z FROM xyz
+EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 ----
 scan  0  scan  ·      ·            (x, y, z)  x!=NULL; key(x)
 ·     0  ·     table  xyz@primary  ·          ·
@@ -230,33 +231,41 @@ CREATE TABLE abcd (
 )
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
+EXPLAIN (VERBOSE) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
 ----
-render     0  render  ·      ·                  ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
- └── scan  1  scan    ·      ·                  (a[omitted], b, c[omitted], d)  b!=NULL; d!=NULL; key(b,d); +d,+b
-·          1  ·       table  abcd@abcd_d_b_key  ·                               ·
-·          1  ·       spans  ALL                ·                               ·
+render     0  render  ·         ·                   ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
+ │         0  ·       render 0  1                   ·                               ·
+ │         0  ·       render 1  test.public.abcd.d  ·                               ·
+ │         0  ·       render 2  test.public.abcd.b  ·                               ·
+ └── scan  1  scan    ·         ·                   (a[omitted], b, c[omitted], d)  b!=NULL; d!=NULL; key(b,d); +d,+b
+·          1  ·       table     abcd@abcd_d_b_key   ·                               ·
+·          1  ·       spans     ALL                 ·                               ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT a, b FROM abcd
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
-distinct        0  distinct  ·          ·             (a, b)                          a!=NULL; b!=NULL; key(a,b); +a,+b
- │              0  ·         order key  a, b          ·                               ·
- └── render     1  render    ·          ·             (a, b)                          a!=NULL; b!=NULL; +a,+b
-      └── scan  2  scan      ·          ·             (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
-·               2  ·         table      abcd@primary  ·                               ·
-·               2  ·         spans      ALL           ·                               ·
+distinct        0  distinct  ·          ·                   (a, b)                          a!=NULL; b!=NULL; key(a,b); +a,+b
+ │              0  ·         order key  a, b                ·                               ·
+ └── render     1  render    ·          ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+      │         1  ·         render 0   test.public.abcd.a  ·                               ·
+      │         1  ·         render 1   test.public.abcd.b  ·                               ·
+      └── scan  2  scan      ·          ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
+·               2  ·         table      abcd@primary        ·                               ·
+·               2  ·         spans      ALL                 ·                               ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT a, b, c FROM abcd
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
 ----
-render     0  render  ·      ·             (a, b, c)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
- └── scan  1  scan    ·      ·             (a, b, c, d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-·          1  ·       table  abcd@primary  ·                      ·
-·          1  ·       spans  ALL           ·                      ·
+render     0  render  ·         ·                   (a, b, c)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+ │         0  ·       render 0  test.public.abcd.a  ·                      ·
+ │         0  ·       render 1  test.public.abcd.b  ·                      ·
+ │         0  ·       render 2  test.public.abcd.c  ·                      ·
+ └── scan  1  scan    ·         ·                   (a, b, c, d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+·          1  ·       table     abcd@primary        ·                      ·
+·          1  ·       spans     ALL                 ·                      ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT DISTINCT a, b, c, d FROM abcd
+EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
 ----
 scan  0  scan  ·      ·             (a, b, c, d)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 ·     0  ·     table  abcd@primary  ·             ·

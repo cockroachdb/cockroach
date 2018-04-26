@@ -197,7 +197,7 @@ nosort             ·      ·
 ·                  spans  ALL
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, t.*)
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -206,7 +206,7 @@ sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
 ·          1  ·     spans  ALL        ·          ·
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, a), c
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -215,7 +215,7 @@ sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
 ·          1  ·     spans  ALL        ·          ·
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT * FROM t ORDER BY b, (a, c)
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -224,7 +224,7 @@ sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
 ·          1  ·     spans  ALL        ·          ·
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT * FROM t ORDER BY (b, (a, c))
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 sort       0  sort  ·      ·          (a, b, c)  a!=NULL; key(a); +b,+a
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -375,36 +375,39 @@ nosort          ·      ·
 
 # Check that the sort key reuses the existing render.
 query TITTTTT
-EXPLAIN (METADATA) SELECT b+2 FROM t ORDER BY b+2
+EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
-sort            0  sort    ·      ·          ("b + 2")                    +"b + 2"
- │              0  ·       order  +"b + 2"   ·                            ·
- └── render     1  render  ·      ·          ("b + 2")                    ·
-      └── scan  2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               2  ·       table  t@primary  ·                            ·
-·               2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·         ·                    ("b + 2")                    +"b + 2"
+ │              0  ·       order     +"b + 2"             ·                            ·
+ └── render     1  render  ·         ·                    ("b + 2")                    ·
+      │         1  ·       render 0  test.public.t.b + 2  ·                            ·
+      └── scan  2  scan    ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
+·               2  ·       table     t@primary            ·                            ·
+·               2  ·       spans     ALL                  ·                            ·
 
 # Check that the sort picks up a renamed render properly.
 query TITTTTT
-EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY y
+EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
-sort            0  sort    ·      ·          (y)                          +y
- │              0  ·       order  +y         ·                            ·
- └── render     1  render  ·      ·          (y)                          ·
-      └── scan  2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               2  ·       table  t@primary  ·                            ·
-·               2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·         ·                    (y)                          +y
+ │              0  ·       order     +y                   ·                            ·
+ └── render     1  render  ·         ·                    (y)                          ·
+      │         1  ·       render 0  test.public.t.b + 2  ·                            ·
+      └── scan  2  scan    ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
+·               2  ·       table     t@primary            ·                            ·
+·               2  ·       spans     ALL                  ·                            ·
 
 # Check that the sort reuses a render behind a rename properly.
 query TITTTTT
-EXPLAIN (METADATA) SELECT b+2 AS y FROM t ORDER BY b+2
+EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-sort            0  sort    ·      ·          (y)                          +y
- │              0  ·       order  +y         ·                            ·
- └── render     1  render  ·      ·          (y)                          ·
-      └── scan  2  scan    ·      ·          (a[omitted], b, c[omitted])  a!=NULL; key(a)
-·               2  ·       table  t@primary  ·                            ·
-·               2  ·       spans  ALL        ·                            ·
+sort            0  sort    ·         ·                    (y)                          +y
+ │              0  ·       order     +y                   ·                            ·
+ └── render     1  render  ·         ·                    (y)                          ·
+      │         1  ·       render 0  test.public.t.b + 2  ·                            ·
+      └── scan  2  scan    ·         ·                    (a[omitted], b, c[omitted])  a!=NULL; key(a)
+·               2  ·       table     t@primary            ·                            ·
+·               2  ·       spans     ALL                  ·                            ·
 
 statement ok
 CREATE TABLE abc (
@@ -612,14 +615,17 @@ render        ·      ·
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-nosort          0  nosort  ·      ·            (b, c)                          b!=NULL; c!=NULL; key(b,c); +b,+c
- │              0  ·       order  +b,+c        ·                               ·
- └── render     1  render  ·      ·            (b, c, a[omitted])              a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-      └── scan  2  scan    ·      ·            (a[omitted], b, c, d[omitted])  a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
-·               2  ·       table  abc@primary  ·                               ·
-·               2  ·       spans  /1-/2        ·                               ·
+nosort          0  nosort  ·         ·                  (b, c)                          b!=NULL; c!=NULL; key(b,c); +b,+c
+ │              0  ·       order     +b,+c              ·                               ·
+ └── render     1  render  ·         ·                  (b, c, a[omitted])              a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
+      │         1  ·       render 0  test.public.abc.b  ·                               ·
+      │         1  ·       render 1  test.public.abc.c  ·                               ·
+      │         1  ·       render 2  NULL               ·                               ·
+      └── scan  2  scan    ·         ·                  (a[omitted], b, c, d[omitted])  a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
+·               2  ·       table     abc@primary        ·                               ·
+·               2  ·       spans     /1-/2              ·                               ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -628,7 +634,7 @@ statement ok
 INSERT INTO bar VALUES (0, NULL), (1, NULL)
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM bar ORDER BY baz, id
+EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, id
 ----
 sort       0  sort  ·      ·          (id, baz)  weak-key(baz); +baz,+id
  │         0  ·     order  +baz,+id   ·          ·
@@ -727,12 +733,15 @@ NaN
 1
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-sort         0  sort    ·      ·                 (x)  +x
- │           0  ·       order  +x                ·    ·
- └── values  1  values  ·      ·                 (x)  ·
-·            1  ·       size   1 column, 3 rows  ·    ·
+sort         0  sort    ·              ·                 (x)  +x
+ │           0  ·       order          +x                ·    ·
+ └── values  1  values  ·              ·                 (x)  ·
+·            1  ·       size           1 column, 3 rows  ·    ·
+·            1  ·       row 0, expr 0  'a'               ·    ·
+·            1  ·       row 1, expr 0  'b'               ·    ·
+·            1  ·       row 2, expr 0  'c'               ·    ·
 
 query TTT
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
@@ -751,55 +760,70 @@ sort              ·      ·
 ·                 size   1 column, 3 rows
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 ----
-ordinality   0  ordinality  ·     ·                 (x, "ordinality")  weak-key("ordinality")
- └── values  1  values      ·     ·                 (x)                ·
-·            1  ·           size  1 column, 3 rows  ·                  ·
+ordinality   0  ordinality  ·              ·                 (x, "ordinality")  weak-key("ordinality")
+ └── values  1  values      ·              ·                 (x)                ·
+·            1  ·           size           1 column, 3 rows  ·                  ·
+·            1  ·           row 0, expr 0  'a'               ·                  ·
+·            1  ·           row 1, expr 0  'b'               ·                  ·
+·            1  ·           row 2, expr 0  'c'               ·                  ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 ----
-ordinality        0  ordinality  ·      ·                 (x, "ordinality")  weak-key("ordinality")
- └── sort         1  sort        ·      ·                 (x)                +x
-      │           1  ·           order  +x                ·                  ·
-      └── values  2  values      ·      ·                 (x)                ·
-·                 2  ·           size   1 column, 3 rows  ·                  ·
+ordinality        0  ordinality  ·              ·                 (x, "ordinality")  weak-key("ordinality")
+ └── sort         1  sort        ·              ·                 (x)                +x
+      │           1  ·           order          +x                ·                  ·
+      └── values  2  values      ·              ·                 (x)                ·
+·                 2  ·           size           1 column, 3 rows  ·                  ·
+·                 2  ·           row 0, expr 0  'a'               ·                  ·
+·                 2  ·           row 1, expr 0  'b'               ·                  ·
+·                 2  ·           row 2, expr 0  'c'               ·                  ·
 
 # Check that the ordering of the source does not propagate blindly to RETURNING.
 query TITTTTT
-EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
+EXPLAIN (VERBOSE) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-render                        0  render    ·     ·        (b)        ·
- └── run                      1  run       ·     ·        (a, b, c)  ·
-      └── insert              2  insert    ·     ·        (a, b, c)  ·
-           │                  2  ·         into  t(a, b)  ·          ·
-           └── render         3  render    ·     ·        (x, y)     x=CONST; y=CONST
-                └── emptyrow  4  emptyrow  ·     ·        ()         ·
+render                        0  render    ·         ·                (b)        ·
+ │                            0  ·         render 0  test.public.t.b  ·          ·
+ └── run                      1  run       ·         ·                (a, b, c)  ·
+      └── insert              2  insert    ·         ·                (a, b, c)  ·
+           │                  2  ·         into      t(a, b)          ·          ·
+           └── render         3  render    ·         ·                (x, y)     x=CONST; y=CONST
+                │             3  ·         render 0  1                ·          ·
+                │             3  ·         render 1  2                ·          ·
+                └── emptyrow  4  emptyrow  ·         ·                ()         ·
 
 query TITTTTT
-EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
+EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-render               0  render  ·      ·          (b)        key()
- └── run             1  run     ·      ·          (a, b, c)  a=CONST; key()
-      └── delete     2  delete  ·      ·          (a, b, c)  a=CONST; key()
-           │         2  ·       from   t          ·          ·
-           └── scan  3  scan    ·      ·          (a, b, c)  a=CONST; key()
-·                    3  ·       table  t@primary  ·          ·
-·                    3  ·       spans  /3-/3/#    ·          ·
+render               0  render  ·         ·                (b)        key()
+ │                   0  ·       render 0  test.public.t.b  ·          ·
+ └── run             1  run     ·         ·                (a, b, c)  a=CONST; key()
+      └── delete     2  delete  ·         ·                (a, b, c)  a=CONST; key()
+           │         2  ·       from      t                ·          ·
+           └── scan  3  scan    ·         ·                (a, b, c)  a=CONST; key()
+·                    3  ·       table     t@primary        ·          ·
+·                    3  ·       spans     /3-/3/#          ·          ·
 
 query TITTTTT
-EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
+EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 ----
-render                    0  render  ·      ·          (b)                ·
- └── run                  1  run     ·      ·          (a, b, c)          ·
-      └── update          2  update  ·      ·          (a, b, c)          ·
-           │              2  ·       table  t          ·                  ·
-           │              2  ·       set    c          ·                  ·
-           └── render     3  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-                └── scan  4  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
-·                         4  ·       table  t@primary  ·                  ·
-·                         4  ·       spans  ALL        ·                  ·
+render                    0  render  ·         ·                (b)                ·
+ │                        0  ·       render 0  test.public.t.b  ·                  ·
+ └── run                  1  run     ·         ·                (a, b, c)          ·
+      └── update          2  update  ·         ·                (a, b, c)          ·
+           │              2  ·       table     t                ·                  ·
+           │              2  ·       set       c                ·                  ·
+           └── render     3  render  ·         ·                (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
+                │         3  ·       render 0  test.public.t.a  ·                  ·
+                │         3  ·       render 1  test.public.t.b  ·                  ·
+                │         3  ·       render 2  test.public.t.c  ·                  ·
+                │         3  ·       render 3  true             ·                  ·
+                └── scan  4  scan    ·         ·                (a, b, c)          a!=NULL; key(a)
+·                         4  ·       table     t@primary        ·                  ·
+·                         4  ·       spans     ALL              ·                  ·
 
 statement ok
 CREATE TABLE uvwxyz (
@@ -816,12 +840,15 @@ CREATE TABLE uvwxyz (
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-render     0  render  ·      ·            (y, w, x)                                                             y=CONST; +w,+x
- └── scan  1  scan    ·      ·            (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; rowid!=NULL; weak-key(u,v,w,x,z,rowid); +w,+x
-·          1  ·       table  uvwxyz@ywxz  ·                                                                     ·
-·          1  ·       spans  /1-/2        ·                                                                     ·
+render     0  render  ·         ·                     (y, w, x)                                                             y=CONST; +w,+x
+ │         0  ·       render 0  test.public.uvwxyz.y  ·                                                                     ·
+ │         0  ·       render 1  test.public.uvwxyz.w  ·                                                                     ·
+ │         0  ·       render 2  test.public.uvwxyz.x  ·                                                                     ·
+ └── scan  1  scan    ·         ·                     (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; rowid!=NULL; weak-key(u,v,w,x,z,rowid); +w,+x
+·          1  ·       table     uvwxyz@ywxz           ·                                                                     ·
+·          1  ·       spans     /1-/2                 ·                                                                     ·
 
 
 statement ok
@@ -836,11 +863,16 @@ CREATE TABLE blocks (
 # Test that ordering goes "through" a renderNode that has a duplicate render of
 # an order-by column (#13696).
 query TITTTTT
-EXPLAIN (METADATA) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
+EXPLAIN (VERBOSE) SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 ----
-limit           0  limit   ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
- └── render     1  render  ·      ·               (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-      └── scan  2  scan    ·      ·               (block_id, writer_id, block_num, raw_bytes[omitted])  block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
-·               2  ·       table  blocks@primary  ·                                                     ·
-·               2  ·       spans  ALL             ·                                                     ·
-·               2  ·       limit  1               ·                                                     ·
+limit           0  limit   ·         ·                             (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+ │              0  ·       count     1                             ·                                                     ·
+ └── render     1  render  ·         ·                             (block_id, writer_id, block_num, block_id)            block_id=block_id; block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+      │         1  ·       render 0  test.public.blocks.block_id   ·                                                     ·
+      │         1  ·       render 1  test.public.blocks.writer_id  ·                                                     ·
+      │         1  ·       render 2  test.public.blocks.block_num  ·                                                     ·
+      │         1  ·       render 3  test.public.blocks.block_id   ·                                                     ·
+      └── scan  2  scan    ·         ·                             (block_id, writer_id, block_num, raw_bytes[omitted])  block_id!=NULL; writer_id!=NULL; block_num!=NULL; key(block_id,writer_id,block_num); +block_id,+writer_id,+block_num
+·               2  ·       table     blocks@primary                ·                                                     ·
+·               2  ·       spans     ALL                           ·                                                     ·
+·               2  ·       limit     1                             ·                                                     ·

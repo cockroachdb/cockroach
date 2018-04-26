@@ -26,7 +26,7 @@ SELECT COUNT(DISTINCT x.*) FROM a x, a y
 2
 
 query TITTTTT
-EXPLAIN(VERBOSE) SELECT COUNT(DISTINCT x.*) FROM a x, a y
+EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT x.*) FROM a x, a y
 ----
 group                0  group   ·            ·                       (count)                                                                       ·
  │                   0  ·       aggregate 0  count(DISTINCT (x, y))  ·                                                                             ·
@@ -42,39 +42,45 @@ group                0  group   ·            ·                       (count)  
 ·                    3  ·       spans        ALL                     ·                                                                             ·
 
 query TTT
-EXPLAIN(EXPRS) SELECT * FROM a ORDER BY a.*
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
+]
 ----
 sort            ·         ·
  │              order     +x,+y
  └── render     ·         ·
-      │         render 0  x
-      │         render 1  y
+      │         render 0  test.public.a.x
+      │         render 1  test.public.a.y
       └── scan  ·         ·
 ·               table     a@primary
 ·               spans     ALL
 
 query TTT
-EXPLAIN(EXPRS) SELECT * FROM a ORDER BY (a.*)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
+]
 ----
 sort            ·         ·
  │              order     +x,+y
  └── render     ·         ·
-      │         render 0  x
-      │         render 1  y
+      │         render 0  test.public.a.x
+      │         render 1  test.public.a.y
       └── scan  ·         ·
 ·               table     a@primary
 ·               spans     ALL
 
 query TTT
-EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY x.*
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(y.x) FROM a x, a y GROUP BY x.*
+]
 ----
 group                ·            ·
  │                   aggregate 0  min(x)
  │                   group by     @1-@2
  └── render          ·            ·
-      │              render 0     x
-      │              render 1     y
-      │              render 2     x
+      │              render 0     x.x
+      │              render 1     x.y
+      │              render 2     y.x
       └── join       ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -85,16 +91,18 @@ group                ·            ·
 ·                    spans        ALL
 
 query TTT
-EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (1, (x.*))
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(y.x) FROM a x, a y GROUP BY (1, (x.*))
+]
 ----
 group                ·            ·
  │                   aggregate 0  min(x)
  │                   group by     @1-@3
  └── render          ·            ·
       │              render 0     1
-      │              render 1     x
-      │              render 2     y
-      │              render 3     x
+      │              render 1     x.x
+      │              render 2     x.y
+      │              render 3     y.x
       └── join       ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -106,15 +114,17 @@ group                ·            ·
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
-EXPLAIN(EXPRS) SELECT MIN(y.x) FROM a x, a y GROUP BY (x.*)
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT MIN(y.x) FROM a x, a y GROUP BY (x.*)
+]
 ----
 group                ·            ·
  │                   aggregate 0  min(x)
  │                   group by     @1-@2
  └── render          ·            ·
-      │              render 0     x
-      │              render 1     y
-      │              render 2     x
+      │              render 0     x.x
+      │              render 1     x.y
+      │              render 2     y.x
       └── join       ·            ·
            │         type         cross
            ├── scan  ·            ·
@@ -126,14 +136,16 @@ group                ·            ·
 
 # Show reuse of renders expression inside an expansion.
 query TTT
-EXPLAIN(EXPRS) SELECT x.y FROM a x, a y GROUP BY x.*
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT x.y FROM a x, a y GROUP BY x.*
+]
 ----
 group                ·            ·
  │                   aggregate 0  y
  │                   group by     @1-@2
  └── render          ·            ·
-      │              render 0     x
-      │              render 1     y
+      │              render 0     x.x
+      │              render 1     x.y
       └── join       ·            ·
            │         type         cross
            ├── scan  ·            ·

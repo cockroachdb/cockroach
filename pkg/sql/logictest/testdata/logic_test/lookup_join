@@ -186,31 +186,6 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT(authors.name) FROM authors,
 https://cockroachdb.github.io/distsqlplan/decode.html?eJysks-L6jAQx-_vr5A5KeSBaa2HwoMe3uH5WHSRvS0eYjOrWWum5AfsIv7vS9qDtmyjwh6bzGc-35nmBJokLsURLeSvwIFBBhsGtaESrSUTjtuihfyAfMpA6dq7cLxhUJJByE_glKsQcljSb6qBgUQnVNUUnRmQdxfEOrFDyOdndtWWx9u-iG2FaxQSTac51EYdhfkshHf7kJXByrt8VHBWJDCk5j-q3hIdOuJ0UJw8Iv5PSt_jfSI6-Hr0TkqPSIcIlzCDSdLBJJcAXpORaFD2_-ftkm_G-SfsPozUH6fCNzcukskfo3Z7Ny745I74s0cW-VdZp3Tput5I96zT_caLX6OtSVu869FPw2ZQ7rDdtCVvSnw2VDaa9nPVcM2BROva23n7sdDtVQh4DfMoPOvAvA8nUTiNm9MHzEkfnkXhLG7OovC0B2_Ov74CAAD__1i6oG0=
 
 
-query TTT
-EXPLAIN (EXPRS) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
-----
-distinct                  ·               ·
- └── render               ·               ·
-      │                   render 0        name
-      └── join            ·               ·
-           │              type            inner
-           │              equality        (book) = (title)
-           ├── scan       ·               ·
-           │              table           authors@primary
-           │              spans           ALL
-           └── join       ·               ·
-                │         type            inner
-                │         equality        (title) = (title)
-                │         mergeJoinOrder  +"(title=title)"
-                │         pred            b1.shelf != b2.shelf
-                ├── scan  ·               ·
-                │         table           books@primary
-                │         spans           ALL
-                └── scan  ·               ·
-·                         table           books@primary
-·                         spans           ALL
-
-
 query TITTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----

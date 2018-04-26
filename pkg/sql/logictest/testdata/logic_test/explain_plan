@@ -31,7 +31,7 @@ scan  ·      ·
 ·     spans  ALL
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM t
+EXPLAIN (VERBOSE) SELECT * FROM t
 ----
 scan  0  scan  ·      ·          (k, v)  k!=NULL; key(k)
 ·     0  ·     table  t@primary  ·       ·
@@ -65,7 +65,7 @@ values  ·     ·
 ·       size  1 column, 1 row
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1
+SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
 limit            ·       ·
  │               count   1
@@ -86,14 +86,14 @@ distinct        ·      ·
 ·               spans  ALL
 
 query TTT
-EXPLAIN (EXPRS) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1
+SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 limit                ·         ·
  │                   count     1
  │                   offset    1
  └── distinct        ·         ·
       └── render     ·         ·
-           │         render 0  v
+           │         render 0  test.public.t.v
            └── scan  ·         ·
 ·                    table     t@primary
 ·                    spans     ALL
@@ -104,25 +104,27 @@ statement ok
 PREPARE x AS SELECT DISTINCT v from t LIMIT $1
 
 query TTT
-EXPLAIN (EXPRS) EXECUTE x(3)
+SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
 ----
 limit                ·         ·
  │                   count     3
  └── distinct        ·         ·
       └── render     ·         ·
-           │         render 0  v
+           │         render 0  test.public.t.v
            └── scan  ·         ·
 ·                    table     t@primary
 ·                    spans     ALL
 
 query TTT
-EXPLAIN (EXPRS) SELECT * FROM [EXECUTE x(3)]
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
+]
 ----
 limit                ·         ·
  │                   count     3
  └── distinct        ·         ·
       └── render     ·         ·
-           │         render 0  v
+           │         render 0  test.public.t.v
            └── scan  ·         ·
 ·                    table     t@primary
 ·                    spans     ALL
@@ -131,14 +133,16 @@ statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
+EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-sort                  0  sort        ·      ·           (a, b)                                   a=CONST; +b
- │                    0  ·           order  +b          ·                                        ·
- └── render           1  render      ·      ·           (a, b)                                   a=CONST
-      └── index-join  2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
-           ├── scan   3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
-           │          3  ·           table  tc@c        ·                                        ·
-           │          3  ·           spans  /10-/11     ·                                        ·
-           └── scan   3  scan        ·      ·           (a, b, rowid[hidden,omitted])            ·
-·                     3  ·           table  tc@primary  ·                                        ·
+sort                  0  sort        ·         ·                 (a, b)                                   a=CONST; +b
+ │                    0  ·           order     +b                ·                                        ·
+ └── render           1  render      ·         ·                 (a, b)                                   a=CONST
+      │               1  ·           render 0  test.public.tc.a  ·                                        ·
+      │               1  ·           render 1  test.public.tc.b  ·                                        ·
+      └── index-join  2  index-join  ·         ·                 (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
+           ├── scan   3  scan        ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
+           │          3  ·           table     tc@c              ·                                        ·
+           │          3  ·           spans     /10-/11           ·                                        ·
+           └── scan   3  scan        ·         ·                 (a, b, rowid[hidden,omitted])            ·
+·                     3  ·           table     tc@primary        ·                                        ·

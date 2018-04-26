@@ -20,8 +20,8 @@ import (
 
 // Explain represents an EXPLAIN statement.
 type Explain struct {
-	// Options defines how EXPLAIN should operate (VERBOSE, METADATA,
-	// etc.) Which options are valid depends on the explain mode. See
+	// Options defines how EXPLAIN should operate (e.g. VERBOSE).
+	// Which options are valid depends on the explain mode. See
 	// sql/explain.go for details.
 	Options []string
 
