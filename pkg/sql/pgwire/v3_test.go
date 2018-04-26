@@ -37,7 +37,7 @@ import (
 )
 
 func makeTestV3Conn(c net.Conn) v3Conn {
-	metrics := makeServerMetrics(nil, metric.TestSampleInterval)
+	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
 	st := cluster.MakeTestingClusterSettings()
 	mon := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource, nil, nil, 1000, st,

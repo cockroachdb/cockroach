@@ -1225,7 +1225,7 @@ func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.execCfg, c.metrics.internalMemMetrics, c.sessionArgs.User,
+		ctx, c.execCfg, &c.metrics.SQLMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return sendError(err)

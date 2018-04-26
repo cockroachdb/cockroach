@@ -158,6 +158,8 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+	// sqlMemMetrics are used to track memory usage of sql sessions.
+	sqlMemMetrics sql.MemoryMetrics
 	serveMode
 }
 
@@ -580,12 +582,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.registry.AddMetricStruct(s.sqlExecutor)
 	}
 
+	// Set up internal memory metrics for use by internal SQL executors.
+	s.sqlMemMetrics = sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
+	s.registry.AddMetricStruct(s.sqlMemMetrics)
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
 		s.ClusterSettings(),
 		s.sqlExecutor,
-		&s.internalMemMetrics,
+		s.sqlMemMetrics,
 		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
 		&execCfg,
