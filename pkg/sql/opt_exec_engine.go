@@ -112,6 +112,7 @@ func (ee *execEngine) Explain(p exec.Plan) ([]tree.Datums, error) {
 		flags,
 		false, /* expanded */
 		false, /* optimized */
+		false, /* optimizeSubqueries */
 		p.(*planTop).plan,
 		p.(*planTop).subqueryPlans,
 	)
@@ -422,4 +423,23 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 		}
 	}
 	return res, nil
+}
+
+// ConstructExplain is part of the exec.Factory interface.
+func (ee *execEngine) ConstructExplain(plan exec.Plan) (exec.Node, error) {
+	p := plan.(*planTop)
+	// For now, we assume VERBOSE.
+	flags := explainFlags{
+		showMetadata: true,
+		qualifyNames: true,
+	}
+	return ee.planner.makeExplainPlanNodeWithPlan(
+		context.TODO(),
+		flags,
+		false, /* expanded */
+		false, /* optimized */
+		false, /* optimizeSubqueries */
+		p.plan,
+		p.subqueryPlans,
+	)
 }

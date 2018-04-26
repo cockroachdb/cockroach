@@ -1,0 +1,64 @@
+exec-raw
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+
+exec
+EXPLAIN (VERBOSE) SELECT * FROM xy
+----
+Tree:string  Level:int  Type:string  Field:string  Description:string  Columns:string  Ordering:string
+scan         0          scan         ·             ·                   (x, y)          ·
+·            0          ·            table         xy@primary          ·               ·
+·            0          ·            spans         ALL                 ·               ·
+
+exec
+EXPLAIN (VERBOSE) SELECT x, x, y FROM xy
+----
+Tree:string  Level:int  Type:string  Field:string  Description:string  Columns:string  Ordering:string
+render       0          render       ·             ·                   (x, x, y)       ·
+ │           0          ·            render 0      x                   ·               ·
+ │           0          ·            render 1      x                   ·               ·
+ │           0          ·            render 2      y                   ·               ·
+ └── scan    1          scan         ·             ·                   (x, y)          ·
+·            1          ·            table         xy@primary          ·               ·
+·            1          ·            spans         ALL                 ·               ·
+
+exec
+EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
+----
+Tree:string  Level:int  Type:string  Field:string  Description:string  Columns:string  Ordering:string
+sort         0          sort         ·             ·                   (x, y)          +y
+ │           0          ·            order         +y                  ·               ·
+ └── scan    1          scan         ·             ·                   (x, y)          ·
+·            1          ·            table         xy@primary          ·               ·
+·            1          ·            spans         ALL                 ·               ·
+
+exec
+EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y
+----
+Tree:string     Level:int  Type:string  Field:string  Description:string  Columns:string  Ordering:string
+render          0          render       ·             ·                   (x, x, y)       ·
+ │              0          ·            render 0      x                   ·               ·
+ │              0          ·            render 1      x                   ·               ·
+ │              0          ·            render 2      y                   ·               ·
+ └── sort       1          sort         ·             ·                   (x, y)          +y
+      │         1          ·            order         +y                  ·               ·
+      └── scan  2          scan         ·             ·                   (x, y)          ·
+·               2          ·            table         xy@primary          ·               ·
+·               2          ·            spans         ALL                 ·               ·
+
+exec
+EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
+----
+Tree:string  Level:int  Type:string  Field:string   Description:string  Columns:string      Ordering:string
+join         0          join         ·              ·                   (x, y, u, v)        ·
+ │           0          ·            type           inner               ·                   ·
+ │           0          ·            equality       (x) = (column1)     ·                   ·
+ ├── scan    1          scan         ·              ·                   (x, y)              ·
+ │           1          ·            table          xy@primary          ·                   ·
+ │           1          ·            spans          ALL                 ·                   ·
+ └── values  1          values       ·              ·                   (column1, column2)  ·
+·            1          ·            size           2 columns, 2 rows   ·                   ·
+·            1          ·            row 0, expr 0  1                   ·                   ·
+·            1          ·            row 0, expr 1  2                   ·                   ·
+·            1          ·            row 1, expr 0  3                   ·                   ·
+·            1          ·            row 1, expr 1  4                   ·                   ·

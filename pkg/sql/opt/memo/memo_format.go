@@ -267,7 +267,10 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 			fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
 
 		case *ExplainOpDef:
-			fmt.Fprintf(f.buf, " %s", t.Props.String())
+			propsStr := t.Props.String()
+			if propsStr != "" {
+				fmt.Fprintf(f.buf, " %s", propsStr)
+			}
 
 		case opt.ColSet, opt.ColList:
 			// Don't show anything, because it's mostly redundant.
