@@ -266,6 +266,9 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 		case *LookupJoinDef:
 			fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
 
+		case *ExplainOpDef:
+			fmt.Fprintf(f.buf, " %s", t.Props.String())
+
 		case opt.ColSet, opt.ColList:
 			// Don't show anything, because it's mostly redundant.
 

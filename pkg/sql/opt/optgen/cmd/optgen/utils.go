@@ -60,6 +60,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.LookupJoinDef"
 	case "SetOpColMap":
 		return "*memo.SetOpColMap"
+	case "ExplainOpDef":
+		return "*memo.ExplainOpDef"
 	case "Datum":
 		return "tree.Datum"
 	case "Type":

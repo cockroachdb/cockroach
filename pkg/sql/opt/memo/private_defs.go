@@ -108,6 +108,17 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool
 	return true
 }
 
+// ExplainOpDef defines the value of the Def private field of the Explain operator.
+type ExplainOpDef struct {
+	// TODO(radu): flags
+
+	// ColList stores the column IDs for the explain columns.
+	ColList opt.ColList
+
+	// Props stores the required physical properties for the enclosed expression.
+	Props PhysicalProps
+}
+
 // SetOpColMap defines the value of the ColMap private field of the set
 // operators: Union, Intersect, Except, UnionAll, IntersectAll and ExceptAll.
 // It matches columns from the left and right inputs of the operator

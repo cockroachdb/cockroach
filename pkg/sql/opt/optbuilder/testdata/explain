@@ -1,0 +1,49 @@
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy
+----
+explain
+ ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ └── scan xy
+      └── columns: x:1(int!null) y:2(int)
+
+# Verify we preserve the ordering requirement of the explained query.
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
+----
+explain
+ ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ └── sort
+      ├── columns: x:1(int!null) y:2(int)
+      ├── ordering: +2
+      └── scan xy
+           └── columns: xy.x:1(int!null) xy.y:2(int)
+
+build
+EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
+----
+explain
+ ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
+      ├── scan xy
+      │    └── columns: xy.x:1(int!null) xy.y:2(int)
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(int)
+      │    ├── tuple [type=tuple{int, int}]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── const: 2 [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      └── eq [type=bool]
+           ├── variable: xy.x [type=int]
+           └── variable: column1 [type=int]
