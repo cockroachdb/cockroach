@@ -68,9 +68,8 @@ const (
 	TempDirPrefix = "cockroach-temp"
 	// TempDirsRecordFilename is the filename for the record file
 	// that keeps track of the paths of the temporary directories created.
-	TempDirsRecordFilename                = "temp-dirs-record.txt"
-	defaultEventLogEnabled                = true
-	defaultEnableWebSessionAuthentication = false
+	TempDirsRecordFilename = "temp-dirs-record.txt"
+	defaultEventLogEnabled = true
 
 	maximumMaxClockOffset = 5 * time.Second
 
@@ -376,6 +375,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		panic(err)
 	}
 
+	requireWebLogin := envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_REQUIRE_WEB_LOGIN", false)
+
 	cfg := Config{
 		Config:                         new(base.Config),
 		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
@@ -386,7 +387,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		ScanInterval:                   defaultScanInterval,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: defaultEnableWebSessionAuthentication,
+		EnableWebSessionAuthentication: requireWebLogin,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
