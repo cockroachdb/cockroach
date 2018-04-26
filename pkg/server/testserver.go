@@ -463,6 +463,8 @@ func (ts *TestServer) GetHTTPClient() (http.Client, error) {
 	return ts.Cfg.GetHTTPClient()
 }
 
+const authenticatedUserName = "authentic_user"
+
 // GetAuthenticatedHTTPClient implements TestServerInterface.
 func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 	ts.authClient.once.Do(func() {
@@ -470,7 +472,7 @@ func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 		// currently have an authorization mechanism, so a specific user is not
 		// necessary.
 		ts.authClient.err = func() error {
-			id, secret, err := ts.authentication.newAuthSession(context.TODO(), "authentic_user")
+			id, secret, err := ts.authentication.newAuthSession(context.TODO(), authenticatedUserName)
 			if err != nil {
 				return err
 			}

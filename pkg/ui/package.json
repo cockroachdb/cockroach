@@ -69,6 +69,7 @@
     "bytebuffer": "^5.0.1",
     "cache-loader": "^1.0.3",
     "chai": "^4.1.0",
+    "copy-webpack-plugin": "^4.5.1",
     "css-loader": "^0.28.0",
     "d3": "<4.0.0",
     "dagre-layout": "^0.8.0",
