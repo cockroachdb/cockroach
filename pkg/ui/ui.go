@@ -22,6 +22,7 @@ package ui
 
 import (
 	"fmt"
+	"html/template"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -67,3 +68,31 @@ var AssetDir = func(name string) ([]string, error) {
 // AssetInfo loads and returns metadata for the asset with the given name. It
 // returns an error if the asset could not be found or could not be loaded.
 var AssetInfo func(name string) (os.FileInfo, error)
+
+var IndexHTMLTemplate *template.Template
+
+func init() {
+	t, err := template.New("index").Parse(`<!DOCTYPE html>
+<html>
+	<head>
+		<title>Cockroach Console</title>
+		<link href="favicon.ico" rel="shortcut icon">
+	</head>
+	<body>
+		<div id="react-layout"></div>
+
+		<script>
+			window.loggedInUser = {{ .loggedInUser }}
+		</script>
+
+		<script src="/assets/protos.dll.js" type="text/javascript"></script>
+		<script src="/assets/vendor.dll.js" type="text/javascript"></script>
+		<script src="/assets/bundle.js" type="text/javascript"></script>
+	</body>
+</html>
+`)
+	if err != nil {
+		panic(fmt.Sprintf("can't parse template: %s", err))
+	}
+	IndexHTMLTemplate = t
+}

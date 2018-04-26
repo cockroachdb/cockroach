@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 
-	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -79,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/elazarl/go-bindata-assetfs"
 )
 
 var (
@@ -1157,11 +1157,21 @@ func (s *Server) Start(ctx context.Context) error {
 	// Also throw the landing page in there. It won't work well, but it's better than a 404.
 	// The remaining endpoints will be opened late, when we're sure that the subsystems they
 	// talk to are functional.
-	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
+	s.mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(&assetfs.AssetFS{
 		Asset:     ui.Asset,
 		AssetDir:  ui.AssetDir,
 		AssetInfo: ui.AssetInfo,
-	}))
+	})))
+
+	// TODO(vilterp): serve after passing through AuthMux, not here
+	s.mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Add("Content-Type", "text/html")
+
+		ui.IndexHTMLTemplate.Execute(writer, map[string]string{
+			// TODO(vilterp): get the logged in user off the context
+			"loggedInUser": `vilterp";alert("hello world")`, // TODO(vilterp): not quite sure if I'm using this right
+		})
+	})
 
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
