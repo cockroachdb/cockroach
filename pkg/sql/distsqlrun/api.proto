@@ -56,6 +56,7 @@ message EvalContext {
   repeated string searchPath = 6;
   optional string user = 7 [(gogoproto.nullable) = false];
   optional SequenceState seq_state = 8 [(gogoproto.nullable) = false];
+  optional string application_name = 9 [(gogoproto.nullable) = false];
 }
 
 // SequenceState is used to marshall the sessiondata.SequenceState struct.

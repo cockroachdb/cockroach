@@ -336,6 +336,7 @@ func (ds *ServerImpl) setupFlow(
 		Planner:     &dummyEvalPlanner{},
 		Sequence:    &dummySequenceOperators{},
 	}
+	evalCtx.SessionData.SetApplicationName(req.EvalContext.ApplicationName)
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 	evalCtx.SessionData.SequenceState = sessiondata.NewSequenceState()
