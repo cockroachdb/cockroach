@@ -72,6 +72,7 @@ select
       │    ├── max1-row
       │    │    ├── columns: column8:8(int)
       │    │    ├── outer: (1,2)
+      │    │    ├── cardinality: [0 - 1]
       │    │    ├── stats: [rows=1]
       │    │    └── project
       │    │         ├── columns: column8:8(int)
@@ -94,12 +95,15 @@ select
       │    │                   ├── max1-row
       │    │                   │    ├── columns: xysd.y:2(int)
       │    │                   │    ├── outer: (2)
+      │    │                   │    ├── cardinality: [1 - 1]
       │    │                   │    ├── stats: [rows=1]
       │    │                   │    └── project
       │    │                   │         ├── columns: xysd.y:2(int)
       │    │                   │         ├── outer: (2)
+      │    │                   │         ├── cardinality: [1 - 1]
       │    │                   │         ├── stats: [rows=1]
       │    │                   │         ├── values
+      │    │                   │         │    ├── cardinality: [1 - 1]
       │    │                   │         │    ├── stats: [rows=1]
       │    │                   │         │    └── tuple [type=tuple{}]
       │    │                   │         └── projections [outer=(2)]
@@ -107,3 +111,26 @@ select
       │    │                   └── variable: xysd.y [type=int, outer=(2)]
       │    └── variable: column8 [type=int, outer=(8)]
       └── const: 5 [type=int]
+
+# Pass through cardinality.
+build
+SELECT x, y FROM (SELECT * FROM xysd LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null) y:2(int)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── keys: (1)
+ ├── limit
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── cardinality: [0 - 10]
+ │    ├── stats: [rows=10]
+ │    ├── keys: (1) weak(3,4)
+ │    ├── scan xysd
+ │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── keys: (1) weak(3,4)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: xysd.x [type=int, outer=(1)]
+      └── variable: xysd.y [type=int, outer=(2)]

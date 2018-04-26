@@ -213,8 +213,8 @@ $input
     $groupingCols
 )
 
-# FilterUnusedValueCols discards Values columns that are never used.
-[FilterUnusedValueCols, Normalize]
+# FilterUnusedValuesCols discards Values columns that are never used.
+[FilterUnusedValuesCols, Normalize]
 (Project
     $input:(Values)
     $projections:* & (HasUnusedColumns $input (NeededCols $projections))

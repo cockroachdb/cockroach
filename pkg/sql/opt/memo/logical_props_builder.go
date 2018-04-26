@@ -16,75 +16,73 @@ package memo
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// logicalPropsFactory is a helper class that consolidates the code that
-// derives a parent expression's logical properties from those of its
-// children.
-// NOTE: The factory is defined as an empty struct with methods rather than as
-//       functions in order to keep the methods grouped and self-contained.
-type logicalPropsFactory struct {
+// logicalPropsBuilder is a helper class that consolidates the code that derives
+// a parent expression's logical properties from those of its children.
+type logicalPropsBuilder struct {
 	evalCtx *tree.EvalContext
 }
 
-// constructProps is called by the memo group construction code in order to
+// buildProps is called by the memo group construction code in order to
 // initialize the new group's logical properties.
 // NOTE: When deriving properties from children, be sure to keep the child
 //       properties immutable by copying them if necessary.
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (f logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
-		return f.constructRelationalProps(ev)
+		return b.buildRelationalProps(ev)
 	}
-	return f.constructScalarProps(ev)
+	return b.buildScalarProps(ev)
 }
 
-func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
-		return f.constructScanProps(ev)
+		return b.buildScanProps(ev)
 
 	case opt.SelectOp:
-		return f.constructSelectProps(ev)
+		return b.buildSelectProps(ev)
 
 	case opt.ProjectOp:
-		return f.constructProjectProps(ev)
+		return b.buildProjectProps(ev)
 
 	case opt.ValuesOp:
-		return f.constructValuesProps(ev)
+		return b.buildValuesProps(ev)
 
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
-		return f.constructJoinProps(ev)
+		return b.buildJoinProps(ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-		return f.constructSetProps(ev)
+		return b.buildSetProps(ev)
 
 	case opt.GroupByOp:
-		return f.constructGroupByProps(ev)
+		return b.buildGroupByProps(ev)
 
 	case opt.LimitOp:
-		return f.constructLimitProps(ev)
+		return b.buildLimitProps(ev)
 
 	case opt.OffsetOp:
-		return f.constructOffsetProps(ev)
+		return b.buildOffsetProps(ev)
 
 	case opt.Max1RowOp:
-		return f.constructMax1RowProps(ev)
+		return b.buildMax1RowProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	md := ev.Metadata()
@@ -108,12 +106,17 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = md.TableWeakKeys(def.Table)
 	filterWeakKeys(props.Relational)
 
-	props.Relational.Stats.initScan(f.evalCtx, md, def, tab)
+	// Don't bother setting cardinality from scan's HardLimit or Constraint,
+	// since those are created by exploration patterns and won't ever be the
+	// basis for the logical props on a newly created memo group.
+	props.Relational.Cardinality = AnyCardinality
+
+	props.Relational.Stats.initScan(b.evalCtx, md, def, tab)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -130,12 +133,15 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 	}
 
-	props.Relational.Stats.initSelect(f.evalCtx, ev.Child(1), &inputProps.Stats)
+	// Select filter can filter any or all rows.
+	props.Relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
+
+	props.Relational.Stats.initSelect(b.evalCtx, ev.Child(1), &inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -161,12 +167,15 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props.Relational.WeakKeys = inputProps.WeakKeys
 	filterWeakKeys(props.Relational)
 
+	// Inherit cardinality from input.
+	props.Relational.Cardinality = inputProps.Cardinality
+
 	props.Relational.Stats.initProject(&inputProps.Stats, &props.Relational.OutputCols)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -223,6 +232,11 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
+	// Calculate cardinality of each join type.
+	props.Relational.Cardinality = calcJoinCardinality(
+		ev, leftProps.Cardinality, rightProps.Cardinality,
+	)
+
 	props.Relational.Stats.initJoin(
 		ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2),
 	)
@@ -230,7 +244,7 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.childGroup(0).logical.Relational
@@ -270,6 +284,16 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	if groupingColSet.Empty() {
+		// Scalar GroupBy returns exactly one row.
+		props.Relational.Cardinality = OneCardinality
+	} else {
+		// GroupBy acts like a filter, never returning more rows than the input
+		// has. However, if the input has at least one row, then at least one row
+		// will also be returned by GroupBy.
+		props.Relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
+	}
+
 	props.Relational.Stats.initGroupBy(
 		&inputProps.Stats, &groupingColSet, &props.Relational.OutputCols,
 	)
@@ -277,7 +301,7 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := ev.childGroup(0).logical.Relational
@@ -305,12 +329,17 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	// Outer columns from either side are outer columns for set operation.
 	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
+	// Calculate cardinality of the set operator.
+	props.Relational.Cardinality = calcSetCardinality(
+		ev, leftProps.Cardinality, rightProps.Cardinality,
+	)
+
 	props.Relational.Stats.initSetOp(ev.Operator(), &leftProps.Stats, &rightProps.Stats, &colMap)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
@@ -321,12 +350,16 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(ev.childGroup(i).logical.Scalar.OuterCols)
 	}
 
+	// Cardinality is number of tuples in the Values operator.
+	card := uint32(ev.ChildCount())
+	props.Relational.Cardinality = Cardinality{Min: card, Max: card}
+
 	props.Relational.Stats.initValues(ev, &props.Relational.OutputCols)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -341,16 +374,27 @@ func (f logicalPropsFactory) constructLimitProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Limit puts a cap on the number of rows returned by input.
+	if limit.Operator() == opt.ConstOp {
+		constLimit := int64(*limit.Private().(*tree.DInt))
+		if constLimit <= 0 {
+			props.Relational.Cardinality = ZeroCardinality
+		} else if constLimit < math.MaxUint32 {
+			props.Relational.Cardinality = props.Relational.Cardinality.AtMost(uint32(constLimit))
+		}
+	}
+
 	props.Relational.Stats.initLimit(limit, &inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
-	offsetProps := ev.Child(1).Logical().Scalar
+	offset := ev.Child(1)
+	offsetProps := offset.Logical().Scalar
 
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
@@ -360,10 +404,21 @@ func (f logicalPropsFactory) constructOffsetProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Offset decreases the number of rows that are passed through from input.
+	if offset.Operator() == opt.ConstOp {
+		constOffset := int64(*offset.Private().(*tree.DInt))
+		if constOffset > 0 {
+			if constOffset > math.MaxUint32 {
+				constOffset = math.MaxUint32
+			}
+			props.Relational.Cardinality = inputProps.Cardinality.Skip(uint32(constOffset))
+		}
+	}
+
 	return props
 }
 
-func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := ev.Child(0).Logical().Relational
@@ -371,12 +426,15 @@ func (f logicalPropsFactory) constructMax1RowProps(ev ExprView) LogicalProps {
 	// Start with pass-through props from input.
 	*props.Relational = *inputProps
 
+	// Max1Row ensures that zero or one row is returned by input.
+	props.Relational.Cardinality = props.Relational.Cardinality.AtMost(1)
+
 	props.Relational.Stats.initMax1Row(&inputProps.Stats)
 
 	return props
 }
 
-func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
+func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
 	switch ev.Operator() {
@@ -404,7 +462,7 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	}
 
 	if props.Scalar.Type == types.Bool {
-		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: f.evalCtx}
+		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: b.evalCtx}
 		props.Scalar.Constraints, props.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}
 	return props
@@ -441,4 +499,61 @@ func filterWeakKeys(props *RelationalProps) {
 	if filtered != nil {
 		props.WeakKeys = filtered
 	}
+}
+
+func calcJoinCardinality(ev ExprView, left, right Cardinality) Cardinality {
+	var card Cardinality
+	switch ev.Operator() {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		// Semi/Anti join cardinality never exceeds left input cardinality, and
+		// allows zero rows.
+		return left.AsLowAs(0)
+	}
+
+	// Other join types can return up to cross product of rows.
+	card = left.Product(right)
+
+	// Outer joins return minimum number of rows, depending on type.
+	switch ev.Operator() {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AtLeast(left.Min)
+	}
+	switch ev.Operator() {
+	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
+		card = card.AtLeast(right.Min)
+	}
+
+	// Apply filter to cardinality.
+	if ev.Child(2).Operator() == opt.TrueOp {
+		return card
+	}
+	return card.AsLowAs(0)
+}
+
+func calcSetCardinality(ev ExprView, left, right Cardinality) Cardinality {
+	var card Cardinality
+	switch ev.Operator() {
+	case opt.UnionOp, opt.UnionAllOp:
+		// Add cardinality of left and right inputs.
+		card = left.Add(right)
+
+	case opt.IntersectOp, opt.IntersectAllOp:
+		// Use minimum of left and right Max cardinality.
+		card = Cardinality{Min: 0, Max: left.Max}
+		card = card.AtMost(right.Max)
+
+	case opt.ExceptOp, opt.ExceptAllOp:
+		// Use left Max cardinality.
+		card = Cardinality{Min: 0, Max: left.Max}
+		if left.Min > right.Max {
+			card.Min = left.Min - right.Max
+		}
+	}
+	switch ev.Operator() {
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
+		// Removing distinct values results in at least one row if input has at
+		// least one row.
+		card = card.AsLowAs(1)
+	}
+	return card
 }

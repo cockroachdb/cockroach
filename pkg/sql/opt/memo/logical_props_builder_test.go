@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-func TestLogicalPropsFactory(t *testing.T) {
+func TestLogicalPropsBuilder(t *testing.T) {
 	runDataDrivenTest(t, "testdata/logprops/", memo.ExprFmtHideCost)
 	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost)
 }

@@ -20,6 +20,73 @@ TABLE b
       └── x int not null
 
 # --------------------------------------------------
+# EliminateLimit
+# --------------------------------------------------
+opt
+SELECT * FROM (SELECT * FROM a LIMIT 99) LIMIT 100
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── limit: 99
+ └── keys: (1)
+
+opt
+SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 100
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── limit: 100
+ └── keys: (1)
+
+# Don't eliminate the outer limit if it's less than the inner.
+opt
+SELECT * FROM (SELECT * FROM a LIMIT 100) LIMIT 99
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 99]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── limit: 100
+ │    └── keys: (1)
+ └── const: 99 [type=int]
+
+# High limits (> max uint32), can't eliminate in this case.
+opt
+SELECT * FROM (SELECT * FROM a LIMIT 5000000000) LIMIT 5100000000
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── keys: (1)
+ ├── limit
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    └── const: 5000000000 [type=int]
+ └── const: 5100000000 [type=int]
+
+# Don't eliminate in case of zero or negative limit.
+opt
+SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
+ ├── keys: (1)
+ ├── limit
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── cardinality: [0 - 0]
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    └── const: 0 [type=int]
+ └── const: -1 [type=int]
+
+# --------------------------------------------------
 # PushLimitIntoProject
 # --------------------------------------------------
 opt
@@ -27,6 +94,7 @@ SELECT k, f*2.0 FROM a LIMIT 5
 ----
 project
  ├── columns: k:1(int!null) column6:6(float)
+ ├── cardinality: [0 - 5]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.f:3(float)
@@ -44,9 +112,11 @@ SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
 ----
 project
  ├── columns: f:3(float) column6:6(float)
+ ├── cardinality: [0 - 5]
  ├── ordering: +3
  ├── limit
  │    ├── columns: a.f:3(float)
+ │    ├── cardinality: [0 - 5]
  │    ├── ordering: +3
  │    ├── sort
  │    │    ├── columns: a.f:3(float)
@@ -68,6 +138,32 @@ project
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
+
+# Don't push zero limit into Scan.
+opt
+SELECT * FROM a LIMIT 0
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── keys: (1)
+ └── const: 0 [type=int]
+
+# Don't push negative limit into Scan.
+opt
+SELECT * FROM a LIMIT -1
+----
+limit
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── keys: (1)
+ └── const: -1 [type=int]
 
 # --------------------------------------------------
 # PushOffsetIntoProject
@@ -130,9 +226,11 @@ SELECT k, f*2.0 FROM a OFFSET 5 LIMIT 10
 ----
 project
  ├── columns: k:1(int!null) column6:6(float)
+ ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
  │    ├── columns: a.k:1(int!null) a.f:3(float)
+ │    ├── cardinality: [0 - 10]
  │    ├── keys: (1)
  │    ├── offset
  │    │    ├── columns: a.k:1(int!null) a.f:3(float)
@@ -153,9 +251,11 @@ SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LI
 ----
 project
  ├── columns: f:3(float) column6:6(float)
+ ├── cardinality: [0 - 10]
  ├── ordering: +3
  ├── limit
  │    ├── columns: a.f:3(float)
+ │    ├── cardinality: [0 - 10]
  │    ├── ordering: +3
  │    ├── offset
  │    │    ├── columns: a.f:3(float)

@@ -153,12 +153,15 @@ select
       └── inner-join
            ├── columns: xysd.x:1(int) xysd.y:2(int)
            ├── outer: (1-3)
+           ├── cardinality: [0 - 1]
            ├── stats: [rows=0]
            ├── project
            │    ├── columns: xysd.x:1(int)
            │    ├── outer: (1)
+           │    ├── cardinality: [1 - 1]
            │    ├── stats: [rows=1]
            │    ├── values
+           │    │    ├── cardinality: [1 - 1]
            │    │    ├── stats: [rows=1]
            │    │    └── tuple [type=tuple{}]
            │    └── projections [outer=(1)]
@@ -166,8 +169,10 @@ select
            ├── project
            │    ├── columns: xysd.y:2(int)
            │    ├── outer: (2)
+           │    ├── cardinality: [1 - 1]
            │    ├── stats: [rows=1]
            │    ├── values
+           │    │    ├── cardinality: [1 - 1]
            │    │    ├── stats: [rows=1]
            │    │    └── tuple [type=tuple{}]
            │    └── projections [outer=(2)]
@@ -176,3 +181,297 @@ select
                 ├── cast: string [type=string, outer=(1)]
                 │    └── variable: xysd.x [type=int, outer=(1)]
                 └── variable: xysd.s [type=string, outer=(3)]
+
+# Calculate semi-join cardinality when left side has non-zero cardinality.
+opt
+SELECT * FROM (SELECT COUNT(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
+----
+semi-join
+ ├── columns: cnt:5(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=0]
+ ├── select
+ │    ├── columns: cnt:5(int)
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=0]
+ │    ├── keys: ()
+ │    ├── group-by
+ │    │    ├── columns: cnt:5(int)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── keys: ()
+ │    │    ├── scan xysd
+ │    │    │    └── stats: [rows=1000]
+ │    │    └── aggregations
+ │    │         └── function: count_rows [type=int]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
+ │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
+ │              ├── variable: cnt [type=int, outer=(5)]
+ │              └── const: 1 [type=int]
+ ├── scan uv
+ │    ├── columns: uv.u:6(int) uv.v:7(int!null)
+ │    └── stats: [rows=1000]
+ └── true [type=bool]
+
+# Calculate semi-join-apply cardinality.
+opt
+SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE EXISTS(SELECT * FROM uv WHERE x=u LIMIT 5)
+----
+semi-join-apply
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=50]
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── limit: 10
+ │    ├── stats: [rows=10]
+ │    └── keys: (1) weak(3,4)
+ ├── limit
+ │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── outer: (1)
+ │    ├── cardinality: [0 - 5]
+ │    ├── stats: [rows=5]
+ │    ├── select
+ │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── stats: [rows=100]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    └── stats: [rows=1000]
+ │    │    └── filters [type=bool, outer=(1,5)]
+ │    │         └── eq [type=bool, outer=(1,5)]
+ │    │              ├── variable: xysd.x [type=int, outer=(1)]
+ │    │              └── variable: uv.u [type=int, outer=(5)]
+ │    └── const: 5 [type=int]
+ └── true [type=bool]
+
+# Calculate anti-join cardinality when left side has non-zero cardinality.
+opt
+SELECT * FROM (SELECT * FROM (VALUES (1))) WHERE NOT EXISTS(SELECT * FROM uv WHERE u=column1)
+----
+anti-join
+ ├── columns: column1:1(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=100, distinct(1)=1]
+ ├── values
+ │    ├── columns: column1:1(int)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(1)=1]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ ├── scan uv
+ │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2)]
+      └── eq [type=bool, outer=(1,2)]
+           ├── variable: uv.u [type=int, outer=(2)]
+           └── variable: column1 [type=int, outer=(1)]
+
+# Calculate anti-join-apply cardinality.
+opt
+SELECT * FROM (SELECT * FROM xysd LIMIT 10) WHERE NOT EXISTS(SELECT * FROM uv WHERE x=u LIMIT 5)
+----
+anti-join-apply
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=50]
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── limit: 10
+ │    ├── stats: [rows=10]
+ │    └── keys: (1) weak(3,4)
+ ├── limit
+ │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── outer: (1)
+ │    ├── cardinality: [0 - 5]
+ │    ├── stats: [rows=5]
+ │    ├── select
+ │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── stats: [rows=100]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    └── stats: [rows=1000]
+ │    │    └── filters [type=bool, outer=(1,5)]
+ │    │         └── eq [type=bool, outer=(1,5)]
+ │    │              ├── variable: xysd.x [type=int, outer=(1)]
+ │    │              └── variable: uv.u [type=int, outer=(5)]
+ │    └── const: 5 [type=int]
+ └── true [type=bool]
+
+# Calculate inner-join cardinality.
+build
+SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
+----
+inner-join
+ ├── columns: column1:1(int) u:2(int) v:3(int!null)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=4, distinct(1)=2]
+ ├── values
+ │    ├── columns: column1:1(int)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(1)=2]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ ├── limit
+ │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── project
+ │    │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:2(int) uv.v:3(int!null) uv.rowid:4(int!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (4)
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: uv.u [type=int, outer=(2)]
+ │    │         └── variable: uv.v [type=int, outer=(3)]
+ │    └── const: 2 [type=int]
+ └── true [type=bool]
+
+# Calculate left-join cardinality.
+build
+SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON True
+----
+left-join
+ ├── columns: column1:1(int) u:2(int) v:3(int)
+ ├── cardinality: [3 - 6]
+ ├── stats: [rows=6, distinct(1)=3]
+ ├── values
+ │    ├── columns: column1:1(int)
+ │    ├── cardinality: [3 - 3]
+ │    ├── stats: [rows=3, distinct(1)=3]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ ├── limit
+ │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── project
+ │    │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:2(int) uv.v:3(int!null) uv.rowid:4(int!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (4)
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: uv.u [type=int, outer=(2)]
+ │    │         └── variable: uv.v [type=int, outer=(3)]
+ │    └── const: 2 [type=int]
+ └── true [type=bool]
+
+# Calculate right-join cardinality.
+build
+SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON True
+----
+right-join
+ ├── columns: u:1(int) v:2(int) column1:4(int)
+ ├── cardinality: [3 - 6]
+ ├── stats: [rows=6, distinct(4)=3]
+ ├── limit
+ │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    ├── cardinality: [0 - 2]
+ │    ├── stats: [rows=2]
+ │    ├── project
+ │    │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    │    ├── stats: [rows=1000]
+ │    │    ├── scan uv
+ │    │    │    ├── columns: uv.u:1(int) uv.v:2(int!null) uv.rowid:3(int!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── keys: (3)
+ │    │    └── projections [outer=(1,2)]
+ │    │         ├── variable: uv.u [type=int, outer=(1)]
+ │    │         └── variable: uv.v [type=int, outer=(2)]
+ │    └── const: 2 [type=int]
+ ├── values
+ │    ├── columns: column1:4(int)
+ │    ├── cardinality: [3 - 3]
+ │    ├── stats: [rows=3, distinct(4)=3]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 3 [type=int]
+ └── true [type=bool]
+
+# Calculate full-join cardinality.
+build
+SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON True
+----
+full-join
+ ├── columns: column1:1(unknown) column1:2(unknown)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1)=1, distinct(2)=1]
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(1)=1]
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── columns: column1:2(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(2)=1]
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ └── true [type=bool]
+
+# Calculate full-join cardinality with filter.
+build
+SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a.column1=b.column1
+----
+full-join
+ ├── columns: column1:1(unknown) column1:2(unknown)
+ ├── cardinality: [0 - 4]
+ ├── stats: [rows=0, distinct(1)=1, distinct(2)=1]
+ ├── values
+ │    ├── columns: column1:1(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(1)=1]
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ ├── values
+ │    ├── columns: column1:2(unknown)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(2)=1]
+ │    ├── tuple [type=tuple{unknown}]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown}]
+ │         └── null [type=unknown]
+ └── null [type=unknown]
+
+# Calculate full-join cardinality of one input with unknown cardinality.
+build
+SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
+----
+full-join
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
+ ├── cardinality: [2 - ]
+ ├── stats: [rows=2000, distinct(5)=2]
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
+ ├── values
+ │    ├── columns: column1:5(int)
+ │    ├── cardinality: [2 - 2]
+ │    ├── stats: [rows=2, distinct(5)=2]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── true [type=bool]
