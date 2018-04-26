@@ -62,7 +62,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &opt.Statistics{}, &RelationalProps{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
@@ -91,7 +91,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &opt.Statistics{}, &RelationalProps{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)

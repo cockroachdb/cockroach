@@ -109,7 +109,7 @@ select
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5, distinct(3)=5]
+ │    ├── stats: [rows=5, distinct(3)=3]
  │    ├── keys: (1) weak(3,4)
  │    ├── sort
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)

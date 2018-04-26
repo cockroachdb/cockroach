@@ -79,10 +79,10 @@ SELECT * FROM a WHERE x = 1
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333, distinct(1)=1]
+ ├── stats: [rows=1, distinct(1)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: a.x [type=int, outer=(1)]
@@ -93,10 +93,10 @@ SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333, distinct(1)=3]
+ ├── stats: [rows=4, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -110,10 +110,10 @@ SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=111, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -127,10 +127,10 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=111, distinct(1)=3, distinct(2)=3]
+ ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -248,10 +248,10 @@ SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333, distinct(1)=3]
+ ├── stats: [rows=4, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
            ├── variable: a.x [type=int, outer=(1)]
@@ -276,10 +276,10 @@ SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333, distinct(1)=2]
+ ├── stats: [rows=2, distinct(1)=2]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -299,10 +299,10 @@ SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=111, distinct(1)=2]
+ ├── stats: [rows=1, distinct(1)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1] [/3 - /3]; /2: [/5 - ]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
       │    ├── variable: a.x [type=int, outer=(1)]

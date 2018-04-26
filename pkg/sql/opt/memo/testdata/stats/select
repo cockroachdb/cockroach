@@ -184,7 +184,7 @@ project
  │    │         ├── variable: b.z [type=int, outer=(2)]
  │    │         └── variable: b.x [type=int, outer=(1)]
  │    └── aggregations [outer=(1)]
- │         └── function: sum [type=decimal, outer=(1)]
+ │         └── sum [type=decimal, outer=(1)]
  │              └── variable: b.x [type=int, outer=(1)]
  └── projections [outer=(4)]
       └── variable: column4 [type=decimal, outer=(4)]
