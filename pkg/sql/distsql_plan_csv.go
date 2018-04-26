@@ -140,10 +140,10 @@ func (l *DistLoader) LoadCSV(
 			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
 				TableDesc: *tableDesc,
 				Options: roachpb.CSVOptions{
-					Comma:   comma,
-					Comment: comment,
-					Nullif:  nullif,
-					Skip:    skip,
+					Comma:        comma,
+					Comment:      comment,
+					NullEncoding: nullif,
+					Skip:         skip,
 				},
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
