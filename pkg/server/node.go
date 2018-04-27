@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,6 +72,22 @@ var (
 	metaExecError = metric.Metadata{
 		Name: "exec.error",
 		Help: "Number of batch KV requests that failed to execute on this node"}
+)
+
+// Cluster settings
+var (
+	// GraphiteEndpoint is host:port, if any, of Graphite metrics server
+	GraphiteEndpoint = settings.RegisterStringSetting(
+		"external.graphite.endpoint",
+		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
+		"",
+	)
+	// GraphiteFrequency is how often metrics are pushed to Graphite, if enabled
+	GraphiteFrequency = settings.RegisterDurationSetting(
+		"external.graphite.frequency",
+		"the frequency with which metrics are pushed to Graphite (if enabled)",
+		10*time.Second,
+	)
 )
 
 type nodeMetrics struct {
@@ -755,6 +772,67 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
 		}
 		return nil
+	})
+}
+
+func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
+	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+	ch := make(chan struct{}, 1)
+
+	GraphiteEndpoint.SetOnChange(&st.SV, func() {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	})
+	GraphiteFrequency.SetOnChange(&st.SV, func() {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	})
+
+	n.stopper.RunWorker(ctx, func(ctx context.Context) {
+		var timer timeutil.Timer
+		defer timer.Stop()
+		var timerSet bool
+		for {
+			select {
+			case <-n.stopper.ShouldStop():
+				return
+			case <-ch:
+				// Cluster settings have changed.
+				if GraphiteEndpoint.Get(&st.SV) == "" {
+					if timerSet {
+						log.Info(ctx, "stopped the graphite ticker")
+						timerSet = false
+						timer.Read = true
+					}
+					if !timer.Stop() {
+						<-timer.C
+					}
+				} else {
+					if timerSet {
+						timer.Read = true
+					} else {
+						timerSet = true
+					}
+					if !timer.Stop() {
+						<-timer.C
+					}
+					wait := GraphiteFrequency.Get(&st.SV)
+					timer.Reset(wait)
+				}
+			case <-timer.C:
+				timer.Read = true
+				endpoint := GraphiteEndpoint.Get(&st.SV)
+				if err := n.recorder.ExportToGraphite(ctx, endpoint); err != nil {
+					log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+				}
+				wait := GraphiteFrequency.Get(&st.SV)
+				timer.Reset(wait)
+			}
+		}
 	})
 }
 
