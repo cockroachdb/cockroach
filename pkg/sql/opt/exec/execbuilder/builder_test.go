@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,11 +63,6 @@ import (
 //        columns (1-indexed). Used for queries which guarantee a partial order.
 //        See partialSort() for more information.
 //
-//  - exec-explain
-//
-//    Builds a memo structure from a SQL statement, then builds an
-//    execution plan and outputs the details of that plan.
-//
 //  - catalog
 //
 //    Prints information about a table, retrieved through the Catalog interface.
@@ -96,6 +90,7 @@ func TestExecBuild(t *testing.T) {
 
 			var rowSort bool
 			var partialSortColumns []int
+			var hideColumns bool
 
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
@@ -115,6 +110,9 @@ func TestExecBuild(t *testing.T) {
 						partialSortColumns[i] = val - 1
 					}
 
+				case "hide-columns":
+					hideColumns = true
+
 				default:
 					if err := tester.Flags.Set(arg); err != nil {
 						d.Fatalf(t, "%s", err)
@@ -130,17 +128,11 @@ func TestExecBuild(t *testing.T) {
 				}
 				return ""
 
-			case "exec", "exec-explain":
+			case "exec":
 				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 				defer eng.Close()
 
-				var columns sqlbase.ResultColumns
-				var results []tree.Datums
-				if d.Cmd == "exec-explain" {
-					results, err = tester.Explain(eng)
-				} else {
-					columns, results, err = tester.Exec(eng)
-				}
+				columns, results, err := tester.Exec(eng)
 				if err != nil {
 					d.Fatalf(t, "%v", err)
 				}
@@ -161,7 +153,7 @@ func TestExecBuild(t *testing.T) {
 					' ', /* padchar */
 					0,   /* flags */
 				)
-				if columns != nil {
+				if columns != nil && !hideColumns {
 					for i := range columns {
 						if i > 0 {
 							fmt.Fprintf(tw, "\t")
