@@ -240,7 +240,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "BEGIN, or before a statement running as an implicit txn",
 			Next:        stateOpen{ImplicitTxn: Var("implicitTxn"), RetryIntent: False},
 			Action: func(args Args) error {
-				return args.Extended.(*txnState2).noTxnToOpen(
+				return args.Extended.(*txnState).noTxnToOpen(
 					args.Ctx, args.Event.(eventTxnStart),
 					args.Payload.(eventTxnStartPayload))
 			},
@@ -251,7 +251,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "anything but BEGIN or extended protocol command error",
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
@@ -264,7 +264,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "COMMIT/ROLLBACK, or after a statement running as an implicit txn",
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
@@ -295,7 +295,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateOpen{ImplicitTxn: Var("implicitTxn"), RetryIntent: Var("retryIntent")},
 			Action: func(args Args) error {
 				// The caller will call rewCap.rewindAndUnlock().
-				args.Extended.(*txnState2).setAdvanceInfo(
+				args.Extended.(*txnState).setAdvanceInfo(
 					rewind,
 					args.Payload.(eventRetriableErrPayload).rewCap,
 					txnRestart)
@@ -319,7 +319,7 @@ var TxnStateTransitions = Compile(Pattern{
 		eventNonRetriableErr{IsCommit: False}: {
 			Next: stateAborted{RetryIntent: Var("retryIntent")},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				ts.txnAbortCount.Inc(1)
@@ -334,7 +334,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Action: func(args Args) error {
 				// We flush after setting the retry intent; we know what statement
 				// caused this event and we don't need to rewind past it.
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -346,7 +346,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "RetryIntent not set, so handled like non-retriable err",
 			Next:        stateAborted{RetryIntent: False},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				ts.txnAbortCount.Inc(1)
@@ -360,7 +360,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Action: func(args Args) error {
 				// Note: Preparing the KV txn for restart has already happened by this
 				// point.
-				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, txnRestart)
 				return nil
 			},
 		},
@@ -368,7 +368,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "RELEASE SAVEPOINT cockroach_restart",
 			Next:        stateCommitWait{},
 			Action: func(args Args) error {
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, noRewind, txnCommit)
+				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnCommit)
 				return nil
 			},
 		},
@@ -377,7 +377,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
 			Action: func(args Args) error {
-				state := args.Extended.(*txnState2)
+				state := args.Extended.(*txnState)
 				// NOTE: We don't bump the txn timestamp on this restart. Should we?
 				// Well, if we generally supported savepoints and one would issue a
 				// rollback to a regular savepoint, clearly we couldn't bump the
@@ -385,7 +385,7 @@ var TxnStateTransitions = Compile(Pattern{
 				// savepoint, it's not clear to me what a user's expectation might be.
 				state.mu.txn.Proto().Restart(
 					0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
 		},
@@ -400,7 +400,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(ts.Ctx)
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
@@ -412,7 +412,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "any other statement",
 			Next:        stateAborted{RetryIntent: Var("retryIntent")},
 			Action: func(args Args) error {
-				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -425,7 +425,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 
 				payload := args.Payload.(eventTxnStartPayload)
@@ -451,7 +451,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK",
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
@@ -463,14 +463,14 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
 			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
 			Action: func(args Args) error {
-				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, noRewind, txnRestart)
+				args.Extended.(*txnState).setAdvanceInfo(advanceOne, noRewind, txnRestart)
 				return nil
 			},
 		},
 		eventNonRetriableErr{IsCommit: Any}: {
 			Next: stateAborted{RetryIntent: True},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(eventNonRetriableErrPayload).err)
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				ts.txnAbortCount.Inc(1)
@@ -484,7 +484,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "COMMIT",
 			Next:        stateNoTxn{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 				ts.setAdvanceInfo(
 					advanceOne, noRewind, args.Payload.(eventTxnFinishPayload).toEvent())
@@ -499,7 +499,7 @@ var TxnStateTransitions = Compile(Pattern{
 			Description: "any other statement",
 			Next:        stateCommitWait{},
 			Action: func(args Args) error {
-				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, noRewind, noEvent)
+				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
 				return nil
 			},
 		},
@@ -508,7 +508,7 @@ var TxnStateTransitions = Compile(Pattern{
 
 // cleanupAndFinish rolls back the KV txn and finishes the SQL txn.
 func cleanupAndFinish(args Args) error {
-	ts := args.Extended.(*txnState2)
+	ts := args.Extended.(*txnState)
 	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
 	ts.finishSQLTxn(args.Ctx)
 	ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
@@ -517,7 +517,7 @@ func cleanupAndFinish(args Args) error {
 
 // noTxnToOpen implements the side effects of starting a txn. It also calls
 // setAdvanceInfo().
-func (ts *txnState2) noTxnToOpen(
+func (ts *txnState) noTxnToOpen(
 	connCtx context.Context, ev eventTxnStart, payload eventTxnStartPayload,
 ) error {
 	txnTyp := explicitTxn
@@ -554,7 +554,7 @@ var BoundTxnStateTransitions = Compile(Pattern{
 		eventNonRetriableErr{IsCommit: Any}: {
 			Next: stateInternalError{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				return nil
@@ -563,7 +563,7 @@ var BoundTxnStateTransitions = Compile(Pattern{
 		eventRetriableErr{CanAutoRetry: Any, IsCommit: False}: {
 			Next: stateInternalError{},
 			Action: func(args Args) error {
-				ts := args.Extended.(*txnState2)
+				ts := args.Extended.(*txnState)
 				ts.finishSQLTxn(args.Ctx)
 				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
 				return nil
