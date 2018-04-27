@@ -188,7 +188,6 @@ func TestSchemaChangeProcess(t *testing.T) {
 		&execCfg,
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
-		&sql.MemoryMetrics{},
 		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
