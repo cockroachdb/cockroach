@@ -71,6 +71,10 @@ var AssetInfo func(name string) (os.FileInfo, error)
 
 var IndexHTMLTemplate *template.Template
 
+type IndexHTMLArgs struct {
+	LoggedInUser string
+}
+
 func init() {
 	t, err := template.New("index").Parse(`<!DOCTYPE html>
 <html>
@@ -85,9 +89,9 @@ func init() {
 			window.loggedInUser = {{ .loggedInUser }}
 		</script>
 
-		<script src="/assets/protos.dll.js" type="text/javascript"></script>
-		<script src="/assets/vendor.dll.js" type="text/javascript"></script>
-		<script src="/assets/bundle.js" type="text/javascript"></script>
+		<script src="protos.dll.js" type="text/javascript"></script>
+		<script src="vendor.dll.js" type="text/javascript"></script>
+		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
 `)

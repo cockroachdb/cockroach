@@ -1154,25 +1154,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	// Also throw the landing page in there. It won't work well, but it's better than a 404.
-	// The remaining endpoints will be opened late, when we're sure that the subsystems they
-	// talk to are functional.
-	s.mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(&assetfs.AssetFS{
-		Asset:     ui.Asset,
-		AssetDir:  ui.AssetDir,
-		AssetInfo: ui.AssetInfo,
-	})))
-
-	// TODO(vilterp): serve after passing through AuthMux, not here
-	s.mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Add("Content-Type", "text/html")
-
-		ui.IndexHTMLTemplate.Execute(writer, map[string]string{
-			// TODO(vilterp): get the logged in user off the context
-			"loggedInUser": `vilterp";alert("hello world")`, // TODO(vilterp): not quite sure if I'm using this right
-		})
-	})
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1459,12 +1440,42 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	s.serveMode.set(modeOperational)
 
+	// TODO(vilterp): wire up index under here!!
 	s.mux.Handle(adminPrefix, authHandler)
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
 	s.mux.Handle(authPrefix, gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
+
+	// Also throw the landing page in there. It won't work well, but it's better than a 404.
+	// The remaining endpoints will be opened late, when we're sure that the subsystems they
+	// talk to are functional.
+	fileServer := http.FileServer(&assetfs.AssetFS{
+		Asset:     ui.Asset,
+		AssetDir:  ui.AssetDir,
+		AssetInfo: ui.AssetInfo,
+	})
+
+	// TODO(vilterp): serve after passing through AuthMux, not here
+	s.mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/" {
+			fileServer.ServeHTTP(writer, request)
+			return
+		}
+
+		writer.Header().Add("Content-Type", "text/html")
+
+		loggedInUser, ok := request.Context().Value("loggedInUser").(string)
+		if !ok {
+			// can we get a nil in here?
+			loggedInUser = ""
+		}
+
+		ui.IndexHTMLTemplate.Execute(writer, ui.IndexHTMLArgs{
+			LoggedInUser: loggedInUser,
+		})
+	})
 
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)

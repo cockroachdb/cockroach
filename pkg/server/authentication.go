@@ -330,7 +330,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	valid, _, err := am.server.verifySession(req.Context(), cookie)
+	valid, username, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
 		http.Error(w, apiInternalError(req.Context(), err).Error(), http.StatusInternalServerError)
 		return
@@ -340,11 +340,11 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// TODO(mrtracy): At this point, we should set the session ID and username
-	// on the request context. However, GRPC Gateway does not correctly use the
-	// request context, and even if it did we are not providing any
-	// authorization for API methods (only authentication).
-	am.inner.ServeHTTP(w, req)
+	// TODO(vilterp): move to a constant
+	newCtx := context.WithValue(req.Context(), "loggedInUser", username)
+	newReq := req.WithContext(newCtx)
+
+	am.inner.ServeHTTP(w, newReq)
 }
 
 func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
