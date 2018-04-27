@@ -519,15 +519,15 @@ func (c *cliState) refreshTransactionStatus() {
 
 	// Change the prompt based on the response from the server.
 	switch txnString {
-	case sql.NoTxn.String():
+	case sql.NoTxnStr:
 		c.lastKnownTxnStatus = ""
-	case sql.Aborted.String():
+	case sql.AbortedStateStr:
 		c.lastKnownTxnStatus = " ERROR"
-	case sql.CommitWait.String():
+	case sql.CommitWaitStateStr:
 		c.lastKnownTxnStatus = "  DONE"
-	case sql.RestartWait.String():
+	case sql.RestartWaitStateStr:
 		c.lastKnownTxnStatus = " RETRY"
-	case sql.Open.String():
+	case sql.OpenStateStr:
 		// The state AutoRetry is reported by the server as Open, so no need to
 		// handle it here.
 		c.lastKnownTxnStatus = "  OPEN"
