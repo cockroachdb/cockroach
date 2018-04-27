@@ -362,7 +362,9 @@ func (e *explorer) canLimitScan(def, limit, ordering memo.PrivateID) bool {
 
 	scanOpDef := e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	if scanOpDef.HardLimit != 0 {
-		// Can't push limit into scan if scan is already limited.
+		// Don't push limit into scan if scan is already limited. This should
+		// only happen when normalizations haven't run, as otherwise redundant
+		// Limit operators would be discarded.
 		return false
 	}
 

@@ -16,3 +16,7 @@ further information, and in some cases proofs, can be found.
     Orthogonal Optimization of Subqueries and Aggregation.
     Sigmod Record. 30. 571-581. 10.1145/375663.375748. 
     http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf
+
+[4] Galindo-Legaria, C.A.. (2001).
+    Parameterized queries and nesting equivalences.
+    https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf

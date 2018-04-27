@@ -74,7 +74,7 @@ func (g *factoryGen) genInternPrivateFuncs() {
 //
 //     ... normalization rule code goes here ...
 //
-//     return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_scanExpr)))
+//     return _f.onConstruct(memo.Expr(_scanExpr))
 //   }
 //
 func (g *factoryGen) genConstructFuncs() {
@@ -117,7 +117,7 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.newline()
 		}
 
-		g.w.writeIndent("return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(%s)))\n", varName)
+		g.w.writeIndent("return _f.onConstruct(memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 	}
 }

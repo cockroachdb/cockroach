@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -183,6 +184,24 @@ func (ev ExprView) Cost() Cost {
 		panic("Cost is not available when traversing the normalized tree")
 	}
 	return ev.mem.bestExpr(BestExprID{group: ev.group, ordinal: ev.best}).cost
+}
+
+// Replace invokes the given callback function for each child memo group of the
+// expression. The callback function can return the unchanged group, or it can
+// construct a new group and return that instead. Replace will assemble all of
+// the changed and unchanged children into an expression of the same type having
+// those children. If the expression is different from the original, then
+// Replace will memoize the new expression and return an ExprView over it.
+// Callers can use this method as a building block when searching and replacing
+// expressions in a tree.
+func (ev ExprView) Replace(evalCtx *tree.EvalContext, replace ReplaceChildFunc) ExprView {
+	if ev.best != normBestOrdinal {
+		panic("Replace can only be used when traversing the normalized tree")
+	}
+	existingExpr := ev.mem.NormExpr(ev.group)
+	newExpr := existingExpr.Replace(ev.mem, replace)
+	newGroup := ev.mem.MemoizeNormExpr(evalCtx, newExpr)
+	return MakeNormExprView(ev.mem, newGroup)
 }
 
 func (ev ExprView) childGroup(nth int) *group {
