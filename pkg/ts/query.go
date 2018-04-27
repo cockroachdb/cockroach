@@ -764,11 +764,11 @@ func (ai aggregatingIterator) makeLeadingEdgeFilter(
 func (db *DB) QueryMemoryConstrained(
 	ctx context.Context,
 	query tspb.Query,
-	queryResolution Resolution,
+	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
-	maxTimespanWidth, err := mem.GetMaxTimespan(queryResolution)
+	maxTimespanWidth, err := mem.GetMaxTimespan(diskResolution)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -778,7 +778,7 @@ func (db *DB) QueryMemoryConstrained(
 		return db.Query(
 			ctx,
 			query,
-			queryResolution,
+			diskResolution,
 			timespan,
 			mem,
 		)
@@ -802,7 +802,7 @@ func (db *DB) QueryMemoryConstrained(
 		data, sources, err := db.Query(
 			ctx,
 			query,
-			queryResolution,
+			diskResolution,
 			adjustedChunkTime,
 			mem,
 		)
@@ -826,9 +826,9 @@ func (db *DB) QueryMemoryConstrained(
 // Query returns datapoints for the named time series during the supplied time
 // span.  Data is returned as a series of consecutive data points.
 //
-// Raw data is queried only at the queryResolution supplied: if data for the
-// named time series is not stored at the given resolution, an empty result will
-// be returned.
+// Raw data is queried only from the on-disk resolution supplied: if data for
+// the named time series is not stored at the given resolution, an empty result
+// will be returned.
 //
 // Raw data is converted into query results through a number of processing
 // steps, which are executed in the following order:
@@ -838,10 +838,10 @@ func (db *DB) QueryMemoryConstrained(
 // 3. Interpolation and Aggregation
 //
 // Raw data stored on the server is already downsampled into samples with
-// interval length queryResolution.SampleDuration(); however, Result data can be
+// interval length diskResolution.SampleDuration(); however, Result data can be
 // further downsampled into a longer sample intervals based on a provided
 // sampleDuration. sampleDuration must have a sample duration which is a
-// positive integer multiple of the queryResolution's sample duration. The
+// positive integer multiple of the diskResolution's sample duration. The
 // downsampling operation can compute a sum, total, max or min. Each downsampled
 // datapoint's timestamp falls in the middle of the sample period it represents.
 //
@@ -860,11 +860,11 @@ func (db *DB) QueryMemoryConstrained(
 func (db *DB) Query(
 	ctx context.Context,
 	query tspb.Query,
-	queryResolution Resolution,
+	diskResolution Resolution,
 	timespan QueryTimespan,
 	mem QueryMemoryContext,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
-	if err := timespan.verifyDiskResolution(queryResolution); err != nil {
+	if err := timespan.verifyDiskResolution(diskResolution); err != nil {
 		return nil, nil, err
 	}
 
@@ -881,8 +881,8 @@ func (db *DB) Query(
 	// system time, move endNanos back by one sample period. This avoids the
 	// situation where we return a data point which was downsampled from
 	// incomplete data which will later be complete.
-	queryResolutionSampleDuration := queryResolution.SampleDuration()
-	if timespan.SampleDurationNanos > queryResolutionSampleDuration &&
+	diskResolutionSampleDuration := diskResolution.SampleDuration()
+	if timespan.SampleDurationNanos > diskResolutionSampleDuration &&
 		timespan.EndNanos+timespan.SampleDurationNanos > systemTime {
 		timespan.EndNanos -= timespan.SampleDurationNanos
 	}
@@ -898,8 +898,8 @@ func (db *DB) Query(
 	defer localAccount.Close(ctx)
 
 	// Actual queried data should include the interpolation limit on either side.
-	queryTimespan := timespan
-	queryTimespan.expand(mem.InterpolationLimitNanos)
+	diskTimespan := timespan
+	diskTimespan.expand(mem.InterpolationLimitNanos)
 
 	var rows []client.KeyValue
 	if len(query.Sources) == 0 {
@@ -908,10 +908,10 @@ func (db *DB) Query(
 		// the query. Query slightly before and after the actual queried range
 		// to allow interpolation of points at the start and end of the range.
 		startKey := MakeDataKey(
-			query.Name, "" /* source */, queryResolution, queryTimespan.StartNanos,
+			query.Name, "" /* source */, diskResolution, diskTimespan.StartNanos,
 		)
 		endKey := MakeDataKey(
-			query.Name, "" /* source */, queryResolution, queryTimespan.EndNanos,
+			query.Name, "" /* source */, diskResolution, diskTimespan.EndNanos,
 		).PrefixEnd()
 		b := &client.Batch{}
 		b.Scan(startKey, endKey)
@@ -924,11 +924,11 @@ func (db *DB) Query(
 		b := &client.Batch{}
 		// Iterate over all key timestamps which may contain data for the given
 		// sources, based on the given start/end time and the resolution.
-		kd := queryResolution.SlabDuration()
-		startTimestamp := queryTimespan.StartNanos - queryTimespan.StartNanos%kd
-		for currentTimestamp := startTimestamp; currentTimestamp <= queryTimespan.EndNanos; currentTimestamp += kd {
+		kd := diskResolution.SlabDuration()
+		startTimestamp := diskTimespan.StartNanos - diskTimespan.StartNanos%kd
+		for currentTimestamp := startTimestamp; currentTimestamp <= diskTimespan.EndNanos; currentTimestamp += kd {
 			for _, source := range query.Sources {
-				key := MakeDataKey(query.Name, source, queryResolution, currentTimestamp)
+				key := MakeDataKey(query.Name, source, diskResolution, currentTimestamp)
 				b.Get(key)
 			}
 		}
@@ -1001,7 +1001,7 @@ func (db *DB) Query(
 
 	// Filter the result of the aggregation function through a leading edge
 	// filter.
-	cutoffNanos := timeutil.Now().UnixNano() - queryResolutionSampleDuration
+	cutoffNanos := timeutil.Now().UnixNano() - diskResolutionSampleDuration
 	valueFn := iters.makeLeadingEdgeFilter(aggFn, cutoffNanos)
 
 	// Iterate over all requested offsets, recording a value from the
