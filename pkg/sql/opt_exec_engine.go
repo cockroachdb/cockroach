@@ -105,7 +105,6 @@ func (ee *execEngine) Explain(p exec.Plan) ([]tree.Datums, error) {
 	// Add an explain node to the plan and run that.
 	flags := explainFlags{
 		showMetadata: true,
-		showExprs:    true,
 		qualifyNames: true,
 	}
 	explainNode, err := ee.planner.makeExplainPlanNodeWithPlan(

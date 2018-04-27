@@ -4,47 +4,56 @@ statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT); CREATE INDEX foo ON kv(v DESC)
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv
 ----
-nosort          0  nosort  ·      ·           (v)     ·
- │              0  ·       order  +k          ·       ·
- └── render     1  render  ·      ·           (v, k)  k!=NULL; key(k); +k
-      └── scan  2  scan    ·      ·           (k, v)  k!=NULL; key(k); +k
-·               2  ·       table  kv@primary  ·       ·
-·               2  ·       spans  ALL         ·       ·
+nosort          0  nosort  ·         ·                 (v)     ·
+ │              0  ·       order     +k                ·       ·
+ └── render     1  render  ·         ·                 (v, k)  k!=NULL; key(k); +k
+      │         1  ·       render 0  test.public.kv.v  ·       ·
+      │         1  ·       render 1  test.public.kv.k  ·       ·
+      └── scan  2  scan    ·         ·                 (k, v)  k!=NULL; key(k); +k
+·               2  ·       table     kv@primary        ·       ·
+·               2  ·       spans     ALL               ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv ASC
 ----
-nosort          0  nosort  ·      ·           (v)     ·
- │              0  ·       order  +k          ·       ·
- └── render     1  render  ·      ·           (v, k)  k!=NULL; key(k); +k
-      └── scan  2  scan    ·      ·           (k, v)  k!=NULL; key(k); +k
-·               2  ·       table  kv@primary  ·       ·
-·               2  ·       spans  ALL         ·       ·
+nosort          0  nosort  ·         ·                 (v)     ·
+ │              0  ·       order     +k                ·       ·
+ └── render     1  render  ·         ·                 (v, k)  k!=NULL; key(k); +k
+      │         1  ·       render 0  test.public.kv.v  ·       ·
+      │         1  ·       render 1  test.public.kv.k  ·       ·
+      └── scan  2  scan    ·         ·                 (k, v)  k!=NULL; key(k); +k
+·               2  ·       table     kv@primary        ·       ·
+·               2  ·       spans     ALL               ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
+EXPLAIN (VERBOSE) SELECT v FROM kv ORDER BY PRIMARY KEY kv DESC
 ----
-nosort             0  nosort   ·      ·           (v)     ·
- │                 0  ·        order  -k          ·       ·
- └── render        1  render   ·      ·           (v, k)  k!=NULL; key(k); -k
-      └── revscan  2  revscan  ·      ·           (k, v)  k!=NULL; key(k); -k
-·                  2  ·        table  kv@primary  ·       ·
-·                  2  ·        spans  ALL         ·       ·
+nosort             0  nosort   ·         ·                 (v)     ·
+ │                 0  ·        order     -k                ·       ·
+ └── render        1  render   ·         ·                 (v, k)  k!=NULL; key(k); -k
+      │            1  ·        render 0  test.public.kv.v  ·       ·
+      │            1  ·        render 1  test.public.kv.k  ·       ·
+      └── revscan  2  revscan  ·         ·                 (k, v)  k!=NULL; key(k); -k
+·                  2  ·        table     kv@primary        ·       ·
+·                  2  ·        spans     ALL               ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY v, PRIMARY KEY kv, v-2
 ----
-sort               0  sort     ·      ·               (k)              k!=NULL
- │                 0  ·        order  +v,+k,+"v - 2"  ·                ·
- └── render        1  render   ·      ·               (k, v, "v - 2")  k!=NULL; weak-key(k,v); +v
-      └── revscan  2  revscan  ·      ·               (k, v)           k!=NULL; weak-key(k,v); +v
-·                  2  ·        table  kv@foo          ·                ·
-·                  2  ·        spans  ALL             ·                ·
+sort               0  sort     ·         ·                     (k)              k!=NULL
+ │                 0  ·        order     +v,+k,+"v - 2"        ·                ·
+ └── render        1  render   ·         ·                     (k, v, "v - 2")  k!=NULL; weak-key(k,v); +v
+      │            1  ·        render 0  test.public.kv.k      ·                ·
+      │            1  ·        render 1  test.public.kv.v      ·                ·
+      │            1  ·        render 2  test.public.kv.v - 2  ·                ·
+      └── revscan  2  revscan  ·         ·                     (k, v)           k!=NULL; weak-key(k,v); +v
+·                  2  ·        table     kv@foo                ·                ·
+·                  2  ·        spans     ALL                   ·                ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
 nosort     0  nosort  ·      ·       (k)     k!=NULL
  │         0  ·       order  -v      ·       ·
@@ -53,7 +62,7 @@ nosort     0  nosort  ·      ·       (k)     k!=NULL
 ·          1  ·       spans  ALL     ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
 nosort     0  nosort  ·      ·       (k)     k!=NULL
  │         0  ·       order  -v      ·       ·
@@ -62,7 +71,7 @@ nosort     0  nosort  ·      ·       (k)     k!=NULL
 ·          1  ·       spans  ALL     ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
 nosort        0  nosort   ·      ·       (k)     k!=NULL
  │            0  ·        order  +v      ·       ·
@@ -71,7 +80,7 @@ nosort        0  nosort   ·      ·       (k)     k!=NULL
 ·             1  ·        spans  ALL     ·       ·
 
 query TITTTTT
-EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo, k
+EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 nosort     0  nosort  ·      ·       (k)     k!=NULL
  │         0  ·       order  -v,+k   ·       ·
@@ -86,44 +95,51 @@ nosort     0  nosort  ·      ·       (k)     k!=NULL
 #
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
+EXPLAIN (VERBOSE) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
-sort                   0  sort    ·         ·                 (k)                             ·
- │                     0  ·       order     -v                ·                               ·
- └── render            1  render  ·         ·                 (k, v)                          ·
-      └── join         2  join    ·         ·                 (k, v, a[omitted], b[omitted])  ·
-           │           2  ·       type      inner             ·                               ·
-           │           2  ·       equality  (k) = (a)         ·                               ·
-           ├── scan    3  scan    ·         ·                 (k, v)                          k!=NULL; key(k)
-           │           3  ·       table     kv@primary        ·                               ·
-           │           3  ·       spans     ALL               ·                               ·
-           └── values  3  values  ·         ·                 (column1, column2[omitted])     ·
-·                      3  ·       size      2 columns, 1 row  ·                               ·
+sort                   0  sort    ·              ·                 (k)                             ·
+ │                     0  ·       order          -v                ·                               ·
+ └── render            1  render  ·              ·                 (k, v)                          ·
+      │                1  ·       render 0       test.public.kv.k  ·                               ·
+      │                1  ·       render 1       test.public.kv.v  ·                               ·
+      └── join         2  join    ·              ·                 (k, v, a[omitted], b[omitted])  ·
+           │           2  ·       type           inner             ·                               ·
+           │           2  ·       equality       (k) = (a)         ·                               ·
+           ├── scan    3  scan    ·              ·                 (k, v)                          k!=NULL; key(k)
+           │           3  ·       table          kv@primary        ·                               ·
+           │           3  ·       spans          ALL               ·                               ·
+           └── values  3  values  ·              ·                 (column1, column2[omitted])     ·
+·                      3  ·       size           2 columns, 1 row  ·                               ·
+·                      3  ·       row 0, expr 0  1                 ·                               ·
 
 query TITTTTT
-EXPLAIN(METADATA) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
+EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-sort                 0  sort    ·               ·                (k)                             k!=NULL; key(k)
- │                   0  ·       order           -v               ·                               ·
- └── render          1  render  ·               ·                (k, v)                          k!=NULL; v!=NULL; key(k)
-      └── join       2  join    ·               ·                (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
-           │         2  ·       type            inner            ·                               ·
-           │         2  ·       equality        (k, v) = (k, v)  ·                               ·
-           │         2  ·       mergeJoinOrder  +"(k=k)"         ·                               ·
-           ├── scan  3  scan    ·               ·                (k, v)                          k!=NULL; key(k); +k
-           │         3  ·       table           kv@primary       ·                               ·
-           │         3  ·       spans           ALL              ·                               ·
-           └── scan  3  scan    ·               ·                (k, v)                          k!=NULL; key(k); +k
-·                    3  ·       table           kv@primary       ·                               ·
-·                    3  ·       spans           ALL              ·                               ·
+sort                 0  sort    ·               ·                 (k)                             k!=NULL; key(k)
+ │                   0  ·       order           -v                ·                               ·
+ └── render          1  render  ·               ·                 (k, v)                          k!=NULL; v!=NULL; key(k)
+      │              1  ·       render 0        a.k               ·                               ·
+      │              1  ·       render 1        test.public.kv.v  ·                               ·
+      └── join       2  join    ·               ·                 (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
+           │         2  ·       type            inner             ·                               ·
+           │         2  ·       equality        (k, v) = (k, v)   ·                               ·
+           │         2  ·       mergeJoinOrder  +"(k=k)"          ·                               ·
+           ├── scan  3  scan    ·               ·                 (k, v)                          k!=NULL; key(k); +k
+           │         3  ·       table           kv@primary        ·                               ·
+           │         3  ·       spans           ALL               ·                               ·
+           └── scan  3  scan    ·               ·                 (k, v)                          k!=NULL; key(k); +k
+·                    3  ·       table           kv@primary        ·                               ·
+·                    3  ·       spans           ALL               ·                               ·
 
 # The underlying index can be forced manually, of course.
 query TITTTTT
-EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
+EXPLAIN (VERBOSE) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
 ----
 nosort               0  nosort  ·               ·                  (k)                             k!=NULL
  │                   0  ·       order           -v                 ·                               ·
  └── render          1  render  ·               ·                  (k, v)                          k!=NULL; v!=NULL; -v
+      │              1  ·       render 0        a.k                ·                               ·
+      │              1  ·       render 1        test.public.kv.v   ·                               ·
       └── join       2  join    ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; -v
            │         2  ·       type            inner              ·                               ·
            │         2  ·       equality        (k, v) = (k, v)    ·                               ·

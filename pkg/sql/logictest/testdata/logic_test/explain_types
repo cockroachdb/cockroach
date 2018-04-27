@@ -45,7 +45,7 @@ render     0  render  ·         ·          (k int)                  k!=NULL; k
 ·          1  ·       spans     ALL        ·                        ·
 
 query TITTTTT
-EXPLAIN (TYPES,QUALIFY) SELECT k FROM t
+EXPLAIN (TYPES,VERBOSE) SELECT k FROM t
 ----
 render     0  render  ·         ·                       (k int)                  k!=NULL; key(k)
  │         0  ·       render 0  (test.public.t.k)[int]  ·                        ·

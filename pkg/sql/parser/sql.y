@@ -2013,14 +2013,15 @@ table_name_list:
 // %Category: Misc
 // %Text:
 // EXPLAIN <statement>
-// EXPLAIN [( [PLAN ,] <planoptions...> )] <statement>
+// EXPLAIN ([PLAN ,] <planoptions...> ) <statement>
+// EXPLAIN (DISTSQL) <statement>
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
 //     SHOW, EXPLAIN, EXECUTE
 //
 // Plan options:
-//     TYPES, EXPRS, METADATA, QUALIFY, INDENT, VERBOSE, DIST_SQL
+//     TYPES, VERBOSE
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:

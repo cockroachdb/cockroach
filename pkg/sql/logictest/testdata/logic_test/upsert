@@ -403,7 +403,9 @@ SELECT * FROM issue_17339 ORDER BY a;
 2 1
 
 query TTT
-EXPLAIN (PLAN,EXPRS) UPSERT INTO kv TABLE kv ORDER BY v DESC
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) UPSERT INTO kv TABLE kv ORDER BY v DESC
+]
 ----
 count                ·      ·
  └── upsert          ·      ·

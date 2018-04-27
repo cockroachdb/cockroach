@@ -50,7 +50,6 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	normalizeExprs := true
 	flags := explainFlags{
 		showMetadata: false,
-		showExprs:    false,
 		showTypes:    false,
 	}
 
@@ -68,30 +67,14 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			switch optLower {
 			case "types":
 				newMode = explainPlan
-				flags.showExprs = true
 				flags.showTypes = true
-				// TYPES implies METADATA.
 				flags.showMetadata = true
 
 			case "symvars":
 				flags.symbolicVars = true
-
-			case "metadata":
-				flags.showMetadata = true
-
-			case "qualify":
-				flags.qualifyNames = true
-
 			case "verbose":
-				// VERBOSE implies EXPRS.
-				flags.showExprs = true
-				// VERBOSE implies QUALIFY.
 				flags.qualifyNames = true
-				// VERBOSE implies METADATA.
 				flags.showMetadata = true
-
-			case "exprs":
-				flags.showExprs = true
 
 			case "noexpand":
 				expanded = false

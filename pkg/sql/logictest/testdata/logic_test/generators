@@ -187,7 +187,7 @@ SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 #·                         expr      generate_series(3, 4)
 
 query error pq: unimplemented: cannot use multiple set-returning functions in a single SELECT clause: "generate_series\(3, 4\)"
-EXPLAIN(EXPRS) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
+EXPLAIN (VERBOSE) SELECT t.*, u.*, generate_series(1,2), generate_series(3, 4) FROM t, u
 
 query TTII colnames
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
