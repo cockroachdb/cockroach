@@ -607,6 +607,26 @@ func resolveFK(
 	} else {
 		target.PrimaryIndex.ReferencedBy = append(target.PrimaryIndex.ReferencedBy, backref)
 	}
+
+	// Multiple FKs from the same column would potentially result in ambiguous or
+	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
+	colsInFKs := make(map[sqlbase.ColumnID]struct{})
+	for _, idx := range tbl.Indexes {
+		if idx.ForeignKey.IsSet() {
+			numCols := len(idx.ColumnIDs)
+			if idx.ForeignKey.SharedPrefixLen > 0 {
+				numCols = int(idx.ForeignKey.SharedPrefixLen)
+			}
+			for i := 0; i < numCols; i++ {
+				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
+					return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+						"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
+				}
+				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1218,25 +1238,6 @@ func MakeTableDesc(
 			}
 		default:
 			return desc, errors.Errorf("unsupported table def: %T", def)
-		}
-	}
-
-	// Multiple FKs from the same column would potentially result in ambiguous or
-	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
-	colsInFKs := make(map[sqlbase.ColumnID]struct{})
-	for _, idx := range desc.Indexes {
-		if idx.ForeignKey.IsSet() {
-			numCols := len(idx.ColumnIDs)
-			if idx.ForeignKey.SharedPrefixLen > 0 {
-				numCols = int(idx.ForeignKey.SharedPrefixLen)
-			}
-			for i := 0; i < numCols; i++ {
-				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-					return desc, fmt.Errorf(
-						"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
-				}
-				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
-			}
 		}
 	}
 
