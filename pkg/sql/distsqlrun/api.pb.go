@@ -51,6 +51,7 @@
 		JobProgress
 		ReadCSVSpec
 		SSTWriterSpec
+		CSVWriterSpec
 		SketchSpec
 		SamplerSpec
 		SampleAggregatorSpec

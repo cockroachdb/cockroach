@@ -64,22 +64,11 @@ func TestDebugLogSpyOptions(t *testing.T) {
 			},
 		},
 		{
-			// When a count is given but no duration, default the duration to the
-			// maximum allowed.
+			// Can't stream out too much at once.
 			vals: map[string][]string{
-				"Count": {"1"},
+				"Count": {strconv.Itoa(2 * logSpyMaxCount)},
 			},
-			expOpts: logSpyOptions{
-				Count:    1,
-				Duration: logSpyMaxDuration,
-			},
-		},
-		{
-			// Can't spy for too long.
-			vals: map[string][]string{
-				"Duration": {(2 * logSpyMaxDuration).String()},
-			},
-			expErr: regexp.QuoteMeta(`duration 2m0s is too large (limit is 1m0s)`),
+			expErr: (`count .* is too large .limit is .*.`),
 		},
 		// Various parse errors.
 		{

@@ -322,11 +322,9 @@ func (p *planner) User() string {
 	return p.SessionData().User
 }
 
-// TODO(dan): This is here to implement PlanHookState, but it's not clear that
-// this is the right abstraction. We could also export DistSQLPlanner, for
-// example. Revisit.
-func (p *planner) DistLoader() *DistLoader {
-	return &DistLoader{distSQLPlanner: p.extendedEvalCtx.DistSQLPlanner}
+// DistSQLPlanner returns the DistSQLPlanner
+func (p *planner) DistSQLPlanner() *DistSQLPlanner {
+	return p.extendedEvalCtx.DistSQLPlanner
 }
 
 // makeInternalPlan initializes a plan from a SQL statement string.

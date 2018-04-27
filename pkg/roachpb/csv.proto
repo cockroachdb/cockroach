@@ -24,8 +24,8 @@ message CSVOptions {
   optional int32 comma = 1 [(gogoproto.nullable) = false];
   // comment is an comment rune; zero value means comments not enabled.
   optional int32 comment = 2 [(gogoproto.nullable) = false];
-  // nullif, if not nil, is the string which identifies a NULL. Can be the empty string.
-  optional string nullif = 3 [(gogoproto.nullable) = true];
+  // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
+  optional string null_encoding = 3 [(gogoproto.nullable) = true];
   // skip the first N lines of the input (e.g. to ignore column headers).
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
 }

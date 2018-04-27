@@ -33,10 +33,50 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DistLoader uses DistSQL to convert external data formats (csv, etc) into
-// sstables of our mvcc-format key values.
-type DistLoader struct {
-	distSQLPlanner *DistSQLPlanner
+// ExportPlanResultTypes is the result types for EXPORT plans.
+var ExportPlanResultTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_STRING}, // filename
+	{SemanticType: sqlbase.ColumnType_INT},    // rows
+	{SemanticType: sqlbase.ColumnType_INT},    // bytes
+}
+
+// PlanAndRunExport makes and runs an EXPORT plan for the given input and output
+// planNode and spec respectively.  The input planNode must be runnable via
+// DistSQL. The output spec's results must conform to the ExportResultTypes.
+func PlanAndRunExport(
+	ctx context.Context,
+	dsp *DistSQLPlanner,
+	execCfg *ExecutorConfig,
+	txn *client.Txn,
+	evalCtx *extendedEvalContext,
+	in planNode,
+	out distsqlrun.ProcessorCoreUnion,
+	resultRows *RowResultWriter,
+) error {
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
+	p, err := dsp.createPlanForNode(&planCtx, in)
+	if err != nil {
+		return errors.Wrap(err, "constructing distSQL plan")
+	}
+
+	p.AddNoGroupingStage(
+		out, distsqlrun.PostProcessSpec{}, ExportPlanResultTypes, distsqlrun.Ordering{},
+	)
+
+	// Overwrite planToStreamColMap (used by recv below) to reflect the output of
+	// the non-grouping stage we've added above. That stage outputs produces
+	// columns filename/rows/bytes.
+	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(ExportPlanResultTypes))
+
+	dsp.FinalizePlan(&planCtx, &p)
+
+	recv := makeDistSQLReceiver(
+		ctx, resultRows, tree.Rows,
+		execCfg.RangeDescriptorCache, execCfg.LeaseHolderCache, txn, func(ts hlc.Timestamp) {},
+	)
+
+	dsp.Run(&planCtx, txn, &p, recv, evalCtx)
+	return resultRows.Err()
 }
 
 // RowResultWriter is a thin wrapper around a RowContainer.
@@ -110,8 +150,9 @@ var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
-func (l *DistLoader) LoadCSV(
+func LoadCSV(
 	ctx context.Context,
+	dsp *DistSQLPlanner,
 	job *jobs.Job,
 	db *client.DB,
 	evalCtx *extendedEvalContext,
@@ -140,10 +181,10 @@ func (l *DistLoader) LoadCSV(
 			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
 				TableDesc: *tableDesc,
 				Options: roachpb.CSVOptions{
-					Comma:   comma,
-					Comment: comment,
-					Nullif:  nullif,
-					Skip:    skip,
+					Comma:        comma,
+					Comment:      comment,
+					NullEncoding: nullif,
+					Skip:         skip,
 				},
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
@@ -170,7 +211,7 @@ func (l *DistLoader) LoadCSV(
 		}
 	}
 
-	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, evalCtx, nil /* txn */)
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, nil /* txn */)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {
@@ -183,7 +224,7 @@ func (l *DistLoader) LoadCSV(
 	samples := details.Tables[0].Samples
 	if samples == nil {
 		var err error
-		samples, err = l.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, csvSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, csvSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
@@ -318,7 +359,7 @@ func (l *DistLoader) LoadCSV(
 		return err
 	}
 
-	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(&planCtx, &p)
 
 	recv := makeDistSQLReceiver(
 		ctx,
@@ -334,12 +375,12 @@ func (l *DistLoader) LoadCSV(
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
+		dsp.Run(&planCtx, txn, &p, recv, evalCtx)
 		return resultRows.Err()
 	})
 }
 
-func (l *DistLoader) loadCSVSamplingPlan(
+func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	ctx context.Context,
 	job *jobs.Job,
 	db *client.DB,
@@ -439,7 +480,7 @@ func (l *DistLoader) loadCSVSamplingPlan(
 
 	// TODO(dan): Consider making FinalizePlan take a map explicitly instead
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
-	l.distSQLPlanner.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	recv := makeDistSQLReceiver(
 		ctx,
@@ -456,7 +497,7 @@ func (l *DistLoader) loadCSVSamplingPlan(
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
 		samples = nil
-		l.distSQLPlanner.Run(planCtx, txn, &p, recv, evalCtx)
+		dsp.Run(planCtx, txn, &p, recv, evalCtx)
 		return rowResultWriter.Err()
 	}); err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ package norm
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -393,6 +394,11 @@ func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).SubsetOf(f.outputCols(right))
 }
 
+// hasZeroOrOneRow returns true if the given group returns at most one row.
+func (f *Factory) hasZeroOrOneRow(group memo.GroupID) bool {
+	return f.mem.GroupProperties(group).Relational.Cardinality.Max <= 1
+}
+
 // isScalarGroupBy returns true if the given grouping columns come from a
 // "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
 // with any aggregate functions operating over the entire input expression.
@@ -764,6 +770,21 @@ func (f *Factory) removeApply(op opt.Operator, left, right, filter memo.GroupID)
 		return f.ConstructAntiJoin(left, right, filter)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", op))
+}
+
+// ----------------------------------------------------------------------
+//
+// Limit Rules
+//   Custom match and replace functions used with limit.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// limitGeMaxRows returns true if the given constant limit value is greater than
+// or equal to the max number of rows returned by the input group.
+func (f *Factory) limitGeMaxRows(limit memo.PrivateID, input memo.GroupID) bool {
+	limitVal := int64(*f.mem.LookupPrivate(limit).(*tree.DInt))
+	maxRows := f.mem.GroupProperties(input).Relational.Cardinality.Max
+	return limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
 }
 
 // ----------------------------------------------------------------------

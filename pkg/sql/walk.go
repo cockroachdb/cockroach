@@ -188,6 +188,10 @@ func (v *planVisitor) visit(plan planNode) {
 				jType = "right outer"
 			case sqlbase.FullOuterJoin:
 				jType = "full outer"
+			case sqlbase.LeftSemiJoin:
+				jType = "semi"
+			case sqlbase.LeftAntiJoin:
+				jType = "anti"
 			}
 			v.observer.attr(name, "type", jType)
 
