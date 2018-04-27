@@ -566,38 +566,38 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 
 // PrettyPrint prints the key in a human readable format:
 //
-// Key's Format                                   Key's Value
-// /Local/...                                        "\x01"+...
-// 		/Store/...                                     "\x01s"+...
-//		/RangeID/...                                   "\x01s"+[rangeid]
-//			/[rangeid]/AbortSpan/[id]                   "\x01s"+[rangeid]+"abc-"+[id]
-//			/[rangeid]/Lease						                 "\x01s"+[rangeid]+"rfll"
-//			/[rangeid]/RaftTombstone                     "\x01s"+[rangeid]+"rftb"
-//			/[rangeid]/RaftHardState						         "\x01s"+[rangeid]+"rfth"
-//			/[rangeid]/RaftAppliedIndex						       "\x01s"+[rangeid]+"rfta"
-//			/[rangeid]/RaftLog/logIndex:[logIndex]       "\x01s"+[rangeid]+"rftl"+[logIndex]
-//			/[rangeid]/RaftTruncatedState                "\x01s"+[rangeid]+"rftt"
-//			/[rangeid]/RaftLastIndex                     "\x01s"+[rangeid]+"rfti"
-//			/[rangeid]/RangeLastReplicaGCTimestamp       "\x01s"+[rangeid]+"rlrt"
-//			/[rangeid]/RangeLastVerificationTimestamp    "\x01s"+[rangeid]+"rlvt"
-//			/[rangeid]/RangeStats                        "\x01s"+[rangeid]+"stat"
-//		/Range/...                                     "\x01k"+...
-//			[key]/RangeDescriptor                        "\x01k"+[key]+"rdsc"
-//			[key]/Transaction/[id]	                     "\x01k"+[key]+"txn-"+[txn-id]
-//			[key]/QueueLastProcessed/[queue]             "\x01k"+[key]+"qlpt"+[queue]
-// /Local/Max                                        "\x02"
+//   Key format                                        Key value
+//   /Local/...                                        "\x01"+...
+//      /Store/...                                     "\x01s"+...
+//      /RangeID/...                                   "\x01s"+[rangeid]
+//        /[rangeid]/AbortSpan/[id]                    "\x01s"+[rangeid]+"abc-"+[id]
+//        /[rangeid]/Lease                             "\x01s"+[rangeid]+"rfll"
+//        /[rangeid]/RaftTombstone                     "\x01s"+[rangeid]+"rftb"
+//        /[rangeid]/RaftHardState                     "\x01s"+[rangeid]+"rfth"
+//        /[rangeid]/RaftAppliedIndex                  "\x01s"+[rangeid]+"rfta"
+//        /[rangeid]/RaftLog/logIndex:[logIndex]       "\x01s"+[rangeid]+"rftl"+[logIndex]
+//        /[rangeid]/RaftTruncatedState                "\x01s"+[rangeid]+"rftt"
+//        /[rangeid]/RaftLastIndex                     "\x01s"+[rangeid]+"rfti"
+//        /[rangeid]/RangeLastReplicaGCTimestamp       "\x01s"+[rangeid]+"rlrt"
+//        /[rangeid]/RangeLastVerificationTimestamp    "\x01s"+[rangeid]+"rlvt"
+//        /[rangeid]/RangeStats                        "\x01s"+[rangeid]+"stat"
+//      /Range/...                                     "\x01k"+...
+//        [key]/RangeDescriptor                        "\x01k"+[key]+"rdsc"
+//        [key]/Transaction/[id]                       "\x01k"+[key]+"txn-"+[txn-id]
+//        [key]/QueueLastProcessed/[queue]             "\x01k"+[key]+"qlpt"+[queue]
+//   /Local/Max                                        "\x02"
 //
-// /Meta1/[key]                                      "\x02"+[key]
-// /Meta2/[key]                                      "\x03"+[key]
-// /System/...                                       "\x04"
-//		/NodeLiveness/[key]                            "\x04\0x00liveness-"+[key]
-//		/StatusNode/[key]                              "\x04status-node-"+[key]
-// /System/Max                                       "\x05"
+//   /Meta1/[key]                                      "\x02"+[key]
+//   /Meta2/[key]                                      "\x03"+[key]
+//   /System/...                                       "\x04"
+//      /NodeLiveness/[key]                            "\x04\0x00liveness-"+[key]
+//      /StatusNode/[key]                              "\x04status-node-"+[key]
+//   /System/Max                                       "\x05"
 //
-// /Table/[key]                                      [key]
+//   /Table/[key]                                      [key]
 //
-// /Min                                              ""
-// /Max                                              "\xff\xff"
+//   /Min                                              ""
+//   /Max                                              "\xff\xff"
 //
 // valDirs correspond to the encoding direction of each encoded value in key.
 // For example, table keys could have column values encoded in ascending or

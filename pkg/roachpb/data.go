@@ -71,12 +71,15 @@ var (
 
 // RKey denotes a Key whose local addressing has been accounted for.
 // A key can be transformed to an RKey by keys.Addr().
+//
+// RKey stands for "resolved key," as in a key whose address has been resolved.
 type RKey Key
 
 // AsRawKey returns the RKey as a Key. This is to be used only in select
 // situations in which an RKey is known to not contain a wrapped locally-
-// addressed Key. Whenever the Key which created the RKey is still available,
-// it should be used instead.
+// addressed Key. That is, it must only be used when the original Key was not a
+// local key. Whenever the Key which created the RKey is still available, it
+// should be used instead.
 func (rk RKey) AsRawKey() Key {
 	return Key(rk)
 }

@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
+// For a high-level overview of the keyspace layout, see the package comment in
+// doc.go.
+
 // These constants are single bytes for performance. They allow single-byte
 // comparisons which are considerably faster than bytes.HasPrefix.
 const (
@@ -36,27 +39,7 @@ const (
 //
 // Note: preserve group-wise ordering when adding new constants.
 var (
-	// localPrefix is the prefix for keys which hold data local to a
-	// RocksDB instance, such as store and range-specific metadata which
-	// must not pollute the user key space, but must be collocated with
-	// the store and/or ranges which they refer to. Storing this
-	// information in the normal system keyspace would place the data on
-	// an arbitrary set of stores, with no guarantee of collocation.
-	// Local data includes store metadata, range metadata, abort
-	// cache values, transaction records, range-spanning binary tree
-	// node pointers, and message queues.
-	//
-	// The local key prefix has been deliberately chosen to sort before
-	// the SystemPrefix, because these local keys are not addressable
-	// via the meta range addressing indexes.
-	//
-	// Some local data are not replicated, such as the store's 'ident'
-	// record. Most local data are replicated, such as AbortSpan
-	// entries and transaction rows, but are not addressable as normal
-	// MVCC values as part of transactions. Finally, some local data are
-	// stored as MVCC values and are addressable as part of distributed
-	// transactions, such as range metadata, range-spanning binary tree
-	// node pointers, and message queues.
+	// localPrefix is the prefix for all local keys.
 	localPrefix = roachpb.Key{localPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global
 	// key.
