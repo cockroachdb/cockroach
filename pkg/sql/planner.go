@@ -317,7 +317,7 @@ func internalExtendedEvalCtx(
 		},
 		SessionMutator:  dataMutator,
 		VirtualSchemas:  execCfg.VirtualSchemas,
-		Tracing:         &dataMutator.sessionTracing,
+		Tracing:         &SessionTracing{},
 		StatusServer:    statusServer,
 		Tables:          tables,
 		ExecCfg:         execCfg,

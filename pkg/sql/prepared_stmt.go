@@ -48,9 +48,6 @@ type PreparedStatement struct {
 	// imprecise type hint like sending an int for an oid comparison.
 	Types   tree.PlaceholderTypes
 	Columns sqlbase.ResultColumns
-	// TODO(andrei): The connExecutor doesn't use this. Delete it once the
-	// Executor is gone.
-	portalNames map[string]struct{}
 
 	// InTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
@@ -76,56 +73,6 @@ type preparedStatementsAccessor interface {
 	Delete(ctx context.Context, name string) bool
 	// DeleteAll removes all prepared statements and portals from the coolection.
 	DeleteAll(ctx context.Context)
-}
-
-// PreparedStatements is a mapping of PreparedStatement names to their
-// corresponding PreparedStatements.
-type PreparedStatements struct {
-	session *Session
-	stmts   map[string]*PreparedStatement
-}
-
-var _ preparedStatementsAccessor = &PreparedStatements{}
-
-// Get returns the PreparedStatement with the provided name.
-func (ps *PreparedStatements) Get(name string) (*PreparedStatement, bool) {
-	stmt, ok := ps.stmts[name]
-	return stmt, ok
-}
-
-// Delete is part of the preparedStatementsAccessor interface.
-func (ps *PreparedStatements) Delete(ctx context.Context, name string) bool {
-	if stmt, ok := ps.Get(name); ok {
-		if ps.session.PreparedPortals.portals != nil {
-			for portalName := range stmt.portalNames {
-				if portal, ok := ps.session.PreparedPortals.Get(name); ok {
-					delete(ps.session.PreparedPortals.portals, portalName)
-					portal.memAcc.Close(ctx)
-				}
-			}
-		}
-		stmt.close(ctx)
-		delete(ps.stmts, name)
-		return true
-	}
-	return false
-}
-
-// closeAll de-registers all statements and portals from the monitor.
-func (ps PreparedStatements) closeAll(ctx context.Context, s *Session) {
-	for _, stmt := range ps.stmts {
-		stmt.close(ctx)
-	}
-	for _, portal := range s.PreparedPortals.portals {
-		portal.close(ctx)
-	}
-}
-
-// DeleteAll is part of the preparedStatementsAccessor interface.
-func (ps *PreparedStatements) DeleteAll(ctx context.Context) {
-	ps.closeAll(ctx, ps.session)
-	ps.stmts = make(map[string]*PreparedStatement)
-	ps.session.PreparedPortals.portals = make(map[string]*PreparedPortal)
 }
 
 // PreparedPortal is a PreparedStatement that has been bound with query arguments.
@@ -164,19 +111,4 @@ func (ex *connExecutor) newPreparedPortal(
 
 func (p *PreparedPortal) close(ctx context.Context) {
 	p.memAcc.Close(ctx)
-}
-
-// PreparedPortals is a mapping of PreparedPortal names to their corresponding
-// PreparedPortals.
-//
-// TODO(andrei): The connExecutor doesn't use this. Delete it once the Executor
-// is gone.
-type PreparedPortals struct {
-	portals map[string]*PreparedPortal
-}
-
-// Get is part of the preparedStatementsAccessor interface.
-func (pp PreparedPortals) Get(name string) (*PreparedPortal, bool) {
-	portal, ok := pp.portals[name]
-	return portal, ok
 }

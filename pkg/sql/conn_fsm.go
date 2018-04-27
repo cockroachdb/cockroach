@@ -34,12 +34,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// Constants for the String() representation of the session states. Shared with
+// the CLI code which needs to recognize them.
+const (
+	NoTxnStr              string = "NoTxn"
+	OpenStateStr                 = "Open"
+	AbortedStateStr              = "Aborted"
+	CommitWaitStateStr           = "CommitWait"
+	RestartWaitStateStr          = "RestartWait"
+	InternalErrorStateStr        = "InternalError"
+)
+
 /// States.
 
 type stateNoTxn struct{}
 
 func (stateNoTxn) String() string {
-	return "NoTxn"
+	return NoTxnStr
 }
 
 type stateOpen struct {
@@ -51,7 +62,7 @@ type stateOpen struct {
 }
 
 func (stateOpen) String() string {
-	return "Open"
+	return OpenStateStr
 }
 
 type stateAborted struct {
@@ -61,19 +72,19 @@ type stateAborted struct {
 }
 
 func (stateAborted) String() string {
-	return "Aborted"
+	return AbortedStateStr
 }
 
 type stateRestartWait struct{}
 
 func (stateRestartWait) String() string {
-	return "RestartWait"
+	return RestartWaitStateStr
 }
 
 type stateCommitWait struct{}
 
 func (stateCommitWait) String() string {
-	return "CommitWait"
+	return CommitWaitStateStr
 }
 
 // stateInternalError is used by the InternalExecutor when running statements in
@@ -84,7 +95,7 @@ func (stateCommitWait) String() string {
 type stateInternalError struct{}
 
 func (stateInternalError) String() string {
-	return "InternalError"
+	return InternalErrorStateStr
 }
 
 func (stateNoTxn) State()         {}
