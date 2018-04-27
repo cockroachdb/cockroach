@@ -758,6 +758,48 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 	})
 }
 
+func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
+	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+	ch := make(chan struct{}, 1)
+
+	metric.GraphiteURL.SetOnChange(&st.SV, func() {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	})
+	metric.GraphiteFrequency.SetOnChange(&st.SV, func() {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	})
+	n.stopper.RunWorker(ctx, func(ctx context.Context) {
+		for {
+			log.Infof(ctx, "initializing graphite exporter")
+			ticker := time.NewTicker(metric.GraphiteFrequency.Get(&st.SV))
+			defer ticker.Stop()
+			if metric.GraphiteURL.Get(&st.SV) == "" {
+				log.Info(ctx, "stopped prematurely the graphite ticker")
+				ticker.Stop()
+			}
+		inner:
+			for {
+				select {
+				case <-ch:
+					break inner
+				case <-ticker.C:
+					if err := n.recorder.ExportToGraphite(ctx); err != nil {
+						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+					}
+				case <-n.stopper.ShouldStop():
+					return
+				}
+			}
+		}
+	})
+}
+
 // startWriteNodeStatus begins periodically persisting status summaries for the
 // node and its stores.
 func (n *Node) startWriteNodeStatus(frequency time.Duration) {
