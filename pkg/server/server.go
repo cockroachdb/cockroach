@@ -322,7 +322,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nil, /* execCfg - will be set later because of circular dependencies */
 		lmKnobs,
 		s.stopper,
-		&s.internalMemMetrics,
 		s.cfg.LeaseManagerConfig,
 	)
 
