@@ -289,9 +289,10 @@ func typeAsPrivate(ev ExprView) types.T {
 }
 
 // typeSubquery returns the type of a subquery, which is equal to the type of
-// its second child, the Projection field.
+// its first (and only) column.
 func typeSubquery(ev ExprView) types.T {
-	return ev.Child(1).Logical().Scalar.Type
+	colID, _ := ev.Child(0).Logical().Relational.OutputCols.Next(0)
+	return ev.Metadata().ColumnType(opt.ColumnID(colID))
 }
 
 // overload encapsulates information about a binary operator overload, to be
