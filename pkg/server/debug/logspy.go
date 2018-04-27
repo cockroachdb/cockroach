@@ -87,8 +87,8 @@ func (d durationAsString) String() string {
 }
 
 const (
-	logSpyDefaultDuration = durationAsString(10 * time.Second)
-	logSpyMaxDuration     = durationAsString(time.Minute)
+	logSpyDefaultDuration = durationAsString(5 * time.Second)
+	logSpyMaxCount        = 10000
 	logSpyDefaultCount    = 1000
 	logSpyChanCap         = 4096
 )
@@ -115,17 +115,16 @@ func logSpyOptionsFromValues(values url.Values) (logSpyOptions, error) {
 		return logSpyOptions{}, err
 	}
 	if opts.Duration == 0 {
-		if opts.Count > 0 {
-			opts.Duration = logSpyMaxDuration
-		} else {
-			opts.Duration = logSpyDefaultDuration
-		}
-	} else if opts.Duration > logSpyMaxDuration {
-		return logSpyOptions{}, errors.Errorf("duration %s is too large (limit is %s)", opts.Duration, logSpyMaxDuration)
+		opts.Duration = logSpyDefaultDuration
 	}
 
 	if opts.Count == 0 {
 		opts.Count = logSpyDefaultCount
+	} else if opts.Count > logSpyMaxCount {
+		return logSpyOptions{}, errors.Errorf(
+			"count %d is too large (limit is %d); consider restricting your filter",
+			opts.Count, logSpyMaxCount,
+		)
 	}
 	return opts, nil
 }

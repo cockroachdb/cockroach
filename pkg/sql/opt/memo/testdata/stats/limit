@@ -47,6 +47,7 @@ SELECT * FROM a WHERE s = 'foo' LIMIT 5
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── cardinality: [0 - 5]
  ├── stats: [rows=5, distinct(1)=5, distinct(3)=1, distinct(1,2)=5, distinct(2,3)=5]
  ├── keys: (1) weak(3,4)
  ├── select
@@ -83,11 +84,14 @@ limit
  └── subquery [type=int]
       ├── max1-row
       │    ├── columns: column5:5(int)
+      │    ├── cardinality: [1 - 1]
       │    ├── stats: [rows=1]
       │    └── project
       │         ├── columns: column5:5(int)
+      │         ├── cardinality: [1 - 1]
       │         ├── stats: [rows=1]
       │         ├── values
+      │         │    ├── cardinality: [1 - 1]
       │         │    ├── stats: [rows=1]
       │         │    └── tuple [type=tuple{}]
       │         └── projections

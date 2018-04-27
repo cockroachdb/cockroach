@@ -955,8 +955,9 @@ func doDistributedCSVTransform(
 		}
 	}()
 
-	if err := p.DistLoader().LoadCSV(
+	if err := sql.LoadCSV(
 		ctx,
+		p.DistSQLPlanner(),
 		job,
 		p.ExecCfg().DB,
 		evalCtx,
@@ -1119,7 +1120,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		defer close(kvCh)
 		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.Nullif, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.NullEncoding, &cp.tableDesc)
 		})
 	})
 	// Sample KVs

@@ -254,8 +254,8 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 	}
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
-	logPropsFactory := logicalPropsFactory{evalCtx: evalCtx}
-	mgrp.logical = logPropsFactory.constructProps(ev)
+	logPropsFactory := logicalPropsBuilder{evalCtx: evalCtx}
+	mgrp.logical = logPropsFactory.buildProps(ev)
 	return mgrp.id
 }
 

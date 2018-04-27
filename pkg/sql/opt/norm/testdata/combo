@@ -321,45 +321,8 @@ GenerateIndexScans (higher cost)
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 --------------------------------------------------------------------------------
-ConstrainScan (higher cost)
+ConstrainScan (no changes)
 --------------------------------------------------------------------------------
-   project
-    ├── columns: s:4(string)
-    ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
-    │    ├── project
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
-    │    │    ├── keys: (1)
-    │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
-    │    │    │    ├── keys: (1)
-  - │    │    │    ├── lookup-join
-  + │    │    │    ├── scan a
-    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
-  - │    │    │    │    ├── table: a
-  - │    │    │    │    ├── keys: (1)
-  - │    │    │    │    └── scan a@secondary
-  - │    │    │    │         ├── columns: a.x:1(int!null) a.s:4(string)
-  - │    │    │    │         └── keys: (1)
-  + │    │    │    │    └── keys: (1)
-    │    │    │    └── filters [type=bool, outer=(2)]
-    │    │    │         └── eq [type=bool, outer=(2)]
-    │    │    │              ├── variable: a.i [type=int, outer=(2)]
-    │    │    │              └── minus [type=int]
-    │    │    │                   ├── const: 10 [type=int]
-    │    │    │                   └── const: 1 [type=int]
-    │    │    └── projections [outer=(1,4)]
-    │    │         ├── variable: a.x [type=int, outer=(1)]
-    │    │         └── variable: a.s [type=string, outer=(4)]
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null)
-    │    │    └── keys: (6)
-    │    └── filters [type=bool, outer=(1,6)]
-    │         └── eq [type=bool, outer=(1,6)]
-    │              ├── variable: a.x [type=int, outer=(1)]
-    │              └── variable: b.x [type=int, outer=(6)]
-    └── projections [outer=(4)]
-         └── variable: a.s [type=string, outer=(4)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -410,6 +373,7 @@ Initial expression
 ================================================================================
   limit
    ├── columns: i:2(int) column8:8(int)
+   ├── cardinality: [0 - 5]
    ├── ordering: +2
    ├── offset
    │    ├── columns: a.i:2(int) column8:8(int)
@@ -448,6 +412,7 @@ EnsureJoinFilters
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -490,6 +455,7 @@ EnsureSelectFilters
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -533,6 +499,7 @@ FilterUnusedSelectCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -590,6 +557,7 @@ FilterUnusedJoinLeftCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -637,6 +605,7 @@ FilterUnusedJoinRightCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -683,6 +652,7 @@ PushSelectIntoProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -745,6 +715,7 @@ EliminateEmptyAnd
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -793,6 +764,7 @@ EliminateSelect
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -860,6 +832,7 @@ EliminateProjectProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -921,6 +894,7 @@ FilterUnusedSelectCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -982,6 +956,7 @@ EliminateProjectProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── offset
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -1043,6 +1018,7 @@ PushOffsetIntoProject
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
   - ├── offset
   + ├── project
@@ -1113,6 +1089,7 @@ FilterUnusedOffsetCols
 ================================================================================
    limit
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── project
     │    ├── columns: a.i:2(int) column8:8(int)
@@ -1178,11 +1155,13 @@ PushLimitIntoProject
   -limit
   +project
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
   - ├── project
   - │    ├── columns: a.i:2(int) column8:8(int)
   + ├── limit
   + │    ├── columns: a.i:2(int)
+  + │    ├── cardinality: [0 - 5]
     │    ├── ordering: +2
     │    ├── offset
     │    │    ├── columns: a.i:2(int)
@@ -1230,9 +1209,11 @@ GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: i:2(int) column8:8(int)
+    ├── cardinality: [0 - 5]
     ├── ordering: +2
     ├── limit
     │    ├── columns: a.i:2(int)
+    │    ├── cardinality: [0 - 5]
     │    ├── ordering: +2
     │    ├── offset
     │    │    ├── columns: a.i:2(int)
@@ -1276,64 +1257,19 @@ GenerateIndexScans (higher cost)
               ├── variable: a.i [type=int, outer=(2)]
               └── const: 1 [type=int]
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
-   project
-    ├── columns: i:2(int) column8:8(int)
-    ├── ordering: +2
-    ├── limit
-    │    ├── columns: a.i:2(int)
-    │    ├── ordering: +2
-    │    ├── offset
-    │    │    ├── columns: a.i:2(int)
-    │    │    ├── ordering: +2
-    │    │    ├── sort
-    │    │    │    ├── columns: a.i:2(int)
-    │    │    │    ├── ordering: +2
-    │    │    │    └── project
-    │    │    │         ├── columns: a.i:2(int)
-    │    │    │         ├── select
-    │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
-    │    │    │         │    ├── full-join
-    │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
-  - │    │    │         │    │    ├── lookup-join
-  + │    │    │         │    │    ├── scan a
-    │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
-  - │    │    │         │    │    │    ├── table: a
-  - │    │    │         │    │    │    ├── keys: (1)
-  - │    │    │         │    │    │    └── scan a@secondary
-  - │    │    │         │    │    │         ├── columns: a.x:1(int!null)
-  - │    │    │         │    │    │         └── keys: (1)
-  + │    │    │         │    │    │    └── keys: (1)
-    │    │    │         │    │    ├── scan b
-    │    │    │         │    │    │    ├── columns: b.x:6(int!null)
-    │    │    │         │    │    │    └── keys: (6)
-    │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
-    │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
-    │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
-    │    │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
-    │    │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
-    │    │    │         │              ├── variable: a.i [type=int, outer=(2)]
-    │    │    │         │              └── const: 10 [type=int]
-    │    │    │         └── projections [outer=(2)]
-    │    │    │              └── variable: a.i [type=int, outer=(2)]
-    │    │    └── const: 1 [type=int]
-    │    └── const: 5 [type=int]
-    └── projections [outer=(2)]
-         ├── variable: a.i [type=int, outer=(2)]
-         └── plus [type=int, outer=(2)]
-              ├── variable: a.i [type=int, outer=(2)]
-              └── const: 1 [type=int]
 ================================================================================
 Final best expression
   Cost: 14500.00
 ================================================================================
   project
    ├── columns: i:2(int) column8:8(int)
+   ├── cardinality: [0 - 5]
    ├── ordering: +2
    ├── limit
    │    ├── columns: a.i:2(int)
+   │    ├── cardinality: [0 - 5]
    │    ├── ordering: +2
    │    ├── offset
    │    │    ├── columns: a.i:2(int)
@@ -1862,28 +1798,8 @@ GenerateIndexScans (higher cost)
          ├── variable: a.s [type=string, outer=(4)]
          └── variable: a.x [type=int, outer=(1)]
 --------------------------------------------------------------------------------
-ConstrainScan (higher cost)
+ConstrainScan (no changes)
 --------------------------------------------------------------------------------
-   project
-    ├── columns: s:4(string) x:1(int!null)
-    ├── keys: (1)
-    ├── select
-    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
-    │    ├── keys: (1) weak(3,4)
-  - │    ├── scan a@secondary
-  + │    ├── scan a
-    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
-    │    │    └── keys: (1) weak(3,4)
-    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
-    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
-    │         │    ├── variable: a.s [type=string, outer=(4)]
-    │         │    └── const: 'foo' [type=string]
-    │         └── gt [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
-    │              ├── variable: a.f [type=float, outer=(3)]
-    │              └── const: 100.0 [type=float]
-    └── projections [outer=(1,4)]
-         ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
 ================================================================================
 ConstrainScan
   Cost: 110.00
@@ -2159,26 +2075,8 @@ GenerateIndexScans (higher cost)
               ├── variable: b.z [type=int, outer=(7)]
               └── variable: a.i [type=int, outer=(2)]
 --------------------------------------------------------------------------------
-GenerateIndexScans (higher cost)
+GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
-   semi-join
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-  - ├── lookup-join
-  + ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  - │    ├── table: a
-  - │    ├── keys: (1) weak(3,4)
-  - │    └── scan a@secondary
-  - │         ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  - │         └── keys: (1) weak(3,4)
-  + │    └── keys: (1) weak(3,4)
-    ├── scan b
-    │    ├── columns: b.x:6(int!null) b.z:7(int)
-    │    └── keys: (6)
-    └── filters [type=bool, outer=(2,7)]
-         └── eq [type=bool, outer=(2,7)]
-              ├── variable: b.z [type=int, outer=(7)]
-              └── variable: a.i [type=int, outer=(2)]
 ================================================================================
 Final best expression
   Cost: 2000.00

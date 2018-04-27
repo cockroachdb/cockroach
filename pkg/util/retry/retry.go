@@ -166,6 +166,12 @@ func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) 
 // without error, or the given duration has elapsed. The function is invoked
 // immediately at first and then successively with an exponential backoff
 // starting at 1ns and ending at the specified duration.
+//
+// This function is DEPRECATED! Please use one of the other functions in this
+// package that takes context cancellation into account.
+//
+// TODO(benesch): remove this function and port its callers to a context-
+// sensitive API.
 func ForDuration(duration time.Duration, fn func() error) error {
 	deadline := timeutil.Now().Add(duration)
 	var lastErr error

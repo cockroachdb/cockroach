@@ -25,6 +25,8 @@ func registerTests(r *registry) {
 	registerCancel(r)
 	registerCopy(r)
 	registerDebug(r)
+	registerClockJump(r)
+	registerClockMonotonicity(r)
 	registerDecommission(r)
 	registerDrop(r)
 	registerImportTPCC(r)

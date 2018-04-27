@@ -215,12 +215,6 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			if failed {
 				failures = append(failures, testCfg)
 
-				// Collect partial systemd logs to diagnose #20492
-				logf("%s: ntp status:", testCfg)
-				c.Run(ctx, workers, "sudo service ntp status")
-				logf("%s: systemd log:", testCfg)
-				c.Run(ctx, workers, "sudo journalctl -x --no-pager --unit=ntp")
-
 				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
 				c.Run(ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
 				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
