@@ -188,7 +188,7 @@ func evalExport(
 		if err := rows.count(iter.UnsafeKey().Key); err != nil {
 			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+		if err := sst.Put(iter.UnsafeKey(), iter.UnsafeValue()); err != nil {
 			return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
 		}
 	}

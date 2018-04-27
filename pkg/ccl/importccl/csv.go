@@ -537,8 +537,8 @@ func makeSSTs(
 		return nil
 	}
 
-	var kv engine.MVCCKeyValue
-	kv.Key.Timestamp.WallTime = walltime
+	var key engine.MVCCKey
+	key.Timestamp.WallTime = walltime
 	// firstKey is always the first key of the span. lastKey, if nil, means the
 	// current SST hasn't yet filled up. Once the SST has filled up, lastKey is
 	// set to the key at which to stop adding KVs. We have to do this because
@@ -561,7 +561,7 @@ func makeSSTs(
 			break
 		}
 
-		// Check this before setting kv.Key.Key because it is used below in the
+		// Check this before setting key.Key because it is used below in the
 		// final writeSST invocation.
 		if endKey != nil && endKey.Compare(it.UnsafeKey()) <= 0 {
 			// If we are at the end, break the loop and return the data. There is no
@@ -573,11 +573,11 @@ func makeSSTs(
 
 		writtenKVs++
 
-		kv.Key.Key = it.Key()
-		kv.Value = it.UnsafeValue()
+		key.Key = it.Key()
+		value := it.UnsafeValue()
 
 		if lastKey != nil {
-			if kv.Key.Key.Compare(lastKey) >= 0 {
+			if key.Key.Compare(lastKey) >= 0 {
 				if err := writeSST(firstKey, lastKey, true); err != nil {
 					return err
 				}
@@ -591,13 +591,13 @@ func makeSSTs(
 				defer sst.Close()
 			}
 		}
-		if err := sst.Add(kv); err != nil {
-			return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
+		if err := sst.Put(key, value); err != nil {
+			return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, key.Key)
 		}
 		if sst.DataSize > sstMaxSize && lastKey == nil {
 			// When we would like to split the file, proceed until we aren't in the
 			// middle of a row. Start by finding the next safe split key.
-			lastKey, err = keys.EnsureSafeSplitKey(kv.Key.Key)
+			lastKey, err = keys.EnsureSafeSplitKey(key.Key)
 			if err != nil {
 				return err
 			}
@@ -610,7 +610,7 @@ func makeSSTs(
 		// argument for the span as in the case above. lastKey <= the most recent
 		// sst.Add call, but since we call PrefixEnd below, it will be guaranteed
 		// to be > the most recent added key.
-		lastKey, err = keys.EnsureSafeSplitKey(kv.Key.Key)
+		lastKey, err = keys.EnsureSafeSplitKey(key.Key)
 		if err != nil {
 			return err
 		}

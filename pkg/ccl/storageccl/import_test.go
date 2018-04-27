@@ -168,8 +168,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		for _, key := range keys {
 			value.ClearChecksum()
 			value.InitChecksum(key)
-			kv := engine.MVCCKeyValue{Key: engine.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
-			if err := sst.Add(kv); err != nil {
+			if err := sst.Put(engine.MVCCKey{Key: key, Timestamp: ts}, value.RawBytes); err != nil {
 				t.Fatalf("%+v", err)
 			}
 		}

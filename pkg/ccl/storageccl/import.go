@@ -85,7 +85,7 @@ func (b *sstBatcher) Add(key engine.MVCCKey, value []byte) error {
 		b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
 	}
 
-	return b.sstWriter.Add(engine.MVCCKeyValue{Key: key, Value: value})
+	return b.sstWriter.Put(key, value)
 }
 
 func (b *sstBatcher) Size() int64 {

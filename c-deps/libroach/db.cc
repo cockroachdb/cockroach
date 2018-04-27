@@ -662,8 +662,32 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
+DBStatus DBSstFileWriterPut(DBSstFileWriter* fw, DBKey key, DBSlice val) {
   rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterMerge(DBSstFileWriter* fw, DBKey key, DBSlice val) {
+  rocksdb::Status status = fw->rep.Merge(EncodeKey(key), ToSlice(val));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key) {
+  rocksdb::Status status = fw->rep.Delete(EncodeKey(key));
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end) {
+  rocksdb::Status status = fw->rep.DeleteRange(EncodeKey(start), EncodeKey(end));
   if (!status.ok()) {
     return ToDBStatus(status);
   }

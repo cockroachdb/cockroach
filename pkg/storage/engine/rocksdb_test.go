@@ -601,10 +601,8 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 	const keyLen = 10
 	const valLen = 100
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	kv := MVCCKeyValue{
-		Key:   MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
-		Value: make([]byte, valLen),
-	}
+	key := MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts}
+	value := make([]byte, valLen)
 
 	b.ResetTimer()
 	sst, err := MakeRocksDBSstFileWriter()
@@ -625,10 +623,10 @@ func BenchmarkRocksDBSstFileWriter(b *testing.B) {
 		}
 
 		b.StopTimer()
-		kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
-		copy(kv.Value, kv.Key.Key)
+		key.Key = []byte(fmt.Sprintf("%09d", i))
+		copy(value, key.Key)
 		b.StartTimer()
-		if err := sst.Add(kv); err != nil {
+		if err := sst.Put(key, value); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -654,10 +652,8 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		b.SetBytes(keyLen + valLen)
 
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		kv := MVCCKeyValue{
-			Key:   MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts},
-			Value: make([]byte, valLen),
-		}
+		key := MVCCKey{Key: roachpb.Key(make([]byte, keyLen)), Timestamp: ts}
+		value := make([]byte, valLen)
 
 		sst, err := MakeRocksDBSstFileWriter()
 		if err != nil {
@@ -669,9 +665,9 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 			entries = maxEntries
 		}
 		for i := 0; i < entries; i++ {
-			kv.Key.Key = []byte(fmt.Sprintf("%09d", i))
-			copy(kv.Value, kv.Key.Key)
-			if err := sst.Add(kv); err != nil {
+			key.Key = []byte(fmt.Sprintf("%09d", i))
+			copy(value, key.Key)
+			if err := sst.Put(key, value); err != nil {
 				b.Fatal(err)
 			}
 		}

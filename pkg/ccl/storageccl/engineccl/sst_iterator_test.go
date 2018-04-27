@@ -73,7 +73,7 @@ func TestSSTIterator(t *testing.T) {
 			},
 			Value: []byte{i},
 		}
-		if err := sst.Add(kv); err != nil {
+		if err := sst.Put(kv.Key, kv.Value); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		allKVs = append(allKVs, kv)

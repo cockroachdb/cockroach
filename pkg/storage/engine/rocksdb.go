@@ -2508,12 +2508,14 @@ func (fr *RocksDBSstFileReader) Close() {
 }
 
 // RocksDBSstFileWriter creates a file suitable for importing with
-// RocksDBSstFileReader.
+// RocksDBSstFileReader. It implements the Writer interface.
 type RocksDBSstFileWriter struct {
 	fw *C.DBSstFileWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 }
+
+var _ Writer = &RocksDBSstFileWriter{}
 
 // MakeRocksDBSstFileWriter creates a new RocksDBSstFileWriter with the default
 // configuration.
@@ -2523,15 +2525,61 @@ func MakeRocksDBSstFileWriter() (RocksDBSstFileWriter, error) {
 	return RocksDBSstFileWriter{fw: fw}, err
 }
 
-// Add puts a kv entry into the sstable being built. An error is returned if it
-// is not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Close` cannot have been called.
-func (fw *RocksDBSstFileWriter) Add(kv MVCCKeyValue) error {
+// ApplyBatchRepr implements the Writer interface.
+func (fw *RocksDBSstFileWriter) ApplyBatchRepr(repr []byte, sync bool) error {
+	panic("unimplemented")
+}
+
+// Clear implements the Writer interface. It adds a Deletion key into the
+// sstable being built. It has the same restrictions as Put.
+func (fw *RocksDBSstFileWriter) Clear(key MVCCKey) error {
 	if fw.fw == nil {
-		return errors.New("cannot call Open on a closed writer")
+		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.DataSize += int64(len(kv.Key.Key)) + int64(len(kv.Value))
-	return statusToError(C.DBSstFileWriterAdd(fw.fw, goToCKey(kv.Key), goToCSlice(kv.Value)))
+	fw.DataSize += int64(len(key.Key))
+	return statusToError(C.DBSstFileWriterDelete(fw.fw, goToCKey(key)))
+}
+
+// ClearRange implements the Writer interface. The function can be called at any
+// time with respect to Put,Merge, and Delete. Close cannot have been called.
+func (fw *RocksDBSstFileWriter) ClearRange(start, end MVCCKey) error {
+	if fw.fw == nil {
+		return errors.New("cannot call ClearRange on a closed writer")
+	}
+	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
+	return statusToError(C.DBSstFileWriterDeleteRange(fw.fw, goToCKey(start), goToCKey(end)))
+}
+
+// ClearIterRange implements the Writer interface.
+func (fw *RocksDBSstFileWriter) ClearIterRange(iter Iterator, start, end MVCCKey) error {
+	panic("unimplemented")
+}
+
+// Merge implements the Writer interface. It adds a Merge key with the provided
+// value into the sstable being built. It has the same restrictions as Put.
+func (fw *RocksDBSstFileWriter) Merge(key MVCCKey, value []byte) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Merge on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	return statusToError(C.DBSstFileWriterMerge(fw.fw, goToCKey(key), goToCSlice(value)))
+}
+
+// Put implements the Writer interface. It adds a Put key with the provided
+// value into the sstable being built. An error is returned if it is not greater
+// than any previously added entry (according to the comparator configured
+// during writer creation). Close cannot have been called.
+func (fw *RocksDBSstFileWriter) Put(key MVCCKey, value []byte) error {
+	if fw.fw == nil {
+		return errors.New("cannot call Put on a closed writer")
+	}
+	fw.DataSize += int64(len(key.Key)) + int64(len(value))
+	return statusToError(C.DBSstFileWriterPut(fw.fw, goToCKey(key), goToCSlice(value)))
+}
+
+// LogData implements the Writer interface.
+func (fw *RocksDBSstFileWriter) LogData(data []byte) error {
+	panic("unimplemented")
 }
 
 // Finish finalizes the writer and returns the constructed file's contents. At

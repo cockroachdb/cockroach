@@ -43,8 +43,7 @@ func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer sst.Close()
-	kv := engine.MVCCKeyValue{Key: key, Value: value}
-	if err := sst.Add(kv); err != nil {
+	if err := sst.Put(key, value); err != nil {
 		return nil, err
 	}
 	return sst.Finish()
@@ -323,7 +322,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 				}
 				prevKey.Key = append(prevKey.Key[:0], kv.Key.Key...)
 				prevKey.Timestamp = kv.Key.Timestamp
-				if err := sst.Add(kv); err != nil {
+				if err := sst.Put(kv.Key, kv.Value); err != nil {
 					t.Fatalf("%+v", err)
 				}
 			}

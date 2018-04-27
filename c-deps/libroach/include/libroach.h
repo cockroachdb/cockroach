@@ -341,11 +341,24 @@ DBSstFileWriter* DBSstFileWriterNew();
 // Opens an in-memory file for output of an sstable.
 DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw);
 
-// Adds a kv entry to the sstable being built. An error is returned if it is
-// not greater than any previously added entry (according to the comparator
-// configured during writer creation). `Open` must have been called. `Close`
-// cannot have been called.
-DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val);
+// Adds a Put key with the provided value into the sstable being built. An error
+// is returned if it is not greater than any previously added entry (according
+// to the comparator configured during writer creation). Open must have been
+// called. Close cannot have been called.
+DBStatus DBSstFileWriterPut(DBSstFileWriter* fw, DBKey key, DBSlice val);
+
+// Adds a Merge key with the provided value into the sstable being built. The
+// function has the same restrictions as DBSstFileWriterPut.
+DBStatus DBSstFileWriterMerge(DBSstFileWriter* fw, DBKey key, DBSlice val);
+
+// Adds a Deletetion key into the sstable being built. The function has the same
+// restrictions as DBSstFileWriterPut.
+DBStatus DBSstFileWriterDelete(DBSstFileWriter* fw, DBKey key);
+
+// Adds a RangeDeletion tombstone into the sstable being built. The function can
+// be called at any time with respect to DBSstFileWriter{Put,Merge,Delete}. Open
+// must have been called. Close cannot have been called.
+DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end);
 
 // Finalizes the writer and stores the constructed file's contents in *data. At
 // least one kv entry must have been added. May only be called once.
