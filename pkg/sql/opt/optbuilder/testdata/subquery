@@ -1469,3 +1469,95 @@ project
  │                             └── const: 9 [type=int]
  └── projections
       └── variable: tab4.col0 [type=int]
+
+# Multiple subqueries in same projection list.
+build
+SELECT (SELECT 1), (SELECT 2)
+----
+project
+ ├── columns: column2:2(int) column4:4(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: column1:1(int)
+      │         └── project
+      │              ├── columns: column1:1(int)
+      │              ├── values
+      │              │    └── tuple [type=tuple{}]
+      │              └── projections
+      │                   └── const: 1 [type=int]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: column3:3(int)
+                └── project
+                     ├── columns: column3:3(int)
+                     ├── values
+                     │    └── tuple [type=tuple{}]
+                     └── projections
+                          └── const: 2 [type=int]
+
+# Reuse duplicate subquery columns.
+build
+SELECT (SELECT 1), (SELECT a FROM abc), (SELECT 1), (SELECT a FROM abc)
+----
+project
+ ├── columns: column2:2(int) column6:6(int) column2:2(int) column6:6(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: column1:1(int)
+      │         └── project
+      │              ├── columns: column1:1(int)
+      │              ├── values
+      │              │    └── tuple [type=tuple{}]
+      │              └── projections
+      │                   └── const: 1 [type=int]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: abc.a:3(int!null)
+                └── project
+                     ├── columns: abc.a:3(int!null)
+                     ├── scan abc
+                     │    └── columns: abc.a:3(int!null) abc.b:4(int) abc.c:5(int)
+                     └── projections
+                          └── variable: abc.a [type=int]
+
+# Multiple nested subqueries in same column list.
+build
+SELECT (SELECT (SELECT 1)), (SELECT (SELECT 1)), (SELECT 1)
+----
+project
+ ├── columns: column3:3(int) column3:3(int) column7:7(int)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── subquery [type=int]
+      │    └── max1-row
+      │         ├── columns: column2:2(int)
+      │         └── project
+      │              ├── columns: column2:2(int)
+      │              ├── values
+      │              │    └── tuple [type=tuple{}]
+      │              └── projections
+      │                   └── subquery [type=int]
+      │                        └── max1-row
+      │                             ├── columns: column1:1(int)
+      │                             └── project
+      │                                  ├── columns: column1:1(int)
+      │                                  ├── values
+      │                                  │    └── tuple [type=tuple{}]
+      │                                  └── projections
+      │                                       └── const: 1 [type=int]
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: column6:6(int)
+                └── project
+                     ├── columns: column6:6(int)
+                     ├── values
+                     │    └── tuple [type=tuple{}]
+                     └── projections
+                          └── const: 1 [type=int]
