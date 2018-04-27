@@ -206,37 +206,3 @@
     )
     (Filters (ExtractUnboundConditions $list $input))
 )
-
-# HoistSelectExists extracts existential subqueries from Select filters,
-# turning them into semi-joins. This eliminates the subquery, which is often
-# expensive to execute and restricts the optimizer's plan choices.
-[HoistSelectExists, Normalize]
-(Select
-    $input:*
-    $filter:(Filters
-        $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
-    )
-)
-=>
-(SemiJoinApply
-    $input
-    $subquery
-    (Filters (RemoveListItem $list $exists))
-)
-
-# HoistSelectNotExists extracts non-existential subqueries from Select filters,
-# turning them into anti-joins. This eliminates the subquery, which is often
-# expensive to execute and restricts the optimizer's plan choices.
-[HoistSelectNotExists, Normalize]
-(Select
-    $input:*
-    $filter:(Filters
-        $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
-    )
-)
-=>
-(AntiJoinApply
-    (Select $input (Filters (RemoveListItem $list $exists)))
-    $subquery
-    (True)
-)
