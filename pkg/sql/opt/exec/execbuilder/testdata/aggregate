@@ -9,8 +9,8 @@ CREATE TABLE kv (
 )
 ----
 
-exec-explain
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
 group           0  group   ·             ·                   (column6, column7, column8, column9, column10, column11, column12, column13, column15, column17, column19)  ·
  │              0  ·       aggregate 0   min(column5)        ·                                                                                                           ·
@@ -58,8 +58,8 @@ SELECT JSONB_AGG(1) FROM kv
 column6:jsonb
 NULL
 
-exec-explain
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 render               0  render  ·            ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column15, column17)  ·
  │                   0  ·       render 0     agg0                ·                                                                                                           ·
@@ -118,8 +118,8 @@ column5:jsonb
 NULL
 
 # Aggregate functions trigger aggregation and computation when there is no source.
-exec-explain
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 render                 0  render  ·             ·                   (column2, column3, column4, column5, column7, column8, column9, column10, column12, column13, column16)  ·
  │                     0  ·       render 0      agg0                ·                                                                                                        ·
@@ -310,8 +310,8 @@ column5:int  k:int
 1            7
 1            8
 
-exec-explain
-SELECT COUNT(*), k FROM kv GROUP BY 2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
 render          0  render  ·            ·             (column5, k)  ·
  │              0  ·       render 0     agg0          ·             ·
@@ -391,8 +391,8 @@ column5:int  column6:string
 2            B
 
 # Selecting and grouping on a more complex expression works.
-exec-explain
-SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 render               0  render  ·            ·             (column6, column5)  ·
  │                   0  ·       render 0     agg0          ·                   ·
@@ -419,8 +419,8 @@ column6:int  column5:int
 1            12
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-exec-explain
-SELECT COUNT(*), k+v FROM kv GROUP BY k, v
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 render          0  render  ·            ·             (column5, column6)  ·
  │              0  ·       render 0     agg0          ·                   ·
@@ -679,8 +679,8 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 column7:decimal
 14.0
 
-exec-explain
-SELECT COUNT(k) FROM kv
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
 ----
 group      0  group  ·            ·           (column5)  ·
  │         0  ·      aggregate 0  count(k)    ·          ·
@@ -688,8 +688,8 @@ group      0  group  ·            ·           (column5)  ·
 ·          1  ·      table        kv@primary  ·          ·
 ·          1  ·      spans        ALL         ·          ·
 
-exec-explain
-SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
 group      0  group  ·            ·           (column5, column6, column7)  ·
  │         0  ·      aggregate 0  count(k)    ·                            ·
@@ -712,8 +712,8 @@ exec-raw
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 ----
 
-exec-explain
-SELECT MIN(a) FROM abc
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
 ----
 group      0  group  ·            ·            (column5)  ·
  │         0  ·      aggregate 0  min(a)       ·          ·
@@ -779,8 +779,8 @@ SELECT MIN(x) FROM xyz
 column4:int
 1
 
-exec-explain
-SELECT MIN(x) FROM xyz
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
 ----
 group      0  group  ·            ·            (column4)  ·
  │         0  ·      aggregate 0  min(x)       ·          ·
@@ -795,8 +795,8 @@ column4:int
 4
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
-exec-explain
-SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group      0  group  ·            ·                        (column4)  ·
  │         0  ·      aggregate 0  min(x)                   ·          ·
@@ -811,8 +811,8 @@ column4:int
 7
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
-exec-explain
-SELECT MAX(x) FROM xyz
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
 ----
 group      0  group  ·            ·            (column4)  ·
  │         0  ·      aggregate 0  max(x)       ·          ·
@@ -826,8 +826,8 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 column4:int
 2
 
-exec-explain
-SELECT MIN(y) FROM xyz WHERE x = 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  min(xyz.y)   ·          ·
@@ -843,8 +843,8 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 column4:int
 2
 
-exec-explain
-SELECT MAX(y) FROM xyz WHERE x = 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  max(xyz.y)   ·          ·
@@ -860,8 +860,8 @@ SELECT MIN(y) FROM xyz WHERE x = 7
 column4:int
 NULL
 
-exec-explain
-SELECT MIN(y) FROM xyz WHERE x = 7
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  min(xyz.y)   ·          ·
@@ -877,8 +877,8 @@ SELECT MAX(y) FROM xyz WHERE x = 7
 column4:int
 NULL
 
-exec-explain
-SELECT MAX(y) FROM xyz WHERE x = 7
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  max(xyz.y)   ·          ·
@@ -894,8 +894,8 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 column4:int
 1
 
-exec-explain
-SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group           0  group   ·            ·           (column4)  ·
  │              0  ·       aggregate 0  min(xyz.x)  ·          ·
@@ -911,8 +911,8 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 column4:int
 1
 
-exec-explain
-SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group           0  group   ·            ·           (column4)  ·
  │              0  ·       aggregate 0  max(xyz.x)  ·          ·
@@ -942,8 +942,8 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 column4:decimal
 NULL
 
-exec-explain
-SELECT VARIANCE(x) FROM xyz WHERE x = 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 group      0  group  ·            ·            (column4)  ·
  │         0  ·      aggregate 0  variance(x)  ·          ·
@@ -1121,8 +1121,8 @@ INSERT INTO ab VALUES
 #output row: [5]
 
 # TODO(radu): ORDER BY not supported yet.
-#exec-explain
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+#exec hide-colnames
+#EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1137,8 +1137,8 @@ INSERT INTO ab VALUES
 #·                    table        kv@primary
 #·                    spans        ALL
 #
-#exec-explain
-#SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+#exec hide-colnames
+#EXPLAIN (VERBOSE) #SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1152,8 +1152,8 @@ INSERT INTO ab VALUES
 #·                    table        kv@primary
 #·                    spans        ALL
 #
-#exec-explain
-#SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+#exec hide-colnames
+#EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1253,8 +1253,8 @@ INSERT INTO ab VALUES
 #·               2  ·       spans        ALL                                ·                                                              ·
 
 # Tests with * inside GROUP BY.
-exec-explain
-SELECT 1 FROM kv GROUP BY kv.*;
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*;
 ----
 render     0  render  ·         ·           (column5)  ·
  │         0  ·       render 0  1           ·          ·
@@ -1273,8 +1273,8 @@ column5:int
 1
 1
 
-exec-explain
-SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 render               0  render  ·            ·            (column9)           ·
  │                   0  ·       render 0     agg0         ·                   ·
@@ -1316,7 +1316,7 @@ column9:decimal
 #----
 #
 ## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-#exec
+#exec hide-colnames
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 #----
 #group           0  group   ·            ·                       (min)            ·
@@ -1341,7 +1341,7 @@ column9:decimal
 #5
 #
 ## Repeat test when there is an existing filter.
-#exec
+#exec hide-colnames
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                       (min)   ·
@@ -1361,7 +1361,7 @@ column9:decimal
 ## Check the optimization when the argument is non-trivial. The renderNode can't
 ## present an ordering on v+1 so the optimization is not applied, but the IS NOT
 ## NULL filter should be added.
-#exec
+#exec hide-colnames
 #EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                           (min)            ·
@@ -1374,7 +1374,7 @@ column9:decimal
 #·               2  ·       filter       (v + 1) IS NOT NULL         ·                ·
 #
 ## Verify that we don't use the optimization if there is a GROUP BY.
-#exec
+#exec hide-colnames
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 #----
 #group      0  group  ·            ·                 (min)   ·
@@ -1447,8 +1447,8 @@ column3:tuple{int, int}
 (2, 1)
 (4, 3)
 
-exec-explain
-SELECT (b, a) FROM ab GROUP BY (b, a)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 render     0  render  ·         ·           (column3)  ·
  │         0  ·       render 0  (b, a)      ·          ·
@@ -1465,8 +1465,8 @@ b               (4, 3)
 d               (2, 1)
 d               (4, 3)
 
-exec-explain
-SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 render               0  render  ·            ·           (column6, column7)  ·
  │                   0  ·       render 0     agg0        ·                   ·

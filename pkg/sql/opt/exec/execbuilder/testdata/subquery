@@ -35,8 +35,8 @@ project
                                ├── variable: t.k [type=int, outer=(1)]
                                └── variable: t.k [type=int, outer=(1)]
 
-exec-explain
-SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 root                 0  root      ·          ·                 (column4)  ·
  ├── render          1  render    ·          ·                 (column4)  ·
@@ -65,8 +65,8 @@ SELECT EXISTS(SELECT * FROM t WHERE u != k*k)
 column4:bool
 false
 
-exec-explain
-SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 root                 0  root      ·            ·          (k, u, v)  ·
  ├── filter          1  filter    ·            ·          (k, u, v)  ·
@@ -90,8 +90,8 @@ SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 k:int  u:int  v:int
 4      16     64
 
-exec-explain
-SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 root                      0  root      ·            ·                 (k, u, v)  ·
  ├── filter               1  filter    ·            ·                 (k, u, v)  ·
