@@ -1422,6 +1422,25 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
+	log.Info(ctx, "starting graphite")
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		s.recorder.InitGraphiteExporter(ctx)
+		ticker := time.NewTicker(15 * time.Second) // TODO neeral define frequency
+		// ticker := time.NewTicker(time.Minute) // TODO neeral define frequency
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.recorder.ExportToGraphite(ctx); err != nil {
+					log.Infof(ctx, "error pushing metrics to graphite: %v\n", err)
+				}
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+	log.Info(ctx, "started graphite")
+
 	// Begin recording status summaries.
 	s.node.startWriteSummaries(DefaultMetricsSampleInterval)
 
