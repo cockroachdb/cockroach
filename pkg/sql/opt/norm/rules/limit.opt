@@ -2,6 +2,7 @@
 # limit.opt contains normalization rules for the Limit and Offset operators.
 # =============================================================================
 
+
 # EliminateLimit discards a Limit operator if its constant limit is greater than
 # or equal to the maximum number of rows that can be returned by the input. In
 # this case, the Limit is just a no-op, because the rows are already limited.

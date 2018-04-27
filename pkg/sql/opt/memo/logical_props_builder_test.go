@@ -32,13 +32,27 @@ func TestLogicalPropsBuilder(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost)
 }
 
-// Test HasCorrelatedSubquery flag in isolation since it's not important enough
-// to add to the ExprView string representation.
+// Test HasCorrelatedSubquery flag manually since it's not important enough
+// to add to the ExprView string representation in order to use data-driven
+// tests.
 func TestHasCorrelatedSubquery(t *testing.T) {
 	cat := createLogPropsCatalog(t)
 
-	test := func(sql string, expected bool) {
-		tester := testutils.NewOptTester(cat, sql)
+	testCases := []struct {
+		sql      string
+		expected bool
+	}{
+		{sql: "SELECT y FROM a WHERE 1=1", expected: false},
+		{sql: "SELECT y FROM a WHERE (SELECT COUNT(*) FROM b) > 0", expected: false},
+		{sql: "SELECT y FROM a WHERE (SELECT y) > 5", expected: true},
+		{sql: "SELECT y FROM a WHERE (SELECT True FROM b WHERE z=y)", expected: true},
+		{sql: "SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", expected: true},
+		{sql: "SELECT y FROM a WHERE 1=1 AND (SELECT z FROM b WHERE z=y)+1 = 10", expected: true},
+		{sql: "SELECT (SELECT z FROM b WHERE z=y) FROM a WHERE False", expected: false},
+	}
+
+	for _, tc := range testCases {
+		tester := testutils.NewOptTester(cat, tc.sql)
 		ev, err := tester.OptBuild()
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -46,18 +60,10 @@ func TestHasCorrelatedSubquery(t *testing.T) {
 
 		// Dig down through input of Project operator and get Select filter.
 		child := ev.Child(0).Child(1)
-		if child.Logical().Scalar.HasCorrelatedSubquery != expected {
-			t.Errorf("expected HasCorrelatedSubquery to be %v, got %v", expected, !expected)
+		if child.Logical().Scalar.HasCorrelatedSubquery != tc.expected {
+			t.Errorf("expected HasCorrelatedSubquery to be %v, got %v", tc.expected, !tc.expected)
 		}
 	}
-
-	test("SELECT y FROM a WHERE 1=1", false /* expected */)
-	test("SELECT y FROM a WHERE (SELECT COUNT(*) FROM b) > 0", false /* expected */)
-	test("SELECT y FROM a WHERE (SELECT y) > 5", true /* expected */)
-	test("SELECT y FROM a WHERE (SELECT True FROM b WHERE z=y)", true /* expected */)
-	test("SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", true /* expected */)
-	test("SELECT y FROM a WHERE 1=1 AND (SELECT z FROM b WHERE z=y)+1 = 10", true /* expected */)
-	test("SELECT (SELECT z FROM b WHERE z=y) FROM a WHERE False", false /* expected */)
 }
 
 // Test joins that cannot yet be tested using SQL syntax + optimizer.
