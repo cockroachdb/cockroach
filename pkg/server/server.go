@@ -118,6 +118,18 @@ var (
 			"feature.",
 		0,
 	)
+
+	graphiteURL = settings.RegisterStringSetting(
+		"external.graphite_server.url",
+		"url of Graphite server or Carbon endpoint for pushing metrics to. Empty string to disable",
+		"",
+	)
+
+	graphitePeriod = settings.RegisterDurationSetting(
+		"external.graphite_server.period",
+		"how frequently to push metrics to Graphite",
+		time.Minute,
+	)
 )
 
 // Server is the cockroach server node.
@@ -740,6 +752,29 @@ func (s *singleListener) Close() error {
 
 func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
+}
+
+func (s *Server) startGraphiteStatsExporter(ctx context.Context) {
+	graphiteConf := make(chan metric.GraphiteConfig, 1)
+	s.stopper.AddCloser(stop.CloserFn(func() { close(graphiteConf) }))
+
+	graphiteURL.SetOnChange(&s.st.SV, func() {
+		g := metric.GraphiteConfig{
+			URL:    graphiteURL.Get(&s.st.SV),
+			Period: graphitePeriod.Get(&s.st.SV),
+		}
+		graphiteConf <- g
+	})
+	graphitePeriod.SetOnChange(&s.st.SV, func() {
+		g := metric.GraphiteConfig{
+			URL:    graphiteURL.Get(&s.st.SV),
+			Period: graphitePeriod.Get(&s.st.SV),
+		}
+		graphiteConf <- g
+	})
+
+	s.recorder.StartExportingStatsToGraphite(ctx, graphiteConf)
+	log.Info(ctx, "Started periodic GraphiteExporter")
 }
 
 // startMonitoringForwardClockJumps starts a background task to monitor forward
