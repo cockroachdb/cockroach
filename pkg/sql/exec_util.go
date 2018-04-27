@@ -464,23 +464,17 @@ func shouldUseDistSQL(
 	return true, nil
 }
 
-// golangFillQueryArguments populates the placeholder map with
-// types and values from an array of Go values.
-// The args can be datums, or Go basic types.
+// golangFillQueryArguments transforms Go values into datums.
+// Some of the args can be datums (in which case the transformation is a no-op).
 //
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-//
-// TODO(andrei): make this simply return a slice of datums once the "internal
-// planner" goes away.
-func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
-	pinfo.Clear()
-
+func golangFillQueryArguments(args ...interface{}) tree.Datums {
+	res := make(tree.Datums, len(args))
 	for i, arg := range args {
-		k := strconv.Itoa(i + 1)
 		if arg == nil {
-			pinfo.SetValue(k, tree.DNull)
+			res[i] = tree.DNull
 			continue
 		}
 
@@ -528,8 +522,9 @@ func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
 				panic(fmt.Sprintf("unexpected type %T", arg))
 			}
 		}
-		pinfo.SetValue(k, d)
+		res[i] = d
 	}
+	return res
 }
 
 func checkResultType(typ types.T) error {

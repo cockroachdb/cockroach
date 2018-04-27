@@ -234,15 +234,13 @@ func TestGolangQueryArgs(t *testing.T) {
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
 	}
 
-	pinfo := &tree.PlaceholderInfo{}
 	for i, tcase := range testCases {
-		golangFillQueryArguments(pinfo, []interface{}{tcase.value})
-		output, valid := pinfo.Type("1", false)
-		if !valid {
-			t.Errorf("case %d failed: argument was invalid", i)
-			continue
+		datums := golangFillQueryArguments(tcase.value)
+		if len(datums) != 1 {
+			t.Fatalf("epected 1 datum, got: %d", len(datums))
 		}
-		if a, e := reflect.TypeOf(output), tcase.expectedType; a != e {
+		d := datums[0]
+		if a, e := reflect.TypeOf(d.ResolvedType()), tcase.expectedType; a != e {
 			t.Errorf("case %d failed: expected type %s, got %s", i, e.String(), a.String())
 		}
 	}
