@@ -741,7 +741,7 @@ func (c *conn) SendCommandComplete(tag []byte) error {
 
 // Rd is part of the pgwirebase.Conn interface.
 func (c *conn) Rd() pgwirebase.BufferedReader {
-	return &pgwireReader2{conn: c}
+	return &pgwireReader{conn: c}
 }
 
 // flushInfo encapsulates information about what results have been flushed to
@@ -1179,33 +1179,31 @@ func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
 	return &res
 }
 
-// pgwireReader2 is an io.Reader that wraps a conn, maintaining its metrics as
+// pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as
 // it is consumed.
-//
-// TODO(andrei): rename when pgwireReader goes away.
-type pgwireReader2 struct {
+type pgwireReader struct {
 	conn *conn
 }
 
-// pgwireReader2 implements the pgwirebase.BufferedReader interface.
-var _ pgwirebase.BufferedReader = &pgwireReader2{}
+// pgwireReader implements the pgwirebase.BufferedReader interface.
+var _ pgwirebase.BufferedReader = &pgwireReader{}
 
 // Read is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) Read(p []byte) (int, error) {
+func (r *pgwireReader) Read(p []byte) (int, error) {
 	n, err := r.conn.rd.Read(p)
 	r.conn.metrics.BytesInCount.Inc(int64(n))
 	return n, err
 }
 
 // ReadString is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) ReadString(delim byte) (string, error) {
+func (r *pgwireReader) ReadString(delim byte) (string, error) {
 	s, err := r.conn.rd.ReadString(delim)
 	r.conn.metrics.BytesInCount.Inc(int64(len(s)))
 	return s, err
 }
 
 // ReadByte is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) ReadByte() (byte, error) {
+func (r *pgwireReader) ReadByte() (byte, error) {
 	b, err := r.conn.rd.ReadByte()
 	if err == nil {
 		r.conn.metrics.BytesInCount.Inc(1)
