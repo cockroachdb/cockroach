@@ -123,9 +123,6 @@ type LeaseStore struct {
 	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
-	// TODO(andrei): remove memMetrics once the LeaseStore moves from using an
-	// "internal planner" to using the InternalExecutor.
-	memMetrics *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -1228,7 +1225,6 @@ func NewLeaseManager(
 	execCfg *ExecutorConfig,
 	testingKnobs LeaseManagerTestingKnobs,
 	stopper *stop.Stopper,
-	memMetrics *MemoryMetrics,
 	cfg *base.LeaseManagerConfig,
 ) *LeaseManager {
 	lm := &LeaseManager{
@@ -1238,7 +1234,6 @@ func NewLeaseManager(
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
 			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
-			memMetrics:          memMetrics,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{

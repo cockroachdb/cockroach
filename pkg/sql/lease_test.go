@@ -206,7 +206,6 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			&cfgCpy,
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
-			&sql.MemoryMetrics{},
 			t.cfg,
 		)
 		t.nodes[nodeID] = mgr
