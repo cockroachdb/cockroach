@@ -212,14 +212,13 @@ func (b *Builder) buildSingleRowSubquery(
 	}
 
 	out, outScope = b.buildSubqueryProjection(s, inScope)
-	v := b.factory.ConstructVariable(b.factory.InternColumnID(outScope.cols[0].id))
 
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can
 	// prove statically that the subquery always returns at most one row.
 	out = b.factory.ConstructMax1Row(out)
 
-	out = b.factory.ConstructSubquery(out, v)
+	out = b.factory.ConstructSubquery(out)
 	return out, outScope
 }
 

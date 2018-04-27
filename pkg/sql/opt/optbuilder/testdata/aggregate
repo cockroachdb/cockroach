@@ -275,26 +275,25 @@ project
  │    └── tuple [type=tuple{}]
  └── projections
       └── subquery [type=int]
-           ├── max1-row
-           │    ├── columns: column7:7(int)
-           │    └── project
-           │         ├── columns: column7:7(int)
-           │         ├── group-by
-           │         │    ├── columns: column6:6(int)
-           │         │    ├── project
-           │         │    │    ├── columns: column5:5(int)
-           │         │    │    ├── scan kv
-           │         │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
-           │         │    │    └── projections
-           │         │    │         └── const: 1 [type=int]
-           │         │    └── aggregations
-           │         │         └── max [type=int]
-           │         │              └── variable: column5 [type=int]
-           │         └── projections
-           │              └── coalesce [type=int]
-           │                   ├── variable: column6 [type=int]
-           │                   └── const: 0 [type=int]
-           └── variable: column7 [type=int]
+           └── max1-row
+                ├── columns: column7:7(int)
+                └── project
+                     ├── columns: column7:7(int)
+                     ├── group-by
+                     │    ├── columns: column6:6(int)
+                     │    ├── project
+                     │    │    ├── columns: column5:5(int)
+                     │    │    ├── scan kv
+                     │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+                     │    │    └── projections
+                     │    │         └── const: 1 [type=int]
+                     │    └── aggregations
+                     │         └── max [type=int]
+                     │              └── variable: column5 [type=int]
+                     └── projections
+                          └── coalesce [type=int]
+                               ├── variable: column6 [type=int]
+                               └── const: 0 [type=int]
 
 build
 SELECT COUNT(*), k FROM kv
@@ -1746,20 +1745,19 @@ limit
  │         └── gt [type=bool]
  │              ├── variable: xyz.x [type=int]
  │              └── subquery [type=decimal]
- │                   ├── max1-row
- │                   │    ├── columns: column5:5(decimal)
- │                   │    └── group-by
- │                   │         ├── columns: column5:5(decimal)
- │                   │         ├── project
- │                   │         │    ├── columns: column4:4(int)
- │                   │         │    ├── values
- │                   │         │    │    └── tuple [type=tuple{}]
- │                   │         │    └── projections
- │                   │         │         └── const: 0 [type=int]
- │                   │         └── aggregations
- │                   │              └── avg [type=decimal]
- │                   │                   └── variable: column4 [type=int]
- │                   └── variable: column5 [type=decimal]
+ │                   └── max1-row
+ │                        ├── columns: column5:5(decimal)
+ │                        └── group-by
+ │                             ├── columns: column5:5(decimal)
+ │                             ├── project
+ │                             │    ├── columns: column4:4(int)
+ │                             │    ├── values
+ │                             │    │    └── tuple [type=tuple{}]
+ │                             │    └── projections
+ │                             │         └── const: 0 [type=int]
+ │                             └── aggregations
+ │                                  └── avg [type=decimal]
+ │                                       └── variable: column4 [type=int]
  └── const: 1 [type=int]
 
 build
@@ -1775,20 +1773,19 @@ limit
  │         └── gt [type=bool]
  │              ├── variable: xyz.x [type=int]
  │              └── subquery [type=decimal]
- │                   ├── max1-row
- │                   │    ├── columns: column7:7(decimal)
- │                   │    └── group-by
- │                   │         ├── columns: column7:7(decimal)
- │                   │         ├── project
- │                   │         │    ├── columns: xyz.y:5(int)
- │                   │         │    ├── scan xyz
- │                   │         │    │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(float)
- │                   │         │    └── projections
- │                   │         │         └── variable: xyz.y [type=int]
- │                   │         └── aggregations
- │                   │              └── avg [type=decimal]
- │                   │                   └── variable: xyz.y [type=int]
- │                   └── variable: column7 [type=decimal]
+ │                   └── max1-row
+ │                        ├── columns: column7:7(decimal)
+ │                        └── group-by
+ │                             ├── columns: column7:7(decimal)
+ │                             ├── project
+ │                             │    ├── columns: xyz.y:5(int)
+ │                             │    ├── scan xyz
+ │                             │    │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(float)
+ │                             │    └── projections
+ │                             │         └── variable: xyz.y [type=int]
+ │                             └── aggregations
+ │                                  └── avg [type=decimal]
+ │                                       └── variable: xyz.y [type=int]
  └── const: 1 [type=int]
 
 exec-ddl

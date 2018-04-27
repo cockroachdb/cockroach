@@ -73,21 +73,20 @@ limit
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── subquery [type=int]
-      ├── max1-row
-      │    ├── columns: column5:5(int)
-      │    ├── cardinality: [1 - 1]
-      │    ├── stats: [rows=1]
-      │    └── project
-      │         ├── columns: column5:5(int)
-      │         ├── cardinality: [1 - 1]
-      │         ├── stats: [rows=1]
-      │         ├── values
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── stats: [rows=1]
-      │         │    └── tuple [type=tuple{}]
-      │         └── projections
-      │              └── const: 1 [type=int]
-      └── variable: column5 [type=int, outer=(5)]
+      └── max1-row
+           ├── columns: column5:5(int)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           └── project
+                ├── columns: column5:5(int)
+                ├── cardinality: [1 - 1]
+                ├── stats: [rows=1]
+                ├── values
+                │    ├── cardinality: [1 - 1]
+                │    ├── stats: [rows=1]
+                │    └── tuple [type=tuple{}]
+                └── projections
+                     └── const: 1 [type=int]
 
 build
 SELECT * FROM xyzs LIMIT 0
@@ -116,27 +115,26 @@ project
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
-           ├── max1-row
-           │    ├── columns: xyzs.x:1(int)
-           │    ├── outer: (1,2)
-           │    ├── cardinality: [0 - 1]
-           │    ├── stats: [rows=1]
-           │    └── limit
-           │         ├── columns: xyzs.x:1(int)
-           │         ├── outer: (1,2)
-           │         ├── stats: [rows=1000]
-           │         ├── project
-           │         │    ├── columns: xyzs.x:1(int)
-           │         │    ├── outer: (1)
-           │         │    ├── stats: [rows=1000]
-           │         │    ├── scan kuv
-           │         │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
-           │         │    │    ├── stats: [rows=1000]
-           │         │    │    └── keys: (5)
-           │         │    └── projections [outer=(1)]
-           │         │         └── variable: xyzs.x [type=int, outer=(1)]
-           │         └── variable: xyzs.y [type=int, outer=(2)]
-           └── variable: xyzs.x [type=int, outer=(1)]
+           └── max1-row
+                ├── columns: xyzs.x:1(int)
+                ├── outer: (1,2)
+                ├── cardinality: [0 - 1]
+                ├── stats: [rows=1]
+                └── limit
+                     ├── columns: xyzs.x:1(int)
+                     ├── outer: (1,2)
+                     ├── stats: [rows=1000]
+                     ├── project
+                     │    ├── columns: xyzs.x:1(int)
+                     │    ├── outer: (1)
+                     │    ├── stats: [rows=1000]
+                     │    ├── scan kuv
+                     │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+                     │    │    ├── stats: [rows=1000]
+                     │    │    └── keys: (5)
+                     │    └── projections [outer=(1)]
+                     │         └── variable: xyzs.x [type=int, outer=(1)]
+                     └── variable: xyzs.y [type=int, outer=(2)]
 
 # Test very high limit (> max uint32).
 opt
