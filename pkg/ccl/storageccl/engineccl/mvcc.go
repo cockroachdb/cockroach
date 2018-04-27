@@ -192,8 +192,8 @@ func (i *MVCCIncrementalIterator) UnsafeKey() engine.MVCCKey {
 	return i.iter.UnsafeKey()
 }
 
-// UnsafeValue returns the same value as Value, but the memory is invalidated on
-// the next call to {Next,Reset,Close}.
+// UnsafeValue returns the same value as a byte slice, but the memory is
+// invalidated on the next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }

@@ -638,7 +638,7 @@ func clearRangeData(
 	desc *roachpb.RangeDescriptor,
 	keyCount int64,
 	eng engine.Engine,
-	batch engine.Batch,
+	writer engine.Writer,
 ) error {
 	iter := eng.NewIterator(engine.IterOptions{})
 	defer iter.Close()
@@ -657,9 +657,9 @@ func clearRangeData(
 		// above), but the data range's key count needs to be explicitly checked.
 		var err error
 		if i >= metadataRanges && keyCount >= clearRangeMinKeys {
-			err = batch.ClearRange(keyRange.Start, keyRange.End)
+			err = writer.ClearRange(keyRange.Start, keyRange.End)
 		} else {
-			err = batch.ClearIterRange(iter, keyRange.Start, keyRange.End)
+			err = writer.ClearIterRange(iter, keyRange.Start, keyRange.End)
 		}
 		if err != nil {
 			return err
@@ -868,6 +868,111 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 		stats.commit = timeutil.Now()
+	case *sstSnapshotStrategy:
+		// TODO DURING REVIEW: do we need to worry about RaftTombstoneIncorrectLegacyKey here?
+		// TODO track stats of ingestion and log them.
+
+		unreplicatedSST, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			return err
+		}
+		defer unreplicatedSST.Close()
+
+		// Clear out all existing unreplicated keys in the range.
+		unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(r.RangeID)
+		unreplicatedStart := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey)
+		unreplicatedEnd := engine.MakeMVCCMetadataKey(unreplicatedPrefixKey.PrefixEnd())
+		err = unreplicatedSST.ClearRange(unreplicatedStart, unreplicatedEnd)
+		if err != nil {
+			return errors.Wrapf(err, "unable to write ClearRange to unreplicated SST writer")
+		}
+		raftLogSize = 0
+
+		////////
+
+		// Note that since this snapshot comes from Raft, we don't have to synthesize
+		// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
+		// ways.
+		hsKey := r.raftMu.stateLoader.RaftHardStateKey()
+		var hsValue roachpb.Value
+		if err := hsValue.SetProto(&hs); err != nil {
+			return err
+		}
+		hsValue.InitChecksum(hsKey)
+		err = engine.MVCCBlindPut(ctx, &unreplicatedSST, nil, hsKey, hlc.Timestamp{}, hsValue, nil)
+		if err != nil {
+			return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
+		}
+
+		///////
+
+		if len(ss.LogEntries) > 0 {
+			logEntries := make([]raftpb.Entry, len(ss.LogEntries))
+			for i, bytes := range ss.LogEntries {
+				if err := protoutil.Unmarshal(bytes, &logEntries[i]); err != nil {
+					return err
+				}
+			}
+			// If this replica doesn't know its ReplicaID yet, we're applying a
+			// preemptive snapshot. In this case, we're going to have to write the
+			// sideloaded proposals into the Raft log. Otherwise, sideload.
+			thinEntries := logEntries
+			if replicaID != 0 {
+				var err error
+				var sideloadedEntriesSize int64
+				thinEntries, sideloadedEntriesSize, err = r.maybeSideloadEntriesRaftMuLocked(ctx, logEntries)
+				if err != nil {
+					return err
+				}
+				raftLogSize += sideloadedEntriesSize
+			}
+			var logDiff enginepb.MVCCStats
+			var logValue roachpb.Value
+			for i := range thinEntries {
+				ent := &thinEntries[i]
+				entKey := r.raftMu.stateLoader.RaftLogKey(ent.Index)
+
+				if err := logValue.SetProto(ent); err != nil {
+					return err
+				}
+				logValue.InitChecksum(entKey)
+				err = engine.MVCCBlindPut(ctx, &unreplicatedSST, &logDiff, entKey, hlc.Timestamp{},
+					logValue, nil /* txn */)
+				if err != nil {
+					return errors.Wrapf(err, "unable to write log entry to unreplicated SST writer")
+				}
+			}
+			raftLogSize += logDiff.SysBytes
+			lastTerm = thinEntries[len(thinEntries)-1].Term
+		} else {
+			lastTerm = invalidLastTerm
+		}
+
+		// Create a new file to write the SST into.
+		unreplicatedSSTFile, err := ss.createEmptySSTFile(r.RangeID)
+		if err != nil {
+			return errors.Wrapf(err, "unable to open empty SST file")
+		}
+		data, err := unreplicatedSST.Finish()
+		if err != nil {
+			unreplicatedSSTFile.Close()
+			return errors.Wrapf(err, "unable to Finish sst file writer")
+		}
+		_, err = unreplicatedSSTFile.Write(data)
+		unreplicatedSSTFile.Close()
+		if err != nil {
+			return errors.Wrapf(err, "unable to write SST data to file")
+		}
+
+		// Ingest all SSTs atomically.
+		if err := r.store.engine.IngestExternalFiles(ctx, ss.SSTs, true /* modify */); err != nil {
+			return errors.Wrapf(err, "while ingesting %s", ss.SSTs)
+		}
+
+		// TODO should we force a compaction? Only in the global keyspace? The
+		// SSTs will probably be living in L0 after the ingestion, which isn't
+		// great, especially because they each contain a large RangeDeletion
+		// tombstone.
 	default:
 		log.Fatalf(ctx, "unknown snapshot strategy: %v", ss)
 	}

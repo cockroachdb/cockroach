@@ -1037,6 +1037,7 @@ func (m *multiTestContext) changeReplicas(
 		// is lost. We could make a this into a roachpb.Error but it seems overkill
 		// for this one usage.
 		if testutils.IsError(err, "snapshot failed: .*") {
+			m.t.Logf("snapshot failed with error: %v", err)
 			continue
 		}
 		return 0, err

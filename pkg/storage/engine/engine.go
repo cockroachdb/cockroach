@@ -243,8 +243,6 @@ type Engine interface {
 	GetStats() (*Stats, error)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
-	//
-	// Not thread safe.
 	GetAuxiliaryDir() string
 	// NewBatch returns a new instance of a batched engine which wraps
 	// this engine. Batched engines accumulate all mutations and apply

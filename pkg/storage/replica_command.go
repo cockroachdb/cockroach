@@ -1875,6 +1875,18 @@ func (r *Replica) sendSnapshot(
 		}
 	}
 
+	// TODO we should introduce a heuristic here for which snapshot strategy
+	// to use. An easy heuristic would be to use SST snapshots only when a
+	// range is over a certain size. That is what we have right now. The 8MB
+	// number was tuned based on the how much it affected the speed of tests.
+	// Right now this provides a ~10% speedup when running ./pkg/storage tests.
+	// We should actually tune this for real.
+	// TODO we need to stick SST snapshots behind a version check.
+	strategy := SnapshotRequest_KV_BATCH
+	if r.GetMVCCStats().LiveBytes > (8 << 20) /* 8MB */ {
+		strategy = SnapshotRequest_SST
+	}
+
 	status := r.RaftStatus()
 	if status == nil {
 		return errors.New("raft status not initialized")
@@ -1898,7 +1910,7 @@ func (r *Replica) sendSnapshot(
 		// Recipients can choose to decline preemptive snapshots.
 		CanDecline: snapType == snapTypePreemptive,
 		Priority:   priority,
-		Strategy:   SnapshotRequest_KV_BATCH,
+		Strategy:   strategy,
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)

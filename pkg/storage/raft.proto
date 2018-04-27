@@ -117,6 +117,10 @@ message SnapshotRequest {
     // combined into a large RocksDB WriteBatch that is atomically
     // applied.
     KV_BATCH = 0;
+    // SST snapshots stream sst files consisting of all keys in a range
+    // from the sender to the receiver. These sst files are then atomically
+    // ingested directly into RocksDB.
+    SST = 1;
   }
 
   message Header {
@@ -149,14 +153,26 @@ message SnapshotRequest {
 
   optional Header header = 1;
 
-  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple
+  // request messages. Only used by KV_BATCH snapshots.
   optional bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
   // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory. They are separate from the kv_batch to
-  // allow flexibility in log implementations.
+  // roundtripping through memory. They are separate from the kv_batch to allow
+  // flexibility in log implementations. Used by KV_BATCH and SST snapshots.
   repeated bytes log_entries = 3;
 
+  // A chunk of an SST file. Multiple SST chunks may be sent across multiple
+  // request messages. These chunks will combine to form one or more complete
+  // SST files, delimited by intermittent sst_final flags. Only used by SST
+  // snapshots.
+  optional bytes sst_chunk = 5 [(gogoproto.customname) = "SSTChunk"];
+
+  // If set, the SST chunk is the last chunk in the current SST file. Only used
+  // by SST snapshots.
+  optional bool sst_final = 6 [(gogoproto.customname) = "SSTFinal", (gogoproto.nullable) = false];
+
+  // Indicates that this is the last request in the snapshot stream.
   optional bool final = 4 [(gogoproto.nullable) = false];
 }
 
