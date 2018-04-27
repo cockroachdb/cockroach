@@ -100,6 +100,10 @@ func assertStrategy(
 type kvBatchSnapshotStrategy struct {
 	status string
 
+	// Fields used when receiving snapshots.
+	Batches    [][]byte // RocksDB BatchReprs
+	LogEntries [][]byte // Raft log entries
+
 	// Fields used when sending snapshots.
 	batchSize int64
 	limiter   *rate.Limiter
@@ -112,8 +116,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 ) (IncomingSnapshot, error) {
 	assertStrategy(ctx, header, SnapshotRequest_KV_BATCH)
 
-	var batches [][]byte
-	var logEntries [][]byte
+	kvSS.Batches = nil
+	kvSS.LogEntries = nil
 	for {
 		req, err := stream.Recv()
 		if err != nil {
@@ -125,10 +129,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
-			batches = append(batches, req.KVBatch)
+			kvSS.Batches = append(kvSS.Batches, req.KVBatch)
 		}
 		if req.LogEntries != nil {
-			logEntries = append(logEntries, req.LogEntries...)
+			kvSS.LogEntries = append(kvSS.LogEntries, req.LogEntries...)
 		}
 		if req.Final {
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
@@ -138,16 +142,16 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			}
 
 			inSnap := IncomingSnapshot{
-				SnapUUID:   snapUUID,
-				Batches:    batches,
-				LogEntries: logEntries,
-				State:      &header.State,
-				snapType:   snapTypeRaft,
+				SnapUUID: snapUUID,
+				Receiver: kvSS,
+				State:    &header.State,
+				snapType: snapTypeRaft,
 			}
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
-			kvSS.status = fmt.Sprintf("kv batches: %d, log entries: %d", len(batches), len(logEntries))
+			kvSS.status = fmt.Sprintf("kv batches: %d, log entries: %d",
+				len(kvSS.Batches), len(kvSS.LogEntries))
 			return inSnap, nil
 		}
 	}
