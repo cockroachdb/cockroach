@@ -32,8 +32,9 @@ func TestLogicalPropsBuilder(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost)
 }
 
-// Test HasCorrelatedSubquery flag in isolation since it's not important enough
-// to add to the ExprView string representation.
+// Test HasCorrelatedSubquery flag manually since it's not important enough
+// to add to the ExprView string representation in order to use data-driven
+// tests.
 func TestHasCorrelatedSubquery(t *testing.T) {
 	cat := createLogPropsCatalog(t)
 
