@@ -121,12 +121,12 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 	// the kv-level transaction has already been committed). But we still
 	// exercise this state to check that the server doesn't crash (which used to
 	// happen - #9879).
-	tests := []sql.TxnStateEnum{sql.Open, sql.RestartWait, sql.CommitWait}
+	tests := []string{"Open", "RestartWait", "CommitWait"}
 	for _, state := range tests {
-		t.Run(state.String(), func(t *testing.T) {
+		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
 			pgURL, cleanupDB := sqlutils.PGUrl(
-				t, s.ServingAddr(), state.String(), url.User(security.RootUser))
+				t, s.ServingAddr(), state, url.User(security.RootUser))
 			defer cleanupDB()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -153,14 +153,14 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 
-			if state == sql.RestartWait || state == sql.CommitWait {
+			if state == "RestartWait" || state == "CommitWait" {
 				if _, err := tx.ExecContext(ctx, "SAVEPOINT cockroach_restart", nil); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			insertStmt := "INSERT INTO t.public.test(k, v) VALUES (1, 'a')"
-			if state == sql.RestartWait {
+			if state == "RestartWait" {
 				// To get a txn in RestartWait, we'll use an aborter.
 				if err := aborter.QueueStmtForAbortion(
 					insertStmt, 1 /* restartCount */, false /* willBeRetriedIbid */); err != nil {
@@ -175,9 +175,9 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 
-			if state == sql.RestartWait || state == sql.CommitWait {
+			if state == "RestartWait" || state == "CommitWait" {
 				_, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT cockroach_restart", nil)
-				if state == sql.CommitWait {
+				if state == "CommitWait" {
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -216,7 +216,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 			// CommitWait actually committed, so we'll need to clean up.
-			if state != sql.CommitWait {
+			if state != "CommitWait" {
 				if count != 0 {
 					t.Fatalf("expected no rows, got: %d", count)
 				}

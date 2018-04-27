@@ -20,16 +20,12 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -39,14 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // traceTxnThreshold can be used to log SQL transactions that take
@@ -124,106 +117,6 @@ type queryMeta struct {
 // txn context.
 func (q *queryMeta) cancel() {
 	q.ctxCancel()
-}
-
-// Session contains the state of a SQL client connection.
-// Create instances using NewSession().
-type Session struct {
-	// data contains user-configurable session-scoped variables. This is the
-	// authoritative copy of these variables; a planner's evalCtx gets a copy.
-	data        sessiondata.SessionData
-	dataMutator sessionDataMutator
-
-	//
-	// Session parameters, non-user-configurable.
-	//
-
-	// ClientAddr is the client's IP address and port.
-	ClientAddr string
-
-	//
-	// State structures for the logical SQL session.
-	//
-
-	// TxnState carries information about the open transaction (if any),
-	// including the retry status and the KV client Txn object.
-	TxnState txnState
-	// PreparedStatements and PreparedPortals store the statements/portals
-	// that have been prepared via pgwire.
-	PreparedStatements PreparedStatements
-	PreparedPortals    PreparedPortals
-
-	//
-	// Run-time state.
-	//
-
-	// execCfg is the configuration of the Executor that is executing this
-	// session.
-	execCfg *ExecutorConfig
-	// distSQLPlanner is in charge of distSQL physical planning and running
-	// logic.
-	distSQLPlanner *DistSQLPlanner
-	// context is the Session's base context, to be used for all
-	// SQL-related logging. See Ctx().
-	context context.Context
-	// mon tracks memory usage for SQL activity within this session. It
-	// is not directly used, but rather indirectly used via sessionMon
-	// and TxnState.mon. sessionMon tracks session-bound objects like prepared
-	// statements and result sets.
-	//
-	// The reason why TxnState.mon and mon are split is to enable
-	// separate reporting of statistics per transaction and per
-	// session. This is because the "interesting" behavior w.r.t memory
-	// is typically caused by transactions, not sessions. The reason why
-	// sessionMon and mon are split is to enable separate reporting of
-	// statistics for result sets (which escape transactions).
-	mon        mon.BytesMonitor
-	sessionMon mon.BytesMonitor
-
-	tables TableCollection
-
-	// mu contains of all elements of the struct that can be changed
-	// after initialization, and may be accessed from another thread.
-	mu struct {
-		syncutil.RWMutex
-
-		//
-		// Session parameters, user-configurable.
-		//
-
-		//
-		// State structures for the logical SQL session.
-		//
-
-		// ActiveQueries contains all queries in flight.
-		ActiveQueries map[ClusterWideID]*queryMeta
-
-		// LastActiveQuery contains a reference to the AST of the last
-		// query that ran on this session.
-		LastActiveQuery tree.Statement
-	}
-
-	//
-	// Per-session statistics.
-	//
-
-	// memMetrics track memory usage by SQL execution.
-	memMetrics *MemoryMetrics
-	// sqlStats tracks per-application statistics for all
-	// applications on each node.
-	sqlStats *sqlStats
-	// appStats track per-application SQL usage statistics. This is a pointer into
-	// sqlStats set as the session's current app.
-	appStats *appStats
-	// phaseTimes tracks session-level phase times. It is copied-by-value
-	// to each planner in session.newPlanner.
-	phaseTimes phaseTimes
-
-	// noCopy is placed here to guarantee that Session objects are not
-	// copied.
-	noCopy util.NoCopy
-
-	sessionID ClusterWideID
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
@@ -337,112 +230,6 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	return response
 }
 
-// Ctx returns the current context for the session: if there is an active SQL
-// transaction it returns the transaction context, otherwise it returns the
-// session context.
-// Note that in some cases we may want the session context even if there is an
-// active transaction (an example is when we want to log an event to the session
-// event log); in that case s.context should be used directly.
-func (s *Session) Ctx() context.Context {
-	if s.TxnState.State() != NoTxn {
-		return s.TxnState.Ctx
-	}
-	return s.context
-}
-
-func (s *Session) resetPlanner(
-	p *planner,
-	txn *client.Txn,
-	txnTimestamp time.Time,
-	stmtTimestamp time.Time,
-	reCache *tree.RegexpCache,
-	statsCollector sqlStatsCollector,
-) {
-	p.statsCollector = statsCollector
-	p.txn = txn
-	p.stmt = nil
-	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
-
-	p.semaCtx = tree.MakeSemaContext(s.data.User == security.RootUser)
-	p.semaCtx.Location = &s.data.Location
-	p.semaCtx.SearchPath = s.data.SearchPath
-
-	p.extendedEvalCtx = s.extendedEvalCtx(txn, txnTimestamp, stmtTimestamp)
-	p.extendedEvalCtx.Planner = p
-	p.extendedEvalCtx.Sequence = p
-	p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
-	p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
-	p.extendedEvalCtx.ReCache = reCache
-
-	p.sessionDataMutator = &s.dataMutator
-	p.preparedStatements = &s.PreparedStatements
-	p.autoCommit = false
-}
-
-// newPlanner creates a planner inside the scope of the given Session. The
-// statement executed by the planner will be executed in txn. The planner
-// should only be used to execute one statement. If txn is nil, none of the
-// timestamp fields of the eval ctx will be set (this is in addition to the
-// various other fields that aren't set in either case). But presumably if that
-// is the case, the caller already doesn't care about SQL semantics too much.
-func (s *Session) newPlanner(
-	txn *client.Txn,
-	txnTimestamp time.Time,
-	stmtTimestamp time.Time,
-	reCache *tree.RegexpCache,
-	statsCollector sqlStatsCollector,
-) *planner {
-	p := &planner{execCfg: s.execCfg}
-	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache, statsCollector)
-	return p
-}
-
-// extendedEvalCtx creates an evaluation context from the Session's current
-// configuration.
-func (s *Session) extendedEvalCtx(
-	txn *client.Txn, txnTimestamp time.Time, stmtTimestamp time.Time,
-) extendedEvalContext {
-	var evalContextTestingKnobs tree.EvalContextTestingKnobs
-	var st *cluster.Settings
-	var statusServer serverpb.StatusServer
-	if s.execCfg != nil {
-		evalContextTestingKnobs = s.execCfg.EvalContextTestingKnobs
-		// TODO(tschottdorf): it looks like this should always be provided.
-		// Perhaps `*Settings` should live somewhere else.
-		st = s.execCfg.Settings
-		statusServer = s.execCfg.StatusServer
-	}
-
-	scInterface := newSchemaInterface(&s.tables, s.execCfg.VirtualSchemas)
-
-	return extendedEvalContext{
-		EvalContext: tree.EvalContext{
-			Txn:           txn,
-			SessionData:   &s.data,
-			TxnState:      getTransactionState(&s.TxnState),
-			TxnReadOnly:   s.TxnState.readOnly,
-			TxnImplicit:   s.TxnState.implicitTxn,
-			Settings:      st,
-			CtxProvider:   s,
-			Mon:           &s.TxnState.mon,
-			TestingKnobs:  evalContextTestingKnobs,
-			StmtTimestamp: stmtTimestamp,
-			TxnTimestamp:  txnTimestamp,
-		},
-		SessionMutator:  &s.dataMutator,
-		VirtualSchemas:  s.execCfg.VirtualSchemas,
-		Tracing:         &s.dataMutator.sessionTracing,
-		StatusServer:    statusServer,
-		MemMetrics:      s.memMetrics,
-		Tables:          &s.tables,
-		ExecCfg:         s.execCfg,
-		DistSQLPlanner:  s.distSQLPlanner,
-		TxnModesSetter:  &s.TxnState,
-		SchemaChangers:  &s.TxnState.schemaChangers,
-		schemaAccessors: scInterface,
-	}
-}
-
 func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
 	sc := &schemaInterface{
 		physical: &CachedPhysicalAccessor{
@@ -460,249 +247,6 @@ func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterf
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
-
-// serialize is part of the registrySession interface.
-func (s *Session) serialize() serverpb.Session {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	s.TxnState.mu.RLock()
-	defer s.TxnState.mu.RUnlock()
-
-	var kvTxnID *uuid.UUID
-	txn := s.TxnState.mu.txn
-	if txn != nil {
-		id := txn.ID()
-		kvTxnID = &id
-	}
-
-	activeQueries := make([]serverpb.ActiveQuery, 0, len(s.mu.ActiveQueries))
-	truncateSQL := func(sql string) string {
-		if len(sql) > MaxSQLBytes {
-			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
-			// Ensure the resulting string is valid utf8.
-			for {
-				if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
-					break
-				}
-				sql = sql[:len(sql)-1]
-			}
-			sql += "…"
-		}
-		return sql
-	}
-
-	for id, query := range s.mu.ActiveQueries {
-		sql := truncateSQL(query.stmt.String())
-		activeQueries = append(activeQueries, serverpb.ActiveQuery{
-			ID:            id.String(),
-			Start:         query.start.UTC(),
-			Sql:           sql,
-			IsDistributed: query.isDistributed,
-			Phase:         (serverpb.ActiveQuery_Phase)(query.phase),
-		})
-	}
-	lastActiveQuery := ""
-	if s.mu.LastActiveQuery != nil {
-		lastActiveQuery = truncateSQL(s.mu.LastActiveQuery.String())
-	}
-
-	return serverpb.Session{
-		Username:        s.data.User,
-		ClientAddress:   s.ClientAddr,
-		ApplicationName: s.data.ApplicationName,
-		Start:           s.phaseTimes[sessionInit].UTC(),
-		ActiveQueries:   activeQueries,
-		KvTxnID:         kvTxnID,
-		LastActiveQuery: lastActiveQuery,
-		ID:              s.sessionID.GetBytes(),
-	}
-}
-
-// TxnStateEnum represents the state of a SQL txn.
-type TxnStateEnum int64
-
-//go:generate stringer -type=TxnStateEnum
-const (
-	// No txn is in scope. Either there never was one, or it got committed/rolled
-	// back. Note that this state will not be experienced outside of the Session
-	// and Executor (i.e. it will not be observed by a running query) because the
-	// Executor opens implicit transactions before executing non-transactional
-	// queries.
-	NoTxn TxnStateEnum = iota
-
-	// Like Open, a txn is in scope. The difference is that, while in the
-	// AutoRetry state, a retriable error will be handled by an automatic
-	// transaction retry, whereas we can't do that in Open. There's a caveat -
-	// even if we're in AutoRetry, we can't do automatic retries if any
-	// results for statements in the current transaction have already been
-	// delivered to the client.
-	// In principle, we can do automatic retries for the first batch of statements
-	// in a transaction. There is an extension to the rule, though: for
-	// example, is we get a batch with "BEGIN; SET TRANSACTION ISOLATION LEVEL
-	// foo; SAVEPOINT cockroach_restart;" followed by a 2nd batch, we can
-	// automatically retry the 2nd batch even though the statements in the first
-	// batch will not be executed again and their results have already been sent
-	// to the clients. We can do this because some statements are special in that
-	// their execution always generates exactly the same results to the consumer
-	// (i.e. the SQL client).
-	//
-	// TODO(andrei): This state shouldn't exist; the decision about whether we can
-	// retry automatically or not should be entirely dynamic, based on which
-	// results we've delivered to the client already. It should have nothing to do
-	// with the client's batching of statements. For example, the client can send
-	// 100 batches but, if we haven't sent it any results yet, we should still be
-	// able to retry them all). Currently the splitting into batches is relevant
-	// because we don't keep track of statements from previous batches, so we
-	// would not be capable of retrying them even if we knew that no results have
-	// been delivered.
-	AutoRetry
-
-	// A txn is in scope.
-	Open
-
-	// The txn has encountered a (non-retriable) error.
-	// Statements will be rejected until a COMMIT/ROLLBACK is seen.
-	Aborted
-	// The txn has encountered a retriable error.
-	// Statements will be rejected until a RESTART_TRANSACTION is seen.
-	RestartWait
-	// The KV txn has been committed successfully through a RELEASE.
-	// Statements are rejected until a COMMIT is seen.
-	CommitWait
-)
-
-// txnState contains state associated with an ongoing SQL txn.
-// There may or may not be an open KV txn associated with the SQL txn.
-// For interactive transactions (open across batches of SQL commands sent by a
-// user), txnState is intended to be stored as part of a user Session.
-type txnState struct {
-	// state is read and written to atomically because it can be updated
-	// concurrently with the execution of statements in the parallelizeQueue.
-	// Access with State() / SetState().
-	//
-	// NOTE: Only state updates that are inconsequential to statement execution
-	// are allowed concurrently with the execution of the parallizeQueue (e.g.
-	// Open->AutoRetry).
-	state TxnStateEnum
-
-	// Mutable fields accessed from goroutines not synchronized by this txn's session,
-	// such as when a SHOW SESSIONS statement is executed on another session.
-	// Note that reads of mu.txn from the session's main goroutine
-	// do not require acquiring a read lock - since only that
-	// goroutine will ever write to mu.txn.
-	mu struct {
-		syncutil.RWMutex
-
-		txn *client.Txn
-	}
-
-	// Ctx is the context for everything running in this SQL txn.
-	Ctx context.Context
-
-	// implicitTxn if set if the transaction was automatically created for a
-	// single statement.
-	implicitTxn bool
-
-	// The schema change closures to run when this txn is done.
-	schemaChangers schemaChangerCollection
-
-	// The transaction's isolation level.
-	isolation enginepb.IsolationType
-
-	// The transaction's priority.
-	priority roachpb.UserPriority
-
-	// The transaction's read only state.
-	readOnly bool
-
-	// mon tracks txn-bound objects like the running state of
-	// planNode in the midst of performing a computation. We
-	// host this here instead of TxnState because TxnState is
-	// fully reset upon each call to resetForNewSQLTxn().
-	mon mon.BytesMonitor
-}
-
-// State returns the current state of the session.
-func (ts *txnState) State() TxnStateEnum {
-	return TxnStateEnum(atomic.LoadInt64((*int64)(&ts.state)))
-}
-
-func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
-	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
-		return err
-	}
-	ts.isolation = isolation
-	return nil
-}
-
-func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
-	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
-		return err
-	}
-	ts.priority = userPriority
-	return nil
-}
-
-func (ts *txnState) setReadOnly(readOnly bool) {
-	ts.readOnly = readOnly
-}
-
-func (ts *txnState) setTransactionModes(modes tree.TransactionModes) error {
-	if err := ts.setSQLIsolationLevel(modes.Isolation); err != nil {
-		return err
-	}
-	if err := ts.setUserPriority(modes.UserPriority); err != nil {
-		return err
-	}
-	return ts.setReadWriteMode(modes.ReadWriteMode)
-}
-
-func (ts *txnState) setSQLIsolationLevel(level tree.IsolationLevel) error {
-	var iso enginepb.IsolationType
-	switch level {
-	case tree.UnspecifiedIsolation:
-		return nil
-	case tree.SnapshotIsolation:
-		iso = enginepb.SNAPSHOT
-	case tree.SerializableIsolation:
-		iso = enginepb.SERIALIZABLE
-	default:
-		return errors.Errorf("unknown isolation level: %s", level)
-	}
-
-	return ts.setIsolationLevel(iso)
-}
-
-func (ts *txnState) setUserPriority(userPriority tree.UserPriority) error {
-	var up roachpb.UserPriority
-	switch userPriority {
-	case tree.UnspecifiedUserPriority:
-		return nil
-	case tree.Low:
-		up = roachpb.MinUserPriority
-	case tree.Normal:
-		up = roachpb.NormalUserPriority
-	case tree.High:
-		up = roachpb.MaxUserPriority
-	default:
-		return errors.Errorf("unknown user priority: %s", userPriority)
-	}
-	return ts.setPriority(up)
-}
-
-func (ts *txnState) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
-	switch readWriteMode {
-	case tree.UnspecifiedReadWriteMode:
-		return nil
-	case tree.ReadOnly:
-		ts.setReadOnly(true)
-	case tree.ReadWrite:
-		ts.setReadOnly(false)
-	default:
-		return errors.Errorf("unknown read mode: %s", readWriteMode)
-	}
-	return nil
-}
 
 type schemaChangerCollection struct {
 	schemaChangers []SchemaChanger
@@ -789,27 +333,6 @@ func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) err
 	return log.Safe(
 		fmt.Sprintf("panic while %s %d statements: %s", action, len(anonymized), anonStmtsStr),
 	).WithCause(r)
-}
-
-// cancelQuery is part of the registrySession interface.
-func (s *Session) cancelQuery(queryID ClusterWideID) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if queryMeta, exists := s.mu.ActiveQueries[queryID]; exists {
-		queryMeta.cancel()
-		return true
-	}
-	return false
-}
-
-// cancelSession is part of the registrySession interface.
-func (s *Session) cancelSession() {
-	panic("not supported")
-}
-
-// user is part of the registrySession interface.
-func (s *Session) user() string {
-	return s.data.User
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
@@ -1287,12 +810,6 @@ func (m *sessionDataMutator) StartSessionTracing(
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 	m.data.SequenceState.RecordValue(seqID, val)
-}
-
-// statsCollector returns an sqlStatsCollector that will record stats in the
-// session's stats containers.
-func (s *Session) statsCollector() sqlStatsCollector {
-	return newSQLStatsCollectorImpl(s.sqlStats, s.appStats, s.phaseTimes)
 }
 
 type sqlStatsCollectorImpl struct {
