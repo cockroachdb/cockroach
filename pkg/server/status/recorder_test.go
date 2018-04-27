@@ -16,10 +16,12 @@ package status
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"reflect"
 	"sort"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -366,4 +368,22 @@ func TestMetricsRecorder(t *testing.T) {
 	if a, e := nodeSummary, expectedNodeSummary; !reflect.DeepEqual(a, e) {
 		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %s", pretty.Diff(e, a))
 	}
+
+	// Make sure that all methods other than GetStatusSummary can operate in
+	// parallel with each other (i.e. even if recorder.mu is RLocked).
+	recorder.mu.RLock()
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			if _, err := recorder.MarshalJSON(); err != nil {
+				t.Error(err)
+			}
+			_ = recorder.PrintAsText(ioutil.Discard)
+			_ = recorder.GetTimeSeriesData()
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	recorder.mu.RUnlock()
 }

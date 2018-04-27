@@ -68,18 +68,16 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 // call. It creates new families as needed.
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry) {
 	labels := registry.getLabels()
-	for _, metric := range registry.tracked {
-		metric.Inspect(func(v interface{}) {
-			if prom, ok := v.(PrometheusExportable); ok {
-				m := prom.ToPrometheusMetric()
-				// Set registry and metric labels.
-				m.Label = append(labels, prom.GetLabels()...)
+	registry.Each(func(_ string, v interface{}) {
+		if prom, ok := v.(PrometheusExportable); ok {
+			m := prom.ToPrometheusMetric()
+			// Set registry and metric labels.
+			m.Label = append(labels, prom.GetLabels()...)
 
-				family := pm.findOrCreateFamily(prom)
-				family.Metric = append(family.Metric, m)
-			}
-		})
-	}
+			family := pm.findOrCreateFamily(prom)
+			family.Metric = append(family.Metric, m)
+		}
+	})
 }
 
 // PrintAsText writes all metrics in the families map to the io.Writer in
