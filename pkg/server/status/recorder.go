@@ -227,6 +227,14 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 
 // scrapePrometheusLocked updates the prometheusExporter's metrics snapshot.
 func (mr *MetricsRecorder) scrapePrometheusLocked() {
+	mr.scrapeIntoPrometheus(&mr.promMu.prometheusExporter)
+}
+
+// scrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
+// snapshot.
+func (mr *MetricsRecorder) scrapeIntoPrometheus(pm *metric.PrometheusExporter) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; output nothing.
 		if log.V(1) {
@@ -234,9 +242,9 @@ func (mr *MetricsRecorder) scrapePrometheusLocked() {
 		}
 	}
 
-	mr.promMu.prometheusExporter.ScrapeRegistry(mr.mu.nodeRegistry)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry)
 	for _, reg := range mr.mu.storeRegistries {
-		mr.promMu.prometheusExporter.ScrapeRegistry(reg)
+		pm.ScrapeRegistry(reg)
 	}
 }
 
@@ -257,10 +265,20 @@ func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
 func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 	mr.promMu.Lock()
 	defer mr.promMu.Unlock()
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
 	mr.scrapePrometheusLocked()
 	return mr.promMu.prometheusExporter.PrintAsText(w)
+}
+
+// ExportToGraphite sends the current metric values to a Graphite server.
+// It creates a new PrometheusExporter each time to avoid needing to worry
+// about races with mr.promMu.prometheusExporter. We are not as worried
+// about the extra memory allocations.
+func (mr *MetricsRecorder) ExportToGraphite(
+	ctx context.Context, endpoint string, pm *metric.PrometheusExporter,
+) error {
+	mr.scrapeIntoPrometheus(pm)
+	graphiteExporter := metric.MakeGraphiteExporter(pm)
+	return graphiteExporter.Push(ctx, endpoint)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by
