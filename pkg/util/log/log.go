@@ -81,6 +81,15 @@ func Info(ctx context.Context, args ...interface{}) {
 	logDepth(ctx, 1, Severity_INFO, "", args)
 }
 
+// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
+// 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Print; a newline is
+// appended.
+func InfoDepth(ctx context.Context, depth int, args ...interface{}) {
+	logDepth(ctx, depth+1, Severity_INFO, "", args)
+}
+
 // InfofDepth logs to the INFO log, offsetting the caller's stack frame by
 // 'depth'.
 // It extracts log tags from the context and logs them along with the given
