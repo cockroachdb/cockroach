@@ -443,8 +443,12 @@ func (ie *internalExecutorImpl) execInternal(
 
 	// Transforms the args to datums. The datum types will be passed as type hints
 	// to the PrepareStmt command.
-	pinfo := tree.MakePlaceholderInfo()
-	golangFillQueryArguments(&pinfo, qargs)
+	datums := golangFillQueryArguments(qargs...)
+	types := make(tree.PlaceholderTypes, len(datums))
+	for i, d := range datums {
+		// Arg numbers start from 1.
+		types[strconv.Itoa(i+1)] = d.ResolvedType()
+	}
 	if len(qargs) == 0 {
 		resPos = 0
 		if err := stmtBuf.Push(
@@ -465,23 +469,13 @@ func (ie *internalExecutorImpl) execInternal(
 				Stmt:       s,
 				ParseStart: parseStart,
 				ParseEnd:   parseEnd,
-				TypeHints:  pinfo.Types,
+				TypeHints:  types,
 			},
 		); err != nil {
 			return result{}, err
 		}
 
-		args := make([]tree.Datum, len(pinfo.Values))
-		for k, v := range pinfo.Values {
-			i, err := strconv.Atoi(k)
-			i--
-			if err != nil {
-				return result{}, err
-			}
-			args[i] = v.(tree.Datum)
-		}
-
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: args}); err != nil {
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
 			return result{}, err
 		}
 
