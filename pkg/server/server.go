@@ -1810,6 +1810,11 @@ func (s *Server) TempDir() string {
 	return s.cfg.TempStorageConfig.Path
 }
 
+// PGServer exports the pgwire server. Used by tests.
+func (s *Server) PGServer() *pgwire.Server {
+	return s.pgServer
+}
+
 type gzipResponseWriter struct {
 	gz gzip.Writer
 	http.ResponseWriter
