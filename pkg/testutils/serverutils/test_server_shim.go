@@ -76,6 +76,10 @@ type TestServerInterface interface {
 	// InternalExecutor returns a *sqlutil.InternalExecutor as an interface{}.
 	InternalExecutor() interface{}
 
+	// ExecutorConfig returns a copy of the server's ExecutorConfig.
+	// The real return type is sql.ExecutorConfig.
+	ExecutorConfig() interface{}
+
 	// Gossip returns the gossip used by the TestServer.
 	Gossip() *gossip.Gossip
 
