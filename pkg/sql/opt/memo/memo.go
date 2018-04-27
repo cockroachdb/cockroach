@@ -247,10 +247,12 @@ func (m *Memo) NormExpr(group GroupID) *Expr {
 
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
-// expression.
+// expression. If the expression is already part of an existing memo group, then
+// MemoizeNormExpr is a no-op, and returns the existing group.
 func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
-	if m.exprMap[norm.Fingerprint()] != 0 {
-		panic("normalized expression has been entered into the memo more than once")
+	existing := m.exprMap[norm.Fingerprint()]
+	if existing != 0 {
+		return existing
 	}
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
