@@ -694,16 +694,14 @@ DBStatus DBSstFileWriterDeleteRange(DBSstFileWriter* fw, DBKey start, DBKey end)
   return kSuccess;
 }
 
-DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
-  rocksdb::Status status = fw->rep.Finish();
+DBStatus DBSstFileWriterCopyData(DBSstFileWriter* fw, DBString* data) {
+  uint64_t file_size;
+  rocksdb::Status status = fw->memenv->GetFileSize("sst", &file_size);
   if (!status.ok()) {
     return ToDBStatus(status);
   }
-
-  uint64_t file_size;
-  status = fw->memenv->GetFileSize("sst", &file_size);
-  if (!status.ok()) {
-    return ToDBStatus(status);
+  if (file_size == 0) {
+    return kSuccess;
   }
 
   const rocksdb::EnvOptions soptions;
@@ -722,6 +720,7 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
   if (!status.ok()) {
     return ToDBStatus(status);
   }
+
   if (sst_contents.size() != file_size) {
     return FmtStatus("expected to read %" PRIu64 " bytes but got %zu", file_size,
                      sst_contents.size());
@@ -740,6 +739,24 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
   data->len = sst_contents.size();
 
   return kSuccess;
+}
+
+DBStatus DBSstFileWriterTruncate(DBSstFileWriter* fw, DBString* data) {
+  DBStatus status = DBSstFileWriterCopyData(fw, data);
+  if (status.data != NULL) {
+    return status;
+  }
+
+  return ToDBStatus(fw->memenv->Truncate("sst", 0));
+}
+
+DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
+  rocksdb::Status status = fw->rep.Finish();
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  return DBSstFileWriterCopyData(fw, data);
 }
 
 void DBSstFileWriterClose(DBSstFileWriter* fw) { delete fw; }

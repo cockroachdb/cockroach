@@ -2582,6 +2582,21 @@ func (fw *RocksDBSstFileWriter) LogData(data []byte) error {
 	panic("unimplemented")
 }
 
+// Truncate truncates the writer's current memory buffer and returns the
+// contents it had contained.May be called multiple times. The function may not
+// truncate and return all keys if the underlying RocksDB blocks have not been
+// flushed. Close cannot have been called.
+func (fw *RocksDBSstFileWriter) Truncate() ([]byte, error) {
+	if fw.fw == nil {
+		return nil, errors.New("cannot call Truncate on a closed writer")
+	}
+	var contents C.DBString
+	if err := statusToError(C.DBSstFileWriterTruncate(fw.fw, &contents)); err != nil {
+		return nil, err
+	}
+	return cStringToGoBytes(contents), nil
+}
+
 // Finish finalizes the writer and returns the constructed file's contents. At
 // least one kv entry must have been added.
 func (fw *RocksDBSstFileWriter) Finish() ([]byte, error) {
