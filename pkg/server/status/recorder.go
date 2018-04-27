@@ -129,6 +129,7 @@ type MetricsRecorder struct {
 		// prometheusExporter merges metrics into families and generates the
 		// prometheus text format.
 		prometheusExporter metric.PrometheusExporter
+		graphiteExporter   metric.GraphiteExporter
 	}
 	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
@@ -155,8 +156,44 @@ func NewMetricsRecorder(
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
 	mr.promMu.prometheusExporter = metric.MakePrometheusExporter()
+	mr.promMu.graphiteExporter = metric.MakeGraphiteExporter(&mr.promMu.prometheusExporter, settings)
 	mr.clock = clock
 	return mr
+}
+
+func (mr *MetricsRecorder) StartExportingStatsToGraphite(
+	ctx context.Context,
+	confCh <-chan struct{},
+) {
+	go func() {
+		for {
+			log.Infof(ctx, "initialising graphite exporter")
+			if err := mr.promMu.graphiteExporter.Init(ctx); err != nil {
+				log.Warningf(ctx, "unable to initialise Graphite stats exporter: %s\n", err)
+			}
+			ticker := time.NewTicker(metric.GraphitePeriod.Get(&mr.settings.SV))
+			defer ticker.Stop()
+			if metric.GraphiteURL.Get(&mr.settings.SV) == "" {
+				log.Info(ctx, "stopped prematurely the graphite ticker")
+				ticker.Stop()
+			}
+		inner:
+			for {
+				select {
+				case _, ok := <-confCh:
+					if !ok {
+						return
+					} else {
+						break inner
+					}
+				case <-ticker.C:
+					if err := mr.exportToGraphite(ctx); err != nil {
+						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
+					}
+				}
+			}
+		}
+	}()
 }
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
@@ -261,6 +298,18 @@ func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 	defer mr.mu.RUnlock()
 	mr.scrapePrometheusLocked()
 	return mr.promMu.prometheusExporter.PrintAsText(w)
+}
+
+// exportToGraphite sends the current metric values to a Graphite server.
+// TODO Qu: Should take copy of metrics so does not block new requests
+//          (see comment for PrintAsText above)
+func (mr *MetricsRecorder) exportToGraphite(ctx context.Context) error {
+	mr.promMu.Lock()
+	defer mr.promMu.Unlock()
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	mr.scrapePrometheusLocked()
+	return mr.promMu.graphiteExporter.Push(ctx)
 }
 
 // GetTimeSeriesData serializes registered metrics for consumption by

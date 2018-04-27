@@ -759,6 +759,21 @@ func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
+func (s *Server) startGraphiteStatsExporter(ctx context.Context) {
+	graphiteConf := make(chan struct{}, 1)
+	s.stopper.AddCloser(stop.CloserFn(func() { close(graphiteConf) }))
+
+	metric.GraphiteURL.SetOnChange(&s.st.SV, func() {
+		graphiteConf <- struct{}{}
+	})
+	metric.GraphitePeriod.SetOnChange(&s.st.SV, func() {
+		graphiteConf <- struct{}{}
+	})
+
+	s.recorder.StartExportingStatsToGraphite(ctx, graphiteConf)
+	log.Info(ctx, "Started periodic GraphiteExporter")
+}
+
 // startMonitoringForwardClockJumps starts a background task to monitor forward
 // clock jumps based on a cluster setting
 func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
@@ -1525,6 +1540,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			return err
 		}
 	}
+
+	s.startGraphiteStatsExporter(ctx)
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
