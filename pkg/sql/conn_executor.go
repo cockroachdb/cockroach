@@ -483,7 +483,7 @@ func (s *Server) newConnExecutor(
 			prepStmts: make(map[string]prepStmtEntry),
 			portals:   make(map[string]portalEntry),
 		},
-		state: txnState2{
+		state: txnState{
 			mon:           &txnMon,
 			connCtx:       ctx,
 			txnAbortCount: s.StatementCounters.TxnAbortCount,
@@ -743,7 +743,7 @@ type connExecutor struct {
 	machine fsm.Machine
 	// state encapsulates fields related to the ongoing SQL txn. It is mutated as
 	// the machine's ExtendedState.
-	state         txnState2
+	state         txnState
 	transitionCtx transitionCtx
 
 	// eventLog for SQL statements and other important session events. Will be set
