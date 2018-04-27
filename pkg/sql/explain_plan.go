@@ -186,12 +186,8 @@ type explainEntry struct {
 type explainFlags struct {
 	// showMetadata indicates whether the output has separate columns for the
 	// schema signature and ordering information of the intermediate
-	// nodes.
+	// nodes (also, whether the plan prints expressions embedded inside the node).
 	showMetadata bool
-
-	// showExprs indicates whether the plan prints expressions
-	// embedded inside the node.
-	showExprs bool
 
 	// qualifyNames determines whether column names in expressions
 	// should be fully qualified during pretty-printing.
@@ -323,7 +319,6 @@ func planToString(ctx context.Context, plan planNode, subqueryPlans []subquery) 
 	e := explainer{
 		explainFlags: explainFlags{
 			showMetadata: true,
-			showExprs:    true,
 			showTypes:    true,
 		},
 		fmtFlags: tree.FmtExpr(tree.FmtSymbolicSubqueries, true, true, true),
@@ -360,7 +355,7 @@ func (e *explainer) observer() planObserver {
 
 // expr implements the planObserver interface.
 func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
-	if e.showExprs && expr != nil {
+	if e.showMetadata && expr != nil {
 		if nodeName == "join" {
 			qualifySave := e.fmtFlags
 			e.fmtFlags.SetFlags(tree.FmtShowTableAliases)

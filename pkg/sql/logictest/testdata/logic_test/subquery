@@ -464,18 +464,21 @@ true
 
 # check that residual filters are not expanded twice
 query TITTTTT
-EXPLAIN (METADATA) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
+EXPLAIN (VERBOSE) SELECT x FROM xyz WHERE x IN (SELECT x FROM xyz)
 ----
 root                 0  root      ·          ·                    (x)                          x!=NULL; key(x)
  ├── render          1  render    ·          ·                    (x)                          x!=NULL; key(x)
+ │    │              1  ·         render 0   test.public.xyz.x    ·                            ·
  │    └── scan       2  scan      ·          ·                    (x, y[omitted], z[omitted])  x!=NULL; key(x)
  │                   2  ·         table      xyz@primary          ·                            ·
  │                   2  ·         spans      ALL                  ·                            ·
+ │                   2  ·         filter     x IN @S1             ·                            ·
  └── subquery        1  subquery  ·          ·                    (x)                          x!=NULL; key(x)
       │              1  ·         id         @S1                  ·                            ·
       │              1  ·         sql        (SELECT x FROM xyz)  ·                            ·
       │              1  ·         exec mode  all rows normalized  ·                            ·
       └── render     2  render    ·          ·                    (x)                          x!=NULL; key(x)
+           │         2  ·         render 0   test.public.xyz.x    ·                            ·
            └── scan  3  scan      ·          ·                    (x, y[omitted], z[omitted])  x!=NULL; key(x)
 ·                    3  ·         table      xyz@primary          ·                            ·
 ·                    3  ·         spans      ALL                  ·                            ·
