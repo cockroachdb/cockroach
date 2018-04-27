@@ -192,6 +192,26 @@ func (f *Factory) removeListItem(list memo.ListID, search memo.GroupID) memo.Lis
 	return f.mem.InternList(newList)
 }
 
+// replaceListItem returns a new list that is a copy of the given list, except
+// that the given search item has been replaced by the given replace item. If
+// the list contains the search item multiple times, then only the first
+// instance is replaced. If the list does not contain the item, then the method
+// is a no-op.
+func (f *Factory) replaceListItem(list memo.ListID, search, replace memo.GroupID) memo.ListID {
+	existingList := f.mem.LookupList(list)
+	newList := make([]memo.GroupID, len(existingList))
+	for i, item := range existingList {
+		if item == search {
+			// Replace item and copy remainder of list.
+			newList[i] = replace
+			copy(newList[i+1:], existingList[i+1:])
+			break
+		}
+		newList[i] = item
+	}
+	return f.mem.InternList(newList)
+}
+
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.

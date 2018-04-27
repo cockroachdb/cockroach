@@ -11,18 +11,18 @@ TABLE a
       └── k int not null
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
+TABLE xy
  ├── x int not null
  ├── y int
  └── INDEX primary
       └── x int not null
 
 exec-ddl
-CREATE TABLE t.c (u INT PRIMARY KEY, v INT)
+CREATE TABLE uv (u INT PRIMARY KEY, v INT)
 ----
-TABLE c
+TABLE uv
  ├── u int not null
  ├── v int
  └── INDEX primary
@@ -285,7 +285,7 @@ project
 # PushSelectIntoJoinLeft
 # --------------------------------------------------
 opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE a.f=1.1
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -299,21 +299,21 @@ inner-join
  │         └── eq [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
  │              ├── variable: a.f [type=float, outer=(3)]
  │              └── const: 1.1 [type=float]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
            ├── variable: a.k [type=int, outer=(1)]
-           └── variable: b.x [type=int, outer=(6)]
+           └── variable: xy.x [type=int, outer=(6)]
 
 opt
-SELECT * FROM a LEFT JOIN b ON a.k=b.x WHERE a.f=1.1 AND a.i<b.y AND (a.s='foo' OR a.s='bar')
+SELECT * FROM a LEFT JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND a.i<xy.y AND (a.s='foo' OR a.s='bar')
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── left-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    ├── keys: (1)
@@ -331,21 +331,21 @@ select
  │    │              └── eq [type=bool, outer=(4), constraints=(/4: [/'bar' - /'bar']; tight)]
  │    │                   ├── variable: a.s [type=string, outer=(4)]
  │    │                   └── const: 'bar' [type=string]
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── filters [type=bool, outer=(1,6)]
  │         └── eq [type=bool, outer=(1,6)]
  │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: b.x [type=int, outer=(6)]
+ │              └── variable: xy.x [type=int, outer=(6)]
  └── filters [type=bool, outer=(2,7)]
       └── lt [type=bool, outer=(2,7)]
            ├── variable: a.i [type=int, outer=(2)]
-           └── variable: b.y [type=int, outer=(7)]
+           └── variable: xy.y [type=int, outer=(7)]
 
 # Pushdown constant condition.
 opt
-SELECT * FROM a INNER JOIN b ON True WHERE a.i=100 AND now()>'2000-01-01T1:00:00'
+SELECT * FROM a INNER JOIN xy ON True WHERE a.i=100 AND now()>'2000-01-01T1:00:00'
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -362,29 +362,29 @@ inner-join
  │         └── gt [type=bool]
  │              ├── function: now [type=timestamptz]
  │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── true [type=bool]
 
 # Don't push down conditions in case of RIGHT JOIN.
 opt
-SELECT * FROM a RIGHT JOIN b ON a.k=b.x WHERE a.i=100
+SELECT * FROM a RIGHT JOIN xy ON a.k=xy.x WHERE a.i=100
 ----
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── right-join
- │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.y:7(int)
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── filters [type=bool, outer=(1,6)]
  │         └── eq [type=bool, outer=(1,6)]
  │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: b.x [type=int, outer=(6)]
+ │              └── variable: xy.x [type=int, outer=(6)]
  └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
       └── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
@@ -392,22 +392,22 @@ select
 
 # Don't push down conditions in case of FULL JOIN.
 opt
-SELECT * FROM a FULL JOIN b ON a.k=b.x WHERE a.i=100
+SELECT * FROM a FULL JOIN xy ON a.k=xy.x WHERE a.i=100
 ----
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── full-join
- │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── filters [type=bool, outer=(1,6)]
  │         └── eq [type=bool, outer=(1,6)]
  │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: b.x [type=int, outer=(6)]
+ │              └── variable: xy.x [type=int, outer=(6)]
  └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
       └── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
@@ -417,12 +417,12 @@ select
 # PushSelectIntoJoinRight
 # --------------------------------------------------
 opt
-SELECT * FROM b INNER JOIN a ON b.x=a.k WHERE a.f=1.1
+SELECT * FROM xy INNER JOIN a ON xy.x=a.k WHERE a.f=1.1
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
- ├── scan b
- │    ├── columns: b.x:1(int!null) b.y:2(int)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    └── keys: (1)
  ├── select
  │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
@@ -436,18 +436,18 @@ inner-join
  │              └── const: 1.1 [type=float]
  └── filters [type=bool, outer=(1,3)]
       └── eq [type=bool, outer=(1,3)]
-           ├── variable: b.x [type=int, outer=(1)]
+           ├── variable: xy.x [type=int, outer=(1)]
            └── variable: a.k [type=int, outer=(3)]
 
 opt
-SELECT * FROM b RIGHT JOIN a ON b.x=a.k WHERE a.f=1.1 AND a.i<b.y AND (a.s='foo' OR a.s='bar')
+SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k WHERE a.f=1.1 AND a.i<xy.y AND (a.s='foo' OR a.s='bar')
 ----
 select
  ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  ├── right-join
- │    ├── columns: b.x:1(int) b.y:2(int) a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
- │    ├── scan b
- │    │    ├── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── columns: xy.x:1(int) xy.y:2(int) a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    │    └── keys: (1)
  │    ├── select
  │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
@@ -468,23 +468,23 @@ select
  │    │                   └── const: 'bar' [type=string]
  │    └── filters [type=bool, outer=(1,3)]
  │         └── eq [type=bool, outer=(1,3)]
- │              ├── variable: b.x [type=int, outer=(1)]
+ │              ├── variable: xy.x [type=int, outer=(1)]
  │              └── variable: a.k [type=int, outer=(3)]
  └── filters [type=bool, outer=(2,4)]
       └── lt [type=bool, outer=(2,4)]
            ├── variable: a.i [type=int, outer=(4)]
-           └── variable: b.y [type=int, outer=(2)]
+           └── variable: xy.y [type=int, outer=(2)]
 
 # Don't push down conditions in case of LEFT JOIN.
 opt
-SELECT * FROM b LEFT JOIN a ON a.k=b.x WHERE a.i=100
+SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100
 ----
 select
  ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  ├── left-join
- │    ├── columns: b.x:1(int!null) b.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
- │    ├── scan b
- │    │    ├── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    │    └── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
@@ -492,7 +492,7 @@ select
  │    └── filters [type=bool, outer=(1,3)]
  │         └── eq [type=bool, outer=(1,3)]
  │              ├── variable: a.k [type=int, outer=(3)]
- │              └── variable: b.x [type=int, outer=(1)]
+ │              └── variable: xy.x [type=int, outer=(1)]
  └── filters [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
       └── eq [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
            ├── variable: a.i [type=int, outer=(4)]
@@ -500,14 +500,14 @@ select
 
 # Don't push down conditions in case of FULL JOIN.
 opt
-SELECT * FROM b FULL JOIN a ON a.k=b.x WHERE a.i=100
+SELECT * FROM xy FULL JOIN a ON a.k=xy.x WHERE a.i=100
 ----
 select
  ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  ├── full-join
- │    ├── columns: b.x:1(int) b.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
- │    ├── scan b
- │    │    ├── columns: b.x:1(int!null) b.y:2(int)
+ │    ├── columns: xy.x:1(int) xy.y:2(int) a.k:3(int) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    │    └── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
@@ -515,7 +515,7 @@ select
  │    └── filters [type=bool, outer=(1,3)]
  │         └── eq [type=bool, outer=(1,3)]
  │              ├── variable: a.k [type=int, outer=(3)]
- │              └── variable: b.x [type=int, outer=(1)]
+ │              └── variable: xy.x [type=int, outer=(1)]
  └── filters [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
       └── eq [type=bool, outer=(4), constraints=(/4: [/100 - /100]; tight)]
            ├── variable: a.i [type=int, outer=(4)]
@@ -525,129 +525,129 @@ select
 # MergeSelectInnerJoin
 # --------------------------------------------------
 opt
-SELECT * FROM a, b WHERE a.k=b.x AND (a.s='foo' OR b.y<100)
+SELECT * FROM a, xy WHERE a.k=xy.x AND (a.s='foo' OR xy.y<100)
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,4,6,7)]
       ├── eq [type=bool, outer=(1,6)]
       │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── variable: b.x [type=int, outer=(6)]
+      │    └── variable: xy.x [type=int, outer=(6)]
       └── or [type=bool, outer=(4,7)]
            ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
            │    ├── variable: a.s [type=string, outer=(4)]
            │    └── const: 'foo' [type=string]
            └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /99]; tight)]
-                ├── variable: b.y [type=int, outer=(7)]
+                ├── variable: xy.y [type=int, outer=(7)]
                 └── const: 100 [type=int]
 
 opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE (a.s='foo' OR b.y<100)
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,4,6,7)]
       ├── eq [type=bool, outer=(1,6)]
       │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── variable: b.x [type=int, outer=(6)]
+      │    └── variable: xy.x [type=int, outer=(6)]
       └── or [type=bool, outer=(4,7)]
            ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
            │    ├── variable: a.s [type=string, outer=(4)]
            │    └── const: 'foo' [type=string]
            └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /99]; tight)]
-                ├── variable: b.y [type=int, outer=(7)]
+                ├── variable: xy.y [type=int, outer=(7)]
                 └── const: 100 [type=int]
 
 opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE False
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── false [type=bool]
 
 # Don't merge with LEFT JOIN.
 opt
-SELECT * FROM a LEFT JOIN b ON True WHERE a.k=b.x
+SELECT * FROM a LEFT JOIN xy ON True WHERE a.k=xy.x
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── left-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
            ├── variable: a.k [type=int, outer=(1)]
-           └── variable: b.x [type=int, outer=(6)]
+           └── variable: xy.x [type=int, outer=(6)]
 
 # Don't merge with RIGHT JOIN.
 opt
-SELECT * FROM a RIGHT JOIN b ON True WHERE a.k=b.x
+SELECT * FROM a RIGHT JOIN xy ON True WHERE a.k=xy.x
 ----
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
  ├── right-join
- │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.y:7(int)
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
            ├── variable: a.k [type=int, outer=(1)]
-           └── variable: b.x [type=int, outer=(6)]
+           └── variable: xy.x [type=int, outer=(6)]
 
 # Don't merge with FULL JOIN.
 opt
-SELECT * FROM a FULL JOIN b ON True WHERE a.k=b.x
+SELECT * FROM a FULL JOIN xy ON True WHERE a.k=xy.x
 ----
 select
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
  ├── full-join
- │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.y:7(int)
+ │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── true [type=bool]
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
            ├── variable: a.k [type=int, outer=(1)]
-           └── variable: b.x [type=int, outer=(6)]
+           └── variable: xy.x [type=int, outer=(6)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinLeft + PushSelectIntoJoinRight + MergeSelectInnerJoin
 # --------------------------------------------------
 opt
-SELECT * FROM a INNER JOIN b ON a.k=b.x WHERE a.f=1.1 AND s='foo' AND b.y=10 AND a.i<b.y
+SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE a.f=1.1 AND s='foo' AND xy.y=10 AND a.i<xy.y
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -665,25 +665,25 @@ inner-join
  │              ├── variable: a.s [type=string, outer=(4)]
  │              └── const: 'foo' [type=string]
  ├── select
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── keys: (6)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
  │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
  │         └── eq [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
- │              ├── variable: b.y [type=int, outer=(7)]
+ │              ├── variable: xy.y [type=int, outer=(7)]
  │              └── const: 10 [type=int]
  └── filters [type=bool, outer=(1,2,6,7)]
       ├── eq [type=bool, outer=(1,6)]
       │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── variable: b.x [type=int, outer=(6)]
+      │    └── variable: xy.x [type=int, outer=(6)]
       └── lt [type=bool, outer=(2,7)]
            ├── variable: a.i [type=int, outer=(2)]
-           └── variable: b.y [type=int, outer=(7)]
+           └── variable: xy.y [type=int, outer=(7)]
 
 opt
-SELECT * FROM a, b WHERE a.i=100 AND now()>'2000-01-01T1:00:00' AND b.x=a.k
+SELECT * FROM a, xy WHERE a.i=100 AND now()>'2000-01-01T1:00:00' AND xy.x=a.k
 ----
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
@@ -700,12 +700,12 @@ inner-join
  │         └── gt [type=bool]
  │              ├── function: now [type=timestamptz]
  │              └── const: '2000-01-01 01:00:00+00:00' [type=timestamptz]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
+           ├── variable: xy.x [type=int, outer=(6)]
            └── variable: a.k [type=int, outer=(1)]
 
 # --------------------------------------------------
@@ -802,27 +802,26 @@ select
            └── const: 0 [type=int]
 
 # --------------------------------------------------
-# HoistSelectExists
+# NormalizeSelectAny
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k)
+SELECT * FROM a WHERE i IN (SELECT y FROM xy)
 ----
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
- │    └── keys: (6)
- └── filters [type=bool, outer=(1,6)]
-      └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
-           └── variable: a.k [type=int, outer=(1)]
+ ├── scan xy
+ │    └── columns: xy.y:7(int)
+ └── filters [type=bool, outer=(2,7)]
+      └── eq [type=bool, outer=(2,7)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── variable: xy.y [type=int, outer=(7)]
 
-# Ensure that EXISTS is hoisted even when it is one of several conjuncts.
+# Any is one of several conjuncts.
 opt
-SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM b WHERE x=k) AND i>1
+SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -831,25 +830,22 @@ semi-join
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    ├── constraint: /1: [/10 - /10]
  │    │    └── keys: (1)
- │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight)]
- │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- │         │    ├── variable: a.s [type=string, outer=(4)]
- │         │    └── const: 'foo' [type=string]
- │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- │              ├── variable: a.i [type=int, outer=(2)]
- │              └── const: 1 [type=int]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
- │    └── keys: (6)
- └── filters [type=bool, outer=(1,6)]
-      └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
-           └── variable: a.k [type=int, outer=(1)]
+ │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │              ├── variable: a.s [type=string, outer=(4)]
+ │              └── const: 'foo' [type=string]
+ ├── scan xy
+ │    └── columns: xy.y:7(int)
+ └── filters [type=bool, outer=(2,7)]
+      └── lt [type=bool, outer=(2,7)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── variable: xy.y [type=int, outer=(7)]
 
-# Multiple Exists operators in same Select list.
+# Multiple ANY conjuncts.
 opt
-SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k) AND EXISTS(SELECT * FROM b WHERE x=i)
+SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FROM xy)
 ----
 semi-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -858,24 +854,27 @@ semi-join
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:8(int!null) b.y:9(int)
- │    │    └── keys: (8)
- │    └── filters [type=bool, outer=(2,8)]
- │         └── eq [type=bool, outer=(2,8)]
- │              ├── variable: b.x [type=int, outer=(8)]
- │              └── variable: a.i [type=int, outer=(2)]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
- │    └── keys: (6)
- └── filters [type=bool, outer=(1,6)]
-      └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
-           └── variable: a.k [type=int, outer=(1)]
+ │    ├── project
+ │    │    ├── columns: column10:10(string)
+ │    │    ├── scan xy
+ │    │    │    └── columns: xy.y:9(int)
+ │    │    └── projections [outer=(9)]
+ │    │         └── cast: string [type=string, outer=(9)]
+ │    │              └── variable: xy.y [type=int, outer=(9)]
+ │    └── filters [type=bool, outer=(4,10)]
+ │         └── eq [type=bool, outer=(4,10)]
+ │              ├── variable: a.s [type=string, outer=(4)]
+ │              └── variable: column10 [type=string, outer=(10)]
+ ├── scan xy
+ │    └── columns: xy.y:7(int)
+ └── filters [type=bool, outer=(2,7)]
+      └── lt [type=bool, outer=(2,7)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── variable: xy.y [type=int, outer=(7)]
 
-# Don't hoist uncorrelated subqueries.
+# Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
 opt
-SELECT * FROM a WHERE EXISTS(SELECT * FROM b)
+SELECT * FROM a WHERE 5 IN (SELECT y FROM xy)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -885,13 +884,106 @@ select
  │    └── keys: (1)
  └── filters [type=bool]
       └── exists [type=bool]
-           └── scan b
-                ├── columns: b.x:6(int!null) b.y:7(int)
+           └── select
+                ├── columns: xy.y:7(int)
+                ├── scan xy
+                │    └── columns: xy.y:7(int)
+                └── filters [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
+                     └── eq [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
+                          ├── variable: xy.y [type=int, outer=(7)]
+                          └── const: 5 [type=int]
+
+# --------------------------------------------------
+# HoistSelectExists
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k)
+----
+semi-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── keys: (1)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+ │    └── keys: (6)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: xy.x [type=int, outer=(6)]
+           └── variable: a.k [type=int, outer=(1)]
+
+# Ensure that EXISTS is hoisted even when it is one of several conjuncts.
+opt
+SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
+----
+semi-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - ]; /4: [/'foo' - /'foo']; tight)]
+ │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         │    ├── variable: a.s [type=string, outer=(4)]
+ │         │    └── const: 'foo' [type=string]
+ │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+ │    └── keys: (6)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: xy.x [type=int, outer=(6)]
+           └── variable: a.k [type=int, outer=(1)]
+
+# Multiple Exists operators in same Select list.
+opt
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE x=k) AND EXISTS(SELECT * FROM xy WHERE x=i)
+----
+semi-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── semi-join
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:8(int!null) xy.y:9(int)
+ │    │    └── keys: (8)
+ │    └── filters [type=bool, outer=(2,8)]
+ │         └── eq [type=bool, outer=(2,8)]
+ │              ├── variable: xy.x [type=int, outer=(8)]
+ │              └── variable: a.i [type=int, outer=(2)]
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+ │    └── keys: (6)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: xy.x [type=int, outer=(6)]
+           └── variable: a.k [type=int, outer=(1)]
+
+# Don't hoist uncorrelated subqueries.
+opt
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    └── keys: (1)
+ └── filters [type=bool]
+      └── exists [type=bool]
+           └── scan xy
+                ├── columns: xy.x:6(int!null) xy.y:7(int)
                 └── keys: (6)
 
 # Hoist nested EXISTS.
 opt
-SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE EXISTS (SELECT * FROM c WHERE x=u) AND x=k)
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE EXISTS (SELECT * FROM uv WHERE x=u) AND x=k)
 ----
 semi-join-apply
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -899,45 +991,45 @@ semi-join-apply
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
  ├── semi-join
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    ├── outer: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:6(int!null) b.y:7(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    └── keys: (6)
- │    ├── scan c
- │    │    ├── columns: c.u:8(int!null) c.v:9(int)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:8(int!null) uv.v:9(int)
  │    │    └── keys: (8)
  │    └── filters [type=bool, outer=(1,6,8)]
  │         ├── eq [type=bool, outer=(1,6)]
- │         │    ├── variable: b.x [type=int, outer=(6)]
+ │         │    ├── variable: xy.x [type=int, outer=(6)]
  │         │    └── variable: a.k [type=int, outer=(1)]
  │         └── eq [type=bool, outer=(6,8)]
- │              ├── variable: b.x [type=int, outer=(6)]
- │              └── variable: c.u [type=int, outer=(8)]
+ │              ├── variable: xy.x [type=int, outer=(6)]
+ │              └── variable: uv.u [type=int, outer=(8)]
  └── true [type=bool]
 
 # --------------------------------------------------
 # HoistSelectNotExists
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE x=k)
+SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
 ----
 anti-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
+           ├── variable: xy.x [type=int, outer=(6)]
            └── variable: a.k [type=int, outer=(1)]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
 opt
-SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM b WHERE x=k) AND i>1
+SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
 anti-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -954,19 +1046,19 @@ anti-join
  │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── const: 1 [type=int]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
+           ├── variable: xy.x [type=int, outer=(6)]
            └── variable: a.k [type=int, outer=(1)]
 
 # Multiple Not Exists operators in same Select list.
 opt
 SELECT *
 FROM a
-WHERE NOT EXISTS(SELECT * FROM b WHERE x=k) AND NOT EXISTS(SELECT * FROM b WHERE x=i)
+WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k) AND NOT EXISTS(SELECT * FROM xy WHERE x=i)
 ----
 anti-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -975,24 +1067,24 @@ anti-join
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:8(int!null) b.y:9(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:8(int!null) xy.y:9(int)
  │    │    └── keys: (8)
  │    └── filters [type=bool, outer=(2,8)]
  │         └── eq [type=bool, outer=(2,8)]
- │              ├── variable: b.x [type=int, outer=(8)]
+ │              ├── variable: xy.x [type=int, outer=(8)]
  │              └── variable: a.i [type=int, outer=(2)]
- ├── scan b
- │    ├── columns: b.x:6(int!null) b.y:7(int)
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    └── keys: (6)
  └── filters [type=bool, outer=(1,6)]
       └── eq [type=bool, outer=(1,6)]
-           ├── variable: b.x [type=int, outer=(6)]
+           ├── variable: xy.x [type=int, outer=(6)]
            └── variable: a.k [type=int, outer=(1)]
 
 # Don't hoist uncorrelated subqueries.
 opt
-SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b)
+SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy)
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -1003,6 +1095,6 @@ select
  └── filters [type=bool]
       └── not [type=bool]
            └── exists [type=bool]
-                └── scan b
-                     ├── columns: b.x:6(int!null) b.y:7(int)
+                └── scan xy
+                     ├── columns: xy.x:6(int!null) xy.y:7(int)
                      └── keys: (6)
