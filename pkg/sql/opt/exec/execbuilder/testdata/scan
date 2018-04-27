@@ -12,8 +12,8 @@ scan a
  ├── cost: 1000.00
  └── keys: (1)
 
-exec-explain
-SELECT * FROM a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a
 ----
 scan  0  scan  ·      ·          (x, y, s)  ·
 ·     0  ·     table  a@primary  ·          ·
@@ -37,8 +37,8 @@ scan a
  ├── cost: 1000.00
  └── keys: (1)
 
-exec-explain
-SELECT s, x FROM a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT s, x FROM a
 ----
 render     0  render  ·         ·          (s, x)  ·
  │         0  ·       render 0  s          ·       ·
@@ -77,8 +77,8 @@ apple     1
 banana    2
 cherry    3
 
-exec-explain
-SELECT s, x FROM b
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT s, x FROM b
 ----
 render     0  render  ·         ·          (s, x)  ·
  │         0  ·       render 0  s          ·       ·
