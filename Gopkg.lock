@@ -170,6 +170,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/beorn7/perks"
+  packages = ["quantile"]
+  revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
+
+[[projects]]
+  branch = "master"
   name = "github.com/biogo/store"
   packages = ["llrb"]
   revision = "913427a1d5e89604e50ea1db0f28f34966d61602"
@@ -917,6 +923,15 @@
   version = "v1.0.0"
 
 [[projects]]
+  name = "github.com/prometheus/client_golang"
+  packages = [
+    "prometheus",
+    "prometheus/graphite",
+  ]
+  revision = "967789050ba94deca04a5e84cce8ad472ce313c1"
+  version = "v0.9.0-pre1"
+
+[[projects]]
   branch = "master"
   name = "github.com/prometheus/client_model"
   packages = ["go"]
@@ -931,6 +946,17 @@
     "model",
   ]
   revision = "1bab55dd05dbff384524a6a1c99006d9eb5f139b"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/procfs"
+  packages = [
+    ".",
+    "internal/util",
+    "nfs",
+    "xfs",
+  ]
+  revision = "8b1c2da0d56deffdbb9e48d4414b4e674bd8083e"
 
 [[projects]]
   branch = "master"
@@ -1006,12 +1032,6 @@
   packages = ["lib"]
   revision = "dd64c3313b8aef16e869ef93eb970221aefb7549"
   version = "v1.4.5"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/tylertreat/hdrhistogram-writer"
-  packages = ["."]
-  revision = "d105e3c15daaac745539bdd3e4a1f743b8feda09"
 
 [[projects]]
   branch = "master"
@@ -1255,6 +1275,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "220d8cdbc95b1ec79fcaf9552bc450418c8766fa108989fa02e6a15271bd9591"
+  inputs-digest = "903bf20dc4f16e4b17f113234a4e4ae246cabf9cccfc8a0ce4254a8ecf5a40be"
   solver-name = "gps-cdcl"
   solver-version = 1
