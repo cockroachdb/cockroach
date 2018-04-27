@@ -36,18 +36,17 @@ select
  │    └── keys: (1) weak(3,4)
  └── eq [type=bool]
       ├── subquery [type=string]
-      │    ├── max1-row
-      │    │    ├── columns: kuv.v:7(string)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── stats: [rows=1]
-      │    │    └── project
-      │    │         ├── columns: kuv.v:7(string)
-      │    │         ├── stats: [rows=1000]
-      │    │         ├── scan kuv
-      │    │         │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
-      │    │         │    ├── stats: [rows=1000]
-      │    │         │    └── keys: (5)
-      │    │         └── projections [outer=(7)]
-      │    │              └── variable: kuv.v [type=string, outer=(7)]
-      │    └── variable: kuv.v [type=string, outer=(7)]
+      │    └── max1-row
+      │         ├── columns: kuv.v:7(string)
+      │         ├── cardinality: [0 - 1]
+      │         ├── stats: [rows=1]
+      │         └── project
+      │              ├── columns: kuv.v:7(string)
+      │              ├── stats: [rows=1000]
+      │              ├── scan kuv
+      │              │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │              │    ├── stats: [rows=1000]
+      │              │    └── keys: (5)
+      │              └── projections [outer=(7)]
+      │                   └── variable: kuv.v [type=string, outer=(7)]
       └── const: 'foo' [type=string]
