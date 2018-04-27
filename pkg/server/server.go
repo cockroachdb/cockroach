@@ -1441,6 +1441,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
+	s.node.startGraphiteStatsExporter(s.st)
 
 	// Create and start the schema change manager only after a NodeID
 	// has been assigned.
