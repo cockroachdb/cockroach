@@ -41,10 +41,6 @@ type TestEngine interface {
 	// results as a Datum table.
 	Execute(p Plan) ([]tree.Datums, error)
 
-	// Explain executes EXPLAIN (VERBOSE) on the given plan (created through the
-	// Factory) and returns the results as a Datum table.
-	Explain(n Plan) ([]tree.Datums, error)
-
 	// Close cleans up any state associated with construction or execution of
 	// plans. It must always be called as the last step in using an engine
 	// instance.
