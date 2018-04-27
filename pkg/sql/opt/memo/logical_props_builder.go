@@ -445,10 +445,8 @@ func (b logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 		return props
 
 	case opt.SubqueryOp:
-		inputProps := ev.childGroup(0).logical.Relational
-		projectionProps := ev.childGroup(1).logical.Scalar
-		props.Scalar.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
-		props.Scalar.OuterCols.UnionWith(inputProps.OuterCols)
+		// Subquery inherits outer columns from its query.
+		props.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
 		if !props.Scalar.OuterCols.Empty() {
 			props.Scalar.HasCorrelatedSubquery = true
 		}
