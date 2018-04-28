@@ -58,7 +58,7 @@ limit
  │    │    │    └── keys: (1) weak(3,4)
  │    │    └── projections
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── const: 10 [type=int]
 
 build

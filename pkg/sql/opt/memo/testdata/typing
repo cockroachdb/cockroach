@@ -437,3 +437,64 @@ project
            ├── const: 2 [type=int]
            ├── const: 3 [type=int]
            └── const: 4 [type=int]
+
+# Aggregate functions.
+build
+SELECT
+    ARRAY_AGG(z), AVG(z), BOOL_AND(z=0), BOOL_OR(z=0), CONCAT_AGG(x), COUNT(z),
+    COUNT(*), MAX(x), MAX(z), SUM_INT(x::int), SUM(z), SQRDIFF(z), VARIANCE(x::int),
+    STDDEV(z), XOR_AGG(x::int), JSON_AGG(x::json), JSONB_AGG(x::jsonb)
+FROM b
+----
+group-by
+ ├── columns: column3:3(decimal[]) column4:4(decimal) column6:6(bool) column7:7(bool) column8:8(string) column9:9(int) column10:10(int) column11:11(string) column12:12(decimal) column14:14(int) column15:15(decimal) column16:16(decimal) column17:17(decimal) column18:18(decimal) column19:19(int) column21:21(jsonb) column23:23(jsonb)
+ ├── project
+ │    ├── columns: b.z:2(decimal!null) column5:5(bool) b.x:1(string!null) column13:13(int) column20:20(jsonb) column22:22(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
+ │    └── projections
+ │         ├── variable: b.z [type=decimal]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: b.z [type=decimal]
+ │         │    └── const: 0 [type=decimal]
+ │         ├── variable: b.x [type=string]
+ │         ├── cast: int [type=int]
+ │         │    └── variable: b.x [type=string]
+ │         ├── cast: jsonb [type=jsonb]
+ │         │    └── variable: b.x [type=string]
+ │         └── cast: jsonb [type=jsonb]
+ │              └── variable: b.x [type=string]
+ └── aggregations
+      ├── array-agg [type=decimal[]]
+      │    └── variable: b.z [type=decimal]
+      ├── avg [type=decimal]
+      │    └── variable: b.z [type=decimal]
+      ├── bool-and [type=bool]
+      │    └── variable: column5 [type=bool]
+      ├── bool-or [type=bool]
+      │    └── variable: column5 [type=bool]
+      ├── concat-agg [type=string]
+      │    └── variable: b.x [type=string]
+      ├── count [type=int]
+      │    └── variable: b.z [type=decimal]
+      ├── count-rows [type=int]
+      ├── max [type=string]
+      │    └── variable: b.x [type=string]
+      ├── max [type=decimal]
+      │    └── variable: b.z [type=decimal]
+      ├── sum-int [type=int]
+      │    └── variable: column13 [type=int]
+      ├── sum [type=decimal]
+      │    └── variable: b.z [type=decimal]
+      ├── sqr-diff [type=decimal]
+      │    └── variable: b.z [type=decimal]
+      ├── variance [type=decimal]
+      │    └── variable: column13 [type=int]
+      ├── std-dev [type=decimal]
+      │    └── variable: b.z [type=decimal]
+      ├── xor-agg [type=int]
+      │    └── variable: column13 [type=int]
+      ├── json-agg [type=jsonb]
+      │    └── variable: column20 [type=jsonb]
+      └── jsonb-agg [type=jsonb]
+           └── variable: column22 [type=jsonb]

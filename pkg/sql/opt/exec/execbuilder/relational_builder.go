@@ -323,7 +323,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
 		fn := aggregations.Child(i)
-		funcDef := fn.Private().(*memo.FuncOpDef)
+		name, overload := memo.FindAggregateOverload(fn)
 
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
@@ -336,8 +336,8 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		}
 
 		aggInfos[i] = exec.AggInfo{
-			FuncName:   funcDef.Name,
-			Builtin:    funcDef.Overload,
+			FuncName:   name,
+			Builtin:    overload,
 			ResultType: fn.Logical().Scalar.Type,
 			ArgCols:    argIdx,
 		}

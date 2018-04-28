@@ -203,7 +203,7 @@ func (op BinOp) params() TypeList {
 }
 
 func (op BinOp) matchParams(l, r types.T) bool {
-	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
+	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
 func (op BinOp) returnType() ReturnTyper {
@@ -1582,7 +1582,7 @@ func (op CmpOp) params() TypeList {
 }
 
 func (op CmpOp) matchParams(l, r types.T) bool {
-	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
+	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
 var cmpOpReturnType = FixedReturnType(types.Bool)

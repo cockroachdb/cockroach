@@ -542,3 +542,97 @@ define Coalesce {
 define UnsupportedExpr {
   Value TypedExpr
 }
+
+[Scalar, Aggregate]
+define ArrayAgg {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define Avg {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define BoolAnd {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define BoolOr {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define ConcatAgg {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define Count {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define CountRows {
+}
+
+[Scalar, Aggregate]
+define Max {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define Min {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define SumInt {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define Sum {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define SqrDiff {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define FinalVariance {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define FinalStdDev {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define Variance {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define StdDev {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define XorAgg {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define JsonAgg {
+    Input Expr
+}
+
+[Scalar, Aggregate]
+define JsonbAgg {
+    Input Expr
+}
