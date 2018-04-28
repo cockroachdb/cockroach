@@ -1917,6 +1917,13 @@ RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE`,
 		},
+		{
+			`SELECT max(a ORDER BY b) FROM ab`,
+			`unimplemented at or near ")"
+SELECT max(a ORDER BY b) FROM ab
+                       ^
+HINT: See: https://github.com/cockroachdb/cockroach/issues/23620`,
+		},
 	}
 	for _, d := range testData {
 		_, err := Parse(d.sql)
