@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -130,6 +131,43 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 					if op.RightType == op2.RightType && op.ReturnType != op2.ReturnType {
 						t.Errorf("found null operand ambiguity for %s:\n%+v\n%+v", name, op, op2)
 					}
+				}
+			}
+		}
+	}
+}
+
+// TestTypingAggregateAssumptions ensures that aggregate overloads conform to
+// certain assumptions we're making in the type inference code:
+//   1. The return type can be inferred from the operator type and the data
+//      types of its operand.
+//   2. The return type of overloads is fixed.
+//   3. The return type for min/max aggregates is same as type of argument.
+func TestTypingAggregateAssumptions(t *testing.T) {
+	for name, overloads := range builtins.Aggregates {
+		for i, overload := range overloads {
+			// Check for basic ambiguity where two different aggregate function
+			// overloads both allow equivalent operand types.
+			for i2, overload2 := range overloads {
+				if i == i2 {
+					continue
+				}
+
+				if overload.Types.Match(overload2.Types.Types()) {
+					format := "found equivalent operand type ambiguity for %s: %+v"
+					t.Errorf(format, name, overload.Types.Types())
+				}
+			}
+
+			// Check for fixed return types.
+			retType := overload.ReturnType(nil)
+			if retType == tree.UnknownReturnType {
+				t.Errorf("return type is not fixed for %s: %+v", name, overload.Types.Types())
+			}
+
+			if name == "min" || name == "max" {
+				if retType != overload.Types.Types()[0] {
+					t.Errorf("return type differs from arg type for %s: %+v", name, overload.Types.Types())
 				}
 			}
 		}

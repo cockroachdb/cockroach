@@ -203,7 +203,7 @@ semi-join
  │    │    ├── scan xysd
  │    │    │    └── stats: [rows=1000]
  │    │    └── aggregations
- │    │         └── function: count_rows [type=int]
+ │    │         └── count-rows [type=int]
  │    └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
  │         └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight)]
  │              ├── variable: cnt [type=int, outer=(5)]

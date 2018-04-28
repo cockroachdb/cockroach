@@ -100,5 +100,5 @@ group-by
  │    ├── columns: a.i:2(int!null) a.s:4(string!null)
  │    └── keys: (2,4)
  └── aggregations [outer=(2)]
-      └── function: sum [type=decimal, outer=(2)]
+      └── sum [type=decimal, outer=(2)]
            └── variable: a.i [type=int, outer=(2)]

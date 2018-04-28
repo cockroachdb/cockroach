@@ -73,5 +73,5 @@ group-by
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── aggregations
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: a.y [type=int]

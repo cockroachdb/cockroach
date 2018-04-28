@@ -46,6 +46,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -213,8 +214,7 @@ func (b *Builder) buildAggregation(
 	// aggregate arguments.
 	b.constructProject(fromScope, aggInScope)
 
-	// Construct the aggregation. We represent the aggregations as Function
-	// operators with Variable arguments; construct those now.
+	// Construct the aggregation operators.
 	aggCols := aggOutScope.getAggregateCols()
 	argCols := aggInScope.cols[len(groupings):]
 	for i, agg := range aggInfos {
@@ -224,11 +224,7 @@ func (b *Builder) buildAggregation(
 			argCols = argCols[1:]
 			argList[j] = b.factory.ConstructVariable(b.factory.InternColumnID(colID))
 		}
-		def := agg.def
-		aggCols[i].group = b.factory.ConstructFunction(
-			b.factory.InternList(argList),
-			b.factory.InternFuncOpDef(&def),
-		)
+		aggCols[i].group = constructAggLookup[agg.def.Name](b.factory, argList)
 	}
 
 	aggList := b.constructList(opt.AggregationsOp, aggCols)
@@ -383,4 +379,64 @@ func isAggregate(def *tree.FunctionDefinition) bool {
 
 func groupingError(colName string) error {
 	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
+}
+
+var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
+	"array_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructArrayAgg(argList[0])
+	},
+	"avg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructAvg(argList[0])
+	},
+	"bool_and": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructBoolAnd(argList[0])
+	},
+	"bool_or": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructBoolOr(argList[0])
+	},
+	"concat_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructConcatAgg(argList[0])
+	},
+	"count": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructCount(argList[0])
+	},
+	"count_rows": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructCountRows()
+	},
+	"max": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructMax(argList[0])
+	},
+	"min": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructMin(argList[0])
+	},
+	"sum_int": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructSumInt(argList[0])
+	},
+	"sum": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructSum(argList[0])
+	},
+	"sqrdiff": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructSqrDiff(argList[0])
+	},
+	"final_variance": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructFinalVariance(argList[0])
+	},
+	"final_stddev": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructFinalStdDev(argList[0])
+	},
+	"variance": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructVariance(argList[0])
+	},
+	"stddev": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructStdDev(argList[0])
+	},
+	"xor_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructXorAgg(argList[0])
+	},
+	"json_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructJsonAgg(argList[0])
+	},
+	"jsonb_agg": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
+		return f.ConstructJsonbAgg(argList[0])
+	},
 }

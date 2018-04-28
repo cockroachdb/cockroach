@@ -58,7 +58,7 @@ project
            │    │    ├── keys: ()
            │    │    ├── scan a
            │    │    └── aggregations
-           │    │         └── function: count_rows [type=int]
+           │    │         └── count-rows [type=int]
            │    └── variable: column6 [type=int, outer=(6)]
            └── const: 100 [type=int]
 

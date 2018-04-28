@@ -958,7 +958,7 @@ select
            │         │    └── projections
            │         │         └── variable: xyz.x [type=int]
            │         └── aggregations
-           │              └── function: min [type=int]
+           │              └── min [type=int]
            │                   └── variable: xyz.x [type=int]
            └── variable: column7 [type=int]
 
@@ -983,7 +983,7 @@ select
            │         │    └── projections
            │         │         └── variable: xyz.x [type=int]
            │         └── aggregations
-           │              └── function: max [type=int]
+           │              └── max [type=int]
            │                   └── variable: xyz.x [type=int]
            └── variable: column7 [type=int]
 
