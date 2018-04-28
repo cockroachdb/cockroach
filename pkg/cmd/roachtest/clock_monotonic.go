@@ -112,13 +112,13 @@ func registerClockMonotonicity(r *registry) {
 		{
 			// Without enabling the feature to persist wall time, wall time is
 			// currently non monotonic on backward clock jumps when a node is down.
-			name:                     "non_monotonic_without_persisting_walltm",
+			name:                     "non_persistent",
 			offset:                   -60 * time.Second,
 			persistWallTimeInterval:  0,
 			expectIncreasingWallTime: false,
 		},
 		{
-			name:                     "monotonic_with_persisting_walltm",
+			name:                     "persistent",
 			offset:                   -60 * time.Second,
 			persistWallTimeInterval:  500 * time.Millisecond,
 			expectIncreasingWallTime: true,
@@ -128,8 +128,9 @@ func registerClockMonotonicity(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("clockmonotonic/nodes=%d/tc=%s", numNodes, tc.name),
-			Nodes: nodes(numNodes),
+			SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25138",
+			Name:           fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
+			Nodes:          nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(t, c, tc)
 			},
