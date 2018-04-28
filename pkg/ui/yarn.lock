@@ -3484,16 +3484,12 @@ karma-chai@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/karma-chai/-/karma-chai-0.1.0.tgz#bee5ad40400517811ae34bb945f762909108b79a"
 
-karma-chrome-launcher@^2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/karma-chrome-launcher/-/karma-chrome-launcher-2.0.0.tgz#c2790c5a32b15577d0fff5a4d5a2703b3b439c25"
+karma-chrome-launcher@^2.2.0:
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/karma-chrome-launcher/-/karma-chrome-launcher-2.2.0.tgz#cf1b9d07136cc18fe239327d24654c3dbc368acf"
   dependencies:
     fs-access "^1.0.0"
     which "^1.2.1"
-
-karma-jsdom-launcher@^6.0.0:
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/karma-jsdom-launcher/-/karma-jsdom-launcher-6.0.0.tgz#392c268ab262f4625cbb8dc44fd9146bf7618638"
 
 karma-mocha-reporter@^2.2.3:
   version "2.2.3"
