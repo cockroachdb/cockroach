@@ -81,31 +81,31 @@ func registerClockJump(r *registry) {
 
 	testCases := []clockJumpTestCase{
 		{
-			name:             "large_forward_jump_with_check",
+			name:             "large_forward_enabled",
 			offset:           500 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: false,
 		},
 		{
-			name:             "small_forward_jump_with_check",
+			name:             "small_forward_enabled",
 			offset:           200 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
 		{
-			name:             "large_backward_jump_with_check",
+			name:             "large_backward_enabled",
 			offset:           -500 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
 		{
-			name:             "large_forward_jump_without_check",
+			name:             "large_forward_disabled",
 			offset:           500 * time.Millisecond,
 			jumpCheckEnabled: false,
 			aliveAfterOffset: true,
 		},
 		{
-			name:             "large_backward_jump_without_check",
+			name:             "large_backward_disabled",
 			offset:           -500 * time.Millisecond,
 			jumpCheckEnabled: false,
 			aliveAfterOffset: true,
@@ -115,8 +115,9 @@ func registerClockJump(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("clockjump/nodes=%d/tc=%s", numNodes, tc.name),
-			Nodes: nodes(numNodes),
+			SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25138",
+			Name:           fmt.Sprintf("clockjump/tc=%s", tc.name),
+			Nodes:          nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(t, c, tc)
 			},
