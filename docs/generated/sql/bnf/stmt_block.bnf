@@ -1810,9 +1810,9 @@ column_path ::=
 
 func_application ::=
 	func_name '(' ')'
-	| func_name '(' expr_list opt_sort_clause ')'
-	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
-	| func_name '(' 'DISTINCT' expr_list opt_sort_clause ')'
+	| func_name '(' expr_list ')'
+	| func_name '(' 'ALL' expr_list ')'
+	| func_name '(' 'DISTINCT' expr_list ')'
 	| func_name '(' '*' ')'
 
 filter_clause ::=
