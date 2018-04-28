@@ -22,14 +22,15 @@ name text    NULL  false  25  -1
 
 
 ## 12115
-query TT
-SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value
-    FROM pg_type t
-    JOIN pg_enum e ON t.oid = e.enumtypid
-    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname = 'public'
-    GROUP BY 1
-----
+# Skipped until #25148 is solved
+# query TT
+# SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value
+#    FROM pg_type t
+#    JOIN pg_enum e ON t.oid = e.enumtypid
+#    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+#    WHERE n.nspname = 'public'
+#    GROUP BY 1
+#----
 
 
 ## 12207
