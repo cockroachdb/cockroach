@@ -5021,6 +5021,10 @@ opt_all_clause:
   ALL {}
 | /* EMPTY */ {}
 
+opt_sort_clause_err:
+  sort_clause { return unimplementedWithIssue(sqllex, 23620) }
+| /* EMPTY */ {}
+
 opt_sort_clause:
   sort_clause
   {
@@ -6652,17 +6656,17 @@ func_application:
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName()}
   }
-| func_name '(' expr_list opt_sort_clause ')'
+| func_name '(' expr_list opt_sort_clause_err ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Exprs: $3.exprs()}
   }
-| func_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
-| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
-| func_name '(' ALL expr_list opt_sort_clause ')'
+| func_name '(' VARIADIC a_expr opt_sort_clause_err ')' { return unimplemented(sqllex, "variadic") }
+| func_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause_err ')' { return unimplemented(sqllex, "variadic") }
+| func_name '(' ALL expr_list opt_sort_clause_err ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.AllFuncType, Exprs: $4.exprs()}
   }
-| func_name '(' DISTINCT expr_list opt_sort_clause ')'
+| func_name '(' DISTINCT expr_list opt_sort_clause_err ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRefFromName(), Type: tree.DistinctFuncType, Exprs: $4.exprs()}
   }
@@ -7422,7 +7426,7 @@ a_expr_const:
   {
     $$.val = tree.NewBytesStrVal($1)
   }
-| func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, "func const") }
+| func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, "func const") }
 | const_typename SCONST
   {
     $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
