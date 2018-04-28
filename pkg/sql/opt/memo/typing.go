@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -101,6 +102,12 @@ func init() {
 		opt.CastOp:            typeAsPrivate,
 		opt.SubqueryOp:        typeSubquery,
 		opt.ArrayOp:           typeAsPrivate,
+
+		// Override default typeAsAggregate behavior for aggregate functions with
+		// a large number of possible overloads.
+		opt.ArrayAggOp: typeArrayAgg,
+		opt.MaxOp:      typeAsFirstArg,
+		opt.MinOp:      typeAsFirstArg,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -118,6 +125,13 @@ func init() {
 	for _, op := range opt.UnaryOperators {
 		typingFuncMap[op] = typeAsUnary
 	}
+
+	for _, op := range opt.AggregateOperators {
+		// Fill in any that are not already added to the typingFuncMap above.
+		if typingFuncMap[op] == nil {
+			typingFuncMap[op] = typeAsAggregate
+		}
+	}
 }
 
 // typeVariable returns the type of a variable expression, which is stored in
@@ -131,9 +145,21 @@ func typeVariable(ev ExprView) types.T {
 	return typ
 }
 
+// typeArrayAgg returns an array type with element type equal to the type of the
+// aggregate expression's first (and only) argument.
+func typeArrayAgg(ev ExprView) types.T {
+	typ := ev.Child(0).Logical().Scalar.Type
+	return types.TArray{Typ: typ}
+}
+
 // typeAsBool returns the fixed boolean type.
 func typeAsBool(_ ExprView) types.T {
 	return types.Bool
+}
+
+// typeAsFirstArg returns the type of the expression's 0th argument.
+func typeAsFirstArg(ev ExprView) types.T {
+	return ev.Child(0).Logical().Scalar.Type
 }
 
 // typeAsTuple constructs a tuple type that is composed of the types of all the
@@ -171,6 +197,35 @@ func typeAsBinary(ev ExprView) types.T {
 // the function's private field, which is an instance of *opt.FuncOpDef.
 func typeFunction(ev ExprView) types.T {
 	return ev.Private().(*FuncOpDef).Type
+}
+
+// typeAsAggregate returns the type of an aggregate expression by hooking into
+// the sql semantics code that searches for aggregate operator overloads.
+func typeAsAggregate(ev ExprView) types.T {
+	aggName := opt.AggregateOpReverseMap[ev.Operator()]
+
+	// Only handle cases where the return type is not dependent on argument
+	// types (i.e. pass nil to the ReturnTyper). Aggregates with return types
+	// that depend on argument types are handled separately.
+	overloads := builtins.Aggregates[aggName]
+	for i := range overloads {
+		overload := &overloads[i]
+		matches := true
+		for i := 0; i < ev.ChildCount(); i++ {
+			typ := ev.Child(i).Logical().Scalar.Type
+			if !overload.Types.MatchAt(typ, i) {
+				matches = false
+			}
+		}
+		if matches {
+			t := overload.ReturnType(nil)
+			if t == tree.UnknownReturnType {
+				panic("unknown aggregate return type")
+			}
+			return t
+		}
+	}
+	panic(fmt.Sprintf("could not find type for aggregate expression %s", ev.Operator()))
 }
 
 // typeAsAny returns types.Any for an operator that never has its type used.

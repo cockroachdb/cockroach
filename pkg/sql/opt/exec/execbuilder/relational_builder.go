@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -323,7 +324,7 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
 		fn := aggregations.Child(i)
-		funcDef := fn.Private().(*memo.FuncOpDef)
+		name, overload := b.findAggOverload(fn)
 
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
@@ -336,8 +337,8 @@ func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 		}
 
 		aggInfos[i] = exec.AggInfo{
-			FuncName:   funcDef.Name,
-			Builtin:    funcDef.Overload,
+			FuncName:   name,
+			Builtin:    overload,
 			ResultType: fn.Logical().Scalar.Type,
 			ArgCols:    argIdx,
 		}
@@ -535,4 +536,26 @@ func (b *Builder) applyPresentation(
 		ep.outputCols.Set(int(p[i].ID), i)
 	}
 	return ep, nil
+}
+
+// findAggOverload finds an aggregate function overload that matches the given
+// aggregate function expression.
+func (b *Builder) findAggOverload(ev memo.ExprView) (name string, overload *tree.Builtin) {
+	name = opt.AggregateOpReverseMap[ev.Operator()]
+	overloads := builtins.Aggregates[name]
+	for o := range overloads {
+		overload = &overloads[o]
+		matches := true
+		for i := 0; i < ev.ChildCount(); i++ {
+			typ := ev.Child(i).Logical().Scalar.Type
+			if !overload.Types.MatchAt(typ, i) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return name, overload
+		}
+	}
+	panic(fmt.Sprintf("could not find overload for %s aggregate", name))
 }

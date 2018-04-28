@@ -228,7 +228,7 @@ group-by
  │    │    └── aggregations
  │    └── projections
  └── aggregations
-      └── function: count_rows [type=int]
+      └── count-rows [type=int]
 
 build
 SELECT DISTINCT x FROM xyz WHERE x > 0
@@ -286,7 +286,7 @@ group-by
  │    │    │    └── projections
  │    │    │         └── variable: xyz.x [type=int]
  │    │    └── aggregations
- │    │         └── function: max [type=int]
+ │    │         └── max [type=int]
  │    │              └── variable: xyz.x [type=int]
  │    └── projections
  │         └── variable: column4 [type=int]
@@ -352,7 +352,7 @@ group-by
  │    │    │    ├── scan xyz
  │    │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    │    └── aggregations
- │    │    │         └── function: max [type=float]
+ │    │    │         └── max [type=float]
  │    │    │              └── variable: xyz.z [type=float]
  │    │    └── gt [type=bool]
  │    │         ├── variable: xyz.y [type=int]
