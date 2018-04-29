@@ -71,6 +71,8 @@ func (b physicalPropsBuilder) canProvidePresentation(
 // canProvideOrdering returns true if the given expression can provide the
 // required ordering property.
 func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
+	// TODO(justin): we should trim any ordering in `required` which contains a
+	// key to its shortest prefix which still contains a key.
 	mexpr := b.mem.Expr(eid)
 	if !mexpr.IsRelational() {
 		panic("ordering property doesn't apply to non-relational operators")
@@ -95,6 +97,10 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.
 		// Scan naturally orders according to the order of the scanned index.
 		def := mexpr.Private(b.mem).(*memo.ScanOpDef)
 		return def.CanProvideOrdering(b.mem.Metadata(), required)
+
+	case opt.RowNumberOp:
+		def := b.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
+		return def.CanProvideOrdering(required)
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
@@ -135,7 +141,7 @@ func (b physicalPropsBuilder) buildChildProps(
 
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
-		case opt.LimitOp, opt.OffsetOp, opt.ExplainOp:
+		case opt.LimitOp, opt.OffsetOp, opt.ExplainOp, opt.RowNumberOp:
 		default:
 			// Fast path taken in common case when no properties are required of
 			// parent and the operator itself does not require any properties.
@@ -158,16 +164,20 @@ func (b physicalPropsBuilder) buildChildProps(
 			childProps.Ordering = parentProps.Ordering
 		}
 
-	case opt.LimitOp, opt.OffsetOp:
-		// Limit/Offset require the ordering in their private.
+	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp:
+		// Limit/Offset/RowNumber require the ordering in their private.
 		if nth == 0 {
-			var ordering memo.PrivateID
-			if mexpr.Operator() == opt.LimitOp {
-				ordering = mexpr.AsLimit().Ordering()
-			} else {
-				ordering = mexpr.AsOffset().Ordering()
+			var ordering memo.Ordering
+			switch mexpr.Operator() {
+			case opt.LimitOp:
+				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering)
+			case opt.OffsetOp:
+				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering)
+			case opt.RowNumberOp:
+				def := b.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
+				ordering = def.Ordering
 			}
-			childProps.Ordering = b.mem.LookupPrivate(ordering).(memo.Ordering)
+			childProps.Ordering = ordering
 		}
 
 	case opt.ExplainOp:

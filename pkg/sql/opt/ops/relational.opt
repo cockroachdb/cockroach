@@ -323,3 +323,11 @@ define Explain {
     Input Expr
     Def   ExplainOpDef
 }
+
+# RowNumber adds a column to each row in its input containing a unique,
+# increasing number.
+[Relational]
+define RowNumber {
+    Input    Expr
+    Def      RowNumberDef
+}

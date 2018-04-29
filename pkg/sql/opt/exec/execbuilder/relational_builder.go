@@ -130,6 +130,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ExplainOp:
 		ep, err = b.buildExplain(ev)
 
+	case opt.RowNumberOp:
+		ep, err = b.buildRowNumber(ev)
+
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
@@ -488,6 +491,28 @@ func (b *Builder) buildSort(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+func (b *Builder) buildRowNumber(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	def := ev.Private().(*memo.RowNumberDef)
+	colName := ev.Metadata().ColumnLabel(def.ColID)
+
+	node, err := b.factory.ConstructOrdinality(input.root, colName)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// We have one additional ordinality column, which is ordered at the end of
+	// the list.
+	outputCols := input.outputCols.Copy()
+	outputCols.Set(int(def.ColID), outputCols.Len())
+
+	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan
