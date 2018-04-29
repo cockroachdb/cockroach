@@ -71,7 +71,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
 		{`CANCEL ??`, `CANCEL`},
-		{`CANCEL JOB ??`, `CANCEL JOB`},
+		{`CANCEL JOB ??`, `CANCEL JOBS`},
+		{`CANCEL JOBS ??`, `CANCEL JOBS`},
 		{`CANCEL QUERY ??`, `CANCEL QUERIES`},
 		{`CANCEL QUERY IF ??`, `CANCEL QUERIES`},
 		{`CANCEL QUERY IF EXISTS ??`, `CANCEL QUERIES`},
@@ -203,9 +204,9 @@ func TestContextualHelp(t *testing.T) {
 		{`GRANT ALL ON foo TO ??`, `GRANT`},
 		{`GRANT ALL ON foo TO bar ??`, `GRANT`},
 
-		{`PAUSE ??`, `PAUSE JOB`},
+		{`PAUSE ??`, `PAUSE JOBS`},
 
-		{`RESUME ??`, `RESUME JOB`},
+		{`RESUME ??`, `RESUME JOBS`},
 
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},

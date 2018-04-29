@@ -193,13 +193,15 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *cancelSessionsNode:
 		p.setUnlimited(n.rows)
 
+	case *controlJobsNode:
+		p.setUnlimited(n.rows)
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *scrubNode:
-	case *controlJobNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

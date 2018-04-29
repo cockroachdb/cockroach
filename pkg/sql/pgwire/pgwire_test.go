@@ -1237,13 +1237,31 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"CANCEL JOBS SELECT $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
 			"RESUME JOB $1",
 			[]preparedExecTest{
 				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
 			},
 		},
 		{
+			"RESUME JOBS SELECT $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
 			"PAUSE JOB $1",
+			[]preparedExecTest{
+				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
+			},
+		},
+		{
+			"PAUSE JOBS SELECT $1",
 			[]preparedExecTest{
 				baseTest.SetArgs(123).Error("pq: job with ID 123 does not exist"),
 			},

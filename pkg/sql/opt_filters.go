@@ -349,12 +349,16 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *controlJobsNode:
+		if n.rows, err = p.triggerFilterPropagation(ctx, n.rows); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *scrubNode:
-	case *controlJobNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

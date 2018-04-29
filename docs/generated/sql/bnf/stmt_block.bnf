@@ -47,7 +47,7 @@ backup_stmt ::=
 	'BACKUP' targets 'TO' string_or_placeholder opt_as_of_clause opt_incremental opt_with_options
 
 cancel_stmt ::=
-	cancel_job_stmt
+	cancel_jobs_stmt
 	| cancel_queries_stmt
 	| cancel_sessions_stmt
 
@@ -102,6 +102,7 @@ import_stmt ::=
 
 pause_stmt ::=
 	'PAUSE' 'JOB' a_expr
+	| 'PAUSE' 'JOBS' select_stmt
 
 prepare_stmt ::=
 	'PREPARE' table_alias_name prep_type_clause 'AS' preparable_stmt
@@ -112,6 +113,7 @@ restore_stmt ::=
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
+	| 'RESUME' 'JOBS' select_stmt
 
 revoke_stmt ::=
 	'REVOKE' privileges 'ON' targets 'FROM' name_list
@@ -217,8 +219,9 @@ opt_with_options ::=
 	| 'WITH' 'OPTIONS' '(' kv_option_list ')'
 	| 
 
-cancel_job_stmt ::=
+cancel_jobs_stmt ::=
 	'CANCEL' 'JOB' a_expr
+	| 'CANCEL' 'JOBS' select_stmt
 
 cancel_queries_stmt ::=
 	'CANCEL' 'QUERY' a_expr

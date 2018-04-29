@@ -14,37 +14,34 @@
 
 package tree
 
-// PauseJob represents a PAUSE JOB statement.
-type PauseJob struct {
-	ID Expr
+// ControlJobs represents a PAUSE/RESUME/CANCEL JOBS statement.
+type ControlJobs struct {
+	Jobs    *Select
+	Command JobCommand
+}
+
+// JobCommand determines which type of action to effect on the selected job(s).
+type JobCommand int
+
+// JobCommand values
+const (
+	PauseJob JobCommand = iota
+	CancelJob
+	ResumeJob
+)
+
+// JobCommandToStatement translates a job command integer to a statement prefix.
+var JobCommandToStatement = map[JobCommand]string{
+	PauseJob:  "PAUSE",
+	CancelJob: "CANCEL",
+	ResumeJob: "RESUME",
 }
 
 // Format implements the NodeFormatter interface.
-func (node *PauseJob) Format(ctx *FmtCtx) {
-	ctx.WriteString("PAUSE JOB ")
-	ctx.FormatNode(node.ID)
-}
-
-// ResumeJob represents a RESUME JOB statement.
-type ResumeJob struct {
-	ID Expr
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ResumeJob) Format(ctx *FmtCtx) {
-	ctx.WriteString("RESUME JOB ")
-	ctx.FormatNode(node.ID)
-}
-
-// CancelJob represents a CANCEL JOB statement.
-type CancelJob struct {
-	ID Expr
-}
-
-// Format implements the NodeFormatter interface.
-func (node *CancelJob) Format(ctx *FmtCtx) {
-	ctx.WriteString("CANCEL JOB ")
-	ctx.FormatNode(node.ID)
+func (n *ControlJobs) Format(ctx *FmtCtx) {
+	ctx.WriteString(JobCommandToStatement[n.Command])
+	ctx.WriteString(" JOBS ")
+	ctx.FormatNode(n.Jobs)
 }
 
 // CancelQueries represents a CANCEL QUERIES statement.

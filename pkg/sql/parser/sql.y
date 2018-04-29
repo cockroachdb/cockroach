@@ -605,7 +605,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> begin_stmt
 
 %type <tree.Statement> cancel_stmt
-%type <tree.Statement> cancel_job_stmt
+%type <tree.Statement> cancel_jobs_stmt
 %type <tree.Statement> cancel_queries_stmt
 %type <tree.Statement> cancel_sessions_stmt
 
@@ -1041,10 +1041,10 @@ stmt:
 | grant_stmt      // EXTEND WITH HELP: GRANT
 | insert_stmt     // EXTEND WITH HELP: INSERT
 | import_stmt     // EXTEND WITH HELP: IMPORT
-| pause_stmt      // EXTEND WITH HELP: PAUSE JOB
+| pause_stmt      // EXTEND WITH HELP: PAUSE JOBS
 | prepare_stmt    // EXTEND WITH HELP: PREPARE
 | restore_stmt    // EXTEND WITH HELP: RESTORE
-| resume_stmt     // EXTEND WITH HELP: RESUME JOB
+| resume_stmt     // EXTEND WITH HELP: RESUME JOBS
 | revoke_stmt     // EXTEND WITH HELP: REVOKE
 | savepoint_stmt  // EXTEND WITH HELP: SAVEPOINT
 | scrub_stmt      // help texts in sub-rule
@@ -1705,23 +1705,35 @@ copy_from_stmt:
 
 // %Help: CANCEL
 // %Category: Group
-// %Text: CANCEL JOB, CANCEL QUERIES, CANCEL SESSIONS
+// %Text: CANCEL JOBS, CANCEL QUERIES, CANCEL SESSIONS
 cancel_stmt:
-  cancel_job_stmt      // EXTEND WITH HELP: CANCEL JOB
+  cancel_jobs_stmt     // EXTEND WITH HELP: CANCEL JOBS
 | cancel_queries_stmt  // EXTEND WITH HELP: CANCEL QUERIES
 | cancel_sessions_stmt // EXTEND WITH HELP: CANCEL SESSIONS
 | CANCEL error         // SHOW HELP: CANCEL
 
-// %Help: CANCEL JOB - cancel a background job
+// %Help: CANCEL JOBS - cancel background jobs
 // %Category: Misc
-// %Text: CANCEL JOB <jobid>
-// %SeeAlso: SHOW JOBS, PAUSE JOBS, RESUME JOB
-cancel_job_stmt:
+// %Text:
+// CANCEL JOBS <selectclause>
+// CANCEL JOB <jobid>
+// %SeeAlso: SHOW JOBS, PAUSE JOBS, RESUME JOBS
+cancel_jobs_stmt:
   CANCEL JOB a_expr
   {
-    $$.val = &tree.CancelJob{ID: $3.expr()}
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+      },
+      Command: tree.CancelJob,
+    }
   }
-| CANCEL JOB error // SHOW HELP: CANCEL JOB
+| CANCEL JOB error // SHOW HELP: CANCEL JOBS
+| CANCEL JOBS select_stmt
+  {
+    $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.CancelJob}
+  }
+| CANCEL JOBS error // SHOW HELP: CANCEL JOBS
 
 // %Help: CANCEL QUERIES - cancel running queries
 // %Category: Misc
@@ -2093,10 +2105,10 @@ preparable_stmt:
 | drop_user_stmt    // EXTEND WITH HELP: DROP USER
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
-| pause_stmt        // EXTEND WITH HELP: PAUSE JOB
+| pause_stmt        // EXTEND WITH HELP: PAUSE JOBS
 | reset_stmt        // help texts in sub-rule
 | restore_stmt      // EXTEND WITH HELP: RESTORE
-| resume_stmt       // EXTEND WITH HELP: RESUME JOB
+| resume_stmt       // EXTEND WITH HELP: RESUME JOBS
 | select_stmt       // help texts in sub-rule
   {
     $$.val = $1.slct()
@@ -2909,7 +2921,7 @@ show_queries_stmt:
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
 // %Text: SHOW JOBS
-// %SeeAlso: CANCEL JOB, PAUSE JOB, RESUME JOB
+// %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
   SHOW JOBS
   {
@@ -3383,16 +3395,27 @@ for_grantee_clause:
     $$.val = tree.NameList(nil)
   }
 
-// %Help: PAUSE JOB - pause a background job
+// %Help: PAUSE JOBS - pause background jobs
 // %Category: Misc
-// %Text: PAUSE JOB <jobid>
-// %SeeAlso: SHOW JOBS, CANCEL JOB, RESUME JOB
+// %Text:
+// PAUSE JOBS <selectclause>
+// PAUSE JOB <jobid>
+// %SeeAlso: SHOW JOBS, CANCEL JOBS, RESUME JOBS
 pause_stmt:
   PAUSE JOB a_expr
   {
-    $$.val = &tree.PauseJob{ID: $3.expr()}
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+      },
+      Command: tree.PauseJob,
+    }
   }
-| PAUSE error // SHOW HELP: PAUSE JOB
+| PAUSE JOBS select_stmt
+  {
+    $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.PauseJob}
+  }
+| PAUSE error // SHOW HELP: PAUSE JOBS
 
 // %Help: CREATE TABLE - create a new table
 // %Category: DDL
@@ -4281,16 +4304,27 @@ release_stmt:
   }
 | RELEASE error // SHOW HELP: RELEASE
 
-// %Help: RESUME JOB - resume a background job
+// %Help: RESUME JOBS - resume background jobs
 // %Category: Misc
-// %Text: RESUME JOB <jobid>
-// %SeeAlso: SHOW JOBS, CANCEL JOB, PAUSE JOB
+// %Text:
+// RESUME JOBS <selectclause>
+// RESUME JOB <jobid>
+// %SeeAlso: SHOW JOBS, CANCEL JOBS, PAUSE JOBS
 resume_stmt:
   RESUME JOB a_expr
   {
-    $$.val = &tree.ResumeJob{ID: $3.expr()}
+    $$.val = &tree.ControlJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+      },
+      Command: tree.ResumeJob,
+    }
   }
-| RESUME error // SHOW HELP: RESUME JOB
+| RESUME JOBS select_stmt
+  {
+    $$.val = &tree.ControlJobs{Jobs: $3.slct(), Command: tree.ResumeJob}
+  }
+| RESUME error // SHOW HELP: RESUME JOBS
 
 // %Help: SAVEPOINT - start a retryable block
 // %Category: Txn

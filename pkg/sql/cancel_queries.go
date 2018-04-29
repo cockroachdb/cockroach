@@ -58,8 +58,13 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 		return ok, err
 	}
 
+	datum := n.rows.Values()[0]
+	if datum == tree.DNull {
+		return true, nil
+	}
+
 	statusServer := params.extendedEvalCtx.StatusServer
-	queryIDDatum := n.rows.Values()[0].(*tree.DString)
+	queryIDDatum := datum.(*tree.DString)
 
 	queryIDString := string(*queryIDDatum)
 	queryID, err := StringToClusterWideID(queryIDString)

@@ -339,13 +339,15 @@ func doExpandPlan(
 	case *cancelSessionsNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
+	case *controlJobsNode:
+		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *scrubNode:
-	case *controlJobNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
@@ -822,13 +824,15 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *cancelSessionsNode:
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
+	case *controlJobsNode:
+		n.rows = p.simplifyOrderings(n.rows, nil)
+
 	case *valuesNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *scrubNode:
-	case *controlJobNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:
