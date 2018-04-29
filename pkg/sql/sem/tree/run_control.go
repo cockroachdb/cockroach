@@ -62,17 +62,17 @@ func (node *CancelQueries) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Queries)
 }
 
-// CancelSession represents a CANCEL SESSION statement.
-type CancelSession struct {
-	ID       Expr
+// CancelSessions represents a CANCEL SESSIONS statement.
+type CancelSessions struct {
+	Sessions *Select
 	IfExists bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *CancelSession) Format(ctx *FmtCtx) {
-	ctx.WriteString("CANCEL SESSION ")
+func (node *CancelSessions) Format(ctx *FmtCtx) {
+	ctx.WriteString("CANCEL SESSIONS ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.ID)
+	ctx.FormatNode(node.Sessions)
 }
