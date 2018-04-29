@@ -221,12 +221,12 @@ func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
 func (*CancelQueries) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
-func (*CancelSession) StatementType() StatementType { return Ack }
+func (*CancelSessions) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CancelSession) StatementTag() string { return "CANCEL SESSION" }
+func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
 
-func (*CancelSession) independentFromParallelizedPriors() {}
+func (*CancelSessions) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
@@ -890,7 +890,7 @@ func (n *Backup) String() string                    { return AsString(n) }
 func (n *BeginTransaction) String() string          { return AsString(n) }
 func (n *CancelJob) String() string                 { return AsString(n) }
 func (n *CancelQueries) String() string             { return AsString(n) }
-func (n *CancelSession) String() string             { return AsString(n) }
+func (n *CancelSessions) String() string            { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
 func (n *CreateChangefeed) String() string          { return AsString(n) }

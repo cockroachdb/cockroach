@@ -39,9 +39,20 @@ CANCEL QUERY 'f54'
 query error not found
 CANCEL QUERY '14d2355b9cccbca50000000000000001'
 
-statement ok count 0
-CANCEL QUERY (SELECT 'a' LIMIT 0)
+query error CANCEL SESSIONS requires string values, not type int
+CANCEL SESSION 1
+
+query error CANCEL SESSIONS expects a single column source, got 2 columns
+CANCEL SESSIONS VALUES (1,2)
+
+query error odd length hex string
+CANCEL SESSION 'f54'
+
+query error not found
+CANCEL SESSION '14d2355b9cccbca50000000000000001'
 
 statement ok count 0
-CANCEL QUERIES SELECT 'a' LIMIT 0
+CANCEL SESSION (SELECT 'a' LIMIT 0)
 
+statement ok count 0
+CANCEL SESSIONS SELECT 'a' LIMIT 0

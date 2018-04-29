@@ -639,8 +639,8 @@ func (p *planner) newPlan(
 		return p.AlterUserSetPassword(ctx, n)
 	case *tree.CancelQueries:
 		return p.CancelQueries(ctx, n)
-	case *tree.CancelSession:
-		return p.CancelSession(ctx, n)
+	case *tree.CancelSessions:
+		return p.CancelSessions(ctx, n)
 	case *tree.CancelJob:
 		return p.CancelJob(ctx, n)
 	case *tree.Scrub:
@@ -822,8 +822,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.AlterUserSetPassword(ctx, n)
 	case *tree.CancelQueries:
 		return p.CancelQueries(ctx, n)
-	case *tree.CancelSession:
-		return p.CancelSession(ctx, n)
+	case *tree.CancelSessions:
+		return p.CancelSessions(ctx, n)
 	case *tree.CancelJob:
 		return p.CancelJob(ctx, n)
 	case *tree.CreateUser:

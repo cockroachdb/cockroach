@@ -75,7 +75,7 @@ func TestCancelSelectQuery(t *testing.T) {
 	<-sem
 	time.Sleep(time.Second * 2)
 
-	const cancelQuery = "CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 2)"
+	const cancelQuery = "CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 2"
 
 	if _, err := conn1.Exec(cancelQuery); err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestCancelParallelQuery(t *testing.T) {
 
 								// Cancel this query, even though it has already completed execution.
 								// The other query (queryToBlock) should return a cancellation error.
-								const cancelQuery = "CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 1 AND query LIKE '%INSERT INTO nums2 VALUES (2%')"
+								const cancelQuery = "CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 1 AND query LIKE '%INSERT INTO nums2 VALUES (2%'"
 								if _, err := conn2.Exec(cancelQuery); err != nil {
 									errChan2 <- err
 								}
@@ -192,7 +192,7 @@ func TestCancelParallelQuery(t *testing.T) {
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
-	cancelQuery := fmt.Sprintf("CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s')", queryToCancel)
+	cancelQuery := fmt.Sprintf("CANCEL QUERIES SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s'", queryToCancel)
 
 	// conn1 is used for the query above. conn2 is solely for the CANCEL statement.
 	var conn1 *gosql.DB
@@ -365,6 +365,48 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 	if err != gosqldriver.ErrBadConn {
 		t.Fatalf("session not canceled; actual error: %s", err)
+	}
+}
+
+func TestCancelMultipleSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.TODO()
+
+	numNodes := 2
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Open two connections on node 1.
+	var conns [2]*gosql.Conn
+	for i := 0; i < 2; i++ {
+		var err error
+		conns[i], err = tc.ServerConn(0).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Open a control connection on node 2.
+	ctlconn, err := tc.ServerConn(1).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel the sessions on node 1.
+	if _, err = ctlconn.ExecContext(ctx,
+		`CANCEL SESSIONS SELECT session_id FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 1`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the connections on node 1 are closed.
+	for i := 0; i < 2; i++ {
+		_, err := conns[i].ExecContext(ctx, "SELECT 1")
+		if err != gosqldriver.ErrBadConn {
+			t.Fatalf("session %d not canceled; actual error: %s", i, err)
+		}
 	}
 }
 

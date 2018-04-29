@@ -206,11 +206,13 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *cancelQueriesNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
+	case *cancelSessionsNode:
+		setNeededColumns(n.rows, allColumns(n.rows))
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
-	case *cancelSessionNode:
 	case *controlJobNode:
 	case *scrubNode:
 	case *createDatabaseNode:

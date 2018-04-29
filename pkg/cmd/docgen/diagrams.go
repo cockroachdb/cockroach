@@ -438,6 +438,7 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
 	{name: "cancel_query", stmt: "cancel_queries_stmt", replace: map[string]string{"a_expr": "query_id"}, unlink: []string{"query_id"}},
+	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
 	{
 		name:    "create_index_stmt",
