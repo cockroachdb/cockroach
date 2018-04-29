@@ -6,8 +6,23 @@ PAUSE JOB 1
 query error could not parse "foo" as type int
 PAUSE JOB 'foo'
 
-query error NULL is not a valid job ID
+query error could not parse "foo" as type int
+CANCEL JOBS SELECT 'foo'
+
+query error CANCEL JOBS expects a single column source, got 2 columns
+CANCEL JOBS VALUES (1,2)
+
+statement ok count 0
 PAUSE JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok count 0
+PAUSE JOBS SELECT id FROM system.jobs LIMIT 0
+
+query error could not parse "foo" as type int
+PAUSE JOBS SELECT 'foo'
+
+query error PAUSE JOBS expects a single column source, got 2 columns
+PAUSE JOBS VALUES (1,2)
 
 query error job with ID 1 does not exist
 RESUME JOB 1
@@ -15,8 +30,17 @@ RESUME JOB 1
 query error could not parse "foo" as type int
 RESUME JOB 'foo'
 
-query error NULL is not a valid job ID
+query error could not parse "foo" as type int
+RESUME JOBS SELECT 'foo'
+
+query error RESUME JOBS expects a single column source, got 2 columns
+RESUME JOBS VALUES (1,2)
+
+statement ok count 0
 RESUME JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok count 0
+RESUME JOBS SELECT id FROM system.jobs LIMIT 0
 
 query error job with ID 1 does not exist
 CANCEL JOB 1
@@ -24,8 +48,11 @@ CANCEL JOB 1
 query error could not parse "foo" as type int
 CANCEL JOB 'foo'
 
-query error NULL is not a valid job ID
+statement ok count 0
 CANCEL JOB (SELECT id FROM system.jobs LIMIT 0)
+
+statement ok count 0
+CANCEL JOBS SELECT id FROM system.jobs LIMIT 0
 
 query error CANCEL QUERIES requires string values, not type int
 CANCEL QUERY 1

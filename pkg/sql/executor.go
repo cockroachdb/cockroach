@@ -1251,8 +1251,8 @@ func (e *Executor) execSingleStatement(
 	queryMeta.ctxCancel = txnState.cancel
 
 	// Ignore statements that spawn jobs from SHOW QUERIES and from being cancellable
-	// using CANCEL QUERIES. Jobs have their own run control statements (CANCEL JOB,
-	// PAUSE JOB, etc). We implement this ignore by not registering queryMeta in
+	// using CANCEL QUERIES. Jobs have their own run control statements (CANCEL JOBS,
+	// PAUSE JOBS, etc). We implement this ignore by not registering queryMeta in
 	// session.mu.ActiveQueries.
 	if _, ok := stmt.AST.(tree.HiddenFromShowQueries); !ok {
 		// For parallel/async queries, we deregister queryMeta from these registries
