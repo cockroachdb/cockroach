@@ -816,6 +816,22 @@ func (stmt *CancelSessions) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *ControlJobs) CopyNode() *ControlJobs {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *ControlJobs) WalkStmt(v Visitor) Statement {
+	sel, changed := WalkStmt(v, stmt.Jobs)
+	if changed {
+		stmt = stmt.CopyNode()
+		stmt.Jobs = sel.(*Select)
+	}
+	return stmt
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Import) CopyNode() *Import {
 	stmtCopy := *stmt
 	stmtCopy.Files = append(Exprs(nil), stmt.Files...)
@@ -1195,6 +1211,7 @@ var _ WalkableStmt = &Update{}
 var _ WalkableStmt = &ValuesClause{}
 var _ WalkableStmt = &CancelQueries{}
 var _ WalkableStmt = &CancelSessions{}
+var _ WalkableStmt = &ControlJobs{}
 
 // WalkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned
