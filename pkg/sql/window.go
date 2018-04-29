@@ -855,6 +855,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
 			return false, f
+
 		case t.GetAggregateConstructor() != nil:
 			// If we see an aggregation that is not used in a window function, we save it
 			// in the visitor's seen aggregate set. The aggregate function will remain in
