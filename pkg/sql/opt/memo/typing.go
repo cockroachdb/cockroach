@@ -101,6 +101,7 @@ func init() {
 		opt.CastOp:            typeAsPrivate,
 		opt.SubqueryOp:        typeSubquery,
 		opt.ArrayOp:           typeAsPrivate,
+		opt.RowNumberOp:       typeAsInt,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -134,6 +135,11 @@ func typeVariable(ev ExprView) types.T {
 // typeAsBool returns the fixed boolean type.
 func typeAsBool(_ ExprView) types.T {
 	return types.Bool
+}
+
+// typeAsInt returns the fixed int type.
+func typeAsInt(_ ExprView) types.T {
+	return types.Int
 }
 
 // typeAsTuple constructs a tuple type that is composed of the types of all the

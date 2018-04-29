@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // logicalPropsBuilder is a helper class that consolidates the code that derives
@@ -77,6 +78,9 @@ func (b logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 
 	case opt.Max1RowOp:
 		return b.buildMax1RowProps(ev)
+
+	case opt.RowNumberOp:
+		return b.buildRowNumberProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -430,6 +434,25 @@ func (b logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 	props.Relational.Cardinality = props.Relational.Cardinality.AtMost(1)
 
 	props.Relational.Stats.initMax1Row(&inputProps.Stats)
+
+	return props
+}
+
+func (b logicalPropsBuilder) buildRowNumberProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	*props.Relational = *inputProps
+	def := ev.Private().(*RowNumberDef)
+
+	props.Relational.OutputCols = props.Relational.OutputCols.Copy()
+	props.Relational.OutputCols.Add(int(def.ColID))
+
+	props.Relational.NotNullCols = props.Relational.NotNullCols.Copy()
+	props.Relational.NotNullCols.Add(int(def.ColID))
+
+	props.Relational.WeakKeys = props.Relational.WeakKeys.Copy()
+	props.Relational.WeakKeys.Add(util.MakeFastIntSet(int(def.ColID)))
 
 	return props
 }

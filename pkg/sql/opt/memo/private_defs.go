@@ -108,6 +108,42 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool
 	return true
 }
 
+// RowNumberDef defines the value of the Def private field of the RowNumber
+// operator.
+type RowNumberDef struct {
+	// Ordering denotes the required ordering of the input.
+	Ordering Ordering
+
+	// ColID holds the id of the column introduced by this operator.
+	ColID opt.ColumnID
+
+	// ColName holds the name of the column introduced by this operator.
+	ColName string
+}
+
+// CanProvideOrdering returns true if the windowing operator returns rows
+// that can satisfy the given required ordering.
+func (w *RowNumberDef) CanProvideOrdering(required Ordering) bool {
+	// RowNumber can provide the same ordering it requires from its input.
+
+	// By construction, the ordinality is a key, and the output is always ordered
+	// ascending by it, so any ordering columns after an ascending ordinality are
+	// irrelevant.
+	// TODO(justin): This could probably be generalized to some helper - when we
+	// are checking if an ordering can be satisfied in this way, we can return
+	// true early if the set of columns we have iterated over are a key.
+	ordCol := opt.MakeOrderingColumn(w.ColID, false)
+	for i, col := range required {
+		if col == ordCol {
+			return true
+		}
+		if i >= len(w.Ordering) || col != w.Ordering[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // SetOpColMap defines the value of the ColMap private field of the set
 // operators: Union, Intersect, Except, UnionAll, IntersectAll and ExceptAll.
 // It matches columns from the left and right inputs of the operator
