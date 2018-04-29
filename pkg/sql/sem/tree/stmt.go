@@ -125,7 +125,7 @@ type HiddenFromStats interface {
 
 // HiddenFromShowQueries is a pseudo-interface to be implemented
 // by statements that should not show up in SHOW QUERIES (and are hence
-// not cancellable using CANCEL QUERY either). Usually implemented by
+// not cancellable using CANCEL QUERIES either). Usually implemented by
 // statements that spawn jobs.
 type HiddenFromShowQueries interface {
 	hiddenFromShowQueries()
@@ -213,12 +213,12 @@ func (*CancelJob) StatementType() StatementType { return Ack }
 func (*CancelJob) StatementTag() string { return "CANCEL JOB" }
 
 // StatementType implements the Statement interface.
-func (*CancelQuery) StatementType() StatementType { return Ack }
+func (*CancelQueries) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CancelQuery) StatementTag() string { return "CANCEL QUERY" }
+func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
 
-func (*CancelQuery) independentFromParallelizedPriors() {}
+func (*CancelQueries) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*CancelSession) StatementType() StatementType { return Ack }
@@ -889,7 +889,7 @@ func (n *AlterSequence) String() string             { return AsString(n) }
 func (n *Backup) String() string                    { return AsString(n) }
 func (n *BeginTransaction) String() string          { return AsString(n) }
 func (n *CancelJob) String() string                 { return AsString(n) }
-func (n *CancelQuery) String() string               { return AsString(n) }
+func (n *CancelQueries) String() string             { return AsString(n) }
 func (n *CancelSession) String() string             { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }

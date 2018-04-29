@@ -203,11 +203,13 @@ func setNeededColumns(plan planNode, needed []bool) {
 		// The sub-node is a DELETE, INSERT, UPDATE etc. and will decide which columns it needs.
 		setNeededColumns(n.source, nil)
 
+	case *cancelQueriesNode:
+		setNeededColumns(n.rows, allColumns(n.rows))
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
-	case *cancelQueryNode:
 	case *cancelSessionNode:
 	case *controlJobNode:
 	case *scrubNode:
