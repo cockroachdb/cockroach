@@ -75,14 +75,14 @@ func TestVariadicFunctions(t *testing.T) {
 		for _, v := range data.cases {
 			t.Run(fmt.Sprintf("%v/%v", fn, v), func(t *testing.T) {
 				if v.matches {
-					if !fn.matchLen(len(v.args)) {
+					if !fn.MatchLen(len(v.args)) {
 						t.Fatalf("expected fn %v to matchLen %v", fn, v.args)
 					}
 
-					if !fn.match(v.args) {
+					if !fn.Match(v.args) {
 						t.Fatalf("expected fn %v to match %v", fn, v.args)
 					}
-				} else if fn.matchLen(len(v.args)) && fn.match(v.args) {
+				} else if fn.MatchLen(len(v.args)) && fn.Match(v.args) {
 					t.Fatalf("expected fn %v to not match %v", fn, v.args)
 				}
 			})

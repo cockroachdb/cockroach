@@ -158,7 +158,7 @@ limit
  │         │    ├── scan t
  │         │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │         │    └── aggregations
- │         │         └── function: sum [type=decimal]
+ │         │         └── sum [type=decimal]
  │         │              └── variable: t.w [type=int]
  │         └── projections
  │              ├── variable: column4 [type=decimal]

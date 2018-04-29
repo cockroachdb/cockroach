@@ -348,7 +348,7 @@ project
  │    │    │    ├── columns: a.x:1(int!null) a.f:3(float)
  │    │    │    └── keys: (1)
  │    │    └── aggregations [outer=(1)]
- │    │         └── function: sum [type=decimal, outer=(1)]
+ │    │         └── sum [type=decimal, outer=(1)]
  │    │              └── variable: a.x [type=int, outer=(1)]
  │    └── filters [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
  │         └── eq [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
@@ -1094,7 +1094,7 @@ group-by
  ├── scan a
  │    └── columns: a.y:2(int) a.s:4(string)
  └── aggregations [outer=(2)]
-      └── function: sum [type=decimal, outer=(2)]
+      └── sum [type=decimal, outer=(2)]
            └── variable: a.y [type=int, outer=(2)]
 
 # No aggregates to discard.
@@ -1128,7 +1128,7 @@ group-by
  ├── scan a
  │    └── columns: a.y:2(int) a.s:4(string)
  └── aggregations [outer=(2)]
-      └── function: sum [type=decimal, outer=(2)]
+      └── sum [type=decimal, outer=(2)]
            └── variable: a.y [type=int, outer=(2)]
 
 # Columns used by both grouping and aggregation.
@@ -1151,7 +1151,7 @@ group-by
  │              └── cast: int [type=int, outer=(4)]
  │                   └── variable: a.s [type=string, outer=(4)]
  └── aggregations [outer=(5)]
-      └── function: avg [type=decimal, outer=(5)]
+      └── avg [type=decimal, outer=(5)]
            └── variable: column5 [type=int, outer=(5)]
 
 # Columns used only by aggregation, no grouping columns.
@@ -1166,9 +1166,9 @@ group-by
  │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    └── keys: (1)
  └── aggregations [outer=(1,2)]
-      ├── function: min [type=int, outer=(2)]
+      ├── min [type=int, outer=(2)]
       │    └── variable: a.y [type=int, outer=(2)]
-      └── function: max [type=int, outer=(1)]
+      └── max [type=int, outer=(1)]
            └── variable: a.x [type=int, outer=(1)]
 
 # Columns used only by groupings, no aggregation columns.
@@ -1208,13 +1208,13 @@ group-by
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
  │    │    │    └── keys: (1)
  │    │    └── aggregations [outer=(1)]
- │    │         └── function: sum [type=decimal, outer=(1)]
+ │    │         └── sum [type=decimal, outer=(1)]
  │    │              └── variable: a.x [type=int, outer=(1)]
  │    └── projections [outer=(2,5)]
  │         ├── variable: a.y [type=int, outer=(2)]
  │         └── variable: sm [type=decimal, outer=(5)]
  └── aggregations [outer=(5)]
-      └── function: min [type=decimal, outer=(5)]
+      └── min [type=decimal, outer=(5)]
            └── variable: sm [type=decimal, outer=(5)]
 
 # --------------------------------------------------
@@ -1325,7 +1325,7 @@ project
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    │    │    └── keys: (1)
  │    │    └── aggregations [outer=(2)]
- │    │         └── function: sum [type=decimal, outer=(2)]
+ │    │         └── sum [type=decimal, outer=(2)]
  │    │              └── variable: a.y [type=int, outer=(2)]
  │    └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
  │         └── gt [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]

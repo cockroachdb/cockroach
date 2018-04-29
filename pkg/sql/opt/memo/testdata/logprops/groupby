@@ -48,7 +48,7 @@ project
  │    │         ├── variable: xyzs.y [type=int, outer=(2)]
  │    │         └── variable: xyzs.z [type=float, outer=(3)]
  │    └── aggregations [outer=(3)]
- │         └── function: sum [type=float, outer=(3)]
+ │         └── sum [type=float, outer=(3)]
  │              └── variable: xyzs.z [type=float, outer=(3)]
  └── projections [outer=(1,2,5)]
       ├── variable: xyzs.y [type=int, outer=(2)]
@@ -77,9 +77,9 @@ group-by
  │         ├── variable: xyzs.x [type=int, outer=(1)]
  │         └── variable: xyzs.y [type=int, outer=(2)]
  └── aggregations [outer=(1,2)]
-      ├── function: sum [type=decimal, outer=(1)]
+      ├── sum [type=decimal, outer=(1)]
       │    └── variable: xyzs.x [type=int, outer=(1)]
-      └── function: max [type=int, outer=(2)]
+      └── max [type=int, outer=(2)]
            └── variable: xyzs.y [type=int, outer=(2)]
 
 # Group by unique index columns.
@@ -132,7 +132,7 @@ project
  │    │         ├── variable: xyzs.z [type=float, outer=(3)]
  │    │         └── variable: xyzs.y [type=int, outer=(2)]
  │    └── aggregations [outer=(3)]
- │         └── function: sum [type=float, outer=(3)]
+ │         └── sum [type=float, outer=(3)]
  │              └── variable: xyzs.z [type=float, outer=(3)]
  └── projections [outer=(2,5)]
       ├── variable: xyzs.y [type=int, outer=(2)]
@@ -159,7 +159,7 @@ group-by
  │         ├── variable: xyzs.z [type=float, outer=(3)]
  │         └── variable: xyzs.s [type=string, outer=(4)]
  └── aggregations [outer=(4)]
-      └── function: max [type=string, outer=(4)]
+      └── max [type=string, outer=(4)]
            └── variable: xyzs.s [type=string, outer=(4)]
 
 # Group by all columns.
@@ -230,7 +230,7 @@ select
       │    │         │    │         ├── variable: kuv.u [type=float, outer=(6)]
       │    │         │    │         └── variable: xyzs.x [type=int, outer=(1)]
       │    │         │    └── aggregations [outer=(1)]
-      │    │         │         └── function: sum [type=decimal, outer=(1)]
+      │    │         │         └── sum [type=decimal, outer=(1)]
       │    │         │              └── variable: xyzs.x [type=int, outer=(1)]
       │    │         └── projections [outer=(8)]
       │    │              └── variable: column8 [type=decimal, outer=(8)]

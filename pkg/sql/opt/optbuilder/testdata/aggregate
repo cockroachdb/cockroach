@@ -32,27 +32,27 @@ group-by
  │         ├── false [type=bool]
  │         └── const: '\x01' [type=bytes]
  └── aggregations
-      ├── function: min [type=int]
+      ├── min [type=int]
       │    └── variable: column5 [type=int]
-      ├── function: max [type=int]
+      ├── max [type=int]
       │    └── variable: column5 [type=int]
-      ├── function: count [type=int]
+      ├── count [type=int]
       │    └── variable: column5 [type=int]
-      ├── function: sum_int [type=int]
+      ├── sum-int [type=int]
       │    └── variable: column5 [type=int]
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: column5 [type=int]
-      ├── function: sum [type=decimal]
+      ├── sum [type=decimal]
       │    └── variable: column5 [type=int]
-      ├── function: stddev [type=decimal]
+      ├── std-dev [type=decimal]
       │    └── variable: column5 [type=int]
-      ├── function: variance [type=decimal]
+      ├── variance [type=decimal]
       │    └── variable: column5 [type=int]
-      ├── function: bool_and [type=bool]
+      ├── bool-and [type=bool]
       │    └── variable: column14 [type=bool]
-      ├── function: bool_or [type=bool]
+      ├── bool-or [type=bool]
       │    └── variable: column16 [type=bool]
-      └── function: xor_agg [type=bytes]
+      └── xor-agg [type=bytes]
            └── variable: column18 [type=bytes]
 
 build
@@ -76,25 +76,25 @@ project
  │    │         └── cast: bytes [type=bytes]
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
- │         ├── function: min [type=int]
+ │         ├── min [type=int]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: max [type=int]
+ │         ├── max [type=int]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: count [type=int]
+ │         ├── count [type=int]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: sum_int [type=int]
+ │         ├── sum-int [type=int]
  │         │    └── variable: column8 [type=int]
- │         ├── function: avg [type=decimal]
+ │         ├── avg [type=decimal]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: sum [type=decimal]
+ │         ├── sum [type=decimal]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: stddev [type=decimal]
+ │         ├── std-dev [type=decimal]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: variance [type=decimal]
+ │         ├── variance [type=decimal]
  │         │    └── variable: kv.v [type=int]
- │         ├── function: bool_and [type=bool]
+ │         ├── bool-and [type=bool]
  │         │    └── variable: column14 [type=bool]
- │         └── function: xor_agg [type=bytes]
+ │         └── xor-agg [type=bytes]
  │              └── variable: column16 [type=bytes]
  └── projections
       ├── variable: column5 [type=int]
@@ -125,27 +125,27 @@ project
  │    │         ├── true [type=bool]
  │    │         └── const: '\x01' [type=bytes]
  │    └── aggregations
- │         ├── function: min [type=int]
+ │         ├── min [type=int]
  │         │    └── variable: column1 [type=int]
- │         ├── function: count [type=int]
+ │         ├── count [type=int]
  │         │    └── variable: column1 [type=int]
- │         ├── function: max [type=int]
+ │         ├── max [type=int]
  │         │    └── variable: column1 [type=int]
- │         ├── function: sum_int [type=int]
+ │         ├── sum-int [type=int]
  │         │    └── variable: column1 [type=int]
- │         ├── function: avg [type=decimal]
+ │         ├── avg [type=decimal]
  │         │    └── variable: column1 [type=int]
- │         ├── function: sum [type=decimal]
+ │         ├── sum [type=decimal]
  │         │    └── variable: column1 [type=int]
- │         ├── function: stddev [type=decimal]
+ │         ├── std-dev [type=decimal]
  │         │    └── variable: column1 [type=int]
- │         ├── function: variance [type=decimal]
+ │         ├── variance [type=decimal]
  │         │    └── variable: column1 [type=int]
- │         ├── function: bool_and [type=bool]
+ │         ├── bool-and [type=bool]
  │         │    └── variable: column12 [type=bool]
- │         ├── function: bool_or [type=bool]
+ │         ├── bool-or [type=bool]
  │         │    └── variable: column12 [type=bool]
- │         └── function: xor_agg [type=bytes]
+ │         └── xor-agg [type=bytes]
  │              └── variable: column15 [type=bytes]
  └── projections
       ├── variable: column2 [type=int]
@@ -175,7 +175,7 @@ group-by
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
-      └── function: array_agg [type=int[]]
+      └── array-agg [type=int[]]
            └── variable: column5 [type=int]
 
 build
@@ -190,7 +190,7 @@ group-by
  │    └── projections
  │         └── variable: kv.v [type=int]
  └── aggregations
-      └── function: json_agg [type=jsonb]
+      └── json-agg [type=jsonb]
            └── variable: kv.v [type=int]
 
 build
@@ -205,7 +205,7 @@ group-by
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
-      └── function: jsonb_agg [type=jsonb]
+      └── jsonb-agg [type=jsonb]
            └── variable: column1 [type=int]
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
@@ -263,7 +263,7 @@ group-by
  │         └── cast: string [type=string]
  │              └── null [type=unknown]
  └── aggregations
-      └── function: array_agg [type=string[]]
+      └── array-agg [type=string[]]
            └── variable: column1 [type=string]
 
 build
@@ -288,7 +288,7 @@ project
            │         │    │    └── projections
            │         │    │         └── const: 1 [type=int]
            │         │    └── aggregations
-           │         │         └── function: max [type=int]
+           │         │         └── max [type=int]
            │         │              └── variable: column5 [type=int]
            │         └── projections
            │              └── coalesce [type=int]
@@ -321,7 +321,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
@@ -342,7 +342,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
@@ -403,7 +403,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -423,7 +423,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -443,7 +443,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -463,7 +463,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -485,7 +485,7 @@ project
  │    │         ├── variable: kv.v [type=int]
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
@@ -508,7 +508,7 @@ project
  │    │         ├── variable: kv.v [type=int]
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
@@ -531,7 +531,7 @@ project
  │    │         └── function: upper [type=string]
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column6 [type=int]
       └── variable: column5 [type=string]
@@ -552,7 +552,7 @@ project
  │    │    └── projections
  │    │         └── const: 3 [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       └── variable: column6 [type=int]
 
@@ -572,7 +572,7 @@ project
  │    │         └── function: length [type=int]
  │    │              └── const: 'abc' [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       └── variable: column6 [type=int]
 
@@ -592,7 +592,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── function: upper [type=string]
@@ -622,7 +622,7 @@ project
  │    │              ├── variable: kv.k [type=int]
  │    │              └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column6 [type=int]
       └── variable: column5 [type=int]
@@ -645,7 +645,7 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── plus [type=int]
@@ -698,7 +698,7 @@ project
  │    │         │    └── variable: kv.w [type=int]
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count [type=int]
+ │         └── count [type=int]
  │              └── variable: kv.k [type=int]
  └── projections
       ├── variable: count_1 [type=int]
@@ -712,7 +712,7 @@ group-by
  ├── values
  │    └── tuple [type=tuple{}]
  └── aggregations
-      └── function: count_rows [type=int]
+      └── count-rows [type=int]
 
 build
 SELECT COUNT(k) from kv
@@ -726,7 +726,7 @@ group-by
  │    └── projections
  │         └── variable: kv.k [type=int]
  └── aggregations
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: kv.k [type=int]
 
 build
@@ -741,7 +741,7 @@ group-by
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: column1 [type=int]
 
 build
@@ -756,7 +756,7 @@ group-by
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: column5 [type=int]
 
 build
@@ -781,7 +781,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: kv.k [type=int]
 
 build
@@ -801,7 +801,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: kv.k [type=int]
 
 build
@@ -821,7 +821,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: kv.k [type=int]
 
 build
@@ -843,7 +843,7 @@ sort
       │    │         ├── variable: kv.v [type=int]
       │    │         └── variable: kv.k [type=int]
       │    └── aggregations
-      │         └── function: count [type=int]
+      │         └── count [type=int]
       │              └── variable: kv.k [type=int]
       └── projections
            ├── variable: kv.v [type=int]
@@ -869,7 +869,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: sum [type=decimal]
+           └── sum [type=decimal]
                 └── variable: kv.k [type=int]
 
 build
@@ -889,7 +889,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: kv.k [type=int]
 
 build
@@ -905,10 +905,10 @@ group-by
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
-      ├── function: count_rows [type=int]
-      ├── function: count [type=int]
+      ├── count-rows [type=int]
+      ├── count [type=int]
       │    └── variable: kv.k [type=int]
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -927,7 +927,7 @@ group-by
  │              ├── variable: kv.w [type=int]
  │              └── variable: kv.s [type=string]
  └── aggregations
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: column5 [type=tuple{int, int, int, string}]
 
 build
@@ -946,7 +946,7 @@ limit
  │    │              ├── variable: kv.k [type=int]
  │    │              └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count [type=int]
+ │         └── count [type=int]
  │              └── variable: column5 [type=tuple{int, int}]
  └── const: 1 [type=int]
 
@@ -966,7 +966,7 @@ offset
  │    │              ├── variable: kv.k [type=int]
  │    │              └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count [type=int]
+ │         └── count [type=int]
  │              └── variable: column5 [type=tuple{int, int}]
  └── const: 1 [type=int]
 
@@ -985,9 +985,9 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.v [type=int]
  │    └── aggregations
- │         ├── function: count [type=int]
+ │         ├── count [type=int]
  │         │    └── variable: kv.k [type=int]
- │         └── function: count [type=int]
+ │         └── count [type=int]
  │              └── variable: kv.v [type=int]
  └── projections
       └── plus [type=int]
@@ -1010,9 +1010,9 @@ group-by
  │              ├── null [type=unknown]
  │              └── null [type=unknown]
  └── aggregations
-      ├── function: count [type=int]
+      ├── count [type=int]
       │    └── variable: column1 [type=int]
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: column3 [type=tuple{unknown, unknown}]
 
 build
@@ -1028,13 +1028,13 @@ group-by
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
-      ├── function: min [type=int]
+      ├── min [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: max [type=int]
+      ├── max [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: min [type=int]
+      ├── min [type=int]
       │    └── variable: kv.v [type=int]
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -1055,13 +1055,13 @@ group-by
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
-      ├── function: min [type=int]
+      ├── min [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: max [type=int]
+      ├── max [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: min [type=int]
+      ├── min [type=int]
       │    └── variable: kv.v [type=int]
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -1077,9 +1077,9 @@ group-by
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.s [type=string]
  └── aggregations
-      ├── function: array_agg [type=int[]]
+      ├── array-agg [type=int[]]
       │    └── variable: kv.k [type=int]
-      └── function: array_agg [type=string[]]
+      └── array-agg [type=string[]]
            └── variable: kv.s [type=string]
 
 build
@@ -1099,7 +1099,7 @@ group-by
  │    └── projections
  │         └── variable: kv.s [type=string]
  └── aggregations
-      └── function: array_agg [type=string[]]
+      └── array-agg [type=string[]]
            └── variable: kv.s [type=string]
 
 build
@@ -1115,13 +1115,13 @@ group-by
  │         ├── variable: kv.k [type=int]
  │         └── variable: kv.v [type=int]
  └── aggregations
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: kv.k [type=int]
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: kv.v [type=int]
-      ├── function: sum [type=decimal]
+      ├── sum [type=decimal]
       │    └── variable: kv.k [type=int]
-      └── function: sum [type=decimal]
+      └── sum [type=decimal]
            └── variable: kv.v [type=int]
 
 build
@@ -1139,13 +1139,13 @@ group-by
  │         └── cast: decimal [type=decimal]
  │              └── variable: kv.v [type=int]
  └── aggregations
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: column5 [type=decimal]
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: column7 [type=decimal]
-      ├── function: sum [type=decimal]
+      ├── sum [type=decimal]
       │    └── variable: column5 [type=decimal]
-      └── function: sum [type=decimal]
+      └── sum [type=decimal]
            └── variable: column7 [type=decimal]
 
 build
@@ -1163,9 +1163,9 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.v [type=int]
  │    └── aggregations
- │         ├── function: avg [type=decimal]
+ │         ├── avg [type=decimal]
  │         │    └── variable: kv.k [type=int]
- │         └── function: max [type=int]
+ │         └── max [type=int]
  │              └── variable: kv.v [type=int]
  └── projections
       └── plus [type=decimal]
@@ -1197,9 +1197,9 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.v [type=int]
  │    └── aggregations
- │         ├── function: avg [type=decimal]
+ │         ├── avg [type=decimal]
  │         │    └── variable: kv.k [type=int]
- │         └── function: max [type=int]
+ │         └── max [type=int]
  │              └── variable: kv.v [type=int]
  └── projections
       └── plus [type=decimal]
@@ -1233,13 +1233,13 @@ group-by
  ├── scan abc
  │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  └── aggregations
-      ├── function: min [type=string]
+      ├── min [type=string]
       │    └── variable: abc.a [type=string]
-      ├── function: min [type=float]
+      ├── min [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: min [type=bool]
+      ├── min [type=bool]
       │    └── variable: abc.c [type=bool]
-      └── function: min [type=decimal]
+      └── min [type=decimal]
            └── variable: abc.d [type=decimal]
 
 build
@@ -1250,13 +1250,13 @@ group-by
  ├── scan abc
  │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  └── aggregations
-      ├── function: max [type=string]
+      ├── max [type=string]
       │    └── variable: abc.a [type=string]
-      ├── function: max [type=float]
+      ├── max [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: max [type=bool]
+      ├── max [type=bool]
       │    └── variable: abc.c [type=bool]
-      └── function: max [type=decimal]
+      └── max [type=decimal]
            └── variable: abc.d [type=decimal]
 
 build
@@ -1272,13 +1272,13 @@ group-by
  │         ├── variable: abc.b [type=float]
  │         └── variable: abc.d [type=decimal]
  └── aggregations
-      ├── function: avg [type=float]
+      ├── avg [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: sum [type=float]
+      ├── sum [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: avg [type=decimal]
+      ├── avg [type=decimal]
       │    └── variable: abc.d [type=decimal]
-      └── function: sum [type=decimal]
+      └── sum [type=decimal]
            └── variable: abc.d [type=decimal]
 
 # Verify summing of intervals
@@ -1300,7 +1300,7 @@ group-by
  ├── scan intervals
  │    └── columns: intervals.a:1(interval!null)
  └── aggregations
-      └── function: sum [type=interval]
+      └── sum [type=interval]
            └── variable: intervals.a [type=interval]
 
 build
@@ -1371,7 +1371,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: min [type=int]
+      └── min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -1394,7 +1394,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: min [type=int]
+      └── min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -1409,7 +1409,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -1429,7 +1429,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.y [type=int]
  └── aggregations
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: xyz.y [type=int]
 
 build
@@ -1449,7 +1449,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.y [type=int]
  └── aggregations
-      └── function: min [type=int]
+      └── min [type=int]
            └── variable: xyz.y [type=int]
 
 build
@@ -1473,7 +1473,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: min [type=int]
+      └── min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -1497,7 +1497,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: max [type=int]
+      └── max [type=int]
            └── variable: xyz.x [type=int]
 
 
@@ -1520,11 +1520,11 @@ project
  │    │         │    └── variable: xyz.y [type=int]
  │    │         └── variable: xyz.z [type=float]
  │    └── aggregations
- │         ├── function: variance [type=decimal]
+ │         ├── variance [type=decimal]
  │         │    └── variable: xyz.x [type=int]
- │         ├── function: variance [type=decimal]
+ │         ├── variance [type=decimal]
  │         │    └── variable: column5 [type=decimal]
- │         └── function: variance [type=float]
+ │         └── variance [type=float]
  │              └── variable: xyz.z [type=float]
  └── projections
       ├── variable: column4 [type=decimal]
@@ -1550,7 +1550,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: variance [type=decimal]
+      └── variance [type=decimal]
            └── variable: xyz.x [type=int]
 
 build
@@ -1570,11 +1570,11 @@ project
  │    │         │    └── variable: xyz.y [type=int]
  │    │         └── variable: xyz.z [type=float]
  │    └── aggregations
- │         ├── function: stddev [type=decimal]
+ │         ├── std-dev [type=decimal]
  │         │    └── variable: xyz.x [type=int]
- │         ├── function: stddev [type=decimal]
+ │         ├── std-dev [type=decimal]
  │         │    └── variable: column5 [type=decimal]
- │         └── function: stddev [type=float]
+ │         └── std-dev [type=float]
  │              └── variable: xyz.z [type=float]
  └── projections
       ├── variable: column4 [type=decimal]
@@ -1600,7 +1600,7 @@ group-by
  │    └── projections
  │         └── variable: xyz.x [type=int]
  └── aggregations
-      └── function: stddev [type=decimal]
+      └── std-dev [type=decimal]
            └── variable: xyz.x [type=int]
 
 build
@@ -1622,11 +1622,11 @@ project
  │    │         └── cast: decimal [type=decimal]
  │    │              └── const: 3 [type=decimal]
  │    └── aggregations
- │         ├── function: avg [type=decimal]
+ │         ├── avg [type=decimal]
  │         │    └── variable: column1 [type=int]
- │         ├── function: avg [type=float]
+ │         ├── avg [type=float]
  │         │    └── variable: column4 [type=float]
- │         └── function: avg [type=decimal]
+ │         └── avg [type=decimal]
  │              └── variable: column7 [type=decimal]
  └── projections
       ├── cast: float [type=float]
@@ -1653,11 +1653,11 @@ group-by
  │         └── cast: decimal [type=decimal]
  │              └── const: 4 [type=decimal]
  └── aggregations
-      ├── function: count [type=int]
+      ├── count [type=int]
       │    └── variable: column1 [type=int]
-      ├── function: count [type=int]
+      ├── count [type=int]
       │    └── variable: column3 [type=float]
-      └── function: count [type=int]
+      └── count [type=int]
            └── variable: column5 [type=decimal]
 
 build
@@ -1677,11 +1677,11 @@ group-by
  │         └── cast: decimal [type=decimal]
  │              └── const: 3 [type=decimal]
  └── aggregations
-      ├── function: sum [type=decimal]
+      ├── sum [type=decimal]
       │    └── variable: column1 [type=int]
-      ├── function: sum [type=float]
+      ├── sum [type=float]
       │    └── variable: column3 [type=float]
-      └── function: sum [type=decimal]
+      └── sum [type=decimal]
            └── variable: column5 [type=decimal]
 
 build
@@ -1701,11 +1701,11 @@ group-by
  │         └── cast: decimal [type=decimal]
  │              └── const: 1 [type=decimal]
  └── aggregations
-      ├── function: variance [type=decimal]
+      ├── variance [type=decimal]
       │    └── variable: column1 [type=int]
-      ├── function: variance [type=float]
+      ├── variance [type=float]
       │    └── variable: column3 [type=float]
-      └── function: variance [type=decimal]
+      └── variance [type=decimal]
            └── variable: column5 [type=decimal]
 
 build
@@ -1725,11 +1725,11 @@ group-by
  │         └── cast: decimal [type=decimal]
  │              └── const: 1 [type=decimal]
  └── aggregations
-      ├── function: stddev [type=decimal]
+      ├── std-dev [type=decimal]
       │    └── variable: column1 [type=int]
-      ├── function: stddev [type=float]
+      ├── std-dev [type=float]
       │    └── variable: column3 [type=float]
-      └── function: stddev [type=decimal]
+      └── std-dev [type=decimal]
            └── variable: column5 [type=decimal]
 
 # Ensure subqueries don't trigger aggregation.
@@ -1757,7 +1757,7 @@ limit
  │                   │         │    └── projections
  │                   │         │         └── const: 0 [type=int]
  │                   │         └── aggregations
- │                   │              └── function: avg [type=decimal]
+ │                   │              └── avg [type=decimal]
  │                   │                   └── variable: column4 [type=int]
  │                   └── variable: column5 [type=decimal]
  └── const: 1 [type=int]
@@ -1786,7 +1786,7 @@ limit
  │                   │         │    └── projections
  │                   │         │         └── variable: xyz.y [type=int]
  │                   │         └── aggregations
- │                   │              └── function: avg [type=decimal]
+ │                   │              └── avg [type=decimal]
  │                   │                   └── variable: xyz.y [type=int]
  │                   └── variable: column7 [type=decimal]
  └── const: 1 [type=int]
@@ -1812,9 +1812,9 @@ group-by
  │    └── projections
  │         └── variable: bools.b [type=bool]
  └── aggregations
-      ├── function: bool_and [type=bool]
+      ├── bool-and [type=bool]
       │    └── variable: bools.b [type=bool]
-      └── function: bool_or [type=bool]
+      └── bool-or [type=bool]
            └── variable: bools.b [type=bool]
 
 
@@ -1859,9 +1859,9 @@ project
  │    │         ├── variable: xor_bytes.a [type=bytes]
  │    │         └── variable: xor_bytes.c [type=int]
  │    └── aggregations
- │         ├── function: xor_agg [type=bytes]
+ │         ├── xor-agg [type=bytes]
  │         │    └── variable: xor_bytes.a [type=bytes]
- │         └── function: xor_agg [type=int]
+ │         └── xor-agg [type=int]
  │              └── variable: xor_bytes.c [type=int]
  └── projections
       ├── function: to_hex [type=string]
@@ -1888,9 +1888,9 @@ sort
       │    │         ├── variable: xor_bytes.a [type=bytes]
       │    │         └── variable: xor_bytes.c [type=int]
       │    └── aggregations
-      │         ├── function: xor_agg [type=bytes]
+      │         ├── xor-agg [type=bytes]
       │         │    └── variable: xor_bytes.a [type=bytes]
-      │         └── function: xor_agg [type=int]
+      │         └── xor-agg [type=int]
       │              └── variable: xor_bytes.c [type=int]
       └── projections
            ├── function: to_hex [type=string]
@@ -1912,7 +1912,7 @@ group-by
  │    └── tuple [type=tuple{bytes}]
  │         └── const: '\x0101' [type=bytes]
  └── aggregations
-      └── function: xor_agg [type=bytes]
+      └── xor-agg [type=bytes]
            └── variable: column1 [type=bytes]
 
 build
@@ -1927,9 +1927,9 @@ group-by
  │    └── projections
  │         └── true [type=bool]
  └── aggregations
-      ├── function: max [type=bool]
+      ├── max [type=bool]
       │    └── variable: column1 [type=bool]
-      └── function: min [type=bool]
+      └── min [type=bool]
            └── variable: column1 [type=bool]
 
 build
@@ -1945,7 +1945,7 @@ group-by
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
  └── aggregations
-      └── function: concat_agg [type=string]
+      └── concat-agg [type=string]
            └── variable: kv.s [type=string]
 
 build
@@ -1961,7 +1961,7 @@ group-by
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
  └── aggregations
-      └── function: json_agg [type=jsonb]
+      └── json-agg [type=jsonb]
            └── variable: kv.s [type=string]
 
 build
@@ -1977,7 +1977,7 @@ group-by
  │         ├── variable: kv.s [type=string]
  │         └── variable: kv.k [type=int]
  └── aggregations
-      └── function: jsonb_agg [type=jsonb]
+      └── jsonb-agg [type=jsonb]
            └── variable: kv.s [type=string]
 
 exec-ddl
@@ -2050,7 +2050,7 @@ project
  │    │         ├── variable: ab.b [type=int]
  │    │         └── variable: xy.y [type=string]
  │    └── aggregations
- │         └── function: min [type=string]
+ │         └── min [type=string]
  │              └── variable: xy.y [type=string]
  └── projections
       ├── variable: column6 [type=string]
@@ -2075,7 +2075,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── variable: kv.k [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: kv.k [type=int]
 
 build
@@ -2094,7 +2094,7 @@ sort
       │    └── projections
       │         └── variable: kv.v [type=int]
       └── aggregations
-           └── function: count_rows [type=int]
+           └── count-rows [type=int]
 
 build
 SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
@@ -2113,7 +2113,7 @@ sort
       │         ├── variable: kv.v [type=int]
       │         └── const: 1 [type=int]
       └── aggregations
-           └── function: count [type=int]
+           └── count [type=int]
                 └── variable: column5 [type=int]
 
 build
@@ -2165,7 +2165,7 @@ project
  │    │         │    └── variable: t.public.kv.w [type=int]
  │    │         └── variable: t.public.kv.w [type=int]
  │    └── aggregations
- │         └── function: sum [type=decimal]
+ │         └── sum [type=decimal]
  │              └── variable: t.public.kv.w [type=int]
  └── projections
       ├── variable: column6 [type=decimal]
@@ -2192,7 +2192,7 @@ project
  │    │         │    └── variable: t.public.kv.w [type=int]
  │    │         └── variable: t.public.kv.w [type=int]
  │    └── aggregations
- │         └── function: sum [type=decimal]
+ │         └── sum [type=decimal]
  │              └── variable: t.public.kv.w [type=int]
  └── projections
       ├── variable: column7 [type=decimal]
@@ -2614,7 +2614,7 @@ project
  │    │              ├── variable: kv.v [type=int]
  │    │              └── const: 2 [type=int]
  │    └── aggregations
- │         └── function: min [type=int]
+ │         └── min [type=int]
  │              └── variable: column6 [type=int]
  └── projections
       └── plus [type=int]
@@ -2636,7 +2636,7 @@ project
  │    │    └── projections
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── projections
       └── variable: column5 [type=int]
 
@@ -2656,7 +2656,7 @@ project
  │    │         └── function: upper [type=string]
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count [type=int]
+ │         └── count [type=int]
  │              └── variable: column5 [type=string]
  └── projections
       └── variable: column6 [type=int]
@@ -2687,7 +2687,7 @@ project
  │    │         ├── variable: kv.s [type=string]
  │    │         └── variable: abc.d [type=decimal]
  │    └── aggregations
- │         └── function: sum [type=decimal]
+ │         └── sum [type=decimal]
  │              └── variable: abc.d [type=decimal]
  └── projections
       └── variable: column9 [type=decimal]

@@ -268,7 +268,7 @@ project
  │    │    ├── scan a
  │    │    │    └── columns: a.i:2(int) a.f:3(float)
  │    │    └── aggregations [outer=(3)]
- │    │         └── function: sum [type=float, outer=(3)]
+ │    │         └── sum [type=float, outer=(3)]
  │    │              └── variable: a.f [type=float, outer=(3)]
  │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
  │         └── eq [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
@@ -729,7 +729,7 @@ group-by
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── const: 1 [type=int]
  └── aggregations
-      └── function: count_rows [type=int]
+      └── count-rows [type=int]
 
 # Push down into GroupBy with no aggregations.
 opt
@@ -771,7 +771,7 @@ select
  │    │              ├── variable: a.i [type=int, outer=(2)]
  │    │              └── variable: a.k [type=int, outer=(1)]
  │    └── aggregations [outer=(4)]
- │         └── function: max [type=string, outer=(4)]
+ │         └── max [type=string, outer=(4)]
  │              └── variable: a.s [type=string, outer=(4)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
       └── eq [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
@@ -792,7 +792,7 @@ select
  │    ├── keys: ()
  │    ├── scan a
  │    └── aggregations
- │         └── function: count_rows [type=int]
+ │         └── count-rows [type=int]
  └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0])]
       ├── lt [type=bool]
       │    ├── function: now [type=timestamptz]

@@ -97,3 +97,27 @@ var UnaryOpReverseMap = [...]tree.UnaryOperator{
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
 }
+
+// AggregateOpReverseMap maps from an optimizer operator type to the name of an
+// aggregation function.
+var AggregateOpReverseMap = [...]string{
+	ArrayAggOp:      "array_agg",
+	AvgOp:           "avg",
+	BoolAndOp:       "bool_and",
+	BoolOrOp:        "bool_or",
+	ConcatAggOp:     "concat_agg",
+	CountOp:         "count",
+	CountRowsOp:     "count_rows",
+	MaxOp:           "max",
+	MinOp:           "min",
+	SumIntOp:        "sum_int",
+	SumOp:           "sum",
+	SqrDiffOp:       "sqrdiff",
+	FinalVarianceOp: "final_variance",
+	FinalStdDevOp:   "final_stddev",
+	VarianceOp:      "variance",
+	StdDevOp:        "stddev",
+	XorAggOp:        "xor_agg",
+	JsonAggOp:       "json_agg",
+	JsonbAggOp:      "jsonb_agg",
+}
