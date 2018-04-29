@@ -47,14 +47,6 @@
 </span></td></tr>
 <tr><td><code>count_rows() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of rows.</p>
 </span></td></tr>
-<tr><td><code>final_stddev(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation from the selected locally-computed squared difference values.</p>
-</span></td></tr>
-<tr><td><code>final_stddev(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation from the selected locally-computed squared difference values.</p>
-</span></td></tr>
-<tr><td><code>final_variance(arg1: <a href="decimal.html">decimal</a>, arg2: <a href="decimal.html">decimal</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the variance from the selected locally-computed squared difference values.</p>
-</span></td></tr>
-<tr><td><code>final_variance(arg1: <a href="float.html">float</a>, arg2: <a href="float.html">float</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the variance from the selected locally-computed squared difference values.</p>
-</span></td></tr>
 <tr><td><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>
 </span></td></tr>
 <tr><td><code>jsonb_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>

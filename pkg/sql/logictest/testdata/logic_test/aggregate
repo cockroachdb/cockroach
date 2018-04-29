@@ -1484,3 +1484,7 @@ render                    ·            ·
                 └── scan  ·            ·
 ·                         table        xy@primary
 ·                         spans        ALL
+
+# Regression test for #23798 until #10495 is fixed.
+statement error function reserved for internal use
+SELECT final_variance(1.2, 1.2, 123) FROM kv
