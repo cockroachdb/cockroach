@@ -25,43 +25,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type cancelQueryNode struct {
-	queryID  tree.TypedExpr
+type cancelQueriesNode struct {
+	rows     planNode
 	ifExists bool
 }
 
-func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
-	typedQueryID, err := p.analyzeExpr(
-		ctx,
-		n.ID,
-		nil,
-		tree.IndexedVarHelper{},
-		types.String,
-		true, /* requireType */
-		"CANCEL QUERY",
-	)
+func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (planNode, error) {
+	rows, err := p.newPlan(ctx, n.Queries, []types.T{types.String})
 	if err != nil {
 		return nil, err
 	}
+	cols := planColumns(rows)
+	if len(cols) != 1 {
+		return nil, errors.Errorf("CANCEL QUERIES expects a single column source, got %d columns", len(cols))
+	}
+	if !cols[0].Typ.Equivalent(types.String) {
+		return nil, errors.Errorf("CANCEL QUERIES requires string values, not type %s", cols[0].Typ)
+	}
 
-	return &cancelQueryNode{
-		queryID:  typedQueryID,
+	return &cancelQueriesNode{
+		rows:     rows,
 		ifExists: n.IfExists,
 	}, nil
 }
 
-func (n *cancelQueryNode) startExec(params runParams) error {
-	statusServer := params.extendedEvalCtx.StatusServer
+func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
+	// TODO(knz): instead of performing the cancels sequentially,
+	// accumulate all the query IDs and then send batches to each of the
+	// nodes.
 
-	queryIDDatum, err := n.queryID.Eval(params.EvalContext())
-	if err != nil {
-		return err
+	if ok, err := n.rows.Next(params); err != nil || !ok {
+		return ok, err
 	}
 
-	queryIDString := tree.AsStringWithFlags(queryIDDatum, tree.FmtBareStrings)
+	statusServer := params.extendedEvalCtx.StatusServer
+	queryIDDatum := n.rows.Values()[0].(*tree.DString)
+
+	queryIDString := string(*queryIDDatum)
 	queryID, err := StringToClusterWideID(queryIDString)
 	if err != nil {
-		return errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
+		return false, errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
 	}
 
 	// Get the lowest 32 bits of the query ID.
@@ -75,16 +78,18 @@ func (n *cancelQueryNode) startExec(params runParams) error {
 
 	response, err := statusServer.CancelQuery(params.ctx, request)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if !response.Canceled && !n.ifExists {
-		return fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
+		return false, fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
 	}
 
-	return nil
+	return true, nil
 }
 
-func (n *cancelQueryNode) Next(runParams) (bool, error) { return false, nil }
-func (*cancelQueryNode) Values() tree.Datums            { return nil }
-func (*cancelQueryNode) Close(context.Context)          {}
+func (*cancelQueriesNode) Values() tree.Datums { return nil }
+
+func (n *cancelQueriesNode) Close(ctx context.Context) {
+	n.rows.Close(ctx)
+}
