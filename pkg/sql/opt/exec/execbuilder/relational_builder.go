@@ -127,6 +127,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.SortOp:
 		ep, err = b.buildSort(ev)
 
+	case opt.WindowByOp:
+		ep, err = b.buildWindowBy(ev)
+
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
@@ -470,6 +473,30 @@ func (b *Builder) buildSort(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
+func (b *Builder) buildWindowBy(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	def := ev.Private().(*memo.WindowByDef)
+	if !def.PartitionCols.Empty() || ev.Child(1).Operator() != opt.RowNumberOp {
+		panic("window functions besides WITH ORDINALITY are not implemented")
+	}
+
+	node, err := b.factory.ConstructWindowBy(input.root)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// We have one additional ordinality column, which is ordered at the end of
+	// the list.
+	outputCols := input.outputCols.Copy()
+	outputCols.Set(int(def.ColID), outputCols.Len())
+
+	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan

@@ -536,6 +536,11 @@ define Coalesce {
     Args ExprList
 }
 
+# RowNumber assigns an increasing integer, starting from 1, to successive rows
+# in a partition.
+[Scalar, Window]
+define RowNumber {}
+
 # UnsupportedExpr is used for interfacing with the old planner code. It can
 # encapsulate a TypedExpr that is otherwise not supported by the optimizer.
 [Scalar]

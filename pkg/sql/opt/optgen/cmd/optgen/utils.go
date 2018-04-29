@@ -58,6 +58,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.ScanOpDef"
 	case "LookupJoinDef":
 		return "*memo.LookupJoinDef"
+	case "WindowByDef":
+		return "*memo.WindowByDef"
 	case "SetOpColMap":
 		return "*memo.SetOpColMap"
 	case "Datum":

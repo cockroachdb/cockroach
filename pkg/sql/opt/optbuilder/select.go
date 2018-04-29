@@ -39,6 +39,11 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 		// Overwrite output properties with any alias information.
 		b.renameSource(source.As, outScope)
+
+		if source.Ordinality {
+			outScope = b.buildOrdinality(outScope)
+		}
+
 		return outScope
 
 	case *tree.JoinTableExpr:
@@ -133,6 +138,36 @@ func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (
 	}
 
 	outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef))
+	return outScope
+}
+
+////////
+func (b *Builder) buildOrdinality(inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+
+	col := b.synthesizeColumn(
+		outScope,
+		"ordinality",
+		types.Int,
+		nil,
+		0,
+	)
+
+	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
+	// for the semantics around WITH ORDINALITY and ordering.
+
+	rank := b.factory.ConstructRowNumber()
+
+	outScope.group = b.factory.ConstructWindowBy(
+		inScope.group,
+		rank,
+		b.factory.InternWindowByDef(&memo.WindowByDef{
+			Ordering:      inScope.physicalProps.Ordering,
+			PartitionCols: opt.ColSet{},
+			ColID:         col.id,
+		}),
+	)
+
 	return outScope
 }
 

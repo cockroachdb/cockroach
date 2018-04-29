@@ -371,6 +371,26 @@ func (ee *execEngine) ConstructSort(
 	}, nil
 }
 
+// ConstructWindowBy is part of the exec.Factory interface.
+func (ee *execEngine) ConstructWindowBy(input exec.Node) (exec.Node, error) {
+	plan := input.(planNode)
+	inputColumns := planColumns(plan)
+	cols := make(sqlbase.ResultColumns, len(inputColumns)+1)
+	copy(cols, inputColumns)
+	cols[len(cols)-1] = sqlbase.ResultColumn{
+		Name: "ordinality",
+		Typ:  types.Int,
+	}
+	return &ordinalityNode{
+		source:  plan,
+		columns: cols,
+		run: ordinalityRun{
+			row:    make(tree.Datums, len(cols)),
+			curCnt: 1,
+		},
+	}, nil
+}
+
 // ConstructLimit is part of the exec.Factory interface.
 func (ee *execEngine) ConstructLimit(
 	input exec.Node, limit int64, offset int64,

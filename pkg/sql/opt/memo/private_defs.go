@@ -108,6 +108,51 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool
 	return true
 }
 
+// WindowByDef defines the value of the Def private field of the WindowBy
+// operator.
+type WindowByDef struct {
+	// Ordering denotes the required ordering of the input. This is not required
+	// for general window functions, only for WITH ORDINALITY in the cases where
+	// ordering must be inherited from the input source.
+	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation.
+	Ordering Ordering
+
+	// PartitionCols is the set of columns this window function partitions over.
+	// In the case of WITH ORDINALITY it is always the empty set.
+	PartitionCols opt.ColSet
+
+	// ColID holds the id of the column introduced by this window function.
+	// TODO(justin): this needs to hold multiple IDs once we can compute multiple
+	// functions over a single window.
+	ColID opt.ColumnID
+}
+
+// CanProvideOrdering returns true if the windowing operator returns rows
+// that can satisfy the given required ordering.
+func (w *WindowByDef) CanProvideOrdering(required Ordering) bool {
+	if !w.PartitionCols.Empty() {
+		panic("window functions besides WITH ORDINALITY are not implemented")
+	}
+	// The window function can provide the same ordering it requires of its input.
+
+	// In addition, right now, we only support WITH ORDINALITY.  By construction,
+	// the ordinality is a key, and the output is always ordered ascending by it,
+	// so any ordering columns after an ascending ordinality are irrelevant.
+	// TODO(justin): This could probably be generalized to some helper - when we
+	// are checking if an ordering can be satisfied in this way, we can return
+	// true early if the set of columns we have iterated over are a key.
+	ordCol := opt.MakeOrderingColumn(w.ColID, false)
+	for i, col := range required {
+		if col == ordCol {
+			return true
+		}
+		if i >= len(w.Ordering) || col != w.Ordering[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // SetOpColMap defines the value of the ColMap private field of the set
 // operators: Union, Intersect, Except, UnionAll, IntersectAll and ExceptAll.
 // It matches columns from the left and right inputs of the operator

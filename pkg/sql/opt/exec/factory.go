@@ -96,6 +96,10 @@ type Factory interface {
 	// by the input node.
 	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
 
+	// ConstructWindowBy returns a node that appends one or more columns to each
+	// row, corresponding to the computation of some window function.
+	ConstructWindowBy(input Node) (Node, error)
+
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If only an offset is desired, limit should be
 	// math.MaxInt64.

@@ -317,3 +317,13 @@ define Offset {
 define Max1Row {
     Input Expr
 }
+
+# WindowBy represents a window function.
+# TODO(justin): Func should actually be a list of functions, when we truly have
+# window functions. At time of writing, this is only used for WITH ORDINALITY.
+[Relational]
+define WindowBy {
+    Input    Expr
+    Function Expr
+    Def      WindowByDef
+}

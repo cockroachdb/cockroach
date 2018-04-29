@@ -260,6 +260,9 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 		case *ScanOpDef:
 			f.formatScanPrivate(t, false /* short */)
 
+		case *WindowByDef:
+			fmt.Fprintf(f.buf, " ordering=%s", t.Ordering)
+
 		case opt.ColumnID:
 			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 

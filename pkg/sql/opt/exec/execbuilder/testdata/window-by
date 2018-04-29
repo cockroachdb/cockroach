@@ -1,0 +1,72 @@
+# tests adapted from logictest -- ordinality
+
+exec
+SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
+----
+ordinality:int
+1
+2
+
+exec-raw
+CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
+----
+
+exec
+SELECT * FROM foo WITH ORDINALITY
+----
+ordinality:int
+1
+2
+
+exec
+SELECT * FROM foo WITH ORDINALITY LIMIT 1
+----
+ordinality:int
+1
+
+exec-explain
+SELECT MAX(ordinality) FROM foo WITH ORDINALITY
+----
+group                 0  group       ·            ·                (column3)          ·
+ │                    0  ·           aggregate 0  max(ordinality)  ·                  ·
+ └── render           1  render      ·            ·                ("ordinality")     ·
+      │               1  ·           render 0     "ordinality"     ·                  ·
+      └── ordinality  2  ordinality  ·            ·                (x, "ordinality")  ·
+           └── scan   3  scan        ·            ·                (x)                ·
+·                     3  ·           table        foo@primary      ·                  ·
+·                     3  ·           spans        ALL              ·                  ·
+
+exec
+SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
+----
+ordinality:int  ordinality:int
+1               1
+1               2
+2               1
+2               2
+
+exec-explain
+SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
+----
+render                0  render      ·         ·                 ("ordinality")     ·
+ │                    0  ·           render 0  "ordinality"      ·                  ·
+ └── filter           1  filter      ·         ·                 (x, "ordinality")  ·
+      │               1  ·           filter    "ordinality" > 1  ·                  ·
+      └── ordinality  2  ordinality  ·         ·                 (x, "ordinality")  ·
+           └── scan   3  scan        ·         ·                 (x)                ·
+·                     3  ·           table     foo@primary       ·                  ·
+·                     3  ·           spans     ALL               ·                  ·
+
+exec-explain
+SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
+----
+render                     0  render      ·         ·                 ("ordinality")     ·
+ │                         0  ·           render 0  "ordinality"      ·                  ·
+ └── sort                  1  sort        ·         ·                 (x, "ordinality")  -"ordinality"
+      │                    1  ·           order     -"ordinality"     ·                  ·
+      └── filter           2  filter      ·         ·                 (x, "ordinality")  ·
+           │               2  ·           filter    "ordinality" > 1  ·                  ·
+           └── ordinality  3  ordinality  ·         ·                 (x, "ordinality")  ·
+                └── scan   4  scan        ·         ·                 (x)                ·
+·                          4  ·           table     foo@primary       ·                  ·
+·                          4  ·           spans     ALL               ·                  ·

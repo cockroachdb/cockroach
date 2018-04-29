@@ -203,6 +203,25 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+func (ps *privateStorage) internWindowByDef(def *WindowByDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	if !def.PartitionCols.Empty() {
+		panic("non-empty partition cols not yet supported")
+	}
+	ps.keyBuf.Reset()
+	for _, col := range def.Ordering {
+		ps.keyBuf.writeVarint(int64(col))
+	}
+	ps.keyBuf.writeUvarint(uint64(def.ColID))
+
+	typ := (*WindowByDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internSetOpColMap adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internSetOpColMap always
