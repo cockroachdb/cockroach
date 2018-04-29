@@ -1683,3 +1683,7 @@ query R
 SELECT MAX(i) * (1/j) * (ROW_NUMBER() OVER (ORDER BY MAX(i))) FROM (SELECT 1 AS i, 2 AS j) GROUP BY j
 ----
 0.5
+
+# regression test for #23798 until #10495 is fixed.
+statement error function reserved for internal use
+SELECT final_variance(1.2, 1.2, 123) OVER (PARTITION BY k) FROM kv

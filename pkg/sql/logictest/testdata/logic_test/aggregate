@@ -1724,3 +1724,7 @@ join                       0  join        ·               ·                   
                 │          4  ·           spans           ALL                      ·                            ·
                 └── scan   4  scan        ·               ·                        (x[omitted], y, z)           ·
 ·                          4  ·           table           group_ord@primary        ·                            ·
+
+# Regression test for #23798 until #10495 is fixed.
+statement error function reserved for internal use
+SELECT final_variance(1.2, 1.2, 123) FROM kv

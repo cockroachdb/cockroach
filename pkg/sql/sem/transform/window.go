@@ -14,7 +14,9 @@
 
 package transform
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 var _ tree.Visitor = &ContainsWindowVisitor{}
 
