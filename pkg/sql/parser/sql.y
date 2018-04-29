@@ -606,7 +606,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <tree.Statement> cancel_stmt
 %type <tree.Statement> cancel_job_stmt
-%type <tree.Statement> cancel_query_stmt
+%type <tree.Statement> cancel_queries_stmt
 %type <tree.Statement> cancel_session_stmt
 
 // SCRUB
@@ -1705,10 +1705,10 @@ copy_from_stmt:
 
 // %Help: CANCEL
 // %Category: Group
-// %Text: CANCEL JOB, CANCEL QUERY, CANCEL SESSION
+// %Text: CANCEL JOB, CANCEL QUERIES, CANCEL SESSION
 cancel_stmt:
   cancel_job_stmt     // EXTEND WITH HELP: CANCEL JOB
-| cancel_query_stmt   // EXTEND WITH HELP: CANCEL QUERY
+| cancel_queries_stmt // EXTEND WITH HELP: CANCEL QUERIES
 | cancel_session_stmt // EXTEND WITH HELP: CANCEL SESSION
 | CANCEL error        // SHOW HELP: CANCEL
 
@@ -1723,20 +1723,41 @@ cancel_job_stmt:
   }
 | CANCEL JOB error // SHOW HELP: CANCEL JOB
 
-// %Help: CANCEL QUERY - cancel a running query
+// %Help: CANCEL QUERIES - cancel running queries
 // %Category: Misc
-// %Text: CANCEL QUERY [IF EXISTS] <queryid>
+// %Text:
+// CANCEL QUERIES [IF EXISTS] <selectclause>
+// CANCEL QUERY [IF EXISTS] <expr>
 // %SeeAlso: SHOW QUERIES
-cancel_query_stmt:
+cancel_queries_stmt:
   CANCEL QUERY a_expr
   {
-    $$.val = &tree.CancelQuery{ID: $3.expr(), IfExists: false}
+    $$.val = &tree.CancelQueries{
+      Queries: &tree.Select{
+        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$3.expr()}}}},
+      },
+      IfExists: false,
+    }
   }
 | CANCEL QUERY IF EXISTS a_expr
   {
-    $$.val = &tree.CancelQuery{ID: $5.expr(), IfExists: true}
+    $$.val = &tree.CancelQueries{
+      Queries: &tree.Select{
+        Select: &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: tree.Exprs{$5.expr()}}}},
+      },
+      IfExists: true,
+    }
   }
-| CANCEL QUERY error // SHOW HELP: CANCEL QUERY
+| CANCEL QUERY error // SHOW HELP: CANCEL QUERIES
+| CANCEL QUERIES select_stmt
+  {
+    $$.val = &tree.CancelQueries{Queries: $3.slct(), IfExists: false}
+  }
+| CANCEL QUERIES IF EXISTS select_stmt
+  {
+    $$.val = &tree.CancelQueries{Queries: $5.slct(), IfExists: true}
+  }
+| CANCEL QUERIES error // SHOW HELP: CANCEL QUERIES
 
 // %Help: CANCEL SESSION - cancel an open session
 // %Category: Misc
@@ -2848,7 +2869,7 @@ show_constraints_stmt:
 // %Help: SHOW QUERIES - list running queries
 // %Category: Misc
 // %Text: SHOW [CLUSTER | LOCAL] QUERIES
-// %SeeAlso: CANCEL QUERY
+// %SeeAlso: CANCEL QUERIES
 show_queries_stmt:
   SHOW QUERIES
   {
