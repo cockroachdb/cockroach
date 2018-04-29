@@ -14,7 +14,10 @@
 
 package transform
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 var _ tree.Visitor = &ContainsWindowVisitor{}
 
@@ -49,4 +52,42 @@ func (v *ContainsWindowVisitor) ContainsWindowFunc(expr tree.Expr) bool {
 		return ret
 	}
 	return false
+}
+
+var _ tree.Visitor = &WindowAggCheckVisitor{}
+
+// WindowAggCheckVisitor checks if walked expressions contain valid aggregations.
+type WindowAggCheckVisitor struct {
+	err error
+}
+
+// VisitPre satisfies the Visitor interface.
+func (v *WindowAggCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+	switch t := expr.(type) {
+	case *tree.FuncExpr:
+		if t.GetAggregateConstructor() != nil && len(t.Exprs) > 1 {
+			v.err = pgerror.UnimplementedWithIssueError(10495,
+				"aggregate functions with multiple arguments are not supported yet")
+			return false, expr
+		}
+	case *tree.Subquery:
+		return false, expr
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (*WindowAggCheckVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// CheckAggregates determines if aggregates in an Expr are valid.
+func (v *WindowAggCheckVisitor) CheckAggregates(expr tree.Expr) error {
+	if expr != nil {
+		v.err = nil
+		tree.WalkExprConst(v, expr)
+		return v.err
+	}
+	return nil
 }

@@ -185,6 +185,8 @@ var Aggregates = map[string][]tree.Builtin{
 	// Adapted from https://www.johndcook.com/blog/skewness_kurtosis and
 	// https://github.com/cockroachdb/cockroach/pull/17728.
 
+	// TODO(knz): These functions cannot be used yet because of issue #10495.
+
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": {
 		makeAggBuiltin([]types.T{types.Decimal, types.Decimal, types.Int}, types.Decimal, newDecimalFinalVarianceAggregate,

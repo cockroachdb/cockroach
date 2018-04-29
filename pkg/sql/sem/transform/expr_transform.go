@@ -28,6 +28,7 @@ type ExprTransformContext struct {
 	normalizeVisitor      tree.NormalizeVisitor
 	isAggregateVisitor    IsAggregateVisitor
 	containsWindowVisitor ContainsWindowVisitor
+	windowAggCheckVisitor WindowAggCheckVisitor
 }
 
 // NormalizeExpr is a wrapper around EvalContex.NormalizeExpr which
@@ -107,6 +108,12 @@ func (t *ExprTransformContext) AssertNoAggregationOrWindowing(
 // the Parser's embedded visitor.
 func (t *ExprTransformContext) WindowFuncInExpr(expr tree.Expr) bool {
 	return t.containsWindowVisitor.ContainsWindowFunc(expr)
+}
+
+// WindowFuncInExpr determines if an Expr contains valid aggregates, using
+// the Parser's embedded visitor.
+func (t *ExprTransformContext) CheckAggregates(expr tree.Expr) error {
+	return t.windowAggCheckVisitor.CheckAggregates(expr)
 }
 
 // WindowFuncInExprs determines if any of the provided TypedExpr contains a

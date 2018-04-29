@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -476,6 +477,9 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 				// windowFuncHolders at this point, so if we see an aggregate
 				// function in the window renders, it is above a window function.
 				if t.GetAggregateConstructor() != nil {
+					if len(t.Exprs) != 1 {
+						return pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet"), false, nil
+					}
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
 					col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
@@ -812,7 +816,8 @@ type extractWindowFuncsVisitor struct {
 	n *windowNode
 
 	// Avoids allocations.
-	subWindowVisitor transform.ContainsWindowVisitor
+	subWindowVisitor   transform.ContainsWindowVisitor
+	subAggCheckVisitor transform.WindowAggCheckVisitor
 
 	// Persisted visitor state.
 	aggregatesSeen map[*tree.FuncExpr]struct{}
@@ -838,6 +843,11 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 				return false, expr
 			}
 
+			if err := v.subAggCheckVisitor.CheckAggregates(expr); err != nil {
+				v.err = err
+				return false, expr
+			}
+
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
@@ -855,12 +865,19 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
 			return false, f
+
 		case t.GetAggregateConstructor() != nil:
+			if len(t.Exprs) > 1 {
+				v.err = pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet")
+				return false, expr
+			}
 			// If we see an aggregation that is not used in a window function, we save it
 			// in the visitor's seen aggregate set. The aggregate function will remain in
 			// this set until the recursion into its children is complete.
 			v.aggregatesSeen[t] = struct{}{}
 		}
+	case *tree.Subquery:
+		return false, expr
 	}
 	return true, expr
 }
