@@ -37,6 +37,10 @@ func registerDebug(r *registry) {
 				return err
 			}
 
+			if err := c.RunE(ctx, c.Node(node), "sudo apt-get install unzip"); err != nil {
+				return err
+			}
+
 			if err := c.RunE(ctx, c.Node(node), "unzip "+file); err != nil {
 				return err
 			}
@@ -45,7 +49,15 @@ func registerDebug(r *registry) {
 				return err
 			}
 
-			return c.RunE(ctx, c.Node(node), "grep 'server_version' ./debug/gossip/nodes")
+			if err := c.RunE(ctx, c.Node(node), "grep 'server_version' ./debug/gossip/nodes"); err != nil {
+				return err
+			}
+
+			if err := c.RunE(ctx, c.Node(node), "rm -rf debug"); err != nil {
+				return err
+			}
+
+			return c.RunE(ctx, c.Node(node), "rm "+file)
 		}
 
 		// Wait until each nodes has at least 3 replications.
