@@ -115,3 +115,14 @@ user root
 
 statement error pq: user root cannot use password authentication
 ALTER USER root WITH PASSWORD 'foo'
+
+subtest HaveIBeenPwned
+
+statement ok
+SET sql_safe_updates = true;
+
+statement error pq: common password: has been reported in breaches over 50 times
+ALTER USER foo WITH PASSWORD 'test'
+
+statement error pq: common password: has been reported in breaches over 50 times
+CREATE USER foo2 WITH PASSWORD 'blah'

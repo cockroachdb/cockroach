@@ -63,7 +63,7 @@ type alterUserSetPasswordRun struct {
 }
 
 func (n *alterUserSetPasswordNode) startExec(params runParams) error {
-	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve(params.EvalContext().SessionData)
 	if err != nil {
 		return err
 	}
