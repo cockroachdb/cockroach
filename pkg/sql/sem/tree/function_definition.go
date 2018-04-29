@@ -25,23 +25,28 @@ type FunctionDefinition struct {
 	HasOverloadsNeedingRepeatedEvaluation bool
 	// Definition is the set of overloads for this function name.
 	Definition []overloadImpl
+	// Private is set if any of the overloads has Private set.
+	Private bool
 }
 
 // NewFunctionDefinition allocates a function definition corresponding
 // to the given built-in definition.
 func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 	hasRowDependentOverloads := false
+	private := false
 	overloads := make([]overloadImpl, len(def))
 	for i := range def {
 		overloads[i] = &def[i]
 		if def[i].NeedsRepeatedEvaluation {
 			hasRowDependentOverloads = true
 		}
+		private = private || def[i].Private
 	}
 	return &FunctionDefinition{
 		Name: name,
 		HasOverloadsNeedingRepeatedEvaluation: hasRowDependentOverloads,
 		Definition:                            overloads,
+		Private:                               private,
 	}
 }
 
