@@ -1336,7 +1336,7 @@ Initial expression
    │    │    │         ├── variable: a.s [type=string, outer=(4)]
    │    │    │         └── variable: a.x [type=int, outer=(1)]
    │    │    └── aggregations [outer=(1)]
-   │    │         └── function: sum [type=decimal, outer=(1)]
+   │    │         └── sum [type=decimal, outer=(1)]
    │    │              └── variable: a.x [type=int, outer=(1)]
    │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
    │         ├── variable: column6 [type=decimal, outer=(6)]
@@ -1368,7 +1368,7 @@ FilterUnusedScanCols
     │    │    │         ├── variable: a.s [type=string, outer=(4)]
     │    │    │         └── variable: a.x [type=int, outer=(1)]
     │    │    └── aggregations [outer=(1)]
-    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │         └── sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
     │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         ├── variable: column6 [type=decimal, outer=(6)]
@@ -1401,7 +1401,7 @@ EliminateProject
   + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
-    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │         └── sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
     │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         ├── variable: column6 [type=decimal, outer=(6)]
@@ -1425,7 +1425,7 @@ EnsureSelectFilters
     │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
     │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
-    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │         └── sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
   - │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │         ├── variable: column6 [type=decimal, outer=(6)]
@@ -1453,7 +1453,7 @@ FilterUnusedSelectCols
   - │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   - │    │    │    └── keys: (1)
   - │    │    └── aggregations [outer=(1)]
-  - │    │         └── function: sum [type=decimal, outer=(1)]
+  - │    │         └── sum [type=decimal, outer=(1)]
   - │    │              └── variable: a.x [type=int, outer=(1)]
   + │    ├── columns: column6:6(decimal)
   + │    ├── project
@@ -1466,7 +1466,7 @@ FilterUnusedSelectCols
   + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
-  + │    │    │         └── function: sum [type=decimal, outer=(1)]
+  + │    │    │         └── sum [type=decimal, outer=(1)]
   + │    │    │              └── variable: a.x [type=int, outer=(1)]
   + │    │    └── projections [outer=(6)]
   + │    │         └── variable: column6 [type=decimal, outer=(6)]
@@ -1495,7 +1495,7 @@ PushSelectIntoProject
   - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
-  - │    │    │         └── function: sum [type=decimal, outer=(1)]
+  - │    │    │         └── sum [type=decimal, outer=(1)]
   - │    │    │              └── variable: a.x [type=int, outer=(1)]
   + │    │    │    ├── group-by
   + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
@@ -1505,7 +1505,7 @@ PushSelectIntoProject
   + │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    │    │    └── keys: (1)
   + │    │    │    │    └── aggregations [outer=(1)]
-  + │    │    │    │         └── function: sum [type=decimal, outer=(1)]
+  + │    │    │    │         └── sum [type=decimal, outer=(1)]
   + │    │    │    │              └── variable: a.x [type=int, outer=(1)]
   + │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1541,7 +1541,7 @@ EliminateEmptyAnd
     │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
     │    │    │    │    │    └── keys: (1)
     │    │    │    │    └── aggregations [outer=(1)]
-    │    │    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │    │    │         └── sum [type=decimal, outer=(1)]
     │    │    │    │              └── variable: a.x [type=int, outer=(1)]
     │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1580,7 +1580,7 @@ EliminateSelect
   - │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   - │    │    │    │    │    └── keys: (1)
   - │    │    │    │    └── aggregations [outer=(1)]
-  - │    │    │    │         └── function: sum [type=decimal, outer=(1)]
+  - │    │    │    │         └── sum [type=decimal, outer=(1)]
   - │    │    │    │              └── variable: a.x [type=int, outer=(1)]
   - │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1593,7 +1593,7 @@ EliminateSelect
   + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
-  + │    │    │         └── function: sum [type=decimal, outer=(1)]
+  + │    │    │         └── sum [type=decimal, outer=(1)]
   + │    │    │              └── variable: a.x [type=int, outer=(1)]
   + │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1627,7 +1627,7 @@ EliminateProject
   - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
-  - │    │    │         └── function: sum [type=decimal, outer=(1)]
+  - │    │    │         └── sum [type=decimal, outer=(1)]
   - │    │    │              └── variable: a.x [type=int, outer=(1)]
   - │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1639,7 +1639,7 @@ EliminateProject
   + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
   + │    │    │    └── keys: (1)
   + │    │    └── aggregations [outer=(1)]
-  + │    │         └── function: sum [type=decimal, outer=(1)]
+  + │    │         └── sum [type=decimal, outer=(1)]
   + │    │              └── variable: a.x [type=int, outer=(1)]
   + │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1664,7 +1664,7 @@ GenerateIndexScans (higher cost)
     │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
     │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
-    │    │         └── function: sum [type=decimal, outer=(1)]
+    │    │         └── sum [type=decimal, outer=(1)]
     │    │              └── variable: a.x [type=int, outer=(1)]
     │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1689,7 +1689,7 @@ Final best expression
    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
    │    │    │    └── keys: (1)
    │    │    └── aggregations [outer=(1)]
-   │    │         └── function: sum [type=decimal, outer=(1)]
+   │    │         └── sum [type=decimal, outer=(1)]
    │    │              └── variable: a.x [type=int, outer=(1)]
    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
