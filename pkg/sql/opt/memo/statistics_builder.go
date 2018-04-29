@@ -153,6 +153,9 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *opt.ColumnS
 
 	case opt.Max1RowOp:
 		return sb.colStatMax1Row(colSet)
+
+	case opt.RowNumberOp:
+		return sb.colStatRowNumber(colSet)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", sb.ev.op))
@@ -973,6 +976,34 @@ func (sb *statisticsBuilder) buildMax1Row(inputStats *opt.Statistics) {
 func (sb *statisticsBuilder) colStatMax1Row(colSet opt.ColSet) *opt.ColumnStatistic {
 	colStat := sb.makeColStat(colSet)
 	colStat.DistinctCount = 1
+	return colStat
+}
+
+func (sb *statisticsBuilder) buildRowNumber(inputStats *opt.Statistics) {
+	sb.s.RowCount = inputStats.RowCount
+}
+
+func (sb *statisticsBuilder) colStatRowNumber(colSet opt.ColSet) *opt.ColumnStatistic {
+	def := sb.ev.Private().(*RowNumberDef)
+	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
+	inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
+
+	inputCols := sb.ev.Child(0).Logical().Relational.OutputCols
+	reqInputCols := colSet.Intersection(inputCols)
+
+	colStat := sb.makeColStat(colSet)
+
+	if colSet.Contains(int(def.ColID)) {
+		// The ordinality column is a key, so every row is distinct.
+		colStat.DistinctCount = sb.ev.Logical().Relational.Stats.RowCount
+	} else {
+		if reqInputCols.Empty() {
+			panic("reqInputCols should have been non-empty, since the ordinality column was not requested")
+		}
+		inputColStat := inputStatsBuilder.colStat(reqInputCols)
+		colStat.DistinctCount = inputColStat.DistinctCount
+	}
+
 	return colStat
 }
 

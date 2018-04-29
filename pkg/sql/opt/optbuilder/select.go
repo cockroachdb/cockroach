@@ -39,6 +39,11 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 
 		// Overwrite output properties with any alias information.
 		b.renameSource(source.As, outScope)
+
+		if source.Ordinality {
+			outScope = b.buildWithOrdinality("ordinality", outScope)
+		}
+
 		return outScope
 
 	case *tree.JoinTableExpr:
@@ -138,6 +143,29 @@ func (b *Builder) buildScan(tab opt.Table, tn *tree.TableName, inScope *scope) (
 
 	outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&scanOpDef))
 	return outScope
+}
+
+// buildWithOrdinality builds a group which appends an increasing integer column to
+// the output. colName optionally denotes the name this column is given, or can
+// be blank for none.
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope *scope) {
+	col := b.synthesizeColumn(inScope, colName, types.Int, nil, 0)
+
+	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
+	// for the semantics around WITH ORDINALITY and ordering.
+
+	inScope.group = b.factory.ConstructRowNumber(
+		inScope.group,
+		b.factory.InternRowNumberDef(&memo.RowNumberDef{
+			Ordering: inScope.physicalProps.Ordering,
+			ColID:    col.id,
+		}),
+	)
+
+	return inScope
 }
 
 // buildSelect builds a set of memo groups that represent the given select
