@@ -11,7 +11,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain
- ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
  └── scan xy
       └── columns: x:1(int!null) y:2(int)
 
@@ -20,7 +20,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 explain
- ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
  └── sort
       ├── columns: x:1(int!null) y:2(int)
       ├── ordering: +2
@@ -31,7 +31,7 @@ build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 explain
- ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+ ├── columns: Tree:5(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
       ├── scan xy

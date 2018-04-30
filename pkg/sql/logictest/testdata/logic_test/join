@@ -622,99 +622,99 @@ statement ok
 CREATE TABLE s(x INT); INSERT INTO s(x) VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)
 
 # THe following queries verify that only the necessary columns are scanned.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x, b.y FROM twocolumn AS a, twocolumn AS b
 ----
-render          0  render  ·         ·                  (x, y)                                                                        ·
- │              0  ·       render 0  a.x                ·                                                                             ·
- │              0  ·       render 1  b.y                ·                                                                             ·
- └── join       1  join    ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
-      │         1  ·       type      cross              ·                                                                             ·
-      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
-      │         2  ·       table     twocolumn@primary  ·                                                                             ·
-      │         2  ·       spans     ALL                ·                                                                             ·
-      └── scan  2  scan    ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
-·               2  ·       table     twocolumn@primary  ·                                                                             ·
-·               2  ·       spans     ALL                ·                                                                             ·
+render          ·         ·                  (x, y)                                                                        ·
+ │              render 0  a.x                ·                                                                             ·
+ │              render 1  b.y                ·                                                                             ·
+ └── join       ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
+      │         type      cross              ·                                                                             ·
+      ├── scan  ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
+      │         table     twocolumn@primary  ·                                                                             ·
+      │         spans     ALL                ·                                                                             ·
+      └── scan  ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                        rowid!=NULL; key(rowid)
+·               table     twocolumn@primary  ·                                                                             ·
+·               spans     ALL                ·                                                                             ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 ----
-render          0  render  ·         ·                  (y)                                                                                    ·
- │              0  ·       render 0  b.y                ·                                                                                      ·
- └── join       1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
-      │         1  ·       type      inner              ·                                                                                      ·
-      │         1  ·       equality  (x) = (x)          ·                                                                                      ·
-      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-      │         2  ·       table     twocolumn@primary  ·                                                                                      ·
-      │         2  ·       spans     ALL                ·                                                                                      ·
-      └── scan  2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
-·               2  ·       table     twocolumn@primary  ·                                                                                      ·
-·               2  ·       spans     ALL                ·                                                                                      ·
+render          ·         ·                  (y)                                                                                    ·
+ │              render 0  b.y                ·                                                                                      ·
+ └── join       ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
+      │         type      inner              ·                                                                                      ·
+      │         equality  (x) = (x)          ·                                                                                      ·
+      ├── scan  ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+      │         table     twocolumn@primary  ·                                                                                      ·
+      │         spans     ALL                ·                                                                                      ·
+      └── scan  ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
+·               table     twocolumn@primary  ·                                                                                      ·
+·               spans     ALL                ·                                                                                      ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = b.x)
 ----
-render          0  render  ·         ·                  (y)                                                                                    ·
- │              0  ·       render 0  b.y                ·                                                                                      ·
- └── join       1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
-      │         1  ·       type      inner              ·                                                                                      ·
-      │         1  ·       equality  (x) = (x)          ·                                                                                      ·
-      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-      │         2  ·       table     twocolumn@primary  ·                                                                                      ·
-      │         2  ·       spans     ALL                ·                                                                                      ·
-      └── scan  2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
-·               2  ·       table     twocolumn@primary  ·                                                                                      ·
-·               2  ·       spans     ALL                ·                                                                                      ·
+render          ·         ·                  (y)                                                                                    ·
+ │              render 0  b.y                ·                                                                                      ·
+ └── join       ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
+      │         type      inner              ·                                                                                      ·
+      │         equality  (x) = (x)          ·                                                                                      ·
+      ├── scan  ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+      │         table     twocolumn@primary  ·                                                                                      ·
+      │         spans     ALL                ·                                                                                      ·
+      └── scan  ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
+·               table     twocolumn@primary  ·                                                                                      ·
+·               spans     ALL                ·                                                                                      ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < b.y)
 ----
-render          0  render  ·         ·                  (x)                                                                                    ·
- │              0  ·       render 0  a.x                ·                                                                                      ·
- └── join       1  join    ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
-      │         1  ·       type      inner              ·                                                                                      ·
-      │         1  ·       pred      a.x < b.y          ·                                                                                      ·
-      ├── scan  2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-      │         2  ·       table     twocolumn@primary  ·                                                                                      ·
-      │         2  ·       spans     ALL                ·                                                                                      ·
-      └── scan  2  scan    ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-·               2  ·       table     twocolumn@primary  ·                                                                                      ·
-·               2  ·       spans     ALL                ·                                                                                      ·
+render          ·         ·                  (x)                                                                                    ·
+ │              render 0  a.x                ·                                                                                      ·
+ └── join       ·         ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
+      │         type      inner              ·                                                                                      ·
+      │         pred      a.x < b.y          ·                                                                                      ·
+      ├── scan  ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+      │         table     twocolumn@primary  ·                                                                                      ·
+      │         spans     ALL                ·                                                                                      ·
+      └── scan  ·         ·                  (x[omitted], y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+·               table     twocolumn@primary  ·                                                                                      ·
+·               spans     ALL                ·                                                                                      ·
 
 # Ensure that the ordering information for the result of joins is sane. (#12037)
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
                   INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
 ----
-sort                             0  sort    ·              ·                  (k, u, w)                     +u
- │                               0  ·       order          +u                 ·                             ·
- └── render                      1  render  ·              ·                  (k, u, w)                     ·
-      │                          1  ·       render 0       k                  ·                             ·
-      │                          1  ·       render 1       u                  ·                             ·
-      │                          1  ·       render 2       b.w                ·                             ·
-      └── render                 2  render  ·              ·                  (k, u, k[hidden,omitted], w)  ·
-           │                     2  ·       render 0       k                  ·                             ·
-           │                     2  ·       render 1       u                  ·                             ·
-           │                     2  ·       render 2       NULL               ·                             ·
-           │                     2  ·       render 3       b.w                ·                             ·
-           └── join              3  join    ·              ·                  (u, k, k[omitted], w)         ·
-                │                3  ·       type           inner              ·                             ·
-                │                3  ·       equality       (k) = (k)          ·                             ·
-                ├── sort         4  sort    ·              ·                  (u, k)                        +k
-                │    │           4  ·       order          +k                 ·                             ·
-                │    └── values  5  values  ·              ·                  (u, k)                        ·
-                │                5  ·       size           2 columns, 2 rows  ·                             ·
-                │                5  ·       row 0, expr 0  9                  ·                             ·
-                │                5  ·       row 0, expr 1  1                  ·                             ·
-                │                5  ·       row 1, expr 0  8                  ·                             ·
-                │                5  ·       row 1, expr 1  2                  ·                             ·
-                └── values       4  values  ·              ·                  (column1, column2)            ·
-·                                4  ·       size           2 columns, 2 rows  ·                             ·
-·                                4  ·       row 0, expr 0  1                  ·                             ·
-·                                4  ·       row 0, expr 1  1                  ·                             ·
-·                                4  ·       row 1, expr 0  2                  ·                             ·
-·                                4  ·       row 1, expr 1  2                  ·                             ·
+sort                             ·              ·                  (k, u, w)                     +u
+ │                               order          +u                 ·                             ·
+ └── render                      ·              ·                  (k, u, w)                     ·
+      │                          render 0       k                  ·                             ·
+      │                          render 1       u                  ·                             ·
+      │                          render 2       b.w                ·                             ·
+      └── render                 ·              ·                  (k, u, k[hidden,omitted], w)  ·
+           │                     render 0       k                  ·                             ·
+           │                     render 1       u                  ·                             ·
+           │                     render 2       NULL               ·                             ·
+           │                     render 3       b.w                ·                             ·
+           └── join              ·              ·                  (u, k, k[omitted], w)         ·
+                │                type           inner              ·                             ·
+                │                equality       (k) = (k)          ·                             ·
+                ├── sort         ·              ·                  (u, k)                        +k
+                │    │           order          +k                 ·                             ·
+                │    └── values  ·              ·                  (u, k)                        ·
+                │                size           2 columns, 2 rows  ·                             ·
+                │                row 0, expr 0  9                  ·                             ·
+                │                row 0, expr 1  1                  ·                             ·
+                │                row 1, expr 0  8                  ·                             ·
+                │                row 1, expr 1  2                  ·                             ·
+                └── values       ·              ·                  (column1, column2)            ·
+·                                size           2 columns, 2 rows  ·                             ·
+·                                row 0, expr 0  1                  ·                             ·
+·                                row 0, expr 1  1                  ·                             ·
+·                                row 1, expr 0  2                  ·                             ·
+·                                row 1, expr 1  2                  ·                             ·
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
@@ -960,23 +960,23 @@ SELECT * FROM pairs, square WHERE pairs.b = square.n
 4  6  6  36
 
 # The filter expression becomes an ON predicate.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-render          0  render  ·         ·                                                                    (a, b, n, sq)                         ·
- │              0  ·       render 0  test.public.pairs.a                                                  ·                                     ·
- │              0  ·       render 1  test.public.pairs.b                                                  ·                                     ·
- │              0  ·       render 2  test.public.square.n                                                 ·                                     ·
- │              0  ·       render 3  test.public.square.sq                                                ·                                     ·
- └── join       1  join    ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
-      │         1  ·       type      inner                                                                ·                                     ·
-      │         1  ·       pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
-      ├── scan  2  scan    ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
-      │         2  ·       table     pairs@primary                                                        ·                                     ·
-      │         2  ·       spans     ALL                                                                  ·                                     ·
-      └── scan  2  scan    ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
-·               2  ·       table     square@primary                                                       ·                                     ·
-·               2  ·       spans     ALL                                                                  ·                                     ·
+render          ·         ·                                                                    (a, b, n, sq)                         ·
+ │              render 0  test.public.pairs.a                                                  ·                                     ·
+ │              render 1  test.public.pairs.b                                                  ·                                     ·
+ │              render 2  test.public.square.n                                                 ·                                     ·
+ │              render 3  test.public.square.sq                                                ·                                     ·
+ └── join       ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
+      │         type      inner                                                                ·                                     ·
+      │         pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
+      ├── scan  ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
+      │         table     pairs@primary                                                        ·                                     ·
+      │         spans     ALL                                                                  ·                                     ·
+      └── scan  ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
+·               table     square@primary                                                       ·                                     ·
+·               spans     ALL                                                                  ·                                     ·
 
 query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
@@ -988,30 +988,30 @@ SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through". See the comment for propagateFilters
 # in fitler_opt.go for all the details.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
-render                    0  render  ·         ·                                          (a, b, n, sq)                         sq!=NULL
- │                        0  ·       render 0  a                                          ·                                     ·
- │                        0  ·       render 1  b                                          ·                                     ·
- │                        0  ·       render 2  n                                          ·                                     ·
- │                        0  ·       render 3  sq                                         ·                                     ·
- └── filter               1  filter  ·         ·                                          (a, b, sum, n, sq)                    sum=sq; sum!=NULL; sq!=NULL
-      │                   1  ·       filter    sum = sq                                   ·                                     ·
-      └── render          2  render  ·         ·                                          (a, b, sum, n, sq)                    ·
-           │              2  ·       render 0  test.public.pairs.a                        ·                                     ·
-           │              2  ·       render 1  test.public.pairs.b                        ·                                     ·
-           │              2  ·       render 2  test.public.pairs.a + test.public.pairs.b  ·                                     ·
-           │              2  ·       render 3  test.public.square.n                       ·                                     ·
-           │              2  ·       render 4  test.public.square.sq                      ·                                     ·
-           └── join       3  join    ·         ·                                          (a, b, rowid[hidden,omitted], n, sq)  ·
-                │         3  ·       type      cross                                      ·                                     ·
-                ├── scan  4  scan    ·         ·                                          (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
-                │         4  ·       table     pairs@primary                              ·                                     ·
-                │         4  ·       spans     ALL                                        ·                                     ·
-                └── scan  4  scan    ·         ·                                          (n, sq)                               n!=NULL; key(n)
-·                         4  ·       table     square@primary                             ·                                     ·
-·                         4  ·       spans     ALL                                        ·                                     ·
+render                    ·         ·                                          (a, b, n, sq)                         sq!=NULL
+ │                        render 0  a                                          ·                                     ·
+ │                        render 1  b                                          ·                                     ·
+ │                        render 2  n                                          ·                                     ·
+ │                        render 3  sq                                         ·                                     ·
+ └── filter               ·         ·                                          (a, b, sum, n, sq)                    sum=sq; sum!=NULL; sq!=NULL
+      │                   filter    sum = sq                                   ·                                     ·
+      └── render          ·         ·                                          (a, b, sum, n, sq)                    ·
+           │              render 0  test.public.pairs.a                        ·                                     ·
+           │              render 1  test.public.pairs.b                        ·                                     ·
+           │              render 2  test.public.pairs.a + test.public.pairs.b  ·                                     ·
+           │              render 3  test.public.square.n                       ·                                     ·
+           │              render 4  test.public.square.sq                      ·                                     ·
+           └── join       ·         ·                                          (a, b, rowid[hidden,omitted], n, sq)  ·
+                │         type      cross                                      ·                                     ·
+                ├── scan  ·         ·                                          (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
+                │         table     pairs@primary                              ·                                     ·
+                │         spans     ALL                                        ·                                     ·
+                └── scan  ·         ·                                          (n, sq)                               n!=NULL; key(n)
+·                         table     square@primary                             ·                                     ·
+·                         spans     ALL                                        ·                                     ·
 
 query IIII rowsort
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
@@ -1021,23 +1021,23 @@ SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WH
 4  5  3  9
 
 # The filter expression must stay on top of the outer join.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-render          0  render  ·         ·                                                                    (a, b, n, sq)                         ·
- │              0  ·       render 0  test.public.pairs.a                                                  ·                                     ·
- │              0  ·       render 1  test.public.pairs.b                                                  ·                                     ·
- │              0  ·       render 2  test.public.square.n                                                 ·                                     ·
- │              0  ·       render 3  test.public.square.sq                                                ·                                     ·
- └── join       1  join    ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
-      │         1  ·       type      full outer                                                           ·                                     ·
-      │         1  ·       pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
-      ├── scan  2  scan    ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
-      │         2  ·       table     pairs@primary                                                        ·                                     ·
-      │         2  ·       spans     ALL                                                                  ·                                     ·
-      └── scan  2  scan    ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
-·               2  ·       table     square@primary                                                       ·                                     ·
-·               2  ·       spans     ALL                                                                  ·                                     ·
+render          ·         ·                                                                    (a, b, n, sq)                         ·
+ │              render 0  test.public.pairs.a                                                  ·                                     ·
+ │              render 1  test.public.pairs.b                                                  ·                                     ·
+ │              render 2  test.public.square.n                                                 ·                                     ·
+ │              render 3  test.public.square.sq                                                ·                                     ·
+ └── join       ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
+      │         type      full outer                                                           ·                                     ·
+      │         pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
+      ├── scan  ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
+      │         table     pairs@primary                                                        ·                                     ·
+      │         spans     ALL                                                                  ·                                     ·
+      └── scan  ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
+·               table     square@primary                                                       ·                                     ·
+·               spans     ALL                                                                  ·                                     ·
 
 query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
@@ -1062,25 +1062,25 @@ NULL  NULL  4     16
 NULL  NULL  5     25
 NULL  NULL  6     36
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-render               0  render  ·         ·                                                                    (a, b, n, sq)                         b!=NULL; sq!=NULL
- │                   0  ·       render 0  test.public.pairs.a                                                  ·                                     ·
- │                   0  ·       render 1  test.public.pairs.b                                                  ·                                     ·
- │                   0  ·       render 2  test.public.square.n                                                 ·                                     ·
- │                   0  ·       render 3  test.public.square.sq                                                ·                                     ·
- └── filter          1  filter  ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  b!=NULL; sq!=NULL
-      │              1  ·       filter    (test.public.pairs.b % 2) != (test.public.square.sq % 2)             ·                                     ·
-      └── join       2  join    ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
-           │         2  ·       type      full outer                                                           ·                                     ·
-           │         2  ·       pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
-           ├── scan  3  scan    ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
-           │         3  ·       table     pairs@primary                                                        ·                                     ·
-           │         3  ·       spans     ALL                                                                  ·                                     ·
-           └── scan  3  scan    ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
-·                    3  ·       table     square@primary                                                       ·                                     ·
-·                    3  ·       spans     ALL                                                                  ·                                     ·
+render               ·         ·                                                                    (a, b, n, sq)                         b!=NULL; sq!=NULL
+ │                   render 0  test.public.pairs.a                                                  ·                                     ·
+ │                   render 1  test.public.pairs.b                                                  ·                                     ·
+ │                   render 2  test.public.square.n                                                 ·                                     ·
+ │                   render 3  test.public.square.sq                                                ·                                     ·
+ └── filter          ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  b!=NULL; sq!=NULL
+      │              filter    (test.public.pairs.b % 2) != (test.public.square.sq % 2)             ·                                     ·
+      └── join       ·         ·                                                                    (a, b, rowid[hidden,omitted], n, sq)  ·
+           │         type      full outer                                                           ·                                     ·
+           │         pred      (test.public.pairs.a + test.public.pairs.b) = test.public.square.sq  ·                                     ·
+           ├── scan  ·         ·                                                                    (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
+           │         table     pairs@primary                                                        ·                                     ·
+           │         spans     ALL                                                                  ·                                     ·
+           └── scan  ·         ·                                                                    (n, sq)                               n!=NULL; key(n)
+·                    table     square@primary                                                       ·                                     ·
+·                    spans     ALL                                                                  ·                                     ·
 
 query IIII rowsort
 SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
@@ -1276,35 +1276,35 @@ SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
 1
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
-render                    0  render  ·         ·                 (x)                                                                                                                                       ·
- │                        0  ·       render 0  test.public.t1.x  ·                                                                                                                                         ·
- └── render               1  render  ·         ·                 (x, y[omitted], col1[omitted], col2[omitted], rowid[hidden,omitted], col3[omitted], y[hidden,omitted], x[hidden,omitted], col4[omitted])  ·
-      │                   1  ·       render 0  test.public.t1.x  ·                                                                                                                                         ·
-      │                   1  ·       render 1  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 2  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 3  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 4  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 5  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 6  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 7  NULL              ·                                                                                                                                         ·
-      │                   1  ·       render 8  NULL              ·                                                                                                                                         ·
-      └── join            2  join    ·         ·                 (col1[omitted], x, col2[omitted], y[omitted], rowid[hidden,omitted], col3[omitted], y[omitted], x[omitted], col4[omitted])                ·
-           │              2  ·       type      inner             ·                                                                                                                                         ·
-           │              2  ·       equality  (x, y) = (x, y)   ·                                                                                                                                         ·
-           ├── scan       3  scan    ·         ·                 (col1[omitted], x, col2[omitted], y, rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
-           │              3  ·       table     t1@primary        ·                                                                                                                                         ·
-           │              3  ·       spans     ALL               ·                                                                                                                                         ·
-           └── render     3  render  ·         ·                 (col3[omitted], y, x, col4[omitted])                                                                                                      ·
-                │         3  ·       render 0  NULL              ·                                                                                                                                         ·
-                │         3  ·       render 1  test.public.t2.y  ·                                                                                                                                         ·
-                │         3  ·       render 2  test.public.t2.x  ·                                                                                                                                         ·
-                │         3  ·       render 3  NULL              ·                                                                                                                                         ·
-                └── scan  4  scan    ·         ·                 (col3[omitted], y, x, col4[omitted], rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
-·                         4  ·       table     t2@primary        ·                                                                                                                                         ·
-·                         4  ·       spans     ALL               ·                                                                                                                                         ·
+render                    ·         ·                 (x)                                                                                                                                       ·
+ │                        render 0  test.public.t1.x  ·                                                                                                                                         ·
+ └── render               ·         ·                 (x, y[omitted], col1[omitted], col2[omitted], rowid[hidden,omitted], col3[omitted], y[hidden,omitted], x[hidden,omitted], col4[omitted])  ·
+      │                   render 0  test.public.t1.x  ·                                                                                                                                         ·
+      │                   render 1  NULL              ·                                                                                                                                         ·
+      │                   render 2  NULL              ·                                                                                                                                         ·
+      │                   render 3  NULL              ·                                                                                                                                         ·
+      │                   render 4  NULL              ·                                                                                                                                         ·
+      │                   render 5  NULL              ·                                                                                                                                         ·
+      │                   render 6  NULL              ·                                                                                                                                         ·
+      │                   render 7  NULL              ·                                                                                                                                         ·
+      │                   render 8  NULL              ·                                                                                                                                         ·
+      └── join            ·         ·                 (col1[omitted], x, col2[omitted], y[omitted], rowid[hidden,omitted], col3[omitted], y[omitted], x[omitted], col4[omitted])                ·
+           │              type      inner             ·                                                                                                                                         ·
+           │              equality  (x, y) = (x, y)   ·                                                                                                                                         ·
+           ├── scan       ·         ·                 (col1[omitted], x, col2[omitted], y, rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
+           │              table     t1@primary        ·                                                                                                                                         ·
+           │              spans     ALL               ·                                                                                                                                         ·
+           └── render     ·         ·                 (col3[omitted], y, x, col4[omitted])                                                                                                      ·
+                │         render 0  NULL              ·                                                                                                                                         ·
+                │         render 1  test.public.t2.y  ·                                                                                                                                         ·
+                │         render 2  test.public.t2.x  ·                                                                                                                                         ·
+                │         render 3  NULL              ·                                                                                                                                         ·
+                └── scan  ·         ·                 (col3[omitted], y, x, col4[omitted], rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
+·                         table     t2@primary        ·                                                                                                                                         ·
+·                         spans     ALL               ·                                                                                                                                         ·
 
 # Tests for merge join ordering information.
 statement ok
@@ -1319,72 +1319,72 @@ CREATE TABLE pkBAC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,c))
 statement ok
 CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-join       0  join  ·               ·                      (a, b, c, d, a, b, c, d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b); key(b,c)
- │         0  ·     type            inner                  ·                         ·
- │         0  ·     equality        (a, b, c) = (a, b, c)  ·                         ·
- │         0  ·     mergeJoinOrder  +"(b=b)"               ·                         ·
- ├── scan  1  scan  ·               ·                      (a, b, c, d)              a!=NULL; b!=NULL; key(a,b); +b
- │         1  ·     table           pkba@primary           ·                         ·
- │         1  ·     spans           ALL                    ·                         ·
- └── scan  1  scan  ·               ·                      (a, b, c, d)              b!=NULL; c!=NULL; key(b,c); +b
-·          1  ·     table           pkbc@primary           ·                         ·
-·          1  ·     spans           ALL                    ·                         ·
+join       ·               ·                      (a, b, c, d, a, b, c, d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b); key(b,c)
+ │         type            inner                  ·                         ·
+ │         equality        (a, b, c) = (a, b, c)  ·                         ·
+ │         mergeJoinOrder  +"(b=b)"               ·                         ·
+ ├── scan  ·               ·                      (a, b, c, d)              a!=NULL; b!=NULL; key(a,b); +b
+ │         table           pkba@primary           ·                         ·
+ │         spans           ALL                    ·                         ·
+ └── scan  ·               ·                      (a, b, c, d)              b!=NULL; c!=NULL; key(b,c); +b
+·          table           pkbc@primary           ·                         ·
+·          spans           ALL                    ·                         ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-render          0  render  ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
- │              0  ·       render 0        test.public.pkba.a           ·                                                             ·
- │              0  ·       render 1        test.public.pkba.b           ·                                                             ·
- │              0  ·       render 2        test.public.pkba.c           ·                                                             ·
- │              0  ·       render 3        test.public.pkba.d           ·                                                             ·
- └── join       1  join    ·               ·                            (a, b, c, d, a[omitted], b[omitted], c[omitted], d[omitted])  a=a; b=b; c=c; d=d; a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
-      │         1  ·       type            inner                        ·                                                             ·
-      │         1  ·       equality        (a, b, c, d) = (a, b, c, d)  ·                                                             ·
-      │         1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(d=d)"   ·                                                             ·
-      ├── scan  2  scan    ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; key(a,b); +b,+a
-      │         2  ·       table           pkba@primary                 ·                                                             ·
-      │         2  ·       spans           ALL                          ·                                                             ·
-      └── scan  2  scan    ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
-·               2  ·       table           pkbad@primary                ·                                                             ·
-·               2  ·       spans           ALL                          ·                                                             ·
+render          ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
+ │              render 0        test.public.pkba.a           ·                                                             ·
+ │              render 1        test.public.pkba.b           ·                                                             ·
+ │              render 2        test.public.pkba.c           ·                                                             ·
+ │              render 3        test.public.pkba.d           ·                                                             ·
+ └── join       ·               ·                            (a, b, c, d, a[omitted], b[omitted], c[omitted], d[omitted])  a=a; b=b; c=c; d=d; a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
+      │         type            inner                        ·                                                             ·
+      │         equality        (a, b, c, d) = (a, b, c, d)  ·                                                             ·
+      │         mergeJoinOrder  +"(b=b)",+"(a=a)",+"(d=d)"   ·                                                             ·
+      ├── scan  ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; key(a,b); +b,+a
+      │         table           pkba@primary                 ·                                                             ·
+      │         spans           ALL                          ·                                                             ·
+      └── scan  ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
+·               table           pkbad@primary                ·                                                             ·
+·               spans           ALL                          ·                                                             ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
-render          0  render  ·               ·                           (a, b, c, d, d)                                      a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
- │              0  ·       render 0        l.a                         ·                                                    ·
- │              0  ·       render 1        l.b                         ·                                                    ·
- │              0  ·       render 2        l.c                         ·                                                    ·
- │              0  ·       render 3        l.d                         ·                                                    ·
- │              0  ·       render 4        r.d                         ·                                                    ·
- └── join       1  join    ·               ·                           (a, b, c, d, a[omitted], b[omitted], c[omitted], d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-      │         1  ·       type            inner                       ·                                                    ·
-      │         1  ·       equality        (a, b, c) = (a, b, c)       ·                                                    ·
-      │         1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"  ·                                                    ·
-      ├── scan  2  scan    ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
-      │         2  ·       table           pkbac@primary               ·                                                    ·
-      │         2  ·       spans           ALL                         ·                                                    ·
-      └── scan  2  scan    ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
-·               2  ·       table           pkbac@primary               ·                                                    ·
-·               2  ·       spans           ALL                         ·                                                    ·
+render          ·               ·                           (a, b, c, d, d)                                      a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+ │              render 0        l.a                         ·                                                    ·
+ │              render 1        l.b                         ·                                                    ·
+ │              render 2        l.c                         ·                                                    ·
+ │              render 3        l.d                         ·                                                    ·
+ │              render 4        r.d                         ·                                                    ·
+ └── join       ·               ·                           (a, b, c, d, a[omitted], b[omitted], c[omitted], d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+      │         type            inner                       ·                                                    ·
+      │         equality        (a, b, c) = (a, b, c)       ·                                                    ·
+      │         mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"  ·                                                    ·
+      ├── scan  ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+      │         table           pkbac@primary               ·                                                    ·
+      │         spans           ALL                         ·                                                    ·
+      └── scan  ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+·               table           pkbac@primary               ·                                                    ·
+·               spans           ALL                         ·                                                    ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-join       0  join  ·               ·                           (a, b, c, d, a, b, c, d)  a=a; b=b; c=d; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
- │         0  ·     type            inner                       ·                         ·
- │         0  ·     equality        (c, a, b) = (d, a, b)       ·                         ·
- │         0  ·     mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
- ├── scan  1  scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
- │         1  ·     table           pkbac@primary               ·                         ·
- │         1  ·     spans           ALL                         ·                         ·
- └── scan  1  scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
-·          1  ·     table           pkbad@primary               ·                         ·
-·          1  ·     spans           ALL                         ·                         ·
+join       ·               ·                           (a, b, c, d, a, b, c, d)  a=a; b=b; c=d; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+ │         type            inner                       ·                         ·
+ │         equality        (c, a, b) = (d, a, b)       ·                         ·
+ │         mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
+ ├── scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+ │         table           pkbac@primary               ·                         ·
+ │         spans           ALL                         ·                         ·
+ └── scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
+·          table           pkbad@primary               ·                         ·
+·          spans           ALL                         ·                         ·
 
 # Tests with joins with merged columns of collated string type.
 statement ok
@@ -1399,27 +1399,27 @@ CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 statement ok
 INSERT INTO str2 VALUES (1, 'A' COLLATE en_u_ks_level1), (2, 'B' COLLATE en_u_ks_level1), (3, 'C' COLLATE en_u_ks_level1), (4, 'E' COLLATE en_u_ks_level1)
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
-render               0  render  ·         ·                   (s, s, s)                               s=s
- │                   0  ·       render 0  test.public.str1.s  ·                                       ·
- │                   0  ·       render 1  test.public.str1.s  ·                                       ·
- │                   0  ·       render 2  test.public.str2.s  ·                                       ·
- └── render          1  render  ·         ·                   (s, a[omitted], a[omitted], s[hidden])  ·
-      │              1  ·       render 0  test.public.str1.s  ·                                       ·
-      │              1  ·       render 1  NULL                ·                                       ·
-      │              1  ·       render 2  NULL                ·                                       ·
-      │              1  ·       render 3  test.public.str2.s  ·                                       ·
-      └── join       2  join    ·         ·                   (a[omitted], s, a[omitted], s)          ·
-           │         2  ·       type      inner               ·                                       ·
-           │         2  ·       equality  (s) = (s)           ·                                       ·
-           ├── scan  3  scan    ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
-           │         3  ·       table     str1@primary        ·                                       ·
-           │         3  ·       spans     ALL                 ·                                       ·
-           └── scan  3  scan    ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
-·                    3  ·       table     str2@primary        ·                                       ·
-·                    3  ·       spans     ALL                 ·                                       ·
+render               ·         ·                   (s, s, s)                               s=s
+ │                   render 0  test.public.str1.s  ·                                       ·
+ │                   render 1  test.public.str1.s  ·                                       ·
+ │                   render 2  test.public.str2.s  ·                                       ·
+ └── render          ·         ·                   (s, a[omitted], a[omitted], s[hidden])  ·
+      │              render 0  test.public.str1.s  ·                                       ·
+      │              render 1  NULL                ·                                       ·
+      │              render 2  NULL                ·                                       ·
+      │              render 3  test.public.str2.s  ·                                       ·
+      └── join       ·         ·                   (a[omitted], s, a[omitted], s)          ·
+           │         type      inner               ·                                       ·
+           │         equality  (s) = (s)           ·                                       ·
+           ├── scan  ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
+           │         table     str1@primary        ·                                       ·
+           │         spans     ALL                 ·                                       ·
+           └── scan  ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
+·                    table     str2@primary        ·                                       ·
+·                    spans     ALL                 ·                                       ·
 
 query TTT rowsort
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
@@ -1428,27 +1428,27 @@ a  a  A
 A  A  A
 c  c  C
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
-render               0  render  ·         ·                   (s, s, s)                               s=s
- │                   0  ·       render 0  test.public.str1.s  ·                                       ·
- │                   0  ·       render 1  test.public.str1.s  ·                                       ·
- │                   0  ·       render 2  test.public.str2.s  ·                                       ·
- └── render          1  render  ·         ·                   (s, a[omitted], a[omitted], s[hidden])  ·
-      │              1  ·       render 0  test.public.str1.s  ·                                       ·
-      │              1  ·       render 1  NULL                ·                                       ·
-      │              1  ·       render 2  NULL                ·                                       ·
-      │              1  ·       render 3  test.public.str2.s  ·                                       ·
-      └── join       2  join    ·         ·                   (a[omitted], s, a[omitted], s)          ·
-           │         2  ·       type      left outer          ·                                       ·
-           │         2  ·       equality  (s) = (s)           ·                                       ·
-           ├── scan  3  scan    ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
-           │         3  ·       table     str1@primary        ·                                       ·
-           │         3  ·       spans     ALL                 ·                                       ·
-           └── scan  3  scan    ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
-·                    3  ·       table     str2@primary        ·                                       ·
-·                    3  ·       spans     ALL                 ·                                       ·
+render               ·         ·                   (s, s, s)                               s=s
+ │                   render 0  test.public.str1.s  ·                                       ·
+ │                   render 1  test.public.str1.s  ·                                       ·
+ │                   render 2  test.public.str2.s  ·                                       ·
+ └── render          ·         ·                   (s, a[omitted], a[omitted], s[hidden])  ·
+      │              render 0  test.public.str1.s  ·                                       ·
+      │              render 1  NULL                ·                                       ·
+      │              render 2  NULL                ·                                       ·
+      │              render 3  test.public.str2.s  ·                                       ·
+      └── join       ·         ·                   (a[omitted], s, a[omitted], s)          ·
+           │         type      left outer          ·                                       ·
+           │         equality  (s) = (s)           ·                                       ·
+           ├── scan  ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
+           │         table     str1@primary        ·                                       ·
+           │         spans     ALL                 ·                                       ·
+           └── scan  ·         ·                   (a[omitted], s)                         a!=NULL; key(a)
+·                    table     str2@primary        ·                                       ·
+·                    spans     ALL                 ·                                       ·
 
 query TTT rowsort
 SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
@@ -1458,28 +1458,28 @@ A  A  A
 c  c  C
 D  D  NULL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING(s)
 ----
-render               0  render  ·         ·                                               (s, s, s)                                          ·
- │                   0  ·       render 0  s                                               ·                                                  ·
- │                   0  ·       render 1  test.public.str1.s                              ·                                                  ·
- │                   0  ·       render 2  test.public.str2.s                              ·                                                  ·
- └── render          1  render  ·         ·                                               (s, a[omitted], s[hidden], a[omitted], s[hidden])  ·
-      │              1  ·       render 0  IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                  ·
-      │              1  ·       render 1  NULL                                            ·                                                  ·
-      │              1  ·       render 2  test.public.str1.s                              ·                                                  ·
-      │              1  ·       render 3  NULL                                            ·                                                  ·
-      │              1  ·       render 4  test.public.str2.s                              ·                                                  ·
-      └── join       2  join    ·         ·                                               (a[omitted], s, a[omitted], s)                     ·
-           │         2  ·       type      right outer                                     ·                                                  ·
-           │         2  ·       equality  (s) = (s)                                       ·                                                  ·
-           ├── scan  3  scan    ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
-           │         3  ·       table     str1@primary                                    ·                                                  ·
-           │         3  ·       spans     ALL                                             ·                                                  ·
-           └── scan  3  scan    ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
-·                    3  ·       table     str2@primary                                    ·                                                  ·
-·                    3  ·       spans     ALL                                             ·                                                  ·
+render               ·         ·                                               (s, s, s)                                          ·
+ │                   render 0  s                                               ·                                                  ·
+ │                   render 1  test.public.str1.s                              ·                                                  ·
+ │                   render 2  test.public.str2.s                              ·                                                  ·
+ └── render          ·         ·                                               (s, a[omitted], s[hidden], a[omitted], s[hidden])  ·
+      │              render 0  IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                  ·
+      │              render 1  NULL                                            ·                                                  ·
+      │              render 2  test.public.str1.s                              ·                                                  ·
+      │              render 3  NULL                                            ·                                                  ·
+      │              render 4  test.public.str2.s                              ·                                                  ·
+      └── join       ·         ·                                               (a[omitted], s, a[omitted], s)                     ·
+           │         type      right outer                                     ·                                                  ·
+           │         equality  (s) = (s)                                       ·                                                  ·
+           ├── scan  ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
+           │         table     str1@primary                                    ·                                                  ·
+           │         spans     ALL                                             ·                                                  ·
+           └── scan  ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
+·                    table     str2@primary                                    ·                                                  ·
+·                    spans     ALL                                             ·                                                  ·
 
 
 query TTT rowsort
@@ -1491,28 +1491,28 @@ c  c     C
 B  NULL  B
 E  NULL  E
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
 ----
-render               0  render  ·         ·                                               (s, s, s)                                          ·
- │                   0  ·       render 0  s                                               ·                                                  ·
- │                   0  ·       render 1  test.public.str1.s                              ·                                                  ·
- │                   0  ·       render 2  test.public.str2.s                              ·                                                  ·
- └── render          1  render  ·         ·                                               (s, a[omitted], s[hidden], a[omitted], s[hidden])  ·
-      │              1  ·       render 0  IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                  ·
-      │              1  ·       render 1  NULL                                            ·                                                  ·
-      │              1  ·       render 2  test.public.str1.s                              ·                                                  ·
-      │              1  ·       render 3  NULL                                            ·                                                  ·
-      │              1  ·       render 4  test.public.str2.s                              ·                                                  ·
-      └── join       2  join    ·         ·                                               (a[omitted], s, a[omitted], s)                     ·
-           │         2  ·       type      full outer                                      ·                                                  ·
-           │         2  ·       equality  (s) = (s)                                       ·                                                  ·
-           ├── scan  3  scan    ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
-           │         3  ·       table     str1@primary                                    ·                                                  ·
-           │         3  ·       spans     ALL                                             ·                                                  ·
-           └── scan  3  scan    ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
-·                    3  ·       table     str2@primary                                    ·                                                  ·
-·                    3  ·       spans     ALL                                             ·                                                  ·
+render               ·         ·                                               (s, s, s)                                          ·
+ │                   render 0  s                                               ·                                                  ·
+ │                   render 1  test.public.str1.s                              ·                                                  ·
+ │                   render 2  test.public.str2.s                              ·                                                  ·
+ └── render          ·         ·                                               (s, a[omitted], s[hidden], a[omitted], s[hidden])  ·
+      │              render 0  IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                  ·
+      │              render 1  NULL                                            ·                                                  ·
+      │              render 2  test.public.str1.s                              ·                                                  ·
+      │              render 3  NULL                                            ·                                                  ·
+      │              render 4  test.public.str2.s                              ·                                                  ·
+      └── join       ·         ·                                               (a[omitted], s, a[omitted], s)                     ·
+           │         type      full outer                                      ·                                                  ·
+           │         equality  (s) = (s)                                       ·                                                  ·
+           ├── scan  ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
+           │         table     str1@primary                                    ·                                                  ·
+           │         spans     ALL                                             ·                                                  ·
+           └── scan  ·         ·                                               (a[omitted], s)                                    a!=NULL; key(a)
+·                    table     str2@primary                                    ·                                                  ·
+·                    spans     ALL                                             ·                                                  ·
 
 query TTT rowsort
 SELECT s, str1.s, str2.s FROM str1 FULL OUTER JOIN str2 USING(s)
@@ -1526,28 +1526,28 @@ B  NULL  B
 
 # Verify that we resolve the merged column a to str2.a but use IFNULL for
 # column s which is a collated string.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 ----
-render               0  render  ·               ·                                               (a, s)                                                           ·
- │                   0  ·       render 0        test.public.str2.a                              ·                                                                ·
- │                   0  ·       render 1        s                                               ·                                                                ·
- └── render          1  render  ·               ·                                               (a, s, a[hidden,omitted], s[hidden,omitted], s[hidden,omitted])  ·
-      │              1  ·       render 0        test.public.str2.a                              ·                                                                ·
-      │              1  ·       render 1        IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                                ·
-      │              1  ·       render 2        NULL                                            ·                                                                ·
-      │              1  ·       render 3        NULL                                            ·                                                                ·
-      │              1  ·       render 4        NULL                                            ·                                                                ·
-      └── join       2  join    ·               ·                                               (a[omitted], s, a, s)                                            ·
-           │         2  ·       type            right outer                                     ·                                                                ·
-           │         2  ·       equality        (a, s) = (a, s)                                 ·                                                                ·
-           │         2  ·       mergeJoinOrder  +"(a=a)"                                        ·                                                                ·
-           ├── scan  3  scan    ·               ·                                               (a, s)                                                           a!=NULL; key(a); +a
-           │         3  ·       table           str1@primary                                    ·                                                                ·
-           │         3  ·       spans           ALL                                             ·                                                                ·
-           └── scan  3  scan    ·               ·                                               (a, s)                                                           a!=NULL; key(a); +a
-·                    3  ·       table           str2@primary                                    ·                                                                ·
-·                    3  ·       spans           ALL                                             ·                                                                ·
+render               ·               ·                                               (a, s)                                                           ·
+ │                   render 0        test.public.str2.a                              ·                                                                ·
+ │                   render 1        s                                               ·                                                                ·
+ └── render          ·               ·                                               (a, s, a[hidden,omitted], s[hidden,omitted], s[hidden,omitted])  ·
+      │              render 0        test.public.str2.a                              ·                                                                ·
+      │              render 1        IFNULL(test.public.str1.s, test.public.str2.s)  ·                                                                ·
+      │              render 2        NULL                                            ·                                                                ·
+      │              render 3        NULL                                            ·                                                                ·
+      │              render 4        NULL                                            ·                                                                ·
+      └── join       ·               ·                                               (a[omitted], s, a, s)                                            ·
+           │         type            right outer                                     ·                                                                ·
+           │         equality        (a, s) = (a, s)                                 ·                                                                ·
+           │         mergeJoinOrder  +"(a=a)"                                        ·                                                                ·
+           ├── scan  ·               ·                                               (a, s)                                                           a!=NULL; key(a); +a
+           │         table           str1@primary                                    ·                                                                ·
+           │         spans           ALL                                             ·                                                                ·
+           └── scan  ·               ·                                               (a, s)                                                           a!=NULL; key(a); +a
+·                    table           str2@primary                                    ·                                                                ·
+·                    spans           ALL                                             ·                                                                ·
 
 
 statement ok
@@ -1562,48 +1562,48 @@ CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 statement ok
 INSERT INTO xyv VALUES (1, 1, 1), (2, 2, 2), (3, 1, 31), (3, 3, 33), (5, 5, 55)
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
-render          0  render  ·               ·                  (x, y, u, v)                          x!=NULL; y!=NULL
- │              0  ·       render 0        test.public.xyu.x  ·                                     ·
- │              0  ·       render 1        test.public.xyu.y  ·                                     ·
- │              0  ·       render 2        test.public.xyu.u  ·                                     ·
- │              0  ·       render 3        test.public.xyv.v  ·                                     ·
- └── join       1  join    ·               ·                  (x, y, u, x[omitted], y[omitted], v)  x=x; y=y; x!=NULL; y!=NULL
-      │         1  ·       type            inner              ·                                     ·
-      │         1  ·       equality        (x, y) = (x, y)    ·                                     ·
-      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
-      ├── scan  2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-      │         2  ·       table           xyu@primary        ·                                     ·
-      │         2  ·       spans           /3-                ·                                     ·
-      └── scan  2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·               2  ·       table           xyv@primary        ·                                     ·
-·               2  ·       spans           /3-                ·                                     ·
+render          ·               ·                  (x, y, u, v)                          x!=NULL; y!=NULL
+ │              render 0        test.public.xyu.x  ·                                     ·
+ │              render 1        test.public.xyu.y  ·                                     ·
+ │              render 2        test.public.xyu.u  ·                                     ·
+ │              render 3        test.public.xyv.v  ·                                     ·
+ └── join       ·               ·                  (x, y, u, x[omitted], y[omitted], v)  x=x; y=y; x!=NULL; y!=NULL
+      │         type            inner              ·                                     ·
+      │         equality        (x, y) = (x, y)    ·                                     ·
+      │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
+      ├── scan  ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+      │         table           xyu@primary        ·                                     ·
+      │         spans           /3-                ·                                     ·
+      └── scan  ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·               table           xyv@primary        ·                                     ·
+·               spans           /3-                ·                                     ·
 
 query IIII
 SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
 3  1  31  31
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-render          0  render  ·               ·                  (x, y, u, v)                          ·
- │              0  ·       render 0        test.public.xyu.x  ·                                     ·
- │              0  ·       render 1        test.public.xyu.y  ·                                     ·
- │              0  ·       render 2        test.public.xyu.u  ·                                     ·
- │              0  ·       render 3        test.public.xyv.v  ·                                     ·
- └── join       1  join    ·               ·                  (x, y, u, x[omitted], y[omitted], v)  ·
-      │         1  ·       type            left outer         ·                                     ·
-      │         1  ·       equality        (x, y) = (x, y)    ·                                     ·
-      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
-      ├── scan  2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-      │         2  ·       table           xyu@primary        ·                                     ·
-      │         2  ·       spans           /3-                ·                                     ·
-      └── scan  2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·               2  ·       table           xyv@primary        ·                                     ·
-·               2  ·       spans           /3-                ·                                     ·
+render          ·               ·                  (x, y, u, v)                          ·
+ │              render 0        test.public.xyu.x  ·                                     ·
+ │              render 1        test.public.xyu.y  ·                                     ·
+ │              render 2        test.public.xyu.u  ·                                     ·
+ │              render 3        test.public.xyv.v  ·                                     ·
+ └── join       ·               ·                  (x, y, u, x[omitted], y[omitted], v)  ·
+      │         type            left outer         ·                                     ·
+      │         equality        (x, y) = (x, y)    ·                                     ·
+      │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
+      ├── scan  ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+      │         table           xyu@primary        ·                                     ·
+      │         spans           /3-                ·                                     ·
+      └── scan  ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·               table           xyv@primary        ·                                     ·
+·               spans           /3-                ·                                     ·
 
 query IIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -1612,31 +1612,31 @@ SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 3  2  32  NULL
 4  4  44  NULL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-render               0  render  ·               ·                  (x, y, u, v)                                        ·
- │                   0  ·       render 0        test.public.xyv.x  ·                                                   ·
- │                   0  ·       render 1        test.public.xyv.y  ·                                                   ·
- │                   0  ·       render 2        test.public.xyu.u  ·                                                   ·
- │                   0  ·       render 3        test.public.xyv.v  ·                                                   ·
- └── render          1  render  ·               ·                  (x, y, x[hidden,omitted], y[hidden,omitted], u, v)  ·
-      │              1  ·       render 0        test.public.xyv.x  ·                                                   ·
-      │              1  ·       render 1        test.public.xyv.y  ·                                                   ·
-      │              1  ·       render 2        NULL               ·                                                   ·
-      │              1  ·       render 3        NULL               ·                                                   ·
-      │              1  ·       render 4        test.public.xyu.u  ·                                                   ·
-      │              1  ·       render 5        test.public.xyv.v  ·                                                   ·
-      └── join       2  join    ·               ·                  (x[omitted], y[omitted], u, x, y, v)                ·
-           │         2  ·       type            right outer        ·                                                   ·
-           │         2  ·       equality        (x, y) = (x, y)    ·                                                   ·
-           │         2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
-           ├── scan  3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-           │         3  ·       table           xyu@primary        ·                                                   ·
-           │         3  ·       spans           /3-                ·                                                   ·
-           └── scan  3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·                    3  ·       table           xyv@primary        ·                                                   ·
-·                    3  ·       spans           /3-                ·                                                   ·
+render               ·               ·                  (x, y, u, v)                                        ·
+ │                   render 0        test.public.xyv.x  ·                                                   ·
+ │                   render 1        test.public.xyv.y  ·                                                   ·
+ │                   render 2        test.public.xyu.u  ·                                                   ·
+ │                   render 3        test.public.xyv.v  ·                                                   ·
+ └── render          ·               ·                  (x, y, x[hidden,omitted], y[hidden,omitted], u, v)  ·
+      │              render 0        test.public.xyv.x  ·                                                   ·
+      │              render 1        test.public.xyv.y  ·                                                   ·
+      │              render 2        NULL               ·                                                   ·
+      │              render 3        NULL               ·                                                   ·
+      │              render 4        test.public.xyu.u  ·                                                   ·
+      │              render 5        test.public.xyv.v  ·                                                   ·
+      └── join       ·               ·                  (x[omitted], y[omitted], u, x, y, v)                ·
+           │         type            right outer        ·                                                   ·
+           │         equality        (x, y) = (x, y)    ·                                                   ·
+           │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
+           ├── scan  ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+           │         table           xyu@primary        ·                                                   ·
+           │         spans           /3-                ·                                                   ·
+           └── scan  ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·                    table           xyv@primary        ·                                                   ·
+·                    spans           /3-                ·                                                   ·
 
 query IIII rowsort
 SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -1645,35 +1645,35 @@ SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 3  3  NULL  33
 5  5  NULL  55
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
-render                    0  render  ·               ·                                             (x, y, u, v)                                                                              x!=NULL
- │                        0  ·       render 0        x                                             ·                                                                                         ·
- │                        0  ·       render 1        y                                             ·                                                                                         ·
- │                        0  ·       render 2        test.public.xyu.u                             ·                                                                                         ·
- │                        0  ·       render 3        test.public.xyv.v                             ·                                                                                         ·
- └── filter               1  filter  ·               ·                                             (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  x!=NULL
-      │                   1  ·       filter          x > 2                                         ·                                                                                         ·
-      └── render          2  render  ·               ·                                             (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  ·
-           │              2  ·       render 0        IFNULL(test.public.xyu.x, test.public.xyv.x)  ·                                                                                         ·
-           │              2  ·       render 1        IFNULL(test.public.xyu.y, test.public.xyv.y)  ·                                                                                         ·
-           │              2  ·       render 2        NULL                                          ·                                                                                         ·
-           │              2  ·       render 3        NULL                                          ·                                                                                         ·
-           │              2  ·       render 4        test.public.xyu.u                             ·                                                                                         ·
-           │              2  ·       render 5        NULL                                          ·                                                                                         ·
-           │              2  ·       render 6        NULL                                          ·                                                                                         ·
-           │              2  ·       render 7        test.public.xyv.v                             ·                                                                                         ·
-           └── join       3  join    ·               ·                                             (x, y, u, x, y, v)                                                                        ·
-                │         3  ·       type            full outer                                    ·                                                                                         ·
-                │         3  ·       equality        (x, y) = (x, y)                               ·                                                                                         ·
-                │         3  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"                             ·                                                                                         ·
-                ├── scan  4  scan    ·               ·                                             (x, y, u)                                                                                 x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-                │         4  ·       table           xyu@primary                                   ·                                                                                         ·
-                │         4  ·       spans           ALL                                           ·                                                                                         ·
-                └── scan  4  scan    ·               ·                                             (x, y, v)                                                                                 x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·                         4  ·       table           xyv@primary                                   ·                                                                                         ·
-·                         4  ·       spans           ALL                                           ·                                                                                         ·
+render                    ·               ·                                             (x, y, u, v)                                                                              x!=NULL
+ │                        render 0        x                                             ·                                                                                         ·
+ │                        render 1        y                                             ·                                                                                         ·
+ │                        render 2        test.public.xyu.u                             ·                                                                                         ·
+ │                        render 3        test.public.xyv.v                             ·                                                                                         ·
+ └── filter               ·               ·                                             (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  x!=NULL
+      │                   filter          x > 2                                         ·                                                                                         ·
+      └── render          ·               ·                                             (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  ·
+           │              render 0        IFNULL(test.public.xyu.x, test.public.xyv.x)  ·                                                                                         ·
+           │              render 1        IFNULL(test.public.xyu.y, test.public.xyv.y)  ·                                                                                         ·
+           │              render 2        NULL                                          ·                                                                                         ·
+           │              render 3        NULL                                          ·                                                                                         ·
+           │              render 4        test.public.xyu.u                             ·                                                                                         ·
+           │              render 5        NULL                                          ·                                                                                         ·
+           │              render 6        NULL                                          ·                                                                                         ·
+           │              render 7        test.public.xyv.v                             ·                                                                                         ·
+           └── join       ·               ·                                             (x, y, u, x, y, v)                                                                        ·
+                │         type            full outer                                    ·                                                                                         ·
+                │         equality        (x, y) = (x, y)                               ·                                                                                         ·
+                │         mergeJoinOrder  +"(x=x)",+"(y=y)"                             ·                                                                                         ·
+                ├── scan  ·               ·                                             (x, y, u)                                                                                 x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+                │         table           xyu@primary                                   ·                                                                                         ·
+                │         spans           ALL                                           ·                                                                                         ·
+                └── scan  ·               ·                                             (x, y, v)                                                                                 x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·                         table           xyv@primary                                   ·                                                                                         ·
+·                         spans           ALL                                           ·                                                                                         ·
 
 query IIII rowsort
 SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -1685,58 +1685,58 @@ SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 5  5  NULL  55
 
 # Verify that we transfer constraints between the two sides.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
- │         0  ·     type            inner              ·                   ·
- │         0  ·     equality        (x, y) = (x, y)    ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan  1  scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
- │         1  ·     table           xyu@primary        ·                   ·
- │         1  ·     spans           /1-/1/10           ·                   ·
- └── scan  1  scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
-·          1  ·     table           xyv@primary        ·                   ·
-·          1  ·     spans           /1-/1/10           ·                   ·
+join       ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
+ │         type            inner              ·                   ·
+ │         equality        (x, y) = (x, y)    ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
+ ├── scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
+ │         table           xyu@primary        ·                   ·
+ │         spans           /1-/1/10           ·                   ·
+ └── scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
+·          table           xyv@primary        ·                   ·
+·          spans           /1-/1/10           ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
 1  1  1  1  1  1
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
- │         0  ·     type            inner              ·                   ·
- │         0  ·     equality        (x, y) = (x, y)    ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
- ├── scan  1  scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
- │         1  ·     table           xyu@primary        ·                   ·
- │         1  ·     spans           /1-/1/10           ·                   ·
- └── scan  1  scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
-·          1  ·     table           xyv@primary        ·                   ·
-·          1  ·     spans           /1-/1/10           ·                   ·
+join       ·               ·                  (x, y, u, x, y, v)  x=x; y=y; x=CONST; y!=NULL
+ │         type            inner              ·                   ·
+ │         equality        (x, y) = (x, y)    ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
+ ├── scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
+ │         table           xyu@primary        ·                   ·
+ │         spans           /1-/1/10           ·                   ·
+ └── scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
+·          table           xyv@primary        ·                   ·
+·          spans           /1-/1/10           ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 1  1  1  1  1  1
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                                                     (x, y, u, x, y, v)  ·
- │         0  ·     type            left outer                                            ·                   ·
- │         0  ·     equality        (x, y) = (x, y)                                       ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"                                     ·                   ·
- │         0  ·     pred            (test.public.xyu.x = 1) AND (test.public.xyu.y < 10)  ·                   ·
- ├── scan  1  scan  ·               ·                                                     (x, y, u)           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
- │         1  ·     table           xyu@primary                                           ·                   ·
- │         1  ·     spans           ALL                                                   ·                   ·
- └── scan  1  scan  ·               ·                                                     (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
-·          1  ·     table           xyv@primary                                           ·                   ·
-·          1  ·     spans           /1-/1/10                                              ·                   ·
+join       ·               ·                                                     (x, y, u, x, y, v)  ·
+ │         type            left outer                                            ·                   ·
+ │         equality        (x, y) = (x, y)                                       ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"                                     ·                   ·
+ │         pred            (test.public.xyu.x = 1) AND (test.public.xyu.y < 10)  ·                   ·
+ ├── scan  ·               ·                                                     (x, y, u)           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+ │         table           xyu@primary                                           ·                   ·
+ │         spans           ALL                                                   ·                   ·
+ └── scan  ·               ·                                                     (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
+·          table           xyv@primary                                           ·                   ·
+·          spans           /1-/1/10                                              ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1747,20 +1747,20 @@ SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu
 3  2  32  NULL  NULL  NULL
 4  4  44  NULL  NULL  NULL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                                                     (x, y, u, x, y, v)  ·
- │         0  ·     type            right outer                                           ·                   ·
- │         0  ·     equality        (x, y) = (x, y)                                       ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"                                     ·                   ·
- │         0  ·     pred            (test.public.xyv.x = 1) AND (test.public.xyv.y < 10)  ·                   ·
- ├── scan  1  scan  ·               ·                                                     (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
- │         1  ·     table           xyu@primary                                           ·                   ·
- │         1  ·     spans           /1-/1/10                                              ·                   ·
- └── scan  1  scan  ·               ·                                                     (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·          1  ·     table           xyv@primary                                           ·                   ·
-·          1  ·     spans           ALL                                                   ·                   ·
+join       ·               ·                                                     (x, y, u, x, y, v)  ·
+ │         type            right outer                                           ·                   ·
+ │         equality        (x, y) = (x, y)                                       ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"                                     ·                   ·
+ │         pred            (test.public.xyv.x = 1) AND (test.public.xyv.y < 10)  ·                   ·
+ ├── scan  ·               ·                                                     (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
+ │         table           xyu@primary                                           ·                   ·
+ │         spans           /1-/1/10                                              ·                   ·
+ └── scan  ·               ·                                                     (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·          table           xyv@primary                                           ·                   ·
+·          spans           ALL                                                   ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1774,24 +1774,24 @@ NULL  NULL  NULL  2  2  2
 
 # Test OUTER joins that are run in the distSQL merge joiner
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-render          0  render  ·               ·                  (x, y, u, v)                          ·
- │              0  ·       render 0        xyu.x              ·                                     ·
- │              0  ·       render 1        xyu.y              ·                                     ·
- │              0  ·       render 2        xyu.u              ·                                     ·
- │              0  ·       render 3        xyv.v              ·                                     ·
- └── join       1  join    ·               ·                  (x, y, u, x[omitted], y[omitted], v)  ·
-      │         1  ·       type            left outer         ·                                     ·
-      │         1  ·       equality        (x, y) = (x, y)    ·                                     ·
-      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
-      ├── scan  2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-      │         2  ·       table           xyu@primary        ·                                     ·
-      │         2  ·       spans           /3-                ·                                     ·
-      └── scan  2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·               2  ·       table           xyv@primary        ·                                     ·
-·               2  ·       spans           /3-                ·                                     ·
+render          ·               ·                  (x, y, u, v)                          ·
+ │              render 0        xyu.x              ·                                     ·
+ │              render 1        xyu.y              ·                                     ·
+ │              render 2        xyu.u              ·                                     ·
+ │              render 3        xyv.v              ·                                     ·
+ └── join       ·               ·                  (x, y, u, x[omitted], y[omitted], v)  ·
+      │         type            left outer         ·                                     ·
+      │         equality        (x, y) = (x, y)    ·                                     ·
+      │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
+      ├── scan  ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+      │         table           xyu@primary        ·                                     ·
+      │         spans           /3-                ·                                     ·
+      └── scan  ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·               table           xyv@primary        ·                                     ·
+·               spans           /3-                ·                                     ·
 
 query IIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
@@ -1800,31 +1800,31 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT *
 3  2  32  NULL
 4  4  44  NULL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-render               0  render  ·               ·                  (x, y, u, v)                                        ·
- │                   0  ·       render 0        xyv.x              ·                                                   ·
- │                   0  ·       render 1        xyv.y              ·                                                   ·
- │                   0  ·       render 2        xyu.u              ·                                                   ·
- │                   0  ·       render 3        xyv.v              ·                                                   ·
- └── render          1  render  ·               ·                  (x, y, x[hidden,omitted], y[hidden,omitted], u, v)  ·
-      │              1  ·       render 0        xyv.x              ·                                                   ·
-      │              1  ·       render 1        xyv.y              ·                                                   ·
-      │              1  ·       render 2        NULL               ·                                                   ·
-      │              1  ·       render 3        NULL               ·                                                   ·
-      │              1  ·       render 4        xyu.u              ·                                                   ·
-      │              1  ·       render 5        xyv.v              ·                                                   ·
-      └── join       2  join    ·               ·                  (x[omitted], y[omitted], u, x, y, v)                ·
-           │         2  ·       type            right outer        ·                                                   ·
-           │         2  ·       equality        (x, y) = (x, y)    ·                                                   ·
-           │         2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
-           ├── scan  3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-           │         3  ·       table           xyu@primary        ·                                                   ·
-           │         3  ·       spans           /3-                ·                                                   ·
-           └── scan  3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·                    3  ·       table           xyv@primary        ·                                                   ·
-·                    3  ·       spans           /3-                ·                                                   ·
+render               ·               ·                  (x, y, u, v)                                        ·
+ │                   render 0        xyv.x              ·                                                   ·
+ │                   render 1        xyv.y              ·                                                   ·
+ │                   render 2        xyu.u              ·                                                   ·
+ │                   render 3        xyv.v              ·                                                   ·
+ └── render          ·               ·                  (x, y, x[hidden,omitted], y[hidden,omitted], u, v)  ·
+      │              render 0        xyv.x              ·                                                   ·
+      │              render 1        xyv.y              ·                                                   ·
+      │              render 2        NULL               ·                                                   ·
+      │              render 3        NULL               ·                                                   ·
+      │              render 4        xyu.u              ·                                                   ·
+      │              render 5        xyv.v              ·                                                   ·
+      └── join       ·               ·                  (x[omitted], y[omitted], u, x, y, v)                ·
+           │         type            right outer        ·                                                   ·
+           │         equality        (x, y) = (x, y)    ·                                                   ·
+           │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
+           ├── scan  ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+           │         table           xyu@primary        ·                                                   ·
+           │         spans           /3-                ·                                                   ·
+           └── scan  ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·                    table           xyv@primary        ·                                                   ·
+·                    spans           /3-                ·                                                   ·
 
 query IIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
@@ -1833,35 +1833,35 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT 
 3  3  NULL  33
 5  5  NULL  55
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
-render                    0  render  ·               ·                     (x, y, u, v)                                                                              x!=NULL
- │                        0  ·       render 0        x                     ·                                                                                         ·
- │                        0  ·       render 1        y                     ·                                                                                         ·
- │                        0  ·       render 2        xyu.u                 ·                                                                                         ·
- │                        0  ·       render 3        xyv.v                 ·                                                                                         ·
- └── filter               1  filter  ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  x!=NULL
-      │                   1  ·       filter          x > 2                 ·                                                                                         ·
-      └── render          2  render  ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  ·
-           │              2  ·       render 0        IFNULL(xyu.x, xyv.x)  ·                                                                                         ·
-           │              2  ·       render 1        IFNULL(xyu.y, xyv.y)  ·                                                                                         ·
-           │              2  ·       render 2        NULL                  ·                                                                                         ·
-           │              2  ·       render 3        NULL                  ·                                                                                         ·
-           │              2  ·       render 4        xyu.u                 ·                                                                                         ·
-           │              2  ·       render 5        NULL                  ·                                                                                         ·
-           │              2  ·       render 6        NULL                  ·                                                                                         ·
-           │              2  ·       render 7        xyv.v                 ·                                                                                         ·
-           └── join       3  join    ·               ·                     (x, y, u, x, y, v)                                                                        ·
-                │         3  ·       type            full outer            ·                                                                                         ·
-                │         3  ·       equality        (x, y) = (x, y)       ·                                                                                         ·
-                │         3  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"     ·                                                                                         ·
-                ├── scan  4  scan    ·               ·                     (x, y, u)                                                                                 x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-                │         4  ·       table           xyu@primary           ·                                                                                         ·
-                │         4  ·       spans           ALL                   ·                                                                                         ·
-                └── scan  4  scan    ·               ·                     (x, y, v)                                                                                 x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·                         4  ·       table           xyv@primary           ·                                                                                         ·
-·                         4  ·       spans           ALL                   ·                                                                                         ·
+render                    ·               ·                     (x, y, u, v)                                                                              x!=NULL
+ │                        render 0        x                     ·                                                                                         ·
+ │                        render 1        y                     ·                                                                                         ·
+ │                        render 2        xyu.u                 ·                                                                                         ·
+ │                        render 3        xyv.v                 ·                                                                                         ·
+ └── filter               ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  x!=NULL
+      │                   filter          x > 2                 ·                                                                                         ·
+      └── render          ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  ·
+           │              render 0        IFNULL(xyu.x, xyv.x)  ·                                                                                         ·
+           │              render 1        IFNULL(xyu.y, xyv.y)  ·                                                                                         ·
+           │              render 2        NULL                  ·                                                                                         ·
+           │              render 3        NULL                  ·                                                                                         ·
+           │              render 4        xyu.u                 ·                                                                                         ·
+           │              render 5        NULL                  ·                                                                                         ·
+           │              render 6        NULL                  ·                                                                                         ·
+           │              render 7        xyv.v                 ·                                                                                         ·
+           └── join       ·               ·                     (x, y, u, x, y, v)                                                                        ·
+                │         type            full outer            ·                                                                                         ·
+                │         equality        (x, y) = (x, y)       ·                                                                                         ·
+                │         mergeJoinOrder  +"(x=x)",+"(y=y)"     ·                                                                                         ·
+                ├── scan  ·               ·                     (x, y, u)                                                                                 x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+                │         table           xyu@primary           ·                                                                                         ·
+                │         spans           ALL                   ·                                                                                         ·
+                └── scan  ·               ·                     (x, y, v)                                                                                 x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·                         table           xyv@primary           ·                                                                                         ·
+·                         spans           ALL                   ·                                                                                         ·
 
 query IIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
@@ -1872,20 +1872,20 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT *
 3  3  NULL  33
 5  5  NULL  55
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                             (x, y, u, x, y, v)  ·
- │         0  ·     type            left outer                    ·                   ·
- │         0  ·     equality        (x, y) = (x, y)               ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
- │         0  ·     pred            (xyu.x = 1) AND (xyu.y < 10)  ·                   ·
- ├── scan  1  scan  ·               ·                             (x, y, u)           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
- │         1  ·     table           xyu@primary                   ·                   ·
- │         1  ·     spans           ALL                           ·                   ·
- └── scan  1  scan  ·               ·                             (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
-·          1  ·     table           xyv@primary                   ·                   ·
-·          1  ·     spans           /1-/1/10                      ·                   ·
+join       ·               ·                             (x, y, u, x, y, v)  ·
+ │         type            left outer                    ·                   ·
+ │         equality        (x, y) = (x, y)               ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
+ │         pred            (xyu.x = 1) AND (xyu.y < 10)  ·                   ·
+ ├── scan  ·               ·                             (x, y, u)           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+ │         table           xyu@primary                   ·                   ·
+ │         spans           ALL                           ·                   ·
+ └── scan  ·               ·                             (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
+·          table           xyv@primary                   ·                   ·
+·          spans           /1-/1/10                      ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1896,20 +1896,20 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT *
 3  2  32  NULL  NULL  NULL
 4  4  44  NULL  NULL  NULL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-join       0  join  ·               ·                             (x, y, u, x, y, v)  ·
- │         0  ·     type            right outer                   ·                   ·
- │         0  ·     equality        (x, y) = (x, y)               ·                   ·
- │         0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
- │         0  ·     pred            (xyv.x = 1) AND (xyv.y < 10)  ·                   ·
- ├── scan  1  scan  ·               ·                             (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
- │         1  ·     table           xyu@primary                   ·                   ·
- │         1  ·     spans           /1-/1/10                      ·                   ·
- └── scan  1  scan  ·               ·                             (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·          1  ·     table           xyv@primary                   ·                   ·
-·          1  ·     spans           ALL                           ·                   ·
+join       ·               ·                             (x, y, u, x, y, v)  ·
+ │         type            right outer                   ·                   ·
+ │         equality        (x, y) = (x, y)               ·                   ·
+ │         mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
+ │         pred            (xyv.x = 1) AND (xyv.y < 10)  ·                   ·
+ ├── scan  ·               ·                             (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
+ │         table           xyu@primary                   ·                   ·
+ │         spans           /1-/1/10                      ·                   ·
+ └── scan  ·               ·                             (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·          table           xyv@primary                   ·                   ·
+·          spans           ALL                           ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1921,24 +1921,24 @@ NULL  NULL  NULL  5  5  55
 NULL  NULL  NULL  2  2  2
 
 # Regression test for #20472: break up tuple inequalities.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-render          0  render  ·               ·                  (x, y, u, v)                          x!=NULL; y!=NULL
- │              0  ·       render 0        test.public.xyu.x  ·                                     ·
- │              0  ·       render 1        test.public.xyu.y  ·                                     ·
- │              0  ·       render 2        test.public.xyu.u  ·                                     ·
- │              0  ·       render 3        test.public.xyv.v  ·                                     ·
- └── join       1  join    ·               ·                  (x, y, u, x[omitted], y[omitted], v)  x=x; y=y; x!=NULL; y!=NULL
-      │         1  ·       type            inner              ·                                     ·
-      │         1  ·       equality        (x, y) = (x, y)    ·                                     ·
-      │         1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
-      ├── scan  2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
-      │         2  ·       table           xyu@primary        ·                                     ·
-      │         2  ·       spans           /1/2/4-            ·                                     ·
-      └── scan  2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
-·               2  ·       table           xyv@primary        ·                                     ·
-·               2  ·       spans           /1/2-              ·                                     ·
+render          ·               ·                  (x, y, u, v)                          x!=NULL; y!=NULL
+ │              render 0        test.public.xyu.x  ·                                     ·
+ │              render 1        test.public.xyu.y  ·                                     ·
+ │              render 2        test.public.xyu.u  ·                                     ·
+ │              render 3        test.public.xyv.v  ·                                     ·
+ └── join       ·               ·                  (x, y, u, x[omitted], y[omitted], v)  x=x; y=y; x!=NULL; y!=NULL
+      │         type            inner              ·                                     ·
+      │         equality        (x, y) = (x, y)    ·                                     ·
+      │         mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
+      ├── scan  ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+      │         table           xyu@primary        ·                                     ·
+      │         spans           /1/2/4-            ·                                     ·
+      └── scan  ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+·               table           xyv@primary        ·                                     ·
+·               spans           /1/2-              ·                                     ·
 
 
 # Regression test for #20858.
@@ -1949,68 +1949,68 @@ CREATE TABLE l (a INT PRIMARY KEY)
 statement ok
 CREATE TABLE r (a INT PRIMARY KEY)
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render          0  render  ·               ·                (a)              ·
- │              0  ·       render 0        test.public.l.a  ·                ·
- └── join       1  join    ·               ·                (a, a[omitted])  ·
-      │         1  ·       type            left outer       ·                ·
-      │         1  ·       equality        (a) = (a)        ·                ·
-      │         1  ·       mergeJoinOrder  +"(a=a)"         ·                ·
-      ├── scan  2  scan    ·               ·                (a)              a=CONST; key()
-      │         2  ·       table           l@primary        ·                ·
-      │         2  ·       spans           /3-/3/#          ·                ·
-      └── scan  2  scan    ·               ·                (a)              a=CONST; key()
-·               2  ·       table           r@primary        ·                ·
-·               2  ·       spans           /3-/3/#          ·                ·
+render          ·               ·                (a)              ·
+ │              render 0        test.public.l.a  ·                ·
+ └── join       ·               ·                (a, a[omitted])  ·
+      │         type            left outer       ·                ·
+      │         equality        (a) = (a)        ·                ·
+      │         mergeJoinOrder  +"(a=a)"         ·                ·
+      ├── scan  ·               ·                (a)              a=CONST; key()
+      │         table           l@primary        ·                ·
+      │         spans           /3-/3/#          ·                ·
+      └── scan  ·               ·                (a)              a=CONST; key()
+·               table           r@primary        ·                ·
+·               spans           /3-/3/#          ·                ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
 ----
-join       0  join  ·               ·           (a, a)  ·
- │         0  ·     type            left outer  ·       ·
- │         0  ·     equality        (a) = (a)   ·       ·
- │         0  ·     mergeJoinOrder  +"(a=a)"    ·       ·
- ├── scan  1  scan  ·               ·           (a)     a=CONST; key()
- │         1  ·     table           l@primary   ·       ·
- │         1  ·     spans           /3-/3/#     ·       ·
- └── scan  1  scan  ·               ·           (a)     a=CONST; key()
-·          1  ·     table           r@primary   ·       ·
-·          1  ·     spans           /3-/3/#     ·       ·
+join       ·               ·           (a, a)  ·
+ │         type            left outer  ·       ·
+ │         equality        (a) = (a)   ·       ·
+ │         mergeJoinOrder  +"(a=a)"    ·       ·
+ ├── scan  ·               ·           (a)     a=CONST; key()
+ │         table           l@primary   ·       ·
+ │         spans           /3-/3/#     ·       ·
+ └── scan  ·               ·           (a)     a=CONST; key()
+·          table           r@primary   ·       ·
+·          spans           /3-/3/#     ·       ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r USING(a) WHERE a = 3;
 ----
-render               0  render  ·               ·                (a)                     ·
- │                   0  ·       render 0        test.public.r.a  ·                       ·
- └── render          1  render  ·               ·                (a, a[hidden,omitted])  ·
-      │              1  ·       render 0        test.public.r.a  ·                       ·
-      │              1  ·       render 1        NULL             ·                       ·
-      └── join       2  join    ·               ·                (a[omitted], a)         ·
-           │         2  ·       type            right outer      ·                       ·
-           │         2  ·       equality        (a) = (a)        ·                       ·
-           │         2  ·       mergeJoinOrder  +"(a=a)"         ·                       ·
-           ├── scan  3  scan    ·               ·                (a)                     a=CONST; key()
-           │         3  ·       table           l@primary        ·                       ·
-           │         3  ·       spans           /3-/3/#          ·                       ·
-           └── scan  3  scan    ·               ·                (a)                     a=CONST; key()
-·                    3  ·       table           r@primary        ·                       ·
-·                    3  ·       spans           /3-/3/#          ·                       ·
+render               ·               ·                (a)                     ·
+ │                   render 0        test.public.r.a  ·                       ·
+ └── render          ·               ·                (a, a[hidden,omitted])  ·
+      │              render 0        test.public.r.a  ·                       ·
+      │              render 1        NULL             ·                       ·
+      └── join       ·               ·                (a[omitted], a)         ·
+           │         type            right outer      ·                       ·
+           │         equality        (a) = (a)        ·                       ·
+           │         mergeJoinOrder  +"(a=a)"         ·                       ·
+           ├── scan  ·               ·                (a)                     a=CONST; key()
+           │         table           l@primary        ·                       ·
+           │         spans           /3-/3/#          ·                       ·
+           └── scan  ·               ·                (a)                     a=CONST; key()
+·                    table           r@primary        ·                       ·
+·                    spans           /3-/3/#          ·                       ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM l RIGHT OUTER JOIN r ON l.a = r.a WHERE r.a = 3;
 ----
-join       0  join  ·               ·            (a, a)  ·
- │         0  ·     type            right outer  ·       ·
- │         0  ·     equality        (a) = (a)    ·       ·
- │         0  ·     mergeJoinOrder  +"(a=a)"     ·       ·
- ├── scan  1  scan  ·               ·            (a)     a=CONST; key()
- │         1  ·     table           l@primary    ·       ·
- │         1  ·     spans           /3-/3/#      ·       ·
- └── scan  1  scan  ·               ·            (a)     a=CONST; key()
-·          1  ·     table           r@primary    ·       ·
-·          1  ·     spans           /3-/3/#      ·       ·
+join       ·               ·            (a, a)  ·
+ │         type            right outer  ·       ·
+ │         equality        (a) = (a)    ·       ·
+ │         mergeJoinOrder  +"(a=a)"     ·       ·
+ ├── scan  ·               ·            (a)     a=CONST; key()
+ │         table           l@primary    ·       ·
+ │         spans           /3-/3/#      ·       ·
+ └── scan  ·               ·            (a)     a=CONST; key()
+·          table           r@primary    ·       ·
+·          spans           /3-/3/#      ·       ·
 
 statement ok
 INSERT INTO l VALUES (1), (2), (3)

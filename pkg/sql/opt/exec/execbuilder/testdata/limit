@@ -6,10 +6,10 @@ INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 12
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-scan  0  scan  ·      ·          (k, v)  ·
-·     0  ·     table  t@primary  ·       ·
-·     0  ·     spans  ALL        ·       ·
-·     0  ·     limit  5          ·       ·
+scan  ·      ·          (k, v)  ·
+·     table  t@primary  ·       ·
+·     spans  ALL        ·       ·
+·     limit  5          ·       ·
 
 exec
 SELECT k, v FROM t ORDER BY k LIMIT 5
@@ -24,11 +24,11 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
-limit      0  limit  ·       ·          (k, v)  ·
- │         0  ·      offset  5          ·       ·
- └── scan  1  scan   ·       ·          (k, v)  ·
-·          1  ·      table   t@primary  ·       ·
-·          1  ·      spans   ALL        ·       ·
+limit      ·       ·          (k, v)  ·
+ │         offset  5          ·       ·
+ └── scan  ·       ·          (k, v)  ·
+·          table   t@primary  ·       ·
+·          spans   ALL        ·       ·
 
 exec
 SELECT k, v FROM t ORDER BY k OFFSET 5
@@ -39,12 +39,12 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-limit      0  limit  ·       ·          (k, v)  ·
- │         0  ·      count   5          ·       ·
- │         0  ·      offset  1          ·       ·
- └── scan  1  scan   ·       ·          (k, v)  ·
-·          1  ·      table   t@t_v_idx  ·       ·
-·          1  ·      spans   ALL        ·       ·
+limit      ·       ·          (k, v)  ·
+ │         count   5          ·       ·
+ │         offset  1          ·       ·
+ └── scan  ·       ·          (k, v)  ·
+·          table   t@t_v_idx  ·       ·
+·          spans   ALL        ·       ·
 
 exec
 SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
@@ -59,14 +59,14 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
-limit           0  limit  ·       ·          (k, v)  -v
- │              0  ·      count   5          ·       ·
- │              0  ·      offset  1          ·       ·
- └── sort       1  sort   ·       ·          (k, v)  -v
-      │         1  ·      order   -v         ·       ·
-      └── scan  2  scan   ·       ·          (k, v)  ·
-·               2  ·      table   t@primary  ·       ·
-·               2  ·      spans   ALL        ·       ·
+limit           ·       ·          (k, v)  -v
+ │              count   5          ·       ·
+ │              offset  1          ·       ·
+ └── sort       ·       ·          (k, v)  -v
+      │         order   -v         ·       ·
+      └── scan  ·       ·          (k, v)  ·
+·               table   t@primary  ·       ·
+·               spans   ALL        ·       ·
 
 exec
 SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
@@ -81,23 +81,23 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-render                         0  render  ·            ·          (column4)         ·
- │                             0  ·       render 0     column4    ·                 ·
- └── limit                     1  limit   ·            ·          ("t.v", column4)  -"t.v"
-      │                        1  ·       count        10         ·                 ·
-      └── sort                 2  sort    ·            ·          ("t.v", column4)  -"t.v"
-           │                   2  ·       order        -"t.v"     ·                 ·
-           └── render          3  render  ·            ·          ("t.v", column4)  ·
-                │              3  ·       render 0     v          ·                 ·
-                │              3  ·       render 1     agg0       ·                 ·
-                └── group      4  group   ·            ·          (k, v, agg0)      ·
-                     │         4  ·       aggregate 0  k          ·                 ·
-                     │         4  ·       aggregate 1  v          ·                 ·
-                     │         4  ·       aggregate 2  sum(w)     ·                 ·
-                     │         4  ·       group by     @1-@2      ·                 ·
-                     └── scan  5  scan    ·            ·          (k, v, w)         ·
-·                              5  ·       table        t@primary  ·                 ·
-·                              5  ·       spans        ALL        ·                 ·
+render                         ·            ·          (column4)         ·
+ │                             render 0     column4    ·                 ·
+ └── limit                     ·            ·          ("t.v", column4)  -"t.v"
+      │                        count        10         ·                 ·
+      └── sort                 ·            ·          ("t.v", column4)  -"t.v"
+           │                   order        -"t.v"     ·                 ·
+           └── render          ·            ·          ("t.v", column4)  ·
+                │              render 0     v          ·                 ·
+                │              render 1     agg0       ·                 ·
+                └── group      ·            ·          (k, v, agg0)      ·
+                     │         aggregate 0  k          ·                 ·
+                     │         aggregate 1  v          ·                 ·
+                     │         aggregate 2  sum(w)     ·                 ·
+                     │         group by     @1-@2      ·                 ·
+                     └── scan  ·            ·          (k, v, w)         ·
+·                              table        t@primary  ·                 ·
+·                              spans        ALL        ·                 ·
 
 exec
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
@@ -113,12 +113,12 @@ column4:decimal
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
-render     0  render  ·         ·          (k)     ·
- │         0  ·       render 0  k          ·       ·
- └── scan  1  scan    ·         ·          (k, v)  ·
-·          1  ·       table     t@t_v_idx  ·       ·
-·          1  ·       spans     ALL        ·       ·
-·          1  ·       limit     4          ·       ·
+render     ·         ·          (k)     ·
+ │         render 0  k          ·       ·
+ └── scan  ·         ·          (k, v)  ·
+·          table     t@t_v_idx  ·       ·
+·          spans     ALL        ·       ·
+·          limit     4          ·       ·
 
 exec
 SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
@@ -132,12 +132,12 @@ k:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
-render     0  render  ·         ·          (k)     ·
- │         0  ·       render 0  k          ·       ·
- └── scan  1  scan    ·         ·          (k, v)  ·
-·          1  ·       table     t@t_v_idx  ·       ·
-·          1  ·       spans     ALL        ·       ·
-·          1  ·       limit     4          ·       ·
+render     ·         ·          (k)     ·
+ │         render 0  k          ·       ·
+ └── scan  ·         ·          (k, v)  ·
+·          table     t@t_v_idx  ·       ·
+·          spans     ALL        ·       ·
+·          limit     4          ·       ·
 
 exec
 SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)

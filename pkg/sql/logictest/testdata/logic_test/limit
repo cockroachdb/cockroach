@@ -57,38 +57,38 @@ SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
 5 25 125
 
 # There must be no limit at the index scan level.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
 ----
-Tree             Level  Type        Field   Description  Columns                      Ordering
-limit            0      limit       ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
- │               0      ·           count   2            ·                            ·
- └── index-join  1      index-join  ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
-      ├── scan   2      scan        ·       ·            (k, v[omitted], w[omitted])  k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
-      │          2      ·           table   t@t_v_idx    ·                            ·
-      │          2      ·           spans   /5-          ·                            ·
-      └── scan   2      scan        ·       ·            (k, v, w)                    ·
-·                2      ·           table   t@primary    ·                            ·
-·                2      ·           filter  w > 30       ·                            ·
+Tree             Field   Description  Columns                      Ordering
+limit            ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+ │               count   2            ·                            ·
+ └── index-join  ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+      ├── scan   ·       ·            (k, v[omitted], w[omitted])  k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+      │          table   t@t_v_idx    ·                            ·
+      │          spans   /5-          ·                            ·
+      └── scan   ·       ·            (k, v, w)                    ·
+·                table   t@primary    ·                            ·
+·                filter  w > 30       ·                            ·
 
 # This kind of query can be used to work around memory usage limits. We need to
 # choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
 # limit we will only store 100 rows in the sort node). See #19677.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
 ----
-Tree                           Level  Type      Field      Description      Columns                      Ordering
-limit                          0      limit     ·          ·                (w)                          weak-key(w); +w
- │                             0      ·         count      25               ·                            ·
- └── distinct                  1      distinct  ·          ·                (w)                          weak-key(w); +w
-      │                        1      ·         order key  w                ·                            ·
-      └── limit                2      limit     ·          ·                (w)                          +w
-           │                   2      ·         count      100              ·                            ·
-           └── sort            3      sort      ·          ·                (w)                          +w
-                │              3      ·         order      +w               ·                            ·
-                │              3      ·         strategy   top 100          ·                            ·
-                └── render     4      render    ·          ·                (w)                          ·
-                     │         4      ·         render 0   test.public.t.w  ·                            ·
-                     └── scan  5      scan      ·          ·                (k[omitted], v[omitted], w)  k!=NULL; key(k)
-·                              5      ·         table      t@primary        ·                            ·
-·                              5      ·         spans      ALL              ·                            ·
+Tree                           Field      Description      Columns                      Ordering
+limit                          ·          ·                (w)                          weak-key(w); +w
+ │                             count      25               ·                            ·
+ └── distinct                  ·          ·                (w)                          weak-key(w); +w
+      │                        order key  w                ·                            ·
+      └── limit                ·          ·                (w)                          +w
+           │                   count      100              ·                            ·
+           └── sort            ·          ·                (w)                          +w
+                │              order      +w               ·                            ·
+                │              strategy   top 100          ·                            ·
+                └── render     ·          ·                (w)                          ·
+                     │         render 0   test.public.t.w  ·                            ·
+                     └── scan  ·          ·                (k[omitted], v[omitted], w)  k!=NULL; key(k)
+·                              table      t@primary        ·                            ·
+·                              spans      ALL              ·                            ·
