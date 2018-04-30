@@ -231,6 +231,10 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 	// sstables.
 	var kvs sqlbase.SpanKVFetcher
 	emitFunc := func(kv engine.MVCCKeyValue) (bool, error) {
+		if log.V(3) {
+			v := roachpb.Value{RawBytes: kv.Value}
+			log.Infof(ctx, `kv %s [%s] -> %s`, kv.Key.Key, kv.Key.Timestamp, v.PrettyPrint())
+		}
 		// TODO(dan): Plumb this timestamp down to record written to kafka.
 		kvs.KVs = append(kvs.KVs, roachpb.KeyValue{
 			Key: kv.Key.Key,
@@ -298,10 +302,14 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		if err != nil {
 			return err
 		}
+		json := j.String()
+		if log.V(3) {
+			log.Infof(ctx, `row %s`, json)
+		}
 
 		message := &sarama.ProducerMessage{
 			Topic: cf.kafkaTopicPrefix + tableDesc.Name,
-			Value: sarama.ByteEncoder(j.String()),
+			Value: sarama.ByteEncoder(json),
 		}
 		if _, _, err := cf.kafka.SendMessage(message); err != nil {
 			return errors.Wrapf(err, `sending message to kafka topic %s`, message.Topic)
@@ -336,13 +344,14 @@ func (b *changefeedResumer) Resume(
 	highwater := details.Highwater
 	for {
 		nextHighwater := p.ExecCfg().Clock.Now()
-		// TODO(dan): nextHighwater should probably be some about of time in the
-		// past, so we don't update a bunch of timestamp caches and cause
+		// TODO(dan): nextHighwater should probably be some amount of time in
+		// the past, so we don't update a bunch of timestamp caches and cause
 		// transactions to be restarted.
 		if err := cf.poll(ctx, highwater, nextHighwater); err != nil {
 			return err
 		}
 		highwater = nextHighwater
+		log.VEventf(ctx, 1, `new highwater: %s`, highwater)
 
 		// TODO(dan): HACK for testing. We call SendMessages with nil to
 		// indicate to the test that a full poll finished. Figure out something
