@@ -34,7 +34,6 @@ func init() {
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
-	t.Skip("#24717")
 
 	const testPollingInterval = 10 * time.Millisecond
 	defer func(oldInterval time.Duration) {
@@ -179,17 +178,11 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 		`{"a": 7, "b": "d"}`,
 		`{"a": 8, "b": "e"}`,
 	})
-	<-k.flushCh
 
 	// PAUSE JOB is asynchronous, so wait out a few polling intervals for it to
-	// notice the pause state and shut down. Then make sure that changedCh is
-	// cleared.
+	// notice the pause state and shut down.
 	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
 	time.Sleep(10 * testPollingInterval)
-	select {
-	case <-k.flushCh:
-	default:
-	}
 
 	// Nothing should happen if the job is paused.
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
@@ -197,8 +190,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	assertPayloads(t, k.Messages(), nil)
 
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
-	<-k.flushCh
-	assertPayloads(t, k.Messages(), []string{
+	assertPayloads(t, k.WaitUntilNewMessages(), []string{
 		`{"a": 16, "b": "f"}`,
 	})
 }
@@ -229,6 +221,24 @@ func (k *testKafkaProducer) SendMessage(
 
 // SendMessages implements the KafkaProducer interface.
 func (k *testKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
+	k.mu.Lock()
+	msgLen := len(k.mu.msgs)
+	k.mu.Unlock()
+	if msgLen == 0 {
+		// Make sure that WaitUntilNewMessages (which wakes up on the fluchCh
+		// trigger) always gets at least one full scan. Without this check,
+		// there is a race where the changefeed finishes a poll, triggers this,
+		// then some data is written and the changefeed is in the middle of
+		// handing them all to SendMessage when WaitUntilNewMessages wakes up
+		// and sees a partial poll.
+		//
+		// TODO(dan): It's become quite clear that the tests are brittle when
+		// they make assumptions about this underlying implementation of a
+		// periodic, consistent incremental scan. This assumption will also no
+		// longer hold once we switch to a push-based implementation. Rework the
+		// tests then.
+		return nil
+	}
 	if msgs == nil {
 		select {
 		case k.flushCh <- struct{}{}:
