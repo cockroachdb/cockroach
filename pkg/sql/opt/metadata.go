@@ -15,6 +15,8 @@
 package opt
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -71,6 +73,10 @@ type mdTable struct {
 	// weakKeys is a cache of the weak key column combinations on this table.
 	// See RelationalProps.WeakKeys for more details.
 	weakKeys WeakKeys
+
+	// statistics contains the available statistics for this table. See
+	// RelationalProps.Statistics for more details.
+	statistics *Statistics
 }
 
 // mdColumn stores information about one of the columns stored in the metadata,
@@ -203,4 +209,74 @@ func (md *Metadata) TableWeakKeys(tabID TableID) WeakKeys {
 		}
 	}
 	return mdTab.weakKeys
+}
+
+// TableStatistics returns the available statistics for the given table.
+// Statistics are derived lazily and are cached in the metadata, since they may
+// be accessed multiple times during query optimization. For more details, see
+// RelationalProps.Statistics.
+func (md *Metadata) TableStatistics(tabID TableID) *Statistics {
+	mdTab := md.tables[tabID]
+	if mdTab.statistics == nil {
+		mdTab.statistics = &Statistics{}
+		if mdTab.tab.StatisticCount() == 0 {
+			// No statistics.
+			mdTab.statistics.RowCount = 1000
+		} else {
+			// Get the RowCount from the most recent statistic. Stats are ordered
+			// with most recent first.
+			mdTab.statistics.RowCount = mdTab.tab.Statistic(0).RowCount()
+
+			// Add all the column statistics, using the most recent statistic for each
+			// column set. Stats are ordered with most recent first.
+			mdTab.statistics.ColStats = make(map[ColumnID]*ColumnStatistic)
+			mdTab.statistics.MultiColStats = make(map[string]*ColumnStatistic)
+			for i := 0; i < mdTab.tab.StatisticCount(); i++ {
+				stat := mdTab.tab.Statistic(i)
+				cols := md.colSetFromTableStatistic(stat, tabID)
+
+				if cols.Len() == 1 {
+					col, _ := cols.Next(0)
+					key := ColumnID(col)
+
+					if _, ok := mdTab.statistics.ColStats[key]; !ok {
+						mdTab.statistics.ColStats[key] = &ColumnStatistic{
+							Cols:          cols,
+							DistinctCount: stat.DistinctCount(),
+						}
+					}
+				} else {
+					// Get a unique key for this column set.
+					key := writeColSet(cols)
+
+					if _, ok := mdTab.statistics.MultiColStats[key]; !ok {
+						mdTab.statistics.MultiColStats[key] = &ColumnStatistic{
+							Cols:          cols,
+							DistinctCount: stat.DistinctCount(),
+						}
+					}
+				}
+			}
+		}
+	}
+	return mdTab.statistics
+}
+
+func (md *Metadata) colSetFromTableStatistic(stat TableStatistic, tableID TableID) (cols ColSet) {
+	for i := 0; i < stat.ColumnCount(); i++ {
+		cols.Add(int(md.TableColumn(tableID, stat.ColumnOrdinal(i))))
+	}
+	return cols
+}
+
+// writeColSet writes a series of varints, one for each column in the set, in
+// column id order. Can be used as a key in a map.
+func writeColSet(colSet ColSet) string {
+	var buf [10]byte
+	var res bytes.Buffer
+	colSet.ForEach(func(i int) {
+		cnt := binary.PutUvarint(buf[:], uint64(i))
+		res.Write(buf[:cnt])
+	})
+	return res.String()
 }

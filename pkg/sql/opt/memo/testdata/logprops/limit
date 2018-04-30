@@ -144,11 +144,11 @@ SELECT s, x FROM xyzs WHERE x=1 LIMIT 4294967296
 ----
 limit
  ├── columns: s:4(string) x:1(int!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=1]
  ├── keys: (1)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
  │    ├── constraint: /1: [/1 - /1]
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1, distinct(1)=1]
  │    └── keys: (1)
  └── const: 4294967296 [type=int]

@@ -42,7 +42,7 @@ memo (optimized)
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── "[presentation: k:1]"
  │         ├── best: (scan a,cols=(1),constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G2: (scan a,cols=(1)) (scan a@u,cols=(1)) (scan a@v,cols=(1))
  │    └── ""
  │         ├── best: (scan a,cols=(1))
@@ -72,11 +72,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 100.00
+ │         └── cost: 333.00
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
- │         └── cost: 100.00
+ │         └── cost: 333.00
  ├── G3: (projections G6)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── ""
@@ -108,11 +108,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G2: (select G4 G5) (select G6 G7) (scan a@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G3: (projections G10)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
@@ -122,7 +122,7 @@ memo (optimized)
  ├── G6: (scan a,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a,cols=(1,2),constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G13)
@@ -161,11 +161,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 110.00
+ │         └── cost: 1.10
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 110.00
+ │         └── cost: 1.10
  ├── G3: (projections G12)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
@@ -175,7 +175,7 @@ memo (optimized)
  ├── G6: (scan a@u,cols=(1,2),constrained)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G7: (filters G9)
  ├── G8: (eq G13 G11)
  ├── G9: (eq G10 G11)
@@ -211,11 +211,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 110.00
+ │         └── cost: 1.10
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 110.00
+ │         └── cost: 1.10
  ├── G3: (projections G10)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
@@ -225,12 +225,12 @@ memo (optimized)
  ├── G6: (scan a@u,constrained)
  │    └── ""
  │         ├── best: (scan a@u,constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G7: (filters G11)
  ├── G8: (scan a@v,constrained)
  │    └── ""
  │         ├── best: (scan a@v,constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G9: (filters G12)
  ├── G10: (variable a.k)
  ├── G11: (eq G13 G14)
@@ -240,7 +240,7 @@ memo (optimized)
  ├── G15: (variable a.u)
  └── G16: (const 1)
 
-# No constraint can be derived from filter (nothing should be pushed down).
+# Only not-null constraint is pushed down.
 opt
 SELECT k FROM a WHERE u=v
 ----

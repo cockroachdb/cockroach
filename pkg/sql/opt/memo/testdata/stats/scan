@@ -29,7 +29,7 @@ SELECT * FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=2000, distinct(1)=2000]
+ ├── stats: [rows=2000]
  └── keys: (1) weak(3,4)
 
 exec-ddl
@@ -57,6 +57,12 @@ ALTER TABLE a INJECT STATISTICS '[
     "created_at": "2018-01-01 2:00:00.00000+00:00",
     "row_count": 3000,
     "distinct_count": 500
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 3000,
+    "distinct_count": 2
   }
 ]'
 ----
@@ -66,7 +72,7 @@ SELECT * FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=3000, distinct(1)=2000, distinct(2)=500, distinct(1,2)=2000]
+ ├── stats: [rows=3000]
  └── keys: (1) weak(3,4)
 
 # Test constrained scan.
@@ -87,5 +93,35 @@ scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/6 - /10]
  ├── limit: 2
- ├── stats: [rows=2, distinct(1)=2]
+ ├── stats: [rows=2]
  └── keys: (1)
+
+opt
+SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
+----
+group-by
+ ├── columns: column5:5(int) y:2(int) x:1(int!null)
+ ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ ├── stats: [rows=148, distinct(1,2)=148]
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── constraint: /1: [/1 - /100]
+ │    ├── stats: [rows=150, distinct(1)=100, distinct(1,2)=148]
+ │    └── keys: (1)
+ └── aggregations
+      └── count-rows [type=int]
+
+# Test calculation of multi-column stats.
+opt
+SELECT y, s FROM a GROUP BY y, s
+----
+group-by
+ ├── columns: y:2(int) s:3(string)
+ ├── grouping columns: a.y:2(int) a.s:3(string)
+ ├── stats: [rows=1000, distinct(2,3)=1000]
+ ├── keys: weak(2,3)
+ ├── scan a
+ │    ├── columns: a.y:2(int) a.s:3(string)
+ │    └── stats: [rows=3000, distinct(2,3)=1000]
+ └── aggregations
