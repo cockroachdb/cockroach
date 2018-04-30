@@ -1089,6 +1089,42 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		if s.testingKnobs.AsyncExecQuickly {
 			delay = 20 * time.Millisecond
 		}
+
+		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
+			for tableID, sc := range schemaChangers {
+				if timeutil.Since(sc.execAfter) > 0 {
+					evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
+
+					execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
+					err := sc.exec(execCtx, false /* inSession */, &evalCtx)
+					cleanup()
+
+					// Advance the execAfter time so that this schema
+					// changer doesn't get called again for a while.
+					sc.execAfter = timeutil.Now().Add(delay)
+					schemaChangers[tableID] = sc
+
+					if err != nil {
+						if shouldLogSchemaChangeError(err) {
+							log.Warningf(ctx, "Error executing schema change: %s", err)
+						}
+						if err == sqlbase.ErrDescriptorNotFound {
+							// Someone deleted this table. Don't try to run the schema
+							// changer again. Note that there's no gossip update for the
+							// deletion which would remove this schemaChanger.
+							delete(schemaChangers, tableID)
+						}
+					} else {
+						// We successfully executed the schema change. Delete it.
+						delete(schemaChangers, tableID)
+					}
+
+					// Only attempt to run one schema changer.
+					break
+				}
+			}
+		}
+
 		for {
 			select {
 			case <-gossipUpdateC:
@@ -1236,38 +1272,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					timer = s.newTimer(s.schemaChangers)
 					continue
 				}
-				for tableID, sc := range s.schemaChangers {
-					if timeutil.Since(sc.execAfter) > 0 {
-						evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
 
-						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
-						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
-						cleanup()
-
-						// Advance the execAfter time so that this schema
-						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(delay)
-						s.schemaChangers[tableID] = sc
-
-						if err != nil {
-							if shouldLogSchemaChangeError(err) {
-								log.Warningf(ctx, "Error executing schema change: %s", err)
-							}
-							if err == sqlbase.ErrDescriptorNotFound {
-								// Someone deleted this table. Don't try to run the schema
-								// changer again. Note that there's no gossip update for the
-								// deletion which would remove this schemaChanger.
-								delete(s.schemaChangers, tableID)
-							}
-						} else {
-							// We successfully executed the schema change. Delete it.
-							delete(s.schemaChangers, tableID)
-						}
-
-						// Only attempt to run one schema changer.
-						break
-					}
-				}
+				execOneSchemaChange(s.schemaChangers)
 
 				timer = s.newTimer(s.schemaChangers)
 
@@ -1278,40 +1284,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					continue
 				}
 
-				for tableID, sc := range s.forGC {
-					if timeutil.Since(sc.execAfter) > 0 {
-						evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
-
-						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
-						// TODO(vivek): This should be a call to just GC the data
-						// instead of calling exec().
-						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
-						cleanup()
-
-						// Advance the execAfter time so that this schema
-						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(delay)
-						s.forGC[tableID] = sc
-
-						if err != nil {
-							if shouldLogSchemaChangeError(err) {
-								log.Warningf(ctx, "Error executing schema change: %s", err)
-							}
-							if err == sqlbase.ErrDescriptorNotFound {
-								// Someone deleted this table. Don't try to run the schema
-								// changer again. Note that there's no gossip update for the
-								// deletion which would remove this schemaChanger.
-								delete(s.forGC, tableID)
-							}
-						} else {
-							// We successfully executed the schema change. Delete it.
-							delete(s.forGC, tableID)
-						}
-
-						// Only attempt to run one schema changer.
-						break
-					}
-				}
+				execOneSchemaChange(s.forGC)
 
 				gcTimer = s.newTimer(s.forGC)
 
