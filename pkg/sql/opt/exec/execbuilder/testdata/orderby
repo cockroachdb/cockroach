@@ -20,8 +20,8 @@ NULL
 false
 true
 
-exec-explain
-SELECT c FROM t ORDER BY c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT c FROM t ORDER BY c
 ----
 sort       0  sort  ·      ·          (c)  +c
  │         0  ·     order  +c         ·    ·
@@ -45,8 +45,8 @@ a:int  b:int
 2      8
 1      9
 
-exec-explain
-SELECT a, b FROM t ORDER BY b
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b
 ----
 sort       0  sort  ·      ·          (a, b)  +b
  │         0  ·     order  +b         ·       ·
@@ -62,8 +62,8 @@ a:int  b:int
 2      8
 3      7
 
-exec-explain
-SELECT a, b FROM t ORDER BY b DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC
 ----
 sort       0  sort  ·      ·          (a, b)  -b
  │         0  ·     order  -b         ·       ·
@@ -80,8 +80,8 @@ a:int
 2
 1
 
-exec-explain
-SELECT a, b FROM t ORDER BY b LIMIT 2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit           0  limit  ·      ·          (a, b)  +b
  │              0  ·      count  2          ·       ·
@@ -99,8 +99,8 @@ a:int  b:int
 2      8
 
 # TODO(radu): this does not work. Unclear if we want to support it or not.
-#exec-explain
-#SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
+#exec hide-colnames
+#EXPLAIN (VERBOSE) #SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
 #----
 #limit                     0  limit     ·         ·                (c)                 weak-key(c)
 # │                        0  ·         count     2                ·                   ·
@@ -129,8 +129,8 @@ b:int
 8
 9
 
-exec-explain
-SELECT b FROM t ORDER BY a DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC
 ----
 render          0  render  ·         ·          (b)     ·
  │              0  ·       render 0  b          ·       ·
@@ -140,8 +140,8 @@ render          0  render  ·         ·          (b)     ·
 ·               2  ·       table     t@primary  ·       ·
 ·               2  ·       spans     ALL        ·       ·
 
-exec-explain
-SELECT b FROM t ORDER BY a LIMIT 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
 render     0  render  ·         ·          (b)     ·
  │         0  ·       render 0  b          ·       ·
@@ -150,8 +150,8 @@ render     0  render  ·         ·          (b)     ·
 ·          1  ·       spans     ALL        ·       ·
 ·          1  ·       limit     1          ·       ·
 
-exec-explain
-SELECT b FROM t ORDER BY a DESC, b ASC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 render          0  render  ·         ·          (b)     ·
  │              0  ·       render 0  b          ·       ·
@@ -161,8 +161,8 @@ render          0  render  ·         ·          (b)     ·
 ·               2  ·       table     t@primary  ·       ·
 ·               2  ·       spans     ALL        ·       ·
 
-exec-explain
-SELECT b FROM t ORDER BY a DESC, b DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 render          0  render  ·         ·          (b)     ·
  │              0  ·       render 0  b          ·       ·
@@ -172,8 +172,8 @@ render          0  render  ·         ·          (b)     ·
 ·               2  ·       table     t@primary  ·       ·
 ·               2  ·       spans     ALL        ·       ·
 
-exec-explain
-SELECT * FROM t ORDER BY (b, t.*)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -181,8 +181,8 @@ sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
 ·          1  ·     table  t@primary  ·          ·
 ·          1  ·     spans  ALL        ·          ·
 
-exec-explain
-SELECT * FROM t ORDER BY (b, a), c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -190,8 +190,8 @@ sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
 ·          1  ·     table  t@primary  ·          ·
 ·          1  ·     spans  ALL        ·          ·
 
-exec-explain
-SELECT * FROM t ORDER BY b, (a, c)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -199,8 +199,8 @@ sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
 ·          1  ·     table  t@primary  ·          ·
 ·          1  ·     spans  ALL        ·          ·
 
-exec-explain
-SELECT * FROM t ORDER BY (b, (a, c))
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -298,8 +298,8 @@ a:int
 
 # Check that sort is skipped if the ORDER BY clause is constant.
 # TODO(radu): we don't optimize constant columns yet.
-exec-explain
-SELECT * FROM t ORDER BY 1+2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY 1+2
 ----
 render               0  render  ·         ·          (a, b, c)                       ·
  │                   0  ·       render 0  "t.a"      ·                               ·
@@ -316,8 +316,8 @@ render               0  render  ·         ·          (a, b, c)                
 ·                    3  ·       table     t@primary  ·                               ·
 ·                    3  ·       spans     ALL        ·                               ·
 
-exec-explain
-SELECT 1, * FROM t ORDER BY 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT 1, * FROM t ORDER BY 1
 ----
 sort            0  sort    ·         ·          (column4, a, b, c)  +column4
  │              0  ·       order     +column4   ·                   ·
@@ -330,8 +330,8 @@ sort            0  sort    ·         ·          (column4, a, b, c)  +column4
 ·               2  ·       table     t@primary  ·                   ·
 ·               2  ·       spans     ALL        ·                   ·
 
-exec-explain
-SELECT * FROM t ORDER BY length('abc')
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY length('abc')
 ----
 render               0  render  ·         ·              (a, b, c)                       ·
  │                   0  ·       render 0  "t.a"          ·                               ·
@@ -349,8 +349,8 @@ render               0  render  ·         ·              (a, b, c)            
 ·                    3  ·       spans     ALL            ·                               ·
 
 # Check that the sort key reuses the existing render.
-exec-explain
-SELECT b+2 FROM t ORDER BY b+2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
 sort            0  sort    ·         ·          (column4)  +column4
  │              0  ·       order     +column4   ·          ·
@@ -361,8 +361,8 @@ sort            0  sort    ·         ·          (column4)  +column4
 ·               2  ·       spans     ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
-exec-explain
-SELECT b+2 AS y FROM t ORDER BY y
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 sort            0  sort    ·         ·          (y)  +y
  │              0  ·       order     +y         ·    ·
@@ -373,8 +373,8 @@ sort            0  sort    ·         ·          (y)  +y
 ·               2  ·       spans     ALL        ·    ·
 
 # Check that the sort reuses a render behind a rename properly.
-exec-explain
-SELECT b+2 AS y FROM t ORDER BY b+2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort            0  sort    ·         ·          (y)  +y
  │              0  ·       order     +y         ·    ·
@@ -420,8 +420,8 @@ six
 three
 two
 
-exec-explain
-SELECT * FROM abc ORDER BY a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
 scan  0  scan  ·      ·            (a, b, c, d)  ·
 ·     0  ·     table  abc@primary  ·             ·
@@ -441,8 +441,8 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec-explain
-SELECT * FROM abc ORDER BY a, c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a, c
 ----
 sort       0  sort  ·      ·            (a, b, c, d)  +a,+c
  │         0  ·     order  +a,+c        ·             ·
@@ -464,8 +464,8 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec-explain
-SELECT a, b FROM abc ORDER BY b, a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
 scan  0  scan  ·      ·       (a, b)  ·
 ·     0  ·     table  abc@ba  ·       ·
@@ -487,8 +487,8 @@ a:int  b:int
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
-exec-explain
-SELECT a, b, c FROM abc ORDER BY b, a, c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 scan  0  scan  ·      ·       (a, b, c)  ·
 ·     0  ·     table  abc@ba  ·          ·
@@ -509,8 +509,8 @@ a:int  b:int  c:int
 3      9      1
 
 # We use the WHERE condition to force the use of index ba.
-exec-explain
-SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
 render               0  render  ·         ·            (a, b, c)     ·
  │                   0  ·       render 0  a            ·             ·
@@ -536,8 +536,8 @@ a:int  b:int  c:int
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-exec-explain
-SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
 sort            0  sort    ·       ·            (a, b, c, d)  +b,+a,+c,+d
  │              0  ·       order   +b,+a,+c,+d  ·             ·
@@ -557,8 +557,8 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec-explain
-SELECT a, b FROM abc ORDER BY b, c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 render     0  render  ·         ·       (a, b)     ·
  │         0  ·       render 0  a       ·          ·
@@ -581,8 +581,8 @@ a:int  b:int
 3      8
 3      9
 
-exec-explain
-SELECT a, b FROM abc ORDER BY c, b
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY c, b
 ----
 render          0  render  ·         ·            (a, b)     ·
  │              0  ·       render 0  a            ·          ·
@@ -607,8 +607,8 @@ a:int  b:int
 1      2
 1      3
 
-exec-explain
-SELECT a, b FROM abc ORDER BY b, c, a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 ----
 render     0  render  ·         ·       (a, b)     ·
  │         0  ·       render 0  a       ·          ·
@@ -631,8 +631,8 @@ a:int  b:int
 3      8
 3      9
 
-exec-explain
-SELECT a, b FROM abc ORDER BY b, c, a DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 render          0  render  ·         ·            (a, b)     ·
  │              0  ·       render 0  a            ·          ·
@@ -657,8 +657,8 @@ a:int  b:int
 3      8
 3      9
 
-exec-explain
-SELECT a FROM abc ORDER BY a DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a FROM abc ORDER BY a DESC
 ----
 sort       0  sort  ·      ·            (a)  -a
  │         0  ·     order  -a           ·    ·
@@ -699,8 +699,8 @@ a:int
 1
 1
 
-exec-explain
-SELECT c FROM abc WHERE b = 2 ORDER BY c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 sort            0  sort    ·         ·       (c)     +c
  │              0  ·       order     +c      ·       ·
@@ -710,8 +710,8 @@ sort            0  sort    ·         ·       (c)     +c
 ·               2  ·       table     abc@bc  ·       ·
 ·               2  ·       spans     /2-/3   ·       ·
 
-exec-explain
-SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 sort            0  sort    ·         ·       (c)     -c
  │              0  ·       order     -c      ·       ·
@@ -722,8 +722,8 @@ sort            0  sort    ·         ·       (c)     -c
 ·               2  ·       spans     /2-/3   ·       ·
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-exec-explain
-SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
 render          0  render  ·         ·            (b, c)     ·
  │              0  ·       render 0  b            ·          ·
@@ -747,8 +747,8 @@ exec-raw
 INSERT INTO bar VALUES (0, NULL, 10), (1, NULL, 5)
 ----
 
-exec-explain
-SELECT * FROM bar ORDER BY baz, extra
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, extra
 ----
 sort       0  sort  ·      ·            (id, baz, extra)  +baz,+extra
  │         0  ·     order  +baz,+extra  ·                 ·
@@ -803,8 +803,8 @@ column5:int
 7
 
 # The following tests verify we recognize that sorting is not necessary
-exec-explain
-SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
 sort       0  sort  ·      ·          (a, b, c)  +c
  │         0  ·     order  +c         ·          ·
@@ -812,8 +812,8 @@ sort       0  sort  ·      ·          (a, b, c)  +c
 ·          1  ·     table  abcd@abc   ·          ·
 ·          1  ·     spans  /1/4-/1/5  ·          ·
 
-exec-explain
-SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 sort       0  sort  ·      ·          (a, b, c)  +c,+b,+a
  │         0  ·     order  +c,+b,+a   ·          ·
@@ -821,8 +821,8 @@ sort       0  sort  ·      ·          (a, b, c)  +c,+b,+a
 ·          1  ·     table  abcd@abc   ·          ·
 ·          1  ·     spans  /1/4-/1/5  ·          ·
 
-exec-explain
-SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
  │         0  ·     order  +b,+a,+c   ·          ·
@@ -830,8 +830,8 @@ sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
 ·          1  ·     table  abcd@abc   ·          ·
 ·          1  ·     spans  /1/4-/1/5  ·          ·
 
-exec-explain
-SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 sort       0  sort  ·      ·          (a, b, c)  +b,+c,+a
  │         0  ·     order  +b,+c,+a   ·          ·
@@ -856,8 +856,8 @@ NaN
 -1.0
 1.0
 
-exec-explain
-SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort         0  sort    ·              ·                 (x)  +x
  │           0  ·       order          +x                ·    ·
@@ -867,8 +867,8 @@ sort         0  sort    ·              ·                 (x)  +x
 ·            1  ·       row 1, expr 0  'b'               ·    ·
 ·            1  ·       row 2, expr 0  'c'               ·    ·
 
-exec-explain
-SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 values  0  values  ·              ·                 (x)  ·
 ·       0  ·       size           1 column, 3 rows  ·    ·
@@ -877,15 +877,15 @@ values  0  values  ·              ·                 (x)  ·
 ·       0  ·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): ordinality not supported
-#exec-explain
-#SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
+#exec hide-colnames
+#EXPLAIN (VERBOSE) #SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 #----
 #ordinality   ·     ·
 # └── values  ·     ·
 #·            size  1 column, 3 rows
 #
-#exec-explain
-#SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
+#exec hide-colnames
+#EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 #----
 #sort              ·      ·
 # │                order  -"ordinality"
@@ -894,8 +894,8 @@ values  0  values  ·              ·                 (x)  ·
 #·                 size   1 column, 3 rows
 #
 # Once ordinality is supported these test cases should have a sort node.
-#exec-explain
-#SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
+#exec hide-colnames
+#EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
 #·       0  ·       size           1 column, 3 rows  ·    ·
@@ -903,8 +903,8 @@ values  0  values  ·              ·                 (x)  ·
 #·       0  ·       row 1, expr 0  'b'               ·    ·
 #·       0  ·       row 2, expr 0  'c'               ·    ·
 #
-#exec-explain
-#SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
+#exec hide-colnames
+#EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
 #·       0  ·       size           1 column, 3 rows  ·    ·
@@ -914,16 +914,16 @@ values  0  values  ·              ·                 (x)  ·
 
 # TODO(radu): DML statements not supported yet.
 ## Check that the ordering of the source does not propagate blindly to RETURNING.
-#exec-explain
-#INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
+#exec hide-colnames
+#EXPLAIN (VERBOSE) #INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 #----
 #insert              0  insert    ·     ·        (b)     ·
 # │                  0  ·         into  t(a, b)  ·       ·
 # └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
 #      └── emptyrow  2  emptyrow  ·     ·        ()      ·
 #
-#exec-explain
-#DELETE FROM t WHERE a = 3 RETURNING b
+#exec hide-colnames
+#EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 #----
 #delete     0  delete  ·      ·          (b)        ·
 # │         0  ·       from   t          ·          ·
@@ -931,8 +931,8 @@ values  0  values  ·              ·                 (x)  ·
 #·          1  ·       table  t@primary  ·          ·
 #·          1  ·       spans  /3-/3/#    ·          ·
 #
-#exec-explain
-#UPDATE t SET c = TRUE RETURNING b
+#exec hide-colnames
+#EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 #----
 #update          0  update  ·      ·          (b)                ·
 # │              0  ·       table  t          ·                  ·
@@ -957,8 +957,8 @@ CREATE TABLE uvwxyz (
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-exec-explain
-SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
 render          0  render  ·         ·            (y, w, x)  ·
  │              0  ·       render 0  y            ·          ·
@@ -983,8 +983,8 @@ CREATE TABLE blocks (
 # TODO(radu): LIMIT not supported yet.
 ## Test that ordering goes "through" a renderNode that has a duplicate render of
 ## an order-by column (#13696).
-#exec-explain
-#SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
+#exec hide-colnames
+#EXPLAIN (VERBOSE) #SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 #----
 #render          0  render  ·         ·                   (block_id, writer_id, block_num, block_id)                                      ·
 # │              0  ·       render 0  "blocks.block_id"   ·                                                                               ·

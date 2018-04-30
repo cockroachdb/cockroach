@@ -3,8 +3,8 @@ CREATE TABLE a (x INT PRIMARY KEY, y INT);
 INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
 ----
 
-exec-explain
-SELECT * FROM a WHERE x > 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
@@ -17,8 +17,8 @@ x:int  y:int
 2      20
 3      30
 
-exec-explain
-SELECT * FROM a WHERE y > 10
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
 filter     0  filter  ·       ·          (x, y)  ·
  │         0  ·       filter  y > 10     ·       ·
@@ -33,8 +33,8 @@ x:int  y:int
 2      20
 3      30
 
-exec-explain
-SELECT * FROM a WHERE x > 1 AND x < 3
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
@@ -46,8 +46,8 @@ SELECT * FROM a WHERE x > 1 AND x < 3
 x:int  y:int
 2      20
 
-exec-explain
-SELECT * FROM a WHERE x > 1 AND y < 30
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
 filter     0  filter  ·       ·          (x, y)  ·
  │         0  ·       filter  y < 30     ·       ·
@@ -66,8 +66,8 @@ CREATE TABLE b (x INT, y INT);
 INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
 ----
 
-exec-explain
-SELECT x, y, rowid FROM b WHERE rowid > 0
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
 scan  0  scan  ·      ·          (x, y, rowid[hidden])  ·
 ·     0  ·     table  b@primary  ·                      ·
@@ -78,8 +78,8 @@ CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
 INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
 ----
 
-exec-explain
-SELECT * FROM c WHERE str >= 'moo'
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
 ----
 scan  0  scan  ·      ·                  (n, str)  ·
 ·     0  ·     table  c@str              ·         ·

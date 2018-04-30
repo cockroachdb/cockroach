@@ -77,6 +77,9 @@ func (b logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 
 	case opt.Max1RowOp:
 		return b.buildMax1RowProps(ev)
+
+	case opt.ExplainOp:
+		return b.buildExplainProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -355,6 +358,18 @@ func (b logicalPropsBuilder) buildValuesProps(ev ExprView) LogicalProps {
 	props.Relational.Cardinality = Cardinality{Min: card, Max: card}
 
 	props.Relational.Stats.initValues(ev, &props.Relational.OutputCols)
+
+	return props
+}
+
+func (b logicalPropsBuilder) buildExplainProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	def := ev.Private().(*ExplainOpDef)
+	props.Relational.OutputCols = opt.ColListToSet(def.ColList)
+	props.Relational.Cardinality = AnyCardinality
+
+	// Zero value for Stats is ok for Explain.
 
 	return props
 }

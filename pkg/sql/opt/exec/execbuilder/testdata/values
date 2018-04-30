@@ -1,6 +1,6 @@
 # Tests for the implicit one row, zero column values operator.
-exec-explain
-SELECT 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT 1
 ----
 render       0  render  ·         ·                 (column1)  ·
  │           0  ·       render 0  1                 ·          ·
@@ -13,8 +13,8 @@ SELECT 1
 column1:int
 1
 
-exec-explain
-SELECT 1 + 2
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
 render       0  render  ·         ·                 (column1)  ·
  │           0  ·       render 0  3                 ·          ·
@@ -27,8 +27,8 @@ SELECT 1 + 2
 column1:int
 3
 
-exec-explain
-VALUES (1, 2, 3), (4, 5, 6)
+exec hide-colnames
+EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
 values  0  values  ·              ·                  (column1, column2, column3)  ·
 ·       0  ·       size           3 columns, 2 rows  ·                            ·
@@ -46,8 +46,8 @@ column1:int  column2:int  column3:int
 1            2            3
 4            5            6
 
-exec-explain
-VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
+exec hide-colnames
+EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
 values  0  values  ·              ·                 (column1)  ·
 ·       0  ·       size           1 column, 4 rows  ·          ·
@@ -65,8 +65,8 @@ column1:int
 3
 4
 
-exec-explain
-SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
 render       0  render  ·              ·                  (column3)           ·
  │           0  ·       render 0       column1 + column2  ·                   ·

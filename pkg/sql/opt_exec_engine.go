@@ -101,29 +101,6 @@ func (ee *execEngine) Execute(p exec.Plan) ([]tree.Datums, error) {
 	return res, nil
 }
 
-// Explain is part of the exec.TestEngine interface.
-func (ee *execEngine) Explain(p exec.Plan) ([]tree.Datums, error) {
-	// Add an explain node to the plan and run that.
-	flags := explainFlags{
-		showMetadata: true,
-		qualifyNames: true,
-	}
-	explainNode, err := ee.planner.makeExplainPlanNodeWithPlan(
-		context.TODO(),
-		flags,
-		false, /* expanded */
-		false, /* optimized */
-		p.(*planTop).plan,
-		p.(*planTop).subqueryPlans,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Execute the explain node.
-	return ee.Execute(&planTop{plan: explainNode})
-}
-
 // Close is part of the exec.TestEngine interface.
 func (ee *execEngine) Close() {
 	if ee.cleanup != nil {
@@ -423,4 +400,23 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 		}
 	}
 	return res, nil
+}
+
+// ConstructExplain is part of the exec.Factory interface.
+func (ee *execEngine) ConstructExplain(plan exec.Plan) (exec.Node, error) {
+	p := plan.(*planTop)
+	// For now, we assume VERBOSE.
+	flags := explainFlags{
+		showMetadata: true,
+		qualifyNames: true,
+	}
+	return ee.planner.makeExplainPlanNodeWithPlan(
+		context.TODO(),
+		flags,
+		false, /* expanded */
+		false, /* optimized */
+		false, /* optimizeSubqueries */
+		p.plan,
+		p.subqueryPlans,
+	)
 }

@@ -162,7 +162,7 @@ func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
 	}
 
 	projectionsScope.physicalProps.Ordering = orderByScope.physicalProps.Ordering
-	projectionsScope.physicalProps.Presentation = makePresentation(projectionsScope.cols)
+	projectionsScope.setPresentation()
 }
 
 func ensureColumnOrderable(e tree.TypedExpr) {

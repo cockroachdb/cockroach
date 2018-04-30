@@ -66,8 +66,8 @@ select
            ├── variable: b.u [type=int, outer=(1)]
            └── const: 1 [type=int]
 
-exec-explain
-SELECT * FROM b WHERE u = 1 AND v = 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
 filter     0  filter  ·       ·          (u, v)  ·
  │         0  ·       filter  u = 1      ·       ·
