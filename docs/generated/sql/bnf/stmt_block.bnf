@@ -1291,8 +1291,7 @@ d_expr ::=
 	| select_with_parens
 	| 'ARRAY' select_with_parens
 	| 'ARRAY' array_expr
-	| explicit_row
-	| implicit_row
+	| row
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -1599,11 +1598,9 @@ array_expr ::=
 	'[' opt_expr_list ']'
 	| '[' array_expr_list ']'
 
-explicit_row ::=
+row ::=
 	'ROW' '(' opt_expr_list ')'
-
-implicit_row ::=
-	'(' expr_list ',' a_expr ')'
+	| '(' expr_list ',' a_expr ')'
 
 array_subscript ::=
 	'[' a_expr ']'

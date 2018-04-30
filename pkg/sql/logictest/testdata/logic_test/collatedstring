@@ -240,6 +240,11 @@ x
 ü
 
 query T
+SELECT a FROM t WHERE a = 'A' COLLATE en;
+----
+A
+
+query T
 SELECT 'a' COLLATE en::STRING || 'b'
 ----
 ab
@@ -299,3 +304,18 @@ query T
 SELECT a FROM foo
 ----
 NULL
+
+# Regression test for #24449
+
+statement ok
+INSERT INTO foo VALUES ('aBcD' COLLATE en_u_ks_level2)
+
+query T
+SELECT * FROM foo WHERE a = 'aBcD' COLLATE en_u_ks_level2
+----
+aBcD
+
+query T
+SELECT * FROM foo WHERE a = 'abcd' COLLATE en_u_ks_level2
+----
+aBcD
