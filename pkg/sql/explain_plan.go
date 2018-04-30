@@ -60,10 +60,12 @@ var explainPlanColumns = sqlbase.ResultColumns{
 var explainPlanVerboseColumns = sqlbase.ResultColumns{
 	// Tree shows the node type with the tree structure.
 	{Name: "Tree", Typ: types.String},
-	// Level is the depth of the node in the tree.
-	{Name: "Level", Typ: types.Int},
-	// Type is the node type.
-	{Name: "Type", Typ: types.String},
+	// Level is the depth of the node in the tree. Hidden by default; can be
+	// retrieved using:
+	//   SELECT "Level" FROM [ EXPLAIN (VERBOSE) ... ].
+	{Name: "Level", Typ: types.Int, Hidden: true},
+	// Type is the node type. Hidden by default.
+	{Name: "Type", Typ: types.String, Hidden: true},
 	// Field is the part of the node that a row of output pertains to.
 	{Name: "Field", Typ: types.String},
 	// Description contains details about the field.

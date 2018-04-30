@@ -23,11 +23,11 @@ true
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT c FROM t ORDER BY c
 ----
-sort       0  sort  ·      ·          (c)  +c
- │         0  ·     order  +c         ·    ·
- └── scan  1  scan  ·      ·          (c)  ·
-·          1  ·     table  t@primary  ·    ·
-·          1  ·     spans  ALL        ·    ·
+sort       ·      ·          (c)  +c
+ │         order  +c         ·    ·
+ └── scan  ·      ·          (c)  ·
+·          table  t@primary  ·    ·
+·          spans  ALL        ·    ·
 
 exec
 SELECT c FROM t ORDER BY c DESC
@@ -48,11 +48,11 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b
 ----
-sort       0  sort  ·      ·          (a, b)  +b
- │         0  ·     order  +b         ·       ·
- └── scan  1  scan  ·      ·          (a, b)  ·
-·          1  ·     table  t@primary  ·       ·
-·          1  ·     spans  ALL        ·       ·
+sort       ·      ·          (a, b)  +b
+ │         order  +b         ·       ·
+ └── scan  ·      ·          (a, b)  ·
+·          table  t@primary  ·       ·
+·          spans  ALL        ·       ·
 
 exec
 SELECT a, b FROM t ORDER BY b DESC
@@ -65,11 +65,11 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC
 ----
-sort       0  sort  ·      ·          (a, b)  -b
- │         0  ·     order  -b         ·       ·
- └── scan  1  scan  ·      ·          (a, b)  ·
-·          1  ·     table  t@primary  ·       ·
-·          1  ·     spans  ALL        ·       ·
+sort       ·      ·          (a, b)  -b
+ │         order  -b         ·       ·
+ └── scan  ·      ·          (a, b)  ·
+·          table  t@primary  ·       ·
+·          spans  ALL        ·       ·
 
 
 exec
@@ -83,13 +83,13 @@ a:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
-limit           0  limit  ·      ·          (a, b)  +b
- │              0  ·      count  2          ·       ·
- └── sort       1  sort   ·      ·          (a, b)  +b
-      │         1  ·      order  +b         ·       ·
-      └── scan  2  scan   ·      ·          (a, b)  ·
-·               2  ·      table  t@primary  ·       ·
-·               2  ·      spans  ALL        ·       ·
+limit           ·      ·          (a, b)  +b
+ │              count  2          ·       ·
+ └── sort       ·      ·          (a, b)  +b
+      │         order  +b         ·       ·
+      └── scan  ·      ·          (a, b)  ·
+·               table  t@primary  ·       ·
+·               spans  ALL        ·       ·
 
 exec
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -132,81 +132,81 @@ b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC
 ----
-render          0  render  ·         ·          (b)     ·
- │              0  ·       render 0  b          ·       ·
- └── sort       1  sort    ·         ·          (a, b)  -a
-      │         1  ·       order     -a         ·       ·
-      └── scan  2  scan    ·         ·          (a, b)  ·
-·               2  ·       table     t@primary  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render          ·         ·          (b)     ·
+ │              render 0  b          ·       ·
+ └── sort       ·         ·          (a, b)  -a
+      │         order     -a         ·       ·
+      └── scan  ·         ·          (a, b)  ·
+·               table     t@primary  ·       ·
+·               spans     ALL        ·       ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
-render     0  render  ·         ·          (b)     ·
- │         0  ·       render 0  b          ·       ·
- └── scan  1  scan    ·         ·          (a, b)  ·
-·          1  ·       table     t@primary  ·       ·
-·          1  ·       spans     ALL        ·       ·
-·          1  ·       limit     1          ·       ·
+render     ·         ·          (b)     ·
+ │         render 0  b          ·       ·
+ └── scan  ·         ·          (a, b)  ·
+·          table     t@primary  ·       ·
+·          spans     ALL        ·       ·
+·          limit     1          ·       ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-render          0  render  ·         ·          (b)     ·
- │              0  ·       render 0  b          ·       ·
- └── sort       1  sort    ·         ·          (a, b)  -a,+b
-      │         1  ·       order     -a,+b      ·       ·
-      └── scan  2  scan    ·         ·          (a, b)  ·
-·               2  ·       table     t@primary  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render          ·         ·          (b)     ·
+ │              render 0  b          ·       ·
+ └── sort       ·         ·          (a, b)  -a,+b
+      │         order     -a,+b      ·       ·
+      └── scan  ·         ·          (a, b)  ·
+·               table     t@primary  ·       ·
+·               spans     ALL        ·       ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-render          0  render  ·         ·          (b)     ·
- │              0  ·       render 0  b          ·       ·
- └── sort       1  sort    ·         ·          (a, b)  -a,-b
-      │         1  ·       order     -a,-b      ·       ·
-      └── scan  2  scan    ·         ·          (a, b)  ·
-·               2  ·       table     t@primary  ·       ·
-·               2  ·       spans     ALL        ·       ·
+render          ·         ·          (b)     ·
+ │              render 0  b          ·       ·
+ └── sort       ·         ·          (a, b)  -a,-b
+      │         order     -a,-b      ·       ·
+      └── scan  ·         ·          (a, b)  ·
+·               table     t@primary  ·       ·
+·               spans     ALL        ·       ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  t@primary  ·          ·
-·          1  ·     spans  ALL        ·          ·
+sort       ·      ·          (a, b, c)  +b,+a,+c
+ │         order  +b,+a,+c   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  t@primary  ·          ·
+·          spans  ALL        ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  t@primary  ·          ·
-·          1  ·     spans  ALL        ·          ·
+sort       ·      ·          (a, b, c)  +b,+a,+c
+ │         order  +b,+a,+c   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  t@primary  ·          ·
+·          spans  ALL        ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  t@primary  ·          ·
-·          1  ·     spans  ALL        ·          ·
+sort       ·      ·          (a, b, c)  +b,+a,+c
+ │         order  +b,+a,+c   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  t@primary  ·          ·
+·          spans  ALL        ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  t@primary  ·          ·
-·          1  ·     spans  ALL        ·          ·
+sort       ·      ·          (a, b, c)  +b,+a,+c
+ │         order  +b,+a,+c   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  t@primary  ·          ·
+·          spans  ALL        ·          ·
 
 exec-raw
 INSERT INTO t VALUES (4, 7), (5, 7)
@@ -301,88 +301,88 @@ a:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY 1+2
 ----
-render               0  render  ·         ·          (a, b, c)                       ·
- │                   0  ·       render 0  "t.a"      ·                               ·
- │                   0  ·       render 1  "t.b"      ·                               ·
- │                   0  ·       render 2  "t.c"      ·                               ·
- └── sort            1  sort    ·         ·          ("t.a", "t.b", "t.c", column4)  +column4
-      │              1  ·       order     +column4   ·                               ·
-      └── render     2  render  ·         ·          ("t.a", "t.b", "t.c", column4)  ·
-           │         2  ·       render 0  a          ·                               ·
-           │         2  ·       render 1  b          ·                               ·
-           │         2  ·       render 2  c          ·                               ·
-           │         2  ·       render 3  3          ·                               ·
-           └── scan  3  scan    ·         ·          (a, b, c)                       ·
-·                    3  ·       table     t@primary  ·                               ·
-·                    3  ·       spans     ALL        ·                               ·
+render               ·         ·          (a, b, c)                       ·
+ │                   render 0  "t.a"      ·                               ·
+ │                   render 1  "t.b"      ·                               ·
+ │                   render 2  "t.c"      ·                               ·
+ └── sort            ·         ·          ("t.a", "t.b", "t.c", column4)  +column4
+      │              order     +column4   ·                               ·
+      └── render     ·         ·          ("t.a", "t.b", "t.c", column4)  ·
+           │         render 0  a          ·                               ·
+           │         render 1  b          ·                               ·
+           │         render 2  c          ·                               ·
+           │         render 3  3          ·                               ·
+           └── scan  ·         ·          (a, b, c)                       ·
+·                    table     t@primary  ·                               ·
+·                    spans     ALL        ·                               ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT 1, * FROM t ORDER BY 1
 ----
-sort            0  sort    ·         ·          (column4, a, b, c)  +column4
- │              0  ·       order     +column4   ·                   ·
- └── render     1  render  ·         ·          (column4, a, b, c)  ·
-      │         1  ·       render 0  1          ·                   ·
-      │         1  ·       render 1  a          ·                   ·
-      │         1  ·       render 2  b          ·                   ·
-      │         1  ·       render 3  c          ·                   ·
-      └── scan  2  scan    ·         ·          (a, b, c)           ·
-·               2  ·       table     t@primary  ·                   ·
-·               2  ·       spans     ALL        ·                   ·
+sort            ·         ·          (column4, a, b, c)  +column4
+ │              order     +column4   ·                   ·
+ └── render     ·         ·          (column4, a, b, c)  ·
+      │         render 0  1          ·                   ·
+      │         render 1  a          ·                   ·
+      │         render 2  b          ·                   ·
+      │         render 3  c          ·                   ·
+      └── scan  ·         ·          (a, b, c)           ·
+·               table     t@primary  ·                   ·
+·               spans     ALL        ·                   ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY length('abc')
 ----
-render               0  render  ·         ·              (a, b, c)                       ·
- │                   0  ·       render 0  "t.a"          ·                               ·
- │                   0  ·       render 1  "t.b"          ·                               ·
- │                   0  ·       render 2  "t.c"          ·                               ·
- └── sort            1  sort    ·         ·              ("t.a", "t.b", "t.c", column4)  +column4
-      │              1  ·       order     +column4       ·                               ·
-      └── render     2  render  ·         ·              ("t.a", "t.b", "t.c", column4)  ·
-           │         2  ·       render 0  a              ·                               ·
-           │         2  ·       render 1  b              ·                               ·
-           │         2  ·       render 2  c              ·                               ·
-           │         2  ·       render 3  length('abc')  ·                               ·
-           └── scan  3  scan    ·         ·              (a, b, c)                       ·
-·                    3  ·       table     t@primary      ·                               ·
-·                    3  ·       spans     ALL            ·                               ·
+render               ·         ·              (a, b, c)                       ·
+ │                   render 0  "t.a"          ·                               ·
+ │                   render 1  "t.b"          ·                               ·
+ │                   render 2  "t.c"          ·                               ·
+ └── sort            ·         ·              ("t.a", "t.b", "t.c", column4)  +column4
+      │              order     +column4       ·                               ·
+      └── render     ·         ·              ("t.a", "t.b", "t.c", column4)  ·
+           │         render 0  a              ·                               ·
+           │         render 1  b              ·                               ·
+           │         render 2  c              ·                               ·
+           │         render 3  length('abc')  ·                               ·
+           └── scan  ·         ·              (a, b, c)                       ·
+·                    table     t@primary      ·                               ·
+·                    spans     ALL            ·                               ·
 
 # Check that the sort key reuses the existing render.
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
-sort            0  sort    ·         ·          (column4)  +column4
- │              0  ·       order     +column4   ·          ·
- └── render     1  render  ·         ·          (column4)  ·
-      │         1  ·       render 0  b + 2      ·          ·
-      └── scan  2  scan    ·         ·          (b)        ·
-·               2  ·       table     t@primary  ·          ·
-·               2  ·       spans     ALL        ·          ·
+sort            ·         ·          (column4)  +column4
+ │              order     +column4   ·          ·
+ └── render     ·         ·          (column4)  ·
+      │         render 0  b + 2      ·          ·
+      └── scan  ·         ·          (b)        ·
+·               table     t@primary  ·          ·
+·               spans     ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
-sort            0  sort    ·         ·          (y)  +y
- │              0  ·       order     +y         ·    ·
- └── render     1  render  ·         ·          (y)  ·
-      │         1  ·       render 0  b + 2      ·    ·
-      └── scan  2  scan    ·         ·          (b)  ·
-·               2  ·       table     t@primary  ·    ·
-·               2  ·       spans     ALL        ·    ·
+sort            ·         ·          (y)  +y
+ │              order     +y         ·    ·
+ └── render     ·         ·          (y)  ·
+      │         render 0  b + 2      ·    ·
+      └── scan  ·         ·          (b)  ·
+·               table     t@primary  ·    ·
+·               spans     ALL        ·    ·
 
 # Check that the sort reuses a render behind a rename properly.
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
-sort            0  sort    ·         ·          (y)  +y
- │              0  ·       order     +y         ·    ·
- └── render     1  render  ·         ·          (y)  ·
-      │         1  ·       render 0  b + 2      ·    ·
-      └── scan  2  scan    ·         ·          (b)  ·
-·               2  ·       table     t@primary  ·    ·
-·               2  ·       spans     ALL        ·    ·
+sort            ·         ·          (y)  +y
+ │              order     +y         ·    ·
+ └── render     ·         ·          (y)  ·
+      │         render 0  b + 2      ·    ·
+      └── scan  ·         ·          (b)  ·
+·               table     t@primary  ·    ·
+·               spans     ALL        ·    ·
 
 exec-raw
 CREATE TABLE abc (
@@ -423,9 +423,9 @@ two
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
-scan  0  scan  ·      ·            (a, b, c, d)  ·
-·     0  ·     table  abc@primary  ·             ·
-·     0  ·     spans  ALL          ·             ·
+scan  ·      ·            (a, b, c, d)  ·
+·     table  abc@primary  ·             ·
+·     spans  ALL          ·             ·
 
 exec partialsort=(1)
 SELECT * FROM abc ORDER BY a
@@ -444,11 +444,11 @@ a:int  b:int  c:int  d:string
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a, c
 ----
-sort       0  sort  ·      ·            (a, b, c, d)  +a,+c
- │         0  ·     order  +a,+c        ·             ·
- └── scan  1  scan  ·      ·            (a, b, c, d)  ·
-·          1  ·     table  abc@primary  ·             ·
-·          1  ·     spans  ALL          ·             ·
+sort       ·      ·            (a, b, c, d)  +a,+c
+ │         order  +a,+c        ·             ·
+ └── scan  ·      ·            (a, b, c, d)  ·
+·          table  abc@primary  ·             ·
+·          spans  ALL          ·             ·
 
 exec partialsort=(1,3)
 SELECT * FROM abc ORDER BY a, c
@@ -467,9 +467,9 @@ a:int  b:int  c:int  d:string
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
-scan  0  scan  ·      ·       (a, b)  ·
-·     0  ·     table  abc@ba  ·       ·
-·     0  ·     spans  ALL     ·       ·
+scan  ·      ·       (a, b)  ·
+·     table  abc@ba  ·       ·
+·     spans  ALL     ·       ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, a
@@ -490,9 +490,9 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-scan  0  scan  ·      ·       (a, b, c)  ·
-·     0  ·     table  abc@ba  ·          ·
-·     0  ·     spans  ALL     ·          ·
+scan  ·      ·       (a, b, c)  ·
+·     table  abc@ba  ·          ·
+·     spans  ALL     ·          ·
 
 exec
 SELECT a, b, c FROM abc ORDER BY b, a, c
@@ -512,17 +512,17 @@ a:int  b:int  c:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
-render               0  render  ·         ·            (a, b, c)     ·
- │                   0  ·       render 0  a            ·             ·
- │                   0  ·       render 1  b            ·             ·
- │                   0  ·       render 2  c            ·             ·
- └── sort            1  sort    ·         ·            (a, b, c, d)  +b,+a,+d
-      │              1  ·       order     +b,+a,+d     ·             ·
-      └── filter     2  filter  ·         ·            (a, b, c, d)  ·
-           │         2  ·       filter    b > 4        ·             ·
-           └── scan  3  scan    ·         ·            (a, b, c, d)  ·
-·                    3  ·       table     abc@primary  ·             ·
-·                    3  ·       spans     ALL          ·             ·
+render               ·         ·            (a, b, c)     ·
+ │                   render 0  a            ·             ·
+ │                   render 1  b            ·             ·
+ │                   render 2  c            ·             ·
+ └── sort            ·         ·            (a, b, c, d)  +b,+a,+d
+      │              order     +b,+a,+d     ·             ·
+      └── filter     ·         ·            (a, b, c, d)  ·
+           │         filter    b > 4        ·             ·
+           └── scan  ·         ·            (a, b, c, d)  ·
+·                    table     abc@primary  ·             ·
+·                    spans     ALL          ·             ·
 
 exec
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
@@ -539,13 +539,13 @@ a:int  b:int  c:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
-sort            0  sort    ·       ·            (a, b, c, d)  +b,+a,+c,+d
- │              0  ·       order   +b,+a,+c,+d  ·             ·
- └── filter     1  filter  ·       ·            (a, b, c, d)  ·
-      │         1  ·       filter  b > 4        ·             ·
-      └── scan  2  scan    ·       ·            (a, b, c, d)  ·
-·               2  ·       table   abc@primary  ·             ·
-·               2  ·       spans   ALL          ·             ·
+sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
+ │              order   +b,+a,+c,+d  ·             ·
+ └── filter     ·       ·            (a, b, c, d)  ·
+      │         filter  b > 4        ·             ·
+      └── scan  ·       ·            (a, b, c, d)  ·
+·               table   abc@primary  ·             ·
+·               spans   ALL          ·             ·
 
 exec
 SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
@@ -560,12 +560,12 @@ a:int  b:int  c:int  d:string
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
-render     0  render  ·         ·       (a, b)     ·
- │         0  ·       render 0  a       ·          ·
- │         0  ·       render 1  b       ·          ·
- └── scan  1  scan    ·         ·       (a, b, c)  ·
-·          1  ·       table     abc@bc  ·          ·
-·          1  ·       spans     ALL     ·          ·
+render     ·         ·       (a, b)     ·
+ │         render 0  a       ·          ·
+ │         render 1  b       ·          ·
+ └── scan  ·         ·       (a, b, c)  ·
+·          table     abc@bc  ·          ·
+·          spans     ALL     ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, c
@@ -584,14 +584,14 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY c, b
 ----
-render          0  render  ·         ·            (a, b)     ·
- │              0  ·       render 0  a            ·          ·
- │              0  ·       render 1  b            ·          ·
- └── sort       1  sort    ·         ·            (a, b, c)  +c,+b
-      │         1  ·       order     +c,+b        ·          ·
-      └── scan  2  scan    ·         ·            (a, b, c)  ·
-·               2  ·       table     abc@primary  ·          ·
-·               2  ·       spans     ALL          ·          ·
+render          ·         ·            (a, b)     ·
+ │              render 0  a            ·          ·
+ │              render 1  b            ·          ·
+ └── sort       ·         ·            (a, b, c)  +c,+b
+      │         order     +c,+b        ·          ·
+      └── scan  ·         ·            (a, b, c)  ·
+·               table     abc@primary  ·          ·
+·               spans     ALL          ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY c, b
@@ -610,12 +610,12 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 ----
-render     0  render  ·         ·       (a, b)     ·
- │         0  ·       render 0  a       ·          ·
- │         0  ·       render 1  b       ·          ·
- └── scan  1  scan    ·         ·       (a, b, c)  ·
-·          1  ·       table     abc@bc  ·          ·
-·          1  ·       spans     ALL     ·          ·
+render     ·         ·       (a, b)     ·
+ │         render 0  a       ·          ·
+ │         render 1  b       ·          ·
+ └── scan  ·         ·       (a, b, c)  ·
+·          table     abc@bc  ·          ·
+·          spans     ALL     ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, c, a
@@ -634,14 +634,14 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-render          0  render  ·         ·            (a, b)     ·
- │              0  ·       render 0  a            ·          ·
- │              0  ·       render 1  b            ·          ·
- └── sort       1  sort    ·         ·            (a, b, c)  +b,+c,-a
-      │         1  ·       order     +b,+c,-a     ·          ·
-      └── scan  2  scan    ·         ·            (a, b, c)  ·
-·               2  ·       table     abc@primary  ·          ·
-·               2  ·       spans     ALL          ·          ·
+render          ·         ·            (a, b)     ·
+ │              render 0  a            ·          ·
+ │              render 1  b            ·          ·
+ └── sort       ·         ·            (a, b, c)  +b,+c,-a
+      │         order     +b,+c,-a     ·          ·
+      └── scan  ·         ·            (a, b, c)  ·
+·               table     abc@primary  ·          ·
+·               spans     ALL          ·          ·
 
 exec
 SELECT a, b FROM abc ORDER BY b, c, a DESC
@@ -660,11 +660,11 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a FROM abc ORDER BY a DESC
 ----
-sort       0  sort  ·      ·            (a)  -a
- │         0  ·     order  -a           ·    ·
- └── scan  1  scan  ·      ·            (a)  ·
-·          1  ·     table  abc@primary  ·    ·
-·          1  ·     spans  ALL          ·    ·
+sort       ·      ·            (a)  -a
+ │         order  -a           ·    ·
+ └── scan  ·      ·            (a)  ·
+·          table  abc@primary  ·    ·
+·          spans  ALL          ·    ·
 
 exec
 SELECT a FROM abc ORDER BY a DESC
@@ -702,37 +702,37 @@ a:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-sort            0  sort    ·         ·       (c)     +c
- │              0  ·       order     +c      ·       ·
- └── render     1  render  ·         ·       (c)     ·
-      │         1  ·       render 0  c       ·       ·
-      └── scan  2  scan    ·         ·       (b, c)  ·
-·               2  ·       table     abc@bc  ·       ·
-·               2  ·       spans     /2-/3   ·       ·
+sort            ·         ·       (c)     +c
+ │              order     +c      ·       ·
+ └── render     ·         ·       (c)     ·
+      │         render 0  c       ·       ·
+      └── scan  ·         ·       (b, c)  ·
+·               table     abc@bc  ·       ·
+·               spans     /2-/3   ·       ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-sort            0  sort    ·         ·       (c)     -c
- │              0  ·       order     -c      ·       ·
- └── render     1  render  ·         ·       (c)     ·
-      │         1  ·       render 0  c       ·       ·
-      └── scan  2  scan    ·         ·       (b, c)  ·
-·               2  ·       table     abc@bc  ·       ·
-·               2  ·       spans     /2-/3   ·       ·
+sort            ·         ·       (c)     -c
+ │              order     -c      ·       ·
+ └── render     ·         ·       (c)     ·
+      │         render 0  c       ·       ·
+      └── scan  ·         ·       (b, c)  ·
+·               table     abc@bc  ·       ·
+·               spans     /2-/3   ·       ·
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render          0  render  ·         ·            (b, c)     ·
- │              0  ·       render 0  b            ·          ·
- │              0  ·       render 1  c            ·          ·
- └── sort       1  sort    ·         ·            (a, b, c)  +b,+c
-      │         1  ·       order     +b,+c        ·          ·
-      └── scan  2  scan    ·         ·            (a, b, c)  ·
-·               2  ·       table     abc@primary  ·          ·
-·               2  ·       spans     /1-/2        ·          ·
+render          ·         ·            (b, c)     ·
+ │              render 0  b            ·          ·
+ │              render 1  c            ·          ·
+ └── sort       ·         ·            (a, b, c)  +b,+c
+      │         order     +b,+c        ·          ·
+      └── scan  ·         ·            (a, b, c)  ·
+·               table     abc@primary  ·          ·
+·               spans     /1-/2        ·          ·
 
 exec-raw
 CREATE TABLE bar (
@@ -750,11 +750,11 @@ INSERT INTO bar VALUES (0, NULL, 10), (1, NULL, 5)
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, extra
 ----
-sort       0  sort  ·      ·            (id, baz, extra)  +baz,+extra
- │         0  ·     order  +baz,+extra  ·                 ·
- └── scan  1  scan  ·      ·            (id, baz, extra)  ·
-·          1  ·     table  bar@primary  ·                 ·
-·          1  ·     spans  ALL          ·                 ·
+sort       ·      ·            (id, baz, extra)  +baz,+extra
+ │         order  +baz,+extra  ·                 ·
+ └── scan  ·      ·            (id, baz, extra)  ·
+·          table  bar@primary  ·                 ·
+·          spans  ALL          ·                 ·
 
 # Here rowsort is needed because a unique index still allows duplicate NULL
 # values. It's not correct to sort on baz alone, even though it is "unique".
@@ -806,38 +806,38 @@ column5:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-sort       0  sort  ·      ·          (a, b, c)  +c
- │         0  ·     order  +c         ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  abcd@abc   ·          ·
-·          1  ·     spans  /1/4-/1/5  ·          ·
+sort       ·      ·          (a, b, c)  +c
+ │         order  +c         ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  abcd@abc   ·          ·
+·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-sort       0  sort  ·      ·          (a, b, c)  +c,+b,+a
- │         0  ·     order  +c,+b,+a   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  abcd@abc   ·          ·
-·          1  ·     spans  /1/4-/1/5  ·          ·
+sort       ·      ·          (a, b, c)  +c,+b,+a
+ │         order  +c,+b,+a   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  abcd@abc   ·          ·
+·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
- │         0  ·     order  +b,+a,+c   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  abcd@abc   ·          ·
-·          1  ·     spans  /1/4-/1/5  ·          ·
+sort       ·      ·          (a, b, c)  +b,+a,+c
+ │         order  +b,+a,+c   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  abcd@abc   ·          ·
+·          spans  /1/4-/1/5  ·          ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-sort       0  sort  ·      ·          (a, b, c)  +b,+c,+a
- │         0  ·     order  +b,+c,+a   ·          ·
- └── scan  1  scan  ·      ·          (a, b, c)  ·
-·          1  ·     table  abcd@abc   ·          ·
-·          1  ·     spans  /1/4-/1/5  ·          ·
+sort       ·      ·          (a, b, c)  +b,+c,+a
+ │         order  +b,+c,+a   ·          ·
+ └── scan  ·      ·          (a, b, c)  ·
+·          table  abcd@abc   ·          ·
+·          spans  /1/4-/1/5  ·          ·
 
 exec-raw
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
@@ -859,22 +859,22 @@ NaN
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
-sort         0  sort    ·              ·                 (x)  +x
- │           0  ·       order          +x                ·    ·
- └── values  1  values  ·              ·                 (x)  ·
-·            1  ·       size           1 column, 3 rows  ·    ·
-·            1  ·       row 0, expr 0  'a'               ·    ·
-·            1  ·       row 1, expr 0  'b'               ·    ·
-·            1  ·       row 2, expr 0  'c'               ·    ·
+sort         ·              ·                 (x)  +x
+ │           order          +x                ·    ·
+ └── values  ·              ·                 (x)  ·
+·            size           1 column, 3 rows  ·    ·
+·            row 0, expr 0  'a'               ·    ·
+·            row 1, expr 0  'b'               ·    ·
+·            row 2, expr 0  'c'               ·    ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-values  0  values  ·              ·                 (x)  ·
-·       0  ·       size           1 column, 3 rows  ·    ·
-·       0  ·       row 0, expr 0  'a'               ·    ·
-·       0  ·       row 1, expr 0  'b'               ·    ·
-·       0  ·       row 2, expr 0  'c'               ·    ·
+values  ·              ·                 (x)  ·
+·       size           1 column, 3 rows  ·    ·
+·       row 0, expr 0  'a'               ·    ·
+·       row 1, expr 0  'b'               ·    ·
+·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): ordinality not supported
 #exec hide-colnames
@@ -960,15 +960,15 @@ CREATE TABLE uvwxyz (
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
-render          0  render  ·         ·            (y, w, x)  ·
- │              0  ·       render 0  y            ·          ·
- │              0  ·       render 1  w            ·          ·
- │              0  ·       render 2  x            ·          ·
- └── sort       1  sort    ·         ·            (w, x, y)  +w,+x
-      │         1  ·       order     +w,+x        ·          ·
-      └── scan  2  scan    ·         ·            (w, x, y)  ·
-·               2  ·       table     uvwxyz@ywxz  ·          ·
-·               2  ·       spans     /1-/2        ·          ·
+render          ·         ·            (y, w, x)  ·
+ │              render 0  y            ·          ·
+ │              render 1  w            ·          ·
+ │              render 2  x            ·          ·
+ └── sort       ·         ·            (w, x, y)  +w,+x
+      │         order     +w,+x        ·          ·
+      └── scan  ·         ·            (w, x, y)  ·
+·               table     uvwxyz@ywxz  ·          ·
+·               spans     /1-/2        ·          ·
 
 exec-raw
 CREATE TABLE blocks (

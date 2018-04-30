@@ -30,12 +30,12 @@ scan  ·      ·
 ·     table  t@primary
 ·     spans  ALL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t
 ----
-scan  0  scan  ·      ·          (k, v)  k!=NULL; key(k)
-·     0  ·     table  t@primary  ·       ·
-·     0  ·     spans  ALL        ·       ·
+scan  ·      ·          (k, v)  k!=NULL; key(k)
+·     table  t@primary  ·       ·
+·     spans  ALL        ·       ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
@@ -44,13 +44,13 @@ scan  ·      ·
 ·     table  t@primary
 ·     spans  /1-/1/# /3-/3/#
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
 ----
-scan  0  scan  ·       ·            (k, v)  k!=NULL; key(k)
-·     0  ·     table   t@primary    ·       ·
-·     0  ·     spans   ALL          ·       ·
-·     0  ·     filter  (k % 2) = 0  ·       ·
+scan  ·       ·            (k, v)  k!=NULL; key(k)
+·     table   t@primary    ·       ·
+·     spans   ALL          ·       ·
+·     filter  (k % 2) = 0  ·       ·
 
 query TTT
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
@@ -132,17 +132,17 @@ limit                ·         ·
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 ----
-sort                  0  sort        ·         ·                 (a, b)                                   a=CONST; +b
- │                    0  ·           order     +b                ·                                        ·
- └── render           1  render      ·         ·                 (a, b)                                   a=CONST
-      │               1  ·           render 0  test.public.tc.a  ·                                        ·
-      │               1  ·           render 1  test.public.tc.b  ·                                        ·
-      └── index-join  2  index-join  ·         ·                 (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
-           ├── scan   3  scan        ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
-           │          3  ·           table     tc@c              ·                                        ·
-           │          3  ·           spans     /10-/11           ·                                        ·
-           └── scan   3  scan        ·         ·                 (a, b, rowid[hidden,omitted])            ·
-·                     3  ·           table     tc@primary        ·                                        ·
+sort                  ·         ·                 (a, b)                                   a=CONST; +b
+ │                    order     +b                ·                                        ·
+ └── render           ·         ·                 (a, b)                                   a=CONST
+      │               render 0  test.public.tc.a  ·                                        ·
+      │               render 1  test.public.tc.b  ·                                        ·
+      └── index-join  ·         ·                 (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
+           ├── scan   ·         ·                 (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
+           │          table     tc@c              ·                                        ·
+           │          spans     /10-/11           ·                                        ·
+           └── scan   ·         ·                 (a, b, rowid[hidden,omitted])            ·
+·                     table     tc@primary        ·                                        ·

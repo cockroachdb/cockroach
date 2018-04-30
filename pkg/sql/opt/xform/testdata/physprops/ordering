@@ -276,7 +276,7 @@ opt
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 explain
- ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+ ├── columns: Tree:5(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
  └── sort
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── ordering: +2
@@ -288,7 +288,7 @@ EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 memo (optimized)
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │    └── "[presentation: Tree:5,Level:6,Type:7,Field:8,Description:9,Columns:10,Ordering:11]"
+ │    └── "[presentation: Tree:5,Field:8,Description:9,Columns:10,Ordering:11]"
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │         └── cost: 1250.00
  └── G2: (scan a)

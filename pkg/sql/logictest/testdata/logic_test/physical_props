@@ -3,196 +3,196 @@
 statement ok
 CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT)
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE b = c
 ----
-Tree  Level  Type  Field   Description   Columns       Ordering
-scan  0      scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
-·     0      ·     table   abcd@primary  ·             ·
-·     0      ·     spans   ALL           ·             ·
-·     0      ·     filter  b = c         ·             ·
+Tree  Field   Description   Columns       Ordering
+scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
+·     table   abcd@primary  ·             ·
+·     spans   ALL           ·             ·
+·     filter  b = c         ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1
 ----
-Tree  Level  Type  Field  Description   Columns       Ordering
-scan  0      scan  ·      ·             (a, b, c, d)  a=CONST; key()
-·     0      ·     table  abcd@primary  ·             ·
-·     0      ·     spans  /1-/1/#       ·             ·
+Tree  Field  Description   Columns       Ordering
+scan  ·      ·             (a, b, c, d)  a=CONST; key()
+·     table  abcd@primary  ·             ·
+·     spans  /1-/1/#       ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE b = 1
 ----
-Tree  Level  Type  Field   Description   Columns       Ordering
-scan  0      scan  ·       ·             (a, b, c, d)  b=CONST; a!=NULL; key(a)
-·     0      ·     table   abcd@primary  ·             ·
-·     0      ·     spans   ALL           ·             ·
-·     0      ·     filter  b = 1         ·             ·
+Tree  Field   Description   Columns       Ordering
+scan  ·       ·             (a, b, c, d)  b=CONST; a!=NULL; key(a)
+·     table   abcd@primary  ·             ·
+·     spans   ALL           ·             ·
+·     filter  b = 1         ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1 AND b = 1
 ----
-Tree  Level  Type  Field   Description   Columns       Ordering
-scan  0      scan  ·       ·             (a, b, c, d)  a=CONST; b=CONST; key()
-·     0      ·     table   abcd@primary  ·             ·
-·     0      ·     spans   /1-/1/#       ·             ·
-·     0      ·     filter  b = 1         ·             ·
+Tree  Field   Description   Columns       Ordering
+scan  ·       ·             (a, b, c, d)  a=CONST; b=CONST; key()
+·     table   abcd@primary  ·             ·
+·     spans   /1-/1/#       ·             ·
+·     filter  b = 1         ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1 AND b = d
 ----
-Tree  Level  Type  Field   Description   Columns       Ordering
-scan  0      scan  ·       ·             (a, b, c, d)  b=d; a=CONST; b!=NULL; d!=NULL; key()
-·     0      ·     table   abcd@primary  ·             ·
-·     0      ·     spans   /1-/1/#       ·             ·
-·     0      ·     filter  b = d         ·             ·
+Tree  Field   Description   Columns       Ordering
+scan  ·       ·             (a, b, c, d)  b=d; a=CONST; b!=NULL; d!=NULL; key()
+·     table   abcd@primary  ·             ·
+·     spans   /1-/1/#       ·             ·
+·     filter  b = d         ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c
 ----
-Tree  Level  Type  Field   Description          Columns       Ordering
-scan  0      scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
-·     0      ·     table   abcd@primary         ·             ·
-·     0      ·     spans   ALL                  ·             ·
-·     0      ·     filter  (a = b) AND (b = c)  ·             ·
+Tree  Field   Description          Columns       Ordering
+scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
+·     table   abcd@primary         ·             ·
+·     spans   ALL                  ·             ·
+·     filter  (a = b) AND (b = c)  ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c AND c = 1
 ----
-Tree  Level  Type  Field   Description                        Columns       Ordering
-scan  0      scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST; b!=NULL; c!=NULL; key()
-·     0      ·     table   abcd@primary                       ·             ·
-·     0      ·     spans   ALL                                ·             ·
-·     0      ·     filter  ((a = b) AND (b = c)) AND (c = 1)  ·             ·
+Tree  Field   Description                        Columns       Ordering
+scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST; b!=NULL; c!=NULL; key()
+·     table   abcd@primary                       ·             ·
+·     spans   ALL                                ·             ·
+·     filter  ((a = b) AND (b = c)) AND (c = 1)  ·             ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = 1
 ----
-Tree         Level  Type    Field          Description        Columns    Ordering
-filter       0      filter  ·              ·                  (a, b, c)  a=CONST
- │           0      ·       filter         x.a = 1            ·          ·
- └── values  1      values  ·              ·                  (a, b, c)  ·
-·            1      ·       size           3 columns, 2 rows  ·          ·
-·            1      ·       row 0, expr 0  1                  ·          ·
-·            1      ·       row 0, expr 1  2                  ·          ·
-·            1      ·       row 0, expr 2  3                  ·          ·
-·            1      ·       row 1, expr 0  4                  ·          ·
-·            1      ·       row 1, expr 1  5                  ·          ·
-·            1      ·       row 1, expr 2  6                  ·          ·
+Tree         Field          Description        Columns    Ordering
+filter       ·              ·                  (a, b, c)  a=CONST
+ │           filter         x.a = 1            ·          ·
+ └── values  ·              ·                  (a, b, c)  ·
+·            size           3 columns, 2 rows  ·          ·
+·            row 0, expr 0  1                  ·          ·
+·            row 0, expr 1  2                  ·          ·
+·            row 0, expr 2  3                  ·          ·
+·            row 1, expr 0  4                  ·          ·
+·            row 1, expr 1  5                  ·          ·
+·            row 1, expr 2  6                  ·          ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b
 ----
-Tree         Level  Type    Field          Description        Columns    Ordering
-filter       0      filter  ·              ·                  (a, b, c)  a=b; a!=NULL; b!=NULL
- │           0      ·       filter         x.a = x.b          ·          ·
- └── values  1      values  ·              ·                  (a, b, c)  ·
-·            1      ·       size           3 columns, 2 rows  ·          ·
-·            1      ·       row 0, expr 0  1                  ·          ·
-·            1      ·       row 0, expr 1  2                  ·          ·
-·            1      ·       row 0, expr 2  3                  ·          ·
-·            1      ·       row 1, expr 0  4                  ·          ·
-·            1      ·       row 1, expr 1  5                  ·          ·
-·            1      ·       row 1, expr 2  6                  ·          ·
+Tree         Field          Description        Columns    Ordering
+filter       ·              ·                  (a, b, c)  a=b; a!=NULL; b!=NULL
+ │           filter         x.a = x.b          ·          ·
+ └── values  ·              ·                  (a, b, c)  ·
+·            size           3 columns, 2 rows  ·          ·
+·            row 0, expr 0  1                  ·          ·
+·            row 0, expr 1  2                  ·          ·
+·            row 0, expr 2  3                  ·          ·
+·            row 1, expr 0  4                  ·          ·
+·            row 1, expr 1  5                  ·          ·
+·            row 1, expr 2  6                  ·          ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b AND b = 1
 ----
-Tree         Level  Type    Field          Description                Columns    Ordering
-filter       0      filter  ·              ·                          (a, b, c)  a=b; a=CONST; b!=NULL
- │           0      ·       filter         (x.a = x.b) AND (x.b = 1)  ·          ·
- └── values  1      values  ·              ·                          (a, b, c)  ·
-·            1      ·       size           3 columns, 2 rows          ·          ·
-·            1      ·       row 0, expr 0  1                          ·          ·
-·            1      ·       row 0, expr 1  2                          ·          ·
-·            1      ·       row 0, expr 2  3                          ·          ·
-·            1      ·       row 1, expr 0  4                          ·          ·
-·            1      ·       row 1, expr 1  5                          ·          ·
-·            1      ·       row 1, expr 2  6                          ·          ·
+Tree         Field          Description                Columns    Ordering
+filter       ·              ·                          (a, b, c)  a=b; a=CONST; b!=NULL
+ │           filter         (x.a = x.b) AND (x.b = 1)  ·          ·
+ └── values  ·              ·                          (a, b, c)  ·
+·            size           3 columns, 2 rows          ·          ·
+·            row 0, expr 0  1                          ·          ·
+·            row 0, expr 1  2                          ·          ·
+·            row 0, expr 2  3                          ·          ·
+·            row 1, expr 0  4                          ·          ·
+·            row 1, expr 1  5                          ·          ·
+·            row 1, expr 2  6                          ·          ·
 
 
 statement ok
 CREATE TABLE efg (e INT PRIMARY KEY, f INT, g INT)
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND a=1 AND f=g
 ----
-Tree       Level  Type  Field           Description   Columns                Ordering
-join       0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
- │         0      ·     type            inner         ·                      ·
- │         0      ·     equality        (a) = (e)     ·                      ·
- │         0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  1      scan  ·               ·             (a, b, c, d)           a=CONST; key()
- │         1      ·     table           abcd@primary  ·                      ·
- │         1      ·     spans           /1-/1/#       ·                      ·
- └── scan  1      scan  ·               ·             (e, f, g)              f=g; e=CONST; f!=NULL; g!=NULL; key()
-·          1      ·     table           efg@primary   ·                      ·
-·          1      ·     spans           /1-/1/#       ·                      ·
-·          1      ·     filter          f = g         ·                      ·
+Tree       Field           Description   Columns                Ordering
+join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
+ │         type            inner         ·                      ·
+ │         equality        (a) = (e)     ·                      ·
+ │         mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan  ·               ·             (a, b, c, d)           a=CONST; key()
+ │         table           abcd@primary  ·                      ·
+ │         spans           /1-/1/#       ·                      ·
+ └── scan  ·               ·             (e, f, g)              f=g; e=CONST; f!=NULL; g!=NULL; key()
+·          table           efg@primary   ·                      ·
+·          spans           /1-/1/#       ·                      ·
+·          filter          f = g         ·                      ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND b=1 AND f=g
 ----
-Tree       Level  Type  Field           Description   Columns                Ordering
-join       0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; a!=NULL; key(a)
- │         0      ·     type            inner         ·                      ·
- │         0      ·     equality        (a) = (e)     ·                      ·
- │         0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  1      scan  ·               ·             (a, b, c, d)           b=CONST; a!=NULL; key(a); +a
- │         1      ·     table           abcd@primary  ·                      ·
- │         1      ·     spans           ALL           ·                      ·
- │         1      ·     filter          b = 1         ·                      ·
- └── scan  1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
-·          1      ·     table           efg@primary   ·                      ·
-·          1      ·     spans           ALL           ·                      ·
-·          1      ·     filter          f = g         ·                      ·
+Tree       Field           Description   Columns                Ordering
+join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; a!=NULL; key(a)
+ │         type            inner         ·                      ·
+ │         equality        (a) = (e)     ·                      ·
+ │         mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan  ·               ·             (a, b, c, d)           b=CONST; a!=NULL; key(a); +a
+ │         table           abcd@primary  ·                      ·
+ │         spans           ALL           ·                      ·
+ │         filter          b = 1         ·                      ·
+ └── scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
+·          table           efg@primary   ·                      ·
+·          spans           ALL           ·                      ·
+·          filter          f = g         ·                      ·
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e
 ----
-Tree       Level  Type  Field           Description   Columns                Ordering
-join       0      join  ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; key(a)
- │         0      ·     type            inner         ·                      ·
- │         0      ·     equality        (a) = (e)     ·                      ·
- │         0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  1      scan  ·               ·             (a, b, c, d)           a!=NULL; key(a); +a
- │         1      ·     table           abcd@primary  ·                      ·
- │         1      ·     spans           ALL           ·                      ·
- └── scan  1      scan  ·               ·             (e, f, g)              e!=NULL; key(e); +e
-·          1      ·     table           efg@primary   ·                      ·
-·          1      ·     spans           ALL           ·                      ·
+Tree       Field           Description   Columns                Ordering
+join       ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; key(a)
+ │         type            inner         ·                      ·
+ │         equality        (a) = (e)     ·                      ·
+ │         mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan  ·               ·             (a, b, c, d)           a!=NULL; key(a); +a
+ │         table           abcd@primary  ·                      ·
+ │         spans           ALL           ·                      ·
+ └── scan  ·               ·             (e, f, g)              e!=NULL; key(e); +e
+·          table           efg@primary   ·                      ·
+·          spans           ALL           ·                      ·
 
 # Verify keys don't get propagated when not appropriate.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=f
 ----
-Tree       Level  Type  Field     Description   Columns                Ordering
-join       0      join  ·         ·             (a, b, c, d, e, f, g)  ·
- │         0      ·     type      inner         ·                      ·
- │         0      ·     equality  (a) = (f)     ·                      ·
- ├── scan  1      scan  ·         ·             (a, b, c, d)           a!=NULL; key(a)
- │         1      ·     table     abcd@primary  ·                      ·
- │         1      ·     spans     ALL           ·                      ·
- └── scan  1      scan  ·         ·             (e, f, g)              e!=NULL; key(e)
-·          1      ·     table     efg@primary   ·                      ·
-·          1      ·     spans     ALL           ·                      ·
+Tree       Field     Description   Columns                Ordering
+join       ·         ·             (a, b, c, d, e, f, g)  ·
+ │         type      inner         ·                      ·
+ │         equality  (a) = (f)     ·                      ·
+ ├── scan  ·         ·             (a, b, c, d)           a!=NULL; key(a)
+ │         table     abcd@primary  ·                      ·
+ │         spans     ALL           ·                      ·
+ └── scan  ·         ·             (e, f, g)              e!=NULL; key(e)
+·          table     efg@primary   ·                      ·
+·          spans     ALL           ·                      ·
 
 # Verify we retain all keys when appropriate.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN (SELECT * FROM efg WITH ORDINALITY) ON a=e
 ----
-Tree             Level  Type        Field           Description   Columns                              Ordering
-join             0      join        ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
- │               0      ·           type            inner         ·                                    ·
- │               0      ·           equality        (a) = (e)     ·                                    ·
- │               0      ·           mergeJoinOrder  +"(a=e)"      ·                                    ·
- ├── scan        1      scan        ·               ·             (a, b, c, d)                         a!=NULL; key(a); +a
- │               1      ·           table           abcd@primary  ·                                    ·
- │               1      ·           spans           ALL           ·                                    ·
- └── ordinality  1      ordinality  ·               ·             (e, f, g, "ordinality")              e!=NULL; key(e); weak-key("ordinality"); +e
-      └── scan   2      scan        ·               ·             (e, f, g)                            e!=NULL; key(e); +e
-·                2      ·           table           efg@primary   ·                                    ·
-·                2      ·           spans           ALL           ·                                    ·
+Tree             Field           Description   Columns                              Ordering
+join             ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
+ │               type            inner         ·                                    ·
+ │               equality        (a) = (e)     ·                                    ·
+ │               mergeJoinOrder  +"(a=e)"      ·                                    ·
+ ├── scan        ·               ·             (a, b, c, d)                         a!=NULL; key(a); +a
+ │               table           abcd@primary  ·                                    ·
+ │               spans           ALL           ·                                    ·
+ └── ordinality  ·               ·             (e, f, g, "ordinality")              e!=NULL; key(e); weak-key("ordinality"); +e
+      └── scan   ·               ·             (e, f, g)                            e!=NULL; key(e); +e
+·                table           efg@primary   ·                                    ·
+·                spans           ALL           ·                                    ·
 
 # Regression test for 24500
 statement ok
@@ -201,13 +201,13 @@ CREATE UNIQUE INDEX ON abc (a, b, c);
 SELECT true FROM abc WHERE b=1 and b=c
 
 # a should be a weak key.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT true FROM abc WHERE b=1 and b=c;
 ----
-Tree       Level  Type    Field     Description          Columns                                    Ordering
-render     0      render  ·         ·                    ("true")                                   "true"=CONST
- │         0      ·       render 0  true                 ·                                          ·
- └── scan  1      scan    ·         ·                    (a[omitted], b, c, rowid[hidden,omitted])  b=c; b=CONST; c!=NULL; weak-key(a)
-·          1      ·       table     abc@abc_a_b_c_key    ·                                          ·
-·          1      ·       spans     ALL                  ·                                          ·
-·          1      ·       filter    (b = 1) AND (b = c)  ·                                          ·
+Tree       Field     Description          Columns                                    Ordering
+render     ·         ·                    ("true")                                   "true"=CONST
+ │         render 0  true                 ·                                          ·
+ └── scan  ·         ·                    (a[omitted], b, c, rowid[hidden,omitted])  b=c; b=CONST; c!=NULL; weak-key(a)
+·          table     abc@abc_a_b_c_key    ·                                          ·
+·          spans     ALL                  ·                                          ·
+·          filter    (b = 1) AND (b = c)  ·                                          ·

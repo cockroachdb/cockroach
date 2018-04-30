@@ -47,17 +47,17 @@ c 1
 a 3
 
 # Check that sort by ordinal picks up the existing render.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT b, a FROM foo ORDER BY @1
 ----
-sort            0  sort    ·         ·                  (b, a)                         +a
- │              0  ·       order     +a                 ·                              ·
- └── render     1  render  ·         ·                  (b, a)                         ·
-      │         1  ·       render 0  test.public.foo.b  ·                              ·
-      │         1  ·       render 1  test.public.foo.a  ·                              ·
-      └── scan  2  scan    ·         ·                  (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·               2  ·       table     foo@primary        ·                              ·
-·               2  ·       spans     ALL                ·                              ·
+sort            ·         ·                  (b, a)                         +a
+ │              order     +a                 ·                              ·
+ └── render     ·         ·                  (b, a)                         ·
+      │         render 0  test.public.foo.b  ·                              ·
+      │         render 1  test.public.foo.a  ·                              ·
+      └── scan  ·         ·                  (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)
+·               table     foo@primary        ·                              ·
+·               spans     ALL                ·                              ·
 
 statement ok
 INSERT INTO foo(a, b) VALUES (4, 'c'), (5, 'c'), (6, 'c')
@@ -80,30 +80,30 @@ SELECT SUM(a) AS s FROM foo GROUP BY @2 ORDER BY s
 16
 
 # Check that GROUP BY picks up column ordinals.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
-group           0  group   ·            ·                  (m)                                     ·
- │              0  ·       aggregate 0  min(a)             ·                                       ·
- │              0  ·       group by     @1                 ·                                       ·
- └── render     1  render  ·            ·                  (a)                                     ·
-      │         1  ·       render 0     test.public.foo.a  ·                                       ·
-      └── scan  2  scan    ·            ·                  (a, b[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·               2  ·       table        foo@primary        ·                                       ·
-·               2  ·       spans        ALL                ·                                       ·
+group           ·            ·                  (m)                                     ·
+ │              aggregate 0  min(a)             ·                                       ·
+ │              group by     @1                 ·                                       ·
+ └── render     ·            ·                  (a)                                     ·
+      │         render 0     test.public.foo.a  ·                                       ·
+      └── scan  ·            ·                  (a, b[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
+·               table        foo@primary        ·                                       ·
+·               spans        ALL                ·                                       ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
-group           0  group   ·            ·                  (m)                            ·
- │              0  ·       aggregate 0  min(a)             ·                              ·
- │              0  ·       group by     @1                 ·                              ·
- └── render     1  render  ·            ·                  (b, a)                         ·
-      │         1  ·       render 0     test.public.foo.b  ·                              ·
-      │         1  ·       render 1     test.public.foo.a  ·                              ·
-      └── scan  2  scan    ·            ·                  (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·               2  ·       table        foo@primary        ·                              ·
-·               2  ·       spans        ALL                ·                              ·
+group           ·            ·                  (m)                            ·
+ │              aggregate 0  min(a)             ·                              ·
+ │              group by     @1                 ·                              ·
+ └── render     ·            ·                  (b, a)                         ·
+      │         render 0     test.public.foo.b  ·                              ·
+      │         render 1     test.public.foo.a  ·                              ·
+      └── scan  ·            ·                  (a, b, rowid[hidden,omitted])  rowid!=NULL; key(rowid)
+·               table        foo@primary        ·                              ·
+·               spans        ALL                ·                              ·
 
 statement error column reference @1 not allowed in this context
 INSERT INTO foo(a, b) VALUES (@1, @2)

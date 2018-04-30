@@ -69,8 +69,8 @@ select
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
 ----
-filter     0  filter  ·       ·          (u, v)  ·
- │         0  ·       filter  u = 1      ·       ·
- └── scan  1  scan    ·       ·          (u, v)  ·
-·          1  ·       table   b@b_v_idx  ·       ·
-·          1  ·       spans   /1-/2      ·       ·
+filter     ·       ·          (u, v)  ·
+ │         filter  u = 1      ·       ·
+ └── scan  ·       ·          (u, v)  ·
+·          table   b@b_v_idx  ·       ·
+·          spans   /1-/2      ·       ·
