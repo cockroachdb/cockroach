@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1157,16 +1157,6 @@ func doDistributedCSVTransform(
 ) error {
 	evalCtx := p.ExtendedEvalContext()
 
-	// TODO(dan): Filter out unhealthy nodes.
-	resp, err := p.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return err
-	}
-	var nodes []roachpb.NodeDescriptor
-	for _, node := range resp.Nodes {
-		nodes = append(nodes, node.Desc)
-	}
-
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
 		{SemanticType: sqlbase.ColumnType_INT},
@@ -1183,11 +1173,8 @@ func doDistributedCSVTransform(
 
 	if err := p.DistLoader().LoadCSV(
 		ctx,
+		p,
 		job,
-		p.ExecCfg().DB,
-		evalCtx,
-		p.ExecCfg().NodeID.Get(),
-		nodes,
 		sql.NewRowResultWriter(rows),
 		tableDesc,
 		files,

@@ -878,21 +878,31 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 	if err != nil {
 		return 0, err
 	}
-	nodeID := replInfo.NodeID
 
-	// Check node health and compatibility.
-	addr := replInfo.NodeDesc.Address.String()
-	if err := dsp.checkNodeHealth(planCtx.ctx, nodeID, addr); err != nil {
-		log.Eventf(planCtx.ctx, "not planning on node %d. unhealthy", nodeID)
-		return dsp.nodeDesc.NodeID, nil
+	nodeID := replInfo.NodeDesc.NodeID
+	if err := dsp.checkNodeHealthAndVersion(planCtx, replInfo.NodeDesc); err != nil {
+		log.Eventf(planCtx.ctx, "not planning on node %d. %v", nodeID, err)
 	}
-	if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
-		log.Eventf(planCtx.ctx, "not planning on node %d. incompatible version", nodeID)
-		return dsp.nodeDesc.NodeID, nil
-	}
-
-	planCtx.nodeAddresses[nodeID] = addr
 	return nodeID, nil
+}
+
+// checkNodeHealthAndVersion adds the node to planCtx if it is healthy and
+// has a compatible version. An error is returned otherwise.
+func (dsp *DistSQLPlanner) checkNodeHealthAndVersion(
+	planCtx *planningCtx, desc *roachpb.NodeDescriptor,
+) error {
+	nodeID := desc.NodeID
+	addr := desc.Address.String()
+	var err error
+
+	if err = dsp.checkNodeHealth(planCtx.ctx, nodeID, addr); err != nil {
+		err = errors.New("unhealthy")
+	} else if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
+		err = errors.New("incompatible version")
+	} else {
+		planCtx.nodeAddresses[nodeID] = addr
+	}
+	return err
 }
 
 // createTableReaders generates a plan consisting of table reader processors,

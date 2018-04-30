@@ -939,7 +939,7 @@ func TestImportStmt(t *testing.T) {
 		)
 
 		data = ",5,e,,,"
-		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `parse "a" as INT: could not parse ""`) {
+		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `could not parse "" as type int`) {
 			t.Fatalf("unexpected: %v", err)
 		}
 		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"a" violates not-null constraint`) {
