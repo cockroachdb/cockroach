@@ -121,8 +121,8 @@ func (b *Builder) Build() (root memo.GroupID, required *memo.PhysicalProps, err 
 
 	outScope := b.buildStmt(b.stmt, &scope{builder: b})
 	root = outScope.group
-	required = b.buildPhysicalProps(outScope)
-	return root, required, nil
+	outScope.setPresentation()
+	return root, &outScope.physicalProps, nil
 }
 
 // builderError is used for semantic errors that occur during the build process
@@ -137,15 +137,6 @@ type builderError struct {
 func errorf(format string, a ...interface{}) builderError {
 	err := fmt.Errorf(format, a...)
 	return builderError{err}
-}
-
-// buildPhysicalProps construct a set of required physical properties from the
-// given scope.
-func (b *Builder) buildPhysicalProps(scope *scope) *memo.PhysicalProps {
-	if scope.physicalProps.Presentation == nil {
-		scope.physicalProps.Presentation = makePresentation(scope.cols)
-	}
-	return &scope.physicalProps
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -172,6 +163,9 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 
 	case *tree.Select:
 		return b.buildSelect(stmt, inScope)
+
+	case *tree.Explain:
+		return b.buildExplain(stmt, inScope)
 
 	default:
 		panic(errorf("unexpected statement: %T", stmt))

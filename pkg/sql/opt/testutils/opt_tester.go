@@ -399,16 +399,6 @@ func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Plan, error) {
 	return execbuilder.New(eng.Factory(), ev).Build()
 }
 
-// Explain builds the exec node tree for the SQL query and then runs the
-// explain command that describes the physical execution plan.
-func (ot *OptTester) Explain(eng exec.TestEngine) ([]tree.Datums, error) {
-	plan, err := ot.ExecBuild(eng)
-	if err != nil {
-		return nil, err
-	}
-	return eng.Explain(plan)
-}
-
 // Exec builds the exec node tree for the SQL query and then executes it.
 func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Datums, error) {
 	plan, err := ot.ExecBuild(eng)

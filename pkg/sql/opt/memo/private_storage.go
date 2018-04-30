@@ -203,6 +203,21 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+// internExplainOpDef adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internLookupJoinDef always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internExplainOpDef(def *ExplainOpDef) PrivateID {
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeColList(def.ColList)
+	ps.keyBuf.WriteString(def.Props.Fingerprint())
+	typ := (*ExplainOpDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internSetOpColMap adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internSetOpColMap always

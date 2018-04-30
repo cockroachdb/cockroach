@@ -127,6 +127,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.SortOp:
 		ep, err = b.buildSort(ev)
 
+	case opt.ExplainOp:
+		ep, err = b.buildExplain(ev)
+
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
@@ -534,5 +537,29 @@ func (b *Builder) applyPresentation(
 	for i := range p {
 		ep.outputCols.Set(int(p[i].ID), i)
 	}
+	return ep, nil
+}
+
+func (b *Builder) buildExplain(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
+	if err != nil {
+		return execPlan{}, err
+	}
+	node, err := b.factory.ConstructExplain(plan)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	colList := ev.Private().(*memo.ExplainOpDef).ColList
+	for i := range colList {
+		ep.outputCols.Set(int(colList[i]), i)
+	}
+	// The subqueries are now owned by the explain node; remove them so they don't
+	// also show up in the final plan.
+	b.subqueries = b.subqueries[:0]
 	return ep, nil
 }

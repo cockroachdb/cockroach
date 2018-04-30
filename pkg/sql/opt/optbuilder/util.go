@@ -297,17 +297,6 @@ func findColByIndex(cols []scopeColumn, id opt.ColumnID) *scopeColumn {
 	return nil
 }
 
-func makePresentation(cols []scopeColumn) memo.Presentation {
-	presentation := make(memo.Presentation, 0, len(cols))
-	for i := range cols {
-		col := &cols[i]
-		if !col.hidden {
-			presentation = append(presentation, opt.LabeledColumn{Label: string(col.name), ID: col.id})
-		}
-	}
-	return presentation
-}
-
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	exprTransformCtx := transform.ExprTransformContext{}
 	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {

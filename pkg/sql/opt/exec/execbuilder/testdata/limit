@@ -3,8 +3,8 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v));
 INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 125), (6, -36, 216)
 ----
 
-exec-explain
-SELECT k, v FROM t ORDER BY k LIMIT 5
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
 scan  0  scan  ·      ·          (k, v)  ·
 ·     0  ·     table  t@primary  ·       ·
@@ -21,8 +21,8 @@ k:int  v:int
 4      -16
 5      25
 
-exec-explain
-SELECT k, v FROM t ORDER BY k OFFSET 5
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
 limit      0  limit  ·       ·          (k, v)  ·
  │         0  ·      offset  5          ·       ·
@@ -36,8 +36,8 @@ SELECT k, v FROM t ORDER BY k OFFSET 5
 k:int  v:int
 6      -36
 
-exec-explain
-SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
 limit      0  limit  ·       ·          (k, v)  ·
  │         0  ·      count   5          ·       ·
@@ -56,8 +56,8 @@ k:int  v:int
 3      9
 5      25
 
-exec-explain
-SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
 limit           0  limit  ·       ·          (k, v)  -v
  │              0  ·      count   5          ·       ·
@@ -78,8 +78,8 @@ k:int  v:int
 4      -16
 6      -36
 
-exec-explain
-SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                         0  render  ·            ·          (column4)         ·
  │                             0  ·       render 0     column4    ·                 ·
@@ -110,8 +110,8 @@ column4:decimal
 94
 216
 
-exec-explain
-SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
 render     0  render  ·         ·          (k)     ·
  │         0  ·       render 0  k          ·       ·
@@ -129,8 +129,8 @@ k:int
 2
 1
 
-exec-explain
-SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
 render     0  render  ·         ·          (k)     ·
  │         0  ·       render 0  k          ·       ·

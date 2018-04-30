@@ -90,6 +90,21 @@ func (s *scope) appendColumn(col *scopeColumn, label string) *scopeColumn {
 	return newCol
 }
 
+// setPresentation sets s.physicalProps.Presentation (if not already set).
+func (s *scope) setPresentation() {
+	if s.physicalProps.Presentation != nil {
+		return
+	}
+	presentation := make(memo.Presentation, 0, len(s.cols))
+	for i := range s.cols {
+		col := &s.cols[i]
+		if !col.hidden {
+			presentation = append(presentation, opt.LabeledColumn{Label: string(col.name), ID: col.id})
+		}
+	}
+	s.physicalProps.Presentation = presentation
+}
+
 // walkExprTree walks the given expression and performs name resolution,
 // replaces unresolved column names with columnProps, and replaces subqueries
 // with typed subquery structs.

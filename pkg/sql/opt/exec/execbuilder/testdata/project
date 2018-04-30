@@ -10,8 +10,8 @@ exec-raw
 INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
 ----
 
-exec-explain
-SELECT * FROM a WHERE x > 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
@@ -24,8 +24,8 @@ x:int  y:int
 2      20
 3      30
 
-exec-explain
-SELECT * FROM a WHERE y > 1
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 1
 ----
 filter     0  filter  ·       ·          (x, y)  ·
  │         0  ·       filter  y > 1      ·       ·
@@ -41,8 +41,8 @@ x:int  y:int
 2      20
 3      30
 
-exec-explain
-SELECT * FROM a WHERE x > 1 AND x < 3
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
@@ -54,8 +54,8 @@ SELECT * FROM a WHERE x > 1 AND x < 3
 x:int  y:int
 2      20
 
-exec-explain
-SELECT x + 1 FROM a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x + 1 FROM a
 ----
 render     0  render  ·         ·          (column3)  ·
  │         0  ·       render 0  x + 1      ·          ·
@@ -71,8 +71,8 @@ column3:int
 3
 4
 
-exec-explain
-SELECT x, x + 1, y, y + 1, x + y FROM a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x, x + 1, y, y + 1, x + y FROM a
 ----
 render     0  render  ·         ·          (x, column3, y, column4, column5)  ·
  │         0  ·       render 0  x          ·                                  ·
@@ -92,8 +92,8 @@ x:int  column3:int  y:int  column4:int  column5:int
 2      3            20     21           22
 3      4            30     31           33
 
-exec-explain
-SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
 render          0  render  ·         ·                  (column5)           ·
  │              0  ·       render 0  column3 + column4  ·                   ·
@@ -112,8 +112,8 @@ column5:int
 35
 46
 
-exec-explain
-SELECT x, x, y, x FROM a
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x, x, y, x FROM a
 ----
 render     0  render  ·         ·          (x, x, y, x)  ·
  │         0  ·       render 0  x          ·             ·
@@ -132,8 +132,8 @@ x:int  x:int  y:int  x:int
 2      2      20     2
 3      3      30     3
 
-exec-explain
-SELECT x + 1, x + y FROM a WHERE x + y > 20
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
 render          0  render  ·         ·             (column3, column4)  ·
  │              0  ·       render 0  x + 1         ·                   ·
@@ -157,8 +157,8 @@ INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
 ----
 
 # Test with a hidden column.
-exec-explain
-SELECT * FROM b
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT * FROM b
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  b@primary  ·       ·
@@ -172,8 +172,8 @@ x:int  y:int
 2      20
 3      30
 
-exec-explain
-SELECT x FROM b WHERE rowid > 0
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT x FROM b WHERE rowid > 0
 ----
 render     0  render  ·         ·          (x)                 ·
  │         0  ·       render 0  x          ·                   ·
@@ -202,8 +202,8 @@ TABLE nocols
  └── INDEX primary
       └── rowid int not null (hidden)
 
-exec-explain
-SELECT 1, * FROM t.nocols
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT 1, * FROM t.nocols
 ----
 render     0  render  ·         ·               (column2)  ·
  │         0  ·       render 0  1               ·          ·

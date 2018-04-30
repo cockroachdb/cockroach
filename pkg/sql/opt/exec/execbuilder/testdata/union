@@ -235,8 +235,8 @@ v:int
 3
 2
 
-exec-explain
-SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
 ----
 union      0  union  ·      ·                  (v)  ·
  ├── scan  1  scan   ·      ·                  (k)  ·
@@ -246,8 +246,8 @@ union      0  union  ·      ·                  (v)  ·
 ·          1  ·      table  uniontest@primary  ·    ·
 ·          1  ·      spans  ALL                ·    ·
 
-exec-explain
-SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
+exec hide-colnames
+EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
 ----
 append     0  append  ·      ·                  (v)  ·
  ├── scan  1  scan    ·      ·                  (k)  ·

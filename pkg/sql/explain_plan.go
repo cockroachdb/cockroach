@@ -41,6 +41,10 @@ type explainPlanNode struct {
 	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
 	optimized bool
 
+	// optimizeSubqueries indicates whether to invoke optimizeSubquery and
+	// setUnlimited on the subqueries.
+	optimizeSubqueries bool
+
 	run explainPlanRun
 }
 
@@ -85,7 +89,7 @@ func (p *planner) makeExplainPlanNode(
 		return nil, err
 	}
 	return p.makeExplainPlanNodeWithPlan(
-		ctx, flags, expanded, optimized, plan, p.curPlan.subqueryPlans,
+		ctx, flags, expanded, optimized, true /* optimizeSubqueries */, plan, p.curPlan.subqueryPlans,
 	)
 }
 
@@ -94,7 +98,7 @@ func (p *planner) makeExplainPlanNode(
 func (p *planner) makeExplainPlanNodeWithPlan(
 	ctx context.Context,
 	flags explainFlags,
-	expanded, optimized bool,
+	expanded, optimized, optimizeSubqueries bool,
 	plan planNode,
 	subqueryPlans []subquery,
 ) (planNode, error) {
@@ -127,11 +131,12 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 	}
 
 	node := &explainPlanNode{
-		explainer:     e,
-		expanded:      expanded,
-		optimized:     optimized,
-		plan:          plan,
-		subqueryPlans: subqueryPlans,
+		explainer:          e,
+		expanded:           expanded,
+		optimized:          optimized,
+		optimizeSubqueries: optimizeSubqueries,
+		plan:               plan,
+		subqueryPlans:      subqueryPlans,
 		run: explainPlanRun{
 			results: p.newContainerValuesNode(columns, 0),
 		},
@@ -146,18 +151,20 @@ type explainPlanRun struct {
 }
 
 func (e *explainPlanNode) startExec(params runParams) error {
-	// The sub-plan's subqueries have been captured local to the EXPLAIN
-	// node so that they would not be automatically started for
-	// execution by planTop.start(). But this also means they were not
-	// yet processed by makePlan()/optimizePlan(). Do it here.
-	for i := range e.subqueryPlans {
-		if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
-			return err
-		}
+	if e.optimizeSubqueries {
+		// The sub-plan's subqueries have been captured local to the EXPLAIN
+		// node so that they would not be automatically started for
+		// execution by planTop.start(). But this also means they were not
+		// yet processed by makePlan()/optimizePlan(). Do it here.
+		for i := range e.subqueryPlans {
+			if err := params.p.optimizeSubquery(params.ctx, &e.subqueryPlans[i]); err != nil {
+				return err
+			}
 
-		// Trigger limit propagation. This would be done otherwise when
-		// starting the plan. However we do not want to start the plan.
-		params.p.setUnlimited(e.subqueryPlans[i].plan)
+			// Trigger limit propagation. This would be done otherwise when
+			// starting the plan. However we do not want to start the plan.
+			params.p.setUnlimited(e.subqueryPlans[i].plan)
+		}
 	}
 
 	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan, e.subqueryPlans)
