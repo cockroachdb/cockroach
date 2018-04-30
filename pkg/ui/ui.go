@@ -72,7 +72,8 @@ var AssetInfo func(name string) (os.FileInfo, error)
 var IndexHTMLTemplate *template.Template
 
 type IndexHTMLArgs struct {
-	LoggedInUser string
+	SomeoneLoggedIn bool
+	LoggedInUser    string
 }
 
 func init() {
@@ -86,7 +87,11 @@ func init() {
 		<div id="react-layout"></div>
 
 		<script>
-			window.loggedInUser = {{ .loggedInUser }}
+			{{if .SomeoneLoggedIn}}
+				window.loggedInUser = {{ .LoggedInUser }};
+			{{else}}
+				window.loggedInUser = null;
+			{{end}}
 		</script>
 
 		<script src="protos.dll.js" type="text/javascript"></script>

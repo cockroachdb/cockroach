@@ -42,6 +42,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
+	"bytes"
+
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1175,7 +1177,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	var authHandler http.Handler = gwMux
 	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
+		authHandler = newAuthenticationMux(s.authentication, authHandler, true)
 	}
 
 	// Setup HTTP<->gRPC handlers.
@@ -1457,25 +1459,37 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		AssetInfo: ui.AssetInfo,
 	})
 
-	// TODO(vilterp): serve after passing through AuthMux, not here
-	s.mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+	assetsHandler := func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/" {
 			fileServer.ServeHTTP(writer, request)
 			return
 		}
 
-		writer.Header().Add("Content-Type", "text/html")
+		tmplArgs := ui.IndexHTMLArgs{}
 
 		loggedInUser, ok := request.Context().Value("loggedInUser").(string)
-		if !ok {
-			// can we get a nil in here?
-			loggedInUser = ""
+		if ok && loggedInUser != "" {
+			tmplArgs.SomeoneLoggedIn = true
+			tmplArgs.LoggedInUser = loggedInUser
 		}
 
-		ui.IndexHTMLTemplate.Execute(writer, ui.IndexHTMLArgs{
-			LoggedInUser: loggedInUser,
-		})
-	})
+		buf := bytes.NewBufferString("")
+		err := ui.IndexHTMLTemplate.Execute(buf, tmplArgs)
+		if err != nil {
+			wrappedErr := errors.Wrap(err, "templating index.html")
+			log.Error(ctx, wrappedErr)
+			writer.WriteHeader(500)
+			fmt.Fprint(writer, wrappedErr.Error())
+			return
+		}
+		writer.Header().Add("Content-Type", "text/html")
+		buf.WriteTo(writer)
+	}
+
+	maybeAuthMux := newAuthenticationMux(s.authentication, http.HandlerFunc(assetsHandler), false)
+
+	// TODO(vilterp): serve after passing through AuthMux, not here
+	s.mux.Handle("/", maybeAuthMux)
 
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)

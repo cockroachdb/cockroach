@@ -305,38 +305,27 @@ RETURNING id
 type authenticationMux struct {
 	server *authenticationServer
 	inner  http.Handler
+
+	rejectIfUnauthenticated bool
 }
 
-func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenticationMux {
+func newAuthenticationMux(
+	s *authenticationServer,
+	inner http.Handler,
+	rejectIfUnauthenticated bool,
+) *authenticationMux {
 	return &authenticationMux{
 		server: s,
 		inner:  inner,
+		rejectIfUnauthenticated: rejectIfUnauthenticated,
 	}
 }
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// Validate the returned cookie.
-	rawCookie, err := req.Cookie(sessionCookieName)
-	if err != nil {
-		err = errors.Wrap(err, "a valid authentication cookie is required")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	cookie, err := decodeSessionCookie(rawCookie)
-	if err != nil {
-		err = errors.Wrap(err, "a valid authentication cookie is required")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
-
-	valid, username, err := am.server.verifySession(req.Context(), cookie)
-	if err != nil {
-		http.Error(w, apiInternalError(req.Context(), err).Error(), http.StatusInternalServerError)
-		return
-	}
-	if !valid {
-		http.Error(w, "The provided authentication session could not be validated.", http.StatusUnauthorized)
+	username, err, httpCode := am.getSession(w, req)
+	fmt.Println("XXXXXXX err", err, "username:", username, "reject if unauthenticated:", am.rejectIfUnauthenticated)
+	if am.rejectIfUnauthenticated && err != nil {
+		http.Error(w, err.Error(), httpCode)
 		return
 	}
 
@@ -360,6 +349,37 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 		HttpOnly: true,
 		Secure:   true,
 	}, nil
+}
+
+// getSession decodes the cookie from the request, looks up the corresponding session, and
+// returns the logged in user name. If there's an error, it returns an error value and the
+// HTTP error code.
+func (am *authenticationMux) getSession(w http.ResponseWriter, req *http.Request) (string, error, int) {
+	// Validate the returned cookie.
+	rawCookie, err := req.Cookie(sessionCookieName)
+	if err != nil {
+		return "", err, http.StatusUnauthorized
+	}
+
+	cookie, err := decodeSessionCookie(rawCookie)
+	if err != nil {
+		err = errors.Wrap(err, "a valid authentication cookie is required")
+		return "", err, http.StatusUnauthorized
+	}
+
+	valid, username, err := am.server.verifySession(req.Context(), cookie)
+	if err != nil {
+		err := apiInternalError(req.Context(), err)
+		return "", err, http.StatusInternalServerError
+	}
+	if !valid {
+		err := errors.New("The provided authentication session could not be validated.")
+		return "", err, http.StatusUnauthorized
+	}
+
+	fmt.Println("XXXXXXXX is someone logged in?", username)
+
+	return username, nil, 0
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
