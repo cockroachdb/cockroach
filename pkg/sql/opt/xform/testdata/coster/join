@@ -24,21 +24,21 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
 inner-join
  ├── columns: k:1(int!null) x:5(int)
- ├── stats: [rows=10000]
+ ├── stats: [rows=100]
  ├── cost: 2100.00
  ├── project
  │    ├── columns: a.k:1(int!null)
- │    ├── stats: [rows=100]
+ │    ├── stats: [rows=1]
  │    ├── cost: 1100.00
  │    ├── keys: (1)
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=1, distinct(4)=1]
  │    │    ├── cost: 1100.00
  │    │    ├── keys: (1)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
- │    │    │    ├── stats: [rows=1000]
+ │    │    │    ├── stats: [rows=1000, distinct(4)=700]
  │    │    │    ├── cost: 1000.00
  │    │    │    └── keys: (1)
  │    │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]

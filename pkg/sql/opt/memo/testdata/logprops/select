@@ -22,11 +22,11 @@ SELECT * FROM xy WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=1, distinct(1)=1]
  ├── keys: (1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000]
  │    └── keys: (1)
  └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
       ├── variable: xy.x [type=int, outer=(1)]
@@ -37,7 +37,7 @@ SELECT * FROM xy,kuv WHERE xy.x=kuv.k
 ----
 select
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
- ├── stats: [rows=100000]
+ ├── stats: [rows=333333]
  ├── inner-join
  │    ├── columns: xy.x:1(int!null) xy.y:2(int) kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
  │    ├── stats: [rows=1000000]
@@ -60,7 +60,7 @@ SELECT * FROM xy WHERE EXISTS(SELECT * FROM (SELECT * FROM kuv WHERE k=y) WHERE 
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan xy
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
@@ -70,12 +70,12 @@ select
       └── select
            ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
            ├── outer: (1,2)
-           ├── stats: [rows=10]
+           ├── stats: [rows=111]
            ├── keys: (3)
            ├── select
            │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
            │    ├── outer: (2)
-           │    ├── stats: [rows=100]
+           │    ├── stats: [rows=333]
            │    ├── keys: (3)
            │    ├── scan kuv
            │    │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
@@ -95,12 +95,12 @@ SELECT COUNT(*) FROM xy HAVING COUNT(*) = 5
 select
  ├── columns: column3:3(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0]
+ ├── stats: [rows=1, distinct(3)=1]
  ├── keys: ()
  ├── group-by
  │    ├── columns: column3:3(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
+ │    ├── stats: [rows=1, distinct(3)=1]
  │    ├── keys: ()
  │    ├── project
  │    │    ├── stats: [rows=1000]

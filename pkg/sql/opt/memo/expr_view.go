@@ -374,14 +374,19 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	}
 }
 
-func (ev ExprView) formatStats(tp treeprinter.Node, s *Statistics) {
+func (ev ExprView) formatStats(tp treeprinter.Node, s *opt.Statistics) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "stats: [rows=%d", s.RowCount)
-	colStatsCopy := make(ColumnStatistics, len(s.ColStats))
-	copy(colStatsCopy, s.ColStats)
-	sort.Sort(colStatsCopy)
-	for _, col := range colStatsCopy {
+	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
+	for _, colStat := range s.ColStats {
+		colStats = append(colStats, *colStat)
+	}
+	for _, colStat := range s.MultiColStats {
+		colStats = append(colStats, *colStat)
+	}
+	sort.Sort(colStats)
+	for _, col := range colStats {
 		fmt.Fprintf(&buf, ", distinct%s=%d", col.Cols.String(), col.DistinctCount)
 	}
 	buf.WriteString("]")

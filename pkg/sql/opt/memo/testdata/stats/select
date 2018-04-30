@@ -63,10 +63,10 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int) z:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=1]
  ├── select
  │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
- │    ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=4]
+ │    ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
  │    ├── keys: (3)
  │    ├── scan b
  │    │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
@@ -97,11 +97,11 @@ SELECT * FROM a WHERE x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1333, distinct(1)=1385, distinct(2)=393]
+ ├── stats: [rows=1333]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, distinct(2)=400]
+ │    ├── stats: [rows=4000]
  │    └── keys: (1)
  └── lt [type=bool, outer=(1,2)]
       ├── plus [type=int, outer=(1,2)]
@@ -115,11 +115,11 @@ SELECT * FROM a WHERE y = 5 AND x + y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=3, distinct(1)=3, distinct(2)=1]
+ ├── stats: [rows=3, distinct(2)=1]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, distinct(2)=400]
+ │    ├── stats: [rows=4000, distinct(2)=400]
  │    └── keys: (1)
  └── and [type=bool, outer=(1,2), constraints=(/2: [/5 - /5])]
       ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
@@ -137,11 +137,11 @@ SELECT * FROM a WHERE x > 5 AND x < 0
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=0, distinct(1)=0, distinct(2)=0]
+ ├── stats: [rows=0]
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.x:1(int!null) a.y:2(int)
- │    ├── stats: [rows=4000, distinct(1)=5000, distinct(2)=400]
+ │    ├── stats: [rows=4000]
  │    └── keys: (1)
  └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
@@ -150,3 +150,41 @@ select
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /-1]; tight)]
            ├── variable: a.x [type=int, outer=(1)]
            └── const: 0 [type=int]
+
+build
+SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
+----
+project
+ ├── columns: column4:4(decimal)
+ ├── stats: [rows=99]
+ ├── group-by
+ │    ├── columns: b.z:2(int!null) column4:4(decimal)
+ │    ├── grouping columns: b.z:2(int!null)
+ │    ├── stats: [rows=99, distinct(2)=99]
+ │    ├── keys: (2)
+ │    ├── project
+ │    │    ├── columns: b.z:2(int!null) b.x:1(int)
+ │    │    ├── stats: [rows=2000, distinct(2)=99]
+ │    │    ├── select
+ │    │    │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    │    │    ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=99]
+ │    │    │    ├── keys: (3)
+ │    │    │    ├── scan b
+ │    │    │    │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    │    │    │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
+ │    │    │    │    └── keys: (3)
+ │    │    │    └── and [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
+ │    │    │         ├── gt [type=bool, outer=(1), constraints=(/1: [/1001 - ]; tight)]
+ │    │    │         │    ├── variable: b.x [type=int, outer=(1)]
+ │    │    │         │    └── const: 1000 [type=int]
+ │    │    │         └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /2000]; tight)]
+ │    │    │              ├── variable: b.x [type=int, outer=(1)]
+ │    │    │              └── const: 2000 [type=int]
+ │    │    └── projections [outer=(1,2)]
+ │    │         ├── variable: b.z [type=int, outer=(2)]
+ │    │         └── variable: b.x [type=int, outer=(1)]
+ │    └── aggregations [outer=(1)]
+ │         └── sum [type=decimal, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(1)]
+ └── projections [outer=(4)]
+      └── variable: column4 [type=decimal, outer=(4)]

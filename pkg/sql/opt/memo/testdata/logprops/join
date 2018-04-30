@@ -143,7 +143,7 @@ SELECT * FROM xysd WHERE EXISTS(SELECT * FROM (SELECT x) INNER JOIN (SELECT y) O
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=100]
+ ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
@@ -189,16 +189,16 @@ SELECT * FROM (SELECT COUNT(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHER
 semi-join
  ├── columns: cnt:5(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0]
+ ├── stats: [rows=1000]
  ├── select
  │    ├── columns: cnt:5(int)
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0]
+ │    ├── stats: [rows=1, distinct(5)=1]
  │    ├── keys: ()
  │    ├── group-by
  │    │    ├── columns: cnt:5(int)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1]
+ │    │    ├── stats: [rows=1, distinct(5)=1]
  │    │    ├── keys: ()
  │    │    ├── scan xysd
  │    │    │    └── stats: [rows=1000]
@@ -210,7 +210,7 @@ semi-join
  │              └── const: 1 [type=int]
  ├── scan uv
  │    ├── columns: uv.u:6(int) uv.v:7(int!null)
- │    └── stats: [rows=1000]
+ │    └── stats: [rows=1000, distinct(5)=700]
  └── true [type=bool]
 
 # Calculate semi-join-apply cardinality.
@@ -234,7 +234,7 @@ semi-join-apply
  │    ├── select
  │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=333]
  │    │    ├── scan uv
  │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -252,11 +252,11 @@ SELECT * FROM (SELECT * FROM (VALUES (1))) WHERE NOT EXISTS(SELECT * FROM uv WHE
 anti-join
  ├── columns: column1:1(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=100, distinct(1)=1]
+ ├── stats: [rows=100]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(1)=1]
+ │    ├── stats: [rows=1]
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── scan uv
@@ -288,7 +288,7 @@ anti-join-apply
  │    ├── select
  │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    ├── outer: (1)
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=333]
  │    │    ├── scan uv
  │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    │    └── stats: [rows=1000]
@@ -306,11 +306,11 @@ SELECT * FROM (VALUES (1), (2)) INNER JOIN (SELECT * FROM uv LIMIT 2) ON True
 inner-join
  ├── columns: column1:1(int) u:2(int) v:3(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=4, distinct(1)=2]
+ ├── stats: [rows=4]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(1)=2]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    └── tuple [type=tuple{int}]
@@ -339,11 +339,11 @@ SELECT * FROM (VALUES (1), (2), (3)) LEFT JOIN (SELECT * FROM uv LIMIT 2) ON Tru
 left-join
  ├── columns: column1:1(int) u:2(int) v:3(int)
  ├── cardinality: [3 - 6]
- ├── stats: [rows=6, distinct(1)=3]
+ ├── stats: [rows=6]
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [3 - 3]
- │    ├── stats: [rows=3, distinct(1)=3]
+ │    ├── stats: [rows=3]
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -374,7 +374,7 @@ SELECT * FROM (SELECT * FROM uv LIMIT 2) RIGHT JOIN (VALUES (1), (2), (3)) ON Tr
 right-join
  ├── columns: u:1(int) v:2(int) column1:4(int)
  ├── cardinality: [3 - 6]
- ├── stats: [rows=6, distinct(4)=3]
+ ├── stats: [rows=6]
  ├── limit
  │    ├── columns: uv.u:1(int) uv.v:2(int!null)
  │    ├── cardinality: [0 - 2]
@@ -393,7 +393,7 @@ right-join
  ├── values
  │    ├── columns: column1:4(int)
  │    ├── cardinality: [3 - 3]
- │    ├── stats: [rows=3, distinct(4)=3]
+ │    ├── stats: [rows=3]
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    ├── tuple [type=tuple{int}]
@@ -409,11 +409,11 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON T
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [4 - 4]
- ├── stats: [rows=4, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=4]
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(1)=1]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -421,7 +421,7 @@ full-join
  ├── values
  │    ├── columns: column1:2(unknown)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(2)=1]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -435,11 +435,11 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=0, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=0]
  ├── values
  │    ├── columns: column1:1(unknown)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(1)=1]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -447,7 +447,7 @@ full-join
  ├── values
  │    ├── columns: column1:2(unknown)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(2)=1]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{unknown}]
  │    │    └── null [type=unknown]
  │    └── tuple [type=tuple{unknown}]
@@ -461,7 +461,7 @@ SELECT * FROM xysd FULL JOIN (SELECT * FROM (VALUES (1), (2))) ON True
 full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) column1:5(int)
  ├── cardinality: [2 - ]
- ├── stats: [rows=2000, distinct(5)=2]
+ ├── stats: [rows=2000]
  ├── scan xysd
  │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
  │    ├── stats: [rows=1000]
@@ -469,7 +469,7 @@ full-join
  ├── values
  │    ├── columns: column1:5(int)
  │    ├── cardinality: [2 - 2]
- │    ├── stats: [rows=2, distinct(5)=2]
+ │    ├── stats: [rows=2]
  │    ├── tuple [type=tuple{int}]
  │    │    └── const: 1 [type=int]
  │    └── tuple [type=tuple{int}]

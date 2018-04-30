@@ -53,10 +53,13 @@ scan a
 opt
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
-scan a@s_idx
+limit
  ├── columns: s:4(string)
- ├── constraint: /4/1: [/'foo' - /'foo']
- └── limit: 1
+ ├── cardinality: [0 - 1]
+ ├── scan a@s_idx
+ │    ├── columns: a.s:4(string)
+ │    └── constraint: /4/1: [/'foo' - /'foo']
+ └── const: 1 [type=int]
 
 # Limit of a limit.
 opt
@@ -111,12 +114,12 @@ SELECT s FROM a WHERE s='foo' LIMIT 1
 memo (optimized)
  ├── G1: (limit G2 G3 ) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── "[presentation: s:4]"
- │         ├── best: (scan a@s_idx,cols=(4),constrained,lim=1)
+ │         ├── best: (limit G2 G3 )
  │         └── cost: 1.00
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(4),constrained)
- │         └── cost: 100.00
+ │         └── cost: 1.00
  ├── G3: (const 1)
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
  │    └── ""

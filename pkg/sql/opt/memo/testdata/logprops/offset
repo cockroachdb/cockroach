@@ -28,7 +28,7 @@ SELECT * FROM xyzs OFFSET 1
 ----
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1000]
+ ├── stats: [rows=999]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
@@ -121,7 +121,7 @@ OFFSET 2
 offset
  ├── columns: x:6(int)
  ├── cardinality: [1 - 11]
- ├── stats: [rows=13]
+ ├── stats: [rows=11]
  ├── union-all
  │    ├── columns: x:6(int)
  │    ├── left columns: xyzs.x:1(int)
@@ -147,7 +147,7 @@ offset
  │    └── values
  │         ├── columns: column1:5(int)
  │         ├── cardinality: [3 - 3]
- │         ├── stats: [rows=3, distinct(5)=3]
+ │         ├── stats: [rows=3]
  │         ├── tuple [type=tuple{int}]
  │         │    └── const: 1 [type=int]
  │         ├── tuple [type=tuple{int}]
@@ -163,17 +163,17 @@ SELECT s, x FROM (SELECT * FROM xyzs LIMIT 100) WHERE x=1 OFFSET 4294967296
 offset
  ├── columns: s:4(string) x:1(int!null)
  ├── cardinality: [0 - 0]
- ├── stats: [rows=10]
+ ├── stats: [rows=0]
  ├── keys: (1)
  ├── select
  │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
  │    ├── cardinality: [0 - 100]
- │    ├── stats: [rows=10]
+ │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── keys: (1)
  │    ├── scan xyzs
  │    │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
  │    │    ├── limit: 100
- │    │    ├── stats: [rows=100]
+ │    │    ├── stats: [rows=100, distinct(1)=100]
  │    │    └── keys: (1)
  │    └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
  │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
