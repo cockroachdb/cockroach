@@ -1332,13 +1332,13 @@ func DecodeTableKey(
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
 	default:
-		if _, ok := valType.(types.TCollatedString); ok {
+		if t, ok := valType.(types.TCollatedString); ok {
 			var r string
-			_, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 			if err != nil {
 				return nil, nil, err
 			}
-			return nil, nil, errors.Errorf("TODO(eisen): cannot decode collation key: %q", r)
+			return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
 		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
