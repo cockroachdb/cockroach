@@ -1098,6 +1098,10 @@ ui-test: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 ui-test-watch: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS)
 	$(NODE_RUN) -C pkg/ui $(KARMA) start --no-single-run --auto-watch
 
+.PHONY: ui-test-debug
+ui-test-debug: $(UI_DLLS) $(UI_MANIFESTS)
+	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --browsers Chrome --no-single-run --debug --auto-watch
+
 pkg/ui/distccl/bindata.go: $(UI_CCL_DLLS) $(UI_CCL_MANIFESTS) $(UI_JS_CCL) $(shell find pkg/ui/ccl -type f)
 pkg/ui/distoss/bindata.go: $(UI_OSS_DLLS) $(UI_OSS_MANIFESTS) $(UI_JS_OSS)
 pkg/ui/dist%/bindata.go: pkg/ui/webpack.app.js $(shell find pkg/ui/src pkg/ui/styl -type f)
