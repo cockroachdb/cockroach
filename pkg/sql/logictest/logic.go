@@ -1852,6 +1852,9 @@ func RunLogicTest(t *testing.T) {
 		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
+	// Set time.Local to time.UTC to circumvent pq's timetz parsing flaw.
+	time.Local = time.UTC
+
 	// run the logic tests indicated by the bigtest and logictestdata flags.
 	// A new cluster is set up for each separate file in the test.
 	var globs []string
