@@ -323,7 +323,7 @@ func newAuthenticationMux(
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, err, httpCode := am.getSession(w, req)
-	fmt.Println("XXXXXXX err", err, "username:", username, "reject if unauthenticated:", am.rejectIfUnauthenticated)
+	fmt.Println("XXXXXXX", "path:", req.URL.Path, "err:", err, "username:", username, "reject if unauthenticated:", am.rejectIfUnauthenticated)
 	if am.rejectIfUnauthenticated && err != nil {
 		http.Error(w, err.Error(), httpCode)
 		return
