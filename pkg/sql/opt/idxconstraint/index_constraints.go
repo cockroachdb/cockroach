@@ -765,20 +765,38 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 
 		switch rd.Type() {
 		case json.ArrayJSONType, json.ObjectJSONType:
-			// We want to have a full index scan if the RHS contains either [] or {}.
-			hasContainerLeaf, err := rd.HasContainerLeaf()
+			// First, check if there's more than one path through the datum.
+			paths, err := json.AllPaths(rd)
 			if err != nil {
 				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 				c.unconstrained(0 /* offset */, out)
 				return false
 			}
-
-			if hasContainerLeaf {
-				c.unconstrained(0 /* offset */, out)
-				return false
+			for i := range paths {
+				hasContainerLeaf, err := paths[i].HasContainerLeaf()
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					c.unconstrained(0 /* offset */, out)
+					return false
+				}
+				if hasContainerLeaf {
+					// We want to have a full index scan if the RHS contains either [] or {}.
+					continue
+				}
+				pathDatum, err := tree.MakeDJSON(paths[i])
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
+					c.unconstrained(0 /* offset */, out)
+					return false
+				}
+				c.eqSpan(0 /* offset */, pathDatum, out)
+				// The span is tight if we just had 1 path through the index constraint.
+				return len(paths) == 1
 			}
-			c.eqSpan(0 /* offset */, memo.ExtractConstDatum(rhs), out)
-			return true
+
+			// We found no paths that could constrain the scan.
+			c.unconstrained(0 /* offset */, out)
+			return false
 
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
