@@ -1254,7 +1254,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
-			Info: "Calculates the interval between `val` and the current time.",
+			Info: "Calculates the interval between the current time and `val`.",
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"begin", types.TimestampTZ}, {"end", types.TimestampTZ}},
