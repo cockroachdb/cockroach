@@ -145,7 +145,7 @@ EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
 render     0  render  ·         ·          (b)     ·
  │         0  ·       render 0  b          ·       ·
- └── scan  1  scan    ·         ·          (a, b)  ·
+ └── scan  1  scan    ·         ·          (a, b)  +a
 ·          1  ·       table     t@primary  ·       ·
 ·          1  ·       spans     ALL        ·       ·
 ·          1  ·       limit     1          ·       ·
@@ -423,7 +423,7 @@ two
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
-scan  0  scan  ·      ·            (a, b, c, d)  ·
+scan  0  scan  ·      ·            (a, b, c, d)  +a
 ·     0  ·     table  abc@primary  ·             ·
 ·     0  ·     spans  ALL          ·             ·
 
@@ -467,7 +467,7 @@ a:int  b:int  c:int  d:string
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
-scan  0  scan  ·      ·       (a, b)  ·
+scan  0  scan  ·      ·       (a, b)  +b,+a
 ·     0  ·     table  abc@ba  ·       ·
 ·     0  ·     spans  ALL     ·       ·
 
@@ -490,7 +490,7 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-scan  0  scan  ·      ·       (a, b, c)  ·
+scan  0  scan  ·      ·       (a, b, c)  +b,+a,+c
 ·     0  ·     table  abc@ba  ·          ·
 ·     0  ·     spans  ALL     ·          ·
 
@@ -563,7 +563,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 render     0  render  ·         ·       (a, b)     ·
  │         0  ·       render 0  a       ·          ·
  │         0  ·       render 1  b       ·          ·
- └── scan  1  scan    ·         ·       (a, b, c)  ·
+ └── scan  1  scan    ·         ·       (a, b, c)  +b,+c
 ·          1  ·       table     abc@bc  ·          ·
 ·          1  ·       spans     ALL     ·          ·
 
@@ -613,7 +613,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 render     0  render  ·         ·       (a, b)     ·
  │         0  ·       render 0  a       ·          ·
  │         0  ·       render 1  b       ·          ·
- └── scan  1  scan    ·         ·       (a, b, c)  ·
+ └── scan  1  scan    ·         ·       (a, b, c)  +b,+c,+a
 ·          1  ·       table     abc@bc  ·          ·
 ·          1  ·       spans     ALL     ·          ·
 
