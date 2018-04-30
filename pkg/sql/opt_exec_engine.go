@@ -127,6 +127,7 @@ func (ee *execEngine) ConstructScan(
 	cols exec.ColumnOrdinalSet,
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
+	reqOrder sqlbase.ColumnOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
@@ -149,6 +150,12 @@ func (ee *execEngine) ConstructScan(
 	if err != nil {
 		return nil, err
 	}
+	for i := range reqOrder {
+		if reqOrder[i].ColIdx >= len(colCfg.wantedColumns) {
+			return nil, errors.Errorf("invalid reqOrder: %v", reqOrder)
+		}
+	}
+	scan.props.ordering = reqOrder
 	return scan, nil
 }
 
