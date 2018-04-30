@@ -201,12 +201,27 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 			n++
 		}
 	}
+
+	var reqOrder sqlbase.ColumnOrdering
+	if reqProps := ev.Physical(); len(reqProps.Ordering) > 0 {
+		reqOrder = make(sqlbase.ColumnOrdering, len(reqProps.Ordering))
+		for i := range reqOrder {
+			reqOrder[i].ColIdx = int(res.getColumnOrdinal(reqProps.Ordering[i].ID()))
+			if reqProps.Ordering[i].Ascending() {
+				reqOrder[i].Direction = encoding.Ascending
+			} else {
+				reqOrder[i].Direction = encoding.Descending
+			}
+		}
+	}
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(def.Index),
 		needed,
 		def.Constraint,
 		def.HardLimit,
+		reqOrder,
 	)
 	if err != nil {
 		return execPlan{}, err

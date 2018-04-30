@@ -6,7 +6,7 @@ INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 12
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
-scan  ·      ·          (k, v)  ·
+scan  ·      ·          (k, v)  +k
 ·     table  t@primary  ·       ·
 ·     spans  ALL        ·       ·
 ·     limit  5          ·       ·
@@ -24,9 +24,9 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
-limit      ·       ·          (k, v)  ·
+limit      ·       ·          (k, v)  +k
  │         offset  5          ·       ·
- └── scan  ·       ·          (k, v)  ·
+ └── scan  ·       ·          (k, v)  +k
 ·          table   t@primary  ·       ·
 ·          spans   ALL        ·       ·
 
@@ -39,10 +39,10 @@ k:int  v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
-limit      ·       ·          (k, v)  ·
+limit      ·       ·          (k, v)  +v
  │         count   5          ·       ·
  │         offset  1          ·       ·
- └── scan  ·       ·          (k, v)  ·
+ └── scan  ·       ·          (k, v)  +v
 ·          table   t@t_v_idx  ·       ·
 ·          spans   ALL        ·       ·
 

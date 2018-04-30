@@ -145,7 +145,7 @@ EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
 render     ·         ·          (b)     ·
  │         render 0  b          ·       ·
- └── scan  ·         ·          (a, b)  ·
+ └── scan  ·         ·          (a, b)  +a
 ·          table     t@primary  ·       ·
 ·          spans     ALL        ·       ·
 ·          limit     1          ·       ·
@@ -423,7 +423,7 @@ two
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
-scan  ·      ·            (a, b, c, d)  ·
+scan  ·      ·            (a, b, c, d)  +a
 ·     table  abc@primary  ·             ·
 ·     spans  ALL          ·             ·
 
@@ -467,7 +467,7 @@ a:int  b:int  c:int  d:string
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
-scan  ·      ·       (a, b)  ·
+scan  ·      ·       (a, b)  +b,+a
 ·     table  abc@ba  ·       ·
 ·     spans  ALL     ·       ·
 
@@ -490,7 +490,7 @@ a:int  b:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
-scan  ·      ·       (a, b, c)  ·
+scan  ·      ·       (a, b, c)  +b,+a,+c
 ·     table  abc@ba  ·          ·
 ·     spans  ALL     ·          ·
 
@@ -563,7 +563,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 render     ·         ·       (a, b)     ·
  │         render 0  a       ·          ·
  │         render 1  b       ·          ·
- └── scan  ·         ·       (a, b, c)  ·
+ └── scan  ·         ·       (a, b, c)  +b,+c
 ·          table     abc@bc  ·          ·
 ·          spans     ALL     ·          ·
 
@@ -613,7 +613,7 @@ EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 render     ·         ·       (a, b)     ·
  │         render 0  a       ·          ·
  │         render 1  b       ·          ·
- └── scan  ·         ·       (a, b, c)  ·
+ └── scan  ·         ·       (a, b, c)  +b,+c,+a
 ·          table     abc@bc  ·          ·
 ·          spans     ALL     ·          ·
 
