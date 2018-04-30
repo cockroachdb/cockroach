@@ -27,6 +27,7 @@
     "react-select": "^1.2.1",
     "redux": "^3.6.0",
     "redux-saga": "^0.15.6",
+    "redux-saga-test-plan": "^3.6.0",
     "redux-thunk": "^2.2.0",
     "regenerator-runtime": "^0.11.0",
     "reselect": "^3.0.0",

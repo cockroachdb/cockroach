@@ -18,6 +18,7 @@ type TSRequest = protos.cockroach.ts.tspb.TimeSeriesQueryRequest;
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 export const REQUEST = "cockroachui/metrics/REQUEST";
+export const BEGIN = "cockroachui/metrics/BEGIN";
 export const RECEIVE = "cockroachui/metrics/RECEIVE";
 export const ERROR = "cockroachui/metrics/ERROR";
 export const FETCH = "cockroachui/metrics/FETCH";
@@ -183,6 +184,20 @@ export function requestMetrics(id: string, request: TSRequest): PayloadAction<Wi
 }
 
 /**
+ * beginMetrics is dispatched by the processing saga to indicate that it has
+ * begun the process of dispatching a request.
+ */
+export function beginMetrics(id: string, request: TSRequest): PayloadAction<WithID<TSRequest>> {
+  return {
+    type: BEGIN,
+    payload: {
+      id: id,
+      data: request,
+    },
+  };
+}
+
+/**
  * receiveMetrics indicates that a previous request from this component has been
  * fulfilled by the server.
  */
@@ -253,7 +268,7 @@ export function* queryMetricsSaga() {
     const requestAction: PayloadAction<WithID<TSRequest>> = yield take((REQUEST));
 
     // Dispatch action to underlying store.
-    yield put(requestAction);
+    yield put(beginMetrics(requestAction.payload.id, requestAction.payload.data));
     requests.push(requestAction.payload);
 
     // If no other requests are queued, fork a process which will send the
