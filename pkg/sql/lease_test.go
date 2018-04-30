@@ -807,20 +807,17 @@ CREATE TABLE t.foo (v INT);
 		t.Fatal(err)
 	}
 
+	// This select can be retried in which case the descriptor gets reacquired.
 	if _, err := tx.Exec(`
 		SELECT * FROM t.foo;
 		`); err != nil {
 		t.Fatal(err)
 	}
 
-	// Descriptor has been acquired.
-	if atomic.LoadInt32(&fooAcquiredCount) != 1 {
-		t.Fatal("descriptor not acquired")
-	}
-
-	// Descriptor has not been released.
-	if atomic.LoadInt32(&fooReleaseCount) > 0 {
-		t.Fatal("released descriptor")
+	// Descriptor has been acquired one more time than it has been released.
+	aCount, rCount := atomic.LoadInt32(&fooAcquiredCount), atomic.LoadInt32(&fooReleaseCount)
+	if aCount != rCount+1 {
+		t.Fatalf("invalid descriptor acquisition counts = %d, %d", aCount, rCount)
 	}
 
 	if _, err := tx.Exec(
@@ -829,13 +826,13 @@ CREATE TABLE t.foo (v INT);
 		t.Fatal(err)
 	}
 
-	if atomic.LoadInt32(&fooAcquiredCount) > 1 {
-		t.Fatal("descriptor reacquired")
+	if cnt := atomic.LoadInt32(&fooAcquiredCount); cnt != aCount {
+		t.Fatalf("descriptor reacquired, %d != %d", cnt, aCount)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if atomic.LoadInt32(&fooReleaseCount) == 0 {
-			return errors.Errorf("didnt release descriptor")
+		if cnt := atomic.LoadInt32(&fooReleaseCount); cnt != aCount {
+			return errors.Errorf("didnt release descriptor, %d != %d", cnt, aCount)
 		}
 		return nil
 	})

@@ -851,7 +851,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr>  interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
-%type <tree.Expr>  row explicit_row implicit_row
+%type <tree.Expr>  row
 %type <tree.Expr>  case_expr case_arg case_default
 %type <*tree.When>  when_clause
 %type <[]*tree.When> when_clause_list
@@ -5161,13 +5161,8 @@ first_or_next:
 // We handle this by using the a_expr production for what the spec calls
 // <ordinary grouping set>, which in the spec represents either one column
 // reference or a parenthesized list of column references. Then, we check the
-// top node of the a_expr to see if it's an implicit RowExpr, and if so, just
-// grab and use the list, discarding the node. (this is done in parse analysis,
-// not here)
-//
-// (we abuse the row_format field of RowExpr to distinguish implicit and
-// explicit row constructors; it's debatable if anyone sanely wants to use them
-// in a group clause, but if they have a reason to, we make it possible.)
+// top node of the a_expr to see if it's an RowExpr, and if so, just grab and
+// use the list, discarding the node. (this is done in parse analysis, not here)
 //
 // Each item in the group_clause list is either an expression tree or a
 // GroupingSet node of some type.
@@ -6640,11 +6635,7 @@ d_expr:
   {
     $$.val = $2.expr()
   }
-| explicit_row
-  {
-    $$.val = $1.expr()
-  }
-| implicit_row
+| row
   {
     $$.val = $1.expr()
   }
@@ -6983,18 +6974,6 @@ row:
     $$.val = &tree.Tuple{Exprs: $3.exprs(), Row: true}
   }
 | '(' expr_list ',' a_expr ')'
-  {
-    $$.val = &tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
-  }
-
-explicit_row:
-  ROW '(' opt_expr_list ')'
-  {
-    $$.val = &tree.Tuple{Exprs: $3.exprs(), Row: true}
-  }
-
-implicit_row:
-  '(' expr_list ',' a_expr ')'
   {
     $$.val = &tree.Tuple{Exprs: append($2.exprs(), $4.expr())}
   }
