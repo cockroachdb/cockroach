@@ -96,7 +96,7 @@ func findBinary(binary, defValue string) (string, error) {
 		}
 
 		var binSuffix string
-		if !local && clusterName != "local" {
+		if !local {
 			binSuffix = ".docker_amd64"
 		}
 		dirs := []string{
@@ -118,8 +118,14 @@ func findBinary(binary, defValue string) (string, error) {
 }
 
 func initBinaries() {
+	// If we're running against an existing "local" cluster, force the local flag
+	// to true in order to get the "local" test configurations.
+	if clusterName == "local" {
+		local = true
+	}
+
 	cockroachDefault := "cockroach"
-	if !local && clusterName != "local" {
+	if !local {
 		cockroachDefault = "cockroach-linux-2.6.32-gnu-amd64"
 	}
 	var err error
@@ -334,7 +340,7 @@ type nodeCPUOption int
 
 func (o nodeCPUOption) apply(spec *nodeSpec) {
 	spec.CPUs = int(o)
-	if !local && clusterName != "local" {
+	if !local {
 		// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
 		// machines have a decent amount of RAM. We could use customer machine
 		// configurations, but the rules for the amount of RAM per CPU need to be
@@ -434,7 +440,7 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	if c.name != clusterName {
 		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(c.nodes)}
 		sargs = append(sargs, nodes[0].args()...)
-		if zones != "" {
+		if !local && zones != "" {
 			sargs = append(sargs, "--gce-zones="+zones)
 		}
 
