@@ -62,3 +62,23 @@ join         ·              ·                   (x, y, u, v)        ·
 ·            row 0, expr 1  2                   ·                   ·
 ·            row 1, expr 0  3                   ·                   ·
 ·            row 1, expr 1  4                   ·                   ·
+
+exec
+SELECT "Tree", "Columns" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
+----
+Tree:string  Columns:string
+sort         (x, y)
+ │           ·
+ └── scan    (x, y)
+·            ·
+·            ·
+
+exec
+SELECT "Level", "Type" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
+----
+Level:int  Type:string
+0          sort
+0          ·
+1          scan
+1          ·
+1          ·
