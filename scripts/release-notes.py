@@ -23,6 +23,8 @@
 #   will be confused. (it will merge their work under one entry).
 # - the list of aliases below must be manually modified when
 #   contributors change their git name and/or email address.
+#
+# Note: there are unit tests in the release-notes subdirectory!
 
 import sys
 import itertools
@@ -97,6 +99,7 @@ crdb_folk = set([
     "Radu Berinde",
     "Raphael 'kena' Poss",
     "Rebecca Taft",
+    "Rich Loveland",
     "Richard Wu",
     "Sean Loiselle",
     "Solon Gordon",
@@ -163,11 +166,14 @@ cat_misspells = {
 norelnote = re.compile(r'^[rR]elease [nN]otes?: *[Nn]one', flags=re.M)
 # Captures :? (xxx) ?: yyy
 form1 = r':? *\((?P<cat1>[^)]*)\) *:?'
-# Captures : xxx: yyy - this must be careful not to capture too much, we just accept one word
-form2 = r': *(?P<cat2>[^ ]*) *:'
+# Captures : xxx: yyy - this must be careful not to capture too much, we just accept one or two words
+form2 = r': *(?P<cat2>[^ ]+(?: +[^ ]+)?) *:'
 # Captures : yyy - no category
 form3 = r':(?P<cat3>)'
 relnote = re.compile(r'(?:^|[\n\r])[rR]elease [nN]otes? *(?:' + form1 + '|' + form2 + '|' + form3 + r') *(?P<note>.*)$', flags=re.S)
+
+coauthor = re.compile(r'^Co-authored-by: (?P<name>[^<]*) <(?P<email>.*)>', flags=re.M)
+fixannot = re.compile(r'^([fF]ix(es|ed)?|[cC]lose(d|s)?) #', flags=re.M)
 
 ## Merge commit format ##
 
@@ -181,7 +187,7 @@ merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
 
 parser = OptionParser()
 parser.add_option("-k", "--sort-key", dest="sort_key", default="title",
-                  help="sort by KEY (pr, title, insertions, deletions, files, sha; default: title)", metavar="KEY")
+                  help="sort by KEY (pr, title, insertions, deletions, files, sha, date; default: title)", metavar="KEY")
 parser.add_option("-r", "--reverse", action="store_true", dest="reverse_sort", default=False,
                   help="reverse sort")
 parser.add_option("-f", "--from", dest="from_commit",
@@ -196,6 +202,8 @@ parser.add_option("--hide-per-contributor-section", action="store_true", dest="h
                   help="omit the per-contributor section")
 parser.add_option("--hide-downloads-section", action="store_true", dest="hide_downloads", default=False,
                   help="omit the email sign-up and downloads section")
+parser.add_option("--hide-header", action="store_true", dest="hide_header", default=False,
+                  help="omit the title and date header")
 
 (options, args) = parser.parse_args()
 
@@ -205,6 +213,7 @@ pull_ref_prefix = options.pull_ref_prefix
 hideshas = options.hide_shas
 hidepercontributor = options.hide_per_contributor
 hidedownloads = options.hide_downloads
+hideheader = options.hide_header
 
 repo = Repo('.')
 heads = repo.heads
@@ -246,63 +255,149 @@ except:
 
 ### Reading data from repository ###
 
+def identify_commit(commit):
+    return '%s ("%s", %s)' % (
+        commit.hexsha, commit.message.split('\n',1)[0],
+        datetime.datetime.fromtimestamp(commit.committed_date).ctime())
+
 # Is the first commit reachable from the current one?
 base = repo.merge_base(firstCommit, commit)
 if len(base) == 0:
-    print("error: %s and %s have no common ancestor" % (options.from_commit, options.until_commit), file=sys.stderr)
+    print("error: %s:%s\nand %s:%s\nhave no common ancestor" % (
+        options.from_commit, identify_commit(firstCommit),
+        options.until_commit, identify_commit(commit)), file=sys.stderr)
     exit(1)
 commonParent = base[0]
 if firstCommit != commonParent:
-    print("warning: %s is not an ancestor of %s!" % (options.from_commit, options.until_commit), file=sys.stderr)
+    print("warning: %s:%s\nis not an ancestor of %s:%s!" % (
+        options.from_commit, identify_commit(firstCommit),
+        options.until_commit, identify_commit(commit)), file=sys.stderr)
     print(file=sys.stderr)
     ageindays = int((firstCommit.committed_date - commonParent.committed_date)/86400)
     prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + firstCommit.hexsha)))
-    print("The first common ancestor is %s," % commonParent.hexsha, file=sys.stderr)
-    print("which is %d commits older than %s and %d days older. Using that as origin." %\
-          (prevlen, options.from_commit, ageindays), file=sys.stderr)
+    print("The first common ancestor is %s" % identify_commit(commonParent), file=sys.stderr)
+    print("which is %d commits older than %s:%s\nand %d days older. Using that as origin." %\
+          (prevlen, options.from_commit, identify_commit(firstCommit), ageindays), file=sys.stderr)
     print(file=sys.stderr)
     firstCommit = commonParent
     options.from_commit = commonParent.hexsha
 
-print("Changes %s ... %s" % (firstCommit, commit), file=sys.stderr)
+print("Changes from\n%s\nuntil\n%s" % (identify_commit(firstCommit), identify_commit(commit)), file=sys.stderr)
 
 release_notes = {}
 missing_release_notes = []
 
+def collect_authors(commit):
+    authors = set()
+    author = author_aliases.get(commit.author.name, commit.author.name)
+    if author != 'GitHub':
+        authors.add(author)
+    author = author_aliases.get(commit.committer.name, commit.committer.name)
+    if author != 'GitHub':
+        authors.add(author)
+    for m in coauthor.finditer(commit.message):
+        aname = m.group('name').strip()
+        author = author_aliases.get(aname, aname)
+        authors.add(author)
+    return authors
+
+
 def extract_release_notes(pr, title, commit):
+    authors = collect_authors(commit)
     if norelnote.search(commit.message) is not None:
         # Explicitly no release note. Nothing to do.
-        return
+        # Just report the author(s).
+        return None, authors
 
-    item = {'author': (commit.author.name, commit.author.email),
-            'sha': commit.hexsha[:shamin],
+    msglines = commit.message.split('\n')
+    curnote = []
+    innote = False
+    foundnote = False
+    cat = None
+    notes = []
+    for line in msglines:
+        m = coauthor.search(line)
+        if m is not None:
+            # A Co-authored-line finishes the parsing of the commit message,
+            # because it's included at the end only.
+            break
+
+        m = fixannot.search(line)
+        if m is not None:
+            # Fix/Close etc. Ignore.
+            continue
+
+        m = relnote.search(line)
+        if m is None:
+            # Current line does not contain a release note separator.
+            # If we were already collecting a note, continue collecting it.
+            if innote:
+                curnote.append(line)
+            continue
+
+        # We have a release note boundary. If we were collecting a
+        # note already, complete it.
+        if innote:
+            notes.append((cat, curnote))
+            curnote = []
+            innote = False
+
+        # Start a new release note.
+
+        firstline = m.group('note').strip()
+        if firstline.lower() == 'none':
+            # Release note: none - there's no note yet.
+            continue
+        foundnote = True
+        innote = True
+
+        # Capitalize the first line.
+        if firstline != "":
+            firstline = firstline[0].upper() + firstline[1:]
+
+        curnote = [firstline]
+        cat = m.group('cat1')
+        if cat is None:
+            cat = m.group('cat2')
+        if cat is None:
+            cat = 'missing category'
+        # Normalize to tolerate various capitalizations.
+        cat = cat.lower()
+        # If there are multiple categories separated by commas or slashes, use the first as grouping key.
+        cat = cat.split(',', 1)[0]
+        cat = cat.split('/', 1)[0]
+        # If there is any misspell, correct it.
+        if cat in cat_misspells:
+            cat = cat_misspells[cat]
+
+    if innote:
+        notes.append((cat, curnote))
+
+    # At the end the notes will be presented in reverse order, because
+    # we explore the commits in reverse order. However within 1 commit
+    # the notes are in the correct order. So reverse them upfront here,
+    # so that the 2nd reverse gets them in the right order again.
+    for cat, note in reversed(notes):
+        completenote(commit, cat, note, authors, pr, title)
+
+    missing_item = None
+    if not foundnote:
+        # Missing release note. Keep track for later.
+        missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
+    return missing_item, authors
+
+def makeitem(pr, prtitle, sha, authors):
+    return {'authors': ', '.join(sorted(authors)),
+            'sha': sha,
             'pr': pr,
-            'prtitle': title,
+            'title': prtitle,
             'note': None}
 
-    m = relnote.search(commit.message)
-    if m is None:
-        # Missing release note. Keep track for later.
-        missing_release_notes.append(item)
-        return
-    item['note'] = m.group('note').strip()
-    if item['note'].lower() == 'none':
-        # Someone entered 'Release note (cat): None'.
-        return
+def completenote(commit, cat, curnote, authors, pr, title):
+    notemsg = '\n'.join(curnote).strip()
+    item = makeitem(pr, title, commit.hexsha[:shamin], authors)
+    item['note'] = notemsg
 
-    cat = m.group('cat1')
-    if cat is None:
-        cat = m.group('cat2')
-    if cat is None:
-        cat = 'missing category'
-    # Normalize to tolerate various capitalizations.
-    cat = cat.lower()
-    # If there are multiple categories separated by commas or slashes, use the first as grouping key.
-    cat = cat.split(',', 1)[0]
-    cat = cat.split('/', 1)[0]
-    # If there is any misspell, correct it.
-    if cat in cat_misspells:
-        cat = cat_misspells[cat]
     # Now collect per category.
     catnotes = release_notes.get(cat, [])
     catnotes.append(item)
@@ -358,13 +453,13 @@ def spin():
 #     |/
 #     K <-- merge base
 #
-# C, E, G, H, and J will each be checked.  None of them are reachable from B,
+# C, E, G, H, and J will each be checked.  None of them are ancestors of B,
 # so they will all be visited. E will be not be counted because the message
 # starts with "Merge", so in the end C, G, H, and J will be included.
 #
 # ### back-merge from target branch
 #
-# Dev branched off F, made one commit G, merged the latest from master in E,
+# Dev branched off H, made one commit G, merged the latest F from master in E,
 # made one final commit in C, then merged the PR.
 #
 #     A <-- master
@@ -381,7 +476,7 @@ def spin():
 #     |/
 #     H <-- merge base
 #
-# C, E, F, and G will each be checked. F is reachable from B, so it will be
+# C, E, F, and G will each be checked. F is an ancestor of B, so it will be
 # excluded. E starts with "Merge", so it will not be counted. Only C and G will
 # have statistics included.
 def analyze_pr(merge, pr):
@@ -395,67 +490,86 @@ def analyze_pr(merge, pr):
     note = ''
     if m is None:
         # GitHub merge
-        note = '\n'.join(merge.message.split('\n')[2:])
+        note = merge.message.split('\n',3)[2]
     else:
         # Bors merge
         note = m.group('message')
+    note = note.strip()
 
     merge_base_result = repo.merge_base(merge.parents[0], tip)
     if len(merge_base_result) == 0:
-        print("uh-oh!  can't find merge base!  pr", pr)
+        print("uh-oh!  can't find merge base!  pr", pr, file=sys.stderr)
         exit(-1)
 
     merge_base = merge_base_result[0]
 
     commits_to_analyze = [tip]
+    seen_commits = set()
 
+    missing_items = []
     authors = set()
     ncommits = 0
     while len(commits_to_analyze) > 0:
         spin()
 
         commit = commits_to_analyze.pop(0)
+        if commit in seen_commits:
+            # We may be seeing the same commit twice if a feature branch has
+            # been forked in sub-branches. Just skip over what we've seen
+            # already.
+            continue
+        seen_commits.add(commit)
 
         if not commit.message.startswith("Merge"):
-            extract_release_notes(pr, note, commit)
-
+            missing_item, prauthors = extract_release_notes(pr, note, commit)
+            authors.update(prauthors)
             ncommits += 1
-            author = author_aliases.get(commit.author.name, commit.author.name)
-            if author != 'GitHub':
-                authors.add(author)
-            committer = author_aliases.get(commit.committer.name, commit.committer.name)
-            if committer != 'GitHub':
-                authors.add(committer)
+            if missing_item is not None:
+                missing_items.append(missing_item)
 
-        # Exclude any parents reachable from the other side of the
-        # PR merge commit.
         for parent in commit.parents:
-          if not repo.is_ancestor(parent, merge.parents[0]):
-            commits_to_analyze.append(parent)
+            if not repo.is_ancestor(parent, merge.parents[0]):
+                # We're not yet back on the main branch. Just continue digging.
+                commits_to_analyze.append(parent)
+            else:
+                # The parent is on the main branch. We're done digging.
+                # print("found merge parent, stopping. final authors", authors)
+                pass
+
+    if ncommits == len(missing_items):
+        # None of the commits found had a release note. List them.
+        for item in missing_items:
+            missing_release_notes.append(item)
 
     text = repo.git.diff(merge_base.hexsha, tip.hexsha, '--', numstat=True)
     stats = Stats._list_from_string(repo, text)
 
-    individual_authors.update(authors)
+    collect_item(pr, note, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
 
+def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
+    individual_authors.update(authors)
     if len(authors) == 0:
         authors.add("Unknown Author")
-
-    item = {
-        'title': note,
-        'pr': pr,
-        'sha': merge.hexsha[:shamin],
-        'ncommits': ncommits,
-        'authors': ", ".join(sorted(authors)),
-        'insertions': stats.total['insertions'],
-        'deletions': stats.total['deletions'],
-        'files': stats.total['files'],
-        'lines': stats.total['lines'],
-        }
+    item = makeitem(pr, prtitle, sha, authors)
+    item.update({'ncommits': ncommits,
+                 'insertions': stats['insertions'],
+                 'deletions': stats['deletions'],
+                 'files': stats['files'],
+                 'lines': stats['lines'],
+                 'date': datetime.date.fromtimestamp(prts).isoformat(),
+                 })
 
     history = per_group_history.get(item['authors'], [])
     history.append(item)
     per_group_history[item['authors']] = history
+
+def analyze_standalone_commit(commit):
+    # Some random out-of-branch commit. Let's not forget them.
+    authors = collect_authors(commit)
+    title = commit.message.split('\n',1)[0].strip()
+    item = makeitem('#unknown', title, commit.hexsha[:shamin], authors)
+    missing_release_notes.append(item)
+    collect_item('#unknown', title, commit.hexsha[:shamin], 1, authors, commit.stats.total, commit.committed_date)
 
 while commit != firstCommit:
     spin()
@@ -466,6 +580,8 @@ while commit != firstCommit:
         prs = numbermatch.group("numbers").strip().split(" ")
         for pr in prs:
             analyze_pr(commit, pr)
+    else:
+        analyze_standalone_commit(commit)
 
     if len(commit.parents) == 0:
         break
@@ -505,14 +621,15 @@ sys.stderr.flush()
 current_version = subprocess.check_output(["git", "describe", "--tags", options.until_commit], universal_newlines=True).strip()
 previous_version = subprocess.check_output(["git", "describe", "--tags", options.from_commit], universal_newlines=True).strip()
 
-print("---")
-print("title: What&#39;s New in", current_version)
-print("toc: false")
-print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
-print("---")
-print()
-print("## " + time.strftime("%B %d, %Y"))
-print()
+if not hideheader:
+    print("---")
+    print("title: What&#39;s New in", current_version)
+    print("toc: false")
+    print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
+    print("---")
+    print()
+    print("## " + time.strftime("%B %d, %Y"))
+    print()
 
 ## Print the release notes sign-up and Downloads section.
 if not hidedownloads:
@@ -561,7 +678,7 @@ for sec in relnote_sec_order:
     print("###", sectitle)
     print()
 
-    for item in r:
+    for item in reversed(r):
         print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
 
     print()
@@ -588,9 +705,8 @@ if len(missing_release_notes) > 0:
     print("#### Changes without release note annotation")
     print()
     for item in missing_release_notes:
-        author = item['author'][0]
-        author = author_aliases.get(author, author)
-        print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(prtitle)s" % item, "(%s)" % author)
+        authors = item['authors']
+        print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(title)s" % item, "(%s)" % authors)
         seenshas.add(item['sha'])
         seenprs.add(item['pr'])
     print()
@@ -617,7 +733,7 @@ if len(ext_contributors) > 0:
     # # not part of the if ext_contributors above.
     if len(firsttime_contributors) > 0:
         print(" We would like to thank the following contributors from the CockroachDB community, with special thanks to first-time contributors ", end='')
-        for i, n in enumerate(firsttime_contributors):
+        for i, n in enumerate(sorted(firsttime_contributors)):
             if i > 0 and i < len(firsttime_contributors)-1:
                 print(', ', end='')
             elif i > 0:
@@ -638,9 +754,9 @@ if not hidepercontributor:
     print("### PRs merged by contributors")
     print()
     if not hideshas:
-        fmt = "  - [%(pr)-6s][%(pr)s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
+        fmt = "  - %(date)s [%(pr)-6s][%(pr)-6s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
     else:
-        fmt = "  - [%(pr)-6s][%(pr)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
+        fmt = "  - %(date)s [%(pr)-6s][%(pr)-6s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
 
     for group in allgroups:
         items = per_group_history[group]
@@ -662,8 +778,8 @@ if not hidepercontributor:
     print()
 
 # Link the PRs and SHAs
-for pr in sorted(list(seenprs)):
+for pr in sorted(seenprs):
     print("[%s]: https://github.com/cockroachdb/cockroach/pull/%s" % (pr, pr[1:]))
-for sha in seenshas:
+for sha in sorted(seenshas):
     print("[%s]: https://github.com/cockroachdb/cockroach/commit/%s" % (sha, sha))
 print()
