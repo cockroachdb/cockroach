@@ -101,11 +101,6 @@ func (r *registry) Run(filter []string) int {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(tests))
 
-	// If we're running against an existing "local" cluster, force the local flag
-	// to true in order to get the "local" test configurations.
-	if clusterName == "local" {
-		local = true
-	}
 	// We can't run tests in parallel on local clusters or on an existing
 	// cluster.
 	if local || clusterName != "" {
