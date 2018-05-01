@@ -91,7 +91,7 @@ var varGen = map[string]sessionVar{
 			return nil
 		},
 		Get: func(evalCtx *extendedEvalContext) string {
-			return evalCtx.ApplicationName
+			return evalCtx.SessionData.ApplicationName
 		},
 		Reset: func(m *sessionDataMutator) error {
 			m.SetApplicationName(m.defaults.applicationName)

@@ -185,18 +185,23 @@ var Aggregates = map[string][]tree.Builtin{
 	// Adapted from https://www.johndcook.com/blog/skewness_kurtosis and
 	// https://github.com/cockroachdb/cockroach/pull/17728.
 
+	// TODO(knz): The 3-argument final_variance and final_stddev are
+	// only defined for internal use by distributed aggregations. They
+	// are marked as "private" so as to not trigger panics from issue
+	// #10495.
+
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": {
-		makeAggBuiltin([]types.T{types.Decimal, types.Decimal, types.Int}, types.Decimal, newDecimalFinalVarianceAggregate,
+		makePrivateAggBuiltin([]types.T{types.Decimal, types.Decimal, types.Int}, types.Decimal, newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]types.T{types.Float, types.Float, types.Int}, types.Float, newFloatFinalVarianceAggregate,
+		makePrivateAggBuiltin([]types.T{types.Float, types.Float, types.Int}, types.Float, newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
 	},
 
 	"final_stddev": {
-		makeAggBuiltin([]types.T{types.Decimal, types.Decimal, types.Int}, types.Decimal, newDecimalFinalStdDevAggregate,
+		makePrivateAggBuiltin([]types.T{types.Decimal, types.Decimal, types.Int}, types.Decimal, newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]types.T{types.Float, types.Float, types.Int}, types.Float, newFloatFinalStdDevAggregate,
+		makePrivateAggBuiltin([]types.T{types.Float, types.Float, types.Int}, types.Float, newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
 	},
 
@@ -234,6 +239,14 @@ var Aggregates = map[string][]tree.Builtin{
 		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
 			"aggregates values as a JSON or JSONB array"),
 	},
+}
+
+func makePrivateAggBuiltin(
+	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
+) tree.Builtin {
+	b := makeAggBuiltin(in, ret, f, info)
+	b.Private = true
+	return b
 }
 
 func makeAggBuiltin(

@@ -36,6 +36,10 @@ func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	for name, def := range Builtins {
 		tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
+		if tree.FunDefs[name].Private {
+			// Avoid listing help for private functions.
+			continue
+		}
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 

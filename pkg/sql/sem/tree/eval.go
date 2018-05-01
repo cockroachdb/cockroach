@@ -2397,9 +2397,6 @@ type EvalContext struct {
 	// Session variables. This is a read-only copy of the values owned by the
 	// Session.
 	SessionData *sessiondata.SessionData
-	// ApplicationName is a session variable, but it is not part of SessionData.
-	// See its definition in Session for details.
-	ApplicationName string
 	// TxnState is a string representation of the current transactional state.
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.

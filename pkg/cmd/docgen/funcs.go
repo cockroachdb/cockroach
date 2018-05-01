@@ -182,6 +182,9 @@ func generateFunctions(from map[string][]tree.Builtin, categorize bool) []byte {
 		}
 		seen[name] = struct{}{}
 		for _, fn := range fns {
+			if fn.Private {
+				continue
+			}
 			if fn.Info == notUsableInfo {
 				continue
 			}

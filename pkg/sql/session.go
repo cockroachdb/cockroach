@@ -673,18 +673,17 @@ func (s *Session) extendedEvalCtx(
 
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:             txn,
-			SessionData:     &s.data,
-			ApplicationName: s.dataMutator.ApplicationName(),
-			TxnState:        getTransactionState(&s.TxnState),
-			TxnReadOnly:     s.TxnState.readOnly,
-			TxnImplicit:     s.TxnState.implicitTxn,
-			Settings:        st,
-			CtxProvider:     s,
-			Mon:             &s.TxnState.mon,
-			TestingKnobs:    evalContextTestingKnobs,
-			StmtTimestamp:   stmtTimestamp,
-			TxnTimestamp:    txnTimestamp,
+			Txn:           txn,
+			SessionData:   &s.data,
+			TxnState:      getTransactionState(&s.TxnState),
+			TxnReadOnly:   s.TxnState.readOnly,
+			TxnImplicit:   s.TxnState.implicitTxn,
+			Settings:      st,
+			CtxProvider:   s,
+			Mon:           &s.TxnState.mon,
+			TestingKnobs:  evalContextTestingKnobs,
+			StmtTimestamp: stmtTimestamp,
+			TxnTimestamp:  txnTimestamp,
 		},
 		SessionMutator:  &s.dataMutator,
 		VirtualSchemas:  s.execCfg.VirtualSchemas,
@@ -887,7 +886,7 @@ func (s *Session) serialize() serverpb.Session {
 	return serverpb.Session{
 		Username:        s.data.User,
 		ClientAddress:   s.ClientAddr,
-		ApplicationName: s.data.ApplicationName(),
+		ApplicationName: s.data.ApplicationName,
 		Start:           s.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
@@ -1901,18 +1900,10 @@ type sessionDataMutator struct {
 
 // SetApplicationName sets the application name.
 func (m *sessionDataMutator) SetApplicationName(appName string) {
-	m.data.SetApplicationName(appName)
+	m.data.ApplicationName = appName
 	if m.applicationNameChanged != nil {
 		m.applicationNameChanged(appName)
 	}
-}
-
-// ApplicationName returns the session's "application_name" variable. This is
-// not a setter method, but the method is here nevertheless because
-// ApplicationName is not part of SessionData because accessing it needs
-// locking.
-func (m *sessionDataMutator) ApplicationName() string {
-	return m.data.ApplicationName()
 }
 
 func (m *sessionDataMutator) SetDatabase(dbName string) {
