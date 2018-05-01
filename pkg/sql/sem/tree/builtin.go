@@ -102,6 +102,11 @@ type Builtin struct {
 	// might be more appropriate.
 	Info string
 
+	// Private, when set to true, indicates the built-in function is not
+	// available for use by user queries. This is currently used by some
+	// aggregates due to issue #10495.
+	Private bool
+
 	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)

@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -472,6 +473,7 @@ func (s *Server) ServeConn(
 		curTxnReadOnly: &ex.state.readOnly,
 		applicationNameChanged: func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
+			ex.applicationName.Store(newName)
 		},
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
@@ -715,6 +717,9 @@ type connExecutor struct {
 	// represent statistrics for the application currently identified by
 	// sessiondata.ApplicationName.
 	appStats *appStats
+	// applicationName is the same as sessionData.ApplicationName. It's copied
+	// here as an atomic so that it can be read concurrently by serialize().
+	applicationName atomic.Value
 
 	// ctxHolder contains the connection's context in which all command executed
 	// on the connection are running. This generally should not be used directly,
@@ -1583,20 +1588,19 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContex
 			Sequence:      p,
 			StmtTimestamp: stmtTS,
 
-			Txn:             txn,
-			SessionData:     &ex.sessionData,
-			ApplicationName: ex.dataMutator.ApplicationName(),
-			TxnState:        ex.getTransactionState(),
-			TxnReadOnly:     ex.state.readOnly,
-			TxnImplicit:     ex.implicitTxn(),
-			Settings:        ex.server.cfg.Settings,
-			CtxProvider:     ex,
-			Mon:             ex.state.mon,
-			TestingKnobs:    ex.server.cfg.EvalContextTestingKnobs,
-			TxnTimestamp:    ex.state.sqlTimestamp,
-			ClusterID:       ex.server.cfg.ClusterID(),
-			NodeID:          ex.server.cfg.NodeID.Get(),
-			ReCache:         ex.server.reCache,
+			Txn:          txn,
+			SessionData:  &ex.sessionData,
+			TxnState:     ex.getTransactionState(),
+			TxnReadOnly:  ex.state.readOnly,
+			TxnImplicit:  ex.implicitTxn(),
+			Settings:     ex.server.cfg.Settings,
+			CtxProvider:  ex,
+			Mon:          ex.state.mon,
+			TestingKnobs: ex.server.cfg.EvalContextTestingKnobs,
+			TxnTimestamp: ex.state.sqlTimestamp,
+			ClusterID:    ex.server.cfg.ClusterID(),
+			NodeID:       ex.server.cfg.NodeID.Get(),
+			ReCache:      ex.server.reCache,
 		},
 		SessionMutator:  &ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
@@ -1845,7 +1849,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	return serverpb.Session{
 		Username:        ex.sessionData.User,
 		ClientAddress:   remoteStr,
-		ApplicationName: ex.sessionData.ApplicationName(),
+		ApplicationName: ex.applicationName.Load().(string),
 		Start:           ex.phaseTimes[sessionInit].UTC(),
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
