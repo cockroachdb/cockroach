@@ -279,7 +279,7 @@ func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 }
 
 // purgatoryChan returns nil.
-func (*raftLogQueue) purgatoryChan() <-chan struct{} {
+func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
 

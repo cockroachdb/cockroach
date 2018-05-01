@@ -154,6 +154,6 @@ func (q *timeSeriesMaintenanceQueue) timer(duration time.Duration) time.Duration
 	return replInterval - duration
 }
 
-func (*timeSeriesMaintenanceQueue) purgatoryChan() <-chan struct{} {
+func (*timeSeriesMaintenanceQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
