@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -342,6 +343,54 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 		run: ordinalityRun{
 			row:    make(tree.Datums, len(cols)),
 			curCnt: 1,
+		},
+	}, nil
+}
+
+// ConstructLookupJoin is part of the exec.Factory interface.
+func (ef *execFactory) ConstructLookupJoin(
+	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet,
+) (exec.Node, error) {
+	// TODO(justin): this would be something besides a scanNode in the general
+	// case of a lookup join.
+	plan, ok := input.(*scanNode)
+	if !ok {
+		return nil, fmt.Errorf("only scanNode supported as input to lookup join")
+	}
+	tabDesc := table.(*optTable).desc
+	tableScan := ef.planner.Scan()
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+	}
+
+	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		desc := tabDesc.Columns[c]
+		colDescs = append(colDescs, desc)
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
+	}
+
+	if err := tableScan.initTable(context.TODO(), ef.planner, tabDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+
+	primaryIndex := tabDesc.GetPrimaryIndex()
+	tableScan.index = &primaryIndex
+	tableScan.run.isSecondaryIndex = false
+	tableScan.disableBatchLimit()
+
+	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, plan)
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc, tableScan.index.ID))
+
+	return &indexJoinNode{
+		index:             plan,
+		table:             tableScan,
+		primaryKeyColumns: primaryKeyColumns,
+		cols:              colDescs,
+		resultColumns:     sqlbase.ResultColumnsFromColDescs(colDescs),
+		run: indexJoinRun{
+			primaryKeyPrefix: primaryKeyPrefix,
+			colIDtoRowIndex:  colIDtoRowIndex,
 		},
 	}, nil
 }

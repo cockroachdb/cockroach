@@ -87,6 +87,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *upsertNode:
 		return n.columns
+	case *indexJoinNode:
+		return n.resultColumns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -116,8 +118,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:
 		return getPlanColumns(n.source.plan, mut)
-	case *indexJoinNode:
-		return getPlanColumns(n.table, mut)
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
 	case *spoolNode:

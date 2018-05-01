@@ -154,6 +154,36 @@ memo (optimized)
  ├── G6: (function G7 lower)
  └── G7: (variable abc.d)
 
+memo
+SELECT j FROM a WHERE s = 'foo'
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: j:5]"
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1.00
+ ├── G2: (select G4 G5) (scan a@si_idx,cols=(4,5),constrained) (lookup-join G6 a,cols=(4,5))
+ │    └── ""
+ │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
+ │         └── cost: 1.00
+ ├── G3: (projections a.j)
+ ├── G4: (scan a,cols=(4,5)) (lookup-join G7 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    └── ""
+ │         ├── best: (scan a,cols=(4,5))
+ │         └── cost: 1000.00
+ ├── G5: (filters G8)
+ ├── G6: (scan a@s_idx,cols=(1,4),constrained)
+ │    └── ""
+ │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
+ │         └── cost: 1.00
+ ├── G7: (scan a@s_idx,cols=(1,4))
+ │    └── ""
+ │         ├── best: (scan a@s_idx,cols=(1,4))
+ │         └── cost: 1000.00
+ ├── G8: (eq G9 G10)
+ ├── G9: (variable a.s)
+ └── G10: (const 'foo')
+
 # Scan of primary index is lowest cost.
 opt
 SELECT s, i, f FROM a ORDER BY k, i, s

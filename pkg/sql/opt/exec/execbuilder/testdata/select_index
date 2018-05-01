@@ -814,32 +814,25 @@ scan  ·       ·                     (k, v)  ·
 statement ok
 CREATE TABLE xy (x INT, y INT, INDEX (y))
 
-# TODO(justinj): re-enable once exec support for lookup join is done
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
-#----
-#render           ·         ·                 (x, y)                                   y=CONST
-# │               render 0  test.public.xy.x  ·                                        ·
-# │               render 1  test.public.xy.y  ·                                        ·
-# └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
-#      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
-#      │          table     xy@xy_y_idx       ·                                        ·
-#      │          spans     /NULL-/!NULL      ·                                        ·
-#      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-#·                table     xy@primary        ·                                        ·
-#
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
-#----
-#render           ·         ·                 (x, y)                                   y=CONST
-# │               render 0  test.public.xy.x  ·                                        ·
-# │               render 1  test.public.xy.y  ·                                        ·
-# └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
-#      ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
-#      │          table     xy@xy_y_idx       ·                                        ·
-#      │          spans     /4-/5             ·                                        ·
-#      └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
-#·                table     xy@primary        ·                                        ·
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
+----
+index-join  ·      ·             (x, y)              ·
+ ├── scan   ·      ·             (y, rowid[hidden])  ·
+ │          table  xy@xy_y_idx   ·                   ·
+ │          spans  /NULL-/!NULL  ·                   ·
+ └── scan   ·      ·             (x, y)              ·
+·           table  xy@primary    ·                   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
+----
+index-join  ·      ·            (x, y)              ·
+ ├── scan   ·      ·            (y, rowid[hidden])  ·
+ │          table  xy@xy_y_idx  ·                   ·
+ │          spans  /4-/5        ·                   ·
+ └── scan   ·      ·            (x, y)              ·
+·           table  xy@primary   ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
@@ -871,16 +864,17 @@ scan  ·      ·          (x, y)  ·
 ·     table  xy@xy_idx  ·       ·
 ·     spans  /1-/3      ·       ·
 
-# TODO(justinj): re-enable once exec support for lookup join is done
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
-#----
-#render     ·         ·                 (x, y)                         x=CONST; y!=NULL
-# │         render 0  test.public.xy.x  ·                              ·
-# │         render 1  test.public.xy.y  ·                              ·
-# └── scan  ·         ·                 (x, y, rowid[hidden,omitted])  x=CONST; y!=NULL; rowid!=NULL; key(y,rowid)
-#·          table     xy@xy_idx         ·                              ·
-#·          spans     /1/1-/1/3         ·                              ·
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
+----
+filter           ·       ·                                                               (x, y)              ·
+ │               filter  (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))  ·                   ·
+ └── index-join  ·       ·                                                               (x, y)              ·
+      ├── scan   ·       ·                                                               (y, rowid[hidden])  ·
+      │          table   xy@xy_y_idx                                                     ·                   ·
+      │          spans   /1-/3                                                           ·                   ·
+      └── scan   ·       ·                                                               (x, y)              ·
+·                table   xy@primary                                                      ·                   ·
 
 # ------------------------------------------------------------------------------
 # Non-covering index
@@ -902,48 +896,47 @@ CREATE TABLE noncover (
 statement ok
 INSERT INTO noncover VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
-# TODO(justinj): re-enable once exec support for lookup join is done
-#query TTT
-#EXPLAIN SELECT * FROM noncover WHERE b = 2
-#----
-#index-join  ·      ·
-# ├── scan   ·      ·
-# │          table  noncover@b
-# │          spans  /2-/3
-# └── scan   ·      ·
-#·           table  noncover@primary
-#
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE b = 2]
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /noncover/b/2/1 -> NULL
-#fetched: /noncover/primary/1 -> NULL
-#fetched: /noncover/primary/1/b -> 2
-#fetched: /noncover/primary/1/c -> 3
-#fetched: /noncover/primary/1/d -> 4
-#output row: [1 2 3 4]
-#
-#query TTT
-#EXPLAIN SELECT * FROM noncover WHERE c = 6
-#----
-#index-join  ·      ·
-# ├── scan   ·      ·
-# │          table  noncover@c
-# │          spans  /6-/7
-# └── scan   ·      ·
-#·           table  noncover@primary
-#
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE c = 7]
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /noncover/c/7 -> /5
-#fetched: /noncover/primary/5 -> NULL
-#fetched: /noncover/primary/5/b -> 6
-#fetched: /noncover/primary/5/c -> 7
-#fetched: /noncover/primary/5/d -> 8
-#output row: [5 6 7 8]
+query TTT
+EXPLAIN SELECT * FROM noncover WHERE b = 2
+----
+index-join  ·      ·
+ ├── scan   ·      ·
+ │          table  noncover@b
+ │          spans  /2-/3
+ └── scan   ·      ·
+·           table  noncover@primary
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE b = 2]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /noncover/b/2/1 -> NULL
+fetched: /noncover/primary/1 -> NULL
+fetched: /noncover/primary/1/b -> 2
+fetched: /noncover/primary/1/c -> 3
+fetched: /noncover/primary/1/d -> 4
+output row: [1 2 3 4]
+
+query TTT
+EXPLAIN SELECT * FROM noncover WHERE c = 6
+----
+index-join  ·      ·
+ ├── scan   ·      ·
+ │          table  noncover@c
+ │          spans  /6-/7
+ └── scan   ·      ·
+·           table  noncover@primary
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE c = 7]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /noncover/c/7 -> /5
+fetched: /noncover/primary/5 -> NULL
+fetched: /noncover/primary/5/b -> 6
+fetched: /noncover/primary/5/c -> 7
+fetched: /noncover/primary/5/d -> 8
+output row: [5 6 7 8]
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
@@ -1067,121 +1060,160 @@ INSERT INTO t2 VALUES
   (8, 3, 2, '32'),
   (9, 3, 3, '33')
 
-# TODO(justinj): re-enable once exec support for lookup join is done
-#query TTT
-#SELECT "Tree", "Field", "Description" FROM [
-#EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
-#]
-#----
-#index-join  ·       ·
-# ├── scan   ·       ·
-# │          table   t2@bc
-# │          spans   /2-/3
-# │          filter  (c % 2) = 0
-# └── scan   ·       ·
-#·           table   t2@primary
-#
-## We do NOT look up the table row for '21' and '23'.
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /t2/bc/2/1/4 -> NULL
-#fetched: /t2/bc/2/2/5 -> NULL
-#fetched: /t2/bc/2/3/6 -> NULL
-#fetched: /t2/primary/5 -> NULL
-#fetched: /t2/primary/5/b -> 2
-#fetched: /t2/primary/5/c -> 2
-#fetched: /t2/primary/5/s -> '22'
-#output row: [5 2 2 '22']
-#
-#query TTT
-#SELECT "Tree", "Field", "Description" FROM [
-#EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
-#]
-#----
-#index-join  ·       ·
-# ├── scan   ·       ·
-# │          table   t2@bc
-# │          spans   /2/!NULL-/3
-# │          filter  c != b
-# └── scan   ·       ·
-#·           table   t2@primary
-#
-## We do NOT look up the table row for '22'.
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /t2/bc/2/1/4 -> NULL
-#fetched: /t2/bc/2/2/5 -> NULL
-#fetched: /t2/bc/2/3/6 -> NULL
-#fetched: /t2/primary/4 -> NULL
-#fetched: /t2/primary/4/b -> 2
-#fetched: /t2/primary/4/c -> 1
-#fetched: /t2/primary/4/s -> '21'
-#output row: [4 2 1 '21']
-#fetched: /t2/primary/6 -> NULL
-#fetched: /t2/primary/6/b -> 2
-#fetched: /t2/primary/6/c -> 3
-#fetched: /t2/primary/6/s -> '23'
-#output row: [6 2 3 '23']
-#
-## We do NOT look up the table row for '22'.
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /t2/bc/2/1/4 -> NULL
-#fetched: /t2/bc/2/2/5 -> NULL
-#fetched: /t2/bc/2/3/6 -> NULL
-#fetched: /t2/primary/4 -> NULL
-#fetched: /t2/primary/4/b -> 2
-#fetched: /t2/primary/4/c -> 1
-#fetched: /t2/primary/4/s -> '21'
-#fetched: /t2/primary/6 -> NULL
-#fetched: /t2/primary/6/b -> 2
-#fetched: /t2/primary/6/c -> 3
-#fetched: /t2/primary/6/s -> '23'
-#output row: [6 2 3 '23']
-#
-## We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
-#query T
-#SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))]
-# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-#----
-#fetched: /t2/bc/2/1/4 -> NULL
-#fetched: /t2/bc/2/2/5 -> NULL
-#fetched: /t2/bc/2/3/6 -> NULL
-#fetched: /t2/bc/3/1/7 -> NULL
-#fetched: /t2/bc/3/2/8 -> NULL
-#fetched: /t2/bc/3/3/9 -> NULL
-#fetched: /t2/primary/6 -> NULL
-#fetched: /t2/primary/6/b -> 2
-#fetched: /t2/primary/6/c -> 3
-#fetched: /t2/primary/6/s -> '23'
-#fetched: /t2/primary/8 -> NULL
-#fetched: /t2/primary/8/b -> 3
-#fetched: /t2/primary/8/c -> 2
-#fetched: /t2/primary/8/s -> '32'
-#fetched: /t2/primary/9 -> NULL
-#fetched: /t2/primary/9/b -> 3
-#fetched: /t2/primary/9/c -> 3
-#fetched: /t2/primary/9/s -> '33'
-#output row: [9 3 3 '33']
-#
-## Check that splitting of the expression filter does not mistakenly
-## bring non-indexed columns (s) under the index scanNode. (#12582)
-## To test this we need an expression containing non-indexed
-## columns that disappears during range simplification.
-#query TTTTT
-#EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
-#----
-#render           ·         ·                (a)                                      a!=NULL
-# │               render 0  test.public.t2.a ·                                        ·
-# └── index-join  ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-#      ├── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-#      │          table     t2@bc            ·                                        ·
-#      │          spans     /2-/3            ·                                        ·
-#      └── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  ·
-#·                table     t2@primary       ·                                        ·
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
+]
+----
+filter           ·       ·
+ │               filter  (c % 2) = 0
+ └── index-join  ·       ·
+      ├── scan   ·       ·
+      │          table   t2@bc
+      │          spans   /2-/3
+      └── scan   ·       ·
+·                table   t2@primary
+
+# We do NOT look up the table row for '21' and '23'.
+# TODO(justin): we need to push the c % 2 into the index scan.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t2/bc/2/1/4 -> NULL
+fetched: /t2/bc/2/2/5 -> NULL
+fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/primary/4 -> NULL
+fetched: /t2/primary/4/b -> 2
+fetched: /t2/primary/4/c -> 1
+fetched: /t2/primary/4/s -> '21'
+fetched: /t2/primary/5 -> NULL
+fetched: /t2/primary/5/b -> 2
+fetched: /t2/primary/5/c -> 2
+fetched: /t2/primary/5/s -> '22'
+output row: [5 2 2 '22']
+fetched: /t2/primary/6 -> NULL
+fetched: /t2/primary/6/b -> 2
+fetched: /t2/primary/6/c -> 3
+fetched: /t2/primary/6/s -> '23'
+
+query TTT
+SELECT "Tree", "Field", "Description" FROM [
+EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
+]
+----
+filter           ·       ·
+ │               filter  c != b
+ └── index-join  ·       ·
+      ├── scan   ·       ·
+      │          table   t2@bc
+      │          spans   /2/!NULL-/3
+      └── scan   ·       ·
+·                table   t2@primary
+
+# We do NOT look up the table row for '22'.
+# TODO(justin): we need to push the filter into the index scan.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t2/bc/2/1/4 -> NULL
+fetched: /t2/bc/2/2/5 -> NULL
+fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/primary/4 -> NULL
+fetched: /t2/primary/4/b -> 2
+fetched: /t2/primary/4/c -> 1
+fetched: /t2/primary/4/s -> '21'
+output row: [4 2 1 '21']
+fetched: /t2/primary/5 -> NULL
+fetched: /t2/primary/5/b -> 2
+fetched: /t2/primary/5/c -> 2
+fetched: /t2/primary/5/s -> '22'
+fetched: /t2/primary/6 -> NULL
+fetched: /t2/primary/6/b -> 2
+fetched: /t2/primary/6/c -> 3
+fetched: /t2/primary/6/s -> '23'
+output row: [6 2 3 '23']
+
+# We do NOT look up the table row for '22'.
+# TODO(justin): we need to push the filter into the index scan.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t2/bc/2/1/4 -> NULL
+fetched: /t2/bc/2/2/5 -> NULL
+fetched: /t2/bc/2/3/6 -> NULL
+fetched: /t2/primary/4 -> NULL
+fetched: /t2/primary/4/b -> 2
+fetched: /t2/primary/4/c -> 1
+fetched: /t2/primary/4/s -> '21'
+fetched: /t2/primary/5 -> NULL
+fetched: /t2/primary/5/b -> 2
+fetched: /t2/primary/5/c -> 2
+fetched: /t2/primary/5/s -> '22'
+fetched: /t2/primary/6 -> NULL
+fetched: /t2/primary/6/b -> 2
+fetched: /t2/primary/6/c -> 3
+fetched: /t2/primary/6/s -> '23'
+output row: [6 2 3 '23']
+
+# We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
+# TODO(justin): we need to push the filter into the index scan.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t2/primary/1 -> NULL
+fetched: /t2/primary/1/b -> 1
+fetched: /t2/primary/1/c -> 1
+fetched: /t2/primary/1/s -> '11'
+fetched: /t2/primary/2 -> NULL
+fetched: /t2/primary/2/b -> 1
+fetched: /t2/primary/2/c -> 2
+fetched: /t2/primary/2/s -> '12'
+fetched: /t2/primary/3 -> NULL
+fetched: /t2/primary/3/b -> 1
+fetched: /t2/primary/3/c -> 3
+fetched: /t2/primary/3/s -> '13'
+fetched: /t2/primary/4 -> NULL
+fetched: /t2/primary/4/b -> 2
+fetched: /t2/primary/4/c -> 1
+fetched: /t2/primary/4/s -> '21'
+fetched: /t2/primary/5 -> NULL
+fetched: /t2/primary/5/b -> 2
+fetched: /t2/primary/5/c -> 2
+fetched: /t2/primary/5/s -> '22'
+fetched: /t2/primary/6 -> NULL
+fetched: /t2/primary/6/b -> 2
+fetched: /t2/primary/6/c -> 3
+fetched: /t2/primary/6/s -> '23'
+fetched: /t2/primary/7 -> NULL
+fetched: /t2/primary/7/b -> 3
+fetched: /t2/primary/7/c -> 1
+fetched: /t2/primary/7/s -> '31'
+fetched: /t2/primary/8 -> NULL
+fetched: /t2/primary/8/b -> 3
+fetched: /t2/primary/8/c -> 2
+fetched: /t2/primary/8/s -> '32'
+fetched: /t2/primary/9 -> NULL
+fetched: /t2/primary/9/b -> 3
+fetched: /t2/primary/9/c -> 3
+fetched: /t2/primary/9/s -> '33'
+output row: [9 3 3 '33']
+
+# Check that splitting of the expression filter does not mistakenly
+# bring non-indexed columns (s) under the index scanNode. (#12582)
+# To test this we need an expression containing non-indexed
+# columns that disappears during range simplification.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
+----
+render           ·         ·           (a)        ·
+ │               render 0  a           ·          ·
+ └── index-join  ·         ·           (a, b, s)  ·
+      ├── scan   ·         ·           (a, b)     ·
+      │          table     t2@bc       ·          ·
+      │          spans     /2-/3       ·          ·
+      └── scan   ·         ·           (a, b, s)  ·
+·                table     t2@primary  ·          ·
