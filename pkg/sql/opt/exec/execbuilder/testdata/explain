@@ -3,6 +3,22 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
 exec
+EXPLAIN SELECT * FROM xy
+----
+Tree:string  Field:string  Description:string
+scan         ·             ·
+·            table         xy@primary
+·            spans         ALL
+
+exec
+EXPLAIN (TYPES) SELECT * FROM xy
+----
+Tree:string  Field:string  Description:string  Columns:string  Ordering:string
+scan         ·             ·                   (x int, y int)  ·
+·            table         xy@primary          ·               ·
+·            spans         ALL                 ·               ·
+
+exec
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 Tree:string  Field:string  Description:string  Columns:string  Ordering:string
