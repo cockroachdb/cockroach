@@ -1,6 +1,6 @@
 exec-ddl
 CREATE TABLE a (
-    x INT PRIMARY KEY,
+    k INT PRIMARY KEY,
     i INT,
     f FLOAT,
     s STRING,
@@ -9,25 +9,25 @@ CREATE TABLE a (
 )
 ----
 TABLE a
- ├── x int not null
+ ├── k int not null
  ├── i int
  ├── f float
  ├── s string
  ├── j jsonb
  ├── INDEX primary
- │    └── x int not null
+ │    └── k int not null
  └── INDEX secondary
       ├── s string desc
       ├── f float
-      ├── x int not null (storing)
+      ├── k int not null (storing)
       └── j jsonb (storing)
 
 exec-ddl
-CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
+CREATE TABLE t.xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE b
+TABLE xy
  ├── x int not null
- ├── z int
+ ├── y int
  └── INDEX primary
       └── x int not null
 
@@ -35,7 +35,7 @@ TABLE b
 # Use optsteps.
 # --------------------------------------------------
 optsteps
-SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
+SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
 ----
 ================================================================================
 Initial expression
@@ -44,17 +44,17 @@ Initial expression
   project
    ├── columns: s:4(string)
    ├── inner-join
-   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+   │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
    │    ├── scan a
-   │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    │    └── keys: (1) weak(3,4)
-   │    ├── scan b
-   │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+   │    ├── scan xy
+   │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
    │    │    └── keys: (6)
    │    └── and [type=bool, outer=(1,2,6)]
    │         ├── eq [type=bool, outer=(1,6)]
-   │         │    ├── variable: a.x [type=int, outer=(1)]
-   │         │    └── variable: b.x [type=int, outer=(6)]
+   │         │    ├── variable: a.k [type=int, outer=(1)]
+   │         │    └── variable: xy.x [type=int, outer=(6)]
    │         └── eq [type=bool, outer=(2)]
    │              ├── plus [type=int, outer=(2)]
    │              │    ├── variable: a.i [type=int, outer=(2)]
@@ -69,17 +69,17 @@ NormalizeCmpPlusConst
    project
     ├── columns: s:4(string)
     ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
     │    ├── scan a
-    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
     │    └── and [type=bool, outer=(1,2,6)]
     │         ├── eq [type=bool, outer=(1,6)]
-    │         │    ├── variable: a.x [type=int, outer=(1)]
-    │         │    └── variable: b.x [type=int, outer=(6)]
+    │         │    ├── variable: a.k [type=int, outer=(1)]
+    │         │    └── variable: xy.x [type=int, outer=(6)]
     │         └── eq [type=bool, outer=(2)]
   - │              ├── plus [type=int, outer=(2)]
   - │              │    ├── variable: a.i [type=int, outer=(2)]
@@ -98,18 +98,18 @@ EnsureJoinFiltersAnd
    project
     ├── columns: s:4(string)
     ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
     │    ├── scan a
-    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
   - │    └── and [type=bool, outer=(1,2,6)]
   + │    └── filters [type=bool, outer=(1,2,6)]
     │         ├── eq [type=bool, outer=(1,6)]
-    │         │    ├── variable: a.x [type=int, outer=(1)]
-    │         │    └── variable: b.x [type=int, outer=(6)]
+    │         │    ├── variable: a.k [type=int, outer=(1)]
+    │         │    └── variable: xy.x [type=int, outer=(6)]
     │         └── eq [type=bool, outer=(2)]
     │              ├── variable: a.i [type=int, outer=(2)]
     │              └── minus [type=int]
@@ -124,14 +124,14 @@ PushFilterIntoJoinLeft
    project
     ├── columns: s:4(string)
     ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
   - │    ├── scan a
   + │    ├── select
-    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    └── keys: (1) weak(3,4)
   + │    │    ├── keys: (1) weak(3,4)
   + │    │    ├── scan a
-  + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    │    │    └── keys: (1) weak(3,4)
   + │    │    └── filters [type=bool, outer=(2)]
   + │    │         └── eq [type=bool, outer=(2)]
@@ -139,13 +139,13 @@ PushFilterIntoJoinLeft
   + │    │              └── minus [type=int]
   + │    │                   ├── const: 10 [type=int]
   + │    │                   └── const: 1 [type=int]
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
   - │    └── filters [type=bool, outer=(1,2,6)]
   - │         ├── eq [type=bool, outer=(1,6)]
-  - │         │    ├── variable: a.x [type=int, outer=(1)]
-  - │         │    └── variable: b.x [type=int, outer=(6)]
+  - │         │    ├── variable: a.k [type=int, outer=(1)]
+  - │         │    └── variable: xy.x [type=int, outer=(6)]
   - │         └── eq [type=bool, outer=(2)]
   - │              ├── variable: a.i [type=int, outer=(2)]
   - │              └── minus [type=int]
@@ -153,8 +153,8 @@ PushFilterIntoJoinLeft
   - │                   └── const: 1 [type=int]
   + │    └── filters [type=bool, outer=(1,6)]
   + │         └── eq [type=bool, outer=(1,6)]
-  + │              ├── variable: a.x [type=int, outer=(1)]
-  + │              └── variable: b.x [type=int, outer=(6)]
+  + │              ├── variable: a.k [type=int, outer=(1)]
+  + │              └── variable: xy.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 ================================================================================
@@ -164,17 +164,17 @@ FilterUnusedJoinLeftCols
    project
     ├── columns: s:4(string)
     ├── inner-join
-  - │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+  - │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int!null) xy.y:7(int)
   - │    ├── select
-  - │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    ├── keys: (1) weak(3,4)
   - │    │    ├── scan a
-  + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
+  + │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null) xy.y:7(int)
   + │    ├── project
-  + │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    ├── keys: (1)
   + │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    │    └── keys: (1) weak(3,4)
   - │    │    └── filters [type=bool, outer=(2)]
   - │    │         └── eq [type=bool, outer=(2)]
@@ -184,7 +184,7 @@ FilterUnusedJoinLeftCols
   - │    │                   └── const: 1 [type=int]
   + │    │    │    ├── keys: (1) weak(3,4)
   + │    │    │    ├── scan a
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    │    │    │    └── keys: (1) weak(3,4)
   + │    │    │    └── filters [type=bool, outer=(2)]
   + │    │    │         └── eq [type=bool, outer=(2)]
@@ -193,15 +193,15 @@ FilterUnusedJoinLeftCols
   + │    │    │                   ├── const: 10 [type=int]
   + │    │    │                   └── const: 1 [type=int]
   + │    │    └── projections [outer=(1,4)]
-  + │    │         ├── variable: a.x [type=int, outer=(1)]
+  + │    │         ├── variable: a.k [type=int, outer=(1)]
   + │    │         └── variable: a.s [type=string, outer=(4)]
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
-    │              ├── variable: a.x [type=int, outer=(1)]
-    │              └── variable: b.x [type=int, outer=(6)]
+    │              ├── variable: a.k [type=int, outer=(1)]
+    │              └── variable: xy.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 ================================================================================
@@ -211,19 +211,19 @@ FilterUnusedSelectCols
    project
     ├── columns: s:4(string)
     ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null) xy.y:7(int)
     │    ├── project
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
     │    │    ├── select
-  - │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    │    ├── keys: (1) weak(3,4)
-  + │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  + │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
   + │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    │    │    └── keys: (1) weak(3,4)
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
   + │    │    │    │    └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
@@ -232,15 +232,15 @@ FilterUnusedSelectCols
     │    │    │                   ├── const: 10 [type=int]
     │    │    │                   └── const: 1 [type=int]
     │    │    └── projections [outer=(1,4)]
-    │    │         ├── variable: a.x [type=int, outer=(1)]
+    │    │         ├── variable: a.k [type=int, outer=(1)]
     │    │         └── variable: a.s [type=string, outer=(4)]
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
-    │              ├── variable: a.x [type=int, outer=(1)]
-    │              └── variable: b.x [type=int, outer=(6)]
+    │              ├── variable: a.k [type=int, outer=(1)]
+    │              └── variable: xy.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 ================================================================================
@@ -250,16 +250,16 @@ FilterUnusedJoinRightCols
    project
     ├── columns: s:4(string)
     ├── inner-join
-  - │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
-  + │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
+  - │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null) xy.y:7(int)
+  + │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null)
     │    ├── project
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
     │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
     │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
     │    │    │    │    └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
@@ -268,16 +268,16 @@ FilterUnusedJoinRightCols
     │    │    │                   ├── const: 10 [type=int]
     │    │    │                   └── const: 1 [type=int]
     │    │    └── projections [outer=(1,4)]
-    │    │         ├── variable: a.x [type=int, outer=(1)]
+    │    │         ├── variable: a.k [type=int, outer=(1)]
     │    │         └── variable: a.s [type=string, outer=(4)]
-    │    ├── scan b
-  - │    │    ├── columns: b.x:6(int!null) b.z:7(int)
-  + │    │    ├── columns: b.x:6(int!null)
+    │    ├── scan xy
+  - │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+  + │    │    ├── columns: xy.x:6(int!null)
     │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
-    │              ├── variable: a.x [type=int, outer=(1)]
-    │              └── variable: b.x [type=int, outer=(6)]
+    │              ├── variable: a.k [type=int, outer=(1)]
+    │              └── variable: xy.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 --------------------------------------------------------------------------------
@@ -286,21 +286,21 @@ GenerateIndexScans (higher cost)
    project
     ├── columns: s:4(string)
     ├── inner-join
-    │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null)
     │    ├── project
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
     │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
     │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
   + │    │    │    ├── lookup-join
-    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+    │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   + │    │    │    │    ├── table: a
   + │    │    │    │    ├── keys: (1)
   + │    │    │    │    └── scan a@secondary
-  + │    │    │    │         ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │         ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │         └── keys: (1)
     │    │    │    └── filters [type=bool, outer=(2)]
     │    │    │         └── eq [type=bool, outer=(2)]
@@ -309,15 +309,15 @@ GenerateIndexScans (higher cost)
     │    │    │                   ├── const: 10 [type=int]
     │    │    │                   └── const: 1 [type=int]
     │    │    └── projections [outer=(1,4)]
-    │    │         ├── variable: a.x [type=int, outer=(1)]
+    │    │         ├── variable: a.k [type=int, outer=(1)]
     │    │         └── variable: a.s [type=string, outer=(4)]
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null)
     │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(1,6)]
     │         └── eq [type=bool, outer=(1,6)]
-    │              ├── variable: a.x [type=int, outer=(1)]
-    │              └── variable: b.x [type=int, outer=(6)]
+    │              ├── variable: a.k [type=int, outer=(1)]
+    │              └── variable: xy.x [type=int, outer=(6)]
     └── projections [outer=(4)]
          └── variable: a.s [type=string, outer=(4)]
 --------------------------------------------------------------------------------
@@ -333,15 +333,15 @@ Final best expression
   project
    ├── columns: s:4(string)
    ├── inner-join
-   │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
+   │    ├── columns: a.k:1(int!null) a.s:4(string) xy.x:6(int!null)
    │    ├── project
-   │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── columns: a.k:1(int!null) a.s:4(string)
    │    │    ├── keys: (1)
    │    │    ├── select
-   │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+   │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
    │    │    │    ├── keys: (1)
    │    │    │    ├── scan a
-   │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+   │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
    │    │    │    │    └── keys: (1)
    │    │    │    └── filters [type=bool, outer=(2)]
    │    │    │         └── eq [type=bool, outer=(2)]
@@ -350,22 +350,22 @@ Final best expression
    │    │    │                   ├── const: 10 [type=int]
    │    │    │                   └── const: 1 [type=int]
    │    │    └── projections [outer=(1,4)]
-   │    │         ├── variable: a.x [type=int, outer=(1)]
+   │    │         ├── variable: a.k [type=int, outer=(1)]
    │    │         └── variable: a.s [type=string, outer=(4)]
-   │    ├── scan b
-   │    │    ├── columns: b.x:6(int!null)
+   │    ├── scan xy
+   │    │    ├── columns: xy.x:6(int!null)
    │    │    └── keys: (6)
    │    └── filters [type=bool, outer=(1,6)]
    │         └── eq [type=bool, outer=(1,6)]
-   │              ├── variable: a.x [type=int, outer=(1)]
-   │              └── variable: b.x [type=int, outer=(6)]
+   │              ├── variable: a.k [type=int, outer=(1)]
+   │              └── variable: xy.x [type=int, outer=(6)]
    └── projections [outer=(4)]
         └── variable: a.s [type=string, outer=(4)]
 
 
 # Select/Project/Limit/Offset rules have cyclical dependencies.
 optsteps
-SELECT i, i+1 FROM a FULL JOIN b ON a.x=b.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET 1
+SELECT i, i+1 FROM a FULL JOIN xy ON a.k=xy.x WHERE i=10 ORDER BY i LIMIT 5 OFFSET 1
 ----
 ================================================================================
 Initial expression
@@ -384,18 +384,18 @@ Initial expression
    │    │    └── project
    │    │         ├── columns: a.i:2(int) column8:8(int)
    │    │         ├── select
-   │    │         │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+   │    │         │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
    │    │         │    ├── full-join
-   │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+   │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
    │    │         │    │    ├── scan a
-   │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    │         │    │    │    └── keys: (1) weak(3,4)
-   │    │         │    │    ├── scan b
-   │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+   │    │         │    │    ├── scan xy
+   │    │         │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
    │    │         │    │    │    └── keys: (6)
    │    │         │    │    └── eq [type=bool, outer=(1,6)]
-   │    │         │    │         ├── variable: a.x [type=int, outer=(1)]
-   │    │         │    │         └── variable: b.x [type=int, outer=(6)]
+   │    │         │    │         ├── variable: a.k [type=int, outer=(1)]
+   │    │         │    │         └── variable: xy.x [type=int, outer=(6)]
    │    │         │    └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
    │    │         │         ├── variable: a.i [type=int, outer=(2)]
    │    │         │         └── const: 10 [type=int]
@@ -423,22 +423,22 @@ EnsureJoinFilters
     │    │    └── project
     │    │         ├── columns: a.i:2(int) column8:8(int)
     │    │         ├── select
-    │    │         │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+    │    │         │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
     │    │         │    ├── full-join
-    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
     │    │         │    │    ├── scan a
-    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │         │    │    │    └── keys: (1) weak(3,4)
-    │    │         │    │    ├── scan b
-    │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    ├── scan xy
+    │    │         │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │         ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │         └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │         ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │         └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │         │    └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │         │         ├── variable: a.i [type=int, outer=(2)]
     │    │         │         └── const: 10 [type=int]
@@ -466,19 +466,19 @@ EnsureSelectFilters
     │    │    └── project
     │    │         ├── columns: a.i:2(int) column8:8(int)
     │    │         ├── select
-    │    │         │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+    │    │         │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
     │    │         │    ├── full-join
-    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
     │    │         │    │    ├── scan a
-    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │         │    │    │    └── keys: (1) weak(3,4)
-    │    │         │    │    ├── scan b
-    │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    ├── scan xy
+    │    │         │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │         │    │    │    └── keys: (6)
     │    │         │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │         └── eq [type=bool, outer=(1,6)]
-    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │         ├── variable: a.i [type=int, outer=(2)]
   - │    │         │         └── const: 10 [type=int]
@@ -510,34 +510,34 @@ FilterUnusedSelectCols
     │    │    └── project
     │    │         ├── columns: a.i:2(int) column8:8(int)
     │    │         ├── select
-  - │    │         │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+  - │    │         │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
   - │    │         │    ├── full-join
-  - │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+  - │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │         │    │    │    └── keys: (1) weak(3,4)
-  - │    │         │    │    ├── scan b
-  - │    │         │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  - │    │         │    │    ├── scan xy
+  - │    │         │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    ├── columns: a.i:2(int)
   + │    │         │    ├── project
   + │    │         │    │    ├── columns: a.i:2(int)
   + │    │         │    │    ├── full-join
-  + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    │         │    │    │    │    └── keys: (1) weak(3,4)
-  + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    │         │    │    │    ├── scan xy
+  + │    │         │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    └── projections [outer=(2)]
   + │    │         │    │         └── variable: a.i [type=int, outer=(2)]
     │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
@@ -572,20 +572,20 @@ FilterUnusedJoinLeftCols
     │    │         │    ├── project
     │    │         │    │    ├── columns: a.i:2(int)
     │    │         │    │    ├── full-join
-  - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int) b.z:7(int)
-  + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int) b.z:7(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) xy.x:6(int) xy.y:7(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int) xy.y:7(int)
     │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │         │    │    │    │    └── keys: (1) weak(3,4)
-  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    │    └── keys: (1)
-    │    │         │    │    │    ├── scan b
-    │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    │         │    │    │    ├── scan xy
+    │    │         │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │         │    │    │    │    └── keys: (6)
     │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-    │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │         │    │    └── projections [outer=(2)]
     │    │         │    │         └── variable: a.i [type=int, outer=(2)]
     │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
@@ -620,19 +620,19 @@ FilterUnusedJoinRightCols
     │    │         │    ├── project
     │    │         │    │    ├── columns: a.i:2(int)
     │    │         │    │    ├── full-join
-  - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int) b.z:7(int)
-  + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int) xy.y:7(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │         │    │    │    ├── scan a
-    │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
     │    │         │    │    │    │    └── keys: (1)
-    │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
-  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+    │    │         │    │    │    ├── scan xy
+  - │    │         │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+  + │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
     │    │         │    │    │    │    └── keys: (6)
     │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-    │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │         │    │    └── projections [outer=(2)]
     │    │         │    │         └── variable: a.i [type=int, outer=(2)]
     │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
@@ -668,29 +668,29 @@ PushSelectIntoProject
     │    │         │    │    ├── columns: a.i:2(int)
   - │    │         │    │    ├── full-join
   + │    │         │    │    ├── select
-    │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    │    └── keys: (1)
-  - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    ├── scan xy
+  - │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    │    ├── full-join
-  + │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │         │    │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │         │    │    │    │    ├── scan a
-  + │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    │    │    └── keys: (1)
-  + │    │         │    │    │    │    ├── scan b
-  + │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    │    ├── scan xy
+  + │    │         │    │    │    │    │    ├── columns: xy.x:6(int!null)
   + │    │         │    │    │    │    │    └── keys: (6)
   + │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │    │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │    │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -730,19 +730,19 @@ EliminateEmptyAnd
     │    │         │    ├── project
     │    │         │    │    ├── columns: a.i:2(int)
     │    │         │    │    ├── select
-    │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │         │    │    │    ├── full-join
-    │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │         │    │    │    │    ├── scan a
-    │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │         │    │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
     │    │         │    │    │    │    │    └── keys: (1)
-    │    │         │    │    │    │    ├── scan b
-    │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+    │    │         │    │    │    │    ├── scan xy
+    │    │         │    │    │    │    │    ├── columns: xy.x:6(int!null)
     │    │         │    │    │    │    │    └── keys: (6)
     │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
     │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
-    │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │         │    │    │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │         │    │    │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │         │    │    │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │         │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │         │    │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │         │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -781,21 +781,21 @@ EliminateSelect
   - │    │         │    │    ├── columns: a.i:2(int)
   - │    │         │    │    ├── select
   + │    │         │    ├── select
-  + │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │         │    │    ├── full-join
-    │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    │    ├── full-join
-  - │    │         │    │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    │    │    ├── scan a
-  - │    │         │    │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    │    │    └── keys: (1)
-  - │    │         │    │    │    │    ├── scan b
-  - │    │         │    │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    │    ├── scan xy
+  - │    │         │    │    │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    │    │    └── keys: (6)
   - │    │         │    │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │    │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │    │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -804,15 +804,15 @@ EliminateSelect
   - │    │         │    │         └── variable: a.i [type=int, outer=(2)]
   - │    │         │    └── true [type=bool]
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    │    └── keys: (1)
-  + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    ├── scan xy
+  + │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
   + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -846,21 +846,21 @@ EliminateProjectProject
   - │    │         │    ├── columns: a.i:2(int)
   - │    │         │    ├── select
   + │    │         ├── select
-  + │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │         │    ├── full-join
-    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    ├── full-join
-  - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    │    └── keys: (1)
-  - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    ├── scan xy
+  - │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -868,15 +868,15 @@ EliminateProjectProject
   - │    │         │    └── projections [outer=(2)]
   - │    │         │         └── variable: a.i [type=int, outer=(2)]
   + │    │         │    │    ├── scan a
-  + │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    └── keys: (1)
-  + │    │         │    │    ├── scan b
-  + │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    ├── scan xy
+  + │    │         │    │    │    ├── columns: xy.x:6(int!null)
   + │    │         │    │    │    └── keys: (6)
   + │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -905,38 +905,38 @@ FilterUnusedSelectCols
     │    │    └── project
     │    │         ├── columns: a.i:2(int) column8:8(int)
   - │    │         ├── select
-  - │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    ├── full-join
   + │    │         ├── project
   + │    │         │    ├── columns: a.i:2(int)
   + │    │         │    ├── select
-    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    └── keys: (1)
-  - │    │         │    │    ├── scan b
-  - │    │         │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    ├── scan xy
+  - │    │         │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │              ├── variable: a.i [type=int, outer=(2)]
   - │    │         │              └── const: 10 [type=int]
   + │    │         │    │    ├── full-join
-  + │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │         │    │    │    ├── scan a
-  + │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    │    └── keys: (1)
-  + │    │         │    │    │    ├── scan b
-  + │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    │    ├── scan xy
+  + │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
   + │    │         │    │    │    │    └── keys: (6)
   + │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -970,21 +970,21 @@ EliminateProjectProject
   - │    │         │    ├── columns: a.i:2(int)
   - │    │         │    ├── select
   + │    │         ├── select
-  + │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │         │    ├── full-join
-    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    ├── full-join
-  - │    │         │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    │    ├── scan a
-  - │    │         │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    │    └── keys: (1)
-  - │    │         │    │    │    ├── scan b
-  - │    │         │    │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    │    ├── scan xy
+  - │    │         │    │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    │    └── keys: (6)
   - │    │         │    │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │    │              ├── variable: a.i [type=int, outer=(2)]
@@ -992,15 +992,15 @@ EliminateProjectProject
   - │    │         │    └── projections [outer=(2)]
   - │    │         │         └── variable: a.i [type=int, outer=(2)]
   + │    │         │    │    ├── scan a
-  + │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │         │    │    │    └── keys: (1)
-  + │    │         │    │    ├── scan b
-  + │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │         │    │    ├── scan xy
+  + │    │         │    │    │    ├── columns: xy.x:6(int!null)
   + │    │         │    │    │    └── keys: (6)
   + │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1027,24 +1027,24 @@ PushOffsetIntoProject
   - │    ├── sort
   - │    │    ├── columns: a.i:2(int) column8:8(int)
   + │    ├── offset
-  + │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │    ├── ordering: +2
   - │    │    └── project
   - │    │         ├── columns: a.i:2(int) column8:8(int)
   - │    │         ├── select
-  - │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    ├── full-join
-  - │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │         │    │    ├── scan a
-  - │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │         │    │    │    └── keys: (1)
-  - │    │         │    │    ├── scan b
-  - │    │         │    │    │    ├── columns: b.x:6(int!null)
+  - │    │         │    │    ├── scan xy
+  - │    │         │    │    │    ├── columns: xy.x:6(int!null)
   - │    │         │    │    │    └── keys: (6)
   - │    │         │    │    └── filters [type=bool, outer=(1,6)]
   - │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  - │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  - │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   - │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1056,22 +1056,22 @@ PushOffsetIntoProject
   - │    │                   └── const: 1 [type=int]
   - │    └── const: 1 [type=int]
   + │    │    ├── sort
-  + │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    │    ├── ordering: +2
   + │    │    │    └── select
-  + │    │    │         ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │    │         ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    │         ├── full-join
-  + │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    │         │    ├── scan a
-  + │    │    │         │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │    │         │    │    └── keys: (1)
-  + │    │    │         │    ├── scan b
-  + │    │    │         │    │    ├── columns: b.x:6(int!null)
+  + │    │    │         │    ├── scan xy
+  + │    │    │         │    │    ├── columns: xy.x:6(int!null)
   + │    │    │         │    │    └── keys: (6)
   + │    │    │         │    └── filters [type=bool, outer=(1,6)]
   + │    │    │         │         └── eq [type=bool, outer=(1,6)]
-  + │    │    │         │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │    │         │              └── variable: b.x [type=int, outer=(6)]
+  + │    │    │         │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │    │         │              └── variable: xy.x [type=int, outer=(6)]
   + │    │    │         └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │    │              └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │    │                   ├── variable: a.i [type=int, outer=(2)]
@@ -1095,46 +1095,46 @@ FilterUnusedOffsetCols
     │    ├── columns: a.i:2(int) column8:8(int)
     │    ├── ordering: +2
     │    ├── offset
-  - │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    ├── columns: a.i:2(int)
     │    │    ├── ordering: +2
     │    │    ├── sort
-  - │    │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    │    ├── columns: a.i:2(int)
     │    │    │    ├── ordering: +2
   - │    │    │    └── select
-  - │    │    │         ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  - │    │    │         ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │    │         ├── full-join
   + │    │    │    └── project
   + │    │    │         ├── columns: a.i:2(int)
   + │    │    │         ├── select
-    │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │    │         │    ├── scan a
-  - │    │    │         │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  - │    │    │         │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │    │         │    │    └── keys: (1)
-  - │    │    │         │    ├── scan b
-  - │    │    │         │    │    ├── columns: b.x:6(int!null)
+  - │    │    │         │    ├── scan xy
+  - │    │    │         │    │    ├── columns: xy.x:6(int!null)
   - │    │    │         │    │    └── keys: (6)
   - │    │    │         │    └── filters [type=bool, outer=(1,6)]
   - │    │    │         │         └── eq [type=bool, outer=(1,6)]
-  - │    │    │         │              ├── variable: a.x [type=int, outer=(1)]
-  - │    │    │         │              └── variable: b.x [type=int, outer=(6)]
+  - │    │    │         │              ├── variable: a.k [type=int, outer=(1)]
+  - │    │    │         │              └── variable: xy.x [type=int, outer=(6)]
   - │    │    │         └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │    │              └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   - │    │    │                   ├── variable: a.i [type=int, outer=(2)]
   - │    │    │                   └── const: 10 [type=int]
   + │    │    │         │    ├── full-join
-  + │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+  + │    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   + │    │    │         │    │    ├── scan a
-  + │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+  + │    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   + │    │    │         │    │    │    └── keys: (1)
-  + │    │    │         │    │    ├── scan b
-  + │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+  + │    │    │         │    │    ├── scan xy
+  + │    │    │         │    │    │    ├── columns: xy.x:6(int!null)
   + │    │    │         │    │    │    └── keys: (6)
   + │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
   + │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
-  + │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-  + │    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+  + │    │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+  + │    │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
   + │    │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
   + │    │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1172,19 +1172,19 @@ PushLimitIntoProject
     │    │    │    └── project
     │    │    │         ├── columns: a.i:2(int)
     │    │    │         ├── select
-    │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │    │         │    ├── full-join
-    │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │    │         │    │    ├── scan a
-    │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
     │    │    │         │    │    │    └── keys: (1)
-    │    │    │         │    │    ├── scan b
-    │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+    │    │    │         │    │    ├── scan xy
+    │    │    │         │    │    │    ├── columns: xy.x:6(int!null)
     │    │    │         │    │    │    └── keys: (6)
     │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
     │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
-    │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1224,25 +1224,25 @@ GenerateIndexScans (higher cost)
     │    │    │    └── project
     │    │    │         ├── columns: a.i:2(int)
     │    │    │         ├── select
-    │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
     │    │    │         │    ├── full-join
-    │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+    │    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
   - │    │    │         │    │    ├── scan a
   + │    │    │         │    │    ├── lookup-join
-    │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+    │    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
   - │    │    │         │    │    │    └── keys: (1)
   + │    │    │         │    │    │    ├── table: a
   + │    │    │         │    │    │    ├── keys: (1)
   + │    │    │         │    │    │    └── scan a@secondary
-  + │    │    │         │    │    │         ├── columns: a.x:1(int!null)
+  + │    │    │         │    │    │         ├── columns: a.k:1(int!null)
   + │    │    │         │    │    │         └── keys: (1)
-    │    │    │         │    │    ├── scan b
-    │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+    │    │    │         │    │    ├── scan xy
+    │    │    │         │    │    │    ├── columns: xy.x:6(int!null)
     │    │    │         │    │    │    └── keys: (6)
     │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
     │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
-    │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-    │    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+    │    │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+    │    │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
     │    │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
     │    │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1280,19 +1280,19 @@ Final best expression
    │    │    │    └── project
    │    │    │         ├── columns: a.i:2(int)
    │    │    │         ├── select
-   │    │    │         │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+   │    │    │         │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
    │    │    │         │    ├── full-join
-   │    │    │         │    │    ├── columns: a.x:1(int) a.i:2(int) b.x:6(int)
+   │    │    │         │    │    ├── columns: a.k:1(int) a.i:2(int) xy.x:6(int)
    │    │    │         │    │    ├── scan a
-   │    │    │         │    │    │    ├── columns: a.x:1(int!null) a.i:2(int)
+   │    │    │         │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
    │    │    │         │    │    │    └── keys: (1)
-   │    │    │         │    │    ├── scan b
-   │    │    │         │    │    │    ├── columns: b.x:6(int!null)
+   │    │    │         │    │    ├── scan xy
+   │    │    │         │    │    │    ├── columns: xy.x:6(int!null)
    │    │    │         │    │    │    └── keys: (6)
    │    │    │         │    │    └── filters [type=bool, outer=(1,6)]
    │    │    │         │    │         └── eq [type=bool, outer=(1,6)]
-   │    │    │         │    │              ├── variable: a.x [type=int, outer=(1)]
-   │    │    │         │    │              └── variable: b.x [type=int, outer=(6)]
+   │    │    │         │    │              ├── variable: a.k [type=int, outer=(1)]
+   │    │    │         │    │              └── variable: xy.x [type=int, outer=(6)]
    │    │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
    │    │    │         │         └── eq [type=bool, outer=(2), constraints=(/2: [/10 - /10]; tight)]
    │    │    │         │              ├── variable: a.i [type=int, outer=(2)]
@@ -1311,7 +1311,7 @@ Final best expression
 # Cyclical rules that trigger assert in AddAltFingerprint without extra code to
 # check whether nested rule has already called AddAltFingerprint.
 optsteps
-SELECT SUM(x) FROM a GROUP BY s, x HAVING SUM(x)=1
+SELECT SUM(k) FROM a GROUP BY s, k HAVING SUM(k)=1
 ----
 ================================================================================
 Initial expression
@@ -1320,24 +1320,24 @@ Initial expression
   project
    ├── columns: column6:6(decimal)
    ├── select
-   │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+   │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
    │    ├── keys: (1)
    │    ├── group-by
-   │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-   │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+   │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
    │    │    ├── keys: (1)
    │    │    ├── project
-   │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+   │    │    │    ├── columns: a.s:4(string) a.k:1(int!null)
    │    │    │    ├── keys: (1)
    │    │    │    ├── scan a
-   │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    │    │    │    └── keys: (1) weak(3,4)
    │    │    │    └── projections [outer=(1,4)]
    │    │    │         ├── variable: a.s [type=string, outer=(4)]
-   │    │    │         └── variable: a.x [type=int, outer=(1)]
+   │    │    │         └── variable: a.k [type=int, outer=(1)]
    │    │    └── aggregations [outer=(1)]
    │    │         └── sum [type=decimal, outer=(1)]
-   │    │              └── variable: a.x [type=int, outer=(1)]
+   │    │              └── variable: a.k [type=int, outer=(1)]
    │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
    │         ├── variable: column6 [type=decimal, outer=(6)]
    │         └── const: 1 [type=decimal]
@@ -1350,26 +1350,26 @@ FilterUnusedScanCols
    project
     ├── columns: column6:6(decimal)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
     │    ├── keys: (1)
     │    ├── group-by
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
     │    │    ├── project
-    │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+    │    │    │    ├── columns: a.s:4(string) a.k:1(int!null)
     │    │    │    ├── keys: (1)
     │    │    │    ├── scan a
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    │    │    └── keys: (1) weak(3,4)
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │    └── keys: (1)
     │    │    │    └── projections [outer=(1,4)]
     │    │    │         ├── variable: a.s [type=string, outer=(4)]
-    │    │    │         └── variable: a.x [type=int, outer=(1)]
+    │    │    │         └── variable: a.k [type=int, outer=(1)]
     │    │    └── aggregations [outer=(1)]
     │    │         └── sum [type=decimal, outer=(1)]
-    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    │              └── variable: a.k [type=int, outer=(1)]
     │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         ├── variable: column6 [type=decimal, outer=(6)]
     │         └── const: 1 [type=decimal]
@@ -1382,27 +1382,27 @@ EliminateProject
    project
     ├── columns: column6:6(decimal)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
     │    ├── keys: (1)
     │    ├── group-by
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
   - │    │    ├── project
-  - │    │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+  - │    │    │    ├── columns: a.s:4(string) a.k:1(int!null)
   - │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   - │    │    │    └── projections [outer=(1,4)]
   - │    │    │         ├── variable: a.s [type=string, outer=(4)]
-  - │    │    │         └── variable: a.x [type=int, outer=(1)]
+  - │    │    │         └── variable: a.k [type=int, outer=(1)]
   + │    │    ├── scan a
-  + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
     │    │         └── sum [type=decimal, outer=(1)]
-    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    │              └── variable: a.k [type=int, outer=(1)]
     │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         ├── variable: column6 [type=decimal, outer=(6)]
     │         └── const: 1 [type=decimal]
@@ -1415,18 +1415,18 @@ EnsureSelectFilters
    project
     ├── columns: column6:6(decimal)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
     │    ├── keys: (1)
     │    ├── group-by
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
     │    │    ├── scan a
-    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
     │    │         └── sum [type=decimal, outer=(1)]
-    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    │              └── variable: a.k [type=int, outer=(1)]
   - │    └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │         ├── variable: column6 [type=decimal, outer=(6)]
   - │         └── const: 1 [type=decimal]
@@ -1443,31 +1443,31 @@ FilterUnusedSelectCols
    project
     ├── columns: column6:6(decimal)
     ├── select
-  - │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
   - │    ├── keys: (1)
   - │    ├── group-by
-  - │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  - │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
   - │    │    ├── keys: (1)
   - │    │    ├── scan a
-  - │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    └── keys: (1)
   - │    │    └── aggregations [outer=(1)]
   - │    │         └── sum [type=decimal, outer=(1)]
-  - │    │              └── variable: a.x [type=int, outer=(1)]
+  - │    │              └── variable: a.k [type=int, outer=(1)]
   + │    ├── columns: column6:6(decimal)
   + │    ├── project
   + │    │    ├── columns: column6:6(decimal)
   + │    │    ├── group-by
-  + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  + │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    ├── keys: (1)
   + │    │    │    ├── scan a
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
   + │    │    │         └── sum [type=decimal, outer=(1)]
-  + │    │    │              └── variable: a.x [type=int, outer=(1)]
+  + │    │    │              └── variable: a.k [type=int, outer=(1)]
   + │    │    └── projections [outer=(6)]
   + │    │         └── variable: column6 [type=decimal, outer=(6)]
     │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
@@ -1488,25 +1488,25 @@ PushSelectIntoProject
     │    │    ├── columns: column6:6(decimal)
   - │    │    ├── group-by
   + │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  - │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
   - │    │    │         └── sum [type=decimal, outer=(1)]
-  - │    │    │              └── variable: a.x [type=int, outer=(1)]
+  - │    │    │              └── variable: a.k [type=int, outer=(1)]
   + │    │    │    ├── group-by
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  + │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │    ├── keys: (1)
   + │    │    │    │    ├── scan a
-  + │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │    │    └── keys: (1)
   + │    │    │    │    └── aggregations [outer=(1)]
   + │    │    │    │         └── sum [type=decimal, outer=(1)]
-  + │    │    │    │              └── variable: a.x [type=int, outer=(1)]
+  + │    │    │    │              └── variable: a.k [type=int, outer=(1)]
   + │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1531,18 +1531,18 @@ EliminateEmptyAnd
     │    ├── project
     │    │    ├── columns: column6:6(decimal)
     │    │    ├── select
-    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
     │    │    │    ├── keys: (1)
     │    │    │    ├── group-by
-    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-    │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    │    │    ├── keys: (1)
     │    │    │    │    ├── scan a
-    │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    │    │    │    └── keys: (1)
     │    │    │    │    └── aggregations [outer=(1)]
     │    │    │    │         └── sum [type=decimal, outer=(1)]
-    │    │    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
     │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │    │    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1566,22 +1566,22 @@ EliminateSelect
   - │    │    ├── columns: column6:6(decimal)
   - │    │    ├── select
   + │    ├── select
-  + │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
   + │    │    ├── keys: (1)
   + │    │    ├── group-by
-    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  + │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    │    ├── keys: (1)
   - │    │    │    ├── group-by
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  - │    │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    │    ├── keys: (1)
   - │    │    │    │    ├── scan a
-  - │    │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    │    │    └── keys: (1)
   - │    │    │    │    └── aggregations [outer=(1)]
   - │    │    │    │         └── sum [type=decimal, outer=(1)]
-  - │    │    │    │              └── variable: a.x [type=int, outer=(1)]
+  - │    │    │    │              └── variable: a.k [type=int, outer=(1)]
   - │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1590,11 +1590,11 @@ EliminateSelect
   - │    │         └── variable: column6 [type=decimal, outer=(6)]
   - │    └── true [type=bool]
   + │    │    │    ├── scan a
-  + │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    │    └── keys: (1)
   + │    │    │    └── aggregations [outer=(1)]
   + │    │    │         └── sum [type=decimal, outer=(1)]
-  + │    │    │              └── variable: a.x [type=int, outer=(1)]
+  + │    │    │              └── variable: a.k [type=int, outer=(1)]
   + │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1613,22 +1613,22 @@ EliminateProject
   - │    ├── columns: column6:6(decimal)
   - │    ├── select
   + ├── select
-  + │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
   + │    ├── keys: (1)
   + │    ├── group-by
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  + │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  + │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
   - │    │    ├── group-by
-  - │    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-  - │    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+  - │    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    ├── keys: (1)
   - │    │    │    ├── scan a
-  - │    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  - │    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   - │    │    │    │    └── keys: (1)
   - │    │    │    └── aggregations [outer=(1)]
   - │    │    │         └── sum [type=decimal, outer=(1)]
-  - │    │    │              └── variable: a.x [type=int, outer=(1)]
+  - │    │    │              └── variable: a.k [type=int, outer=(1)]
   - │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   - │    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1636,11 +1636,11 @@ EliminateProject
   - │    └── projections [outer=(6)]
   - │         └── variable: column6 [type=decimal, outer=(6)]
   + │    │    ├── scan a
-  + │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  + │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
   + │    │    │    └── keys: (1)
   + │    │    └── aggregations [outer=(1)]
   + │    │         └── sum [type=decimal, outer=(1)]
-  + │    │              └── variable: a.x [type=int, outer=(1)]
+  + │    │              └── variable: a.k [type=int, outer=(1)]
   + │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
   + │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1653,19 +1653,19 @@ GenerateIndexScans (higher cost)
    project
     ├── columns: column6:6(decimal)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
     │    ├── keys: (1)
     │    ├── group-by
-    │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-    │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+    │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
     │    │    ├── keys: (1)
   - │    │    ├── scan a
   + │    │    ├── scan a@secondary
-    │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+    │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
     │    │    │    └── keys: (1)
     │    │    └── aggregations [outer=(1)]
     │    │         └── sum [type=decimal, outer=(1)]
-    │    │              └── variable: a.x [type=int, outer=(1)]
+    │    │              └── variable: a.k [type=int, outer=(1)]
     │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
     │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1679,18 +1679,18 @@ Final best expression
   project
    ├── columns: column6:6(decimal)
    ├── select
-   │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
+   │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
    │    ├── keys: (1)
    │    ├── group-by
-   │    │    ├── columns: a.x:1(int!null) a.s:4(string) column6:6(decimal)
-   │    │    ├── grouping columns: a.x:1(int!null) a.s:4(string)
+   │    │    ├── columns: a.k:1(int!null) a.s:4(string) column6:6(decimal)
+   │    │    ├── grouping columns: a.k:1(int!null) a.s:4(string)
    │    │    ├── keys: (1)
    │    │    ├── scan a
-   │    │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+   │    │    │    ├── columns: a.k:1(int!null) a.s:4(string)
    │    │    │    └── keys: (1)
    │    │    └── aggregations [outer=(1)]
    │    │         └── sum [type=decimal, outer=(1)]
-   │    │              └── variable: a.x [type=int, outer=(1)]
+   │    │              └── variable: a.k [type=int, outer=(1)]
    │    └── filters [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
    │         └── eq [type=bool, outer=(6), constraints=(/6: [/1 - /1]; tight)]
    │              ├── variable: column6 [type=decimal, outer=(6)]
@@ -1700,20 +1700,20 @@ Final best expression
 
 # Exploration patterns with varying costs.
 optsteps
-SELECT s, x FROM a WHERE s='foo' AND f>100
+SELECT s, k FROM a WHERE s='foo' AND f>100
 ----
 ================================================================================
 Initial expression
   Cost: 1100.00
 ================================================================================
   project
-   ├── columns: s:4(string) x:1(int!null)
+   ├── columns: s:4(string) k:1(int!null)
    ├── keys: (1)
    ├── select
-   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    ├── keys: (1) weak(3,4)
    │    ├── scan a
-   │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    │    └── keys: (1) weak(3,4)
    │    └── and [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
    │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
@@ -1724,19 +1724,19 @@ Initial expression
    │              └── const: 100.0 [type=float]
    └── projections [outer=(1,4)]
         ├── variable: a.s [type=string, outer=(4)]
-        └── variable: a.x [type=int, outer=(1)]
+        └── variable: a.k [type=int, outer=(1)]
 ================================================================================
 EnsureSelectFiltersAnd
   Cost: 1100.00
 ================================================================================
    project
-    ├── columns: s:4(string) x:1(int!null)
+    ├── columns: s:4(string) k:1(int!null)
     ├── keys: (1)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    ├── keys: (1) weak(3,4)
     │    ├── scan a
-    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
   - │    └── and [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
   + │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
@@ -1748,21 +1748,21 @@ EnsureSelectFiltersAnd
     │              └── const: 100.0 [type=float]
     └── projections [outer=(1,4)]
          ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
+         └── variable: a.k [type=int, outer=(1)]
 ================================================================================
 FilterUnusedSelectCols
   Cost: 1100.00
 ================================================================================
    project
-    ├── columns: s:4(string) x:1(int!null)
+    ├── columns: s:4(string) k:1(int!null)
     ├── keys: (1)
     ├── select
-  - │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  - │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
     │    ├── keys: (1) weak(3,4)
     │    ├── scan a
-  - │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-  + │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  - │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
     │    │    └── keys: (1) weak(3,4)
     │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
     │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
@@ -1773,19 +1773,19 @@ FilterUnusedSelectCols
     │              └── const: 100.0 [type=float]
     └── projections [outer=(1,4)]
          ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
+         └── variable: a.k [type=int, outer=(1)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    project
-    ├── columns: s:4(string) x:1(int!null)
+    ├── columns: s:4(string) k:1(int!null)
     ├── keys: (1)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
     │    ├── keys: (1) weak(3,4)
   - │    ├── scan a
   + │    ├── scan a@secondary
-    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
     │    │    └── keys: (1) weak(3,4)
     │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
     │         ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
@@ -1796,7 +1796,7 @@ GenerateIndexScans (higher cost)
     │              └── const: 100.0 [type=float]
     └── projections [outer=(1,4)]
          ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
+         └── variable: a.k [type=int, outer=(1)]
 --------------------------------------------------------------------------------
 ConstrainScan (no changes)
 --------------------------------------------------------------------------------
@@ -1805,14 +1805,14 @@ ConstrainScan
   Cost: 1.10
 ================================================================================
    project
-    ├── columns: s:4(string) x:1(int!null)
+    ├── columns: s:4(string) k:1(int!null)
     ├── keys: (1)
     ├── select
-    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
     │    ├── keys: (1) weak(3,4)
   - │    ├── scan a
   + │    ├── scan a@secondary
-    │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
   + │    │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
     │    │    └── keys: (1) weak(3,4)
   - │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
@@ -1827,20 +1827,20 @@ ConstrainScan
   + │         └── true [type=bool]
     └── projections [outer=(1,4)]
          ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
+         └── variable: a.k [type=int, outer=(1)]
 ================================================================================
 SimplifyFilters
   Cost: 1.00
 ================================================================================
    project
-    ├── columns: s:4(string) x:1(int!null)
+    ├── columns: s:4(string) k:1(int!null)
     ├── keys: (1)
   - ├── select
   + ├── scan a@secondary
-    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
   - │    ├── keys: (1) weak(3,4)
   - │    ├── scan a@secondary
-  - │    │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+  - │    │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
   - │    │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
   - │    │    └── keys: (1) weak(3,4)
   - │    └── filters [type=bool]
@@ -1850,106 +1850,106 @@ SimplifyFilters
   + │    └── keys: (1) weak(3,4)
     └── projections [outer=(1,4)]
          ├── variable: a.s [type=string, outer=(4)]
-         └── variable: a.x [type=int, outer=(1)]
+         └── variable: a.k [type=int, outer=(1)]
 ================================================================================
 Final best expression
   Cost: 1.00
 ================================================================================
   project
-   ├── columns: s:4(string) x:1(int!null)
+   ├── columns: s:4(string) k:1(int!null)
    ├── keys: (1)
    ├── scan a@secondary
-   │    ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string)
+   │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
    │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
    │    └── keys: (1) weak(3,4)
    └── projections [outer=(1,4)]
         ├── variable: a.s [type=string, outer=(4)]
-        └── variable: a.x [type=int, outer=(1)]
+        └── variable: a.k [type=int, outer=(1)]
 
 # Decorrelation pattern.
 optsteps
-SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE z=i)
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE y=i)
 ----
 ================================================================================
 Initial expression
   Cost: 2200.00
 ================================================================================
   select
-   ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+   ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
    ├── keys: (1) weak(3,4)
    ├── scan a
-   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    └── keys: (1) weak(3,4)
    └── exists [type=bool, outer=(2)]
         └── select
-             ├── columns: b.x:6(int!null) b.z:7(int)
+             ├── columns: xy.x:6(int!null) xy.y:7(int)
              ├── outer: (2)
              ├── keys: (6)
-             ├── scan b
-             │    ├── columns: b.x:6(int!null) b.z:7(int)
+             ├── scan xy
+             │    ├── columns: xy.x:6(int!null) xy.y:7(int)
              │    └── keys: (6)
              └── eq [type=bool, outer=(2,7)]
-                  ├── variable: b.z [type=int, outer=(7)]
+                  ├── variable: xy.y [type=int, outer=(7)]
                   └── variable: a.i [type=int, outer=(2)]
 ================================================================================
 EnsureSelectFilters
   Cost: 2200.00
 ================================================================================
    select
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── keys: (1) weak(3,4)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
     └── exists [type=bool, outer=(2)]
          └── select
-              ├── columns: b.x:6(int!null) b.z:7(int)
+              ├── columns: xy.x:6(int!null) xy.y:7(int)
               ├── outer: (2)
               ├── keys: (6)
-              ├── scan b
-              │    ├── columns: b.x:6(int!null) b.z:7(int)
+              ├── scan xy
+              │    ├── columns: xy.x:6(int!null) xy.y:7(int)
               │    └── keys: (6)
   -           └── eq [type=bool, outer=(2,7)]
-  -                ├── variable: b.z [type=int, outer=(7)]
+  -                ├── variable: xy.y [type=int, outer=(7)]
   -                └── variable: a.i [type=int, outer=(2)]
   +           └── filters [type=bool, outer=(2,7)]
   +                └── eq [type=bool, outer=(2,7)]
-  +                     ├── variable: b.z [type=int, outer=(7)]
+  +                     ├── variable: xy.y [type=int, outer=(7)]
   +                     └── variable: a.i [type=int, outer=(2)]
 ================================================================================
 EnsureSelectFilters
   Cost: 2200.00
 ================================================================================
    select
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── keys: (1) weak(3,4)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
   - └── exists [type=bool, outer=(2)]
   -      └── select
-  -           ├── columns: b.x:6(int!null) b.z:7(int)
+  -           ├── columns: xy.x:6(int!null) xy.y:7(int)
   -           ├── outer: (2)
   -           ├── keys: (6)
-  -           ├── scan b
-  -           │    ├── columns: b.x:6(int!null) b.z:7(int)
+  -           ├── scan xy
+  -           │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   -           │    └── keys: (6)
   -           └── filters [type=bool, outer=(2,7)]
   -                └── eq [type=bool, outer=(2,7)]
-  -                     ├── variable: b.z [type=int, outer=(7)]
+  -                     ├── variable: xy.y [type=int, outer=(7)]
   -                     └── variable: a.i [type=int, outer=(2)]
   + └── filters [type=bool, outer=(2)]
   +      └── exists [type=bool, outer=(2)]
   +           └── select
-  +                ├── columns: b.x:6(int!null) b.z:7(int)
+  +                ├── columns: xy.x:6(int!null) xy.y:7(int)
   +                ├── outer: (2)
   +                ├── keys: (6)
-  +                ├── scan b
-  +                │    ├── columns: b.x:6(int!null) b.z:7(int)
+  +                ├── scan xy
+  +                │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   +                │    └── keys: (6)
   +                └── filters [type=bool, outer=(2,7)]
   +                     └── eq [type=bool, outer=(2,7)]
-  +                          ├── variable: b.z [type=int, outer=(7)]
+  +                          ├── variable: xy.y [type=int, outer=(7)]
   +                          └── variable: a.i [type=int, outer=(2)]
 ================================================================================
 HoistSelectExists
@@ -1957,34 +1957,34 @@ HoistSelectExists
 ================================================================================
   -select
   +semi-join-apply
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   - ├── keys: (1) weak(3,4)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
   - └── filters [type=bool, outer=(2)]
   -      └── exists [type=bool, outer=(2)]
   -           └── select
-  -                ├── columns: b.x:6(int!null) b.z:7(int)
+  -                ├── columns: xy.x:6(int!null) xy.y:7(int)
   -                ├── outer: (2)
   -                ├── keys: (6)
-  -                ├── scan b
-  -                │    ├── columns: b.x:6(int!null) b.z:7(int)
+  -                ├── scan xy
+  -                │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   -                │    └── keys: (6)
   -                └── filters [type=bool, outer=(2,7)]
   -                     └── eq [type=bool, outer=(2,7)]
-  -                          ├── variable: b.z [type=int, outer=(7)]
+  -                          ├── variable: xy.y [type=int, outer=(7)]
   -                          └── variable: a.i [type=int, outer=(2)]
   + ├── select
-  + │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   + │    ├── outer: (2)
   + │    ├── keys: (6)
-  + │    ├── scan b
-  + │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + │    ├── scan xy
+  + │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   + │    │    └── keys: (6)
   + │    └── filters [type=bool, outer=(2,7)]
   + │         └── eq [type=bool, outer=(2,7)]
-  + │              ├── variable: b.z [type=int, outer=(7)]
+  + │              ├── variable: xy.y [type=int, outer=(7)]
   + │              └── variable: a.i [type=int, outer=(2)]
   + └── filters [type=bool]
 ================================================================================
@@ -1992,20 +1992,20 @@ EliminateEmptyAnd
   Cost: 2100.00
 ================================================================================
    semi-join-apply
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
     ├── select
-    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    ├── outer: (2)
     │    ├── keys: (6)
-    │    ├── scan b
-    │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    │    ├── scan xy
+    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    │    └── keys: (6)
     │    └── filters [type=bool, outer=(2,7)]
     │         └── eq [type=bool, outer=(2,7)]
-    │              ├── variable: b.z [type=int, outer=(7)]
+    │              ├── variable: xy.y [type=int, outer=(7)]
     │              └── variable: a.i [type=int, outer=(2)]
   - └── filters [type=bool]
   + └── true [type=bool]
@@ -2014,27 +2014,27 @@ TryDecorrelateSelect
   Cost: 2000.00
 ================================================================================
    semi-join-apply
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
   - ├── select
-  + ├── scan b
-    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  + ├── scan xy
+    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   - │    ├── outer: (2)
   - │    ├── keys: (6)
-  - │    ├── scan b
-  - │    │    ├── columns: b.x:6(int!null) b.z:7(int)
+  - │    ├── scan xy
+  - │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
   - │    │    └── keys: (6)
   - │    └── filters [type=bool, outer=(2,7)]
   - │         └── eq [type=bool, outer=(2,7)]
-  - │              ├── variable: b.z [type=int, outer=(7)]
+  - │              ├── variable: xy.y [type=int, outer=(7)]
   - │              └── variable: a.i [type=int, outer=(2)]
   - └── true [type=bool]
   + │    └── keys: (6)
   + └── filters [type=bool, outer=(2,7)]
   +      └── eq [type=bool, outer=(2,7)]
-  +           ├── variable: b.z [type=int, outer=(7)]
+  +           ├── variable: xy.y [type=int, outer=(7)]
   +           └── variable: a.i [type=int, outer=(2)]
 ================================================================================
 DecorrelateJoin
@@ -2042,37 +2042,37 @@ DecorrelateJoin
 ================================================================================
   -semi-join-apply
   +semi-join
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     ├── scan a
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    └── keys: (1) weak(3,4)
-    ├── scan b
-    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    ├── scan xy
+    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    └── keys: (6)
     └── filters [type=bool, outer=(2,7)]
          └── eq [type=bool, outer=(2,7)]
-              ├── variable: b.z [type=int, outer=(7)]
+              ├── variable: xy.y [type=int, outer=(7)]
               └── variable: a.i [type=int, outer=(2)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    semi-join
-    ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   - ├── scan a
   + ├── lookup-join
-    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    └── keys: (1) weak(3,4)
   + │    ├── table: a
   + │    ├── keys: (1) weak(3,4)
   + │    └── scan a@secondary
-  + │         ├── columns: a.x:1(int!null) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  + │         ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │         └── keys: (1) weak(3,4)
-    ├── scan b
-    │    ├── columns: b.x:6(int!null) b.z:7(int)
+    ├── scan xy
+    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
     │    └── keys: (6)
     └── filters [type=bool, outer=(2,7)]
          └── eq [type=bool, outer=(2,7)]
-              ├── variable: b.z [type=int, outer=(7)]
+              ├── variable: xy.y [type=int, outer=(7)]
               └── variable: a.i [type=int, outer=(2)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
@@ -2082,14 +2082,14 @@ Final best expression
   Cost: 2000.00
 ================================================================================
   semi-join
-   ├── columns: x:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+   ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
    ├── scan a
-   │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+   │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    └── keys: (1) weak(3,4)
-   ├── scan b
-   │    ├── columns: b.x:6(int!null) b.z:7(int)
+   ├── scan xy
+   │    ├── columns: xy.x:6(int!null) xy.y:7(int)
    │    └── keys: (6)
    └── filters [type=bool, outer=(2,7)]
         └── eq [type=bool, outer=(2,7)]
-             ├── variable: b.z [type=int, outer=(7)]
+             ├── variable: xy.y [type=int, outer=(7)]
              └── variable: a.i [type=int, outer=(2)]

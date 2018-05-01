@@ -47,6 +47,11 @@ func MakeNormExprID(group GroupID) ExprID {
 	return ExprID{Group: group, Expr: normExprOrdinal}
 }
 
+// ReplaceChildFunc is the callback function passed to the Expr.Replace method.
+// It is called with each child group of the expression. See the Replace method
+// for more details.
+type ReplaceChildFunc func(child GroupID) GroupID
+
 // exprState is opaque storage used to store operator-specific fields in the
 // memo expression.
 type exprState [opt.MaxOperands]uint32
@@ -154,6 +159,45 @@ func (e *Expr) ChildGroup(mem *Memo, nth int) GroupID {
 		return mem.LookupList(listID)[nth]
 	}
 	panic("child index out of range")
+}
+
+// Replace invokes the given callback function for each child memo group of the
+// expression, including both fixed and list children. The callback function can
+// return the unchanged group, or it can construct a new group and return that
+// instead. Replace will assemble all of the changed and unchanged children and
+// return a new expression of the same type having those children. Callers can
+// use this method as a building block when searching and replacing expressions
+// in a tree.
+func (e *Expr) Replace(mem *Memo, replace ReplaceChildFunc) Expr {
+	var operands DynamicOperands
+	layout := opLayoutTable[e.op]
+
+	// Visit each fixed child.
+	nth := int(layout.fixedCount())
+	for i := 0; i < nth; i++ {
+		operands[i] = DynamicID(replace(GroupID(e.state[i])))
+	}
+
+	// Visit each list child.
+	list := layout.list()
+	if list != 0 {
+		listID := ListID{Offset: e.state[list-1], Length: e.state[list]}
+		oldList := mem.LookupList(listID)
+		newList := make([]GroupID, len(oldList))
+		for i := 0; i < len(oldList); i++ {
+			newList[i] = replace(oldList[i])
+		}
+		operands[nth] = MakeDynamicListID(mem.InternList(newList))
+		nth++
+	}
+
+	// Append the private and construct a new Expr with possibly modified
+	// children.
+	privateID := e.privateID()
+	if privateID != 0 {
+		operands[nth] = DynamicID(privateID)
+	}
+	return MakeExpr(e.op, operands)
 }
 
 // Private returns the value of this expression's private field, if it has one,

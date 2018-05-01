@@ -135,8 +135,8 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
-func (f *Factory) onConstruct(group memo.GroupID) memo.GroupID {
-	return group
+func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
+	return f.mem.MemoizeNormExpr(f.evalCtx, e)
 }
 
 // ----------------------------------------------------------------------
@@ -308,6 +308,7 @@ func (f *Factory) hasType(group memo.GroupID, typ memo.PrivateID) bool {
 	return groupType.Equivalent(requestedType)
 }
 
+// boolType returns the private ID of the boolean SQL type.
 func (f *Factory) boolType() memo.PrivateID {
 	return f.InternType(types.Bool)
 }
@@ -417,6 +418,12 @@ func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 // hasZeroOrOneRow returns true if the given group returns at most one row.
 func (f *Factory) hasZeroOrOneRow(group memo.GroupID) bool {
 	return f.mem.GroupProperties(group).Relational.Cardinality.Max <= 1
+}
+
+// hasCorrelatedSubquery returns true if the given scalar group contains a
+// subquery within its subtree that has at least one outer column.
+func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
+	return f.lookupScalar(group).HasCorrelatedSubquery
 }
 
 // isScalarGroupBy returns true if the given grouping columns come from a
@@ -763,33 +770,6 @@ func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 		}
 	}
 	return false
-}
-
-// ----------------------------------------------------------------------
-//
-// Join Rules
-//   Custom match and replace functions used with join.opt rules.
-//
-// ----------------------------------------------------------------------
-
-// removeApply replaces an apply join operator type with the corresponding non-
-// apply join operator type. This is used when decorrelating subqueries.
-func (f *Factory) removeApply(op opt.Operator, left, right, filter memo.GroupID) memo.GroupID {
-	switch op {
-	case opt.InnerJoinApplyOp:
-		return f.ConstructInnerJoin(left, right, filter)
-	case opt.LeftJoinApplyOp:
-		return f.ConstructLeftJoin(left, right, filter)
-	case opt.RightJoinApplyOp:
-		return f.ConstructRightJoin(left, right, filter)
-	case opt.FullJoinApplyOp:
-		return f.ConstructFullJoin(left, right, filter)
-	case opt.SemiJoinApplyOp:
-		return f.ConstructSemiJoin(left, right, filter)
-	case opt.AntiJoinApplyOp:
-		return f.ConstructAntiJoin(left, right, filter)
-	}
-	panic(fmt.Sprintf("unexpected join operator: %v", op))
 }
 
 // ----------------------------------------------------------------------

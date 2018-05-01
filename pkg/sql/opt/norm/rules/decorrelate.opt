@@ -1,0 +1,194 @@
+# =============================================================================
+# decorrelate.opt contains normalization patterns that try to eliminate
+# correlated subqueries. A correlated subquery is a subquery with one or more
+# outer columns. For example:
+#
+#   SELECT * FROM a WHERE (SELECT b.y FROM b WHERE a.x=b.x) < 5
+#
+# A correlated join has outer columns in its right input that refer to columns
+# in its left input. For example (not actually possible in SQL):
+#
+#   SELECT * FROM a INNER JOIN LATERAL (SELECT * FROM b WHERE a.x=b.x)
+#
+# Normalization rules "hoist" or "pull up" subqueries so that they are directly
+# joined with the outer relation to which they are bound. Other patterns try
+# to "push down" correlated joins (apply) until they disappear or can no
+# longer be pushed further. An apply join can be rewritten as a non-apply join
+# once there are no outer columns in the right side of the join that are bound
+# by the left side of the join (i.e. the inputs are not "correlated").
+#
+# Together, these pattens tend to eliminate unnecessary correlation, which has
+# the desirable effect of eliminating patterns that can only be executed using
+# often expensive nested loops, and instead open up other physical plan
+# possibilities.
+#
+# Citations: [3]
+# =============================================================================
+
+
+# DecorrelateJoin maps an apply join into the corresponding join without an
+# apply if the right side of the join is not correlated with the left side.
+# This allows the optimizer to consider additional physical join operators that
+# are unable to handle correlated inputs.
+#
+# NOTE: Keep this before other decorrelation patterns, as if the correlated
+#       join can be removed first, it avoids unnecessarily matching other
+#       patterns that only exist to get to this pattern.
+#
+# Citations: [3]
+[DecorrelateJoin, Normalize]
+(JoinApply
+    $left:*
+    $right:* & ^(IsCorrelated $right $left)
+    $on:*
+)
+=>
+(ConstructNonApplyJoin (OpName) $left $right $on)
+
+# TryDecorrelateSelect "pushes down" the join apply into the select operator,
+# in order to eliminate any correlation between the select filter list and the
+# left side of the join, and also to keep "digging" down to find and eliminate
+# other unnecessary correlation. Eventually, the hope is to trigger the
+# DecorrelateJoin pattern to turn the JoinApply operator into a non-apply Join
+# operator.
+#
+# This rule triggers a cycle with the PushFilterIntoJoinRight rule. Because this
+# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
+# gives the PushFilterIntoJoinRight rule one last chance to push Select into the
+# right input, and therefore causes the normal form to be (Join (Select)) rather
+# than (Select (Join)) when the choice is ambiguous.
+#
+# Note that citation [3] doesn't directly contain this identity, since it
+# assumes that the Select will be hoisted above the Join rather than becoming
+# part of its On condition. PushFilterIntoJoinRight allows the condition to be
+# pushed down, so this rule can correctly pull it up.
+#
+# Citations: [3]
+[TryDecorrelateSelect, Normalize, DetectCycle]
+(InnerJoinApply | LeftJoinApply | SemiJoinApply | AntiJoinApply
+    $left:*
+    $right:(Select $input:* $filter:*) & (HasOuterCols $right)
+    $on:*
+)
+=>
+((OpName)
+    $left
+    $input
+    (ConcatFilters $on $filter)
+)
+
+# NormalizeSelectAny rewrites Any into Exists when it's a top-level conjunct in
+# a Select filter. The HoistSelectExists rule will then introduce a semi-join.
+# Any in a Select filter can be rewritten as Exists because a NULL return value
+# is treated as False by Select.
+[NormalizeSelectAny, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[
+            ...
+            $any:
+            (Any
+                (Project $projectInput:* (Projections [ $condition:* ]))
+            )
+            ...
+        ]
+    )
+)
+=>
+(Select
+    $input
+    (Filters
+        (ReplaceListItem
+            $list
+            $any
+            (Exists (Select $projectInput (Filters [ $condition ])))
+        )
+    )
+)
+
+# HoistSelectExists extracts existential subqueries from Select filters,
+# turning them into semi-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
+    )
+)
+=>
+(SemiJoinApply
+    $input
+    $subquery
+    (Filters (RemoveListItem $list $exists))
+)
+
+# HoistSelectNotExists extracts non-existential subqueries from Select filters,
+# turning them into anti-joins. This eliminates the subquery, which is often
+# expensive to execute and restricts the optimizer's plan choices.
+[HoistSelectNotExists, Normalize]
+(Select
+    $input:*
+    $filter:(Filters
+        $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
+    )
+)
+=>
+(AntiJoinApply
+    (Select $input (Filters (RemoveListItem $list $exists)))
+    $subquery
+    (True)
+)
+
+# HoistSelectSubquery extracts subqueries from a Select filter and joins them
+# with the Select input. This and other subquery hoisting patterns create a
+# single, top-level relational query with no nesting.
+#
+# NOTE: Keep this ordered after the HoistSelectExists and HoistSelectNotExists
+#       rules. This rule will hoist any existential subqueries using
+#       LeftJoinApply, which is equivalent to, but not as efficient as, using
+#       SemiJoinApply and AntiJoinApply.
+#
+# Citations: [4]
+[HoistSelectSubquery, Normalize]
+(Select
+    $input:*
+    $filter:* & (HasCorrelatedSubquery $filter)
+)
+=>
+(HoistSelectSubquery $input $filter)
+
+# HoistProjectSubquery extracts subqueries from a projections list and joins
+# them with the Project input. This and other subquery hoisting patterns create
+# a single, top-level relational query with no nesting.
+[HoistProjectSubquery, Normalize]
+(Project
+    $input:*
+    $projections:* & (HasCorrelatedSubquery $projections)
+)
+=>
+(HoistProjectSubquery $input $projections)
+
+# HoistJoinSubquery extracts subqueries from a join filter and joins them with
+# the join's right input. This and other subquery hoisting patterns create a
+# single, top-level relational query with no nesting.
+[HoistJoinSubquery, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:* & (HasCorrelatedSubquery $on)
+)
+=>
+(HoistJoinSubquery (OpName) $left $right $on)
+
+# HoistValuesSubquery extracts subqueries from row tuples and joins them with
+# the Values operator. This and other subquery hoisting patterns create a
+# single, top-level relational query with no nesting.
+[HoistValuesSubquery, Normalize]
+(Values
+    $rows:[ ... $item:* & (HasCorrelatedSubquery $item) ... ]
+    $cols:*
+)
+=>
+(HoistValuesSubquery $rows $cols)

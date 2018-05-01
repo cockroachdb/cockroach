@@ -50,7 +50,7 @@ func (_f *Factory) ConstructNot(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_notExpr)))
+	return _f.onConstruct(memo.Expr(_notExpr))
 }
 
 // ConstructFuncCall constructs an expression for the FuncCall operator.
@@ -65,7 +65,7 @@ func (_f *Factory) ConstructFuncCall(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_funcCallExpr)))
+	return _f.onConstruct(memo.Expr(_funcCallExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -148,7 +148,7 @@ func (_f *Factory) ConstructInnerJoin(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_innerJoinExpr)))
+	return _f.onConstruct(memo.Expr(_innerJoinExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -278,7 +278,7 @@ func (_f *Factory) ConstructEq(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_eqExpr)))
+	return _f.onConstruct(memo.Expr(_eqExpr))
 }
 
 // ConstructLt constructs an expression for the Lt operator.
@@ -323,7 +323,7 @@ func (_f *Factory) ConstructLt(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_ltExpr)))
+	return _f.onConstruct(memo.Expr(_ltExpr))
 }
 
 // ConstructPlus constructs an expression for the Plus operator.
@@ -337,7 +337,7 @@ func (_f *Factory) ConstructPlus(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_plusExpr)))
+	return _f.onConstruct(memo.Expr(_plusExpr))
 }
 
 // ConstructMinus constructs an expression for the Minus operator.
@@ -351,7 +351,7 @@ func (_f *Factory) ConstructMinus(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_minusExpr)))
+	return _f.onConstruct(memo.Expr(_minusExpr))
 }
 
 // ConstructConst constructs an expression for the Const operator.
@@ -364,7 +364,7 @@ func (_f *Factory) ConstructConst(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_constExpr)))
+	return _f.onConstruct(memo.Expr(_constExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -493,7 +493,7 @@ func (_f *Factory) ConstructFunc(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_funcExpr)))
+	return _f.onConstruct(memo.Expr(_funcExpr))
 }
 
 // ConstructVariable constructs an expression for the Variable operator.
@@ -506,7 +506,7 @@ func (_f *Factory) ConstructVariable(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_variableExpr)))
+	return _f.onConstruct(memo.Expr(_variableExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -641,7 +641,7 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_selectExpr)))
+	return _f.onConstruct(memo.Expr(_selectExpr))
 }
 
 // ConstructInnerJoin constructs an expression for the InnerJoin operator.
@@ -655,7 +655,7 @@ func (_f *Factory) ConstructInnerJoin(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_innerJoinExpr)))
+	return _f.onConstruct(memo.Expr(_innerJoinExpr))
 }
 
 // ConstructFullJoin constructs an expression for the FullJoin operator.
@@ -669,7 +669,7 @@ func (_f *Factory) ConstructFullJoin(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_fullJoinExpr)))
+	return _f.onConstruct(memo.Expr(_fullJoinExpr))
 }
 
 // ConstructUnion constructs an expression for the Union operator.
@@ -683,7 +683,7 @@ func (_f *Factory) ConstructUnion(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_unionExpr)))
+	return _f.onConstruct(memo.Expr(_unionExpr))
 }
 
 // ConstructAnd constructs an expression for the And operator.
@@ -697,7 +697,7 @@ func (_f *Factory) ConstructAnd(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_andExpr)))
+	return _f.onConstruct(memo.Expr(_andExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -832,7 +832,7 @@ func (_f *Factory) ConstructList(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_listExpr)))
+	return _f.onConstruct(memo.Expr(_listExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -909,7 +909,7 @@ func (_f *Factory) ConstructJoin(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_joinExpr)))
+	return _f.onConstruct(memo.Expr(_joinExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -977,7 +977,7 @@ func (_f *Factory) ConstructList(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_listExpr)))
+	return _f.onConstruct(memo.Expr(_listExpr))
 }
 
 // ConstructOp constructs an expression for the Op operator.
@@ -1016,7 +1016,7 @@ func (_f *Factory) ConstructOp(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_opExpr)))
+	return _f.onConstruct(memo.Expr(_opExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1136,7 +1136,7 @@ func (_f *Factory) ConstructEq(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_eqExpr)))
+	return _f.onConstruct(memo.Expr(_eqExpr))
 }
 
 // ConstructNe constructs an expression for the Ne operator.
@@ -1185,7 +1185,7 @@ func (_f *Factory) ConstructNe(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_neExpr)))
+	return _f.onConstruct(memo.Expr(_neExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1282,7 +1282,7 @@ func (_f *Factory) ConstructPlus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_plusExpr)))
+	return _f.onConstruct(memo.Expr(_plusExpr))
 }
 
 // ConstructMinus constructs an expression for the Minus operator.
@@ -1313,7 +1313,7 @@ func (_f *Factory) ConstructMinus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_minusExpr)))
+	return _f.onConstruct(memo.Expr(_minusExpr))
 }
 
 // ConstructNull constructs an expression for the Null operator.
@@ -1324,7 +1324,7 @@ func (_f *Factory) ConstructNull() memo.GroupID {
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_nullExpr)))
+	return _f.onConstruct(memo.Expr(_nullExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
@@ -1414,7 +1414,7 @@ func (_f *Factory) ConstructLt(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_ltExpr)))
+	return _f.onConstruct(memo.Expr(_ltExpr))
 }
 
 // ConstructGt constructs an expression for the Gt operator.
@@ -1428,7 +1428,7 @@ func (_f *Factory) ConstructGt(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_gtExpr)))
+	return _f.onConstruct(memo.Expr(_gtExpr))
 }
 
 // ConstructContains constructs an expression for the Contains operator.
@@ -1442,7 +1442,7 @@ func (_f *Factory) ConstructContains(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_containsExpr)))
+	return _f.onConstruct(memo.Expr(_containsExpr))
 }
 
 // ConstructNot constructs an expression for the Not operator.
@@ -1477,7 +1477,7 @@ func (_f *Factory) ConstructNot(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.MemoizeNormExpr(_f.evalCtx, memo.Expr(_notExpr)))
+	return _f.onConstruct(memo.Expr(_notExpr))
 }
 
 type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID

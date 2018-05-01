@@ -34,10 +34,9 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    ├── scan a
-           │    │    ├── columns: a.i:2(int)
-           │    │    └── limit: 1
-           │    └── variable: a.i [type=int, outer=(2)]
+           │    └── scan a
+           │         ├── columns: a.i:2(int)
+           │         └── limit: 1
            └── const: 5 [type=int]
 
 opt
@@ -52,14 +51,13 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    ├── group-by
-           │    │    ├── columns: column6:6(int)
-           │    │    ├── cardinality: [1 - 1]
-           │    │    ├── keys: ()
-           │    │    ├── scan a
-           │    │    └── aggregations
-           │    │         └── count-rows [type=int]
-           │    └── variable: column6 [type=int, outer=(6)]
+           │    └── group-by
+           │         ├── columns: column6:6(int)
+           │         ├── cardinality: [1 - 1]
+           │         ├── keys: ()
+           │         ├── scan a
+           │         └── aggregations
+           │              └── count-rows [type=int]
            └── const: 100 [type=int]
 
 opt
@@ -74,13 +72,12 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    ├── limit
-           │    │    ├── columns: a.i:2(int)
-           │    │    ├── cardinality: [0 - 0]
-           │    │    ├── scan a
-           │    │    │    └── columns: a.i:2(int)
-           │    │    └── const: 0 [type=int]
-           │    └── variable: a.i [type=int, outer=(2)]
+           │    └── limit
+           │         ├── columns: a.i:2(int)
+           │         ├── cardinality: [0 - 0]
+           │         ├── scan a
+           │         │    └── columns: a.i:2(int)
+           │         └── const: 0 [type=int]
            └── const: 5 [type=int]
 
 # Don't remove the Max1Row operator.
@@ -96,10 +93,9 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    ├── max1-row
-           │    │    ├── columns: a.i:2(int)
-           │    │    ├── cardinality: [0 - 1]
-           │    │    └── scan a
-           │    │         └── columns: a.i:2(int)
-           │    └── variable: a.i [type=int, outer=(2)]
+           │    └── max1-row
+           │         ├── columns: a.i:2(int)
+           │         ├── cardinality: [0 - 1]
+           │         └── scan a
+           │              └── columns: a.i:2(int)
            └── const: 5 [type=int]

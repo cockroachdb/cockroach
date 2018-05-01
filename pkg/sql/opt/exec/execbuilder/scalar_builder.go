@@ -320,11 +320,6 @@ func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 	if cols.Len() != 1 {
 		return nil, errors.Errorf("subquery input with multiple columns")
 	}
-	colID, _ := cols.Next(0)
-	proj := ev.Child(1)
-	if proj.Operator() != opt.VariableOp || proj.Private().(opt.ColumnID) != opt.ColumnID(colID) {
-		return nil, errors.Errorf("subquery with non-trivial projection not supported")
-	}
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.

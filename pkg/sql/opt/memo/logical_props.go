@@ -134,6 +134,14 @@ type ScalarProps struct {
 	// constraints. If it is false, the constraints are weaker than the
 	// expression.
 	TightConstraints bool
+
+	// HasCorrelatedSubquery is true if the scalar expression tree contains a
+	// subquery having one or more outer columns. The subquery can be a Subquery,
+	// Exists, or Any operator. These operators need to be hoisted out of scalar
+	// expression trees and turned into top-level apply joins. This property makes
+	// detection fast and easy so that the hoister doesn't waste time searching
+	// subtrees that don't contain subqueries.
+	HasCorrelatedSubquery bool
 }
 
 // OuterCols is a helper method that returns either the relational or scalar
