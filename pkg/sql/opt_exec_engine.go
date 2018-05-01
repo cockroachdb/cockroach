@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var _ exec.TestEngineFactory = &Executor{}
@@ -404,18 +403,19 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 }
 
 // ConstructExplain is part of the exec.Factory interface.
-func (ee *execEngine) ConstructExplain(plan exec.Plan) (exec.Node, error) {
+func (ee *execEngine) ConstructExplain(
+	options *tree.ExplainOptions, plan exec.Plan,
+) (exec.Node, error) {
 	p := plan.(*planTop)
-	// For now, we assume VERBOSE.
-	// Also, NOEXPAND and NOOPTIMIZE should always be set when using the
-	// optimizer, to prevent the plans from being modified.
-	opts := tree.ExplainOptions{
-		Flags: util.MakeFastIntSet(
-			tree.ExplainFlagVerbose,
-			tree.ExplainFlagNoExpand,
-			tree.ExplainFlagNoOptimize,
-		),
+
+	if options.Mode != tree.ExplainPlan {
+		return nil, errors.Errorf("only PLAN explain mode supported")
 	}
+	// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
+	// prevent the plans from being modified.
+	opts := *options
+	opts.Flags.Add(tree.ExplainFlagNoExpand)
+	opts.Flags.Add(tree.ExplainFlagNoOptimize)
 	return ee.planner.makeExplainPlanNodeWithPlan(
 		context.TODO(),
 		&opts,
