@@ -215,6 +215,14 @@ func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, 
 	return out, nil
 }
 
+func makeGCEClusterName(testName, id, username string) string {
+	name := fmt.Sprintf("%s-%s-%s", username, id, testName)
+	name = strings.ToLower(name)
+	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
+	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
+	return name
+}
+
 func makeClusterName(t testI) string {
 	if clusterName != "" {
 		return clusterName
@@ -222,7 +230,6 @@ func makeClusterName(t testI) string {
 	if local {
 		return "local"
 	}
-
 	if username == "" {
 		usr, err := user.Current()
 		if err != nil {
@@ -234,11 +241,7 @@ func makeClusterName(t testI) string {
 	if id == "" {
 		id = fmt.Sprintf("%d", timeutil.Now().Unix())
 	}
-	name := fmt.Sprintf("%s-%s-%s", username, id, t.Name())
-	name = strings.ToLower(name)
-	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
-	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
-	return name
+	return makeGCEClusterName(t.Name(), id, username)
 }
 
 type testI interface {

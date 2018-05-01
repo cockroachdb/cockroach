@@ -36,9 +36,10 @@ import (
 )
 
 var (
-	parallelism = 10
-	debug       = false
-	dryrun      = false
+	parallelism   = 10
+	debug         = false
+	dryrun        = false
+	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
 type testSpec struct {
@@ -51,12 +52,33 @@ type testSpec struct {
 
 type registry struct {
 	m              map[string]*test
+	clusters       map[string]string
 	out            io.Writer
 	statusInterval time.Duration
 }
 
 func newRegistry() *registry {
-	return &registry{m: make(map[string]*test), out: os.Stdout}
+	return &registry{
+		m:        make(map[string]*test),
+		clusters: make(map[string]string),
+		out:      os.Stdout,
+	}
+}
+
+func (r *registry) verifyClusterName(testName string) error {
+	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
+	// breathing room.
+	name := makeGCEClusterName(testName, "xxxxxxx", "teamcity")
+	if !clusterNameRE.MatchString(name) {
+		return fmt.Errorf("cluster name '%s' must match regex '%s'",
+			name, clusterNameRE)
+	}
+	if t, ok := r.clusters[name]; ok {
+		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
+			testName, t, name)
+	}
+	r.clusters[name] = testName
+	return nil
 }
 
 func (r *registry) Add(spec testSpec) {
@@ -65,6 +87,10 @@ func (r *registry) Add(spec testSpec) {
 		os.Exit(1)
 	}
 	r.m[spec.Name] = &test{spec: &spec}
+	if err := r.verifyClusterName(spec.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 }
 
 func (r *registry) List(filter []string) []*test {

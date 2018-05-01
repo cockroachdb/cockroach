@@ -21,15 +21,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 func TestRegistryRun(t *testing.T) {
-	r := &registry{m: make(map[string]*test), out: ioutil.Discard}
+	r := newRegistry()
+	r.out = ioutil.Discard
 	r.Add(testSpec{
 		Name: "pass",
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -84,11 +87,9 @@ func TestRegistryStatus(t *testing.T) {
 	waitingRE := regexp.MustCompile(`(?m)^.*status: waiting.*worker?.*worker?.*$`)
 	cleaningUpRE := regexp.MustCompile(`(?m)^.*status: cleaning up \(.*\)$`)
 
-	r := &registry{
-		m:              make(map[string]*test),
-		out:            &buf,
-		statusInterval: 20 * time.Millisecond,
-	}
+	r := newRegistry()
+	r.out = &buf
+	r.statusInterval = 20 * time.Millisecond
 	r.Add(testSpec{
 		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -138,11 +139,10 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	var buf syncedBuffer
 	unknownRE := regexp.MustCompile(`(?m)^.*status: \?\?\? \(.*\)$`)
 
-	r := &registry{
-		m:              make(map[string]*test),
-		out:            &buf,
-		statusInterval: 20 * time.Millisecond,
-	}
+	r := newRegistry()
+	r.out = &buf
+	r.statusInterval = 20 * time.Millisecond
+
 	r.Add(testSpec{
 		Name: `status`,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -162,5 +162,31 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	}
 	if testing.Verbose() {
 		fmt.Println(status)
+	}
+}
+
+func TestRegistryVerifyClusterName(t *testing.T) {
+	testCases := []struct {
+		testNames   []string
+		expectedErr string
+	}{
+		{[]string{"hello"}, ""},
+		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
+		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
+		{[]string{"hello+"}, "must match regex"},
+		{[]string{strings.Repeat("y", 46)}, ""},
+		{[]string{strings.Repeat("y", 47)}, "must match regex"},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			r := newRegistry()
+			var err error
+			for _, n := range c.testNames {
+				err = r.verifyClusterName(n)
+			}
+			if !testutils.IsError(err, c.expectedErr) {
+				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
+			}
+		})
 	}
 }
