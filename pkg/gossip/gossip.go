@@ -74,7 +74,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -94,9 +93,6 @@ const (
 	// excessive tightening of the network.
 	minPeers = 3
 
-	// ttlNodeDescriptorGossip is time-to-live for node ID -> descriptor.
-	ttlNodeDescriptorGossip = 1 * time.Hour
-
 	// defaultStallInterval is the default interval for checking whether
 	// the incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
@@ -112,9 +108,20 @@ const (
 	// efficiently targeted connection to the most distant node.
 	defaultCullInterval = 60 * time.Second
 
-	// defaultGossipStoresInterval is the default interval for gossiping
-	// store descriptors.
-	defaultGossipStoresInterval = 60 * time.Second
+	// NodeDescriptorInterval is the interval for gossiping the node descriptor.
+	// Note that increasing this duration may increase the likelihood of gossip
+	// thrashing, since node descriptors are used to determine the number of gossip
+	// hops between nodes (see #9819 for context).
+	NodeDescriptorInterval = 1 * time.Hour
+
+	// NodeDescriptorTTL is time-to-live for node ID -> descriptor.
+	NodeDescriptorTTL = 2 * NodeDescriptorInterval
+
+	// StoresInterval is the default interval for gossiping store descriptors.
+	StoresInterval = 60 * time.Second
+
+	// StoreTTL is time-to-live for store-related info.
+	StoreTTL = 2 * StoresInterval
 
 	unknownNodeID roachpb.NodeID = 0
 )
@@ -142,12 +149,6 @@ var (
 	MetaBytesReceived = metric.Metadata{
 		Name: "gossip.bytes.received",
 		Help: "Number of received gossip bytes"}
-)
-
-var (
-	// GossipStoresInterval is the interval for gossipping storage-related info.
-	GossipStoresInterval = envutil.EnvOrDefaultDuration("COCKROACH_GOSSIP_STORES_INTERVAL",
-		defaultGossipStoresInterval)
 )
 
 // KeyNotPresentError is returned by gossip when queried for a key that doesn't
@@ -330,7 +331,7 @@ func (g *Gossip) GetNodeMetrics() *Metrics {
 func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(ctx, "NodeDescriptor set to %+v", desc)
-	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, ttlNodeDescriptorGossip); err != nil {
+	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
 		return errors.Errorf("node %d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
 	return nil
@@ -726,7 +727,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		// asynchronously.
 		key := MakeNodeIDKey(oldNodeID)
 		var emptyProto []byte
-		if err := g.addInfoLocked(key, emptyProto, ttlNodeDescriptorGossip); err != nil {
+		if err := g.addInfoLocked(key, emptyProto, NodeDescriptorTTL); err != nil {
 			log.Errorf(ctx, "failed to empty node descriptor for node %d: %s", oldNodeID, err)
 		}
 	}
