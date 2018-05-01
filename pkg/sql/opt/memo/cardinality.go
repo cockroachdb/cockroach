@@ -41,6 +41,11 @@ type Cardinality struct {
 	Max uint32
 }
 
+// AllowsZero is true if the expression can return zero rows.
+func (c Cardinality) AllowsZero() bool {
+	return c.Min == 0
+}
+
 // AsLowAs ratchets the min bound downwards in order to ensure that it allows
 // values that are >= the min value.
 func (c Cardinality) AsLowAs(min uint32) Cardinality {
