@@ -119,9 +119,12 @@
     )
 )
 =>
-(SemiJoinApply
-    $input
-    $subquery
+(Select
+    (SemiJoinApply
+        $input
+        $subquery
+        (True)
+    )
     (Filters (RemoveListItem $list $exists))
 )
 
@@ -136,10 +139,13 @@
     )
 )
 =>
-(AntiJoinApply
-    (Select $input (Filters (RemoveListItem $list $exists)))
-    $subquery
-    (True)
+(Select
+    (AntiJoinApply
+        $input
+        $subquery
+        (True)
+    )
+    (Filters (RemoveListItem $list $exists))
 )
 
 # HoistSelectSubquery extracts subqueries from a Select filter and joins them
