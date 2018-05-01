@@ -49,6 +49,10 @@ func TestHasCorrelatedSubquery(t *testing.T) {
 		{sql: "SELECT y FROM a WHERE (SELECT z FROM b WHERE z=y) = 5", expected: true},
 		{sql: "SELECT y FROM a WHERE 1=1 AND (SELECT z FROM b WHERE z=y)+1 = 10", expected: true},
 		{sql: "SELECT (SELECT z FROM b WHERE z=y) FROM a WHERE False", expected: false},
+		{sql: "SELECT y FROM a WHERE EXISTS(SELECT z FROM b WHERE z=y)", expected: true},
+		{sql: "SELECT y FROM a WHERE EXISTS(SELECT z FROM b)", expected: false},
+		{sql: "SELECT y FROM a WHERE 5 = ANY(SELECT z FROM b WHERE z=y)", expected: true},
+		{sql: "SELECT y FROM a WHERE 5 = ANY(SELECT z FROM b)", expected: false},
 	}
 
 	for _, tc := range testCases {
