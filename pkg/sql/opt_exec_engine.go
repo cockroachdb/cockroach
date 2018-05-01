@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -352,6 +353,57 @@ func (ee *execEngine) ConstructSort(
 		columns:  inputColumns,
 		ordering: ordering,
 		needSort: true,
+	}, nil
+}
+
+// ConstructLookupJoin is part of the exec.Factory interface.
+func (ee *execEngine) ConstructLookupJoin(
+	input exec.Node, table opt.Table, cols exec.ColumnOrdinalSet,
+) (exec.Node, error) {
+	// TODO(justin): this would be something besides a scanNode in the general
+	// case of a lookup join.
+	plan := input.(*scanNode)
+	tabDesc := table.(*optTable).desc
+	tableScan := ee.planner.Scan()
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+	}
+
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(tabDesc.Columns[c].ID))
+	}
+
+	if err := tableScan.initTable(context.TODO(), ee.planner, tabDesc, nil, colCfg); err != nil {
+		return nil, err
+	}
+
+	primaryIndex := tabDesc.GetPrimaryIndex()
+	tableScan.index = &primaryIndex
+	tableScan.run.isSecondaryIndex = false
+	tableScan.disableBatchLimit()
+
+	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
+
+	primaryKeyColumns := make([]bool, len(plan.cols))
+	for _, colID := range primaryIndex.ColumnIDs {
+		idx, ok := plan.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
+		}
+		primaryKeyColumns[idx] = true
+		colIDtoRowIndex[colID] = idx
+	}
+
+	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc, tableScan.index.ID))
+
+	return &indexJoinNode{
+		index:             plan,
+		table:             tableScan,
+		primaryKeyColumns: primaryKeyColumns,
+		run: indexJoinRun{
+			primaryKeyPrefix: primaryKeyPrefix,
+			colIDtoRowIndex:  colIDtoRowIndex,
+		},
 	}, nil
 }
 

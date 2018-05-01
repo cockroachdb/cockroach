@@ -102,6 +102,9 @@ type Factory interface {
 	// by the input node.
 	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
 
+	// ConstructLookupJoin returns a node that performs a lookup join.
+	ConstructLookupJoin(input Node, table opt.Table, cols ColumnOrdinalSet) (Node, error)
+
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If only an offset is desired, limit should be
 	// math.MaxInt64.

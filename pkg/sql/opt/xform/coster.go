@@ -70,10 +70,6 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	case opt.ValuesOp:
 		return c.computeValuesCost(candidate, props)
 
-	case opt.LookupJoinOp:
-		// TODO(justin): remove this once we can execbuild index joins.
-		return 1000000000000
-
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
 		// of the underlying plan. However, we want to explain the plan we would get

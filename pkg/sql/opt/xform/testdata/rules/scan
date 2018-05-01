@@ -83,8 +83,8 @@ SELECT s, i, f FROM a ORDER BY s DESC, i
 memo (optimized)
  ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
- │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    ├── best: (lookup-join G2="[ordering: -4,+2]" a,cols=(2-4))
+ │    │    └── cost: 1000.00
  │    └── ""
  │         ├── best: (scan a,cols=(2-4))
  │         └── cost: 1000.00
@@ -154,6 +154,35 @@ memo (optimized)
  ├── G6: (function G7 lower)
  └── G7: (variable abc.d)
 
+# TODO(justin): this is limited by our ability to push filters into index joins
+# at the moment.
+memo
+SELECT j FROM a WHERE s = 'foo'
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    └── "[presentation: j:5]"
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1.00
+ ├── G2: (select G4 G5) (scan a@si_idx,cols=(4,5),constrained)
+ │    └── ""
+ │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
+ │         └── cost: 1.00
+ ├── G3: (projections G6)
+ ├── G4: (scan a,cols=(4,5)) (lookup-join G7 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    └── ""
+ │         ├── best: (scan a,cols=(4,5))
+ │         └── cost: 1000.00
+ ├── G5: (filters G8)
+ ├── G6: (variable a.j)
+ ├── G7: (scan a@s_idx,cols=(1,4))
+ │    └── ""
+ │         ├── best: (scan a@s_idx,cols=(1,4))
+ │         └── cost: 1000.00
+ ├── G8: (eq G9 G10)
+ ├── G9: (variable a.s)
+ └── G10: (const 'foo')
+
 # Scan of primary index is lowest cost.
 opt
 SELECT s, i, f FROM a ORDER BY k, i, s
@@ -186,11 +215,14 @@ memo (optimized)
 opt
 SELECT s, j FROM a ORDER BY s
 ----
-sort
+lookup-join
  ├── columns: s:4(string) j:5(jsonb)
+ ├── table: a
  ├── ordering: +4
- └── scan a
-      └── columns: a.s:4(string) a.j:5(jsonb)
+ └── scan a@s_idx
+      ├── columns: a.k:1(int!null) a.s:4(string)
+      ├── keys: (1)
+      └── ordering: +4
 
 memo
 SELECT s, j FROM a ORDER BY s
@@ -198,8 +230,8 @@ SELECT s, j FROM a ORDER BY s
 memo (optimized)
  ├── G1: (scan a,cols=(4,5)) (lookup-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
  │    ├── "[presentation: s:4,j:5] [ordering: +4]"
- │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    ├── best: (lookup-join G2="[ordering: +4]" a,cols=(4,5))
+ │    │    └── cost: 1000.00
  │    └── ""
  │         ├── best: (scan a,cols=(4,5))
  │         └── cost: 1000.00
