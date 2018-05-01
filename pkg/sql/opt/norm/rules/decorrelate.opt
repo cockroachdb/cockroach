@@ -49,8 +49,8 @@
 # in order to eliminate any correlation between the select filter list and the
 # left side of the join, and also to keep "digging" down to find and eliminate
 # other unnecessary correlation. Eventually, the hope is to trigger the
-# DecorrelateJoin pattern to turn the JoinApply operator into a non-apply Join
-# operator.
+# DecorrelateJoin pattern to turn JoinApply operators into non-apply Join
+# operators.
 #
 # This rule triggers a cycle with the PushFilterIntoJoinRight rule. Because this
 # rule has the DetectCycle tag, it is skipped once a cycle is detected. This
@@ -65,9 +65,10 @@
 #
 # Citations: [3]
 [TryDecorrelateSelect, Normalize, DetectCycle]
-(InnerJoinApply | LeftJoinApply | SemiJoinApply | AntiJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+ SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:(Select $input:* $filter:*) & (HasOuterCols $right)
+    $right:* & (HasOuterCols $right) & (Select $input:* $filter:*)
     $on:*
 )
 =>
