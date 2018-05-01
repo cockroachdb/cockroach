@@ -177,11 +177,11 @@ type queueImpl interface {
 	// yet, this can be 0.
 	timer(time.Duration) time.Duration
 
-	// purgatoryChan returns a channel that is signaled when it's time
-	// to retry replicas which have been relegated to purgatory due to
-	// failures. If purgatoryChan returns nil, failing replicas are not
-	// sent to purgatory.
-	purgatoryChan() <-chan struct{}
+	// purgatoryChan returns a channel that is signaled with the current
+	// time when it's time to retry replicas which have been relegated to
+	// purgatory due to failures. If purgatoryChan returns nil, failing
+	// replicas are not sent to purgatory.
+	purgatoryChan() <-chan time.Time
 }
 
 type queueConfig struct {
