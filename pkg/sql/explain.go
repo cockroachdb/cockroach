@@ -17,94 +17,25 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-type explainMode int
-
-const (
-	explainNone explainMode = iota
-	explainPlan
-	// explainDistSQL shows the physical distsql plan for a query and whether a
-	// query would be run in "auto" DISTSQL mode. See explainDistSQLNode for
-	// details.
-	explainDistSQL
-)
-
-var explainStrings = map[explainMode]string{
-	explainPlan:    "plan",
-	explainDistSQL: "distsql",
-}
 
 // Explain executes the explain statement, providing debugging and analysis
 // info about the wrapped statement.
 //
 // Privileges: the same privileges as the statement being explained.
 func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error) {
-	mode := explainNone
-
-	optimized := true
-	expanded := true
-	normalizeExprs := true
-	flags := explainFlags{
-		showMetadata: false,
-		showTypes:    false,
-	}
-
-	for _, opt := range n.Options {
-		optLower := strings.ToLower(opt)
-		newMode := explainNone
-		// Search for the string in `explainStrings`.
-		for mode, modeStr := range explainStrings {
-			if optLower == modeStr {
-				newMode = mode
-				break
-			}
-		}
-		if newMode == explainNone {
-			switch optLower {
-			case "types":
-				newMode = explainPlan
-				flags.showTypes = true
-				flags.showMetadata = true
-
-			case "symvars":
-				flags.symbolicVars = true
-			case "verbose":
-				flags.qualifyNames = true
-				flags.showMetadata = true
-
-			case "noexpand":
-				expanded = false
-
-			case "nonormalize":
-				normalizeExprs = false
-
-			case "nooptimize":
-				optimized = false
-
-			default:
-				return nil, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
-			}
-		}
-		if newMode != explainNone {
-			if mode != explainNone {
-				return nil, fmt.Errorf("cannot set EXPLAIN mode more than once: %s", opt)
-			}
-			mode = newMode
-		}
-	}
-	if mode == explainNone {
-		mode = explainPlan
+	opts, err := n.ParseOptions()
+	if err != nil {
+		return nil, err
 	}
 
 	defer func(save bool) { p.extendedEvalCtx.SkipNormalize = save }(p.extendedEvalCtx.SkipNormalize)
-	p.extendedEvalCtx.SkipNormalize = !normalizeExprs
+	p.extendedEvalCtx.SkipNormalize = opts.Flags.Contains(tree.ExplainFlagNoNormalize)
 
-	switch mode {
-	case explainDistSQL:
+	switch opts.Mode {
+	case tree.ExplainDistSQL:
 		plan, err := p.newPlan(ctx, n.Statement, nil)
 		if err != nil {
 			return nil, err
@@ -113,12 +44,12 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			plan: plan,
 		}, nil
 
-	case explainPlan:
+	case tree.ExplainPlan:
 		// We may want to show placeholder types, so allow missing values.
 		p.semaCtx.Placeholders.PermitUnassigned()
-		return p.makeExplainPlanNode(ctx, flags, expanded, optimized, n.Statement)
+		return p.makeExplainPlanNode(ctx, &opts, n.Statement)
 
 	default:
-		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)
+		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", opts.Mode)
 	}
 }
