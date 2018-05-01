@@ -372,8 +372,7 @@ func TestCancelMultipleSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.TODO()
 
-	numNodes := 2
-	tc := serverutils.StartTestCluster(t, numNodes,
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -383,8 +382,10 @@ func TestCancelMultipleSessions(t *testing.T) {
 	var conns [2]*gosql.Conn
 	for i := 0; i < 2; i++ {
 		var err error
-		conns[i], err = tc.ServerConn(0).Conn(ctx)
-		if err != nil {
+		if conns[i], err = tc.ServerConn(0).Conn(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := conns[i].ExecContext(ctx, "SET application_name = 'killme'"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -396,7 +397,7 @@ func TestCancelMultipleSessions(t *testing.T) {
 
 	// Cancel the sessions on node 1.
 	if _, err = ctlconn.ExecContext(ctx,
-		`CANCEL SESSIONS SELECT session_id FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 1`,
+		`CANCEL SESSIONS SELECT session_id FROM [SHOW CLUSTER SESSIONS] WHERE application_name = 'killme'`,
 	); err != nil {
 		t.Fatal(err)
 	}
