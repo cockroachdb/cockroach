@@ -96,7 +96,7 @@ type replicateQueue struct {
 	*baseQueue
 	metrics           ReplicateQueueMetrics
 	allocator         Allocator
-	updateChan        chan struct{}
+	updateChan        chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 }
 
@@ -105,7 +105,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 	rq := &replicateQueue{
 		metrics:    makeReplicateQueueMetrics(),
 		allocator:  allocator,
-		updateChan: make(chan struct{}, 1),
+		updateChan: make(chan time.Time, 1),
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -125,7 +125,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 
 	updateFn := func() {
 		select {
-		case rq.updateChan <- struct{}{}:
+		case rq.updateChan <- timeutil.Now():
 		default:
 		}
 	}
@@ -608,7 +608,7 @@ func (*replicateQueue) timer(_ time.Duration) time.Duration {
 }
 
 // purgatoryChan returns the replicate queue's store update channel.
-func (rq *replicateQueue) purgatoryChan() <-chan struct{} {
+func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
 	return rq.updateChan
 }
 

@@ -165,6 +165,6 @@ func (*splitQueue) timer(_ time.Duration) time.Duration {
 }
 
 // purgatoryChan returns nil.
-func (*splitQueue) purgatoryChan() <-chan struct{} {
+func (*splitQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }

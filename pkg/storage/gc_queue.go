@@ -906,6 +906,6 @@ func (*gcQueue) timer(_ time.Duration) time.Duration {
 }
 
 // purgatoryChan returns nil.
-func (*gcQueue) purgatoryChan() <-chan struct{} {
+func (*gcQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
