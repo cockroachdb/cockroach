@@ -8,6 +8,30 @@ TABLE xy
       └── x int not null
 
 build
+EXPLAIN SELECT * FROM xy
+----
+explain
+ ├── columns: Tree:3(string) Field:4(string) Description:5(string)
+ └── scan xy
+      └── columns: x:1(int!null) y:2(int)
+
+build
+EXPLAIN (PLAN,SYMVARS) SELECT * FROM xy
+----
+explain
+ ├── columns: Tree:3(string) Field:4(string) Description:5(string)
+ └── scan xy
+      └── columns: x:1(int!null) y:2(int)
+
+build
+EXPLAIN (TYPES) SELECT * FROM xy
+----
+explain
+ ├── columns: Tree:3(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ └── scan xy
+      └── columns: x:1(int!null) y:2(int)
+
+build
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 explain

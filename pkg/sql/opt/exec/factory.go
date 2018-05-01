@@ -116,9 +116,7 @@ type Factory interface {
 
 	// ConstructExplain returns a node that implements EXPLAIN, showing
 	// information about the given plan.
-	//
-	// TODO(radu): add flags, for now we assume VERBOSE.
-	ConstructExplain(plan Plan) (Node, error)
+	ConstructExplain(options *tree.ExplainOptions, plan Plan) (Node, error)
 }
 
 // Subquery encapsulates information about a subquery that is part of a plan.

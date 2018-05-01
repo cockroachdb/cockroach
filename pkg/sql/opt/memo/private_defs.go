@@ -110,7 +110,7 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool
 
 // ExplainOpDef defines the value of the Def private field of the Explain operator.
 type ExplainOpDef struct {
-	// TODO(radu): flags
+	Options tree.ExplainOptions
 
 	// ColList stores the column IDs for the explain columns.
 	ColList opt.ColList

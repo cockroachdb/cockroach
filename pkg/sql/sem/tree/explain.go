@@ -15,7 +15,10 @@
 package tree
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Explain represents an EXPLAIN statement.
@@ -43,4 +46,72 @@ func (node *Explain) Format(ctx *FmtCtx) {
 		ctx.WriteString(") ")
 	}
 	ctx.FormatNode(node.Statement)
+}
+
+// ExplainOptions contains information about the options passed to an EXPLAIN
+// statement.
+type ExplainOptions struct {
+	Mode  ExplainMode
+	Flags util.FastIntSet
+}
+
+// ExplainMode indicates the mode of the explain. Currently there are two modes:
+// PLAN (the default) and DISTSQL.
+type ExplainMode uint8
+
+const (
+	// ExplainPlan shows information about the planNode tree for a query.
+	ExplainPlan ExplainMode = iota
+	// ExplainDistSQL shows the physical distsql plan for a query and whether a
+	// query would be run in "auto" DISTSQL mode. See sql/explain_distsql.go for
+	// details.
+	ExplainDistSQL
+)
+
+var explainModeStrings = map[string]ExplainMode{
+	"plan":    ExplainPlan,
+	"distsql": ExplainDistSQL,
+}
+
+// Explain flags.
+const (
+	ExplainFlagVerbose = iota
+	ExplainFlagSymVars
+	ExplainFlagTypes
+	ExplainFlagNoExpand
+	ExplainFlagNoNormalize
+	ExplainFlagNoOptimize
+)
+
+var explainFlagStrings = map[string]int{
+	"verbose":     ExplainFlagVerbose,
+	"symvars":     ExplainFlagSymVars,
+	"types":       ExplainFlagTypes,
+	"noexpand":    ExplainFlagNoExpand,
+	"nonormalize": ExplainFlagNoNormalize,
+	"nooptimize":  ExplainFlagNoOptimize,
+}
+
+// ParseOptions parses the options for an EXPLAIN statement.
+func (node *Explain) ParseOptions() (ExplainOptions, error) {
+	// If not specified, the default mode is ExplainPlan.
+	res := ExplainOptions{Mode: ExplainPlan}
+	modeSet := false
+	for _, opt := range node.Options {
+		optLower := strings.ToLower(opt)
+		if mode, ok := explainModeStrings[optLower]; ok {
+			if modeSet {
+				return ExplainOptions{}, fmt.Errorf("cannot set EXPLAIN mode more than once: %s", opt)
+			}
+			res.Mode = mode
+			modeSet = true
+			continue
+		}
+		flag, ok := explainFlagStrings[optLower]
+		if !ok {
+			return ExplainOptions{}, fmt.Errorf("unsupported EXPLAIN option: %s", opt)
+		}
+		res.Flags.Add(flag)
+	}
+	return res, nil
 }

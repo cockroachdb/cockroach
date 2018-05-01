@@ -106,6 +106,9 @@ func collectFilesImpl(cwd, path, srcDir string, seen map[string]struct{}) ([]str
 		{"."},
 	} {
 		for _, sourceFile := range sourceFiles {
+			if isFileAlwaysIgnored(sourceFile) {
+				continue
+			}
 			f, err := filepath.Rel(cwd, filepath.Join(pkg.Dir, sourceFile))
 			if err != nil {
 				return nil, err
@@ -132,6 +135,15 @@ func isStdlibPackage(path string) bool {
 	//
 	// This logic is not foolproof, but it's the same logic used by goimports.
 	return !strings.Contains(path, ".")
+}
+
+func isFileAlwaysIgnored(name string) bool {
+	// build.Package.IgnoredGoFiles does not distinguish between Go files that are
+	// always ignored and Go files that are temporarily ignored due to build tags.
+	// Duplicate some logic from go/build [0] here so we can tell the difference.
+	//
+	// [0]: https://github.com/golang/go/blob/9ecf899b2/src/go/build/build.go#L1065-L1068
+	return (strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".")) && filepath.Ext(name) == ".go"
 }
 
 // See: https://www.cmcrossroads.com/article/gnu-make-escaping-walk-wild-side
