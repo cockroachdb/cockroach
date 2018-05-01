@@ -419,17 +419,16 @@ semi-join-apply
  │    │              └── const: 'foo' [type=string]
  │    ├── select
  │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float) a.s:11(string) a.j:12(jsonb)
- │    │    ├── outer: (2)
  │    │    ├── keys: (8)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float) a.s:11(string) a.j:12(jsonb)
  │    │    │    └── keys: (8)
- │    │    └── filters [type=bool, outer=(2,9), constraints=(/2: [/101 - ]; /9: [/10 - /10]; tight)]
- │    │         ├── eq [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
- │    │         │    ├── variable: a.i [type=int, outer=(9)]
- │    │         │    └── const: 10 [type=int]
- │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
- │    │              ├── variable: b.y [type=int, outer=(2)]
- │    │              └── const: 100 [type=int]
- │    └── true [type=bool]
+ │    │    └── filters [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
+ │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
+ │    │              ├── variable: a.i [type=int, outer=(9)]
+ │    │              └── const: 10 [type=int]
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+ │         └── gt [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+ │              ├── variable: b.y [type=int, outer=(2)]
+ │              └── const: 100 [type=int]
  └── true [type=bool]
