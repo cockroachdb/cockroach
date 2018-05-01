@@ -1,0 +1,116 @@
+# LogicTest: opt
+
+statement ok
+CREATE TABLE x (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  INDEX(b),
+  INDEX(c)
+)
+
+statement ok
+INSERT INTO x VALUES (1, 3, 10), (2, 2, 30), (3, 1, 20)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT c FROM x ORDER BY b
+----
+render          ·         ·          (c)     ·
+ │              render 0  c          ·       ·
+ └── sort       ·         ·          (b, c)  +b
+      │         order     +b         ·       ·
+      └── scan  ·         ·          (b, c)  ·
+·               table     x@primary  ·       ·
+·               spans     ALL        ·       ·
+
+# TODO(justin): this should be using a lookup join.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT c FROM x ORDER BY b LIMIT 1
+----
+render               ·         ·          (c)     ·
+ │                   render 0  c          ·       ·
+ └── limit           ·         ·          (b, c)  +b
+      │              count     1          ·       ·
+      └── sort       ·         ·          (b, c)  +b
+           │         order     +b         ·       ·
+           └── scan  ·         ·          (b, c)  ·
+·                    table     x@primary  ·       ·
+·                    spans     ALL        ·       ·
+
+# tests adapted from logictest -- select_non_covering_index
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX b (b),
+  UNIQUE INDEX c (c),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d)
+)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE b = 2
+----
+index-join  ·      ·          (a, b, c, d)  ·
+ ├── scan   ·      ·          (a, b)        ·
+ │          table  t@b        ·             ·
+ │          spans  /2-/3      ·             ·
+ └── scan   ·      ·          (a, b, c, d)  ·
+·           table  t@primary  ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE c = 6
+----
+index-join  ·      ·          (a, b, c, d)  ·
+ ├── scan   ·      ·          (a, c)        ·
+ │          table  t@c        ·             ·
+ │          spans  /6-/7      ·             ·
+ └── scan   ·      ·          (a, b, c, d)  ·
+·           table  t@primary  ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE c > 0 AND c < 10
+----
+index-join  ·      ·          (a, b, c, d)  ·
+ ├── scan   ·      ·          (a, c)        ·
+ │          table  t@c        ·             ·
+ │          spans  /1-/10     ·             ·
+ └── scan   ·      ·          (a, b, c, d)  ·
+·           table  t@primary  ·             ·
+
+# TODO(justin): this should probably be using a lookup join.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE c > 0 AND d = 8
+----
+scan  ·       ·                    (a, b, c, d)  ·
+·     table   t@primary            ·             ·
+·     spans   ALL                  ·             ·
+·     filter  (c > 0) AND (d = 8)  ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE c > 0 ORDER BY c DESC
+----
+sort       ·       ·          (a, b, c, d)  -c
+ │         order   -c         ·             ·
+ └── scan  ·       ·          (a, b, c, d)  ·
+·          table   t@primary  ·             ·
+·          spans   ALL        ·             ·
+·          filter  c > 0      ·             ·
+
+# TODO(justin): figure out if this should be using a lookup join, and figure
+# out why it isn't if it should be. It's getting explored to, just not chosen
+# for cost.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE c > 0 ORDER BY c
+----
+sort       ·       ·          (a, b, c, d)  +c
+ │         order   +c         ·             ·
+ └── scan  ·       ·          (a, b, c, d)  ·
+·          table   t@primary  ·             ·
+·          spans   ALL        ·             ·
+·          filter  c > 0      ·             ·

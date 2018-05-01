@@ -127,17 +127,15 @@ index-join  ·      ·
  └── scan   ·      ·
 ·           table  abcd@primary
 
-# TODO(justinj): re-enable once exec support for lookup join is done
-#query TTT
-#EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
-#----
-#render           ·      ·
-# └── index-join  ·      ·
-#      ├── scan   ·      ·
-#      │          table  abcd@cd
-#      │          spans  /10-/11
-#      └── scan   ·      ·
-#·                table  abcd@primary
+query TTT
+EXPLAIN SELECT b, c, d FROM abcd WHERE c = 10
+----
+index-join  ·      ·
+ ├── scan   ·      ·
+ │          table  abcd@cd
+ │          spans  /10-/11
+ └── scan   ·      ·
+·           table  abcd@primary
 
 query TTT
 EXPLAIN SELECT b, c, d FROM abcd@{NO_INDEX_JOIN} WHERE c = 10

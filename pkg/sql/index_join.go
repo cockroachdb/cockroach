@@ -88,7 +88,38 @@ type indexJoinNode struct {
 	// uses more columns than the PK.
 	primaryKeyColumns []bool
 
+	// The columns returned by this node. While these are not ever different from
+	// the underlying table in the heuristic planner, the optimizer plans them to
+	// be different in some cases.
+	cols []sqlbase.ColumnDescriptor
+	// There is a 1-1 correspondence between cols and resultColumns.
+	resultColumns sqlbase.ResultColumns
+
 	run indexJoinRun
+}
+
+func processIndexJoinColumns(
+	table *scanNode, indexScan *scanNode,
+) (primaryKeyColumns []bool, colIDtoRowIndex map[sqlbase.ColumnID]int) {
+	colIDtoRowIndex = map[sqlbase.ColumnID]int{}
+
+	// primaryKeyColumns defined here will serve both as the primaryKeyColumns
+	// field in the indexJoinNode, and to determine which columns are
+	// provided by this index for the purpose of splitting the WHERE
+	// filter into an index-specific part and a "rest" part.
+	primaryKeyColumns = make([]bool, len(indexScan.cols))
+	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
+		// All the PK columns from the table scanNode must
+		// be fetched in the index scanNode.
+		idx, ok := indexScan.colIdxMap[colID]
+		if !ok {
+			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
+		}
+		primaryKeyColumns[idx] = true
+		colIDtoRowIndex[colID] = idx
+	}
+
+	return primaryKeyColumns, colIDtoRowIndex
 }
 
 // makeIndexJoin build an index join node.
@@ -114,23 +145,7 @@ func (p *planner) makeIndexJoin(
 	table.initOrdering(0 /* exactPrefix */, p.EvalContext())
 	table.disableBatchLimit()
 
-	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
-
-	// primaryKeyColumns defined here will serve both as the primaryKeyColumns
-	// field in the indexJoinNode, and to determine which columns are
-	// provided by this index for the purpose of splitting the WHERE
-	// filter into an index-specific part and a "rest" part.
-	primaryKeyColumns := make([]bool, len(origScan.cols))
-	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
-		// All the PK columns from the table scanNode must
-		// be fetched in the index scanNode.
-		idx, ok := indexScan.colIdxMap[colID]
-		if !ok {
-			panic(fmt.Sprintf("Unknown column %d in PrimaryIndex!", colID))
-		}
-		primaryKeyColumns[idx] = true
-		colIDtoRowIndex[colID] = idx
-	}
+	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(table, indexScan)
 
 	// To split the WHERE filter into an index-specific part and a
 	// "rest" part below the splitFilter() code must know which columns
@@ -152,7 +167,6 @@ func (p *planner) makeIndexJoin(
 			valProvidedIndex[idx] = true
 			colIDtoRowIndex[colID] = idx
 		}
-
 	}
 
 	if origScan.filter != nil {
@@ -187,6 +201,8 @@ func (p *planner) makeIndexJoin(
 	node := &indexJoinNode{
 		index:             indexScan,
 		table:             table,
+		cols:              table.cols,
+		resultColumns:     table.resultColumns,
 		primaryKeyColumns: primaryKeyColumns,
 		run: indexJoinRun{
 			primaryKeyPrefix: primaryKeyPrefix,
