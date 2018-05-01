@@ -135,7 +135,7 @@ func (b physicalPropsBuilder) buildChildProps(
 
 	if required == memo.MinPhysPropsID {
 		switch mexpr.Operator() {
-		case opt.LimitOp, opt.OffsetOp:
+		case opt.LimitOp, opt.OffsetOp, opt.ExplainOp:
 		default:
 			// Fast path taken in common case when no properties are required of
 			// parent and the operator itself does not require any properties.

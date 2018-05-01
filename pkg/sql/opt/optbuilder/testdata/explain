@@ -47,3 +47,35 @@ explain
       └── eq [type=bool]
            ├── variable: xy.x [type=int]
            └── variable: column1 [type=int]
+
+build
+SELECT "Tree" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ]
+----
+project
+ ├── columns: Tree:3(string)
+ ├── explain
+ │    ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ │    └── scan xy
+ │         └── columns: x:1(int!null) y:2(int)
+ └── projections
+      └── variable: Tree [type=string]
+
+build
+SELECT "Tree" FROM [ EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y ]
+----
+project
+ ├── columns: Tree:3(string)
+ ├── explain
+ │    ├── columns: Tree:3(string) Level:4(int) Type:5(string) Field:6(string) Description:7(string) Columns:8(string) Ordering:9(string)
+ │    └── sort
+ │         ├── columns: x:1(int!null) x:1(int!null) y:2(int)
+ │         ├── ordering: +2
+ │         └── project
+ │              ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │              ├── scan xy
+ │              │    └── columns: xy.x:1(int!null) xy.y:2(int)
+ │              └── projections
+ │                   ├── variable: xy.x [type=int]
+ │                   └── variable: xy.y [type=int]
+ └── projections
+      └── variable: Tree [type=string]
