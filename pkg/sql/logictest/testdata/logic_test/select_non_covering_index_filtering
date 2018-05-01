@@ -135,17 +135,17 @@ output row: [9 3 3 '33']
 # bring non-indexed columns (s) under the index scanNode. (#12582)
 # To test this we need an expression containing non-indexed
 # columns that disappears during range simplification.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-render           0  render      ·         ·                (a)                                      a!=NULL
- │               0  ·           render 0  test.public.t.a  ·                                        ·
- └── index-join  1  index-join  ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      ├── scan   2  scan        ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      │          2  ·           table     t@bc             ·                                        ·
-      │          2  ·           spans     /2-/3            ·                                        ·
-      └── scan   2  scan        ·         ·                (a, b[omitted], c[omitted], s[omitted])  ·
-·                2  ·           table     t@primary        ·                                        ·
+render           ·         ·                (a)                                      a!=NULL
+ │               render 0  test.public.t.a  ·                                        ·
+ └── index-join  ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+      ├── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+      │          table     t@bc             ·                                        ·
+      │          spans     /2-/3            ·                                        ·
+      └── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  ·
+·                table     t@primary        ·                                        ·
 
 query I rowsort
 SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))

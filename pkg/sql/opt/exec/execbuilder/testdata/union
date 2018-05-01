@@ -238,24 +238,24 @@ v:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
 ----
-union      0  union  ·      ·                  (v)  ·
- ├── scan  1  scan   ·      ·                  (k)  ·
- │         1  ·      table  uniontest@primary  ·    ·
- │         1  ·      spans  ALL                ·    ·
- └── scan  1  scan   ·      ·                  (v)  ·
-·          1  ·      table  uniontest@primary  ·    ·
-·          1  ·      spans  ALL                ·    ·
+union      ·      ·                  (v)  ·
+ ├── scan  ·      ·                  (k)  ·
+ │         table  uniontest@primary  ·    ·
+ │         spans  ALL                ·    ·
+ └── scan  ·      ·                  (v)  ·
+·          table  uniontest@primary  ·    ·
+·          spans  ALL                ·    ·
 
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
 ----
-append     0  append  ·      ·                  (v)  ·
- ├── scan  1  scan    ·      ·                  (k)  ·
- │         1  ·       table  uniontest@primary  ·    ·
- │         1  ·       spans  ALL                ·    ·
- └── scan  1  scan    ·      ·                  (v)  ·
-·          1  ·       table  uniontest@primary  ·    ·
-·          1  ·       spans  ALL                ·    ·
+append     ·      ·                  (v)  ·
+ ├── scan  ·      ·                  (k)  ·
+ │         table  uniontest@primary  ·    ·
+ │         spans  ALL                ·    ·
+ └── scan  ·      ·                  (v)  ·
+·          table  uniontest@primary  ·    ·
+·          spans  ALL                ·    ·
 
 exec
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);

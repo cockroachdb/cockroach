@@ -13,9 +13,9 @@ INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
-scan  0  scan  ·      ·          (x, y)  ·
-·     0  ·     table  a@primary  ·       ·
-·     0  ·     spans  /2-        ·       ·
+scan  ·      ·          (x, y)  ·
+·     table  a@primary  ·       ·
+·     spans  /2-        ·       ·
 
 exec
 SELECT * FROM a WHERE x > 1
@@ -27,11 +27,11 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 1
 ----
-filter     0  filter  ·       ·          (x, y)  ·
- │         0  ·       filter  y > 1      ·       ·
- └── scan  1  scan    ·       ·          (x, y)  ·
-·          1  ·       table   a@primary  ·       ·
-·          1  ·       spans   ALL        ·       ·
+filter     ·       ·          (x, y)  ·
+ │         filter  y > 1      ·       ·
+ └── scan  ·       ·          (x, y)  ·
+·          table   a@primary  ·       ·
+·          spans   ALL        ·       ·
 
 exec
 SELECT * FROM a WHERE y > 1
@@ -44,9 +44,9 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
-scan  0  scan  ·      ·          (x, y)  ·
-·     0  ·     table  a@primary  ·       ·
-·     0  ·     spans  /2-/2/#    ·       ·
+scan  ·      ·          (x, y)  ·
+·     table  a@primary  ·       ·
+·     spans  /2-/2/#    ·       ·
 
 exec
 SELECT * FROM a WHERE x > 1 AND x < 3
@@ -57,11 +57,11 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT x + 1 FROM a
 ----
-render     0  render  ·         ·          (column3)  ·
- │         0  ·       render 0  x + 1      ·          ·
- └── scan  1  scan    ·         ·          (x)        ·
-·          1  ·       table     a@primary  ·          ·
-·          1  ·       spans     ALL        ·          ·
+render     ·         ·          (column3)  ·
+ │         render 0  x + 1      ·          ·
+ └── scan  ·         ·          (x)        ·
+·          table     a@primary  ·          ·
+·          spans     ALL        ·          ·
 
 exec
 SELECT x + 1 FROM a
@@ -74,15 +74,15 @@ column3:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT x, x + 1, y, y + 1, x + y FROM a
 ----
-render     0  render  ·         ·          (x, column3, y, column4, column5)  ·
- │         0  ·       render 0  x          ·                                  ·
- │         0  ·       render 1  x + 1      ·                                  ·
- │         0  ·       render 2  y          ·                                  ·
- │         0  ·       render 3  y + 1      ·                                  ·
- │         0  ·       render 4  x + y      ·                                  ·
- └── scan  1  scan    ·         ·          (x, y)                             ·
-·          1  ·       table     a@primary  ·                                  ·
-·          1  ·       spans     ALL        ·                                  ·
+render     ·         ·          (x, column3, y, column4, column5)  ·
+ │         render 0  x          ·                                  ·
+ │         render 1  x + 1      ·                                  ·
+ │         render 2  y          ·                                  ·
+ │         render 3  y + 1      ·                                  ·
+ │         render 4  x + y      ·                                  ·
+ └── scan  ·         ·          (x, y)                             ·
+·          table     a@primary  ·                                  ·
+·          spans     ALL        ·                                  ·
 
 exec
 SELECT x, x + 1, y, y + 1, x + y FROM a
@@ -95,14 +95,14 @@ x:int  column3:int  y:int  column4:int  column5:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
-render          0  render  ·         ·                  (column5)           ·
- │              0  ·       render 0  column3 + column4  ·                   ·
- └── render     1  render  ·         ·                  (column3, column4)  ·
-      │         1  ·       render 0  x + 3              ·                   ·
-      │         1  ·       render 1  y + 10             ·                   ·
-      └── scan  2  scan    ·         ·                  (x, y)              ·
-·               2  ·       table     a@primary          ·                   ·
-·               2  ·       spans     ALL                ·                   ·
+render          ·         ·                  (column5)           ·
+ │              render 0  column3 + column4  ·                   ·
+ └── render     ·         ·                  (column3, column4)  ·
+      │         render 0  x + 3              ·                   ·
+      │         render 1  y + 10             ·                   ·
+      └── scan  ·         ·                  (x, y)              ·
+·               table     a@primary          ·                   ·
+·               spans     ALL                ·                   ·
 
 exec
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
@@ -115,14 +115,14 @@ column5:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT x, x, y, x FROM a
 ----
-render     0  render  ·         ·          (x, x, y, x)  ·
- │         0  ·       render 0  x          ·             ·
- │         0  ·       render 1  x          ·             ·
- │         0  ·       render 2  y          ·             ·
- │         0  ·       render 3  x          ·             ·
- └── scan  1  scan    ·         ·          (x, y)        ·
-·          1  ·       table     a@primary  ·             ·
-·          1  ·       spans     ALL        ·             ·
+render     ·         ·          (x, x, y, x)  ·
+ │         render 0  x          ·             ·
+ │         render 1  x          ·             ·
+ │         render 2  y          ·             ·
+ │         render 3  x          ·             ·
+ └── scan  ·         ·          (x, y)        ·
+·          table     a@primary  ·             ·
+·          spans     ALL        ·             ·
 
 exec
 SELECT x, x, y, x FROM a
@@ -135,14 +135,14 @@ x:int  x:int  y:int  x:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
-render          0  render  ·         ·             (column3, column4)  ·
- │              0  ·       render 0  x + 1         ·                   ·
- │              0  ·       render 1  x + y         ·                   ·
- └── filter     1  filter  ·         ·             (x, y)              ·
-      │         1  ·       filter    (x + y) > 20  ·                   ·
-      └── scan  2  scan    ·         ·             (x, y)              ·
-·               2  ·       table     a@primary     ·                   ·
-·               2  ·       spans     ALL           ·                   ·
+render          ·         ·             (column3, column4)  ·
+ │              render 0  x + 1         ·                   ·
+ │              render 1  x + y         ·                   ·
+ └── filter     ·         ·             (x, y)              ·
+      │         filter    (x + y) > 20  ·                   ·
+      └── scan  ·         ·             (x, y)              ·
+·               table     a@primary     ·                   ·
+·               spans     ALL           ·                   ·
 
 exec
 SELECT x + 1, x + y FROM a WHERE x + y > 20
@@ -160,9 +160,9 @@ INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM b
 ----
-scan  0  scan  ·      ·          (x, y)  ·
-·     0  ·     table  b@primary  ·       ·
-·     0  ·     spans  ALL        ·       ·
+scan  ·      ·          (x, y)  ·
+·     table  b@primary  ·       ·
+·     spans  ALL        ·       ·
 
 exec
 SELECT * FROM b
@@ -175,11 +175,11 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT x FROM b WHERE rowid > 0
 ----
-render     0  render  ·         ·          (x)                 ·
- │         0  ·       render 0  x          ·                   ·
- └── scan  1  scan    ·         ·          (x, rowid[hidden])  ·
-·          1  ·       table     b@primary  ·                   ·
-·          1  ·       spans     /1-        ·                   ·
+render     ·         ·          (x)                 ·
+ │         render 0  x          ·                   ·
+ └── scan  ·         ·          (x, rowid[hidden])  ·
+·          table     b@primary  ·                   ·
+·          spans     /1-        ·                   ·
 
 exec
 SELECT x FROM b WHERE rowid > 0
@@ -205,11 +205,11 @@ TABLE nocols
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT 1, * FROM t.nocols
 ----
-render     0  render  ·         ·               (column2)  ·
- │         0  ·       render 0  1               ·          ·
- └── scan  1  scan    ·         ·               ()         ·
-·          1  ·       table     nocols@primary  ·          ·
-·          1  ·       spans     ALL             ·          ·
+render     ·         ·               (column2)  ·
+ │         render 0  1               ·          ·
+ └── scan  ·         ·               ()         ·
+·          table     nocols@primary  ·          ·
+·          spans     ALL             ·          ·
 
 exec
 SELECT 1, * FROM t.nocols
