@@ -812,7 +812,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
 FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
 
-pkg/%.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go' -not -name 'bindata.go')
+pkg/%.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go' -not -name 'bindata.go' -not -path '*/testdata/*')
 	$(MAKE) testbuild PKG='./pkg/$(*D)'
 
 bench: ## Run benchmarks.

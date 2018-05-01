@@ -609,29 +609,29 @@ FROM system.information_schema.constraint_column_usage
 ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
 ----
 table_catalog  table_schema  table_name        column_name    constraint_catalog  constraint_schema  constraint_name
-system         public        descriptor        id             system              system             primary
-system         public        eventlog          timestamp      system              system             primary
-system         public        eventlog          uniqueID       system              system             primary
-system         public        jobs              id             system              system             primary
-system         public        lease             descID         system              system             primary
-system         public        lease             expiration     system              system             primary
-system         public        lease             nodeID         system              system             primary
-system         public        lease             version        system              system             primary
-system         public        locations         localityKey    system              system             primary
-system         public        locations         localityValue  system              system             primary
-system         public        namespace         name           system              system             primary
-system         public        namespace         parentID       system              system             primary
-system         public        rangelog          timestamp      system              system             primary
-system         public        rangelog          uniqueID       system              system             primary
-system         public        role_members      member         system              system             primary
-system         public        role_members      role           system              system             primary
-system         public        settings          name           system              system             primary
-system         public        table_statistics  statisticID    system              system             primary
-system         public        table_statistics  tableID        system              system             primary
-system         public        ui                key            system              system             primary
-system         public        users             username       system              system             primary
-system         public        web_sessions      id             system              system             primary
-system         public        zones             id             system              system             primary
+system         public        descriptor        id             system              public             primary
+system         public        eventlog          timestamp      system              public             primary
+system         public        eventlog          uniqueID       system              public             primary
+system         public        jobs              id             system              public             primary
+system         public        lease             descID         system              public             primary
+system         public        lease             expiration     system              public             primary
+system         public        lease             nodeID         system              public             primary
+system         public        lease             version        system              public             primary
+system         public        locations         localityKey    system              public             primary
+system         public        locations         localityValue  system              public             primary
+system         public        namespace         name           system              public             primary
+system         public        namespace         parentID       system              public             primary
+system         public        rangelog          timestamp      system              public             primary
+system         public        rangelog          uniqueID       system              public             primary
+system         public        role_members      member         system              public             primary
+system         public        role_members      role           system              public             primary
+system         public        settings          name           system              public             primary
+system         public        table_statistics  statisticID    system              public             primary
+system         public        table_statistics  tableID        system              public             primary
+system         public        ui                key            system              public             primary
+system         public        users             username       system              public             primary
+system         public        web_sessions      id             system              public             primary
+system         public        zones             id             system              public             primary
 
 statement ok
 CREATE DATABASE constraint_db
@@ -668,15 +668,15 @@ constraint_db       public             fk               constraint_db  public   
 query TTTTTTT colnames
 SELECT *
 FROM information_schema.constraint_column_usage
-WHERE constraint_schema = 'constraint_db'
+WHERE constraint_catalog = 'constraint_db'
 ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
 ----
 table_catalog  table_schema  table_name  column_name  constraint_catalog  constraint_schema  constraint_name
-constraint_db  public        t1          a            constraint_db       constraint_db      c2
-constraint_db  public        t1          a            constraint_db       constraint_db      check_a
-constraint_db  public        t1          a            constraint_db       constraint_db      fk
-constraint_db  public        t1          a            constraint_db       constraint_db      t1_a_key
-constraint_db  public        t1          p            constraint_db       constraint_db      primary
+constraint_db  public        t1          a            constraint_db       public             c2
+constraint_db  public        t1          a            constraint_db       public             check_a
+constraint_db  public        t1          a            constraint_db       public             fk
+constraint_db  public        t1          a            constraint_db       public             t1_a_key
+constraint_db  public        t1          p            constraint_db       public             primary
 
 statement ok
 DROP DATABASE constraint_db CASCADE
