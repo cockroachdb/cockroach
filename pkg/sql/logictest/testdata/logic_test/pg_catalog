@@ -142,7 +142,8 @@ Table         Name     Type  Column(s)  Details
 query TTTTT colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
-Database Schema Table  User  Privileges
+Database  Schema      Table         User    Privileges
+test      pg_catalog  pg_namespace  public  SELECT
 
 
 # Verify selecting from pg_catalog.

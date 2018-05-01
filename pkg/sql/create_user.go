@@ -19,6 +19,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -78,6 +79,11 @@ func (n *CreateUserNode) startExec(params runParams) error {
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
 		return errors.New("cluster in insecure mode; user cannot use password authentication")
+	}
+
+	// Reject the "public" role. It does not have an entry in the users table but is reserved.
+	if normalizedUsername == sqlbase.PublicRole {
+		return pgerror.NewErrorf(pgerror.CodeReservedNameError, "role name %q is reserved", sqlbase.PublicRole)
 	}
 
 	var opName string

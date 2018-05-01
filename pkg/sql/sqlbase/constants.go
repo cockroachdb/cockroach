@@ -21,3 +21,9 @@ var DefaultSearchPath = sessiondata.MakeSearchPath([]string{"public"})
 
 // AdminRole is the default (and non-droppable) role with superuser privileges.
 var AdminRole = "admin"
+
+// PublicRole is the special "public" pseudo-role.
+// All users are implicit members of "public". The role cannot be created,
+// dropped, assigned to another role, and is generally not listed.
+// It can be granted privileges, implicitly granting them to all users (current and future).
+var PublicRole = "public"

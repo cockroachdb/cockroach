@@ -52,7 +52,7 @@ SELECT has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_ty
        has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'UPDATE'),
        has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'REFERENCES')
 ----
-false  false  false  false
+true  false  false  true
 
 query BBBB
 SELECT has_any_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'SELECT'),
@@ -72,7 +72,7 @@ SELECT has_any_column_privilege('pg_type', 'SELECT'),
        has_any_column_privilege('pg_type', 'REFERENCES'),
        has_any_column_privilege('pg_type', 'SELECT, INSERT, UPDATE')
 ----
-false  false  false  false  false
+true  false  false  true  false
 
 query BBBBB
 SELECT has_any_column_privilege('t', 'SELECT'),
@@ -148,7 +148,7 @@ SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type')
        has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'UPDATE'),
        has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 1, 'REFERENCES')
 ----
-false  false  false  false
+true  false  false  true
 
 query BBBB
 SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 1, 'SELECT'),
@@ -171,7 +171,7 @@ SELECT has_column_privilege('pg_type', 1, 'SELECT'),
        has_column_privilege('pg_type', 1, 'REFERENCES'),
        has_column_privilege('pg_type', 1, 'SELECT, INSERT, UPDATE')
 ----
-false  false  false  false  false
+true  false  false  true  false
 
 query BBBBB
 SELECT has_column_privilege('t', 1, 'SELECT'),
@@ -229,7 +229,7 @@ SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type')
        has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'UPDATE'),
        has_column_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'typname', 'REFERENCES')
 ----
-false  false  false  false
+true  false  false  true
 
 query BBBB
 SELECT has_column_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'a', 'SELECT'),
@@ -252,7 +252,7 @@ SELECT has_column_privilege('pg_type', 'typname', 'SELECT'),
        has_column_privilege('pg_type', 'typname', 'REFERENCES'),
        has_column_privilege('pg_type', 'typname', 'SELECT, INSERT, UPDATE')
 ----
-false  false  false  false  false
+true  false  false  true  false
 
 query BBBBB
 SELECT has_column_privilege('t', 'a', 'SELECT'),
@@ -739,7 +739,7 @@ SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'REFERENCES'),
        has_table_privilege((SELECT oid FROM pg_class WHERE relname = 'pg_type'), 'TRIGGER')
 ----
-false  false  false  false  false  false  false
+true  false  false  false  false  true  false
 
 query BBBBBBB
 SELECT has_table_privilege((SELECT oid FROM pg_class WHERE relname = 't'), 'SELECT'),
@@ -766,7 +766,7 @@ SELECT has_table_privilege('pg_type', 'SELECT'),
        has_table_privilege('pg_type', 'SELECT, INSERT, UPDATE'),
        has_table_privilege('pg_type', 'SELECT, TRUNCATE')
 ----
-false  false  false  false  false  false  false  false  false
+true  false  false  false  false  true  false  false  false
 
 query BBBBBBBBB
 SELECT has_table_privilege('t', 'SELECT'),

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -201,18 +202,17 @@ func NewVirtualSchemaHolder(
 	return vs, nil
 }
 
-// Virtual databases and tables each have an empty set of privileges. In practice,
-// all users have SELECT privileges on the database/tables, but this is handled
-// separately from normal SELECT privileges, because the virtual schemas need more
-// fine-grained access control. For instance, information_schema will only expose
-// rows to a given user which that user has access to.
-var emptyPrivileges = &sqlbase.PrivilegeDescriptor{}
+// Virtual databases and tables each have SELECT privileges for "public", which includes
+// all users. However, virtual schemas have more fine-grained access control.
+// For instance, information_schema will only expose rows to a given user which that
+// user has access to.
+var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
 
 func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
 	return &sqlbase.DatabaseDescriptor{
 		Name:       name,
 		ID:         keys.VirtualDescriptorID,
-		Privileges: emptyPrivileges,
+		Privileges: publicSelectPrivileges,
 	}
 }
 
@@ -242,7 +242,7 @@ func initVirtualTableDesc(
 		0, /* parentID */
 		keys.VirtualDescriptorID,
 		hlc.Timestamp{}, /* creationTime */
-		emptyPrivileges,
+		publicSelectPrivileges,
 		nil, /* affected */
 		nil, /* semaCtx */
 		nil, /* evalCtx */

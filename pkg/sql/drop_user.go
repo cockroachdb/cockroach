@@ -167,13 +167,15 @@ func (n *DropUserNode) startExec(params runParams) error {
 	// All safe - do the work.
 	var numUsersDeleted, numRoleMembershipsDeleted int
 	for normalizedUsername := range userNames {
-		// We don't specifically check whether it's a user or role, we should never reach
-		// this point anyway, the "privileges exist" check will fail first.
-		if normalizedUsername == sqlbase.AdminRole {
-			return errors.Errorf("role %s cannot be dropped", sqlbase.AdminRole)
+		// Specifically reject special users and roles. Some (root, admin) would fail with
+		// "privileges still exist" first.
+		if normalizedUsername == sqlbase.AdminRole || normalizedUsername == sqlbase.PublicRole {
+			return pgerror.NewErrorf(
+				pgerror.CodeInvalidParameterValueError, "cannot drop special role %s", normalizedUsername)
 		}
 		if normalizedUsername == security.RootUser {
-			return errors.Errorf("user %s cannot be dropped", security.RootUser)
+			return pgerror.NewErrorf(
+				pgerror.CodeInvalidParameterValueError, "cannot drop special user %s", normalizedUsername)
 		}
 
 		internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
