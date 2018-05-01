@@ -15,8 +15,6 @@
 package optbuilder
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,9 +22,9 @@ import (
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
-	// TODO(radu): for now we only support VERBOSE
-	if len(explain.Options) != 1 || strings.ToLower(explain.Options[0]) != "verbose" {
-		panic(errorf("only VERBOSE option supported for now"))
+	opts, err := explain.ParseOptions()
+	if err != nil {
+		panic(builderError{err})
 	}
 
 	// We don't allow the statement under Explain to reference outer columns, so we
@@ -37,24 +35,36 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	outScope = inScope.push()
 
+	if opts.Mode != tree.ExplainPlan {
+		panic(errorf("only PLAN is supported for EXPLAIN"))
+	}
+
+	verboseColumns := opts.Flags.Contains(tree.ExplainFlagVerbose) ||
+		opts.Flags.Contains(tree.ExplainFlagTypes)
+
 	// Tree shows the node type with the tree structure.
 	b.synthesizeColumn(outScope, "Tree", types.String, nil /* expr */, 0 /* group */)
-	// Level is the depth of the node in the tree (hidden).
-	c := b.synthesizeColumn(outScope, "Level", types.Int, nil /* expr */, 0 /* group */)
-	c.hidden = true
-	// Type is the node type (hidden).
-	c = b.synthesizeColumn(outScope, "Type", types.String, nil /* expr */, 0 /* group */)
-	c.hidden = true
+	if verboseColumns {
+		// Level is the depth of the node in the tree (hidden).
+		c := b.synthesizeColumn(outScope, "Level", types.Int, nil /* expr */, 0 /* group */)
+		c.hidden = true
+		// Type is the node type (hidden).
+		c = b.synthesizeColumn(outScope, "Type", types.String, nil /* expr */, 0 /* group */)
+		c.hidden = true
+	}
 	// Field is the part of the node that a row of output pertains to.
 	b.synthesizeColumn(outScope, "Field", types.String, nil /* expr */, 0 /* group */)
 	// Description contains details about the field.
 	b.synthesizeColumn(outScope, "Description", types.String, nil /* expr */, 0 /* group */)
-	// Columns is the type signature of the data source.
-	b.synthesizeColumn(outScope, "Columns", types.String, nil /* expr */, 0 /* group */)
-	// Ordering indicates the known ordering of the data from this source.
-	b.synthesizeColumn(outScope, "Ordering", types.String, nil /* expr */, 0 /* group */)
+	if verboseColumns {
+		// Columns is the type signature of the data source.
+		b.synthesizeColumn(outScope, "Columns", types.String, nil /* expr */, 0 /* group */)
+		// Ordering indicates the known ordering of the data from this source.
+		b.synthesizeColumn(outScope, "Ordering", types.String, nil /* expr */, 0 /* group */)
+	}
 
 	def := memo.ExplainOpDef{
+		Options: opts,
 		ColList: make(opt.ColList, len(outScope.cols)),
 		Props:   stmtScope.physicalProps,
 	}

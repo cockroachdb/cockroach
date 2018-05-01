@@ -78,7 +78,7 @@ var explainPlanVerboseColumns = sqlbase.ResultColumns{
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	ctx context.Context, flags explainFlags, expanded, optimized bool, origStmt tree.Statement,
+	ctx context.Context, opts *tree.ExplainOptions, origStmt tree.Statement,
 ) (planNode, error) {
 	// Build the plan for the query being explained.  We want to capture
 	// all the analyzed sub-queries in the explain node, so we are going
@@ -91,7 +91,7 @@ func (p *planner) makeExplainPlanNode(
 		return nil, err
 	}
 	return p.makeExplainPlanNodeWithPlan(
-		ctx, flags, expanded, optimized, true /* optimizeSubqueries */, plan, p.curPlan.subqueryPlans,
+		ctx, opts, true /* optimizeSubqueries */, plan, p.curPlan.subqueryPlans,
 	)
 }
 
@@ -99,13 +99,24 @@ func (p *planner) makeExplainPlanNode(
 // underlying plan.
 func (p *planner) makeExplainPlanNodeWithPlan(
 	ctx context.Context,
-	flags explainFlags,
-	expanded, optimized, optimizeSubqueries bool,
+	opts *tree.ExplainOptions,
+	optimizeSubqueries bool,
 	plan planNode,
 	subqueryPlans []subquery,
 ) (planNode, error) {
-	columns := explainPlanColumns
+	flags := explainFlags{
+		symbolicVars: opts.Flags.Contains(tree.ExplainFlagSymVars),
+	}
+	if opts.Flags.Contains(tree.ExplainFlagVerbose) {
+		flags.showMetadata = true
+		flags.qualifyNames = true
+	}
+	if opts.Flags.Contains(tree.ExplainFlagTypes) {
+		flags.showMetadata = true
+		flags.showTypes = true
+	}
 
+	columns := explainPlanColumns
 	if flags.showMetadata {
 		columns = explainPlanVerboseColumns
 	}
@@ -134,8 +145,8 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 
 	node := &explainPlanNode{
 		explainer:          e,
-		expanded:           expanded,
-		optimized:          optimized,
+		expanded:           !opts.Flags.Contains(tree.ExplainFlagNoExpand),
+		optimized:          !opts.Flags.Contains(tree.ExplainFlagNoOptimize),
 		optimizeSubqueries: optimizeSubqueries,
 		plan:               plan,
 		subqueryPlans:      subqueryPlans,

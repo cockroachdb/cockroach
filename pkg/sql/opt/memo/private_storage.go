@@ -209,6 +209,9 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 // returns the same private id that was returned from the previous call.
 func (ps *privateStorage) internExplainOpDef(def *ExplainOpDef) PrivateID {
 	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.Options.Mode))
+	// This isn't a column set, but writing it out works just the same.
+	ps.keyBuf.writeColSet(def.Options.Flags)
 	ps.keyBuf.writeColList(def.ColList)
 	ps.keyBuf.WriteString(def.Props.Fingerprint())
 	typ := (*ExplainOpDef)(nil)

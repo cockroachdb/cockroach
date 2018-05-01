@@ -410,18 +410,22 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 }
 
 // ConstructExplain is part of the exec.Factory interface.
-func (ee *execEngine) ConstructExplain(plan exec.Plan) (exec.Node, error) {
+func (ee *execEngine) ConstructExplain(
+	options *tree.ExplainOptions, plan exec.Plan,
+) (exec.Node, error) {
 	p := plan.(*planTop)
-	// For now, we assume VERBOSE.
-	flags := explainFlags{
-		showMetadata: true,
-		qualifyNames: true,
+
+	if options.Mode != tree.ExplainPlan {
+		return nil, errors.Errorf("only PLAN explain mode supported")
 	}
+	// NOEXPAND and NOOPTIMIZE must always be set when using the optimizer to
+	// prevent the plans from being modified.
+	opts := *options
+	opts.Flags.Add(tree.ExplainFlagNoExpand)
+	opts.Flags.Add(tree.ExplainFlagNoOptimize)
 	return ee.planner.makeExplainPlanNodeWithPlan(
 		context.TODO(),
-		flags,
-		false, /* expanded */
-		false, /* optimized */
+		&opts,
 		false, /* optimizeSubqueries */
 		p.plan,
 		p.subqueryPlans,

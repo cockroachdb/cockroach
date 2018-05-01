@@ -564,14 +564,14 @@ func (b *Builder) buildExplain(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	node, err := b.factory.ConstructExplain(plan)
+	def := ev.Private().(*memo.ExplainOpDef)
+	node, err := b.factory.ConstructExplain(&def.Options, plan)
 	if err != nil {
 		return execPlan{}, err
 	}
 	ep := execPlan{root: node}
-	colList := ev.Private().(*memo.ExplainOpDef).ColList
-	for i := range colList {
-		ep.outputCols.Set(int(colList[i]), i)
+	for i := range def.ColList {
+		ep.outputCols.Set(int(def.ColList[i]), i)
 	}
 	// The subqueries are now owned by the explain node; remove them so they don't
 	// also show up in the final plan.
