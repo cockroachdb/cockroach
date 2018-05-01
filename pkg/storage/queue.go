@@ -253,10 +253,10 @@ type baseQueue struct {
 	processSem chan struct{}
 	processDur int64 // accessed atomically
 	mu         struct {
-		syncutil.Mutex                                  // Protects all variables in the mu struct
-		replicas       map[roachpb.RangeID]*replicaItem // Map from RangeID to replicaItem
-		priorityQ      priorityQueue                    // The priority queue
-		purgatory      map[roachpb.RangeID]error        // Map of replicas to processing errors
+		syncutil.Mutex                                    // Protects all variables in the mu struct
+		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
+		priorityQ      priorityQueue                      // The priority queue
+		purgatory      map[roachpb.RangeID]purgatoryError // Map of replicas to processing errors
 		stopped        bool
 		// Some tests in this package disable queues.
 		disabled bool
@@ -736,12 +736,6 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 func (bq *baseQueue) finishProcessingReplica(
 	ctx context.Context, stopper *stop.Stopper, repl *Replica, err error,
 ) {
-	if err != nil {
-		// Increment failures metric here to capture all error returns from
-		// process().
-		bq.failures.Inc(1)
-	}
-
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
@@ -755,32 +749,44 @@ func (bq *baseQueue) finishProcessingReplica(
 		cb(err)
 	}
 
+	// Handle failures.
+	if err != nil {
+		// Increment failures metric to capture all error.
+		bq.failures.Inc(1)
+
+		// Determine whether a failure is a purgatory error. If it is, add
+		// the failing replica to purgatory. Note that even if the item was
+		// scheduled to be requeued, we ignore this if we add the replica to
+		// purgatory.
+		if purgErr, ok := errors.Cause(err).(purgatoryError); ok {
+			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
+			return
+		}
+
+		// If not a purgatory error, log.
+		log.Error(ctx, err)
+	}
+
+	// Maybe add replica back into queue, if requested.
 	if item.requeue {
-		// Maybe add replica back into queue.
 		bq.maybeAddLocked(ctx, repl, bq.store.Clock().Now())
-	} else if err != nil {
-		// Maybe add failing replica to purgatory if the queue supports it.
-		bq.maybeAddToPurgatoryLocked(ctx, stopper, repl, err)
 	}
 }
 
-// maybeAddToPurgatoryLocked possibly adds the specified replica
-// to the purgatory queue, which holds replicas which have failed
-// processing. To be added, the failing error must implement
-// purgatoryError and the queue implementation must have its own
-// mechanism for signaling re-processing of replicas held in
-// purgatory.
-func (bq *baseQueue) maybeAddToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl *Replica, triggeringErr error,
+// addToPurgatoryLocked adds the specified replica to the purgatory queue, which
+// holds replicas which have failed processing.
+func (bq *baseQueue) addToPurgatoryLocked(
+	ctx context.Context, stopper *stop.Stopper, repl *Replica, purgErr purgatoryError,
 ) {
-	// Check whether the failure is a purgatory error and whether the queue supports it.
-	if _, ok := errors.Cause(triggeringErr).(purgatoryError); !ok || bq.impl.purgatoryChan() == nil {
-		log.Error(ctx, triggeringErr)
+	// Check whether the queue supports purgatory errors. If not then something
+	// went wrong because a purgatory error should not have ended up here.
+	if bq.impl.purgatoryChan() == nil {
+		log.Errorf(ctx, "queue does not support purgatory errors, but saw %v", purgErr)
 		return
 	}
 
 	if log.V(1) {
-		log.Info(ctx, errors.Wrap(triggeringErr, "purgatory"))
+		log.Info(ctx, errors.Wrap(purgErr, "purgatory"))
 	}
 
 	item := &replicaItem{value: repl.RangeID}
@@ -792,13 +798,13 @@ func (bq *baseQueue) maybeAddToPurgatoryLocked(
 
 	// If purgatory already exists, just add to the map and we're done.
 	if bq.mu.purgatory != nil {
-		bq.mu.purgatory[repl.RangeID] = triggeringErr
+		bq.mu.purgatory[repl.RangeID] = purgErr
 		return
 	}
 
 	// Otherwise, create purgatory and start processing.
-	bq.mu.purgatory = map[roachpb.RangeID]error{
-		repl.RangeID: triggeringErr,
+	bq.mu.purgatory = map[roachpb.RangeID]purgatoryError{
+		repl.RangeID: purgErr,
 	}
 
 	workerCtx := bq.AnnotateCtx(context.Background())
