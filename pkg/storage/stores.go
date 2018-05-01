@@ -163,25 +163,18 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 }
 
 // Send implements the client.Sender interface. The store is looked up from the
-// store map if specified by the request; otherwise, the command is being
-// executed locally, and the replica is determined via lookup through each
-// store's LookupRange method. The latter path is taken only by unit tests.
+// store map using the ID specified in the request.
 func (ls *Stores) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// If we aren't given a Replica, then a little bending over
-	// backwards here. This case applies exclusively to unittests.
-	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
-		rs, err := keys.Range(ba)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		rangeID, repDesc, err := ls.LookupReplica(rs.Key, rs.EndKey)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		ba.RangeID = rangeID
-		ba.Replica = repDesc
+	// To simplify tests, this function used to perform its own range routing if
+	// the request was missing its range or store IDs. It was too easy to rely on
+	// this in production code paths, though, so it's now a fatal error if either
+	// the range or store ID is missing.
+	if ba.RangeID == 0 {
+		log.Fatal(ctx, "batch request missing range ID")
+	} else if ba.Replica.StoreID == 0 {
+		log.Fatal(ctx, "batch request missing store ID")
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
@@ -194,86 +187,6 @@ func (ls *Stores) Send(
 		panic(roachpb.ErrorUnexpectedlySet(store, br))
 	}
 	return br, pErr
-}
-
-// LookupReplica looks up replica by key [range]. Lookups are done
-// by consulting each store in turn via Store.LookupReplica(key).
-// Returns RangeID and replica on success; RangeKeyMismatch error
-// if not found.
-// If end is nil, a replica containing start is looked up.
-// This is only for testing usage; performance doesn't matter.
-func (ls *Stores) LookupReplica(
-	start, end roachpb.RKey,
-) (roachpb.RangeID, roachpb.ReplicaDescriptor, error) {
-	var rangeID roachpb.RangeID
-	var repDesc roachpb.ReplicaDescriptor
-	var repDescFound bool
-	var err error
-	ls.storeMap.Range(func(k int64, v unsafe.Pointer) bool {
-		store := (*Store)(v)
-		replica := store.LookupReplica(start, nil)
-		if replica == nil {
-			return true
-		}
-
-		// Verify that the descriptor contains the entire range.
-		if desc := replica.Desc(); !desc.ContainsKeyRange(start, end) {
-			ctx := ls.AnnotateCtx(context.TODO())
-			log.Warningf(ctx, "range not contained in one range: [%s,%s), but have [%s,%s)",
-				start, end, desc.StartKey, desc.EndKey)
-			err = roachpb.NewRangeKeyMismatchError(start.AsRawKey(), end.AsRawKey(), desc)
-			return false
-		}
-
-		rangeID = replica.RangeID
-
-		repDesc, err = replica.GetReplicaDescriptor()
-		if err != nil {
-			if _, ok := err.(*roachpb.RangeNotFoundError); ok {
-				// We are not holding a lock across this block; the replica could have
-				// been removed from the range (via down-replication) between the
-				// LookupReplica and the GetReplicaDescriptor calls. In this case just
-				// ignore this replica.
-				err = nil
-			}
-			return err == nil
-		}
-
-		if repDescFound {
-			// We already found the range; this should never happen outside of tests.
-			err = errors.Errorf("range %+v exists on additional store: %+v", replica, store)
-			return false
-		}
-
-		repDescFound = true
-		return true // loop to see if another store also contains the replica
-	})
-	if err != nil {
-		return 0, roachpb.ReplicaDescriptor{}, err
-	}
-	if !repDescFound {
-		return 0, roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(0)
-	}
-	return rangeID, repDesc, nil
-}
-
-// FirstRange implements the RangeDescriptorDB interface. It returns the
-// range descriptor which contains KeyMin.
-func (ls *Stores) FirstRange() (*roachpb.RangeDescriptor, error) {
-	_, repDesc, err := ls.LookupReplica(roachpb.RKeyMin, nil)
-	if err != nil {
-		return nil, err
-	}
-	store, err := ls.GetStore(repDesc.StoreID)
-	if err != nil {
-		return nil, err
-	}
-
-	rpl := store.LookupReplica(roachpb.RKeyMin, nil)
-	if rpl == nil {
-		panic("firstRange found no first range")
-	}
-	return rpl.Desc(), nil
 }
 
 // ReadBootstrapInfo implements the gossip.Storage interface. Read
