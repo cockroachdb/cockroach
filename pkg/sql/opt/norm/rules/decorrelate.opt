@@ -6,7 +6,7 @@
 #   SELECT * FROM a WHERE (SELECT b.y FROM b WHERE a.x=b.x) < 5
 #
 # A correlated join has outer columns in its right input that refer to columns
-# in its left input. For example (not actually possible in SQL):
+# in its left input. For example:
 #
 #   SELECT * FROM a INNER JOIN LATERAL (SELECT * FROM b WHERE a.x=b.x)
 #
@@ -84,7 +84,9 @@
 [HoistSelectExists, Normalize]
 (Select
     $input:*
-    $filter:(Filters
+    $filter:* &
+    (HasCorrelatedSubquery $filter) &
+    (Filters
         $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
     )
 )
@@ -104,7 +106,9 @@
 [HoistSelectNotExists, Normalize]
 (Select
     $input:*
-    $filter:(Filters
+    $filter:* &
+    (HasCorrelatedSubquery $filter) &
+    (Filters
         $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
     )
 )
@@ -131,7 +135,7 @@
 [HoistSelectSubquery, Normalize]
 (Select
     $input:*
-    $filter:* & (HasCorrelatedSubquery $filter)
+    $filter:* & (HasCorrelatedSubquery $filter) & (Filters)
 )
 =>
 (HoistSelectSubquery $input $filter)
@@ -154,7 +158,7 @@
 (Join
     $left:*
     $right:*
-    $on:* & (HasCorrelatedSubquery $on)
+    $on:* & (HasCorrelatedSubquery $on) & (Filters)
 )
 =>
 (HoistJoinSubquery (OpName) $left $right $on)

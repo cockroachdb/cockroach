@@ -280,7 +280,6 @@ project
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
 
-
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
 # --------------------------------------------------

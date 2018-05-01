@@ -461,15 +461,14 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
-	// TODO(andyk): Set HasCorrelatedSubquery flag for Exists and Any operators.
 	switch ev.Operator() {
 	case opt.VariableOp:
 		// Variable introduces outer column.
 		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return props
 
-	case opt.SubqueryOp:
-		// Subquery inherits outer columns from its query.
+	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+		// Inherit outer columns from input query.
 		props.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
 		if !props.Scalar.OuterCols.Empty() {
 			props.Scalar.HasCorrelatedSubquery = true
@@ -480,11 +479,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	// By default, union outer cols from all children, both relational and scalar.
 	for i := 0; i < ev.ChildCount(); i++ {
 		logical := &ev.childGroup(i).logical
-		if logical.Scalar != nil {
-			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
-		} else {
-			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
-		}
+		props.Scalar.OuterCols.UnionWith(logical.OuterCols())
 
 		// Propagate HasCorrelatedSubquery up the scalar expression tree.
 		if logical.Scalar != nil && logical.Scalar.HasCorrelatedSubquery {
