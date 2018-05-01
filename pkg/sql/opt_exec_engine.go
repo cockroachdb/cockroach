@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var _ exec.TestEngineFactory = &Executor{}
@@ -406,15 +407,18 @@ func (ee *execEngine) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 func (ee *execEngine) ConstructExplain(plan exec.Plan) (exec.Node, error) {
 	p := plan.(*planTop)
 	// For now, we assume VERBOSE.
-	flags := explainFlags{
-		showMetadata: true,
-		qualifyNames: true,
+	// Also, NOEXPAND and NOOPTIMIZE should always be set when using the
+	// optimizer, to prevent the plans from being modified.
+	opts := tree.ExplainOptions{
+		Flags: util.MakeFastIntSet(
+			tree.ExplainFlagVerbose,
+			tree.ExplainFlagNoExpand,
+			tree.ExplainFlagNoOptimize,
+		),
 	}
 	return ee.planner.makeExplainPlanNodeWithPlan(
 		context.TODO(),
-		flags,
-		false, /* expanded */
-		false, /* optimized */
+		&opts,
 		false, /* optimizeSubqueries */
 		p.plan,
 		p.subqueryPlans,
