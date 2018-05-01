@@ -134,10 +134,25 @@ func isStdlibPackage(path string) bool {
 	return !strings.Contains(path, ".")
 }
 
+// See: https://www.cmcrossroads.com/article/gnu-make-escaping-walk-wild-side
+var filenameEscaper = strings.NewReplacer(
+	`[`, `\[`,
+	`]`, `\]`,
+	`*`, `\*`,
+	`?`, `\?`,
+	`~`, `\~`,
+	`$`, `$$`,
+	`#`, `\#`,
+)
+
 func run(w io.Writer, path string) error {
 	files, err := collectFiles(path)
 	if err != nil {
 		return err
+	}
+
+	for i := range files {
+		files[i] = filenameEscaper.Replace(files[i])
 	}
 
 	absPath, err := filepath.Abs(path)
