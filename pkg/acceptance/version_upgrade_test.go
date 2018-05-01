@@ -67,14 +67,18 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 		newBin = GetBinary(ctx, t, string(bv))
 	}
 	lc := c.(*localcluster.LocalCluster)
-	for i := 0; i < c.NumNodes(); i++ {
-		log.Infof(ctx, "upgrading node %d's binary to %s", i, string(bv))
-		lc.ReplaceBinary(i, newBin)
-		if err := lc.Restart(ctx, i); err != nil {
+	// Restart nodes in a random order; otherwise it'd be node 0 running the
+	// migrations and it probably also has all the leases.
+	firstToRestart := rand.Intn(c.NumNodes())
+	for j := 0; j < c.NumNodes(); j++ {
+		nodeIdx := (j + firstToRestart) % c.NumNodes()
+		log.Infof(ctx, "upgrading node %d's binary to %s", nodeIdx, string(bv))
+		lc.ReplaceBinary(nodeIdx, newBin)
+		if err := lc.Restart(ctx, nodeIdx); err != nil {
 			t.Fatal(err)
 		}
 
-		bv.checkNode(ctx, t, c, i)
+		bv.checkNode(ctx, t, c, nodeIdx)
 
 		// TODO(nvanbenschoten): add upgrade qualification step. What should we
 		// test? We could run logictests. We could add custom logic here. Maybe
@@ -268,6 +272,22 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 
 	c := StartCluster(ctx, t, cfg)
 	defer c.AssertAndStop(ctx, t)
+
+	// Create a bunch of tables, over the batch size on which some migrations
+	// operate. It generally seems like a good idea to have a bunch of tables in
+	// the cluster, and we had a bug about migrations on large numbers of tables:
+	// #22370.
+	db := makePGClient(t, c.PGUrl(ctx, 0 /* nodeId */))
+	if _, err := db.Exec(fmt.Sprintf("create database lotsatables")); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		_, err := db.Exec(fmt.Sprintf("create table lotsatables.t%d (x int primary key)", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer db.Close()
 
 	startingBinVersion.checkAll(ctx, t, c)
 	for _, step := range steps {
