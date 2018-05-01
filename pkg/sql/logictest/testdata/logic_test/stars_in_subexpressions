@@ -25,21 +25,21 @@ SELECT COUNT(DISTINCT x.*) FROM a x, a y
 ----
 2
 
-query TITTTTT
+query TTTTT
 EXPLAIN(VERBOSE) SELECT COUNT(DISTINCT x.*) FROM a x, a y
 ----
-group                0  group   ·            ·                           (count)                                                                       ·
- │                   0  ·       aggregate 0  count(DISTINCT (x.x, x.y))  ·                                                                             ·
- └── render          1  render  ·            ·                           ("(x, y)")                                                                    ·
-      │              1  ·       render 0     (x.x, x.y)                  ·                                                                             ·
-      └── join       2  join    ·            ·                           (x, y, rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
-           │         2  ·       type         cross                       ·                                                                             ·
-           ├── scan  3  scan    ·            ·                           (x, y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
-           │         3  ·       table        a@primary                   ·                                                                             ·
-           │         3  ·       spans        ALL                         ·                                                                             ·
-           └── scan  3  scan    ·            ·                           (x[omitted], y[omitted], rowid[hidden,omitted])                               rowid!=NULL; key(rowid)
-·                    3  ·       table        a@primary                   ·                                                                             ·
-·                    3  ·       spans        ALL                         ·                                                                             ·
+group                ·            ·                           (count)                                                                       ·
+ │                   aggregate 0  count(DISTINCT (x.x, x.y))  ·                                                                             ·
+ └── render          ·            ·                           ("(x, y)")                                                                    ·
+      │              render 0     (x.x, x.y)                  ·                                                                             ·
+      └── join       ·            ·                           (x, y, rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
+           │         type         cross                       ·                                                                             ·
+           ├── scan  ·            ·                           (x, y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+           │         table        a@primary                   ·                                                                             ·
+           │         spans        ALL                         ·                                                                             ·
+           └── scan  ·            ·                           (x[omitted], y[omitted], rowid[hidden,omitted])                               rowid!=NULL; key(rowid)
+·                    table        a@primary                   ·                                                                             ·
+·                    spans        ALL                         ·                                                                             ·
 
 query TTT
 EXPLAIN(EXPRS) SELECT * FROM a ORDER BY a.*

@@ -82,18 +82,18 @@ NULL             /NULL/NULL/NULL  5         {5}       5
 /"2"/"3"/"4"     /"3"/"4"/"5"     24        {4}       4
 /"3"/"4"/"5"     NULL             25        {5}       5
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 ----
-distinct        0  distinct  ·            ·                  (x, y, z)               weak-key(x,y,z)
- │              0  ·         distinct on  x, y, z            ·                       ·
- └── render     1  render    ·            ·                  (x, y, z)               ·
-      │         1  ·         render 0     test.public.xyz.x  ·                       ·
-      │         1  ·         render 1     test.public.xyz.y  ·                       ·
-      │         1  ·         render 2     test.public.xyz.z  ·                       ·
-      └── scan  2  scan      ·            ·                  (id[omitted], x, y, z)  id!=NULL; key(id)
-·               2  ·         table        xyz@primary        ·                       ·
-·               2  ·         spans        ALL                ·                       ·
+distinct        ·            ·                  (x, y, z)               weak-key(x,y,z)
+ │              distinct on  x, y, z            ·                       ·
+ └── render     ·            ·                  (x, y, z)               ·
+      │         render 0     test.public.xyz.x  ·                       ·
+      │         render 1     test.public.xyz.y  ·                       ·
+      │         render 2     test.public.xyz.z  ·                       ·
+      └── scan  ·            ·                  (id[omitted], x, y, z)  id!=NULL; key(id)
+·               table        xyz@primary        ·                       ·
+·               spans        ALL                ·                       ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
@@ -111,21 +111,21 @@ SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
 4 1 6
 
 # Ensure that ordering propagates past local DISTINCT processors.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 ----
-distinct             0  distinct  ·            ·                  (x, y, z)               weak-key(x,y,z); +x
- │                   0  ·         distinct on  x, y, z            ·                       ·
- │                   0  ·         order key    x                  ·                       ·
- └── sort            1  sort      ·            ·                  (x, y, z)               +x
-      │              1  ·         order        +x                 ·                       ·
-      └── render     2  render    ·            ·                  (x, y, z)               ·
-           │         2  ·         render 0     test.public.xyz.x  ·                       ·
-           │         2  ·         render 1     test.public.xyz.y  ·                       ·
-           │         2  ·         render 2     test.public.xyz.z  ·                       ·
-           └── scan  3  scan      ·            ·                  (id[omitted], x, y, z)  id!=NULL; key(id)
-·                    3  ·         table        xyz@primary        ·                       ·
-·                    3  ·         spans        ALL                ·                       ·
+distinct             ·            ·                  (x, y, z)               weak-key(x,y,z); +x
+ │                   distinct on  x, y, z            ·                       ·
+ │                   order key    x                  ·                       ·
+ └── sort            ·            ·                  (x, y, z)               +x
+      │              order        +x                 ·                       ·
+      └── render     ·            ·                  (x, y, z)               ·
+           │         render 0     test.public.xyz.x  ·                       ·
+           │         render 1     test.public.xyz.y  ·                       ·
+           │         render 2     test.public.xyz.z  ·                       ·
+           └── scan  ·            ·                  (id[omitted], x, y, z)  id!=NULL; key(id)
+·                    table        xyz@primary        ·                       ·
+·                    spans        ALL                ·                       ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
@@ -144,20 +144,20 @@ SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
 
 # Ensure that even with more ordering columns, ordering propagates past local
 # DISTINCT processors.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-distinct             0  distinct  ·            ·                  (x, y)                           weak-key(y); +y,+x
- │                   0  ·         distinct on  y                  ·                                ·
- │                   0  ·         order key    y                  ·                                ·
- └── sort            1  sort      ·            ·                  (x, y)                           +y,+x
-      │              1  ·         order        +y,+x              ·                                ·
-      └── render     2  render    ·            ·                  (x, y)                           ·
-           │         2  ·         render 0     test.public.xyz.x  ·                                ·
-           │         2  ·         render 1     test.public.xyz.y  ·                                ·
-           └── scan  3  scan      ·            ·                  (id[omitted], x, y, z[omitted])  id!=NULL; key(id)
-·                    3  ·         table        xyz@primary        ·                                ·
-·                    3  ·         spans        ALL                ·                                ·
+distinct             ·            ·                  (x, y)                           weak-key(y); +y,+x
+ │                   distinct on  y                  ·                                ·
+ │                   order key    y                  ·                                ·
+ └── sort            ·            ·                  (x, y)                           +y,+x
+      │              order        +y,+x              ·                                ·
+      └── render     ·            ·                  (x, y)                           ·
+           │         render 0     test.public.xyz.x  ·                                ·
+           │         render 1     test.public.xyz.y  ·                                ·
+           └── scan  ·            ·                  (id[omitted], x, y, z[omitted])  id!=NULL; key(id)
+·                    table        xyz@primary        ·                                ·
+·                    spans        ALL                ·                                ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
@@ -172,12 +172,12 @@ SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 4 5
 
 # Distinct processors elided becaue of strong key.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 ----
-scan  0  scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-·     0  ·     table  abc@primary  ·          ·
-·     0  ·     spans  ALL          ·          ·
+scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+·     table  abc@primary  ·          ·
+·     spans  ALL          ·          ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
@@ -193,17 +193,17 @@ SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
 2  3  4
 3  4  5
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distinct        0  distinct  ·            ·            (a, b)     a!=NULL; b!=NULL; key(a,b); +a,+b
- │              0  ·         distinct on  a, b         ·          ·
- │              0  ·         order key    a, b         ·          ·
- └── nosort     1  nosort    ·            ·            (a, b)     a!=NULL; b!=NULL; +a,+b
-      │         1  ·         order        +a,+b,+c     ·          ·
-      └── scan  2  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b,+c
-·               2  ·         table        abc@primary  ·          ·
-·               2  ·         spans        ALL          ·          ·
+distinct        ·            ·            (a, b)     a!=NULL; b!=NULL; key(a,b); +a,+b
+ │              distinct on  a, b         ·          ·
+ │              order key    a, b         ·          ·
+ └── nosort     ·            ·            (a, b)     a!=NULL; b!=NULL; +a,+b
+      │         order        +a,+b,+c     ·          ·
+      └── scan  ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b,+c
+·               table        abc@primary  ·          ·
+·               spans        ALL          ·          ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
