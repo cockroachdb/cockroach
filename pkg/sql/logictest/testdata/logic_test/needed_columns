@@ -1,191 +1,191 @@
 # LogicTest: default distsql
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA,NOOPTIMIZE) SELECT 1 FROM (SELECT 2 AS s)
 ----
-render              0  render    ·  ·  ("1")  "1"=CONST
- └── render         1  render    ·  ·  (s)    s=CONST
-      └── emptyrow  2  emptyrow  ·  ·  ()     ·
+render              ·  ·  ("1")  "1"=CONST
+ └── render         ·  ·  (s)    s=CONST
+      └── emptyrow  ·  ·  ()     ·
 
 # Propagation to data sources.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s)
 ----
-render              0  render    ·  ·  ("1")         "1"=CONST
- └── render         1  render    ·  ·  (s[omitted])  ·
-      └── emptyrow  2  emptyrow  ·  ·  ()            ·
+render              ·  ·  ("1")         "1"=CONST
+ └── render         ·  ·  (s[omitted])  ·
+      └── emptyrow  ·  ·  ()            ·
 
 # Propagation through CREATE TABLE.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) CREATE TABLE t AS SELECT 1 FROM (SELECT 2 AS s)
 ----
-create table             0  create table  ·  ·  ()            ·
- └── render              1  render        ·  ·  ("1")         "1"=CONST
-      └── render         2  render        ·  ·  (s[omitted])  ·
-           └── emptyrow  3  emptyrow      ·  ·  ()            ·
+create table             ·  ·  ()            ·
+ └── render              ·  ·  ("1")         "1"=CONST
+      └── render         ·  ·  (s[omitted])  ·
+           └── emptyrow  ·  ·  ()            ·
 
 # Propagation through LIMIT.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s) LIMIT 1
 ----
-limit                    0  limit     ·  ·  ("1")         "1"=CONST
- └── render              1  render    ·  ·  ("1")         "1"=CONST
-      └── render         2  render    ·  ·  (s[omitted])  ·
-           └── emptyrow  3  emptyrow  ·  ·  ()            ·
+limit                    ·  ·  ("1")         "1"=CONST
+ └── render              ·  ·  ("1")         "1"=CONST
+      └── render         ·  ·  (s[omitted])  ·
+           └── emptyrow  ·  ·  ()            ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 2 AS s LIMIT 1)
 ----
-render                   0  render    ·  ·  ("1")         "1"=CONST
- └── limit               1  limit     ·  ·  (s[omitted])  ·
-      └── render         2  render    ·  ·  (s[omitted])  ·
-           └── emptyrow  3  emptyrow  ·  ·  ()            ·
+render                   ·  ·  ("1")         "1"=CONST
+ └── limit               ·  ·  (s[omitted])  ·
+      └── render         ·  ·  (s[omitted])  ·
+           └── emptyrow  ·  ·  ()            ·
 
 # Propagation through UNION.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION SELECT 2 AS s)
 ----
-render                   0  render    ·  ·  ("1")  "1"=CONST
- └── union               1  union     ·  ·  (s)    ·
-      ├── render         2  render    ·  ·  (s)    s=CONST
-      │    └── emptyrow  3  emptyrow  ·  ·  ()     ·
-      └── render         2  render    ·  ·  (s)    s=CONST
-           └── emptyrow  3  emptyrow  ·  ·  ()     ·
+render                   ·  ·  ("1")  "1"=CONST
+ └── union               ·  ·  (s)    ·
+      ├── render         ·  ·  (s)    s=CONST
+      │    └── emptyrow  ·  ·  ()     ·
+      └── render         ·  ·  (s)    s=CONST
+           └── emptyrow  ·  ·  ()     ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s UNION ALL SELECT 2 AS s)
 ----
-render                   0  render    ·  ·  ("1")         "1"=CONST
- └── append              1  append    ·  ·  (s[omitted])  ·
-      ├── render         2  render    ·  ·  (s[omitted])  ·
-      │    └── emptyrow  3  emptyrow  ·  ·  ()            ·
-      └── render         2  render    ·  ·  (s[omitted])  ·
-           └── emptyrow  3  emptyrow  ·  ·  ()            ·
+render                   ·  ·  ("1")         "1"=CONST
+ └── append              ·  ·  (s[omitted])  ·
+      ├── render         ·  ·  (s[omitted])  ·
+      │    └── emptyrow  ·  ·  ()            ·
+      └── render         ·  ·  (s[omitted])  ·
+           └── emptyrow  ·  ·  ()            ·
 
 # Propagation through WITH ORDINALITY.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
-render                   0  render      ·  ·  ("1")                       "1"=CONST
- └── ordinality          1  ordinality  ·  ·  (s[omitted], "ordinality")  weak-key("ordinality")
-      └── render         2  render      ·  ·  (s[omitted])                ·
-           └── emptyrow  3  emptyrow    ·  ·  ()                          ·
+render                   ·  ·  ("1")                       "1"=CONST
+ └── ordinality          ·  ·  (s[omitted], "ordinality")  weak-key("ordinality")
+      └── render         ·  ·  (s[omitted])                ·
+           └── emptyrow  ·  ·  ()                          ·
 
 # Propagation through sort, when the sorting column is in the results.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y) ORDER BY x
 ----
-render              0  render    ·  ·  (x)              x=CONST
- └── render         1  render    ·  ·  (x, y[omitted])  x=CONST
-      └── emptyrow  2  emptyrow  ·  ·  ()               ·
+render              ·  ·  (x)              x=CONST
+ └── render         ·  ·  (x, y[omitted])  x=CONST
+      └── emptyrow  ·  ·  ()               ·
 
 # Propagation through sort, when the sorting column is not in the results.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT x FROM (SELECT 1 AS x, 2 AS y, 3 AS z) ORDER BY y
 ----
-nosort                   0  nosort    ·      ·   (x)                 x=CONST
- │                       0  ·         order  +y  ·                   ·
- └── render              1  render    ·      ·   (x, y)              x=CONST; y=CONST
-      └── render         2  render    ·      ·   (x, y, z[omitted])  x=CONST; y=CONST
-           └── emptyrow  3  emptyrow  ·      ·   ()                  ·
+nosort                   ·      ·   (x)                 x=CONST
+ │                       order  +y  ·                   ·
+ └── render              ·      ·   (x, y)              x=CONST; y=CONST
+      └── render         ·      ·   (x, y, z[omitted])  x=CONST; y=CONST
+           └── emptyrow  ·      ·   ()                  ·
 
 # Propagation to sub-queries.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 ----
-root                               0  root      ·          ·                                     (y)           y=CONST
- ├── render                        1  render    ·          ·                                     (y)           y=CONST
- │    └── emptyrow                 2  emptyrow  ·          ·                                     ()            ·
- └── subquery                      1  subquery  ·          ·                                     (y)           y=CONST
-      │                            1  ·         id         @S1                                   ·             ·
-      │                            1  ·         sql        (SELECT 2 AS x FROM (SELECT 3 AS s))  ·             ·
-      │                            1  ·         exec mode  one row                               ·             ·
-      └── limit                    2  limit     ·          ·                                     (x)           x=CONST
-           └── render              3  render    ·          ·                                     (x)           x=CONST
-                └── render         4  render    ·          ·                                     (s[omitted])  ·
-                     └── emptyrow  5  emptyrow  ·          ·                                     ()            ·
+root                               ·          ·                                     (y)           y=CONST
+ ├── render                        ·          ·                                     (y)           y=CONST
+ │    └── emptyrow                 ·          ·                                     ()            ·
+ └── subquery                      ·          ·                                     (y)           y=CONST
+      │                            id         @S1                                   ·             ·
+      │                            sql        (SELECT 2 AS x FROM (SELECT 3 AS s))  ·             ·
+      │                            exec mode  one row                               ·             ·
+      └── limit                    ·          ·                                     (x)           x=CONST
+           └── render              ·          ·                                     (x)           x=CONST
+                └── render         ·          ·                                     (s[omitted])  ·
+                     └── emptyrow  ·          ·                                     ()            ·
 
 # Propagation through table scans.
 statement ok
 CREATE TABLE kv(k INT PRIMARY KEY, v INT)
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT 1 FROM kv
 ----
-render     0  render  ·      ·           ("1")                     "1"=CONST
- └── scan  1  scan    ·      ·           (k[omitted], v[omitted])  k!=NULL; key(k)
-·          1  ·       table  kv@primary  ·                         ·
-·          1  ·       spans  ALL         ·                         ·
+render     ·      ·           ("1")                     "1"=CONST
+ └── scan  ·      ·           (k[omitted], v[omitted])  k!=NULL; key(k)
+·          table  kv@primary  ·                         ·
+·          spans  ALL         ·                         ·
 
 # Propagation through DISTINCT.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) SELECT DISTINCT v FROM kv
 ----
-distinct        0  distinct  ·      ·           (v)              weak-key(v)
- └── render     1  render    ·      ·           (v)              ·
-      └── scan  2  scan      ·      ·           (k[omitted], v)  k!=NULL; key(k)
-·               2  ·         table  kv@primary  ·                ·
-·               2  ·         spans  ALL         ·                ·
+distinct        ·      ·           (v)              weak-key(v)
+ └── render     ·      ·           (v)              ·
+      └── scan  ·      ·           (k[omitted], v)  k!=NULL; key(k)
+·               table  kv@primary  ·                ·
+·               spans  ALL         ·                ·
 
 # Propagation through INSERT.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
 ----
-insert                   0  insert    ·     ·         ()                        ·
- │                       0  ·         into  kv(k, v)  ·                         ·
- └── render              1  render    ·     ·         ("1", "2")                "1"=CONST; "2"=CONST
-      └── render         2  render    ·     ·         (x[omitted], y[omitted])  ·
-           └── emptyrow  3  emptyrow  ·     ·         ()                        ·
+insert                   ·     ·         ()                        ·
+ │                       into  kv(k, v)  ·                         ·
+ └── render              ·     ·         ("1", "2")                "1"=CONST; "2"=CONST
+      └── render         ·     ·         (x[omitted], y[omitted])  ·
+           └── emptyrow  ·     ·         ()                        ·
 
 # Propagation through DELETE.
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) DELETE FROM kv WHERE k = 3
 ----
-delete          0  delete  ·      ·           ()               ·
- │              0  ·       from   kv          ·                ·
- └── render     1  render  ·      ·           (k)              k=CONST; key()
-      └── scan  2  scan    ·      ·           (k, v[omitted])  k=CONST; key()
-·               2  ·       table  kv@primary  ·                ·
-·               2  ·       spans  /3-/3/#     ·                ·
+delete          ·      ·           ()               ·
+ │              from   kv          ·                ·
+ └── render     ·      ·           (k)              k=CONST; key()
+      └── scan  ·      ·           (k, v[omitted])  k=CONST; key()
+·               table  kv@primary  ·                ·
+·               spans  /3-/3/#     ·                ·
 
 # Ensure that propagations through a render node removes the renders
 # and properly propagates the remaining needed columns.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM (SELECT 1 AS x, y FROM (SELECT 2 AS y))
 ----
-render                   0  render    ·         ·     (x)              x=CONST
- │                       0  ·         render 0  x     ·                ·
- └── render              1  render    ·         ·     (x, y[omitted])  x=CONST
-      │                  1  ·         render 0  1     ·                ·
-      │                  1  ·         render 1  NULL  ·                ·
-      └── render         2  render    ·         ·     (y[omitted])     ·
-           │             2  ·         render 0  NULL  ·                ·
-           └── emptyrow  3  emptyrow  ·         ·     ()               ·
+render                   ·         ·     (x)              x=CONST
+ │                       render 0  x     ·                ·
+ └── render              ·         ·     (x, y[omitted])  x=CONST
+      │                  render 0  1     ·                ·
+      │                  render 1  NULL  ·                ·
+      └── render         ·         ·     (y[omitted])     ·
+           │             render 0  NULL  ·                ·
+           └── emptyrow  ·         ·     ()               ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
 ----
-render     0  render  ·         ·           ("1")                     "1"=CONST
- │         0  ·       render 0  1           ·                         ·
- └── scan  1  scan    ·         ·           (k[omitted], v[omitted])  k!=NULL; key(k)
-·          1  ·       table     kv@primary  ·                         ·
-·          1  ·       spans     ALL         ·                         ·
+render     ·         ·           ("1")                     "1"=CONST
+ │         render 0  1           ·                         ·
+ └── scan  ·         ·           (k[omitted], v[omitted])  k!=NULL; key(k)
+·          table     kv@primary  ·                         ·
+·          spans     ALL         ·                         ·
 
 statement ok
 CREATE TABLE a ("name" string, age int);
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 ----
-group                0  group   ·            ·             (count)                                                 ·
- │                   0  ·       aggregate 0  count_rows()  ·                                                       ·
- └── render          1  render  ·            ·             ()                                                      ·
-      └── render     2  render  ·            ·             ("name"[omitted], age[omitted])                         ·
-           │         2  ·       render 0     NULL          ·                                                       ·
-           │         2  ·       render 1     NULL          ·                                                       ·
-           └── scan  3  scan    ·            ·             ("name"[omitted], age[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
-·                    3  ·       table        a@primary     ·                                                       ·
-·                    3  ·       spans        ALL           ·                                                       ·
+group                ·            ·             (count)                                                 ·
+ │                   aggregate 0  count_rows()  ·                                                       ·
+ └── render          ·            ·             ()                                                      ·
+      └── render     ·            ·             ("name"[omitted], age[omitted])                         ·
+           │         render 0     NULL          ·                                                       ·
+           │         render 1     NULL          ·                                                       ·
+           └── scan  ·            ·             ("name"[omitted], age[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
+·                    table        a@primary     ·                                                       ·
+·                    spans        ALL           ·                                                       ·
 
 # Ensure that variables within filter conditions are omitted (not decoded) if
 # the filter condition is replaced by an index search.
@@ -193,12 +193,12 @@ group                0  group   ·            ·             (count)            
 statement ok
 CREATE TABLE ab (a INT, b INT, PRIMARY KEY (a, b));
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FROM ab WHERE a=1
 ----
-group           0  group   ·            ·             (count)                   ·
- │              0  ·       aggregate 0  count_rows()  ·                         ·
- └── render     1  render  ·            ·             ()                        ·
-      └── scan  2  scan    ·            ·             (a[omitted], b[omitted])  a=CONST; b!=NULL; key(b)
-·               2  ·       table        ab@primary    ·                         ·
-·               2  ·       spans        /1-/2         ·                         ·
+group           ·            ·             (count)                   ·
+ │              aggregate 0  count_rows()  ·                         ·
+ └── render     ·            ·             ()                        ·
+      └── scan  ·            ·             (a[omitted], b[omitted])  a=CONST; b!=NULL; key(b)
+·               table        ab@primary    ·                         ·
+·               spans        /1-/2         ·                         ·

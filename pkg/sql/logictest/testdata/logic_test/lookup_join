@@ -211,30 +211,30 @@ distinct                  ·               ·
 ·                         spans           ALL
 
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
-Tree                      Level  Type      Field           Description                 Columns                                                                                                                                             Ordering
-distinct                  0      distinct  ·               ·                           ("(authors.name)")                                                                                                                                  weak-key("(authors.name)")
- └── render               1      render    ·               ·                           ("(authors.name)")                                                                                                                                  ·
-      │                   1      ·         render 0        test.public.authors."name"  ·                                                                                                                                                   ·
-      └── join            2      join      ·               ·                           ("name", book[omitted], rowid[hidden,omitted], title[omitted], edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])  ·
-           │              2      ·         type            inner                       ·                                                                                                                                                   ·
-           │              2      ·         equality        (book) = (title)            ·                                                                                                                                                   ·
-           ├── scan       3      scan      ·               ·                           ("name", book, rowid[hidden,omitted])                                                                                                               rowid!=NULL; key(rowid)
-           │              3      ·         table           authors@primary             ·                                                                                                                                                   ·
-           │              3      ·         spans           ALL                         ·                                                                                                                                                   ·
-           └── join       3      join      ·               ·                           (title, edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])                                                         title=title; title!=NULL
-                │         3      ·         type            inner                       ·                                                                                                                                                   ·
-                │         3      ·         equality        (title) = (title)           ·                                                                                                                                                   ·
-                │         3      ·         mergeJoinOrder  +"(title=title)"            ·                                                                                                                                                   ·
-                │         3      ·         pred            b1.shelf != b2.shelf        ·                                                                                                                                                   ·
-                ├── scan  4      scan      ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
-                │         4      ·         table           books@primary               ·                                                                                                                                                   ·
-                │         4      ·         spans           ALL                         ·                                                                                                                                                   ·
-                └── scan  4      scan      ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
-·                         4      ·         table           books@primary               ·                                                                                                                                                   ·
-·                         4      ·         spans           ALL                         ·                                                                                                                                                   ·
+Tree                      Field           Description                 Columns                                                                                                                                             Ordering
+distinct                  ·               ·                           ("(authors.name)")                                                                                                                                  weak-key("(authors.name)")
+ └── render               ·               ·                           ("(authors.name)")                                                                                                                                  ·
+      │                   render 0        test.public.authors."name"  ·                                                                                                                                                   ·
+      └── join            ·               ·                           ("name", book[omitted], rowid[hidden,omitted], title[omitted], edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])  ·
+           │              type            inner                       ·                                                                                                                                                   ·
+           │              equality        (book) = (title)            ·                                                                                                                                                   ·
+           ├── scan       ·               ·                           ("name", book, rowid[hidden,omitted])                                                                                                               rowid!=NULL; key(rowid)
+           │              table           authors@primary             ·                                                                                                                                                   ·
+           │              spans           ALL                         ·                                                                                                                                                   ·
+           └── join       ·               ·                           (title, edition[omitted], shelf[omitted], title[omitted], edition[omitted], shelf[omitted])                                                         title=title; title!=NULL
+                │         type            inner                       ·                                                                                                                                                   ·
+                │         equality        (title) = (title)           ·                                                                                                                                                   ·
+                │         mergeJoinOrder  +"(title=title)"            ·                                                                                                                                                   ·
+                │         pred            b1.shelf != b2.shelf        ·                                                                                                                                                   ·
+                ├── scan  ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
+                │         table           books@primary               ·                                                                                                                                                   ·
+                │         spans           ALL                         ·                                                                                                                                                   ·
+                └── scan  ·               ·                           (title, edition[omitted], shelf)                                                                                                                    title!=NULL; edition!=NULL; key(title,edition); +title
+·                         table           books@primary               ·                                                                                                                                                   ·
+·                         spans           ALL                         ·                                                                                                                                                   ·
 
 
 # Ensure lookup join preserves sort from the left side.

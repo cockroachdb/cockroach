@@ -48,12 +48,12 @@ pg_constraint  pg_constraint
 query error pgcode 42P01 relation "foo.pg_constraint" does not exist
 SELECT 'foo.pg_constraint'::REGCLASS
 
-query TITTTTT
+query TTTTT
 EXPLAIN (TYPES) SELECT 'pg_constraint'::REGCLASS
 ----
-render         0  render    ·         ·                          ("'pg_constraint'::REGCLASS" regclass)  "'pg_constraint'::REGCLASS"=CONST
- │             0  ·         render 0  (pg_constraint)[regclass]  ·                                       ·
- └── emptyrow  1  emptyrow  ·         ·                          ()                                      ·
+render         ·         ·                          ("'pg_constraint'::REGCLASS" regclass)  "'pg_constraint'::REGCLASS"=CONST
+ │             render 0  (pg_constraint)[regclass]  ·                                       ·
+ └── emptyrow  ·         ·                          ()                                      ·
 
 query OO
 SELECT '"pg_constraint"'::REGCLASS, '  "pg_constraint" '::REGCLASS

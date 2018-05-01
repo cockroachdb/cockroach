@@ -343,37 +343,37 @@ update     ·      ·
 ·          table  xyz@primary
 ·          spans  ALL
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (1, 2)
 ----
-update          0  update  ·      ·            ()                   ·
- │              0  ·       table  xyz          ·                    ·
- │              0  ·       set    x, y         ·                    ·
- └── render     1  render  ·      ·            (x, y, z, "1", "2")  "1"=CONST; "2"=CONST; x!=NULL; key(x)
-      └── scan  2  scan    ·      ·            (x, y, z)            x!=NULL; key(x)
-·               2  ·       table  xyz@primary  ·                    ·
-·               2  ·       spans  ALL          ·                    ·
+update          ·      ·            ()                   ·
+ │              table  xyz          ·                    ·
+ │              set    x, y         ·                    ·
+ └── render     ·      ·            (x, y, z, "1", "2")  "1"=CONST; "2"=CONST; x!=NULL; key(x)
+      └── scan  ·      ·            (x, y, z)            x!=NULL; key(x)
+·               table  xyz@primary  ·                    ·
+·               spans  ALL          ·                    ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (y, x)
 ----
-update     0  update  ·      ·            ()         ·
- │         0  ·       table  xyz          ·          ·
- │         0  ·       set    x, y         ·          ·
- └── scan  1  scan    ·      ·            (x, y, z)  x!=NULL; key(x)
-·          1  ·       table  xyz@primary  ·          ·
-·          1  ·       spans  ALL          ·          ·
+update     ·      ·            ()         ·
+ │         table  xyz          ·          ·
+ │         set    x, y         ·          ·
+ └── scan  ·      ·            (x, y, z)  x!=NULL; key(x)
+·          table  xyz@primary  ·          ·
+·          spans  ALL          ·          ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (METADATA) UPDATE xyz SET (x, y) = (2, 2)
 ----
-update          0  update  ·      ·            ()              ·
- │              0  ·       table  xyz          ·               ·
- │              0  ·       set    x, y         ·               ·
- └── render     1  render  ·      ·            (x, y, z, "2")  "2"=CONST; x!=NULL; key(x)
-      └── scan  2  scan    ·      ·            (x, y, z)       x!=NULL; key(x)
-·               2  ·       table  xyz@primary  ·               ·
-·               2  ·       spans  ALL          ·               ·
+update          ·      ·            ()              ·
+ │              table  xyz          ·               ·
+ │              set    x, y         ·               ·
+ └── render     ·      ·            (x, y, z, "2")  "2"=CONST; x!=NULL; key(x)
+      └── scan  ·      ·            (x, y, z)       x!=NULL; key(x)
+·               table  xyz@primary  ·               ·
+·               spans  ALL          ·               ·
 
 statement ok
 CREATE TABLE lots (

@@ -149,22 +149,22 @@ BEGIN;
 COMMIT
 
 # The view should contain column z.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM v
 ----
-Tree            Level  Type    Field        Description       Columns           Ordering
-update          0      update  ·            ·                 (k)               ·
- │              0      ·       table        kv                ·                 ·
- │              0      ·       set          v                 ·                 ·
- │              0      ·       returning 0  test.public.kv.k  ·                 ·
- └── render     1      render  ·            ·                 (k, v, z, "444")  "444"=CONST; k!=NULL; key(k)
-      │         1      ·       render 0     test.public.kv.k  ·                 ·
-      │         1      ·       render 1     test.public.kv.v  ·                 ·
-      │         1      ·       render 2     test.public.kv.z  ·                 ·
-      │         1      ·       render 3     444               ·                 ·
-      └── scan  2      scan    ·            ·                 (k, v, z)         k!=NULL; key(k)
-·               2      ·       table        kv@primary        ·                 ·
-·               2      ·       spans        /1-               ·                 ·
+Tree            Field        Description       Columns           Ordering
+update          ·            ·                 (k)               ·
+ │              table        kv                ·                 ·
+ │              set          v                 ·                 ·
+ │              returning 0  test.public.kv.k  ·                 ·
+ └── render     ·            ·                 (k, v, z, "444")  "444"=CONST; k!=NULL; key(k)
+      │         render 0     test.public.kv.k  ·                 ·
+      │         render 1     test.public.kv.v  ·                 ·
+      │         render 2     test.public.kv.z  ·                 ·
+      │         render 3     444               ·                 ·
+      └── scan  ·            ·                 (k, v, z)         k!=NULL; key(k)
+·               table        kv@primary        ·                 ·
+·               spans        /1-               ·                 ·
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
