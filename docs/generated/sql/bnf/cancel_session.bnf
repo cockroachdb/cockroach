@@ -1,0 +1,5 @@
+cancel_sessions_stmt ::=
+	'CANCEL' 'SESSION' session_id
+	| 'CANCEL' 'SESSION' 'IF' 'EXISTS' session_id
+	| 'CANCEL' 'SESSIONS' select_stmt
+	| 'CANCEL' 'SESSIONS' 'IF' 'EXISTS' select_stmt

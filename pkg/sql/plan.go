@@ -214,6 +214,7 @@ var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
+var _ planNodeFastPath = &controlJobsNode{}
 
 // planNodeRequireSpool serves as marker for nodes whose parent must
 // ensure that the node is fully run to completion (and the results
@@ -637,12 +638,12 @@ func (p *planner) newPlan(
 		return p.AlterSequence(ctx, n)
 	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
-	case *tree.CancelQuery:
-		return p.CancelQuery(ctx, n)
-	case *tree.CancelSession:
-		return p.CancelSession(ctx, n)
-	case *tree.CancelJob:
-		return p.CancelJob(ctx, n)
+	case *tree.CancelQueries:
+		return p.CancelQueries(ctx, n)
+	case *tree.CancelSessions:
+		return p.CancelSessions(ctx, n)
+	case *tree.ControlJobs:
+		return p.ControlJobs(ctx, n)
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
 	case *tree.CreateDatabase:
@@ -687,8 +688,6 @@ func (p *planner) newPlan(
 		return p.Insert(ctx, n, desiredTypes)
 	case *tree.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes)
-	case *tree.PauseJob:
-		return p.PauseJob(ctx, n)
 	case *tree.TestingRelocate:
 		return p.TestingRelocate(ctx, n)
 	case *tree.RenameColumn:
@@ -699,8 +698,6 @@ func (p *planner) newPlan(
 		return p.RenameIndex(ctx, n)
 	case *tree.RenameTable:
 		return p.RenameTable(ctx, n)
-	case *tree.ResumeJob:
-		return p.ResumeJob(ctx, n)
 	case *tree.Revoke:
 		return p.Revoke(ctx, n)
 	case *tree.Scatter:
@@ -820,12 +817,12 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 	switch n := stmt.(type) {
 	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
-	case *tree.CancelQuery:
-		return p.CancelQuery(ctx, n)
-	case *tree.CancelSession:
-		return p.CancelSession(ctx, n)
-	case *tree.CancelJob:
-		return p.CancelJob(ctx, n)
+	case *tree.CancelQueries:
+		return p.CancelQueries(ctx, n)
+	case *tree.CancelSessions:
+		return p.CancelSessions(ctx, n)
+	case *tree.ControlJobs:
+		return p.ControlJobs(ctx, n)
 	case *tree.CreateUser:
 		return p.CreateUser(ctx, n)
 	case *tree.CreateTable:
@@ -838,10 +835,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.Explain(ctx, n)
 	case *tree.Insert:
 		return p.Insert(ctx, n, nil)
-	case *tree.PauseJob:
-		return p.PauseJob(ctx, n)
-	case *tree.ResumeJob:
-		return p.ResumeJob(ctx, n)
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
