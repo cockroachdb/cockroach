@@ -93,6 +93,9 @@ func grantRolePlanHook(
 		return nil, err
 	}
 
+	// NOTE: membership manipulation involving the "public" pseudo-role fails with
+	// "role public does not exist". This matches postgres behavior.
+
 	// Check roles: these have to be roles.
 	for _, r := range grant.Roles {
 		if isRole, ok := users[string(r)]; !ok || !isRole {

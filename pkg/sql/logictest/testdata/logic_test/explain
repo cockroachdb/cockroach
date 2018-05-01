@@ -265,7 +265,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 130 rows
+·                      size   8 columns, 370 rows
 
 
 query TTT
