@@ -2015,7 +2015,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *roachpb.BatchResponse, e *roachpb.Error) {
 				return
 			},
-		))(SendOptions{}, &rpc.Context{}, nil, roachpb.BatchRequest{})
+		))(SendOptions{}, &rpc.Context{}, ReplicaSlice{{}}, roachpb.BatchRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
