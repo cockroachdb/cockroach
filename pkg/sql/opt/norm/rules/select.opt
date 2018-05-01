@@ -3,6 +3,12 @@
 # =============================================================================
 
 
+# EliminateSelect discards an unnecessary Select operator in the case where its
+# filter is always true. Keep this near the top of the file so that it tends to
+# be checked early.
+[EliminateSelect, Normalize]
+(Select $input:* (True)) => $input
+
 # EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
 # Filters operator. This allows other rules to rely upon the presence of the
 # Filters when matching. See comment at top of bool.opt for more details. This
@@ -33,11 +39,6 @@
     $input
     (Filters [ $filter ])
 )
-
-# EliminateSelect discards an unnecessary Select operator in the case where its
-# filter is always true.
-[EliminateSelect, Normalize]
-(Select $input:* (True)) => $input
 
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
@@ -88,10 +89,10 @@
 )
 
 # PushSelectIntoJoinLeft pushes Select filter conditions into the left side of
-# an input Join. This is possible in the case of InnerJoin and LeftJoin, as
-# long as the condition has no dependencies on the right side of the join.
-# Right and Full joins are not eligible, since attempting to filter left rows
-# would just result in NULL left rows instead.
+# an input Join. This is possible in the case of InnerJoin, LeftJoin, SemiJoin,
+# and AntiJoin, as long as the condition has no dependencies on the right side
+# of the join. Right and Full joins are not eligible, since attempting to filter
+# left rows would just result in NULL left rows instead.
 #
 #   -- No row is returned for a.x=1, a.y=2, b.x=1, since the WHERE excludes it.
 #   SELECT * FROM a RIGHT JOIN b ON a.x=b.x WHERE a.y < 0
@@ -103,7 +104,8 @@
 # Citations: [1]
 [PushSelectIntoJoinLeft, Normalize]
 (Select
-    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+            SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
         $left:*
         $right:*
         $on:*
