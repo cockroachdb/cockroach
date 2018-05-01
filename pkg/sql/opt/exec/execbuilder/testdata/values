@@ -2,10 +2,10 @@
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT 1
 ----
-render       0  render  ·         ·                 (column1)  ·
- │           0  ·       render 0  1                 ·          ·
- └── values  1  values  ·         ·                 ()         ·
-·            1  ·       size      0 columns, 1 row  ·          ·
+render       ·         ·                 (column1)  ·
+ │           render 0  1                 ·          ·
+ └── values  ·         ·                 ()         ·
+·            size      0 columns, 1 row  ·          ·
 
 exec
 SELECT 1
@@ -16,10 +16,10 @@ column1:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
-render       0  render  ·         ·                 (column1)  ·
- │           0  ·       render 0  3                 ·          ·
- └── values  1  values  ·         ·                 ()         ·
-·            1  ·       size      0 columns, 1 row  ·          ·
+render       ·         ·                 (column1)  ·
+ │           render 0  3                 ·          ·
+ └── values  ·         ·                 ()         ·
+·            size      0 columns, 1 row  ·          ·
 
 exec
 SELECT 1 + 2
@@ -30,14 +30,14 @@ column1:int
 exec hide-colnames
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
-values  0  values  ·              ·                  (column1, column2, column3)  ·
-·       0  ·       size           3 columns, 2 rows  ·                            ·
-·       0  ·       row 0, expr 0  1                  ·                            ·
-·       0  ·       row 0, expr 1  2                  ·                            ·
-·       0  ·       row 0, expr 2  3                  ·                            ·
-·       0  ·       row 1, expr 0  4                  ·                            ·
-·       0  ·       row 1, expr 1  5                  ·                            ·
-·       0  ·       row 1, expr 2  6                  ·                            ·
+values  ·              ·                  (column1, column2, column3)  ·
+·       size           3 columns, 2 rows  ·                            ·
+·       row 0, expr 0  1                  ·                            ·
+·       row 0, expr 1  2                  ·                            ·
+·       row 0, expr 2  3                  ·                            ·
+·       row 1, expr 0  4                  ·                            ·
+·       row 1, expr 1  5                  ·                            ·
+·       row 1, expr 2  6                  ·                            ·
 
 exec
 VALUES (1, 2, 3), (4, 5, 6)
@@ -49,12 +49,12 @@ column1:int  column2:int  column3:int
 exec hide-colnames
 EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
-values  0  values  ·              ·                 (column1)  ·
-·       0  ·       size           1 column, 4 rows  ·          ·
-·       0  ·       row 0, expr 0  length('a')       ·          ·
-·       0  ·       row 1, expr 0  1 + length('a')   ·          ·
-·       0  ·       row 2, expr 0  length('abc')     ·          ·
-·       0  ·       row 3, expr 0  length('ab') * 2  ·          ·
+values  ·              ·                 (column1)  ·
+·       size           1 column, 4 rows  ·          ·
+·       row 0, expr 0  length('a')       ·          ·
+·       row 1, expr 0  1 + length('a')   ·          ·
+·       row 2, expr 0  length('abc')     ·          ·
+·       row 3, expr 0  length('ab') * 2  ·          ·
 
 exec
 VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
@@ -68,16 +68,16 @@ column1:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-render       0  render  ·              ·                  (column3)           ·
- │           0  ·       render 0       column1 + column2  ·                   ·
- └── values  1  values  ·              ·                  (column1, column2)  ·
-·            1  ·       size           2 columns, 3 rows  ·                   ·
-·            1  ·       row 0, expr 0  1                  ·                   ·
-·            1  ·       row 0, expr 1  2                  ·                   ·
-·            1  ·       row 1, expr 0  3                  ·                   ·
-·            1  ·       row 1, expr 1  4                  ·                   ·
-·            1  ·       row 2, expr 0  5                  ·                   ·
-·            1  ·       row 2, expr 1  6                  ·                   ·
+render       ·              ·                  (column3)           ·
+ │           render 0       column1 + column2  ·                   ·
+ └── values  ·              ·                  (column1, column2)  ·
+·            size           2 columns, 3 rows  ·                   ·
+·            row 0, expr 0  1                  ·                   ·
+·            row 0, expr 1  2                  ·                   ·
+·            row 1, expr 0  3                  ·                   ·
+·            row 1, expr 1  4                  ·                   ·
+·            row 2, expr 0  5                  ·                   ·
+·            row 2, expr 1  6                  ·                   ·
 
 exec
 SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)

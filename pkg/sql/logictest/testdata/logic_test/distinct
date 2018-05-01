@@ -204,21 +204,21 @@ SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 3
 
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT x FROM xyz
 ----
-render     0  render  ·         ·                  (x)                          x!=NULL; key(x)
- │         0  ·       render 0  test.public.xyz.x  ·                            ·
- └── scan  1  scan    ·         ·                  (x, y[omitted], z[omitted])  x!=NULL; key(x)
-·          1  ·       table     xyz@primary        ·                            ·
-·          1  ·       spans     ALL                ·                            ·
+render     ·         ·                  (x)                          x!=NULL; key(x)
+ │         render 0  test.public.xyz.x  ·                            ·
+ └── scan  ·         ·                  (x, y[omitted], z[omitted])  x!=NULL; key(x)
+·          table     xyz@primary        ·                            ·
+·          spans     ALL                ·                            ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT x, y, z FROM xyz
 ----
-scan  0  scan  ·      ·            (x, y, z)  x!=NULL; key(x)
-·     0  ·     table  xyz@primary  ·          ·
-·     0  ·     spans  ALL          ·          ·
+scan  ·      ·            (x, y, z)  x!=NULL; key(x)
+·     table  xyz@primary  ·          ·
+·     spans  ALL          ·          ·
 
 statement ok
 CREATE TABLE abcd (
@@ -230,46 +230,46 @@ CREATE TABLE abcd (
   UNIQUE INDEX (d, b)
 )
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
 ----
-render     0  render  ·         ·                   ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
- │         0  ·       render 0  1                   ·                               ·
- │         0  ·       render 1  test.public.abcd.d  ·                               ·
- │         0  ·       render 2  test.public.abcd.b  ·                               ·
- └── scan  1  scan    ·         ·                   (a[omitted], b, c[omitted], d)  b!=NULL; d!=NULL; key(b,d); +d,+b
-·          1  ·       table     abcd@abcd_d_b_key   ·                               ·
-·          1  ·       spans     ALL                 ·                               ·
+render     ·         ·                   ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
+ │         render 0  1                   ·                               ·
+ │         render 1  test.public.abcd.d  ·                               ·
+ │         render 2  test.public.abcd.b  ·                               ·
+ └── scan  ·         ·                   (a[omitted], b, c[omitted], d)  b!=NULL; d!=NULL; key(b,d); +d,+b
+·          table     abcd@abcd_d_b_key   ·                               ·
+·          spans     ALL                 ·                               ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
-distinct        0  distinct  ·          ·                   (a, b)                          a!=NULL; b!=NULL; key(a,b); +a,+b
- │              0  ·         order key  a, b                ·                               ·
- └── render     1  render    ·          ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
-      │         1  ·         render 0   test.public.abcd.a  ·                               ·
-      │         1  ·         render 1   test.public.abcd.b  ·                               ·
-      └── scan  2  scan      ·          ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
-·               2  ·         table      abcd@primary        ·                               ·
-·               2  ·         spans      ALL                 ·                               ·
+distinct        ·          ·                   (a, b)                          a!=NULL; b!=NULL; key(a,b); +a,+b
+ │              order key  a, b                ·                               ·
+ └── render     ·          ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+      │         render 0   test.public.abcd.a  ·                               ·
+      │         render 1   test.public.abcd.b  ·                               ·
+      └── scan  ·          ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
+·               table      abcd@primary        ·                               ·
+·               spans      ALL                 ·                               ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c FROM abcd
 ----
-render     0  render  ·         ·                   (a, b, c)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
- │         0  ·       render 0  test.public.abcd.a  ·                      ·
- │         0  ·       render 1  test.public.abcd.b  ·                      ·
- │         0  ·       render 2  test.public.abcd.c  ·                      ·
- └── scan  1  scan    ·         ·                   (a, b, c, d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-·          1  ·       table     abcd@primary        ·                      ·
-·          1  ·       spans     ALL                 ·                      ·
+render     ·         ·                   (a, b, c)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+ │         render 0  test.public.abcd.a  ·                      ·
+ │         render 1  test.public.abcd.b  ·                      ·
+ │         render 2  test.public.abcd.c  ·                      ·
+ └── scan  ·         ·                   (a, b, c, d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+·          table     abcd@primary        ·                      ·
+·          spans     ALL                 ·                      ·
 
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b, c, d FROM abcd
 ----
-scan  0  scan  ·      ·             (a, b, c, d)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-·     0  ·     table  abcd@primary  ·             ·
-·     0  ·     spans  ALL           ·             ·
+scan  ·      ·             (a, b, c, d)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+·     table  abcd@primary  ·             ·
+·     spans  ALL           ·             ·
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
@@ -277,16 +277,16 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
 statement ok
 INSERT INTO kv VALUES (1, 1), (2, 2), (3, NULL), (4, NULL), (5, 5), (6, NULL)
 
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
-Tree            Level  Type      Field     Description       Columns          Ordering
-distinct        0      distinct  ·         ·                 (v)              weak-key(v)
- └── render     1      render    ·         ·                 (v)              ·
-      │         1      ·         render 0  test.public.kv.v  ·                ·
-      └── scan  2      scan      ·         ·                 (k[omitted], v)  k!=NULL; key(k)
-·               2      ·         table     kv@primary        ·                ·
-·               2      ·         spans     ALL               ·                ·
+Tree            Field     Description       Columns          Ordering
+distinct        ·         ·                 (v)              weak-key(v)
+ └── render     ·         ·                 (v)              ·
+      │         render 0  test.public.kv.v  ·                ·
+      └── scan  ·         ·                 (k[omitted], v)  k!=NULL; key(k)
+·               table     kv@primary        ·                ·
+·               spans     ALL               ·                ·
 
 query I rowsort
 SELECT DISTINCT v FROM kv
@@ -297,17 +297,17 @@ NULL
 5
 
 # Verify we don't incorrectly elide the distinct node when we only have a weak key (#19343).
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
-Tree            Level  Type      Field      Description       Columns          Ordering
-distinct        0      distinct  ·          ·                 (v)              weak-key(v); +v
- │              0      ·         order key  v                 ·                ·
- └── render     1      render    ·          ·                 (v)              weak-key(v); +v
-      │         1      ·         render 0   test.public.kv.v  ·                ·
-      └── scan  2      scan      ·          ·                 (k[omitted], v)  weak-key(v); +v
-·               2      ·         table      kv@idx            ·                ·
-·               2      ·         spans      ALL               ·                ·
+Tree            Field      Description       Columns          Ordering
+distinct        ·          ·                 (v)              weak-key(v); +v
+ │              order key  v                 ·                ·
+ └── render     ·          ·                 (v)              weak-key(v); +v
+      │         render 0   test.public.kv.v  ·                ·
+      └── scan  ·          ·                 (k[omitted], v)  weak-key(v); +v
+·               table      kv@idx            ·                ·
+·               spans      ALL               ·                ·
 
 query I rowsort
 SELECT DISTINCT v FROM kv@idx
@@ -318,15 +318,15 @@ NULL
 5
 
 # Here we can infer that v is not-NULL so eliding the node is correct.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
-Tree       Level  Type    Field     Description       Columns          Ordering
-render     0      render  ·         ·                 (v)              v!=NULL; key(v)
- │         0      ·       render 0  test.public.kv.v  ·                ·
- └── scan  1      scan    ·         ·                 (k[omitted], v)  v!=NULL; key(v)
-·          1      ·       table     kv@idx            ·                ·
-·          1      ·       spans     /1-               ·                ·
+Tree       Field     Description       Columns          Ordering
+render     ·         ·                 (v)              v!=NULL; key(v)
+ │         render 0  test.public.kv.v  ·                ·
+ └── scan  ·         ·                 (k[omitted], v)  v!=NULL; key(v)
+·          table     kv@idx            ·                ·
+·          spans     /1-               ·                ·
 
 query I rowsort
 SELECT DISTINCT v FROM kv@idx WHERE v > 0
@@ -339,12 +339,12 @@ statement ok
 CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
 
 # In this case it is correct to elide the distinct node.
-query TITTTTT colnames
+query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
 ----
-Tree       Level  Type    Field     Description        Columns          Ordering
-render     0      render  ·         ·                  (v)              v!=NULL; key(v)
- │         0      ·       render 0  test.public.kv2.v  ·                ·
- └── scan  1      scan    ·         ·                  (k[omitted], v)  v!=NULL; key(v)
-·          1      ·       table     kv2@idx            ·                ·
-·          1      ·       spans     ALL                ·                ·
+Tree       Field     Description        Columns          Ordering
+render     ·         ·                  (v)              v!=NULL; key(v)
+ │         render 0  test.public.kv2.v  ·                ·
+ └── scan  ·         ·                  (k[omitted], v)  v!=NULL; key(v)
+·          table     kv2@idx            ·                ·
+·          spans     ALL                ·                ·

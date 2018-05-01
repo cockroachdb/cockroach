@@ -39,10 +39,12 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	// Tree shows the node type with the tree structure.
 	b.synthesizeColumn(outScope, "Tree", types.String, nil /* expr */, 0 /* group */)
-	// Level is the depth of the node in the tree.
-	b.synthesizeColumn(outScope, "Level", types.Int, nil /* expr */, 0 /* group */)
-	// Type is the node type.
-	b.synthesizeColumn(outScope, "Type", types.String, nil /* expr */, 0 /* group */)
+	// Level is the depth of the node in the tree (hidden).
+	c := b.synthesizeColumn(outScope, "Level", types.Int, nil /* expr */, 0 /* group */)
+	c.hidden = true
+	// Type is the node type (hidden).
+	c = b.synthesizeColumn(outScope, "Type", types.String, nil /* expr */, 0 /* group */)
+	c.hidden = true
 	// Field is the part of the node that a row of output pertains to.
 	b.synthesizeColumn(outScope, "Field", types.String, nil /* expr */, 0 /* group */)
 	// Description contains details about the field.

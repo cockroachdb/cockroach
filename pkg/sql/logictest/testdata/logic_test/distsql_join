@@ -40,52 +40,52 @@ statement ok
 SET CLUSTER SETTING sql.distsql.merge_joins.enabled = true;
 
 # ensure merge joins are planned when there's orderings.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-render               0  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL
- │                   0  ·       render 0        a                   ·                               ·
- │                   0  ·       render 1        b                   ·                               ·
- └── join            1  join    ·               ·                   (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
-      │              1  ·       type            inner               ·                               ·
-      │              1  ·       equality        (a, b) = (a, b)     ·                               ·
-      │              1  ·       mergeJoinOrder  +"(a=a)",+"(b=b)"   ·                               ·
-      ├── render     2  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
-      │    │         2  ·       render 0        test.public.data.a  ·                               ·
-      │    │         2  ·       render 1        test.public.data.b  ·                               ·
-      │    └── scan  3  scan    ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-      │              3  ·       table           data@primary        ·                               ·
-      │              3  ·       spans           ALL                 ·                               ·
-      └── render     2  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
-           │         2  ·       render 0        data2.a             ·                               ·
-           │         2  ·       render 1        data2.b             ·                               ·
-           └── scan  3  scan    ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-·                    3  ·       table           data@primary        ·                               ·
-·                    3  ·       spans           ALL                 ·                               ·
+render               ·               ·                   (a, b)                          a!=NULL; b!=NULL
+ │                   render 0        a                   ·                               ·
+ │                   render 1        b                   ·                               ·
+ └── join            ·               ·                   (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
+      │              type            inner               ·                               ·
+      │              equality        (a, b) = (a, b)     ·                               ·
+      │              mergeJoinOrder  +"(a=a)",+"(b=b)"   ·                               ·
+      ├── render     ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+      │    │         render 0        test.public.data.a  ·                               ·
+      │    │         render 1        test.public.data.b  ·                               ·
+      │    └── scan  ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+      │              table           data@primary        ·                               ·
+      │              spans           ALL                 ·                               ·
+      └── render     ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+           │         render 0        data2.a             ·                               ·
+           │         render 1        data2.b             ·                               ·
+           └── scan  ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+·                    table           data@primary        ·                               ·
+·                    spans           ALL                 ·                               ·
 
 
 # ORDER BY on the mergeJoinOrder columns should not require a SORT node
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY c,d)
 ----
-join                 0  join    ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
- │                   0  ·       type            inner              ·                               ·
- │                   0  ·       equality        (a, b) = (c, d)    ·                               ·
- │                   0  ·       mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
- ├── render          1  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
- │    │              1  ·       render 0        data1.a            ·                               ·
- │    │              1  ·       render 1        data1.b            ·                               ·
- │    └── scan       2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
- │                   2  ·       table           data@primary       ·                               ·
- │                   2  ·       spans           ALL                ·                               ·
- └── sort            1  sort    ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
-      │              1  ·       order           +c,+d              ·                               ·
-      └── render     2  render  ·               ·                  (c, d)                          c!=NULL; d!=NULL
-           │         2  ·       render 0        data2.c            ·                               ·
-           │         2  ·       render 1        data2.d            ·                               ·
-           └── scan  3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
-·                    3  ·       table           data@primary       ·                               ·
-·                    3  ·       spans           ALL                ·                               ·
+join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+ │                   type            inner              ·                               ·
+ │                   equality        (a, b) = (c, d)    ·                               ·
+ │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
+ ├── render          ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
+ │    │              render 0        data1.a            ·                               ·
+ │    │              render 1        data1.b            ·                               ·
+ │    └── scan       ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+ │                   table           data@primary       ·                               ·
+ │                   spans           ALL                ·                               ·
+ └── sort            ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
+      │              order           +c,+d              ·                               ·
+      └── render     ·               ·                  (c, d)                          c!=NULL; d!=NULL
+           │         render 0        data2.c            ·                               ·
+           │         render 1        data2.d            ·                               ·
+           └── scan  ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
+·                    table           data@primary       ·                               ·
+·                    spans           ALL                ·                               ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY c,d)]
@@ -94,27 +94,27 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzclk1r20AQhu_9FWFOLdmCdy
 
 # ORDER BY on the columns equal to the mergeJoinOrder columns should not
 # require a terminal SORT node.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY a,b)
 ----
-join                 0  join    ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
- │                   0  ·       type            inner              ·                               ·
- │                   0  ·       equality        (a, b) = (c, d)    ·                               ·
- │                   0  ·       mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
- ├── render          1  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
- │    │              1  ·       render 0        data1.a            ·                               ·
- │    │              1  ·       render 1        data1.b            ·                               ·
- │    └── scan       2  scan    ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
- │                   2  ·       table           data@primary       ·                               ·
- │                   2  ·       spans           ALL                ·                               ·
- └── sort            1  sort    ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
-      │              1  ·       order           +c,+d              ·                               ·
-      └── render     2  render  ·               ·                  (c, d)                          c!=NULL; d!=NULL
-           │         2  ·       render 0        data2.c            ·                               ·
-           │         2  ·       render 1        data2.d            ·                               ·
-           └── scan  3  scan    ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
-·                    3  ·       table           data@primary       ·                               ·
-·                    3  ·       spans           ALL                ·                               ·
+join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+ │                   type            inner              ·                               ·
+ │                   equality        (a, b) = (c, d)    ·                               ·
+ │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
+ ├── render          ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
+ │    │              render 0        data1.a            ·                               ·
+ │    │              render 1        data1.b            ·                               ·
+ │    └── scan       ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+ │                   table           data@primary       ·                               ·
+ │                   spans           ALL                ·                               ·
+ └── sort            ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
+      │              order           +c,+d              ·                               ·
+      └── render     ·               ·                  (c, d)                          c!=NULL; d!=NULL
+           │         render 0        data2.c            ·                               ·
+           │         render 1        data2.d            ·                               ·
+           └── scan  ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
+·                    table           data@primary       ·                               ·
+·                    spans           ALL                ·                               ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY a,b)]
@@ -122,29 +122,29 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS dat
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzclk1r20AQhu_9FWFOLdmCdyXnQ1DQNYUmJe2t-KBYW1vgeM1qDQ3B_73YSjGS4nk9rGuMj4r1aEazz-TVK81dae-LZ1tT9os0KTKkKCFFKSka0kjRwruxrWvn17c0wF35h7KBomq-WIb1n0eKxs5byl4pVGFmKaOfxdPMPtqitJ4UlTYU1WxTZOGr58K_5GURClL0sAzZRa5Vbmi0UuSW4e2Z20c9vVxMi3rafsw_ZKSoDsXEUqZX6n-1l6g87bS3rWskdX84H7olc32pcnMZ-_7Jzj62j3K-tN6WO-vvfec7r_bN-on96qp59_1m9nf4-IZ--uKryXR72TJA8YNO41_wnbbv3We3aN2_q_6wVV-ftv8HbU_gP6h7NP_1uftvTtu_g7Yn8A_UPZp_5tz9S07bv4O2J_AP1D2af8m5-5eetn8HbU_gH6h7NP_Sc_cPfOg_2nrh5rXd68tysH4fW05sM63aLf3YfvduvCnTXD5suM2HTWnr0PyaNBd38-andYP7wzcxsDZR9FUMbQY8rbv0oEW34EEXNoKBGxl8EwN3Bi6lr2LozsB7dMIOPOVPK-VPS_PHNYzZDx4G-8HDaD8ADfaDp9F-XLETv-YHfh2zHzwM9oOH0X4AGuwHT6P9uInZj9sYw3kYGM7DyHBAA8N5GiZAL0BaE9fgn4ruJYhEckADywGNNEc48BzgSHTdyxGJ6bqXIxLVAQ1cBzSSHeHAdoBD3fkM1UOguyRE-2cuSVEpDXUX5agUh7rzSYp0l0SplEa6i8JUjCPdRXHax_k81bdAd0mi9s9cEqlSGuouClUpjnQ3fKp2dR-tPvwNAAD__1XEQ9M=
 
 # ORDER BY on a different ordering should require a terminal SORT NODE.
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)
 ----
-sort                      0  sort    ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +b,+a
- │                        0  ·       order           +b,+a              ·                               ·
- └── join                 1  join    ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL
-      │                   1  ·       type            inner              ·                               ·
-      │                   1  ·       equality        (a, b) = (c, d)    ·                               ·
-      │                   1  ·       mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
-      ├── render          2  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
-      │    │              2  ·       render 0        data1.a            ·                               ·
-      │    │              2  ·       render 1        data1.b            ·                               ·
-      │    └── scan       3  scan    ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-      │                   3  ·       table           data@primary       ·                               ·
-      │                   3  ·       spans           ALL                ·                               ·
-      └── sort            2  sort    ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
-           │              2  ·       order           +c,+d              ·                               ·
-           └── render     3  render  ·               ·                  (c, d)                          c!=NULL; d!=NULL
-                │         3  ·       render 0        data2.c            ·                               ·
-                │         3  ·       render 1        data2.d            ·                               ·
-                └── scan  4  scan    ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
-·                         4  ·       table           data@primary       ·                               ·
-·                         4  ·       spans           ALL                ·                               ·
+sort                      ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +b,+a
+ │                        order           +b,+a              ·                               ·
+ └── join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL
+      │                   type            inner              ·                               ·
+      │                   equality        (a, b) = (c, d)    ·                               ·
+      │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
+      ├── render          ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
+      │    │              render 0        data1.a            ·                               ·
+      │    │              render 1        data1.b            ·                               ·
+      │    └── scan       ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+      │                   table           data@primary       ·                               ·
+      │                   spans           ALL                ·                               ·
+      └── sort            ·               ·                  (c, d)                          c!=NULL; d!=NULL; +c,+d
+           │              order           +c,+d              ·                               ·
+           └── render     ·               ·                  (c, d)                          c!=NULL; d!=NULL
+                │         render 0        data2.c            ·                               ·
+                │         render 1        data2.d            ·                               ·
+                └── scan  ·               ·                  (a[omitted], b[omitted], c, d)  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
+·                         table           data@primary       ·                               ·
+·                         spans           ALL                ·                               ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY b,a)]
@@ -176,37 +176,37 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzkl1GL2kAUhd_7K-Q-tewUnE
 
 
 # Nested merge joins should be planned on the same ordering
-query TITTTTT
+query TTTTT
 EXPLAIN (VERBOSE) (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d))
 ----
-render                         0  render  ·               ·                                    (a, b)                                                                          a!=NULL; b!=NULL
- │                             0  ·       render 0        data3.a                              ·                                                                               ·
- │                             0  ·       render 1        data3.b                              ·                                                                               ·
- └── join                      1  join    ·               ·                                    (a, b, c[omitted], d[omitted], a[omitted], b[omitted], c[omitted], d[omitted])  a=c=a=c; b=d=b=d; a!=NULL; b!=NULL
-      │                        1  ·       type            inner                                ·                                                                               ·
-      │                        1  ·       equality        (a, b, c, d) = (a, b, c, d)          ·                                                                               ·
-      │                        1  ·       mergeJoinOrder  +"(a=a)",+"(b=b)",+"(c=c)",+"(d=d)"  ·                                                                               ·
-      ├── scan                 2  scan    ·               ·                                    (a, b, c, d)                                                                    a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b,+c,+d
-      │                        2  ·       table           data@primary                         ·                                                                               ·
-      │                        2  ·       spans           ALL                                  ·                                                                               ·
-      └── join                 2  join    ·               ·                                    (a, b, c, d)                                                                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
-           │                   2  ·       type            inner                                ·                                                                               ·
-           │                   2  ·       equality        (a, b) = (c, d)                      ·                                                                               ·
-           │                   2  ·       mergeJoinOrder  +"(a=c)",+"(b=d)"                    ·                                                                               ·
-           ├── render          3  render  ·               ·                                    (a, b)                                                                          a!=NULL; b!=NULL; +a,+b
-           │    │              3  ·       render 0        data1.a                              ·                                                                               ·
-           │    │              3  ·       render 1        data1.b                              ·                                                                               ·
-           │    └── scan       4  scan    ·               ·                                    (a, b, c[omitted], d[omitted])                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-           │                   4  ·       table           data@primary                         ·                                                                               ·
-           │                   4  ·       spans           ALL                                  ·                                                                               ·
-           └── sort            3  sort    ·               ·                                    (c, d)                                                                          c!=NULL; d!=NULL; +c,+d
-                │              3  ·       order           +c,+d                                ·                                                                               ·
-                └── render     4  render  ·               ·                                    (c, d)                                                                          c!=NULL; d!=NULL
-                     │         4  ·       render 0        data2.c                              ·                                                                               ·
-                     │         4  ·       render 1        data2.d                              ·                                                                               ·
-                     └── scan  5  scan    ·               ·                                    (a[omitted], b[omitted], c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
-·                              5  ·       table           data@primary                         ·                                                                               ·
-·                              5  ·       spans           ALL                                  ·                                                                               ·
+render                         ·               ·                                    (a, b)                                                                          a!=NULL; b!=NULL
+ │                             render 0        data3.a                              ·                                                                               ·
+ │                             render 1        data3.b                              ·                                                                               ·
+ └── join                      ·               ·                                    (a, b, c[omitted], d[omitted], a[omitted], b[omitted], c[omitted], d[omitted])  a=c=a=c; b=d=b=d; a!=NULL; b!=NULL
+      │                        type            inner                                ·                                                                               ·
+      │                        equality        (a, b, c, d) = (a, b, c, d)          ·                                                                               ·
+      │                        mergeJoinOrder  +"(a=a)",+"(b=b)",+"(c=c)",+"(d=d)"  ·                                                                               ·
+      ├── scan                 ·               ·                                    (a, b, c, d)                                                                    a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b,+c,+d
+      │                        table           data@primary                         ·                                                                               ·
+      │                        spans           ALL                                  ·                                                                               ·
+      └── join                 ·               ·                                    (a, b, c, d)                                                                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+           │                   type            inner                                ·                                                                               ·
+           │                   equality        (a, b) = (c, d)                      ·                                                                               ·
+           │                   mergeJoinOrder  +"(a=c)",+"(b=d)"                    ·                                                                               ·
+           ├── render          ·               ·                                    (a, b)                                                                          a!=NULL; b!=NULL; +a,+b
+           │    │              render 0        data1.a                              ·                                                                               ·
+           │    │              render 1        data1.b                              ·                                                                               ·
+           │    └── scan       ·               ·                                    (a, b, c[omitted], d[omitted])                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+           │                   table           data@primary                         ·                                                                               ·
+           │                   spans           ALL                                  ·                                                                               ·
+           └── sort            ·               ·                                    (c, d)                                                                          c!=NULL; d!=NULL; +c,+d
+                │              order           +c,+d                                ·                                                                               ·
+                └── render     ·               ·                                    (c, d)                                                                          c!=NULL; d!=NULL
+                     │         render 0        data2.c                              ·                                                                               ·
+                     │         render 1        data2.d                              ·                                                                               ·
+                     └── scan  ·               ·                                    (a[omitted], b[omitted], c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d)
+·                              table           data@primary                         ·                                                                               ·
+·                              spans           ALL                                  ·                                                                               ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT * FROM (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d)))]

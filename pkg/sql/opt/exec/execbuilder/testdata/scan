@@ -15,9 +15,9 @@ scan a
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a
 ----
-scan  0  scan  ·      ·          (x, y, s)  ·
-·     0  ·     table  a@primary  ·          ·
-·     0  ·     spans  ALL        ·          ·
+scan  ·      ·          (x, y, s)  ·
+·     table  a@primary  ·          ·
+·     spans  ALL        ·          ·
 
 exec
 SELECT * FROM a
@@ -40,12 +40,12 @@ scan a
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT s, x FROM a
 ----
-render     0  render  ·         ·          (s, x)  ·
- │         0  ·       render 0  s          ·       ·
- │         0  ·       render 1  x          ·       ·
- └── scan  1  scan    ·         ·          (x, s)  ·
-·          1  ·       table     a@primary  ·       ·
-·          1  ·       spans     ALL        ·       ·
+render     ·         ·          (s, x)  ·
+ │         render 0  s          ·       ·
+ │         render 1  x          ·       ·
+ └── scan  ·         ·          (x, s)  ·
+·          table     a@primary  ·       ·
+·          spans     ALL        ·       ·
 
 exec
 SELECT s, x FROM a
@@ -80,9 +80,9 @@ cherry    3
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT s, x FROM b
 ----
-render     0  render  ·         ·          (s, x)  ·
- │         0  ·       render 0  s          ·       ·
- │         0  ·       render 1  x          ·       ·
- └── scan  1  scan    ·         ·          (x, s)  ·
-·          1  ·       table     b@primary  ·       ·
-·          1  ·       spans     ALL        ·       ·
+render     ·         ·          (s, x)  ·
+ │         render 0  s          ·       ·
+ │         render 1  x          ·       ·
+ └── scan  ·         ·          (x, s)  ·
+·          table     b@primary  ·       ·
+·          spans     ALL        ·       ·

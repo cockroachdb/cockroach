@@ -8,14 +8,14 @@ INSERT INTO b VALUES (2, 200), (3, 300), (4, 400)
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a, b
 ----
-join       0  join  ·      ·          (x, y, x, z)  ·
- │         0  ·     type   cross      ·             ·
- ├── scan  1  scan  ·      ·          (x, y)        ·
- │         1  ·     table  a@primary  ·             ·
- │         1  ·     spans  ALL        ·             ·
- └── scan  1  scan  ·      ·          (x, z)        ·
-·          1  ·     table  b@primary  ·             ·
-·          1  ·     spans  ALL        ·             ·
+join       ·      ·          (x, y, x, z)  ·
+ │         type   cross      ·             ·
+ ├── scan  ·      ·          (x, y)        ·
+ │         table  a@primary  ·             ·
+ │         spans  ALL        ·             ·
+ └── scan  ·      ·          (x, z)        ·
+·          table  b@primary  ·             ·
+·          spans  ALL        ·             ·
 
 exec
 SELECT * FROM a, b
@@ -34,15 +34,15 @@ x:int  y:int  x:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE a.x = b.x
 ----
-join       0  join  ·         ·          (x, y, x, z)  ·
- │         0  ·     type      inner      ·             ·
- │         0  ·     equality  (x) = (x)  ·             ·
- ├── scan  1  scan  ·         ·          (x, y)        ·
- │         1  ·     table     a@primary  ·             ·
- │         1  ·     spans     ALL        ·             ·
- └── scan  1  scan  ·         ·          (x, z)        ·
-·          1  ·     table     b@primary  ·             ·
-·          1  ·     spans     ALL        ·             ·
+join       ·         ·          (x, y, x, z)  ·
+ │         type      inner      ·             ·
+ │         equality  (x) = (x)  ·             ·
+ ├── scan  ·         ·          (x, y)        ·
+ │         table     a@primary  ·             ·
+ │         spans     ALL        ·             ·
+ └── scan  ·         ·          (x, z)        ·
+·          table     b@primary  ·             ·
+·          spans     ALL        ·             ·
 
 exec
 SELECT * FROM a, b WHERE a.x = b.x
@@ -54,15 +54,15 @@ x:int  y:int  x:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
-join       0  join  ·         ·          (x, y, x, z)  ·
- │         0  ·     type      inner      ·             ·
- │         0  ·     equality  (x) = (x)  ·             ·
- ├── scan  1  scan  ·         ·          (x, y)        ·
- │         1  ·     table     a@primary  ·             ·
- │         1  ·     spans     ALL        ·             ·
- └── scan  1  scan  ·         ·          (x, z)        ·
-·          1  ·     table     b@primary  ·             ·
-·          1  ·     spans     ALL        ·             ·
+join       ·         ·          (x, y, x, z)  ·
+ │         type      inner      ·             ·
+ │         equality  (x) = (x)  ·             ·
+ ├── scan  ·         ·          (x, y)        ·
+ │         table     a@primary  ·             ·
+ │         spans     ALL        ·             ·
+ └── scan  ·         ·          (x, z)        ·
+·          table     b@primary  ·             ·
+·          spans     ALL        ·             ·
 
 exec
 SELECT * FROM a INNER JOIN b ON a.x = b.x
@@ -74,19 +74,19 @@ x:int  y:int  x:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL JOIN b
 ----
-render          0  render  ·         ·          (x, y, z)     ·
- │              0  ·       render 0  x          ·             ·
- │              0  ·       render 1  y          ·             ·
- │              0  ·       render 2  z          ·             ·
- └── join       1  join    ·         ·          (x, y, x, z)  ·
-      │         1  ·       type      inner      ·             ·
-      │         1  ·       equality  (x) = (x)  ·             ·
-      ├── scan  2  scan    ·         ·          (x, y)        ·
-      │         2  ·       table     a@primary  ·             ·
-      │         2  ·       spans     ALL        ·             ·
-      └── scan  2  scan    ·         ·          (x, z)        ·
-·               2  ·       table     b@primary  ·             ·
-·               2  ·       spans     ALL        ·             ·
+render          ·         ·          (x, y, z)     ·
+ │              render 0  x          ·             ·
+ │              render 1  y          ·             ·
+ │              render 2  z          ·             ·
+ └── join       ·         ·          (x, y, x, z)  ·
+      │         type      inner      ·             ·
+      │         equality  (x) = (x)  ·             ·
+      ├── scan  ·         ·          (x, y)        ·
+      │         table     a@primary  ·             ·
+      │         spans     ALL        ·             ·
+      └── scan  ·         ·          (x, z)        ·
+·               table     b@primary  ·             ·
+·               spans     ALL        ·             ·
 
 exec
 SELECT * FROM a NATURAL JOIN b
@@ -98,15 +98,15 @@ x:int  y:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
-join       0  join  ·         ·           (x, y, x, z)  ·
- │         0  ·     type      left outer  ·             ·
- │         0  ·     equality  (x) = (x)   ·             ·
- ├── scan  1  scan  ·         ·           (x, y)        ·
- │         1  ·     table     a@primary   ·             ·
- │         1  ·     spans     ALL         ·             ·
- └── scan  1  scan  ·         ·           (x, z)        ·
-·          1  ·     table     b@primary   ·             ·
-·          1  ·     spans     ALL         ·             ·
+join       ·         ·           (x, y, x, z)  ·
+ │         type      left outer  ·             ·
+ │         equality  (x) = (x)   ·             ·
+ ├── scan  ·         ·           (x, y)        ·
+ │         table     a@primary   ·             ·
+ │         spans     ALL         ·             ·
+ └── scan  ·         ·           (x, z)        ·
+·          table     b@primary   ·             ·
+·          spans     ALL         ·             ·
 
 exec
 SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
@@ -119,19 +119,19 @@ x:int  y:int  x:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
-render          0  render  ·         ·            (x, y, z)     ·
- │              0  ·       render 0  x            ·             ·
- │              0  ·       render 1  y            ·             ·
- │              0  ·       render 2  z            ·             ·
- └── join       1  join    ·         ·            (x, y, x, z)  ·
-      │         1  ·       type      right outer  ·             ·
-      │         1  ·       equality  (x) = (x)    ·             ·
-      ├── scan  2  scan    ·         ·            (x, y)        ·
-      │         2  ·       table     a@primary    ·             ·
-      │         2  ·       spans     ALL          ·             ·
-      └── scan  2  scan    ·         ·            (x, z)        ·
-·               2  ·       table     b@primary    ·             ·
-·               2  ·       spans     ALL          ·             ·
+render          ·         ·            (x, y, z)     ·
+ │              render 0  x            ·             ·
+ │              render 1  y            ·             ·
+ │              render 2  z            ·             ·
+ └── join       ·         ·            (x, y, x, z)  ·
+      │         type      right outer  ·             ·
+      │         equality  (x) = (x)    ·             ·
+      ├── scan  ·         ·            (x, y)        ·
+      │         table     a@primary    ·             ·
+      │         spans     ALL          ·             ·
+      └── scan  ·         ·            (x, z)        ·
+·               table     b@primary    ·             ·
+·               spans     ALL          ·             ·
 
 exec
 SELECT * FROM a NATURAL RIGHT OUTER JOIN b
@@ -144,19 +144,19 @@ x:int  y:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
-render          0  render  ·         ·               (x, y, z)     ·
- │              0  ·       render 0  COALESCE(x, x)  ·             ·
- │              0  ·       render 1  y               ·             ·
- │              0  ·       render 2  z               ·             ·
- └── join       1  join    ·         ·               (x, y, x, z)  ·
-      │         1  ·       type      full outer      ·             ·
-      │         1  ·       equality  (x) = (x)       ·             ·
-      ├── scan  2  scan    ·         ·               (x, y)        ·
-      │         2  ·       table     a@primary       ·             ·
-      │         2  ·       spans     ALL             ·             ·
-      └── scan  2  scan    ·         ·               (x, z)        ·
-·               2  ·       table     b@primary       ·             ·
-·               2  ·       spans     ALL             ·             ·
+render          ·         ·               (x, y, z)     ·
+ │              render 0  COALESCE(x, x)  ·             ·
+ │              render 1  y               ·             ·
+ │              render 2  z               ·             ·
+ └── join       ·         ·               (x, y, x, z)  ·
+      │         type      full outer      ·             ·
+      │         equality  (x) = (x)       ·             ·
+      ├── scan  ·         ·               (x, y)        ·
+      │         table     a@primary       ·             ·
+      │         spans     ALL             ·             ·
+      └── scan  ·         ·               (x, z)        ·
+·               table     b@primary       ·             ·
+·               spans     ALL             ·             ·
 
 exec
 SELECT * FROM a FULL OUTER JOIN b USING(x)
@@ -171,18 +171,18 @@ x:int  y:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
-join            0  join    ·       ·          (x, y, x, z)  ·
- │              0  ·       type    cross      ·             ·
- ├── filter     1  filter  ·       ·          (x, y)        ·
- │    │         1  ·       filter  y > 10     ·             ·
- │    └── scan  2  scan    ·       ·          (x, y)        ·
- │              2  ·       table   a@primary  ·             ·
- │              2  ·       spans   ALL        ·             ·
- └── filter     1  filter  ·       ·          (x, z)        ·
-      │         1  ·       filter  z < 400    ·             ·
-      └── scan  2  scan    ·       ·          (x, z)        ·
-·               2  ·       table   b@primary  ·             ·
-·               2  ·       spans   ALL        ·             ·
+join            ·       ·          (x, y, x, z)  ·
+ │              type    cross      ·             ·
+ ├── filter     ·       ·          (x, y)        ·
+ │    │         filter  y > 10     ·             ·
+ │    └── scan  ·       ·          (x, y)        ·
+ │              table   a@primary  ·             ·
+ │              spans   ALL        ·             ·
+ └── filter     ·       ·          (x, z)        ·
+      │         filter  z < 400    ·             ·
+      └── scan  ·       ·          (x, z)        ·
+·               table   b@primary  ·             ·
+·               spans   ALL        ·             ·
 
 exec
 SELECT * FROM a, b WHERE y > 10 AND z < 400
@@ -197,17 +197,17 @@ x:int  y:int  x:int  z:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
-join            0  join    ·         ·           (x, y, x, z)  ·
- │              0  ·       type      left outer  ·             ·
- │              0  ·       equality  (x) = (x)   ·             ·
- ├── scan       1  scan    ·         ·           (x, y)        ·
- │              1  ·       table     a@primary   ·             ·
- │              1  ·       spans     ALL         ·             ·
- └── filter     1  filter  ·         ·           (x, z)        ·
-      │         1  ·       filter    z < 300     ·             ·
-      └── scan  2  scan    ·         ·           (x, z)        ·
-·               2  ·       table     b@primary   ·             ·
-·               2  ·       spans     ALL         ·             ·
+join            ·         ·           (x, y, x, z)  ·
+ │              type      left outer  ·             ·
+ │              equality  (x) = (x)   ·             ·
+ ├── scan       ·         ·           (x, y)        ·
+ │              table     a@primary   ·             ·
+ │              spans     ALL         ·             ·
+ └── filter     ·         ·           (x, z)        ·
+      │         filter    z < 300     ·             ·
+      └── scan  ·         ·           (x, z)        ·
+·               table     b@primary   ·             ·
+·               spans     ALL         ·             ·
 
 exec
 SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
@@ -228,15 +228,15 @@ INSERT INTO c VALUES (2, 200), (3, 300), (4, 400)
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
 ----
-join       0  join  ·         ·          (x, y)  ·
- │         0  ·     type      semi       ·       ·
- │         0  ·     equality  (x) = (u)  ·       ·
- ├── scan  1  scan  ·         ·          (x, y)  ·
- │         1  ·     table     a@primary  ·       ·
- │         1  ·     spans     ALL        ·       ·
- └── scan  1  scan  ·         ·          (u, v)  ·
-·          1  ·     table     c@primary  ·       ·
-·          1  ·     spans     ALL        ·       ·
+join       ·         ·          (x, y)  ·
+ │         type      semi       ·       ·
+ │         equality  (x) = (u)  ·       ·
+ ├── scan  ·         ·          (x, y)  ·
+ │         table     a@primary  ·       ·
+ │         spans     ALL        ·       ·
+ └── scan  ·         ·          (u, v)  ·
+·          table     c@primary  ·       ·
+·          spans     ALL        ·       ·
 
 exec
 SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
@@ -248,15 +248,15 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
-join       0  join  ·      ·            (x, y)  ·
- │         0  ·     type   semi         ·       ·
- │         0  ·     pred   u = (x - 1)  ·       ·
- ├── scan  1  scan  ·      ·            (x, y)  ·
- │         1  ·     table  a@primary    ·       ·
- │         1  ·     spans  ALL          ·       ·
- └── scan  1  scan  ·      ·            (u, v)  ·
-·          1  ·     table  c@primary    ·       ·
-·          1  ·     spans  ALL          ·       ·
+join       ·      ·            (x, y)  ·
+ │         type   semi         ·       ·
+ │         pred   u = (x - 1)  ·       ·
+ ├── scan  ·      ·            (x, y)  ·
+ │         table  a@primary    ·       ·
+ │         spans  ALL          ·       ·
+ └── scan  ·      ·            (u, v)  ·
+·          table  c@primary    ·       ·
+·          spans  ALL          ·       ·
 
 exec
 SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
@@ -267,15 +267,15 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
 ----
-join       0  join  ·         ·          (x, y)  ·
- │         0  ·     type      anti       ·       ·
- │         0  ·     equality  (x) = (u)  ·       ·
- ├── scan  1  scan  ·         ·          (x, y)  ·
- │         1  ·     table     a@primary  ·       ·
- │         1  ·     spans     ALL        ·       ·
- └── scan  1  scan  ·         ·          (u, v)  ·
-·          1  ·     table     c@primary  ·       ·
-·          1  ·     spans     ALL        ·       ·
+join       ·         ·          (x, y)  ·
+ │         type      anti       ·       ·
+ │         equality  (x) = (u)  ·       ·
+ ├── scan  ·         ·          (x, y)  ·
+ │         table     a@primary  ·       ·
+ │         spans     ALL        ·       ·
+ └── scan  ·         ·          (u, v)  ·
+·          table     c@primary  ·       ·
+·          spans     ALL        ·       ·
 
 exec
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
@@ -286,15 +286,15 @@ x:int  y:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
-join       0  join  ·      ·            (x, y)  ·
- │         0  ·     type   anti         ·       ·
- │         0  ·     pred   u = (x - 1)  ·       ·
- ├── scan  1  scan  ·      ·            (x, y)  ·
- │         1  ·     table  a@primary    ·       ·
- │         1  ·     spans  ALL          ·       ·
- └── scan  1  scan  ·      ·            (u, v)  ·
-·          1  ·     table  c@primary    ·       ·
-·          1  ·     spans  ALL          ·       ·
+join       ·      ·            (x, y)  ·
+ │         type   anti         ·       ·
+ │         pred   u = (x - 1)  ·       ·
+ ├── scan  ·      ·            (x, y)  ·
+ │         table  a@primary    ·       ·
+ │         spans  ALL          ·       ·
+ └── scan  ·      ·            (u, v)  ·
+·          table  c@primary    ·       ·
+·          spans  ALL          ·       ·
 
 exec
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
