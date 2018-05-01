@@ -53,12 +53,18 @@ type Factory interface {
 	//     in the constraint.
 	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
 	//     the scan.
+	//
+	// The required ordering (reqOrder) is necessary for distributed execution:
+	// this annotation indicates how results from multiple nodes are merged. It
+	// refers to the scanned columns by ordinal: specifically, ColIdx=0 is the
+	// first column in the needed set, ColIdx=1 is the second column, etc.
 	ConstructScan(
 		table opt.Table,
 		index opt.Index,
 		needed ColumnOrdinalSet,
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
+		reqOrder sqlbase.ColumnOrdering,
 	) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
