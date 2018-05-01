@@ -121,6 +121,6 @@ func (*raftSnapshotQueue) timer(_ time.Duration) time.Duration {
 	return raftSnapshotQueueTimerDuration
 }
 
-func (rq *raftSnapshotQueue) purgatoryChan() <-chan struct{} {
+func (rq *raftSnapshotQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }
