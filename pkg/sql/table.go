@@ -280,6 +280,10 @@ func (tc *TableCollection) getTableVersion(
 		return nil, nil, err
 	}
 
+	if !origTimestamp.Less(expiration) {
+		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", origTimestamp, expiration)
+	}
+
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
@@ -339,6 +343,10 @@ func (tc *TableCollection) getTableVersionByID(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
+	}
+
+	if !origTimestamp.Less(expiration) {
+		log.Fatalf(ctx, "bad table for T=%s, expiration=%s", origTimestamp, expiration)
 	}
 
 	tc.leasedTables = append(tc.leasedTables, table)
