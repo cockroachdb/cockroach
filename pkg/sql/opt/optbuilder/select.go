@@ -64,6 +64,10 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		outScope.removeHiddenCols()
 		return outScope
 
+	case *tree.StatementSource:
+		outScope = b.buildStmt(source.Statement, inScope)
+		return outScope
+
 	default:
 		panic(errorf("not yet implemented: table expr: %T", texpr))
 	}
