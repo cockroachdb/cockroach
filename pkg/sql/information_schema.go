@@ -382,13 +382,13 @@ CREATE TABLE information_schema.constraint_column_usage (
 				tableNameStr := tree.NewDString(conTable.Name)
 				for _, col := range conCols {
 					if err := addRow(
-						dbNameStr,                // table_catalog
-						scNameStr,                // table_schema
-						tableNameStr,             // table_name
-						tree.NewDString(col),     // column_name
-						dbNameStr,                // constraint_catalog
-						tree.NewDString(db.Name), // constraint_schema
-						conNameStr,               // constraint_name
+						dbNameStr,            // table_catalog
+						scNameStr,            // table_schema
+						tableNameStr,         // table_name
+						tree.NewDString(col), // column_name
+						dbNameStr,            // constraint_catalog
+						scNameStr,            // constraint_schema
+						conNameStr,           // constraint_name
 					); err != nil {
 						return err
 					}
