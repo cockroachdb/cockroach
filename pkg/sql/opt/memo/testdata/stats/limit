@@ -82,21 +82,20 @@ limit
  │         ├── variable: a.s [type=string, outer=(3)]
  │         └── const: 'foo' [type=string]
  └── subquery [type=int]
-      ├── max1-row
-      │    ├── columns: column5:5(int)
-      │    ├── cardinality: [1 - 1]
-      │    ├── stats: [rows=1]
-      │    └── project
-      │         ├── columns: column5:5(int)
-      │         ├── cardinality: [1 - 1]
-      │         ├── stats: [rows=1]
-      │         ├── values
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── stats: [rows=1]
-      │         │    └── tuple [type=tuple{}]
-      │         └── projections
-      │              └── const: 5 [type=int]
-      └── variable: column5 [type=int, outer=(5)]
+      └── max1-row
+           ├── columns: column5:5(int)
+           ├── cardinality: [1 - 1]
+           ├── stats: [rows=1]
+           └── project
+                ├── columns: column5:5(int)
+                ├── cardinality: [1 - 1]
+                ├── stats: [rows=1]
+                ├── values
+                │    ├── cardinality: [1 - 1]
+                │    ├── stats: [rows=1]
+                │    └── tuple [type=tuple{}]
+                └── projections
+                     └── const: 5 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'

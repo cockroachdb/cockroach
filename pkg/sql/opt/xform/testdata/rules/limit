@@ -102,11 +102,10 @@ limit
  ├── scan a
  │    └── columns: a.s:4(string)
  └── subquery [type=int]
-      ├── scan a
-      │    ├── columns: a.k:6(int!null)
-      │    ├── limit: 1
-      │    └── keys: (6)
-      └── variable: a.k [type=int, outer=(6)]
+      └── scan a
+           ├── columns: a.k:6(int!null)
+           ├── limit: 1
+           └── keys: (6)
 
 memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
