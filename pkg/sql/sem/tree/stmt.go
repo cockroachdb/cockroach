@@ -125,7 +125,7 @@ type HiddenFromStats interface {
 
 // HiddenFromShowQueries is a pseudo-interface to be implemented
 // by statements that should not show up in SHOW QUERIES (and are hence
-// not cancellable using CANCEL QUERY either). Usually implemented by
+// not cancellable using CANCEL QUERIES either). Usually implemented by
 // statements that spawn jobs.
 type HiddenFromShowQueries interface {
 	hiddenFromShowQueries()
@@ -207,26 +207,30 @@ func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 func (*BeginTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
-func (*CancelJob) StatementType() StatementType { return Ack }
+func (*ControlJobs) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CancelJob) StatementTag() string { return "CANCEL JOB" }
+func (n *ControlJobs) StatementTag() string {
+	return fmt.Sprintf("%s JOBS", JobCommandToStatement[n.Command])
+}
+
+func (*ControlJobs) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
-func (*CancelQuery) StatementType() StatementType { return Ack }
+func (*CancelQueries) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CancelQuery) StatementTag() string { return "CANCEL QUERY" }
+func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
 
-func (*CancelQuery) independentFromParallelizedPriors() {}
+func (*CancelQueries) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
-func (*CancelSession) StatementType() StatementType { return Ack }
+func (*CancelSessions) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*CancelSession) StatementTag() string { return "CANCEL SESSION" }
+func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
 
-func (*CancelSession) independentFromParallelizedPriors() {}
+func (*CancelSessions) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
@@ -436,12 +440,6 @@ func (*ParenSelect) StatementType() StatementType { return Rows }
 func (*ParenSelect) StatementTag() string { return "SELECT" }
 
 // StatementType implements the Statement interface.
-func (*PauseJob) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*PauseJob) StatementTag() string { return "PAUSE JOB" }
-
-// StatementType implements the Statement interface.
 func (*Prepare) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -501,12 +499,6 @@ func (*Restore) StatementType() StatementType { return Rows }
 func (*Restore) StatementTag() string { return "RESTORE" }
 
 func (*Restore) hiddenFromShowQueries() {}
-
-// StatementType implements the Statement interface.
-func (*ResumeJob) StatementType() StatementType { return Ack }
-
-// StatementTag returns a short string identifying the type of statement.
-func (*ResumeJob) StatementTag() string { return "RESUME JOB" }
 
 // StatementType implements the Statement interface.
 func (*Revoke) StatementType() StatementType { return DDL }
@@ -888,9 +880,9 @@ func (n *AlterUserSetPassword) String() string      { return AsString(n) }
 func (n *AlterSequence) String() string             { return AsString(n) }
 func (n *Backup) String() string                    { return AsString(n) }
 func (n *BeginTransaction) String() string          { return AsString(n) }
-func (n *CancelJob) String() string                 { return AsString(n) }
-func (n *CancelQuery) String() string               { return AsString(n) }
-func (n *CancelSession) String() string             { return AsString(n) }
+func (n *ControlJobs) String() string               { return AsString(n) }
+func (n *CancelQueries) String() string             { return AsString(n) }
+func (n *CancelSessions) String() string            { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
 func (n *CreateChangefeed) String() string          { return AsString(n) }
@@ -919,7 +911,6 @@ func (n *GrantRole) String() string                 { return AsString(n) }
 func (n *Insert) String() string                    { return AsString(n) }
 func (n *Import) String() string                    { return AsString(n) }
 func (n *ParenSelect) String() string               { return AsString(n) }
-func (n *PauseJob) String() string                  { return AsString(n) }
 func (n *Prepare) String() string                   { return AsString(n) }
 func (n *ReleaseSavepoint) String() string          { return AsString(n) }
 func (n *TestingRelocate) String() string           { return AsString(n) }
@@ -928,7 +919,6 @@ func (n *RenameDatabase) String() string            { return AsString(n) }
 func (n *RenameIndex) String() string               { return AsString(n) }
 func (n *RenameTable) String() string               { return AsString(n) }
 func (n *Restore) String() string                   { return AsString(n) }
-func (n *ResumeJob) String() string                 { return AsString(n) }
 func (n *Revoke) String() string                    { return AsString(n) }
 func (n *RevokeRole) String() string                { return AsString(n) }
 func (n *RollbackToSavepoint) String() string       { return AsString(n) }
