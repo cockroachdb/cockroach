@@ -17,6 +17,7 @@
 #include <libroach.h>
 #include <rocksdb/db.h>
 #include "engine.h"
+#include "writable_file.h"
 
 namespace cockroach {
 
@@ -38,6 +39,9 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus OpenFile(DBSlice path, DBWritableFile* file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual void CloseFile(DBWritableFile* file);
 };
 
 }  // namespace cockroach

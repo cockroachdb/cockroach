@@ -2616,6 +2616,23 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
 }
 
+// OpenFile opens a DBWritableFile, which is essentially a rocksdb WritableFile
+// with the given filename, in this RocksDB's env.
+func (r *RocksDB) OpenFile(filename string) (*C.DBWritableFile, error) {
+	var file *C.DBWritableFile
+	return file, statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), file))
+}
+
+// CloseFile closes the DBWritableFile in this RocksDB's env.
+func (r *RocksDB) CloseFile(file *C.DBWritableFile) {
+	C.DBEnvCloseFile(r.rdb, file)
+}
+
+// AppendFile appends data to a file in this RocksDB's env.
+func (r *RocksDB) AppendFile(file *C.DBWritableFile, data []byte) error {
+	return statusToError(C.DBEnvAppendFile(r.rdb, file, goToCSlice(data)))
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key

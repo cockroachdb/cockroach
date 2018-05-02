@@ -18,6 +18,7 @@
 #include <rocksdb/db.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
 #include "engine.h"
+#include "writable_file.h"
 
 namespace cockroach {
 
@@ -41,6 +42,9 @@ struct DBBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus OpenFile(DBSlice path, DBWritableFile* file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual void CloseFile(DBWritableFile* file);
 };
 
 struct DBWriteOnlyBatch : public DBEngine {
@@ -62,6 +66,9 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus OpenFile(DBSlice path, DBWritableFile* file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual void CloseFile(DBWritableFile* file);
 };
 
 // GetDBBatchInserter returns a WriteBatch::Handler that operates on a

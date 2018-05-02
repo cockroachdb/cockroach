@@ -35,6 +35,7 @@
 #include "options.h"
 #include "snapshot.h"
 #include "status.h"
+#include "writable_file.h"
 
 using namespace cockroach;
 
@@ -418,6 +419,18 @@ DBEngine* DBNewBatch(DBEngine* db, bool writeOnly) {
 
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
   return db->EnvWriteFile(path, contents);
+}
+
+DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file) {
+  return db->OpenFile(path, file);
+}
+
+void DBEnvCloseFile(DBEngine* db, DBWritableFile* file) {
+  db->CloseFile(file);
+}
+
+DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile* file, DBSlice contents) {
+  return db->EnvAppendFile(file->file, contents);
 }
 
 DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {

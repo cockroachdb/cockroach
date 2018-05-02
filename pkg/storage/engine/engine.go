@@ -23,6 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// #cgo CPPFLAGS: -I../../../c-deps/libroach/include
+// #cgo LDFLAGS: -lroach
+// #cgo LDFLAGS: -lprotobuf
+// #cgo LDFLAGS: -lrocksdb
+// #cgo LDFLAGS: -lsnappy
+// #cgo linux LDFLAGS: -lrt -lpthread
+// #cgo windows LDFLAGS: -lrpcrt4
+//
+// #include <stdlib.h>
+// #include <libroach.h>
+import "C"
+
 // SimpleIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleIterator implementations are thread safe unless otherwise
 // noted. SimpleIterator is a subset of the functionality offered by Iterator.
@@ -283,6 +295,13 @@ type Engine interface {
 	// that the key range is compacted all the way to the bottommost level of
 	// SSTables, which is necessary to pick up changes to bloom filters.
 	CompactRange(start, end roachpb.Key, forceBottommost bool) error
+	// OpenFile opens a DBWritableFile with the given filename and returns a
+	// pointer to it.
+	OpenFile(filename string) (*C.DBWritableFile, error)
+	// AppendFile appends the given data to the given DBWritableFile.
+	AppendFile(file *C.DBWritableFile, data []byte) error
+	// CloseFile closes the DBWritableFile.
+	CloseFile(file *C.DBWritableFile)
 }
 
 // WithSSTables extends the Engine interface with a method to get info

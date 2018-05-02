@@ -515,6 +515,16 @@ DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
+DBStatus DBBatch::OpenFile(DBSlice path, DBWritableFile* file) {
+  return FmtStatus("unsupported");
+}
+
+void DBBatch::CloseFile(DBWritableFile* file) {}
+
+DBStatus DBBatch::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
 DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep, db->iters), updates(0) {}
 
 DBWriteOnlyBatch::~DBWriteOnlyBatch() {}
@@ -579,6 +589,16 @@ DBStatus DBWriteOnlyBatch::GetStats(DBStatsResult* stats) { return FmtStatus("un
 DBString DBWriteOnlyBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBWriteOnlyBatch::EnvWriteFile(DBSlice path, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::OpenFile(DBSlice path, DBWritableFile* file) {
+  return FmtStatus("unsupported");
+}
+
+void DBWriteOnlyBatch::CloseFile(DBWritableFile* file) {}
+
+DBStatus DBWriteOnlyBatch::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
   return FmtStatus("unsupported");
 }
 

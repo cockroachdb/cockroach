@@ -223,4 +223,31 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   return kSuccess;
 }
 
+DBStatus DBImpl::OpenFile(DBSlice path, DBWritableFile* file) {
+  rocksdb::Status s;
+
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::WritableFile> rocksdb_file;
+  s = this->rep->GetEnv()->NewWritableFile(ToString(path), &rocksdb_file, soptions);
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+  file->file = rocksdb_file.release();
+  return kSuccess;
+}
+
+void DBImpl::CloseFile(DBWritableFile* file) {
+  delete file->file;
+}
+
+// EnvAppendFile appends the given data to the file in the given engine.
+DBStatus DBImpl::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  rocksdb::Status s;
+  s = file->Append(ToSlice(contents));
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+  return kSuccess;
+}
+
 }  // namespace cockroach

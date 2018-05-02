@@ -21,6 +21,7 @@
 #include <rocksdb/env.h>
 #include <rocksdb/statistics.h>
 #include "eventlistener.h"
+#include "writable_file.h"
 
 struct DBEngine {
   rocksdb::DB* const rep;
@@ -42,6 +43,9 @@ struct DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
+  virtual DBStatus OpenFile(DBSlice path, DBWritableFile* file) = 0;
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) = 0;
+  virtual void CloseFile(DBWritableFile* file) = 0;
 
   DBSSTable* GetSSTables(int* n);
   DBString GetUserProperties();
@@ -78,6 +82,9 @@ struct DBImpl : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus OpenFile(DBSlice path, DBWritableFile* file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual void CloseFile(DBWritableFile* file);
 };
 
 }  // namespace cockroach
