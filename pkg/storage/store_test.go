@@ -2868,49 +2868,6 @@ func TestRemovedReplicaTombstone(t *testing.T) {
 	}
 }
 
-func TestCanCampaignIdleReplica(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	s := tc.store
-	ctx := context.Background()
-
-	s.idleReplicaElectionTime.Lock()
-	s.idleReplicaElectionTime.at = time.Time{}
-	s.idleReplicaElectionTime.Unlock()
-
-	// Bump the clock by the election timeout. Idle replicas can't campaign
-	// eagerly yet because we haven't gossiped the store descriptor.
-	electionTimeout := int64(s.cfg.RaftTickInterval * time.Duration(s.cfg.RaftElectionTimeoutTicks))
-	tc.manualClock.Increment(electionTimeout)
-	if s.canCampaignIdleReplica() {
-		t.Fatalf("idle replica can unexpectedly campaign")
-	}
-
-	// Gossip the store descriptor.
-	if err := s.GossipStore(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if s.canCampaignIdleReplica() {
-		t.Fatalf("idle replica can unexpectedly campaign")
-	}
-
-	// Bump the clock to just before the idle election time.
-	tc.manualClock.Increment(electionTimeout - 1)
-	if s.canCampaignIdleReplica() {
-		t.Fatalf("idle replica can unexpectedly campaign")
-	}
-
-	// One more nanosecond bump and idle replicas should be able to campaign
-	// eagerly.
-	tc.manualClock.Increment(1)
-	if !s.canCampaignIdleReplica() {
-		t.Fatalf("idle replica unexpectedly cannot campaign")
-	}
-}
-
 type fakeSnapshotStream struct {
 	nextResp *SnapshotResponse
 	nextErr  error
