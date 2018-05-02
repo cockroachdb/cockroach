@@ -42,6 +42,10 @@ struct DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
+  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) = 0;
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) = 0;
+  virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file) = 0;
+  virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file) = 0;
 
   DBSSTable* GetSSTables(int* n);
   DBString GetUserProperties();
@@ -78,6 +82,10 @@ struct DBImpl : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
+  virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
 };
 
 }  // namespace cockroach

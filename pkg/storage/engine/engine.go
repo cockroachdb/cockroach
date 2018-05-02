@@ -283,6 +283,8 @@ type Engine interface {
 	// that the key range is compacted all the way to the bottommost level of
 	// SSTables, which is necessary to pick up changes to bloom filters.
 	CompactRange(start, end roachpb.Key, forceBottommost bool) error
+	// OpenFile opens a DBFile with the given filename.
+	OpenFile(filename string) (DBFile, error)
 }
 
 // WithSSTables extends the Engine interface with a method to get info

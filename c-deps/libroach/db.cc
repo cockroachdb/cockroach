@@ -420,6 +420,22 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents) {
   return db->EnvWriteFile(path, contents);
 }
 
+DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file) {
+  return db->EnvOpenFile(path, (rocksdb::WritableFile**)file);
+}
+
+DBStatus DBEnvCloseFile(DBEngine* db, DBWritableFile file) {
+  return db->EnvCloseFile((rocksdb::WritableFile*)file);
+}
+
+DBStatus DBEnvSyncFile(DBEngine* db, DBWritableFile file) {
+  return db->EnvSyncFile((rocksdb::WritableFile*)file);
+}
+
+DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile file, DBSlice contents) {
+  return db->EnvAppendFile((rocksdb::WritableFile*)file, contents);
+}
+
 DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
   rocksdb::ReadOptions opts;
   opts.prefix_same_as_start = prefix;

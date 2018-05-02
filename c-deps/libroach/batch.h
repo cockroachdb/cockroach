@@ -41,6 +41,10 @@ struct DBBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
+  virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
 };
 
 struct DBWriteOnlyBatch : public DBEngine {
@@ -62,6 +66,10 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
+  virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
+  virtual DBStatus EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents);
+  virtual DBStatus EnvSyncFile(rocksdb::WritableFile* file);
+  virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
 };
 
 // GetDBBatchInserter returns a WriteBatch::Handler that operates on a
