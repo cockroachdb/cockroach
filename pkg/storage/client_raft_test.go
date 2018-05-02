@@ -1138,6 +1138,28 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 		storeConfig: &sc,
 	}
 	defer mtc.Stop()
+
+	for i := 0; i < 3; i++ {
+		dir, cleanup := testutils.TempDir(t)
+		defer cleanup()
+		cache := engine.NewRocksDBCache(1 << 20)
+		defer cache.Release()
+
+		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+			Dir:       dir,
+			MustExist: false,
+		}, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		engineStopper := stop.NewStopper()
+		mtc.engineStoppers = append(mtc.engineStoppers, engineStopper)
+		engineStopper.AddCloser(eng)
+		mtc.engines = append(mtc.engines, eng)
+		mtc.injEngines = true
+	}
+
 	mtc.Start(t, 3)
 	mtc.stopStore(2)
 	if err := storage.ProposeAddSSTable(

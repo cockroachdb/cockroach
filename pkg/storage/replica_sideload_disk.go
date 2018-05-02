@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
@@ -36,6 +37,7 @@ type diskSideloadStorage struct {
 	limiter    *rate.Limiter
 	dir        string
 	dirCreated bool
+	eng        engine.Engine
 }
 
 func newDiskSideloadStorage(
@@ -44,6 +46,7 @@ func newDiskSideloadStorage(
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	limiter *rate.Limiter,
+	eng engine.Engine,
 ) (sideloadStorage, error) {
 	ss := &diskSideloadStorage{
 		dir: filepath.Join(
@@ -52,6 +55,7 @@ func newDiskSideloadStorage(
 			fmt.Sprintf("%d", rangeID%1000), // sharding
 			fmt.Sprintf("%d.%d", rangeID, replicaID),
 		),
+		eng:     eng,
 		st:      st,
 		limiter: limiter,
 	}
@@ -75,7 +79,10 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := writeFileSyncing(ctx, filename, contents, 0644, ss.st, ss.limiter); err == nil {
+		if err := writeFileSyncing(ctx, filename, contents, ss.eng, 0644, ss.st, ss.limiter); err == nil {
+			if _, err := os.Stat(filename); err == nil {
+				ss.dirCreated = true
+			}
 			return nil
 		} else if !os.IsNotExist(err) {
 			return err
