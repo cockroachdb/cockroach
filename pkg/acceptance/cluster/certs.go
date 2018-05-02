@@ -44,6 +44,10 @@ func GenerateCerts(ctx context.Context) func() {
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
 		512, 48*time.Hour, false, security.RootUser))
 
+	maybePanic(security.CreateClientPair(
+		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		512, 48*time.Hour, false, "testuser"))
+
 	// Store a copy of the client private key in PKCS#8 format, which is
 	// the only format understood by PgJDBC (Java).
 	{

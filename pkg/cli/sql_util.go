@@ -559,9 +559,9 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 			}
 			// If we can go on (we have a certificate spec), clear the password.
 			baseURL.User = url.User(security.RootUser)
-		} else {
-			// If there's no password in the URL yet, ask for it and populate
-			// it in the URL.
+		} else if options.Get("sslcert") == "" || options.Get("sslkey") == "" {
+			// If there's no password in the URL yet and we don't have a client
+			// certificate, ask for it and populate it in the URL.
 			if _, pwdSet := baseURL.User.Password(); !pwdSet {
 				pwd, err := security.PromptForPassword()
 				if err != nil {
