@@ -390,6 +390,28 @@ func typeCheckOverloadedExprs(
 			})
 	}
 
+	var homogeneousTyp types.T
+	if len(s.resolvableIdxs) > 0 {
+		homogeneousTyp = s.typedExprs[s.resolvableIdxs[0]].ResolvedType()
+		for _, i := range s.resolvableIdxs[1:] {
+			if !homogeneousTyp.Equivalent(s.typedExprs[i].ResolvedType()) {
+				homogeneousTyp = nil
+				break
+			}
+		}
+	}
+	if len(s.placeholderIdxs) > 0 && homogeneousTyp != nil {
+		// Before we continue, try to propagate the homogeneous type to the
+		// placeholders. This might not have happened yet, if the overloads'
+		// parameter types are ambiguous (like in the case of tuple-tuple binary
+		// operators).
+		for _, i := range s.placeholderIdxs {
+			if _, err := exprs[i].TypeCheck(ctx, homogeneousTyp); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
 	// At this point, all remaining overload candidates accept the argument list,
 	// so we begin checking for a single remaining candidate implementation to choose.
 	// In case there is more than one candidate remaining, the following code uses
@@ -413,17 +435,6 @@ func typeCheckOverloadedExprs(
 			})
 		if types, fns, ok, err := checkReturn(ctx, s); ok {
 			return types, fns, err
-		}
-	}
-
-	var homogeneousTyp types.T
-	if len(s.resolvableIdxs) > 0 {
-		homogeneousTyp = s.typedExprs[s.resolvableIdxs[0]].ResolvedType()
-		for _, i := range s.resolvableIdxs[1:] {
-			if !homogeneousTyp.Equivalent(s.typedExprs[i].ResolvedType()) {
-				homogeneousTyp = nil
-				break
-			}
 		}
 	}
 

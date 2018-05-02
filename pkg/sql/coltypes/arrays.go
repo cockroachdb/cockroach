@@ -60,3 +60,21 @@ type TVector struct {
 func (node *TVector) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
+
+// TTuple represents tuple column types. Tuples aren't writable to disk, but
+// they need a ColType representation to
+type TTuple []T
+
+// Format implements the ColTypeFormatter interface.
+func (node TTuple) Format(buf *bytes.Buffer, flags lex.EncodeFlags) {
+	buf.WriteString("(")
+	writeComma := false
+	for i := range node {
+		if writeComma {
+			buf.WriteString(", ")
+		}
+		node[i].Format(buf, flags)
+		writeComma = true
+	}
+	buf.WriteString(")")
+}

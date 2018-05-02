@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// SetTransaction sets a transaction's isolation level
+// SetTransaction sets a transaction's isolation level, priority and ro/rw state
 func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
 	return newZeroNode(nil /* columns */), p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes)
 }
