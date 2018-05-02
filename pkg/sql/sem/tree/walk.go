@@ -1114,6 +1114,28 @@ func (stmt *SetVar) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *SetTracing) CopyNode() *SetTracing {
+	stmtCopy := *stmt
+	stmtCopy.Values = append(Exprs(nil), stmt.Values...)
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *SetTracing) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	for i, expr := range stmt.Values {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.CopyNode()
+			}
+			ret.Values[i] = e
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *SetClusterSetting) CopyNode() *SetClusterSetting {
 	stmtCopy := *stmt
 	return &stmtCopy

@@ -58,11 +58,7 @@ func (p *planner) SetClusterSetting(
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
 		if _, ok := n.Value.(tree.DefaultVal); !ok {
 			expr := n.Value
-			if s, ok := expr.(*tree.UnresolvedName); ok {
-				// Special rule for SET: because SET doesn't apply in the context
-				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-				expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
-			}
+			expr = unresolvedNameToStrVal(expr)
 
 			var requiredType types.T
 			switch setting.(type) {
