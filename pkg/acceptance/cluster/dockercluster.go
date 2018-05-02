@@ -672,6 +672,9 @@ func (l *DockerCluster) Start(ctx context.Context) {
 	maybePanic(security.CreateClientPair(
 		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
 		512, 48*time.Hour, false, security.RootUser))
+	maybePanic(security.CreateClientPair(
+		l.CertsDir, filepath.Join(l.CertsDir, security.EmbeddedCAKey),
+		512, 48*time.Hour, false, "testuser"))
 
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor(ctx)
