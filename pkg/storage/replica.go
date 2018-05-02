@@ -937,6 +937,7 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 		replicaID,
 		r.store.Engine().GetAuxiliaryDir(),
 		r.store.limiters.BulkIOWriteRate,
+		r.store.engine,
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
