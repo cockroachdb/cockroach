@@ -27,3 +27,17 @@ std::string RandomBytes(size_t length) {
   CryptoPP::OS_GenerateRandomBlock(false /* blocking */, data, length);
   return std::string(reinterpret_cast<const char*>(data.data()), data.size());
 }
+
+AESCipher::~AESCipher() {}
+
+size_t AESCipher::BlockSize() { return CryptoPP::AES::BLOCKSIZE; }
+
+rocksdb::Status AESCipher::Encrypt(char* data) {
+  enc_.ProcessBlock((byte*)data);
+  return rocksdb::Status::OK();
+}
+
+rocksdb::Status AESCipher::Decrypt(char* data) {
+  enc_.ProcessBlock((byte*)data);
+  return rocksdb::Status::OK();
+}

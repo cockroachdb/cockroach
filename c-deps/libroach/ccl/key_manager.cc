@@ -216,6 +216,7 @@ rocksdb::Status DataKeyManager::LoadKeysHelper(enginepbccl::DataKeysRegistry* re
     return rocksdb::Status::InvalidArgument(
         fmt::StringPrintf("failed to parse key registry %s", registry_path_.c_str()));
   }
+
   return rocksdb::Status::OK();
 }
 
