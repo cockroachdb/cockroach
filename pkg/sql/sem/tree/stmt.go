@@ -151,11 +151,17 @@ func (l *StatementList) Format(ctx *FmtCtx) {
 	}
 }
 
-// ObserverStatement is a marker interface to be implemented by
-// statements which are always valid and do not modify neither the
-// session state, the txn state or the database. They are to be
-// allowed at any point, including when a current transaction is in a
-// transient state like retry_wait.
+// ObserverStatement is a marker interface for statements which are allowed to
+// run regardless of the current transaction state: statements other than
+// rollback are generally rejected if the session is in a failed transaction
+// state, but it's convenient to allow some statements (e.g. "show syntax; set
+// tracing").
+// Such statements are not expected to modify the database, the transaction or
+// session state (other than special cases such as enabling/disabling tracing).
+//
+// These statements short-circuit the regular execution - they don't get planned
+// (there are no corresponding planNodes). The connExecutor recognizes them and
+// handles them.
 type ObserverStatement interface {
 	observerStatement()
 }
@@ -585,6 +591,17 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*SetTracing) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*SetTracing) StatementTag() string { return "SET TRACING" }
+
+func (*SetTracing) hiddenFromStats() {}
+
+// observerStatement implements the ObserverStatement interface.
+func (*SetTracing) observerStatement() {}
+
+// StatementType implements the Statement interface.
 func (*SetZoneConfig) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -933,6 +950,7 @@ func (n *SetClusterSetting) String() string         { return AsString(n) }
 func (n *SetZoneConfig) String() string             { return AsString(n) }
 func (n *SetSessionCharacteristics) String() string { return AsString(n) }
 func (n *SetTransaction) String() string            { return AsString(n) }
+func (n *SetTracing) String() string                { return AsString(n) }
 func (n *SetVar) String() string                    { return AsString(n) }
 func (n *ShowBackup) String() string                { return AsString(n) }
 func (n *ShowClusterSetting) String() string        { return AsString(n) }

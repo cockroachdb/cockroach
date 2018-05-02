@@ -63,11 +63,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		if !isReset {
 			typedValues = make([]tree.TypedExpr, len(n.Values))
 			for i, expr := range n.Values {
-				// Special rule for SET: because SET doesn't apply in the context
-				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-				if s, ok := expr.(*tree.UnresolvedName); ok {
-					expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
-				}
+				expr = unresolvedNameToStrVal(expr)
 
 				var dummyHelper tree.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
@@ -96,6 +92,15 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	}
 
 	return &setVarNode{v: v, typedValues: typedValues}, nil
+}
+
+// Special rule for SET: because SET doesn't apply in the context
+// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
+func unresolvedNameToStrVal(expr tree.Expr) tree.Expr {
+	if s, ok := expr.(*tree.UnresolvedName); ok {
+		return tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
+	}
+	return expr
 }
 
 func (n *setVarNode) startExec(params runParams) error {
