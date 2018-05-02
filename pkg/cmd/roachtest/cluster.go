@@ -47,6 +47,7 @@ var (
 	local       bool
 	artifacts   string
 	cockroach   string
+	store       string
 	workload    string
 	clusterName string
 	clusterID   string
@@ -606,6 +607,9 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	args := []string{
 		"roachprod",
 		"start",
+	}
+	if store != "" {
+		args = append(args, "-a", "--store="+store)
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
