@@ -345,7 +345,16 @@ func (t TTuple) Equivalent(other T) bool {
 		return true
 	}
 	u, ok := UnwrapType(other).(TTuple)
-	if !ok || len(t) != len(u) {
+	if !ok {
+		return false
+	}
+	if len(t) == 0 || len(u) == 0 {
+		// Tuples that aren't fully specified (have a nil subtype list) are always
+		// equivalent to other tuples, to allow overloads to specify that they take
+		// an arbitrary tuple type.
+		return true
+	}
+	if len(t) != len(u) {
 		return false
 	}
 	for i, typ := range t {
@@ -375,7 +384,7 @@ func (t TTuple) IsAmbiguous() bool {
 			return true
 		}
 	}
-	return false
+	return len(t) == 0
 }
 
 // TPlaceholder is the type of a placeholder.
@@ -389,6 +398,9 @@ func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.
 // Equivalent implements the T interface.
 func (t TPlaceholder) Equivalent(other T) bool {
 	if other == Any {
+		return true
+	}
+	if other.IsAmbiguous() {
 		return true
 	}
 	u, ok := UnwrapType(other).(TPlaceholder)

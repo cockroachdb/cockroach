@@ -521,7 +521,14 @@ func typeCheckOverloadedExprs(
 	// only possible if all constants and resolvable expressions were resolved
 	// homogeneously up to this point.
 	if homogeneousTyp != nil && len(s.placeholderIdxs) > 0 {
+		// Before we continue, try to propagate the homogeneous type to the
+		// placeholders. This might not have happened yet, if the overloads'
+		// parameter types are ambiguous (like in the case of tuple-tuple binary
+		// operators).
 		for _, i := range s.placeholderIdxs {
+			if _, err := exprs[i].TypeCheck(ctx, homogeneousTyp); err != nil {
+				return nil, nil, err
+			}
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 				func(o overloadImpl) bool {
 					return o.params().GetAt(i).Equivalent(homogeneousTyp)
@@ -690,6 +697,9 @@ func checkReturn(
 			des := p.GetAt(i)
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
+				if des.IsAmbiguous() {
+					return nil, nil, false, nil
+				}
 				return s.typedExprs, nil, true, err
 			}
 			s.typedExprs[i] = typ
