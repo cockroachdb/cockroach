@@ -6,6 +6,9 @@ source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_prepare
 
+export TMPDIR=$PWD/artifacts/testrace
+mkdir -p "$TMPDIR"
+
 tc_start_block "Maybe stressrace pull request"
 build/builder.sh go install ./pkg/cmd/github-pull-request-make
 build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
