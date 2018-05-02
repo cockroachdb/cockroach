@@ -726,30 +726,40 @@ OPTGEN_TARGETS = \
 	pkg/sql/opt/norm/factory.og.go \
 	pkg/sql/opt/rule_name.og.go
 
+go-targets-ccl := \
+	$(COCKROACH) build buildshort go-install \
+	bench benchshort \
+	check test testshort testslow testrace testraceslow testbuild \
+	stress stressrace \
+	generate \
+	lint lintshort
+
+go-targets := $(go-targets-ccl) buildoss
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
 .PHONY: c-deps
 c-deps: $(C_LIBS_CCL)
 
+$(COCKROACH) build buildoss buildshort: BUILDMODE = build -o $(COCKROACH)
+
+$(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
+
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS) $(UI_ROOT)/distoss/bindata.go
 
 buildshort: BUILDTARGET = ./pkg/cmd/cockroach-short
-buildshort: $(C_LIBS_CCL)
 
-$(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
-$(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
-
-$(COCKROACH) build buildoss buildshort: BUILDMODE = build -o $(COCKROACH)
+$(go-targets-ccl): $(C_LIBS_CCL)
 
 BUILDINFO = .buildinfo/tag .buildinfo/rev
 BUILD_TAGGED_RELEASE =
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(PROTOBUF_TARGETS)
-$(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
+$(go-targets): $(BOOTSTRAP_TARGET) $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS)
+$(go-targets): $(SQLPARSER_TARGETS) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS)
+$(go-targets): override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
@@ -787,18 +797,10 @@ start:
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
 .PHONY: testbuild
-testbuild: gotestdashi
+testbuild:
 	$(XGO) list -tags '$(TAGS)' -f \
 	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
-
-# TODO(benesch): remove this target or give it a more sensible name. It's a
-# vestige from the pre-Go 1.10 era when we needed to run `go test -i` because
-# `go test` did not cache compilation of transitive packages. Removing it is
-# finicky because it's in the dependency graph of many other targets, so it's
-# best left to early in a release cycle.
-.PHONY: gotestdashi
-gotestdashi: ;
 
 testshort: override TESTFLAGS += -short
 
@@ -826,7 +828,7 @@ benchshort: override TESTFLAGS += -benchtime=1ns -short
 
 .PHONY: check test testshort testrace testlogic testccllogic bench benchshort
 test: ## Run tests.
-check test testshort testrace bench benchshort: gotestdashi
+check test testshort testrace bench benchshort:
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 testlogic: ## Run SQL Logic Tests.
@@ -845,7 +847,7 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 
 .PHONY: testslow testraceslow
 testslow testraceslow: override TESTFLAGS += -v
-testslow testraceslow: gotestdashi
+testslow testraceslow:
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
 
 stressrace: override GOFLAGS += -race
@@ -863,7 +865,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 .PHONY: stress stressrace
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
-stress stressrace: gotestdashi
+stress stressrace:
 	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage

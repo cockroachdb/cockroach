@@ -11,9 +11,9 @@ run build/builder.sh go install ./pkg/cmd/github-pull-request-make
 run build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stress github-pull-request-make
 tc_end_block "Maybe stress pull request"
 
-tc_start_block "Compile"
-run build/builder.sh make -Otarget gotestdashi
-tc_end_block "Compile"
+tc_start_block "Compile C dependencies"
+run build/builder.sh make -Otarget c-deps
+tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests"
 run build/builder.sh env TZ=America/New_York make test TESTFLAGS='-v' 2>&1 \
