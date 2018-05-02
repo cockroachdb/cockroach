@@ -479,7 +479,7 @@ CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE) CC=$(CC_PATH) CXX=$(CXX_PATH)
 # Use XCMAKE_FLAGS when invoking CMake on libraries/binaries for the target
 # platform (i.e., the cross-compiled platform, if specified); use plain
 # CMAKE_FLAGS when invoking CMake on libraries/binaries for the host platform.
-XCMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
+XCMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME) -DCMAKE_INSTALL_NAME_TOOL=$(XHOST_TRIPLE)-install_name_tool
 
 TARGET_TRIPLE := $(XHOST_TRIPLE)
 else
