@@ -12,13 +12,26 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package coltypes
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
-// SetTransaction sets a transaction's isolation level, priority and ro/rw state
-func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
-	return newZeroNode(nil /* columns */), p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes)
+// TTuple represents tuple column types. Tuples aren't writable to disk, but
+// all types still need ColType representations.
+type TTuple []T
+
+// Format implements the ColTypeFormatter interface.
+func (node TTuple) Format(buf *bytes.Buffer, flags lex.EncodeFlags) {
+	buf.WriteString("(")
+	for i := range node {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		node[i].Format(buf, flags)
+	}
+	buf.WriteString(")")
 }
