@@ -38,6 +38,9 @@ var (
 	ExactCtx = DecimalCtx.WithPrecision(0)
 	// HighPrecisionCtx is a decimal context with high precision.
 	HighPrecisionCtx = DecimalCtx.WithPrecision(2000)
+	// TimePrecisionCtx is a decimal context with enough precision
+	// to represent month,day,nanosecond times and intervals.
+	TimePrecisionCtx = DecimalCtx.WithPrecision(35)
 	// IntermediateCtx is a decimal context with additional precision for
 	// intermediate calculations to protect against order changes that can
 	// happen in dist SQL. The additional 5 allows the stress test to pass.
