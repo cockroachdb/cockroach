@@ -49,9 +49,10 @@ struct DBEngine {
 
 namespace cockroach {
 
+struct EnvManager;
+
 struct DBImpl : public DBEngine {
-  std::unique_ptr<rocksdb::Env> switching_env;
-  std::unique_ptr<rocksdb::Env> memenv;
+  std::unique_ptr<EnvManager> env_mgr;
   std::unique_ptr<rocksdb::DB> rep_deleter;
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
@@ -60,8 +61,8 @@ struct DBImpl : public DBEngine {
   // Construct a new DBImpl from the specified DB.
   // The DB and passed Envs will be deleted when the DBImpl is deleted.
   // Either env can be NULL.
-  DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
-         std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env);
+  DBImpl(rocksdb::DB* r, std::unique_ptr<EnvManager> e, std::shared_ptr<rocksdb::Cache> bc,
+         std::shared_ptr<DBEventListener> event_listener);
   virtual ~DBImpl();
 
   virtual DBStatus AssertPreClose();

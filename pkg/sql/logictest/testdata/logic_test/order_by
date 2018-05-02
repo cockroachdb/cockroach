@@ -876,3 +876,15 @@ limit           ·         ·                             (block_id, writer_id, 
 ·               table     blocks@primary                ·                                                     ·
 ·               spans     ALL                           ·                                                     ·
 ·               limit     1                             ·                                                     ·
+
+# Regression test for #25197: make sure that order by with an offset works in
+# the top-k sorter.
+
+statement ok
+CREATE TABLE t25197 (id BIGSERIAL PRIMARY KEY, d TEXT)
+
+statement ok
+INSERT INTO t25197 (d) VALUES ('test1')
+
+query TT
+SELECT * FROM t25197 ORDER BY d ASC OFFSET 1 LIMIT 10

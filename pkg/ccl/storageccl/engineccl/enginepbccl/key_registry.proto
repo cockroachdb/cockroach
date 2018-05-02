@@ -21,6 +21,9 @@ enum EncryptionType {
   AES256_CTR = 3;
 }
 
+// DataKeysRegistry contains all data keys (including the raw key) as well
+// as store key information (excluding raw key).
+// This is written to disk.
 message DataKeysRegistry {
   // Map of key_id to KeyInfo (raw key is not included).
   map<string, KeyInfo> store_keys = 1;
@@ -58,4 +61,17 @@ message SecretKey {
   KeyInfo info = 1;
   // The raw key.
   bytes key = 2;
+}
+
+// EncryptionSettings describes the encryption settings for a file.
+// This is stored as a protobuf.Any inside the FileEntry as described in:
+// pkg/storage/engine/enginepb/file_registry.proto
+message EncryptionSettings {
+  EncryptionType encryption_type = 1;
+
+  // Fields for AES-CTR. Empty when encryption_type = Plaintext.
+  string key_id = 2;
+  // len(nonce) + sizeof(counter) should add up to AES_Blocksize (128 bits).
+  bytes nonce = 3;    // 12 bytes
+  uint32 counter = 4; // 4 bytes
 }
