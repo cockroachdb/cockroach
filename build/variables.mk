@@ -153,6 +153,8 @@ define VALID_VARS
   bindir
   bins
   cyan
+  go-targets
+  go-targets-ccl
   go-version-check
   langgen-package
   optgen-defs
