@@ -171,6 +171,10 @@ class BaseDeltaIterator : public rocksdb::Iterator {
     Advance();
   }
 
+  void SeekForPrev(const rocksdb::Slice& k) override {
+    status_ = rocksdb::Status::NotSupported("SeekForPrev() not supported");
+  }
+
   void Prev() override { status_ = rocksdb::Status::NotSupported("Prev() not supported"); }
 
   rocksdb::Slice key() const override {
