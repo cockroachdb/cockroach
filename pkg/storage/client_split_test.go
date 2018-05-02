@@ -2353,67 +2353,89 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	})
 }
 
+// TestUnsplittableRange creates an unsplittable range and tests that
+// it is handled correctly by the split queue's purgatory. The test:
+// 1. creates an unsplittable range that needs to be split
+// 2. makes sure that range enters purgatory
+// 3. makes sure a purgatory run still fails
+// 4. GCs part of the range so that it no longer needs to be split
+// 5. makes sure a purgatory run succeeds and the range leaves purgatory
 func TestUnsplittableRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ttl := 1 * time.Hour
+	const maxBytes = 1 << 16
+	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+		GC: config.GCPolicy{
+			TTLSeconds: int32(ttl.Seconds()),
+		},
+	})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
-	store.ForceSplitScanAndProcess()
+	manual := hlc.NewManualClock(123)
+	splitQueuePurgatoryChan := make(chan time.Time, 1)
+	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan
+	store := createTestStoreWithConfig(t, stopper, cfg)
+	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+		t.Fatal(err)
+	}
 
 	// Add a single large row to /Table/14.
 	tableKey := keys.MakeTablePrefix(keys.UITableID)
 	row1Key := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	col1Key := keys.MakeFamilyKey(append([]byte(nil), row1Key...), 0)
-	value := bytes.Repeat([]byte("x"), 64<<10)
+	valueLen := 0.9 * maxBytes
+	value := bytes.Repeat([]byte("x"), int(valueLen))
 	if err := store.DB().Put(context.Background(), col1Key, value); err != nil {
 		t.Fatal(err)
 	}
 
-	store.ForceSplitScanAndProcess()
-	testutils.SucceedsSoon(t, func() error {
-		repl := store.LookupReplica(tableKey, nil)
-		if repl.Desc().StartKey.Equal(tableKey) {
-			return nil
-		}
-		return errors.Errorf("waiting for split: %s", repl)
-	})
-
-	repl := store.LookupReplica(tableKey, nil)
-	origMaxBytes := repl.GetMaxBytes()
-	repl.SetMaxBytes(int64(len(value)))
-
-	// Wait for an attempt to split the range which will fail because it contains
-	// a single large value. The max-bytes for the range will be changed, but it
-	// should not have been reset to its original value.
-	store.ForceSplitScanAndProcess()
-	testutils.SucceedsSoon(t, func() error {
-		maxBytes := repl.GetMaxBytes()
-		if maxBytes != int64(len(value)) && maxBytes < origMaxBytes {
-			return nil
-		}
-		return errors.Errorf("expected max-bytes to be changed: %d", repl.GetMaxBytes())
-	})
-
-	// Add two more rows to the range.
-	for i := int64(2); i < 4; i++ {
-		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), i))
-		colKey := keys.MakeFamilyKey(append([]byte(nil), rowKey...), 0)
-		if err := store.DB().Put(context.Background(), colKey, value); err != nil {
-			t.Fatal(err)
-		}
+	// Wait for half of the ttl and add another large value in the same row.
+	// Together, these two values bump the range over the max range size.
+	manual.Increment(ttl.Nanoseconds() / 2)
+	value2Len := 0.2 * maxBytes
+	value2 := bytes.Repeat([]byte("y"), int(value2Len))
+	if err := store.DB().Put(context.Background(), col1Key, value2); err != nil {
+		t.Fatal(err)
 	}
 
-	// Wait for the range to be split and verify that max-bytes was reset to the
-	// value in the zone config.
+	// Ensure that an attempt to split the range will hit an
+	// unsplittableRangeError and place the range in purgatory.
 	store.ForceSplitScanAndProcess()
+	if purgLen := store.SplitQueuePurgatoryLength(); purgLen != 1 {
+		t.Fatalf("expected split queue purgatory to contain 1 replica, found %d", purgLen)
+	}
+
+	// Signal the split queue's purgatory channel and ensure that the purgatory
+	// remains occupied because the range still needs to split but can't.
+	splitQueuePurgatoryChan <- timeutil.Now()
+	if purgLen := store.SplitQueuePurgatoryLength(); purgLen != 1 {
+		t.Fatalf("expected split queue purgatory to contain 1 replica, found %d", purgLen)
+	}
+
+	// Wait for much longer than the ttl to accumulate GCByteAge.
+	manual.Increment(10 * ttl.Nanoseconds())
+	// Trigger the GC queue, which should clean up the earlier version of the
+	// row. Once the first version of the row is cleaned up, the range should
+	// exit the split queue purgatory.
+	repl := store.LookupReplica(tableKey, nil)
+	if err := store.ManualGC(repl); err != nil {
+		t.Fatal(err)
+	}
+
+	// Signal the split queue's purgatory channel and ensure that the purgatory
+	// removes its now well-sized replica.
+	splitQueuePurgatoryChan <- timeutil.Now()
 	testutils.SucceedsSoon(t, func() error {
-		if origMaxBytes == repl.GetMaxBytes() {
+		purgLen := store.SplitQueuePurgatoryLength()
+		if purgLen == 0 {
 			return nil
 		}
-		return errors.Errorf("expected max-bytes=%d, but got max-bytes=%d",
-			origMaxBytes, repl.GetMaxBytes())
+		return errors.Errorf("expected split queue purgatory to be empty, found %d", purgLen)
 	})
 }
 
