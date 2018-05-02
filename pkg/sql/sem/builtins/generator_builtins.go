@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -261,7 +262,7 @@ func seriesIntNext(s *seriesValueGenerator) (bool, error) {
 		return false, nil
 	}
 	s.value = start
-	s.start, s.nextOK = tree.AddWithOverflow(start, step)
+	s.start, s.nextOK = arith.AddWithOverflow(start, step)
 	return true, nil
 }
 

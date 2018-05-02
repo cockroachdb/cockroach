@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -50,6 +51,7 @@ import (
 var (
 	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
 	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
+	errDecOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
 
 	// ErrDivByZero is reported on a division by zero.
 	ErrDivByZero = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
@@ -344,17 +346,6 @@ func (o binOpOverload) lookupImpl(left, right types.T) (BinOp, bool) {
 	return BinOp{}, false
 }
 
-// AddWithOverflow returns a+b. If ok is false, a+b overflowed.
-func AddWithOverflow(a, b int64) (r int64, ok bool) {
-	if b > 0 && a > math.MaxInt64-b {
-		return 0, false
-	}
-	if b < 0 && a < math.MinInt64-b {
-		return 0, false
-	}
-	return a + b, true
-}
-
 // getJSONPath is used for the #> and #>> operators.
 func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
@@ -437,7 +428,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				r, ok := AddWithOverflow(int64(a), int64(b))
+				r, ok := arith.AddWithOverflow(int64(a), int64(b))
 				if !ok {
 					return nil, errIntOutOfRange
 				}
@@ -2893,7 +2884,11 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DDate:
 			res = NewDInt(DInt(int64(*v)))
 		case *DInterval:
-			res = NewDInt(DInt(v.Nanos / 1000000000))
+			iv, ok := v.AsInt64()
+			if !ok {
+				return nil, errIntOutOfRange
+			}
+			res = NewDInt(DInt(iv))
 		case *DOid:
 			res = &v.DInt
 		}
@@ -2931,8 +2926,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DDate:
 			return NewDFloat(DFloat(float64(*v))), nil
 		case *DInterval:
-			micros := v.Nanos / 1000
-			return NewDFloat(DFloat(float64(micros) / 1e6)), nil
+			return NewDFloat(DFloat(v.AsFloat64())), nil
 		}
 
 	case *coltypes.TDecimal:
@@ -2975,9 +2969,8 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			val.Add(val, big.NewInt(int64(micros)))
 			dd.Exponent = -6
 		case *DInterval:
-			val := &dd.Coeff
-			val.SetInt64(v.Nanos / 1000)
-			dd.Exponent = -6
+			v.AsBigInt(&dd.Coeff)
+			dd.Exponent = -9
 		default:
 			unset = true
 		}
@@ -3156,17 +3149,35 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		}
 
 	case *coltypes.TInterval:
-		// TODO(knz): Interval from float, decimal.
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))
 		case *DCollatedString:
 			return ParseDInterval(v.Contents)
 		case *DInt:
-			// An integer duration represents a duration in microseconds.
-			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
+			return &DInterval{Duration: duration.FromInt64(int64(*v))}, nil
+		case *DFloat:
+			return &DInterval{Duration: duration.FromFloat64(float64(*v))}, nil
 		case *DTime:
 			return &DInterval{Duration: duration.Duration{Nanos: int64(*v) * 1000}}, nil
+		case *DDecimal:
+			d := ctx.getTmpDec()
+			dnanos := v.Decimal
+			dnanos.Exponent += 9
+			// We need HighPrecisionCtx because duration values can contain
+			// upward of 35 decimal digits and DecimalCtx only provides 25.
+			_, err := HighPrecisionCtx.Quantize(d, &dnanos, 0)
+			if err != nil {
+				return nil, err
+			}
+			if dnanos.Negative {
+				d.Coeff.Neg(&d.Coeff)
+			}
+			dv, ok := duration.FromBigInt(&d.Coeff)
+			if !ok {
+				return nil, errDecOutOfRange
+			}
+			return &DInterval{Duration: dv}, nil
 		case *DInterval:
 			return d, nil
 		}
