@@ -167,6 +167,8 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && echo 'deb https://dl.yarnpkg.com/debian/ stable main' | tee /etc/apt/sources.list.d/yarn.list \
  && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk-xenial main' | tee /etc/apt/sources.list.d/gcloud.list \
+ && curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+ && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
  && apt-get update
 
 # ccache - speed up C and C++ compilation
@@ -174,13 +176,15 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # openjdk-8-jre - railroad diagram generation
 # google-cloud-sdk - roachprod acceptance tests
 # yarn - ui
+# chrome - ui
 RUN apt-get install -y --no-install-recommends \
     ccache \
     google-cloud-sdk \
     nodejs \
     openjdk-8-jre \
     openssh-client \
-    yarn
+    yarn \
+    google-chrome-stable
 
 # Without CCACHE_CPP2=1, ccache can generate spurious warnings. See the manpage
 # for details. This option is enabled by default in ccache v3.3+, but our
