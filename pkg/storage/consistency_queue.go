@@ -104,6 +104,11 @@ func (q *consistencyQueue) process(
 	}
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
+		// Check again here to see if it is turned off just in case there was a race
+		// when starting up the queue.
+		if q.interval() <= 0 {
+			return nil
+		}
 		_, shouldQuiesce := <-repl.store.Stopper().ShouldQuiesce()
 		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the

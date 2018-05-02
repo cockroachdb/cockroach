@@ -904,6 +904,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
+	// Turn off the consistency checker as it is a little spammy and won't impact these tests.
+	if _, err := t.cluster.ServerConn(0).Exec(
+		"SET CLUSTER SETTING server.consistency_check.interval = '0ms'",
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	if cfg.overrideDistSQLMode != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
 			"SET CLUSTER SETTING sql.defaults.distsql = $1::string", cfg.overrideDistSQLMode,
