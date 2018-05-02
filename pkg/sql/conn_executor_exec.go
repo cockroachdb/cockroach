@@ -32,6 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+var errSavepointNotUsed = pgerror.NewErrorf(
+	pgerror.CodeSavepointExceptionError,
+	"savepoint %s has not been used", tree.RestartSavepointName)
+
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
 // transition is needed. If nil is returned, then the cursor is supposed to
@@ -217,6 +221,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return makeErrEvent(err)
 		}
+		if !ex.machine.CurState().(stateOpen).RetryIntent.Get() {
+			return makeErrEvent(errSavepointNotUsed)
+		}
+
 		// ReleaseSavepoint is executed fully here; there's no plan for it.
 		ev, payload := ex.commitSQLTransaction(ctx, stmt.AST)
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
@@ -248,8 +256,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		if !os.RetryIntent.Get() {
-			err := fmt.Errorf("SAVEPOINT %s has not been used", tree.RestartSavepointName)
-			return makeErrEvent(err)
+			return makeErrEvent(errSavepointNotUsed)
 		}
 
 		res.ResetStmtType((*tree.Savepoint)(nil))
@@ -811,10 +818,9 @@ func (ex *connExecutor) execStmtInAbortedState(
 		}
 
 		if !(inRestartWait || ex.machine.CurState().(stateAborted).RetryIntent.Get()) {
-			err := fmt.Errorf("SAVEPOINT %s has not been used", tree.RestartSavepointName)
 			ev := eventNonRetriableErr{IsCommit: fsm.False}
 			payload := eventNonRetriableErrPayload{
-				err: err,
+				err: errSavepointNotUsed,
 			}
 			return ev, payload
 		}

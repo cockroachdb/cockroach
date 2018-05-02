@@ -770,7 +770,7 @@ ROLLBACK
 statement ok
 BEGIN
 
-statement error SAVEPOINT COCKROACH_RESTART has not been used
+statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -784,7 +784,7 @@ BEGIN
 statement error pq: relation "bogus_name" does not exist
 SELECT * from bogus_name
 
-statement error SAVEPOINT COCKROACH_RESTART has not been used
+statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
 ROLLBACK TO SAVEPOINT cockroach_restart
 
 statement ok
@@ -978,6 +978,14 @@ BEGIN; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
 SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+
+statement ok
+ROLLBACK
+
+# Check that we don't crash when doing a release that wasn't preceded by a
+# savepoint.
+statement error pgcode 3B000 savepoint COCKROACH_RESTART has not been used
+BEGIN; RELEASE SAVEPOINT cockroach_restart
 
 statement ok
 ROLLBACK
