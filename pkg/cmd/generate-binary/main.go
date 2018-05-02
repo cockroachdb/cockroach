@@ -109,6 +109,7 @@ var defaultVals = map[string][]string{
 	"jsonb":       jsonbInputs,
 	"uuid[]":      arrayUUIDInputs,
 	"decimal[]":   arrayDecimalInputs,
+	"interval":    intervalInputs,
 }
 
 var decimalInputs = []string{
@@ -186,6 +187,32 @@ var timeInputs = []string{
 	"00:00:00",
 	"12:00:00.000001",
 	"23:59:59.999999",
+}
+
+var intervalInputs = []string{
+	"10y10mon",
+	"10mon10d",
+	"1y1mon",
+	"1y1m",
+	"1y",
+	"1mon",
+	"21d2h",
+	"1w",
+	"1d",
+	"23:12:34",
+	"21 days",
+	"3h",
+	"2h",
+	"1h",
+	"1m",
+	"1s",
+	"-23:00:00",
+	"-10d",
+	"-1mon",
+	"-1mon10s",
+	"-1y",
+	"-1y1mon",
+	"-1y1mon10s",
 }
 
 var inetInputs = []string{
