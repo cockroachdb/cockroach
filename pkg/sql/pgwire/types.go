@@ -354,6 +354,12 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
+	case *tree.DInterval:
+		b.putInt32(16)
+		b.putInt64(v.Nanos / int64(time.Microsecond/time.Nanosecond))
+		b.putInt32(int32(v.Days))
+		b.putInt32(int32(v.Months))
+
 	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))

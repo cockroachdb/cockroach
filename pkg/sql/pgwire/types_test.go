@@ -17,6 +17,7 @@ package pgwire
 import (
 	"bytes"
 	"context"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -28,8 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // The assertions in this test should also be caught by the integration tests on
@@ -136,6 +139,35 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
+	}
+}
+
+func TestCanWriteAllDatums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+
+	for _, typ := range types.AnyNonArray {
+		buf := newWriteBuffer(nil /* bytecount */)
+
+		semtyp, err := sqlbase.DatumTypeToColumnSemanticType(typ)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for i := 0; i < 10; i++ {
+			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: semtyp}, true)
+
+			buf.writeTextDatum(context.Background(), d, time.UTC)
+			if buf.err != nil {
+				t.Fatalf("got %s while attempting to write datum %s as text", buf.err, d)
+			}
+
+			buf.writeBinaryDatum(context.Background(), d, time.UTC)
+			if buf.err != nil {
+				t.Fatalf("got %s while attempting to write datum %s as binary", buf.err, d)
+			}
+		}
 	}
 }
 
