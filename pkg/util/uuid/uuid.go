@@ -16,6 +16,7 @@ package uuid
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -93,6 +94,22 @@ func (u UUID) MarshalTo(data []byte) (int, error) {
 // Unmarshal unmarshals data to u.
 func (u *UUID) Unmarshal(data []byte) error {
 	return u.UUID.UnmarshalBinary(data)
+}
+
+// MarshalJSON returns the JSON encoding of u.
+func (u UUID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(u.String())
+}
+
+// UnmarshalJSON unmarshals the JSON encoded data into u.
+func (u *UUID) UnmarshalJSON(data []byte) error {
+	var uuidString string
+	if err := json.Unmarshal(data, &uuidString); err != nil {
+		return err
+	}
+	uuid, err := FromString(uuidString)
+	*u = uuid
+	return err
 }
 
 // MakeV4 delegates to "github.com/satori/go.uuid".NewV4 and wraps the result in
