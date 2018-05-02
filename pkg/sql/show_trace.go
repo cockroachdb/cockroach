@@ -205,12 +205,12 @@ func (n *showTraceNode) startExec(params runParams) error {
 	if params.extendedEvalCtx.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := params.extendedEvalCtx.SessionMutator.StartSessionTracing(
+	if err := params.extendedEvalCtx.Tracing.StartTracing(
 		tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
 	}
-	n.run.stopTracing = func() error { return stopTracing(params.extendedEvalCtx.SessionMutator) }
+	n.run.stopTracing = params.extendedEvalCtx.Tracing.StopTracing
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
@@ -260,7 +260,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 			log.VEventf(consumeCtx, 2, "resources released, stopping trace")
 		}()
 
-		if err := stopTracing(params.extendedEvalCtx.SessionMutator); err != nil {
+		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
 			return false, err
 		}
 		n.run.stopTracing = nil

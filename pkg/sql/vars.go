@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -575,22 +574,8 @@ var varGen = map[string]sessionVar{
 			}
 			return "off"
 		},
-		Reset: func(m *sessionDataMutator) error {
-			if !m.sessionTracing.Enabled() {
-				// Tracing is not active. Nothing to do.
-				return nil
-			}
-			return stopTracing(m)
-		},
 		// Setting is done by the SetTracing statement.
 	},
-}
-
-func stopTracing(m *sessionDataMutator) error {
-	if err := m.StopSessionTracing(); err != nil {
-		return errors.Wrapf(err, "error stopping tracing")
-	}
-	return nil
 }
 
 var varNames = func() []string {
