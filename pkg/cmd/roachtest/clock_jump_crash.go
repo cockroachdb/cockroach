@@ -88,7 +88,7 @@ func registerClockJump(r *registry) {
 		},
 		{
 			name:             "small_forward_enabled",
-			offset:           200 * time.Millisecond,
+			offset:           150 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
@@ -115,9 +115,8 @@ func registerClockJump(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25138",
-			Name:           fmt.Sprintf("clockjump/tc=%s", tc.name),
-			Nodes:          nodes(numNodes),
+			Name:  fmt.Sprintf("clockjump/tc=%s", tc.name),
+			Nodes: nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(t, c, tc)
 			},
