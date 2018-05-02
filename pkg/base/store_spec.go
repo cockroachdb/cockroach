@@ -67,9 +67,9 @@ type StoreSpec struct {
 	SizePercent float64
 	InMemory    bool
 	Attributes  roachpb.Attributes
-	// UseSwitchingEnv is true if the "switching env" store version is desired.
+	// UseFileRegistry is true if the "file registry" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
-	UseSwitchingEnv bool
+	UseFileRegistry bool
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
