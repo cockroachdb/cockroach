@@ -994,9 +994,9 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		}
 	}
 	if !enableMode {
-		return stopTracing(&ex.dataMutator)
+		return ex.sessionTracing.StopTracing()
 	}
-	return ex.dataMutator.StartSessionTracing(recordingType, traceKV)
+	return ex.sessionTracing.StartTracing(recordingType, traceKV)
 }
 
 // addActiveQuery adds a running query to the list of running queries.

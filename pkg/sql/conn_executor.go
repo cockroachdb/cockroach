@@ -477,8 +477,8 @@ func (s *Server) ServeConn(
 		},
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
-	ex.dataMutator.sessionTracing.ex = &ex
-	ex.transitionCtx.sessionTracing = &ex.dataMutator.sessionTracing
+	ex.sessionTracing.ex = &ex
+	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
 	if traceSessionEventLogEnabled.Get(&s.cfg.Settings.SV) {
 		remoteStr := "<admin>"
@@ -608,8 +608,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.prepStmtsNamespace.resetTo(ctx, &prepStmtNamespace{})
 	}
 
-	if ex.dataMutator.sessionTracing.Enabled() {
-		if err := ex.dataMutator.StopSessionTracing(); err != nil {
+	if ex.sessionTracing.Enabled() {
+		if err := ex.sessionTracing.StopTracing(); err != nil {
 			log.Warningf(ctx, "error stopping tracing: %s", err)
 		}
 	}
@@ -663,8 +663,9 @@ type connExecutor struct {
 	machine fsm.Machine
 	// state encapsulates fields related to the ongoing SQL txn. It is mutated as
 	// the machine's ExtendedState.
-	state         txnState2
-	transitionCtx transitionCtx
+	state          txnState2
+	transitionCtx  transitionCtx
+	sessionTracing SessionTracing
 
 	// eventLog for SQL statements and other important session events. Will be set
 	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
@@ -1604,7 +1605,7 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContex
 		},
 		SessionMutator:  &ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
-		Tracing:         &ex.dataMutator.sessionTracing,
+		Tracing:         &ex.sessionTracing,
 		StatusServer:    ex.server.cfg.StatusServer,
 		MemMetrics:      ex.memMetrics,
 		Tables:          &ex.extraTxnState.tables,
