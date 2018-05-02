@@ -128,9 +128,8 @@ func registerClockMonotonicity(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25138",
-			Name:           fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
-			Nodes:          nodes(numNodes),
+			Name:  fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
+			Nodes: nodes(numNodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(t, c, tc)
 			},

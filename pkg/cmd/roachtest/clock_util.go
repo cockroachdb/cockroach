@@ -46,10 +46,15 @@ type offsetInjector struct {
 // deploy installs ntp and downloads / compiles bumptime used to create a clock offset
 func (oi *offsetInjector) deploy(ctx context.Context) {
 	oi.c.Install(ctx, oi.c.All(), "ntp")
-	oi.c.Run(ctx, oi.c.All(), "service ntp stop")
-	oi.c.Run(ctx, oi.c.All(), "curl -kO https://raw.githubusercontent.com/cockroachdb/jepsen/master/"+
-		"cockroachdb/resources/bumptime.c")
-	oi.c.Run(ctx, oi.c.All(), "gcc bumptime.c -o bumptime && rm bumptime.c")
+	oi.c.Install(ctx, oi.c.All(), "gcc")
+	oi.c.Run(ctx, oi.c.All(), "sudo", "service", "ntp", "stop")
+	oi.c.Run(ctx,
+		oi.c.All(),
+		"curl",
+		"-kO",
+		"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
+	)
+	oi.c.Run(ctx, oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c")
 	oi.deployed = true
 }
 
@@ -62,7 +67,7 @@ func (oi *offsetInjector) offset(ctx context.Context, nodeID int, s time.Duratio
 	oi.c.Run(
 		ctx,
 		oi.c.Node(nodeID),
-		fmt.Sprintf("./bumptime %f", float64(s)/float64(time.Millisecond)),
+		fmt.Sprintf("sudo ./bumptime %f", float64(s)/float64(time.Millisecond)),
 	)
 }
 
@@ -73,16 +78,16 @@ func (oi *offsetInjector) recover(ctx context.Context, nodeID int) {
 		oi.c.t.Fatal("Offset injector must be deployed before recovering from clock offsets")
 	}
 
-	syncCmds := []string{
-		"service ntp stop",
-		"ntpdate -u time.google.com",
-		"service ntp start",
+	syncCmds := [][]string{
+		{"sudo", "service", "ntp", "stop"},
+		{"sudo", "ntpdate", "-u", "time.google.com"},
+		{"sudo", "service", "ntp", "start"},
 	}
 	for _, cmd := range syncCmds {
 		oi.c.Run(
 			ctx,
 			oi.c.Node(nodeID),
-			cmd,
+			cmd...,
 		)
 	}
 }
