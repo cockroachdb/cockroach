@@ -55,6 +55,14 @@ Use 'roachtest run -n' to see a list of all tests.
 
 	rootCmd.AddCommand(runCmd)
 
+	runCmd.Flags().StringVar(
+		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+	runCmd.Flags().StringVarP(
+		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
+	runCmd.Flags().StringVar(
+		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+	runCmd.Flags().StringVar(
+		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	runCmd.Flags().BoolVarP(
 		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
 	runCmd.Flags().BoolVarP(
@@ -64,26 +72,20 @@ Use 'roachtest run -n' to see a list of all tests.
 	runCmd.Flags().IntVarP(
 		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 	runCmd.Flags().StringVar(
-		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+		&slackToken, "slack-token", "", "Slack bot token")
+	runCmd.Flags().BoolVar(
+		&clusterSecure, "secure", false, "run cluster in secure mode")
+	runCmd.Flags().BoolVar(
+		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
 	runCmd.Flags().StringVarP(
-		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
-	runCmd.Flags().StringVar(
-		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+		&username, "user", "u", username, "username to run under, detect if blank")
 	runCmd.Flags().BoolVar(
 		&clusterWipe, "wipe", true,
 		"wipe existing cluster before starting test (for use with --cluster)")
 	runCmd.Flags().StringVar(
-		&cockroach, "cockroach", "", "path to cockroach binary to use")
-	runCmd.Flags().StringVarP(
-		&username, "user", "u", username, "username to run under, detect if blank")
-	runCmd.Flags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
 	runCmd.Flags().StringVar(
-		&slackToken, "slack-token", "", "Slack bot token")
-	runCmd.Flags().StringVar(
 		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
-	runCmd.Flags().BoolVar(
-		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
