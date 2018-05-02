@@ -585,6 +585,17 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*SetTracing) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*SetTracing) StatementTag() string { return "SET TRACING" }
+
+func (*SetTracing) hiddenFromStats() {}
+
+// observerStatement implements the ObserverStatement interface.
+func (*SetTracing) observerStatement() {}
+
+// StatementType implements the Statement interface.
 func (*SetZoneConfig) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -933,6 +944,7 @@ func (n *SetClusterSetting) String() string         { return AsString(n) }
 func (n *SetZoneConfig) String() string             { return AsString(n) }
 func (n *SetSessionCharacteristics) String() string { return AsString(n) }
 func (n *SetTransaction) String() string            { return AsString(n) }
+func (n *SetTracing) String() string                { return AsString(n) }
 func (n *SetVar) String() string                    { return AsString(n) }
 func (n *ShowBackup) String() string                { return AsString(n) }
 func (n *ShowClusterSetting) String() string        { return AsString(n) }

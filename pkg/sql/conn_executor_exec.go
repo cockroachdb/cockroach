@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 var errSavepointNotUsed = pgerror.NewErrorf(
@@ -64,6 +67,7 @@ func (ex *connExecutor) execStmt(
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
 		err := ex.runObserverStatement(ctx, stmt, res)
+		log.Infof(ctx, "!!! observer stmt err: %v", err)
 		return nil, nil, err
 	}
 
@@ -899,6 +903,9 @@ func (ex *connExecutor) runObserverStatement(
 		return ex.runShowTransactionState(ctx, res)
 	case *tree.ShowSyntax:
 		return ex.runShowSyntax(ctx, sqlStmt.Statement, res)
+	case *tree.SetTracing:
+		ex.runSetTracing(ctx, sqlStmt, res)
+		return nil
 	default:
 		res.SetError(pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: unrecognized observer statement type %T", stmt.AST))
@@ -939,6 +946,61 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+func (ex *connExecutor) runSetTracing(
+	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
+) {
+	if len(n.Values) == 0 {
+		res.SetError(fmt.Errorf("set tracing missing argument"))
+		return
+	}
+
+	modes := make([]string, len(n.Values))
+	for i, v := range n.Values {
+		// Special rule for SET: because SET doesn't apply in the context
+		// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
+		if ident, ok := v.(*tree.UnresolvedName); ok {
+			v = tree.NewStrVal(tree.AsStringWithFlags(ident, tree.FmtBareIdentifiers))
+		}
+		strVal, ok := v.(*tree.StrVal)
+		if !ok {
+			res.SetError(fmt.Errorf("expected string for set tracing argument, not %T", v))
+			return
+		}
+		modes[i] = strVal.RawString()
+	}
+
+	if err := ex.enableTracing(modes); err != nil {
+		res.SetError(err)
+	}
+}
+
+func (ex *connExecutor) enableTracing(modes []string) error {
+	traceKV := false
+	recordingType := tracing.SnowballRecording
+	enableMode := true
+
+	for _, s := range modes {
+		switch strings.ToLower(s) {
+		case "on":
+			enableMode = true
+		case "off":
+			enableMode = false
+		case "kv":
+			traceKV = true
+		case "local":
+			recordingType = tracing.SingleNodeRecording
+		case "cluster":
+			recordingType = tracing.SnowballRecording
+		default:
+			return errors.Errorf("set tracing: unknown mode %q", s)
+		}
+	}
+	if !enableMode {
+		return stopTracing(&ex.dataMutator)
+	}
+	return ex.dataMutator.StartSessionTracing(recordingType, traceKV)
 }
 
 // addActiveQuery adds a running query to the list of running queries.

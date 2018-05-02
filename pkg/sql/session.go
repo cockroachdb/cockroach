@@ -1564,7 +1564,8 @@ func (st *SessionTracing) getRecording() ([]traceRow, error) {
 //   are per-row.
 func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
 	if st.enabled {
-		return errors.Errorf("already tracing")
+		// We're already tracing. No-op.
+		return nil
 	}
 
 	// If we're inside a transaction, start recording on the txn span.
@@ -1607,7 +1608,8 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingE
 // An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
 	if !st.enabled {
-		return errors.Errorf("not tracing")
+		// We're not currently tracing. No-op.
+		return nil
 	}
 	st.enabled = false
 
