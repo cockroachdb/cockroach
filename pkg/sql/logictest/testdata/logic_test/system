@@ -458,6 +458,7 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+server.consistency_check.interval
 trace.debug.enable
 version
 
@@ -470,9 +471,10 @@ FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
 ORDER BY name
 ----
-diagnostics.reporting.enabled  true
-somesetting                    somevalue
-trace.debug.enable             false
+diagnostics.reporting.enabled     true
+server.consistency_check.interval 0s
+somesetting                       somevalue
+trace.debug.enable                false
 
 user testuser
 
