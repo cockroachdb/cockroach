@@ -412,14 +412,6 @@ func (n *Node) start(
 		return err
 	}
 
-	if n.initialBoot {
-		// The cluster was just bootstrapped by this node, explicitly notify the
-		// stores that they were bootstrapped.
-		for _, s := range stores {
-			s.NotifyBootstrapped()
-		}
-	}
-
 	if err := n.startStores(ctx, stores, n.stopper); err != nil {
 		return err
 	}

@@ -521,13 +521,11 @@ var _ KeyRange = &Replica{}
 // initialized) Raft group. The supplied function should return true for the
 // unquiesceAndWakeLeader argument if the replica should be unquiesced (and the
 // leader awoken). See handleRaftReady for an instance of where this value
-// varies. The shouldCampaignOnCreation argument indicates whether a new raft group
-// should be campaigned upon creation and is used to eagerly campaign idle
-// replicas.
+// varies.
 //
 // Requires that both Replica.mu and Replica.raftMu are held.
 func (r *Replica) withRaftGroupLocked(
-	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
+	f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
 	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
@@ -539,13 +537,6 @@ func (r *Replica) withRaftGroupLocked(
 		// The replica's raft group has not yet been configured (i.e. the replica
 		// was created from a preemptive snapshot).
 		return nil
-	}
-
-	if shouldCampaignOnCreation {
-		// Special handling of idle replicas: we campaign their Raft group upon
-		// creation if we gossiped our store descriptor more than the election
-		// timeout in the past.
-		shouldCampaignOnCreation = (r.mu.internalRaftGroup == nil) && r.store.canCampaignIdleReplica()
 	}
 
 	ctx := r.AnnotateCtx(context.TODO())
@@ -563,45 +554,7 @@ func (r *Replica) withRaftGroupLocked(
 		}
 		r.mu.internalRaftGroup = raftGroup
 
-		if !shouldCampaignOnCreation {
-			// Automatically campaign and elect a leader for this group if there's
-			// exactly one known node for this group.
-			//
-			// A grey area for this being correct happens in the case when we're
-			// currently in the process of adding a second node to the group, with
-			// the change committed but not applied.
-			//
-			// Upon restarting, the first node would immediately elect itself and
-			// only then apply the config change, where really it should be applying
-			// first and then waiting for the majority (which would now require two
-			// votes, not only its own).
-			//
-			// However, in that special case, the second node has no chance to be
-			// elected leader while the first node restarts (as it's aware of the
-			// configuration and knows it needs two votes), so the worst that could
-			// happen is both nodes ending up in candidate state, timing out and then
-			// voting again. This is expected to be an extremely rare event.
-			//
-			// TODO(peter): It would be more natural for this campaigning to only be
-			// done when proposing a command (see defaultProposeRaftCommandLocked).
-			// Unfortunately, we enqueue the right hand side of a split for Raft
-			// ready processing if the range only has a single replica (see
-			// splitPostApply). Doing so implies we need to be campaigning
-			// that right hand side range when raft ready processing is
-			// performed. Perhaps we should move the logic for campaigning single
-			// replica ranges there so that normally we only eagerly campaign when
-			// proposing.
-			shouldCampaignOnCreation = r.isSoloReplicaRLocked()
-		}
-		if shouldCampaignOnCreation {
-			log.VEventf(ctx, 3, "campaigning")
-			if err := raftGroup.Campaign(); err != nil {
-				return err
-			}
-			if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
-				fn(r)
-			}
-		}
+		r.maybeCampaignOnWakeLocked(ctx)
 	}
 
 	unquiesce, err := f(r.mu.internalRaftGroup)
@@ -621,7 +574,39 @@ func (r *Replica) withRaftGroup(
 ) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.withRaftGroupLocked(false, f)
+	return r.withRaftGroupLocked(f)
+}
+
+// maybeCampaignOnWakeLocked is called when the range wakes from a
+// dormant state (either the initial "raftGroup == nil" state or after
+// being quiescent) and campaigns for raft leadership if appropriate.
+func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
+	// When waking up a range, campaign unless we know that another
+	// node holds a valid lease (this is most important after a split,
+	// when all replicas create their raft groups at about the same
+	// time, with a lease pre-assigned to one of them). Note that
+	// thanks to PreVote, unnecessary campaigns are not disruptive so
+	// we should err on the side of campaigining here.
+	anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
+		LeaseState_VALID &&
+		!r.mu.state.Lease.OwnedBy(r.store.StoreID())
+	// Raft panics if a node that is not currently a member of the
+	// group tries to campaign. That happens primarily when we apply
+	// preemptive snapshots.
+	_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
+	// If we're already campaigning or know who the leader is, don't
+	// start a new term.
+	status := r.mu.internalRaftGroup.Status()
+	noLeader := status.RaftState == raft.StateFollower && status.Lead == 0
+	if currentMember && !anotherOwnsLease && noLeader {
+		log.VEventf(ctx, 3, "campaigning")
+		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
+			log.VEventf(ctx, 1, "failed to campaign: %s", err)
+		}
+		if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
+			fn(r)
+		}
+	}
 }
 
 var _ client.Sender = &Replica{}
@@ -1831,17 +1816,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Campaign if this replica is the current lease holder to avoid
-	// an election storm after a recent split. If no replica is the
-	// lease holder, all replicas must campaign to avoid waiting for
-	// an election timeout to acquire the lease. In the latter case,
-	// there's less chance of an election storm because this replica
-	// will only campaign if it's been idle for >= election timeout,
-	// so there's most likely been no traffic to the range.
-	shouldCampaignOnCreation := r.mu.state.Lease.OwnedBy(r.store.StoreID()) ||
-		r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State !=
-			LeaseState_VALID
-	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
+	if err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
 		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
@@ -3296,11 +3271,6 @@ func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	return defaultSubmitProposalLocked(r, p)
 }
 
-func (r *Replica) isSoloReplicaRLocked() bool {
-	return len(r.mu.state.Desc.Replicas) == 1 &&
-		r.mu.state.Desc.Replicas[0].ReplicaID == r.mu.replicaID
-}
-
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	data, err := protoutil.Marshal(p.command)
 	if err != nil {
@@ -3361,7 +3331,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			return err
 		}
 
-		return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+		return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
@@ -3374,7 +3344,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		})
 	}
 
-	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
+	return r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		encode := encodeRaftCommandV1
 		if p.command.ReplicatedEvalResult.AddSSTable != nil {
 			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -3422,22 +3392,24 @@ func (r *Replica) quiesceLocked() bool {
 
 func (r *Replica) unquiesceLocked() {
 	if r.mu.quiescent {
+		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			ctx := r.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
+		r.maybeCampaignOnWakeLocked(ctx)
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
 }
 
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
 	if r.mu.quiescent {
+		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			ctx := r.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "unquiescing: waking leader")
 		}
 		r.mu.quiescent = false
+		r.maybeCampaignOnWakeLocked(ctx)
 		// Propose an empty command which will wake the leader.
 		_ = r.mu.internalRaftGroup.Propose(encodeRaftCommandV1(makeIDKey(), nil))
 	}
@@ -3527,7 +3499,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	//     handleRaftReadyRaftMuLocked, the next write will get blocked.
 	defer r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
 
-	err := r.withRaftGroupLocked(false, func(raftGroup *raft.RawNode) (bool, error) {
+	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
@@ -3911,28 +3883,11 @@ func (r *Replica) tick() (bool, error) {
 	if r.mu.quiescent {
 		// While a replica is quiesced we still advance its logical clock.
 		//
-		// When CheckQuorum is used (currently when !enablePreVote), this is
-		// necessary to avoid a scenario where the leader quiesces and a follower
-		// does not. The follower calls an election but the election fails because
-		// the leader and other follower believe that no time in the current term
-		// has passed. The Raft group is then in a state where one member has a
-		// term that is advanced which will then cause subsequent heartbeats from
-		// the existing leader to be rejected in a way that the leader will step
-		// down. This situation is caused by an interaction between quiescence and
-		// the Raft CheckQuorum feature which relies on the logical clock ticking
-		// at roughly the same rate on all members of the group.
-		//
-		// By ticking the logical clock (incrementing an integer) we avoid this
-		// situation. If one of the followers does not quiesce it will call an
-		// election but the election will succeed. Note that while we expect such
-		// elections from quiesced followers to be extremely rare, it is very
-		// difficult to completely eliminate them so we want to minimize the
-		// disruption when they do occur.
-		//
-		// Without CheckQuorum, the call to TickQuiesced is less critical,
-		// but still improves our responsiveness to node failures by
-		// priming the replica to start an election immediately upon
-		// unquiescing, instead of waiting for a full election timeout.
+		// Since we no longer use CheckQuorum, the call to TickQuiesced is
+		// less critical, but still improves our responsiveness to node
+		// failures by priming the replica to start an election
+		// immediately upon unquiescing, instead of waiting for a full
+		// election timeout.
 		//
 		// Enabling TickQuiesced slightly increases the rate of contested
 		// elections. Deployments with high inter-node latency and skewed
