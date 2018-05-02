@@ -52,7 +52,8 @@ type versionStep interface {
 // up to its binary version.
 type binaryVersionUpgrade struct {
 	newVersion string
-	nodes      []int
+	// If not empty when constructed, these nodes' data dir will be wiped before starting.
+	wipeNodes []int
 }
 
 // sourceVersion corresponds to the source binary version.
@@ -71,18 +72,28 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 	}
 	lc := c.(*localcluster.LocalCluster)
 
-	if len(bv.nodes) == 0 {
-		bv.nodes = make([]int, c.NumNodes())
+	var wipeData bool
+	if len(bv.wipeNodes) == 0 {
+		bv.wipeNodes = make([]int, c.NumNodes())
 		for i := 0; i < c.NumNodes(); i++ {
-			bv.nodes[i] = i
+			bv.wipeNodes[i] = i
 		}
+	} else {
+		wipeData = true
 	}
 
 	// Restart nodes in a random order; otherwise it'd be node 0 running the
 	// migrations and it probably also has all the leases.
-	firstToRestart := rand.Intn(c.NumNodes())
-	for _, j := range bv.nodes {
-		nodeIdx := (j + firstToRestart) % c.NumNodes()
+	firstToRestart := rand.Intn(len(bv.wipeNodes))
+	for _, j := range bv.wipeNodes {
+		nodeIdx := (j + firstToRestart) % len(bv.wipeNodes)
+		if wipeData {
+			// Nodes to upgrade is provided, wipe the old data and start them fresh.
+			if err := lc.RemoveNodeData(nodeIdx); err != nil {
+				t.Fatal(err)
+			}
+			log.Infof(ctx, "wiping node %d's data directory", nodeIdx)
+		}
 		log.Infof(ctx, "upgrading node %d's binary to %s", nodeIdx, bv.newVersion)
 		lc.ReplaceBinary(nodeIdx, newBin)
 		if err := lc.Restart(ctx, nodeIdx); err != nil {
@@ -246,7 +257,8 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		binaryVersionUpgrade{newVersion: "v1.1.1"},
 		clusterVersionUpgrade("1.1"),
 
-		binaryVersionUpgrade{newVersion: "v2.0.0", nodes: []int{min(3, len(cfg.Nodes)) - 1}},
+		// Wipe out the data dir for the last nodes to start it fresh.
+		binaryVersionUpgrade{newVersion: "v2.0.0", wipeNodes: []int{min(3, len(cfg.Nodes)) - 1}},
 
 		binaryVersionUpgrade{newVersion: "v2.0.0"},
 		clusterVersionUpgrade("1.1-6"),
