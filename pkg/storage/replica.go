@@ -1519,6 +1519,54 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 	}
 }
 
+// proactivelyRenewLease will continue attempting to renew the replica's
+// expiration-based lease for as long as the replica holds onto it.
+// Should be called in a long-running worker goroutine.
+func (r *Replica) proactivelyRenewLease(ctx context.Context, startingLease roachpb.Lease) {
+	renewalDuration := r.store.cfg.RangeLeaseRenewalDuration()
+	renewalTime := startingLease.Expiration.Add(-renewalDuration.Nanoseconds(), 0)
+	timer := timeutil.NewTimer()
+	defer timer.Stop()
+
+	for {
+		timer.Reset(renewalTime.GoTime().Sub(r.store.Clock().PhysicalTime()))
+		select {
+		case <-timer.C:
+			timer.Read = true
+			leaseStatus, pErr := r.redirectOnOrAcquireLease(ctx)
+			if pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+					log.Warningf(ctx, "failed to proactively renew lease: %s", pErr)
+				}
+				return
+			}
+
+			// redirectOnOrAcquireLease doesn't wait until the lease request
+			// completes when we already own the lease, so manually join the
+			// lease request and wait on it.  We don't need any fancy
+			// error-handling logic here, since we're just trying to figure out
+			// when we should next try to renew the lease. If we get an error
+			// and the lease doesn't actually renew, it just means we'll try
+			// again sooner.
+			renewalTime = leaseStatus.Lease.Expiration.Add(-renewalDuration.Nanoseconds(), 0)
+			if renewalTime.Less(r.store.Clock().Now()) {
+				r.mu.Lock()
+				handle := r.requestLeaseLocked(ctx, leaseStatus)
+				r.mu.Unlock()
+				select {
+				case <-handle.C():
+					lease, _ := r.GetLease()
+					renewalTime = lease.Expiration.Add(-renewalDuration.Nanoseconds(), 0)
+				case <-r.store.Stopper().ShouldStop():
+					return
+				}
+			}
+		case <-r.store.Stopper().ShouldStop():
+			return
+		}
+	}
+}
+
 // IsInitialized is true if we know the metadata of this range, either
 // because we created it or we have received an initial snapshot from
 // another node. It is false when a range has been created in response

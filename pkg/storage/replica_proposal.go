@@ -260,11 +260,20 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	r.mu.state.Lease = &newLease
 	r.mu.Unlock()
 
-	// Gossip the first range whenever its lease is acquired. We check to
-	// make sure the lease is active so that a trailing replica won't process
-	// an old lease request and attempt to gossip the first range.
 	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+		// Gossip the first range whenever its lease is acquired. We check to
+		// make sure the lease is active so that a trailing replica won't process
+		// an old lease request and attempt to gossip the first range.
 		r.gossipFirstRange(ctx)
+
+		// Start a worker that will continually attempt to renew the lease before
+		// it expires. This reduces user-visible latency when range lookups are
+		// needed to serve a request and reduces ping-ponging of the lease to
+		// different replicas as maybeGossipFirstRange is called on each (e.g.
+		// #24753).
+		r.store.Stopper().RunWorker(r.AnnotateCtx(context.Background()), func(ctx context.Context) {
+			r.proactivelyRenewLease(ctx, newLease)
+		})
 	}
 
 	if leaseChangingHands && !iAmTheLeaseHolder {
