@@ -44,17 +44,25 @@ import (
 )
 
 var (
-	local       bool
-	artifacts   string
-	cockroach   string
-	workload    string
-	clusterName string
-	clusterID   string
-	clusterWipe bool
-	username    = os.Getenv("ROACHPROD_USER")
-	zones       string
-	teamCity    bool
+	local         bool
+	artifacts     string
+	cockroach     string
+	workload      string
+	clusterID     string
+	clusterName   string
+	clusterSecure bool
+	clusterWipe   bool
+	username      = os.Getenv("ROACHPROD_USER")
+	zones         string
+	teamCity      bool
 )
+
+func maybeAddSecureFlag(args []string) []string {
+	if clusterSecure {
+		return append(args, "--secure")
+	}
+	return args
+}
 
 func ifLocal(trueVal, falseVal string) string {
 	if local {
@@ -603,10 +611,8 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	}
 	c.status("starting cluster")
 	defer c.status()
-	args := []string{
-		"roachprod",
-		"start",
-	}
+	args := []string{"roachprod", "start"}
+	args = maybeAddSecureFlag(args)
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
 	if err := execCmd(ctx, c.l, args...); err != nil {
@@ -677,8 +683,12 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args
 	if err := c.preRunChecks(); err != nil {
 		return err
 	}
-	return execCmd(ctx, l,
-		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
+
+	roachprodArgs := []string{"roachprod", "run"}
+	roachprodArgs = maybeAddSecureFlag(roachprodArgs)
+	roachprodArgs = append(roachprodArgs, c.makeNodes(node), "--")
+	roachprodArgs = append(roachprodArgs, args...)
+	return execCmd(ctx, l, roachprodArgs...)
 }
 
 // preRunChecks runs checks to see if it makes sense to run a command.
@@ -702,8 +712,12 @@ func (c *cluster) RunWithBuffer(
 	if err := c.preRunChecks(); err != nil {
 		return nil, err
 	}
-	return execCmdWithBuffer(ctx, l,
-		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
+
+	roachprodArgs := []string{"roachprod", "run"}
+	roachprodArgs = maybeAddSecureFlag(roachprodArgs)
+	roachprodArgs = append(roachprodArgs, c.makeNodes(node), "--")
+	roachprodArgs = append(roachprodArgs, args...)
+	return execCmdWithBuffer(ctx, l, roachprodArgs...)
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
