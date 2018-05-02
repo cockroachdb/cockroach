@@ -312,6 +312,11 @@ func (bq *baseQueue) Length() int {
 
 // PurgatoryLength returns the current size of purgatory.
 func (bq *baseQueue) PurgatoryLength() int {
+	// Lock processing while measuring the purgatory length. This ensures that
+	// no purgatory replicas are concurrently being processed, during which time
+	// they are removed from bq.mu.purgatory even though they may be re-added.
+	defer bq.lockProcessing()()
+
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 	return len(bq.mu.purgatory)
