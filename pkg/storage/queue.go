@@ -527,12 +527,18 @@ func (bq *baseQueue) addInternalLocked(
 }
 
 // MaybeAddCallback adds a callback to be called when the specified range
-// finishes processing if the range is in the queue. If the range is not
-// in the queue (either waiting or processing), the method returns false.
+// finishes processing if the range is in the queue. If the range is in
+// purgatory, the callback is called immediately with the purgatory error. If
+// the range is not in the queue (either waiting or processing), the method
+// returns false.
 func (bq *baseQueue) MaybeAddCallback(rangeID roachpb.RangeID, cb processCallback) bool {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
 
+	if purgatoryErr, ok := bq.mu.purgatory[rangeID]; ok {
+		cb(purgatoryErr)
+		return true
+	}
 	if item, ok := bq.mu.replicas[rangeID]; ok {
 		item.registerCallback(cb)
 		return true

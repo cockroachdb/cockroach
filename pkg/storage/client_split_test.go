@@ -795,9 +795,15 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 // fillRange writes keys with the given prefix and associated values
 // until bytes bytes have been written or the given range has split.
 func fillRange(
-	t *testing.T, store *storage.Store, rangeID roachpb.RangeID, prefix roachpb.Key, bytes int64,
+	t *testing.T,
+	store *storage.Store,
+	rangeID roachpb.RangeID,
+	prefix roachpb.Key,
+	bytes int64,
+	singleKey bool,
 ) {
 	src := rand.New(rand.NewSource(0))
+	var key []byte
 	for {
 		ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
 		if err != nil {
@@ -807,8 +813,10 @@ func fillRange(
 		if keyBytes+valBytes >= bytes {
 			return
 		}
-		key := append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
-		key = keys.MakeFamilyKey(key, src.Uint32())
+		if key == nil || !singleKey {
+			key = append(append([]byte(nil), prefix...), randutil.RandBytes(src, 100)...)
+			key = keys.MakeFamilyKey(key, src.Uint32())
+		}
 		val := randutil.RandBytes(src, int(src.Int31n(1<<8)))
 		pArgs := putArgs(key, val)
 		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
@@ -867,7 +875,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 		}
 
 		// Look in the range after prefix we're writing to.
-		fillRange(t, store, repl.RangeID, tableBoundary, maxBytes)
+		fillRange(t, store, repl.RangeID, tableBoundary, maxBytes, false /* singleKey */)
 	}
 
 	// Verify that the range is in fact split.
@@ -937,18 +945,26 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	// Backpressured writes react differently depending on whether there is an
 	// ongoing split or not. If there is an ongoing split then the writes wait
 	// on the split are only allowed to proceed if the split succeeds. If there
-	// is not an ongoing split the write is rejected immediately.
+	// is not an ongoing split or if the range is unsplittable and in the split
+	// queue's purgatory, the write is rejected immediately.
 	testCases := []struct {
-		splitOngoing bool
-		splitErr     bool
-		expErr       string
+		splitOngoing    bool
+		splitErr        bool
+		splitImpossible bool
+		expErr          string
 	}{
 		{splitOngoing: true, splitErr: false},
 		{splitOngoing: true, splitErr: true, expErr: "split failed while applying backpressure.* boom"},
 		{splitOngoing: false, expErr: "range large enough to require backpressure, but no split ongoing"},
+		{splitImpossible: true, expErr: "split failed while applying backpressure: could not find valid split key"},
 	}
 	for _, tc := range testCases {
-		name := fmt.Sprintf("splitOngoing=%t,splitErr=%t", tc.splitOngoing, tc.splitErr)
+		var name string
+		if tc.splitImpossible {
+			name = fmt.Sprintf("splitImpossible=%t", tc.splitImpossible)
+		} else {
+			name = fmt.Sprintf("splitOngoing=%t,splitErr=%t", tc.splitOngoing, tc.splitErr)
+		}
 		t.Run(name, func(t *testing.T) {
 			var activateSplitFilter int32
 			splitKey := roachpb.RKey(keys.UserTableDataMin)
@@ -994,7 +1010,8 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 			// Fill the new range past the point where writes should backpressure.
 			repl = store.LookupReplica(splitKey, nil)
-			fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1)
+			singleKey := tc.splitImpossible
+			fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1, singleKey)
 
 			if !repl.ShouldBackpressureWrites() {
 				t.Fatal("expected ShouldBackpressureWrites=true, found false")
@@ -1011,6 +1028,12 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 					t.Fatal(err)
 				}
 				<-splitPending
+			} else if tc.splitImpossible {
+				store.SetSplitQueueActive(true)
+				store.ForceSplitScanAndProcess()
+				if l := store.SplitQueuePurgatoryLength(); l != 1 {
+					t.Fatalf("expected split queue purgatory to contain 1 replica, found %d", l)
+				}
 			}
 
 			// Send a Put request. This should be backpressured on the split, so it should
