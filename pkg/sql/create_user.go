@@ -15,13 +15,19 @@
 package sql
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha1"
+	"fmt"
+	"net/http"
 	"regexp"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -72,7 +78,7 @@ func (p *planner) CreateUserNode(
 }
 
 func (n *CreateUserNode) startExec(params runParams) error {
-	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve(params.EvalContext().SessionData)
 	if err != nil {
 		return err
 	}
@@ -201,8 +207,8 @@ func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userA
 	return userAuthInfo{name: name, password: password}, nil
 }
 
-// resolve returns the actual user name and (hashed) password.
-func (ua *userAuthInfo) resolve() (string, []byte, error) {
+// resolve returns the actual user name and (hashed) password. If checkHaveIBeenPwned is true, an error is returned if
+func (ua *userAuthInfo) resolve(session *sessiondata.SessionData) (string, []byte, error) {
 	name, err := ua.name()
 	if err != nil {
 		return "", nil, err
@@ -225,6 +231,15 @@ func (ua *userAuthInfo) resolve() (string, []byte, error) {
 			return "", nil, security.ErrEmptyPassword
 		}
 
+		if session.SafeUpdates {
+			const haveIBeenPwnedCount = 50
+			if count, err := getHaveIBeenPwnedCount(resolvedPassword); err != nil {
+				return "", nil, errors.Wrap(err, "getHaveIBeenPwnedCount")
+			} else if count > haveIBeenPwnedCount {
+				return "", nil, errors.Errorf("common password: has been reported in breaches over %d times", haveIBeenPwnedCount)
+			}
+		}
+
 		hashedPassword, err = security.HashPassword(resolvedPassword)
 		if err != nil {
 			return "", nil, err
@@ -232,4 +247,27 @@ func (ua *userAuthInfo) resolve() (string, []byte, error) {
 	}
 
 	return normalizedUsername, hashedPassword, nil
+}
+
+func getHaveIBeenPwnedCount(password string) (int, error) {
+	sha := sha1.Sum([]byte(password))
+	text := fmt.Sprintf("%X", sha)
+	const prefixLen = 5
+	const postfixLen = sha1.Size*2 - prefixLen
+
+	resp, err := http.Get(fmt.Sprintf("https://api.pwnedpasswords.com/range/%s", text[:prefixLen]))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.New(resp.Status)
+	}
+	scan := bufio.NewScanner(resp.Body)
+	for scan.Scan() {
+		if text[prefixLen:] == scan.Text()[:postfixLen] {
+			return strconv.Atoi(scan.Text()[postfixLen+1:])
+		}
+	}
+	return 0, scan.Err()
 }

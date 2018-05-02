@@ -15,6 +15,7 @@
 package logictest
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -22,5 +23,9 @@ import (
 
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// This prevents leaking an http conn goroutine during getHaveIBeenPwnedCount.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
 	RunLogicTest(t)
 }
