@@ -71,14 +71,25 @@ func (bv binaryVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.
 	}
 	lc := c.(*localcluster.LocalCluster)
 
+	var wipeData bool
 	if len(bv.nodes) == 0 {
 		bv.nodes = make([]int, c.NumNodes())
 		for i := 0; i < c.NumNodes(); i++ {
 			bv.nodes[i] = i
 		}
+	} else {
+		wipeData = true
 	}
 
 	for _, i := range bv.nodes {
+		if wipeData {
+			// Nodes to upgrade is provided, wipe the old data and start them fresh.
+			if err := lc.RemoveNodeData(i); err != nil {
+				t.Fatal(err)
+			}
+			log.Infof(ctx, "wiping node %d's data directory", i)
+		}
+
 		log.Infof(ctx, "upgrading node %d's binary to %s", i, bv.newVersion)
 		lc.ReplaceBinary(i, newBin)
 		if err := lc.Restart(ctx, i); err != nil {

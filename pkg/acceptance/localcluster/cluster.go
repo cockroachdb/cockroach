@@ -315,6 +315,12 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 	return n, ch
 }
 
+// RemoveNodeData removes the given node's data directory.
+func (c *Cluster) RemoveNodeData(nodeIdx int) error {
+	dir := c.Cfg.PerNodeCfg[nodeIdx].DataDir
+	return os.RemoveAll(dir)
+}
+
 // ReplaceBinary replaces the binary that will be used for the specified node
 // after its next restart.
 func (c *Cluster) ReplaceBinary(nodeIdx int, bin string) {
