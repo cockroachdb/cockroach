@@ -14,6 +14,10 @@
 
 package tree
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+)
+
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
 	IfExists bool
@@ -54,6 +58,7 @@ type AlterTableCmd interface {
 
 func (*AlterTableAddColumn) alterTableCmd()          {}
 func (*AlterTableAddConstraint) alterTableCmd()      {}
+func (*AlterTableAlterColumnType) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
@@ -65,6 +70,7 @@ func (*AlterTableInjectStats) alterTableCmd()        {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
+var _ AlterTableCmd = &AlterTableAlterColumnType{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
@@ -123,6 +129,47 @@ func (node *AlterTableAddConstraint) Format(ctx *FmtCtx) {
 	if node.ValidationBehavior == ValidationSkip {
 		ctx.WriteString(" NOT VALID")
 	}
+}
+
+// AlterTableAlterColumnType represents an ALTER TABLE ALTER COLUMN TYPE command.
+type AlterTableAlterColumnType struct {
+	Collation      string
+	Column         Name
+	ColumnKeyword  bool
+	SetDataKeyword bool
+	ToType         coltypes.T
+	Using          Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER ")
+	if node.ColumnKeyword {
+		ctx.WriteString("COLUMN ")
+	}
+	ctx.FormatNode(&node.Column)
+
+	if node.SetDataKeyword {
+		ctx.WriteString(" SET DATA")
+	}
+
+	ctx.WriteString(" TYPE ")
+	node.ToType.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+
+	if len(node.Collation) > 0 {
+		ctx.WriteString(" COLLATE ")
+		ctx.WriteString(node.Collation)
+	}
+
+	if node.Using != nil {
+		ctx.WriteString(" USING ")
+		ctx.FormatNode(node.Using)
+	}
+}
+
+// GetColumn implements the ColumnMutationCmd interface.
+func (node *AlterTableAlterColumnType) GetColumn() Name {
+	return node.Column
 }
 
 // AlterTableDropColumn represents a DROP COLUMN command.

@@ -121,6 +121,17 @@ func TestBinaryTimestampTZ(t *testing.T) {
 	})
 }
 
+func TestBinaryInterval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "interval", func(val string) tree.Datum {
+		d, err := tree.ParseDInterval(val)
+		if err != nil {
+			t.Fatalf("could not parse %q as interval: %s", val, err)
+		}
+		return d
+	})
+}
+
 func TestBinaryDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "date", func(val string) tree.Datum {

@@ -667,6 +667,9 @@ func applyColumnMutation(
 	params runParams,
 ) error {
 	switch t := mut.(type) {
+	case *tree.AlterTableAlterColumnType:
+		return pgerror.Unimplemented("alter column type", "changing column types is not supported")
+
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {
 			if err := removeSequenceDependencies(tableDesc, col, params); err != nil {

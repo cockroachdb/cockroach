@@ -163,10 +163,6 @@ func TestCanWriteAllDatums(t *testing.T) {
 				t.Fatalf("got %s while attempting to write datum %s as text", buf.err, d)
 			}
 
-			// TODO(justin): #24525.
-			if typ == types.Interval {
-				continue
-			}
 			buf.writeBinaryDatum(context.Background(), d, time.UTC)
 			if buf.err != nil {
 				t.Fatalf("got %s while attempting to write datum %s as binary", buf.err, d)
