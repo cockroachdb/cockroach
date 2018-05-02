@@ -1282,6 +1282,7 @@ clean-c-deps:
 	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(ROCKSDB_DIR)
 	rm -rf $(SNAPPY_DIR)
+	rm -rf $(LIBROACH_DIR)
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
@@ -1290,6 +1291,7 @@ unsafe-clean-c-deps:
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
+	git -C $(LIBROACH_SRC_DIR) clean -dxf
 
 .PHONY: clean
 clean: ## Remove build artifacts.
