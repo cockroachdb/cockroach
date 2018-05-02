@@ -3135,6 +3135,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip()
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()

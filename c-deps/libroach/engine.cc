@@ -223,4 +223,57 @@ DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   return kSuccess;
 }
 
+// EnvOpenFile opens a new file in the given engine.
+DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+  rocksdb::Status status;
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::WritableFile> rocksdb_file;
+
+  /*
+    // Recursively create the directory of the given file.
+    std::string delimiter = "/";
+    std::string dir = "";
+    std::string rest = ToString(path);
+    int i = 0;
+    int next;
+    while(rest.length() != 0 && (next = rest.find(delimiter)) != -1) {
+      std::string current = rest.substr(0, next+1);
+      i += current.length();
+      rest = rest.substr(current.length(), rest.length());
+      dir += current;
+      this->rep->GetEnv()->CreateDirIfMissing(dir);
+    }
+  */
+
+  // Create the file.
+  status = this->rep->GetEnv()->NewWritableFile(ToString(path), &rocksdb_file, soptions);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  *file = rocksdb_file.release();
+  return kSuccess;
+}
+
+// CloseFile closes the given file in the given engine.
+DBStatus DBImpl::EnvCloseFile(rocksdb::WritableFile* file) {
+  rocksdb::Status status = file->Close();
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  delete file;
+  return kSuccess;
+}
+
+// EnvAppendFile appends the given data to the file in the given engine.
+DBStatus DBImpl::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  rocksdb::Status status = file->Append(ToSlice(contents));
+  return ToDBStatus(status);
+}
+
+// EnvSyncFile synchronously writes the data of the file to the disk.
+DBStatus DBImpl::EnvSyncFile(rocksdb::WritableFile* file) {
+  rocksdb::Status status = file->Sync();
+  return ToDBStatus(status);
+}
+
 }  // namespace cockroach

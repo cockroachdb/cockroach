@@ -402,7 +402,7 @@ func addSSTablePreApply(
 			}
 		}
 
-		if err := writeFileSyncing(ctx, path, sst.Data, 0600, st, limiter); err != nil {
+		if err := writeFileSyncing(ctx, path, sst.Data, eng, 0600, st, limiter); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
 		copied = true

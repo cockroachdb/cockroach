@@ -57,4 +57,16 @@ DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBSnapshot::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBSnapshot::EnvCloseFile(rocksdb::WritableFile* file) { return FmtStatus("unsupported"); }
+
+DBStatus DBSnapshot::EnvSyncFile(rocksdb::WritableFile* file) { return FmtStatus("unsupported"); }
+
+DBStatus DBSnapshot::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
 }  // namespace cockroach
