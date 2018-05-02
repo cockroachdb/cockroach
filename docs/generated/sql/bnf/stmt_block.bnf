@@ -1759,6 +1759,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
 	| 'DROP' opt_column column_name opt_drop_behavior
+	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_alter_column_collate opt_alter_column_using
 	| 'ADD' table_constraint opt_validate_behavior
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
@@ -1951,6 +1952,18 @@ user_priority ::=
 alter_column_default ::=
 	'SET' 'DEFAULT' a_expr
 	| 'DROP' 'DEFAULT'
+
+opt_set_data ::=
+	'SET' 'DATA'
+	| 
+
+opt_alter_column_collate ::=
+	'COLLATE' collation_name
+	| 
+
+opt_alter_column_using ::=
+	'USING' a_expr
+	| 
 
 opt_validate_behavior ::=
 	'NOT' 'VALID'
