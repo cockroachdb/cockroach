@@ -73,8 +73,6 @@ const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount             = 10
 	defaultHeartbeatIntervalTicks = 5
-	// ttlStoreGossip is time-to-live for store-related info.
-	ttlStoreGossip = 2 * time.Minute
 
 	// defaultRaftEntryCacheSize is the default size in bytes for a
 	// store's Raft log entry cache.
@@ -1553,7 +1551,7 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	// Unique gossip key per store.
 	gossipStoreKey := gossip.MakeStoreKey(storeDesc.StoreID)
 	// Gossip store descriptor.
-	if err := s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, ttlStoreGossip); err != nil {
+	if err := s.cfg.Gossip.AddInfoProto(gossipStoreKey, storeDesc, gossip.StoreTTL); err != nil {
 		return err
 	}
 	// Once we have gossiped the store descriptor the first time, other nodes
@@ -1643,7 +1641,7 @@ func (s *Store) GossipDeadReplicas(ctx context.Context) error {
 	// Unique gossip key per store.
 	key := gossip.MakeDeadReplicasKey(s.StoreID())
 	// Gossip dead replicas.
-	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, ttlStoreGossip)
+	return s.cfg.Gossip.AddInfoProto(key, &deadReplicas, gossip.StoreTTL)
 }
 
 // Bootstrap writes a new store ident to the underlying engine. To
