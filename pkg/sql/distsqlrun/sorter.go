@@ -425,11 +425,11 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		s.rows.Sort(ctx)
 	}
 
-	if s.closed || s.rows.Len() == 0 {
-		return nil, s.producerMeta(nil /* err */)
-	}
-
 	for {
+		if s.closed || s.rows.Len() == 0 {
+			return nil, s.producerMeta(nil /* err */)
+		}
+
 		row := s.rows.EncRow(0)
 		s.rows.PopFirst()
 
