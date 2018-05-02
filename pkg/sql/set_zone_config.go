@@ -157,6 +157,33 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	hasNewSubzones := yamlConfig != nil && index != nil
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
 		targetID, table, zone, params.extendedEvalCtx.ExecCfg, hasNewSubzones)
+
+	var eventLogType EventLogType
+	info := struct {
+		Target string
+		Config string `json:",omitempty"`
+		User   string
+	}{
+		Target: config.CLIZoneSpecifier(&n.zoneSpecifier),
+		User:   params.SessionData().User,
+	}
+	if yamlConfig == nil {
+		eventLogType = EventLogRemoveZoneConfig
+	} else {
+		eventLogType = EventLogSetZoneConfig
+		info.Config = *yamlConfig
+	}
+	if err := MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(
+		params.ctx,
+		params.p.txn,
+		eventLogType,
+		int32(targetID),
+		int32(params.extendedEvalCtx.NodeID),
+		info,
+	); err != nil {
+		return err
+	}
+
 	return err
 }
 
