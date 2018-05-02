@@ -199,14 +199,13 @@ func PopulateStoreSpecWithEncryption(
 			}
 
 			// Found a matching path.
-			if storeSpecs.Specs[i].UseSwitchingEnv {
+			if storeSpecs.Specs[i].UseFileRegistry {
 				return fmt.Errorf("store with path %s already has an encryption setting",
 					storeSpecs.Specs[i].Path)
 			}
 
-			// TODO(mberhault): figure out how to pass encryption settings through to C++-CCL.
-			// Tell the store we absolutely need the switching env.
-			storeSpecs.Specs[i].UseSwitchingEnv = true
+			// Tell the store we absolutely need the file registry.
+			storeSpecs.Specs[i].UseFileRegistry = true
 			opts, err := es.toEncryptionOptions()
 			if err != nil {
 				return err

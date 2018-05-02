@@ -27,14 +27,14 @@ type storageVersion int
 const (
 	versionNoFile storageVersion = iota
 	versionBeta20160331
-	versionSwitchingEnv
+	versionFileRegistry
 )
 
 const (
 	versionFilename     = "COCKROACHDB_VERSION"
 	versionFilenameTemp = "COCKROACHDB_VERSION_TEMP"
 	versionMinimum      = versionNoFile
-	versionCurrent      = versionSwitchingEnv
+	versionCurrent      = versionFileRegistry
 )
 
 // Version stores all the version information for all stores and is used as
