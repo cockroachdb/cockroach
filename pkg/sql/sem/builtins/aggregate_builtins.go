@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -731,7 +732,7 @@ func (a *intSumAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Dat
 		// does not provide checked addition, we have to check for the
 		// overflow explicitly.
 		if !a.large {
-			r, ok := tree.AddWithOverflow(a.intSum, t)
+			r, ok := arith.AddWithOverflow(a.intSum, t)
 			if ok {
 				a.intSum = r
 			} else {
@@ -1070,7 +1071,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://www.johndcook.com/blog/skewness_kurtosis and our
 	// implementation of NumericStats
 	// https://github.com/cockroachdb/cockroach/pull/17728.
-	totalCount, ok := tree.AddWithOverflow(a.count, count)
+	totalCount, ok := arith.AddWithOverflow(a.count, count)
 	if !ok {
 		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "number of values in aggregate exceed max count of %d", math.MaxInt64)
 	}
