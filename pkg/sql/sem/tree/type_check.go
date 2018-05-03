@@ -591,6 +591,45 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 }
 
 // TypeCheck implements the Expr interface.
+func (expr *IfErrExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Cond, expr.Else)
+	if err != nil {
+		return nil, decorateTypeCheckError(err, "incompatible IFERROR expressions")
+	}
+	var typedErrCond TypedExpr
+	if expr.ErrCond != nil {
+		typedErrCond, err = typeCheckAndRequire(ctx, expr.ErrCond, types.String, "IFERROR")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	expr.Cond, expr.Else = typedSubExprs[0], typedSubExprs[1]
+	expr.ErrCond = typedErrCond
+	expr.typ = retType
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *IsErrExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	typedCond, err := expr.Cond.TypeCheck(ctx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+	var typedErrCond TypedExpr
+	if expr.ErrCond != nil {
+		typedErrCond, err = typeCheckAndRequire(ctx, expr.ErrCond, types.String, "IFERROR")
+		if err != nil {
+			return nil, err
+		}
+	}
+	expr.Cond = typedCond
+	expr.ErrCond = typedErrCond
+	expr.typ = types.Bool
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	typedCond, err := typeCheckAndRequireBoolean(ctx, expr.Cond, "IF condition")
 	if err != nil {

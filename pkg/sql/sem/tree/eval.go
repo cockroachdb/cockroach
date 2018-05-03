@@ -3486,6 +3486,52 @@ func ensureExpectedType(exp types.T, d Datum) error {
 }
 
 // Eval implements the TypedExpr interface.
+func (expr *IfErrExpr) Eval(ctx *EvalContext) (Datum, error) {
+	cond, evalErr := expr.Cond.(TypedExpr).Eval(ctx)
+	if evalErr == nil {
+		return cond, nil
+	}
+	if expr.ErrCond != nil {
+		errpat, err := expr.ErrCond.(TypedExpr).Eval(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if errpat == DNull {
+			return nil, evalErr
+		}
+		errpatStr := string(MustBeDString(errpat))
+		pqErr, ok := pgerror.GetPGCause(evalErr)
+		if !ok || pqErr.Code != errpatStr {
+			return nil, evalErr
+		}
+	}
+	return expr.Else.(TypedExpr).Eval(ctx)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *IsErrExpr) Eval(ctx *EvalContext) (Datum, error) {
+	_, evalErr := expr.Cond.(TypedExpr).Eval(ctx)
+	if evalErr == nil {
+		return DBoolFalse, nil
+	}
+	if expr.ErrCond != nil {
+		errpat, err := expr.ErrCond.(TypedExpr).Eval(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if errpat == DNull {
+			return nil, evalErr
+		}
+		errpatStr := string(MustBeDString(errpat))
+		pqErr, ok := pgerror.GetPGCause(evalErr)
+		if !ok || pqErr.Code != errpatStr {
+			return nil, evalErr
+		}
+	}
+	return DBoolTrue, nil
+}
+
+// Eval implements the TypedExpr interface.
 func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {

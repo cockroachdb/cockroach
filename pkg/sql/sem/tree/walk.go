@@ -277,6 +277,42 @@ func (expr *IfExpr) Walk(v Visitor) Expr {
 	return expr
 }
 
+// Walk implements the Expr interface.
+func (expr *IfErrExpr) Walk(v Visitor) Expr {
+	c, changedC := WalkExpr(v, expr.Cond)
+	t := expr.ErrCond
+	changedEC := false
+	if t != nil {
+		t, changedEC = WalkExpr(v, expr.ErrCond)
+	}
+	e, changedE := WalkExpr(v, expr.Else)
+	if changedC || changedEC || changedE {
+		exprCopy := *expr
+		exprCopy.Cond = c
+		exprCopy.ErrCond = t
+		exprCopy.Else = e
+		return &exprCopy
+	}
+	return expr
+}
+
+// Walk implements the Expr interface.
+func (expr *IsErrExpr) Walk(v Visitor) Expr {
+	c, changedC := WalkExpr(v, expr.Cond)
+	t := expr.ErrCond
+	changedEC := false
+	if t != nil {
+		t, changedEC = WalkExpr(v, expr.ErrCond)
+	}
+	if changedC || changedEC {
+		exprCopy := *expr
+		exprCopy.Cond = c
+		exprCopy.ErrCond = t
+		return &exprCopy
+	}
+	return expr
+}
+
 // CopyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *IndirectionExpr) CopyNode() *IndirectionExpr {
 	exprCopy := *expr

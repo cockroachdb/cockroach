@@ -539,6 +539,67 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// IfErrExpr represents an IFERR expression.
+type IfErrExpr struct {
+	Cond    Expr
+	Else    Expr
+	ErrCond Expr
+
+	typeAnnotation
+}
+
+// TypedErrCondExpr returns the IfErrExpr's True expression as a TypedExpr.
+func (node *IfErrExpr) TypedErrCondExpr() TypedExpr {
+	return node.ErrCond.(TypedExpr)
+}
+
+// TypedCondExpr returns the IfErrExpr's Cond expression as a TypedExpr.
+func (node *IfErrExpr) TypedCondExpr() TypedExpr {
+	return node.Cond.(TypedExpr)
+}
+
+// TypedElseExpr returns the IfErrExpr's Else expression as a TypedExpr.
+func (node *IfErrExpr) TypedElseExpr() TypedExpr {
+	return node.Else.(TypedExpr)
+}
+
+// Format implements the NodeFormatter interface.
+func (node *IfErrExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("IFERROR(")
+	ctx.FormatNode(node.Cond)
+	ctx.WriteString(", ")
+	ctx.FormatNode(node.Else)
+	if node.ErrCond != nil {
+		ctx.WriteString(", ")
+		ctx.FormatNode(node.ErrCond)
+	}
+	ctx.WriteByte(')')
+}
+
+// IsErrExpr represents an IFERR expression.
+type IsErrExpr struct {
+	Cond    Expr
+	ErrCond Expr
+
+	typeAnnotation
+}
+
+// TypedCondExpr returns the IsErrExpr's Cond expression as a TypedExpr.
+func (node *IsErrExpr) TypedCondExpr() TypedExpr {
+	return node.Cond.(TypedExpr)
+}
+
+// Format implements the NodeFormatter interface.
+func (node *IsErrExpr) Format(ctx *FmtCtx) {
+	ctx.WriteString("ISERROR(")
+	ctx.FormatNode(node.Cond)
+	if node.ErrCond != nil {
+		ctx.WriteString(", ")
+		ctx.FormatNode(node.ErrCond)
+	}
+	ctx.WriteByte(')')
+}
+
 // IfExpr represents an IF expression.
 type IfExpr struct {
 	Cond Expr
@@ -1512,8 +1573,10 @@ func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
+func (node *IfErrExpr) String() string        { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
 func (node *IndirectionExpr) String() string  { return AsString(node) }
+func (node *IsErrExpr) String() string        { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
 func (node *Name) String() string             { return AsString(node) }
 func (node *UnrestrictedName) String() string { return AsString(node) }
