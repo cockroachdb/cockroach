@@ -133,3 +133,10 @@ func (wk *WeakKeys) Add(new ColSet) {
 	}
 	*wk = append((*wk)[:insert], new)
 }
+
+// Copy returns a copy of the list of weak keys.
+func (wk *WeakKeys) Copy() WeakKeys {
+	res := make(WeakKeys, len(*wk))
+	copy(res, *wk)
+	return res
+}

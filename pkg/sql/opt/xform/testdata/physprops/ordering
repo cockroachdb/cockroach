@@ -298,3 +298,168 @@ memo (optimized)
       └── "[presentation: x:1,y:2,z:3,s:4] [ordering: +2]"
            ├── best: (sort G2)
            └── cost: 1250.00
+
+# --------------------------------------------------
+# With Ordinality
+# --------------------------------------------------
+
+memo
+SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: +5]"
+ │    │    ├── best: (project G2="[ordering: +5]" G3)
+ │    │    └── cost: 1000.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (row-number G4)
+ │    ├── ""
+ │    │    ├── best: (row-number G4)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +5]"
+ │         ├── best: (row-number G4)
+ │         └── cost: 1000.00
+ ├── G3: (projections G5 G6)
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (variable a.y)
+ └── G6: (variable ordinality)
+
+memo
+SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: +6]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (row-number G4)
+ │    └── ""
+ │         ├── best: (row-number G4)
+ │         └── cost: 1000.00
+ ├── G3: (projections G5 G6)
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (variable a.y)
+ ├── G6: (unary-minus G7)
+ └── G7: (variable ordinality)
+
+memo
+SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: +5,+1]"
+ │    │    ├── best: (project G2="[ordering: +5,+1]" G3)
+ │    │    └── cost: 1000.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (row-number G4)
+ │    ├── ""
+ │    │    ├── best: (row-number G4)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +5,+1]"
+ │         ├── best: (row-number G4)
+ │         └── cost: 1000.00
+ ├── G3: (projections G5 G6 G7)
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (variable a.y)
+ ├── G6: (variable ordinality)
+ └── G7: (variable a.x)
+
+memo
+SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: +2,+5]"
+ │    │    ├── best: (project G2="[ordering: +2,+5]" G3)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1250.00
+ ├── G2: (row-number G4 ordering=+2)
+ │    ├── ""
+ │    │    ├── best: (row-number G4="[ordering: +2]" ordering=+2)
+ │    │    └── cost: 1250.00
+ │    └── "[ordering: +2,+5]"
+ │         ├── best: (row-number G4="[ordering: +2]" ordering=+2)
+ │         └── cost: 1250.00
+ ├── G3: (projections G5 G6)
+ ├── G4: (scan a)
+ │    ├── ""
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G4)
+ │         └── cost: 1250.00
+ ├── G5: (variable a.y)
+ └── G6: (variable ordinality)
+
+memo
+SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: +5,+2]"
+ │    │    ├── best: (project G2="[ordering: +5,+2]" G3)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1250.00
+ ├── G2: (row-number G4 ordering=+2)
+ │    ├── ""
+ │    │    ├── best: (row-number G4="[ordering: +2]" ordering=+2)
+ │    │    └── cost: 1250.00
+ │    └── "[ordering: +5,+2]"
+ │         ├── best: (row-number G4="[ordering: +2]" ordering=+2)
+ │         └── cost: 1250.00
+ ├── G3: (projections G5 G6)
+ ├── G4: (scan a)
+ │    ├── ""
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G4)
+ │         └── cost: 1250.00
+ ├── G5: (variable a.y)
+ └── G6: (variable ordinality)
+
+memo
+SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
+----
+memo (optimized)
+ ├── G1: (project G2 G3)
+ │    ├── "[presentation: y:2] [ordering: -5]"
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1250.00
+ │    └── ""
+ │         ├── best: (project G2 G3)
+ │         └── cost: 1000.00
+ ├── G2: (row-number G4)
+ │    ├── ""
+ │    │    ├── best: (row-number G4)
+ │    │    └── cost: 1000.00
+ │    └── "[ordering: -5]"
+ │         ├── best: (sort G2)
+ │         └── cost: 1250.00
+ ├── G3: (projections G5 G6)
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (variable a.y)
+ └── G6: (variable ordinality)

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // logicalPropsBuilder is a helper class that consolidates the code that derives
@@ -81,6 +82,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 
 	case opt.ExplainOp:
 		return b.buildExplainProps(ev)
+
+	case opt.RowNumberOp:
+		return b.buildRowNumberProps(ev)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -458,18 +462,39 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) LogicalProps {
 	return props
 }
 
+func (b *logicalPropsBuilder) buildRowNumberProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.Child(0).Logical().Relational
+	*props.Relational = *inputProps
+	def := ev.Private().(*RowNumberDef)
+
+	props.Relational.OutputCols = props.Relational.OutputCols.Copy()
+	props.Relational.OutputCols.Add(int(def.ColID))
+
+	props.Relational.NotNullCols = props.Relational.NotNullCols.Copy()
+	props.Relational.NotNullCols.Add(int(def.ColID))
+
+	props.Relational.WeakKeys = props.Relational.WeakKeys.Copy()
+	props.Relational.WeakKeys.Add(util.MakeFastIntSet(int(def.ColID)))
+
+	b.sb.init(b.evalCtx, &props.Relational.Stats, props.Relational, ev, &keyBuffer{})
+	b.sb.buildRowNumber(&inputProps.Stats)
+
+	return props
+}
+
 func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
-	// TODO(andyk): Set HasCorrelatedSubquery flag for Exists and Any operators.
 	switch ev.Operator() {
 	case opt.VariableOp:
 		// Variable introduces outer column.
 		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return props
 
-	case opt.SubqueryOp:
-		// Subquery inherits outer columns from its query.
+	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+		// Inherit outer columns from input query.
 		props.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
 		if !props.Scalar.OuterCols.Empty() {
 			props.Scalar.HasCorrelatedSubquery = true
@@ -480,11 +505,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	// By default, union outer cols from all children, both relational and scalar.
 	for i := 0; i < ev.ChildCount(); i++ {
 		logical := &ev.childGroup(i).logical
-		if logical.Scalar != nil {
-			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
-		} else {
-			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
-		}
+		props.Scalar.OuterCols.UnionWith(logical.OuterCols())
 
 		// Propagate HasCorrelatedSubquery up the scalar expression tree.
 		if logical.Scalar != nil && logical.Scalar.HasCorrelatedSubquery {

@@ -601,3 +601,20 @@ define JsonAgg {
 define JsonbAgg {
     Input Expr
 }
+
+# ExistsAgg evalutes to True if there is at least one non-null value in the
+# grouping set. Otherwise, it returns False. Its behavior is exactly equivalent
+# to:
+#
+#   COUNT(c) > 0
+#
+# Just like COUNT(c) and the other SQL aggregates, EXISTS_AGG(c) will ignore
+# null values. A set containing only null values is equivalent to an empty set
+# (both yield False).
+#
+# ExistsAgg is not part of SQL, but it's used internally to rewrite correlated
+# Exists subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define ExistsAgg {
+    Input Expr
+}

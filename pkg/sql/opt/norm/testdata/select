@@ -280,7 +280,6 @@ project
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
 
-
 # --------------------------------------------------
 # PushSelectIntoJoinLeft
 # --------------------------------------------------
@@ -412,6 +411,54 @@ select
       └── eq [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
            └── const: 100 [type=int]
+
+# Push into semi-join.
+opt
+SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
+----
+semi-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 0 [type=int]
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+ │    └── keys: (6)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: xy.x [type=int, outer=(6)]
+
+# Push into anti-join.
+opt
+SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
+----
+anti-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── select
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── keys: (1)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    │    └── keys: (1)
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │         └── eq [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 0 [type=int]
+ ├── scan xy
+ │    ├── columns: xy.x:6(int!null) xy.y:7(int)
+ │    └── keys: (6)
+ └── filters [type=bool, outer=(1,6)]
+      └── eq [type=bool, outer=(1,6)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: xy.x [type=int, outer=(6)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinRight
