@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
@@ -40,22 +41,38 @@ func Main() {
 		os.Args = append(os.Args, "help")
 	}
 
+	cmdName := commandName(os.Args[1:])
+
 	log.SetupCrashReporter(
 		context.Background(),
-		os.Args[1],
+		cmdName,
 	)
 
 	defer log.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
 	errCode := 0
 	if err := Run(os.Args[1:]); err != nil {
-		fmt.Fprintf(stderr, "Failed running %q\n", os.Args[1])
+		fmt.Fprintf(stderr, "Failed running %q\n", cmdName)
 		errCode = 1
 		if ec, ok := errors.Cause(err).(*cliError); ok {
 			errCode = ec.exitCode
 		}
 	}
 	os.Exit(errCode)
+}
+
+// commandName computes the name of the command that args would invoke. For
+// example, the full name of "cockroach debug zip" is "debug zip". If args
+// specify a nonexistent command, commandName returns "cockroach".
+func commandName(args []string) string {
+	rootName := cockroachCmd.CommandPath()
+	// Ask Cobra to find the command so that flags and their arguments are
+	// ignored. The name of "cockroach --verbosity 2 start" is "start", not
+	// "--verbosity" or "2".
+	if cmd, _, _ := cockroachCmd.Find(os.Args[1:]); cmd != nil {
+		return strings.TrimPrefix(cmd.CommandPath(), rootName+" ")
+	}
+	return rootName
 }
 
 type cliError struct {
