@@ -354,7 +354,7 @@ func TestDropIndex(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -392,7 +392,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Create a test table with a secondary index.
-	if err := tests.CreateKVTable(sqlDB.DB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB.DB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -494,7 +494,7 @@ func TestDropTable(t *testing.T) {
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -546,7 +546,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	// Can create a table with the same name.
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -577,7 +577,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 

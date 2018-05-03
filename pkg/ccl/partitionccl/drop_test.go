@@ -30,7 +30,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Create a test table with a partitioned secondary index.
-	if err := tests.CreateKVTable(sqlDB.DB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB.DB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	sqlDB.Exec(t, `CREATE INDEX i ON t.kv (v) PARTITION BY LIST (v) (
