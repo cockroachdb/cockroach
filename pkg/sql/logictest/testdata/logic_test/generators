@@ -561,3 +561,165 @@ subtest 24866
 # 3
 # 2
 # 1
+
+subtest generate_subscripts
+
+# Basic use cases
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1])
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1)
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, false)
+----
+generate_subscripts
+1
+2
+3
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 1, true)
+----
+generate_subscripts
+3
+2
+1
+
+query I colnames
+SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1) AS s
+----
+s
+1
+2
+3
+4
+
+query I colnames
+SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1, true) AS s
+----
+s
+4
+3
+2
+1
+
+# With a non-valid dimension (only 1 should return any rows)
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 2, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], 0, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[3,2,1], -1, true)
+----
+generate_subscripts
+
+# With an empty array
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[])
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[], 1)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::string[], 1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::bool[], 1, true)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::int[], 0)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::string[], -1, false)
+----
+generate_subscripts
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[]:::bool[], 2, true)
+----
+generate_subscripts
+
+# With an array with only one value
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[100])
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[100], 1)
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY['b'], 1, false)
+----
+generate_subscripts
+1
+
+query I colnames
+SELECT * FROM generate_subscripts(ARRAY[true], 1, true)
+----
+generate_subscripts
+1
