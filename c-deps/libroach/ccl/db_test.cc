@@ -13,20 +13,20 @@ using namespace cockroach;
 
 TEST(LibroachCCL, DBOpenHook) {
   DBOptions db_opts;
-  db_opts.use_switching_env = false;
+  db_opts.use_file_registry = false;
 
   // Try an empty extra_options.
   db_opts.extra_options = ToDBSlice("");
   EXPECT_OK(DBOpenHook("", db_opts, nullptr));
 
-  // Try without switching env enabled and bogus options. We should fail
-  // because encryption options without switching env is not allowed.
+  // Try without file registry enabled and bogus options. We should fail
+  // because encryption options without file registry is not allowed.
   db_opts.extra_options = ToDBSlice("blah");
   EXPECT_ERR(DBOpenHook("", db_opts, nullptr),
              "on-disk version does not support encryption, but we found encryption flags");
 
-  db_opts.use_switching_env = true;
-  // Try with switching env but bogus encryption flags.
+  db_opts.use_file_registry = true;
+  // Try with file registry but bogus encryption flags.
   db_opts.extra_options = ToDBSlice("blah");
   EXPECT_ERR(DBOpenHook("", db_opts, nullptr), "failed to parse extra options");
 }

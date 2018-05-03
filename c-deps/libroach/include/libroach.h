@@ -68,7 +68,7 @@ typedef struct {
   bool logging_enabled;
   int num_cpu;
   int max_open_files;
-  bool use_switching_env;
+  bool use_file_registry;
   bool must_exist;
   bool read_only;
   DBSlice rocksdb_options;

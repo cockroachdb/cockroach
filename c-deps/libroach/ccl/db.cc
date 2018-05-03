@@ -37,9 +37,9 @@ rocksdb::Status DBOpenHook(const std::string& db_dir, const DBOptions db_opts,
     return rocksdb::Status::OK();
   }
 
-  // The Go code sets the "switching_env" storage version if we specified encryption flags,
+  // The Go code sets the "file_registry" storage version if we specified encryption flags,
   // but let's double check anyway.
-  if (!db_opts.use_switching_env) {
+  if (!db_opts.use_file_registry) {
     return rocksdb::Status::InvalidArgument(
         "on-disk version does not support encryption, but we found encryption flags");
   }

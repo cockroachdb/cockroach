@@ -138,8 +138,8 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   // Create the file registry. It uses the base_env to access the registry file.
   auto file_registry = std::unique_ptr<FileRegistry>(new FileRegistry(env_ctx->base_env, db_dir));
 
-  if (db_opts.use_switching_env) {
-    // We're using the switching env.
+  if (db_opts.use_file_registry) {
+    // We're using the file registry.
     auto status = file_registry->Load();
     if (!status.ok()) {
       return ToDBStatus(status);
@@ -148,7 +148,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
     // EnvManager takes ownership of the file registry.
     env_ctx->file_registry.swap(file_registry);
   } else {
-    // Switching env format not enabled: check whether we have a registry file (we shouldn't).
+    // File registry format not enabled: check whether we have a registry file (we shouldn't).
     // The file_registry is not passed to anyone, it is deleted when it goes out of scope.
     auto status = file_registry->CheckNoRegistryFile();
     if (!status.ok()) {

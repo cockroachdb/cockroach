@@ -451,9 +451,9 @@ type RocksDBConfig struct {
 	WarnLargeBatchThreshold time.Duration
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
-	// UseSwitchingEnv is true if the switching env is needed (eg: encryption-at-rest).
-	// This may force the store version to versionSwitchingEnv if currently lower.
-	UseSwitchingEnv bool
+	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
+	// This may force the store version to versionFileRegistry if currently lower.
+	UseFileRegistry bool
 	// RocksDBOptions contains RocksDB specific options using a semicolon
 	// separated key-value syntax ("key1=value1; key2=value2").
 	RocksDBOptions string
@@ -577,15 +577,15 @@ func (r *RocksDB) open() error {
 
 		newVersion = existingVersion
 		if newVersion == versionNoFile {
-			// We currently set the default store version one before the switching env
+			// We currently set the default store version one before the file registry
 			// to allow downgrades to older binaries as long as encryption is not in use.
-			// TODO(mberhault): once enough releases supporting versionSwitchingEnv have passed, we can upgrade
+			// TODO(mberhault): once enough releases supporting versionFileRegistry have passed, we can upgrade
 			// to it without worry.
 			newVersion = versionBeta20160331
 		}
 
-		// Using the switching environment forces the latest version. We can't downgrade!
-		if r.cfg.UseSwitchingEnv {
+		// Using the file registry forces the latest version. We can't downgrade!
+		if r.cfg.UseFileRegistry {
 			newVersion = versionCurrent
 		}
 	} else {
@@ -608,7 +608,7 @@ func (r *RocksDB) open() error {
 			logging_enabled:   C.bool(log.V(3)),
 			num_cpu:           C.int(rocksdbConcurrency),
 			max_open_files:    C.int(maxOpenFiles),
-			use_switching_env: C.bool(newVersion == versionCurrent),
+			use_file_registry: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
 			read_only:         C.bool(r.cfg.ReadOnly),
 			rocksdb_options:   goToCSlice([]byte(r.cfg.RocksDBOptions)),
