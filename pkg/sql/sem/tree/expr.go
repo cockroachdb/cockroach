@@ -539,6 +539,34 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 }
 
+// IfErrExpr represents an IFERROR expression.
+type IfErrExpr struct {
+	Cond    Expr
+	Else    Expr
+	ErrCode Expr
+
+	typeAnnotation
+}
+
+// Format implements the NodeFormatter interface.
+func (node *IfErrExpr) Format(ctx *FmtCtx) {
+	if node.Else != nil {
+		ctx.WriteString("IFERROR(")
+	} else {
+		ctx.WriteString("ISERROR(")
+	}
+	ctx.FormatNode(node.Cond)
+	if node.Else != nil {
+		ctx.WriteString(", ")
+		ctx.FormatNode(node.Else)
+	}
+	if node.ErrCode != nil {
+		ctx.WriteString(", ")
+		ctx.FormatNode(node.ErrCode)
+	}
+	ctx.WriteByte(')')
+}
+
 // IfExpr represents an IF expression.
 type IfExpr struct {
 	Cond Expr
@@ -1523,6 +1551,7 @@ func (node *Exprs) String() string            { return AsString(node) }
 func (node *ArrayFlatten) String() string     { return AsString(node) }
 func (node *FuncExpr) String() string         { return AsString(node) }
 func (node *IfExpr) String() string           { return AsString(node) }
+func (node *IfErrExpr) String() string        { return AsString(node) }
 func (node *IndexedVar) String() string       { return AsString(node) }
 func (node *IndirectionExpr) String() string  { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
