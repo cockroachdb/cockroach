@@ -508,6 +508,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/jsonpb_marshal.go",
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
+			":!util/tracing/tracer_span.go",
 		)
 		if err != nil {
 			t.Fatal(err)
