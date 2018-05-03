@@ -6,7 +6,7 @@
 #   SELECT * FROM a WHERE (SELECT b.y FROM b WHERE a.x=b.x) < 5
 #
 # A correlated join has outer columns in its right input that refer to columns
-# in its left input. For example (not actually possible in SQL):
+# in its left input. For example:
 #
 #   SELECT * FROM a INNER JOIN LATERAL (SELECT * FROM b WHERE a.x=b.x)
 #
@@ -49,8 +49,8 @@
 # in order to eliminate any correlation between the select filter list and the
 # left side of the join, and also to keep "digging" down to find and eliminate
 # other unnecessary correlation. Eventually, the hope is to trigger the
-# DecorrelateJoin pattern to turn the JoinApply operator into a non-apply Join
-# operator.
+# DecorrelateJoin pattern to turn JoinApply operators into non-apply Join
+# operators.
 #
 # This rule triggers a cycle with the PushFilterIntoJoinRight rule. Because this
 # rule has the DetectCycle tag, it is skipped once a cycle is detected. This
@@ -65,9 +65,10 @@
 #
 # Citations: [3]
 [TryDecorrelateSelect, Normalize, DetectCycle]
-(InnerJoinApply | LeftJoinApply | SemiJoinApply | AntiJoinApply
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+ SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:(Select $input:* $filter:*) & (HasOuterCols $right)
+    $right:* & (HasOuterCols $right) & (Select $input:* $filter:*)
     $on:*
 )
 =>
@@ -77,50 +78,25 @@
     (ConcatFilters $on $filter)
 )
 
-# NormalizeSelectAny rewrites Any into Exists when it's a top-level conjunct in
-# a Select filter. The HoistSelectExists rule will then introduce a semi-join.
-# Any in a Select filter can be rewritten as Exists because a NULL return value
-# is treated as False by Select.
-[NormalizeSelectAny, Normalize]
-(Select
-    $input:*
-    $filter:(Filters
-        $list:[
-            ...
-            $any:
-            (Any
-                (Project $projectInput:* (Projections [ $condition:* ]))
-            )
-            ...
-        ]
-    )
-)
-=>
-(Select
-    $input
-    (Filters
-        (ReplaceListItem
-            $list
-            $any
-            (Exists (Select $projectInput (Filters [ $condition ])))
-        )
-    )
-)
-
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
 [HoistSelectExists, Normalize]
 (Select
     $input:*
-    $filter:(Filters
+    $filter:* &
+    (HasCorrelatedSubquery $filter) &
+    (Filters
         $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
     )
 )
 =>
-(SemiJoinApply
-    $input
-    $subquery
+(Select
+    (SemiJoinApply
+        $input
+        $subquery
+        (True)
+    )
     (Filters (RemoveListItem $list $exists))
 )
 
@@ -130,15 +106,20 @@
 [HoistSelectNotExists, Normalize]
 (Select
     $input:*
-    $filter:(Filters
+    $filter:* &
+    (HasCorrelatedSubquery $filter) &
+    (Filters
         $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
     )
 )
 =>
-(AntiJoinApply
-    (Select $input (Filters (RemoveListItem $list $exists)))
-    $subquery
-    (True)
+(Select
+    (AntiJoinApply
+        $input
+        $subquery
+        (True)
+    )
+    (Filters (RemoveListItem $list $exists))
 )
 
 # HoistSelectSubquery extracts subqueries from a Select filter and joins them
@@ -154,7 +135,7 @@
 [HoistSelectSubquery, Normalize]
 (Select
     $input:*
-    $filter:* & (HasCorrelatedSubquery $filter)
+    $filter:* & (HasCorrelatedSubquery $filter) & (Filters)
 )
 =>
 (HoistSelectSubquery $input $filter)
@@ -177,7 +158,7 @@
 (Join
     $left:*
     $right:*
-    $on:* & (HasCorrelatedSubquery $on)
+    $on:* & (HasCorrelatedSubquery $on) & (Filters)
 )
 =>
 (HoistJoinSubquery (OpName) $left $right $on)
@@ -192,3 +173,29 @@
 )
 =>
 (HoistValuesSubquery $rows $cols)
+
+# NormalizeAnyFilter rewrites Any into Exists when it's a top-level conjunct in
+# a Select or Join filter. Any can be rewritten as Exists in this context
+# because a NULL return value is treated as False by the filter.
+#
+# Exists is more efficient than Any, since its null handling is much simpler. In
+# addition, the Exists can be transformed into a semi-join.
+[NormalizeAnyFilter, Normalize]
+(Filters
+    $list:[
+        ...
+        $any:
+        (Any
+            (Project $input:* (Projections [ $condition:* ]))
+        )
+        ...
+    ]
+)
+=>
+(Filters
+    (ReplaceListItem
+        $list
+        $any
+        (Exists (Select $input (Filters [ $condition ])))
+    )
+)

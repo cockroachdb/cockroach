@@ -102,6 +102,10 @@ type Factory interface {
 	// by the input node.
 	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
 
+	// ConstructOrdinality returns a node that appends an ordinality column to
+	// each row in the input node.
+	ConstructOrdinality(input Node, colName string) (Node, error)
+
 	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
 	// results of the given node. If only an offset is desired, limit should be
 	// math.MaxInt64.

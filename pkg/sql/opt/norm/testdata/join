@@ -402,34 +402,32 @@ semi-join-apply
  │    └── keys: (1)
  ├── anti-join
  │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
- │    ├── outer: (1,2)
+ │    ├── outer: (2)
  │    ├── select
  │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
- │    │    ├── outer: (1)
  │    │    ├── keys: (3)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float) a.s:6(string) a.j:7(jsonb)
  │    │    │    └── keys: (3)
- │    │    └── filters [type=bool, outer=(1,3,6), constraints=(/6: [/'foo' - /'foo'])]
- │    │         ├── eq [type=bool, outer=(1,3)]
- │    │         │    ├── variable: a.k [type=int, outer=(3)]
- │    │         │    └── variable: b.x [type=int, outer=(1)]
+ │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
  │    │         └── eq [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
  │    │              ├── variable: a.s [type=string, outer=(6)]
  │    │              └── const: 'foo' [type=string]
  │    ├── select
  │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float) a.s:11(string) a.j:12(jsonb)
- │    │    ├── outer: (2)
  │    │    ├── keys: (8)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float) a.s:11(string) a.j:12(jsonb)
  │    │    │    └── keys: (8)
- │    │    └── filters [type=bool, outer=(2,9), constraints=(/2: [/101 - ]; /9: [/10 - /10]; tight)]
- │    │         ├── eq [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
- │    │         │    ├── variable: a.i [type=int, outer=(9)]
- │    │         │    └── const: 10 [type=int]
- │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
- │    │              ├── variable: b.y [type=int, outer=(2)]
- │    │              └── const: 100 [type=int]
- │    └── true [type=bool]
- └── true [type=bool]
+ │    │    └── filters [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
+ │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
+ │    │              ├── variable: a.i [type=int, outer=(9)]
+ │    │              └── const: 10 [type=int]
+ │    └── filters [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+ │         └── gt [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+ │              ├── variable: b.y [type=int, outer=(2)]
+ │              └── const: 100 [type=int]
+ └── filters [type=bool, outer=(1,3)]
+      └── eq [type=bool, outer=(1,3)]
+           ├── variable: a.k [type=int, outer=(3)]
+           └── variable: b.x [type=int, outer=(1)]

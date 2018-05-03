@@ -221,6 +221,26 @@ func (ps *privateStorage) internExplainOpDef(def *ExplainOpDef) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
 }
 
+// internRowNumberDef adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internRowNumberDef always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internRowNumberDef(def *RowNumberDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	for _, col := range def.Ordering {
+		ps.keyBuf.writeVarint(int64(col))
+	}
+	ps.keyBuf.writeUvarint(uint64(def.ColID))
+
+	typ := (*RowNumberDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internSetOpColMap adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internSetOpColMap always
