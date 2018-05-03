@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-source "$(dirname "${0}")/teamcity-support.sh"
+source "$(dirname "${0}")/teamcity-support.sh" "clean"
 
 # The workspace is clean iff `git status --porcelain` produces no output. Any
 # output is either an error message or a listing of an untracked/dirty file.

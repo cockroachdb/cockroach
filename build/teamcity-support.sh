@@ -1,5 +1,12 @@
 # Common helpers for teamcity-*.sh scripts.
 
+if [ -n "${1-}" ]; then
+  echo "Whitelisting ${1}"
+else
+  echo "Fast failing this test to avoid using teamcity resources."
+  exit 1
+fi
+
 # root is the absolute path to the root directory of the repository.
 root=$(cd "$(dirname "$0")/.." && pwd)
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${0}")/teamcity-local-roachtest.sh"
+exit 0
+
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
