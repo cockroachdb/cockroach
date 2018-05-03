@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -69,11 +70,6 @@ var (
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 30 * time.Second
 
-// This is the delay [0.9 * asyncSchemaChangeGCDelay, 1.1 * asyncSchemaChangeGCDelay)
-// added to an attempt to run a schema change via the asynchronous path
-// for GC-ing of dropped schema change data.
-const asyncSchemaChangeGCDelay = 10 * time.Minute
-
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
 	tableID    sqlbase.ID
@@ -84,8 +80,10 @@ type SchemaChanger struct {
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
 	execAfter time.Time
-	// This schema change is responsible for GC-ing drop schema change data.
-	forGC          bool
+
+	// table.DropTime.
+	dropTime int64
+
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
@@ -460,6 +458,10 @@ func (sc *SchemaChanger) drainNames(
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
+	if log.V(2) {
+		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
+			sc.tableID, sc.mutationID)
+	}
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx, evalCtx.Tables)
 	if err != nil {
@@ -1028,6 +1030,8 @@ type SchemaChangeManager struct {
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
+	// Create a schema changer for every dropped table that needs to be GC-ed.
+	forGC          map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *DistSQLPlanner
 }
 
@@ -1045,26 +1049,26 @@ func NewSchemaChangeManager(
 		execCfg:        execCfg,
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
+		forGC:          make(map[sqlbase.ID]SchemaChanger),
 		distSQLPlanner: dsp,
 	}
 }
 
 // Creates a timer that is used by the manager to decide on
 // when to run the next schema changer.
-func (s *SchemaChangeManager) newTimer() *time.Timer {
+func (s *SchemaChangeManager) newTimer(changers map[sqlbase.ID]SchemaChanger) *time.Timer {
+	if len(changers) == 0 {
+		return &time.Timer{}
+	}
 	waitDuration := time.Duration(math.MaxInt64)
 	now := timeutil.Now()
-	for _, sc := range s.schemaChangers {
+	for _, sc := range changers {
 		d := sc.execAfter.Sub(now)
 		if d < waitDuration {
 			waitDuration = d
 		}
 	}
-	// Create a timer if there is an existing schema changer.
-	if len(s.schemaChangers) > 0 {
-		return time.NewTimer(waitDuration)
-	}
-	return &time.Timer{}
+	return time.NewTimer(waitDuration)
 }
 
 // Start starts a goroutine that runs outstanding schema changes
@@ -1073,17 +1077,55 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 	stopper.RunWorker(s.ambientCtx.AnnotateCtx(context.Background()), func(ctx context.Context) {
 		descKeyPrefix := keys.MakeTablePrefix(uint32(sqlbase.DescriptorTable.ID))
 		cfgFilter := gossip.MakeSystemConfigDeltaFilter(descKeyPrefix)
+		k := keys.MakeTablePrefix(uint32(keys.ZonesTableID))
+		k = encoding.EncodeUvarintAscending(k, uint64(keys.ZonesTablePrimaryIndexID))
+		zoneCfgFilter := gossip.MakeSystemConfigDeltaFilter(k)
 		gossipUpdateC := s.execCfg.Gossip.RegisterSystemConfigChannel()
 		timer := &time.Timer{}
-		for {
-			// A jitter is added to reduce contention between nodes
-			// attempting to run the schema change.
-			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.9 + 0.2*rand.Float64()))
-			gcDelay := time.Duration(float64(asyncSchemaChangeGCDelay) * (0.9 + 0.2*rand.Float64()))
-			if s.testingKnobs.AsyncExecQuickly {
-				delay = 20 * time.Millisecond
-				gcDelay = 20 * time.Millisecond
+		gcTimer := &time.Timer{}
+		// A jitter is added to reduce contention between nodes
+		// attempting to run the schema change.
+		delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.9 + 0.2*rand.Float64()))
+		if s.testingKnobs.AsyncExecQuickly {
+			delay = 20 * time.Millisecond
+		}
+
+		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
+			for tableID, sc := range schemaChangers {
+				if timeutil.Since(sc.execAfter) > 0 {
+					evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
+
+					execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
+					err := sc.exec(execCtx, false /* inSession */, &evalCtx)
+					cleanup()
+
+					// Advance the execAfter time so that this schema
+					// changer doesn't get called again for a while.
+					sc.execAfter = timeutil.Now().Add(delay)
+					schemaChangers[tableID] = sc
+
+					if err != nil {
+						if shouldLogSchemaChangeError(err) {
+							log.Warningf(ctx, "Error executing schema change: %s", err)
+						}
+						if err == sqlbase.ErrDescriptorNotFound {
+							// Someone deleted this table. Don't try to run the schema
+							// changer again. Note that there's no gossip update for the
+							// deletion which would remove this schemaChanger.
+							delete(schemaChangers, tableID)
+						}
+					} else {
+						// We successfully executed the schema change. Delete it.
+						delete(schemaChangers, tableID)
+					}
+
+					// Only attempt to run one schema changer.
+					break
+				}
 			}
+		}
+
+		for {
 			select {
 			case <-gossipUpdateC:
 				cfg, _ := s.execCfg.Gossip.GetSystemConfig()
@@ -1091,6 +1133,42 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
 				}
+
+				resetTimer := false
+				// Check to see if the zone cfg has been modified.
+				zoneCfgModified := false
+				zoneCfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
+					zoneCfgModified = true
+				})
+				if zoneCfgModified {
+					// Check to see if the GC TTL has changed for all the
+					// tables that are currently waiting to be GC-ed. If the
+					// GC TTL for a table has indeed changed it is modified
+					// and enqueued with the new TTL timeout.
+					for id, sc := range s.forGC {
+						if sc.dropTime > 0 {
+							zoneCfg, _, err := ZoneConfigHook(cfg, uint32(id), nil)
+							if err != nil {
+								log.Errorf(ctx, "no zone config for desc: %d", id)
+								return
+							}
+							deadline := sc.dropTime +
+								int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
+								int64(delay)
+							if ea := timeutil.Unix(0, deadline); ea != sc.execAfter {
+								resetTimer = true
+								sc.execAfter = ea
+								// Safe to modify map inplace while iterating over it.
+								s.forGC[id] = sc
+								if log.V(2) {
+									log.Infof(ctx,
+										"re-queue up pending drop table GC; table: %d", id)
+								}
+							}
+						}
+					}
+				}
+
 				schemaChanger := SchemaChanger{
 					execCfg:              s.execCfg,
 					nodeID:               s.execCfg.NodeID.Get(),
@@ -1106,8 +1184,6 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 
 				execAfter := timeutil.Now().Add(delay)
-				execGCAfter := timeutil.Now().Add(gcDelay)
-				resetTimer := false
 				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					resetTimer = true
 					// Attempt to unmarshal config into a table/database descriptor.
@@ -1127,42 +1203,55 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							return
 						}
 
+						schemaChanger.tableID = table.ID
+						schemaChanger.mutationID = sqlbase.InvalidMutationID
+						schemaChanger.execAfter = execAfter
+						schemaChanger.dropTime = 0
+
+						// If the table is dropped add table to map forGC.
+						if table.Dropped() {
+							if log.V(2) {
+								log.Infof(ctx,
+									"%s: queue up pending drop table GC; table: %d, version: %d",
+									kv.Key, table.ID, table.Version)
+							}
+
+							if table.DropTime > 0 {
+								schemaChanger.dropTime = table.DropTime
+								zoneCfg, _, err := ZoneConfigHook(cfg, uint32(table.ID), nil)
+								if err != nil {
+									log.Errorf(ctx, "no zone config for desc: %d", table.ID)
+									return
+								}
+								deadline := table.DropTime +
+									int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
+									int64(delay)
+								schemaChanger.execAfter = timeutil.Unix(0, deadline)
+							}
+
+							s.forGC[table.ID] = schemaChanger
+							// Remove from schema change map if present because
+							// this table has been dropped and is only waiting
+							// to be GC-ed.
+							delete(s.schemaChangers, table.ID)
+							break
+						}
+
 						// Keep track of outstanding schema changes.
 						// If all schema change commands always set UpVersion, why
 						// check for the presence of mutations?
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
-						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Dropped() || table.Adding() ||
+						// outstanding mutations.
+						if table.UpVersion || table.Adding() ||
 							table.HasDrainingNames() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
 							}
 
-							// Only track the first schema change. We depend on
-							// gossip to renotify us when a schema change has been
-							// completed.
-							schemaChanger.tableID = table.ID
-							schemaChanger.forGC = false
-							if len(table.Mutations) == 0 || table.Dropped() {
-								schemaChanger.mutationID = sqlbase.InvalidMutationID
-							} else {
+							if len(table.Mutations) > 0 {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
-							}
-							schemaChanger.execAfter = execAfter
-							// If the table is dropped and there's a DropTime set, use that
-							// to generate an extended delay instead of the standard delay.
-							if !table.UpVersion && table.Dropped() && table.DropTime != 0 {
-								schemaChanger.forGC = true
-								schemaChanger.execAfter = execGCAfter
-							}
-							// Keep track of this schema change.
-							if sc, ok := s.schemaChangers[table.ID]; ok {
-								if sc.mutationID == schemaChanger.mutationID {
-									// Ignore duplicate.
-									return
-								}
 							}
 							s.schemaChangers[table.ID] = schemaChanger
 						}
@@ -1173,52 +1262,31 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				})
 
 				if resetTimer {
-					timer = s.newTimer()
+					timer = s.newTimer(s.schemaChangers)
+					gcTimer = s.newTimer(s.forGC)
 				}
 
 			case <-timer.C:
 				if s.testingKnobs.AsyncExecNotification != nil &&
 					s.testingKnobs.AsyncExecNotification() != nil {
-					timer = s.newTimer()
+					timer = s.newTimer(s.schemaChangers)
 					continue
 				}
-				for tableID, sc := range s.schemaChangers {
-					if timeutil.Since(sc.execAfter) > 0 {
-						evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now())
 
-						execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
-						err := sc.exec(execCtx, false /* inSession */, &evalCtx)
-						cleanup()
+				execOneSchemaChange(s.schemaChangers)
 
-						// Advance the execAfter time so that this schema
-						// changer doesn't get called again for a while.
-						if sc.forGC {
-							sc.execAfter = timeutil.Now().Add(gcDelay)
-						} else {
-							sc.execAfter = timeutil.Now().Add(delay)
-						}
-						s.schemaChangers[tableID] = sc
+				timer = s.newTimer(s.schemaChangers)
 
-						if err != nil {
-							if shouldLogSchemaChangeError(err) {
-								log.Warningf(ctx, "Error executing schema change: %s", err)
-							}
-							if err == sqlbase.ErrDescriptorNotFound {
-								// Someone deleted this table. Don't try to run the schema
-								// changer again. Note that there's no gossip update for the
-								// deletion which would remove this schemaChanger.
-								delete(s.schemaChangers, tableID)
-							}
-						} else {
-							// We successfully executed the schema change. Delete it.
-							delete(s.schemaChangers, tableID)
-						}
-
-						// Only attempt to run one schema changer.
-						break
-					}
+			case <-gcTimer.C:
+				if s.testingKnobs.AsyncExecNotification != nil &&
+					s.testingKnobs.AsyncExecNotification() != nil {
+					gcTimer = s.newTimer(s.forGC)
+					continue
 				}
-				timer = s.newTimer()
+
+				execOneSchemaChange(s.forGC)
+
+				gcTimer = s.newTimer(s.forGC)
 
 			case <-stopper.ShouldStop():
 				return
