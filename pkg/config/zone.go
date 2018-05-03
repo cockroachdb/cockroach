@@ -387,6 +387,38 @@ func (z *ZoneConfig) Validate() error {
 	return nil
 }
 
+// StoreMatchesConstraint returns whether a store matches the given constraint.
+func StoreMatchesConstraint(store roachpb.StoreDescriptor, constraint Constraint) bool {
+	hasConstraint := storeHasConstraint(store, constraint)
+	if (constraint.Type == Constraint_REQUIRED && !hasConstraint) ||
+		(constraint.Type == Constraint_PROHIBITED && hasConstraint) {
+		return false
+	}
+	return true
+}
+
+// storeHasConstraint returns whether a store's attributes or node's locality
+// matches the key value pair in the constraint. It notably ignores whether
+// the constraint is required, prohibited, positive, or otherwise.
+func storeHasConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
+	if c.Key == "" {
+		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
+			for _, attr := range attrs.Attrs {
+				if attr == c.Value {
+					return true
+				}
+			}
+		}
+	} else {
+		for _, tier := range store.Node.Locality.Tiers {
+			if c.Key == tier.Key && c.Value == tier.Value {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // DeleteTableConfig removes any configuration that applies to the table
 // targeted by this ZoneConfig, leaving only its subzone configs, if any. After
 // calling DeleteTableConfig, IsZubzonePlaceholder will return true.

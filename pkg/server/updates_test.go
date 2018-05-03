@@ -103,6 +103,7 @@ func TestCheckVersion(t *testing.T) {
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const elemName = "somestring"
 	ctx := context.TODO()
 
 	r := makeMockRecorder(t)
@@ -111,15 +112,18 @@ func TestReportUsage(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
 	params := base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
-			base.DefaultTestStoreSpec,
+			storeSpec,
 			base.DefaultTestStoreSpec,
 		},
 		Settings: st,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
 				{Key: "region", Value: "east"},
+				{Key: "zone", Value: elemName},
 				{Key: "state", Value: "ny"},
 				{Key: "city", Value: "nyc"},
 			},
@@ -132,7 +136,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const elemName = "somestring"
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
 	}

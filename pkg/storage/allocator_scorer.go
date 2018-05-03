@@ -951,27 +951,6 @@ func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
 	return true
 }
 
-// storeHasConstraint returns whether a store's attributes or node's locality
-// matches the key value pair in the constraint.
-func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool {
-	if c.Key == "" {
-		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
-			for _, attr := range attrs.Attrs {
-				if attr == c.Value {
-					return true
-				}
-			}
-		}
-	} else {
-		for _, tier := range store.Node.Locality.Tiers {
-			if c.Key == tier.Key && c.Value == tier.Value {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 type analyzedConstraints struct {
 	constraints []config.Constraints
 	// True if the per-replica constraints don't fully cover all the desired
@@ -1167,11 +1146,7 @@ func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constr
 // store matches the constraints.
 func subConstraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraint) bool {
 	for _, constraint := range constraints {
-		hasConstraint := storeHasConstraint(store, constraint)
-		switch {
-		case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
-			return false
-		case constraint.Type == config.Constraint_PROHIBITED && hasConstraint:
+		if !config.StoreMatchesConstraint(store, constraint) {
 			return false
 		}
 	}
