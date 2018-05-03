@@ -1,0 +1,2 @@
+export_stmt ::=
+	'EXPORT' 'INTO' CSV file_location kv_options 'FROM' (| 'select_stmt' | 'table_name')
