@@ -22,7 +22,9 @@ import (
 
 	"golang.org/x/net/trace"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/gogo/protobuf/types"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
@@ -50,6 +52,18 @@ type spanContext struct {
 
 	// The span's associated baggage.
 	Baggage map[string]string
+}
+
+// SpanStatPrefix is prefixed to all stats output in span tags.
+const SpanStatPrefix = "cockroach.stat."
+
+// SpanStats are stats that can be added to a span.
+type SpanStats interface {
+	protoutil.Message
+	// Stats returns the stats that the object represents as a map from stat name
+	// to value to be added to span tags. The keys will be prefixed with
+	// SpanStatPrefix.
+	Stats() map[string]string
 }
 
 var _ opentracing.SpanContext = &spanContext{}
@@ -107,6 +121,8 @@ type span struct {
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
 		// those that were set before recording started)?
 		tags opentracing.Tags
+
+		stats SpanStats
 
 		// The span's associated baggage.
 		Baggage map[string]string
@@ -257,6 +273,18 @@ func IsBlackHoleSpan(s opentracing.Span) bool {
 func IsNoopContext(spanCtx opentracing.SpanContext) bool {
 	_, noop := spanCtx.(noopSpanContext)
 	return noop
+}
+
+// SetSpanStats sets the stats on a span. stats.Stats() will also be added to
+// the span tags.
+func SetSpanStats(os opentracing.Span, stats SpanStats) {
+	s := os.(*span)
+	s.mu.Lock()
+	s.mu.stats = stats
+	for name, value := range stats.Stats() {
+		s.setTagInner(SpanStatPrefix+name, value, true)
+	}
+	s.mu.Unlock()
 }
 
 // Finish is part of the opentracing.Span interface.
@@ -491,6 +519,14 @@ func (ss *spanGroup) getSpans() []RecordedSpan {
 		case 0:
 			// 0 is a special value for unfinished spans. Change to 1ns.
 			rs.Duration = time.Nanosecond
+		}
+
+		if s.mu.stats != nil {
+			stats, err := types.MarshalAny(s.mu.stats)
+			if err != nil {
+				panic(err)
+			}
+			rs.Stats = stats
 		}
 
 		if len(s.mu.Baggage) > 0 {

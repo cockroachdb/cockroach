@@ -15,12 +15,10 @@
 package protoutil
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"golang.org/x/sync/syncmap"
@@ -89,10 +87,13 @@ func RandomZeroInsertingVisitor(v reflect.Value) {
 			fieldType: typ,
 			index:     i,
 		}
-		actual, loaded := insertZero.LoadOrStore(key, flipCoin())
-		if !loaded {
+		actual, _ := insertZero.LoadOrStore(key, flipCoin())
+		// TODO(asubiotto): Heads up that I removed this because the log import
+		// resulted in an import cycle when I attempted to import protoutil in
+		// tracing. I don't think this log is useful, but wanted to point it out.
+		/*if !loaded {
 			log.Infof(context.Background(), "inserting null for (%v).%v: %t", typ, typ.Field(i).Name, actual)
-		}
+		}*/
 		if b := actual.(bool); b {
 			hookInsertZero(v, i)
 		}
