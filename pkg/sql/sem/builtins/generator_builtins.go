@@ -126,6 +126,27 @@ var Generators = map[string][]tree.Builtin{
 				"This function is used only by CockroachDB's developers for testing purposes.",
 		),
 	},
+	"generate_subscripts": {
+		makeGeneratorBuiltin(
+			tree.ArgTypes{{"array", types.AnyArray}},
+			subscriptsValueGeneratorType,
+			makeGenerateSubscriptsGenerator,
+			"Returns a series comprising the given array's subscripts.",
+		),
+		makeGeneratorBuiltin(
+			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}},
+			subscriptsValueGeneratorType,
+			makeGenerateSubscriptsGenerator,
+			"Returns a series comprising the given array's subscripts.",
+		),
+		makeGeneratorBuiltin(
+			tree.ArgTypes{{"array", types.AnyArray}, {"dim", types.Int}, {"reverse", types.Bool}},
+			subscriptsValueGeneratorType,
+			makeGenerateSubscriptsGenerator,
+			"Returns a series comprising the given array's subscripts.\n\n"+
+				"When reverse is true, the series is returned in reverse order.",
+		),
+	},
 	"json_array_elements":       {jsonArrayElementsImpl},
 	"jsonb_array_elements":      {jsonArrayElementsImpl},
 	"json_array_elements_text":  {jsonArrayElementsTextImpl},
@@ -191,10 +212,7 @@ func (k *keywordsValueGenerator) Start() error {
 }
 func (k *keywordsValueGenerator) Next() (bool, error) {
 	k.curKeyword++
-	if k.curKeyword >= len(keywordNames) {
-		return false, nil
-	}
-	return true, nil
+	return k.curKeyword < len(keywordNames), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
@@ -438,10 +456,7 @@ func (s *expandArrayValueGenerator) Close() {}
 // Next implements the tree.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Next() (bool, error) {
 	s.avg.nextIndex++
-	if s.avg.nextIndex >= s.avg.array.Len() {
-		return false, nil
-	}
-	return true, nil
+	return s.avg.nextIndex < s.avg.array.Len(), nil
 }
 
 // Values implements the tree.ValueGenerator interface.
@@ -451,6 +466,78 @@ func (s *expandArrayValueGenerator) Values() tree.Datums {
 		s.avg.array.Array[s.avg.nextIndex],
 		tree.NewDInt(tree.DInt(s.avg.nextIndex + 1)),
 	}
+}
+
+func makeGenerateSubscriptsGenerator(
+	evalCtx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	var arr *tree.DArray
+	dim := 1
+	if len(args) > 1 {
+		dim = int(tree.MustBeDInt(args[1]))
+	}
+	// We sadly only support 1D arrays right now.
+	if dim == 1 {
+		arr = tree.MustBeDArray(args[0])
+	} else {
+		arr = &tree.DArray{}
+	}
+	var reverse bool
+	if len(args) == 3 {
+		reverse = bool(tree.MustBeDBool(args[2]))
+	}
+	return &subscriptsValueGenerator{
+		avg:     arrayValueGenerator{array: arr},
+		reverse: reverse,
+	}, nil
+}
+
+// subscriptsValueGenerator is a value generator that returns a series
+// comprising the given array's subscripts.
+type subscriptsValueGenerator struct {
+	avg     arrayValueGenerator
+	reverse bool
+}
+
+var subscriptsValueGeneratorLabels = []string{"generate_subscripts"}
+
+var subscriptsValueGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.Int},
+	Labels: subscriptsValueGeneratorLabels,
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *subscriptsValueGenerator) ResolvedType() types.TTable {
+	return subscriptsValueGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *subscriptsValueGenerator) Start() error {
+	if s.reverse {
+		s.avg.nextIndex = s.avg.array.Len()
+	} else {
+		s.avg.nextIndex = -1
+	}
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *subscriptsValueGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (s *subscriptsValueGenerator) Next() (bool, error) {
+	if s.reverse {
+		s.avg.nextIndex--
+		return s.avg.nextIndex >= 0, nil
+	}
+	s.avg.nextIndex++
+	return s.avg.nextIndex < s.avg.array.Len(), nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *subscriptsValueGenerator) Values() tree.Datums {
+	// Generate Subscript's indexes are 1 based.
+	return tree.Datums{tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))}
 }
 
 // EmptyDTable returns a new, empty tree.DTable.
