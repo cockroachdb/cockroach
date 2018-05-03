@@ -86,6 +86,11 @@ const (
 
 	// EventLogSetClusterSetting is recorded when a cluster setting is changed.
 	EventLogSetClusterSetting EventLogType = "set_cluster_setting"
+
+	// EventLogSetZoneConfig is recorded when a zone config is changed.
+	EventLogSetZoneConfig EventLogType = "set_zone_config"
+	// EventLogRemoveZoneConfig is recorded when a zone config is removed.
+	EventLogRemoveZoneConfig EventLogType = "remove_zone_config"
 )
 
 // EventLogSetClusterSettingDetail is the json details for a settings change.
