@@ -5,7 +5,7 @@ values
  ├── columns: column1:1(int) column2:2(int) column3:3(int)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
- ├── cost: 2.00
+ ├── cost: 0.02
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
