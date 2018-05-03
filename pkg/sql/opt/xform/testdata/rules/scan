@@ -59,7 +59,7 @@ memo (optimized)
       │    └── cost: 1000.00
       └── "[ordering: +4,+1,+2]"
            ├── best: (sort G2)
-           └── cost: 1250.00
+           └── cost: 1099.66
 
 memo
 SELECT s, i, f FROM a ORDER BY f
@@ -68,7 +68,7 @@ memo (optimized)
  ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +3]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    └── cost: 1099.66
  │    └── ""
  │         ├── best: (scan a,cols=(2-4))
  │         └── cost: 1000.00
@@ -84,7 +84,7 @@ memo (optimized)
  ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (lookup-join G2 a,cols=(2-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    └── cost: 1099.66
  │    └── ""
  │         ├── best: (scan a,cols=(2-4))
  │         └── cost: 1000.00
@@ -134,7 +134,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: d:4] [ordering: +5]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    └── cost: 1099.66
  │    └── ""
  │         ├── best: (project G2 G3)
  │         └── cost: 1000.00
@@ -180,7 +180,7 @@ memo (optimized)
       │    └── cost: 1000.00
       └── "[ordering: +1,+2,+4]"
            ├── best: (sort G2)
-           └── cost: 1250.00
+           └── cost: 1099.66
 
 # Secondary index has right order, but is not covering.
 opt
@@ -199,7 +199,7 @@ memo (optimized)
  ├── G1: (scan a,cols=(4,5)) (lookup-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
  │    ├── "[presentation: s:4,j:5] [ordering: +4]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1250.00
+ │    │    └── cost: 1099.66
  │    └── ""
  │         ├── best: (scan a,cols=(4,5))
  │         └── cost: 1000.00
