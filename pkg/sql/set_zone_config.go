@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -152,6 +153,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		if err := zone.Validate(); err != nil {
 			return fmt.Errorf("could not validate zone config: %s", err)
 		}
+		if err := validateZoneAttrsAndLocalities(
+			params.ctx,
+			params.extendedEvalCtx.StatusServer.Nodes,
+			*yamlConfig,
+		); err != nil {
+			return err
+		}
 	}
 
 	hasNewSubzones := yamlConfig != nil && index != nil
@@ -191,6 +199,92 @@ func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
 
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
+
+type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
+
+// validateZoneAttrsAndLocalities ensures that all constraints/lease preferences
+// specified in the new zone config snippet are actually valid, meaning that
+// they match at least one node. This protects against user typos causing
+// zone configs that silently don't work as intended.
+//
+// Note that this really only catches typos in required constraints -- we don't
+// want to reject prohibited constraints whose attributes/localities don't
+// match any of the current nodes because it's a reasonable use case to add
+// prohibited constraints for a new set of nodes before adding the new nodes to
+// the cluster. If you had to first add one of the nodes before creating the
+// constraints, data could be replicated there that shouldn't be.
+func validateZoneAttrsAndLocalities(
+	ctx context.Context, getNodes nodeGetter, yamlConfig string,
+) error {
+	// The caller should have already parsed the yaml once into a pre-populated
+	// zone config, so this shouldn't ever fail, but we want to re-parse it so
+	// that we only verify newly-set fields, not existing ones.
+	var zone config.ZoneConfig
+	if err := yaml.UnmarshalStrict([]byte(yamlConfig), &zone); err != nil {
+		return fmt.Errorf("could not parse zone config: %s", err)
+	}
+
+	if len(zone.Constraints) == 0 && len(zone.LeasePreferences) == 0 {
+		return nil
+	}
+
+	// Given that we have something to validate, do the work to retrieve the
+	// set of attributes and localities present on at least one node.
+	nodes, err := getNodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+
+	// Accumulate a unique list of constraints to validate.
+	toValidate := make([]config.Constraint, 0)
+	addToValidate := func(c config.Constraint) {
+		var alreadyInList bool
+		for _, val := range toValidate {
+			if c == val {
+				alreadyInList = true
+				break
+			}
+		}
+		if !alreadyInList {
+			toValidate = append(toValidate, c)
+		}
+	}
+	for _, constraints := range zone.Constraints {
+		for _, constraint := range constraints.Constraints {
+			addToValidate(constraint)
+		}
+	}
+	for _, leasePreferences := range zone.LeasePreferences {
+		for _, constraint := range leasePreferences.Constraints {
+			addToValidate(constraint)
+		}
+	}
+
+	// Check that each constraint matches some store somewhere in the cluster.
+	for _, constraint := range toValidate {
+		var found bool
+	node:
+		for _, node := range nodes.Nodes {
+			for _, store := range node.StoreStatuses {
+				// We could alternatively use config.storeHasConstraint here to catch
+				// typos in prohibited constraints as well, but as noted in the
+				// function-level comment that could break very reasonable use cases
+				// for prohibited constraints.
+				if config.StoreMatchesConstraint(store.Desc, constraint) {
+					found = true
+					break node
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf(
+				"constraint %q matches no existing nodes within the cluster - did you enter it correctly?",
+				constraint)
+		}
+	}
+
+	return nil
+}
 
 func writeZoneConfig(
 	ctx context.Context,

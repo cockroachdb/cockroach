@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
@@ -30,8 +31,8 @@ type cliTest struct {
 	connArgs []string
 }
 
-func newCLITest() cliTest {
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{Insecure: true})
+func newCLITest(args base.TestServerArgs) cliTest {
+	s, err := serverutils.StartServerRaw(args)
 	if err != nil {
 		panic(err)
 	}
@@ -62,7 +63,18 @@ func (c *cliTest) runWithArgs(args []string) {
 }
 
 func Example_cclzone() {
-	c := newCLITest()
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{"ssd"}}
+	c := newCLITest(base.TestServerArgs{
+		Insecure:   true,
+		StoreSpecs: []base.StoreSpec{storeSpec},
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east-1"},
+				{Key: "zone", Value: "us-east-1a"},
+			},
+		},
+	})
 	defer c.close()
 
 	c.runWithArgs([]string{"sql", "-e", "CREATE DATABASE db"})
@@ -119,7 +131,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -127,7 +139,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone get db.t
 	// .default
 	// range_min_bytes: 1048576
@@ -150,7 +162,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone get db.t.p1
 	// db.t.p1
 	// range_min_bytes: 1048576
@@ -158,7 +170,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -166,7 +178,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
@@ -191,7 +203,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
@@ -213,6 +225,6 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: {'+us-east-1a,+ssd': 1, +us-east-1b: 1}
-	// experimental_lease_preferences: [[+us-east1b], [+us-east-1a]]
+	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
+	// experimental_lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
 }
