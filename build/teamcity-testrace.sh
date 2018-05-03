@@ -25,9 +25,9 @@ else
 fi
 tc_end_block "Determine changed packages"
 
-tc_start_block "Compile"
-run build/builder.sh make -Otarget gotestdashi GOFLAGS=-race
-tc_end_block "Compile"
+tc_start_block "Compile C dependencies"
+run build/builder.sh make -Otarget c-deps GOFLAGS=-race
+tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
 run build/builder.sh env \
