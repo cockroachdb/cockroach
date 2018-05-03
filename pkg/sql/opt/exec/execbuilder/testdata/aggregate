@@ -576,17 +576,19 @@ SELECT COUNT((k, v)) FROM kv
 column6:int
 6
 
-exec
-SELECT COUNT(DISTINCT (k, v)) FROM kv
-----
-column6:int
-6
 
-exec
-SELECT COUNT(DISTINCT (k, (v))) FROM kv
-----
-column6:int
-6
+# TODO(radu): DISTINCT not supported yet.
+#exec
+#SELECT COUNT(DISTINCT (k, v)) FROM kv
+#----
+#column6:int
+#6
+
+#exec
+#SELECT COUNT(DISTINCT (k, (v))) FROM kv
+#----
+#column6:int
+#6
 
 exec
 SELECT COUNT((k, v)) FROM kv LIMIT 1

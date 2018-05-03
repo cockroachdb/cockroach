@@ -2688,3 +2688,13 @@ project
  │              └── variable: abc.d [type=decimal]
  └── projections
       └── variable: column9 [type=decimal]
+
+build
+SELECT SUM(DISTINCT abc.d) FROM abc
+----
+error: aggregates with DISTINCT are not supported yet
+
+build
+SELECT SUM(abc.d) FILTER (WHERE abc.d > 0) FROM abc
+----
+error: aggregates with FILTER are not supported yet
