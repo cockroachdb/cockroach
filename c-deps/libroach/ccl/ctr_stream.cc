@@ -8,7 +8,7 @@
 //  (found in the LICENSE.Apache file in the root directory).
 
 #include "ctr_stream.h"
-#include <arpa/inet.h>
+#include <google/protobuf/stubs/port.h>
 #include "../fmt.h"
 #include "../plaintext_stream.h"
 #include "crypto_utils.h"
@@ -119,7 +119,7 @@ rocksdb::Status CTRCipherStream::EncryptBlock(uint64_t blockIndex, char* data, c
   memcpy(scratch, nonce_.data(), nonce_size);
 
   // Counter value for this block, converted to network byte order.
-  uint32_t block_counter = htonl(counter_ + blockIndex);
+  uint32_t block_counter = google::protobuf::ghtonl(counter_ + blockIndex);
   // Write after the nonce.
   memcpy(scratch + nonce_size, &block_counter, 4);
 
