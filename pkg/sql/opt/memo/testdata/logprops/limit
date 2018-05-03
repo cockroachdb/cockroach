@@ -142,11 +142,44 @@ SELECT s, x FROM xyzs WHERE x=1 LIMIT 4294967296
 ----
 limit
  ├── columns: s:4(string) x:1(int!null)
+ ├── used: (1)
  ├── stats: [rows=1]
  ├── keys: (1)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
  │    ├── constraint: /1: [/1 - /1]
+ │    ├── used: (1)
  │    ├── stats: [rows=1, distinct(1)=1]
  │    └── keys: (1)
  └── const: 4294967296 [type=int]
+
+# Test pass through UsedCols + columns used by ordering.
+build
+SELECT * FROM (SELECT * FROM xyzs WHERE x=1) ORDER BY s LIMIT 1
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── used: (1,4)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── keys: (1) weak(3,4)
+ ├── ordering: +4
+ ├── sort
+ │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── used: (1)
+ │    ├── stats: [rows=1, distinct(1)=1]
+ │    ├── keys: (1) weak(3,4)
+ │    ├── ordering: +4
+ │    └── select
+ │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │         ├── used: (1)
+ │         ├── stats: [rows=1, distinct(1)=1]
+ │         ├── keys: (1) weak(3,4)
+ │         ├── scan xyzs
+ │         │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │         │    ├── stats: [rows=1000, distinct(1)=1000]
+ │         │    └── keys: (1) weak(3,4)
+ │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │              ├── variable: xyzs.x [type=int, outer=(1)]
+ │              └── const: 1 [type=int]
+ └── const: 1 [type=int]

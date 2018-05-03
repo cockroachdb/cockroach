@@ -63,6 +63,7 @@ opt
 ----
 limit
  ├── columns: column1:3(int)
+ ├── used: (3)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
  ├── cost: 10.00
