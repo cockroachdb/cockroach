@@ -272,6 +272,8 @@ type Session struct {
 	noCopy util.NoCopy
 
 	sessionID ClusterWideID
+
+	sessionTracing SessionTracing
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
@@ -519,11 +521,6 @@ func (s *Session) Finish(e *Executor) {
 		s.eventLog = nil
 	}
 
-	if s.dataMutator.sessionTracing.Enabled() {
-		if err := s.dataMutator.StopSessionTracing(); err != nil {
-			log.Infof(s.context, "error stopping tracing: %s", err)
-		}
-	}
 	// Clear this session from the sessions registry.
 	e.cfg.SessionRegistry.deregister(s.sessionID)
 
@@ -687,7 +684,7 @@ func (s *Session) extendedEvalCtx(
 		},
 		SessionMutator:  &s.dataMutator,
 		VirtualSchemas:  s.execCfg.VirtualSchemas,
-		Tracing:         &s.dataMutator.sessionTracing,
+		Tracing:         &s.sessionTracing,
 		StatusServer:    statusServer,
 		MemMetrics:      s.memMetrics,
 		Tables:          &s.tables,
@@ -1112,7 +1109,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// traceTxnThreshold and debugTrace7881Enabled to integrate more nicely with
 	// session tracing.
 	st := s.execCfg.Settings
-	if !s.dataMutator.sessionTracing.Enabled() && (traceTxnThreshold.Get(&st.SV) > 0 || debugTrace7881Enabled) {
+	if traceTxnThreshold.Get(&st.SV) > 0 || debugTrace7881Enabled {
 		mode := tracing.SingleNodeRecording
 		if traceTxnThreshold.Get(&st.SV) > 0 {
 			mode = tracing.SnowballRecording
@@ -1564,7 +1561,8 @@ func (st *SessionTracing) getRecording() ([]traceRow, error) {
 //   are per-row.
 func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
 	if st.enabled {
-		return errors.Errorf("already tracing")
+		// We're already tracing. No-op.
+		return nil
 	}
 
 	// If we're inside a transaction, start recording on the txn span.
@@ -1607,7 +1605,8 @@ func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingE
 // An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
 	if !st.enabled {
-		return errors.Errorf("not tracing")
+		// We're not currently tracing. No-op.
+		return nil
 	}
 	st.enabled = false
 
@@ -1892,7 +1891,6 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
-	sessionTracing SessionTracing
 	// applicationNamedChanged, if set, is called when the "application name"
 	// variable is updated.
 	applicationNameChanged func(newName string)
@@ -1952,16 +1950,6 @@ func (m *sessionDataMutator) SetReadOnly(val bool) {
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 	m.data.StmtTimeout = timeout
-}
-
-func (m *sessionDataMutator) StopSessionTracing() error {
-	return m.sessionTracing.StopTracing()
-}
-
-func (m *sessionDataMutator) StartSessionTracing(
-	recType tracing.RecordingType, kvTracingEnabled bool,
-) error {
-	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

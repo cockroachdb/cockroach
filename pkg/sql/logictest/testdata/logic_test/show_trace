@@ -12,18 +12,15 @@ SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off;
 query ITT
 SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
-0  === SPAN START: sql txn ===                          sql txn
-1  === SPAN START: session recording ===                session recording
-1  [NoTxn pos:5] executing ExecStmt: BEGIN TRANSACTION  session recording
+0  === SPAN START: session recording ===                session recording
+0  [NoTxn pos:5] executing ExecStmt: BEGIN TRANSACTION  session recording
+1  === SPAN START: sql txn ===                          sql txn
+1  [Open pos:6] executing ExecStmt: SELECT 1            sql txn
+1  [Open pos:7] executing ExecStmt: COMMIT TRANSACTION  sql txn
+0  [NoTxn pos:8] executing ExecStmt: SELECT 2           session recording
 2  === SPAN START: sql txn ===                          sql txn
-2  [Open pos:6] executing ExecStmt: SELECT 1            sql txn
-2  [Open pos:7] executing ExecStmt: COMMIT TRANSACTION  sql txn
-1  [NoTxn pos:8] executing ExecStmt: SELECT 2           session recording
-3  === SPAN START: sql txn ===                          sql txn
-3  [Open pos:8] executing ExecStmt: SELECT 2            sql txn
-1  [NoTxn pos:9] executing ExecStmt: SET tracing = off  session recording
-4  === SPAN START: sql txn ===                          sql txn
-4  [Open pos:9] executing ExecStmt: SET tracing = off   sql txn
+2  [Open pos:8] executing ExecStmt: SELECT 2            sql txn
+0  [NoTxn pos:9] executing ExecStmt: SET TRACING = off  session recording
 
 # Same, with SHOW TRACE FOR.
 # This also tests that sub-spans are reported properly.
@@ -827,3 +824,28 @@ query T
 SELECT message FROM [ SHOW TRACE FOR SELECT * FROM t.enginestats ] WHERE message LIKE '%InternalDelete%'
 ----
 engine stats: {InternalDeleteSkippedCount:0 TimeBoundNumSSTs:0}
+
+# Check that we can run set tracing regardless of the current tracing state.
+# This is convenient; sometimes it's unclear, for example, if you previously
+# stopped tracing or not, so issuing a set tracing=off should just work.
+subtest idempotent
+
+statement ok
+SET tracing = on; SET tracing = on;
+
+statement ok
+SET tracing = off; SET tracing = off;
+
+# Check that we can run set tracing in the aborted state (this is implemented by
+# making set tracing an ObserverStmt). This is very convenient for clients that
+# start tracing, then might get an error, then want to stop tracing.
+subtest aborted_txn
+
+query error pq: foo
+BEGIN; SELECT crdb_internal.force_error('', 'foo')
+
+statement ok
+SET tracing = off
+
+statement ok
+ROLLBACK

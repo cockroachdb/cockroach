@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -575,61 +574,8 @@ var varGen = map[string]sessionVar{
 			}
 			return "off"
 		},
-		Reset: func(m *sessionDataMutator) error {
-			if !m.sessionTracing.Enabled() {
-				// Tracing is not active. Nothing to do.
-				return nil
-			}
-			return stopTracing(m)
-		},
-		Set: func(
-			_ context.Context, m *sessionDataMutator,
-			evalCtx *extendedEvalContext, values []tree.TypedExpr,
-		) error {
-			return enableTracing(&evalCtx.EvalContext, m, values)
-		},
+		// Setting is done by the SetTracing statement.
 	},
-}
-
-func enableTracing(
-	evalCtx *tree.EvalContext, m *sessionDataMutator, values []tree.TypedExpr,
-) error {
-	traceKV := false
-	recordingType := tracing.SnowballRecording
-	enableMode := true
-
-	for _, v := range values {
-		s, err := datumAsString(evalCtx, "trace", v)
-		if err != nil {
-			return err
-		}
-
-		switch strings.ToLower(s) {
-		case "on":
-			enableMode = true
-		case "off":
-			enableMode = false
-		case "kv":
-			traceKV = true
-		case "local":
-			recordingType = tracing.SingleNodeRecording
-		case "cluster":
-			recordingType = tracing.SnowballRecording
-		default:
-			return errors.Errorf("set tracing: unknown mode %q", s)
-		}
-	}
-	if !enableMode {
-		return stopTracing(m)
-	}
-	return m.StartSessionTracing(recordingType, traceKV)
-}
-
-func stopTracing(m *sessionDataMutator) error {
-	if err := m.StopSessionTracing(); err != nil {
-		return errors.Wrapf(err, "error stopping tracing")
-	}
-	return nil
 }
 
 var varNames = func() []string {
