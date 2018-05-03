@@ -10,18 +10,18 @@ project
  ├── columns: column4:4(bool)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1101.00
+ ├── cost: 1010.01
  ├── values
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 1.00
+ │    ├── cost: 0.01
  │    └── tuple [type=tuple{}]
  └── projections
       └── exists [type=bool]
            └── select
                 ├── columns: t.k:1(int!null) t.u:2(int) t.v:3(int)
                 ├── stats: [rows=333]
-                ├── cost: 1100.00
+                ├── cost: 1010.00
                 ├── keys: (1)
                 ├── scan t
                 │    ├── columns: t.k:1(int!null) t.u:2(int) t.v:3(int)

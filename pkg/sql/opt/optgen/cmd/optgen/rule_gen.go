@@ -40,7 +40,7 @@ import (
 // It does this by generating a loop rather than an if statement (as in the
 // normalization case), similar to this:
 //
-//   for _ord := 0; _ord < _state.end; _ord++ {
+//   for _ord := memo.ExprOrdinal(0); _ord < _state.end; _ord++ {
 //     _eid := memo.ExprID{Group: _innerJoin.Left(), Expr: _ord}
 //     _selectExpr := _e.mem.Expr(_eid).AsSelect()
 //     if _selectExpr != nil {
@@ -388,7 +388,7 @@ func (g *ruleGen) genMatchNameAndChildren(match *lang.MatchExpr, contextName str
 				// Note that _partlyExplored is deliberately shadowed so that each
 				// loop has its own copy. If any outer copy is false, then every
 				// inner copy should also be false.
-				g.w.nestIndent("for _ord := 0; _ord < _state.end; _ord++ {\n")
+				g.w.nestIndent("for _ord := memo.ExprOrdinal(0); _ord < _state.end; _ord++ {\n")
 				g.w.writeIndent("_partlyExplored := _partlyExplored && _ord < _state.start\n")
 			}
 
