@@ -48,37 +48,64 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 // neededColsLimit unions the columns needed by Projections with the columns in
 // the Ordering of a Limit/Offset operator.
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
-	colSet := f.outerCols(projections).Copy()
-	for _, col := range f.mem.LookupPrivate(ordering).(memo.Ordering) {
-		colSet.Add(int(col.ID()))
+	return f.outerCols(projections).Union(f.extractOrdering(ordering).ColSet())
+}
+
+// hasUnusedCols returns true if the target group has extra columns that are
+// not needed at this level of the tree, and can be eliminated by one of the
+// UnusedCols rules. A column cannot be eliminated if it is either needed by
+// another expression bound in the rule:
+//
+//   SELECT * FROM (SELECT * FROM a WHERE y=5) AS target WHERE x=1
+//                                                       ^^^^^^^^^
+//
+// or else if it is used in the target group's subtree:
+//
+//   SELECT * FROM (SELECT * FROM a WHERE y=5) AS target WHERE x=1
+//                                  ^^^^^^^^^
+//
+// In this example, the "x" and "y" columns are needed, but any other
+// columns from the table will be eliminated.
+func (f *Factory) hasUnusedCols(target memo.GroupID, neededCols opt.ColSet) bool {
+	colSet := f.outputCols(target)
+	colSet.DifferenceWith(f.usedCols(target))
+	colSet.DifferenceWith(neededCols)
+	return !colSet.Empty()
+}
+
+// usedCols returns the subset of output columns that are in use in the target
+// expression's subtree. Projections and Aggregations return an empty set, since
+// they are projecting a new set of columns that haven't yet been used.
+// Relational expressions consult the UsedCols property to determine if an
+// expression in the subtree has referenced one or more of the output columns.
+func (f *Factory) usedCols(target memo.GroupID) opt.ColSet {
+	switch f.mem.NormExpr(target).Operator() {
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		return opt.ColSet{}
 	}
-	return colSet
+	return f.lookupLogical(target).Relational.UsedCols
 }
 
-// hasUnusedColumns returns true if the target group has additional columns
-// that are not part of the neededCols set.
-func (f *Factory) hasUnusedColumns(target memo.GroupID, neededCols opt.ColSet) bool {
-	return !f.outputCols(target).Difference(neededCols).Empty()
-}
-
-// filterUnusedColumns creates an expression that discards any outputs columns
+// filterUnusedCols creates an expression that discards any outputs columns
 // of the given group that are not used. If the target expression type supports
 // column filtering (like Scan, Values, Projections, etc.), then create a new
 // instance of that operator that does the filtering. Otherwise, construct a
 // Project operator that wraps the operator and does the filtering.
-func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet) memo.GroupID {
+func (f *Factory) filterUnusedCols(target memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	targetExpr := f.mem.NormExpr(target)
 	switch targetExpr.Operator() {
 	case opt.ScanOp:
-		return f.filterUnusedScanColumns(target, neededCols)
+		return f.filterUnusedScanCols(target, neededCols)
 
 	case opt.ValuesOp:
-		return f.filterUnusedValuesColumns(target, neededCols)
+		return f.filterUnusedValuesCols(target, neededCols)
 	}
 
-	// Get the subset of the target group's output columns that are in the
-	// needed set (and discard those that aren't).
-	colSet := f.outputCols(target).Intersection(neededCols)
+	// Get the subset of the target group's output columns that are in the used
+	// set, including columns used in the subtree and additional columns passed
+	// in by the rule. Any columns not in that set will be filtered away.
+	colSet := f.usedCols(target).Union(neededCols)
+	colSet.IntersectionWith(f.outputCols(target))
 	cnt := colSet.Len()
 
 	// Create a new list of groups to project, along with the list of column
@@ -130,9 +157,9 @@ func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet
 	return f.ConstructProject(target, projections)
 }
 
-// filterUnusedScanColumns constructs a new Scan operator based on the given
+// filterUnusedScanCols constructs a new Scan operator based on the given
 // existing Scan operator, but projecting only the needed columns.
-func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
+func (f *Factory) filterUnusedScanCols(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	colSet := f.outputCols(scan).Intersection(neededCols)
 	scanExpr := f.mem.NormExpr(scan).AsScan()
 	existing := f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
@@ -140,10 +167,10 @@ func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColS
 	return f.ConstructScan(f.mem.InternScanOpDef(&new))
 }
 
-// filterUnusedValuesColumns constructs a new Values operator based on the
+// filterUnusedValuesCols constructs a new Values operator based on the
 // given existing Values operator. The new operator will have the same set of
 // rows, but containing only the needed columns. Other columns are discarded.
-func (f *Factory) filterUnusedValuesColumns(
+func (f *Factory) filterUnusedValuesCols(
 	values memo.GroupID, neededCols opt.ColSet,
 ) memo.GroupID {
 	valuesExpr := f.mem.NormExpr(values).AsValues()

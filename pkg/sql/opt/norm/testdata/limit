@@ -115,23 +115,21 @@ project
  ├── cardinality: [0 - 5]
  ├── ordering: +3
  ├── limit
- │    ├── columns: a.f:3(float)
+ │    ├── columns: a.i:2(int) a.f:3(float)
  │    ├── cardinality: [0 - 5]
+ │    ├── keys: weak(2,3)
  │    ├── ordering: +3
  │    ├── sort
- │    │    ├── columns: a.f:3(float)
+ │    │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    ├── keys: weak(2,3)
  │    │    ├── ordering: +3
- │    │    └── project
- │    │         ├── columns: a.f:3(float)
- │    │         ├── group-by
- │    │         │    ├── columns: a.i:2(int) a.f:3(float)
- │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
- │    │         │    ├── keys: weak(2,3)
- │    │         │    ├── scan a
- │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
- │    │         │    └── aggregations
- │    │         └── projections [outer=(3)]
- │    │              └── variable: a.f [type=float, outer=(3)]
+ │    │    └── group-by
+ │    │         ├── columns: a.i:2(int) a.f:3(float)
+ │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │         ├── keys: weak(2,3)
+ │    │         ├── scan a
+ │    │         │    └── columns: a.i:2(int) a.f:3(float)
+ │    │         └── aggregations
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
       ├── variable: a.f [type=float, outer=(3)]
@@ -195,22 +193,20 @@ project
  ├── columns: f:3(float) column6:6(float)
  ├── ordering: +3
  ├── offset
- │    ├── columns: a.f:3(float)
+ │    ├── columns: a.i:2(int) a.f:3(float)
+ │    ├── keys: weak(2,3)
  │    ├── ordering: +3
  │    ├── sort
- │    │    ├── columns: a.f:3(float)
+ │    │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    ├── keys: weak(2,3)
  │    │    ├── ordering: +3
- │    │    └── project
- │    │         ├── columns: a.f:3(float)
- │    │         ├── group-by
- │    │         │    ├── columns: a.i:2(int) a.f:3(float)
- │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
- │    │         │    ├── keys: weak(2,3)
- │    │         │    ├── scan a
- │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
- │    │         │    └── aggregations
- │    │         └── projections [outer=(3)]
- │    │              └── variable: a.f [type=float, outer=(3)]
+ │    │    └── group-by
+ │    │         ├── columns: a.i:2(int) a.f:3(float)
+ │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │         ├── keys: weak(2,3)
+ │    │         ├── scan a
+ │    │         │    └── columns: a.i:2(int) a.f:3(float)
+ │    │         └── aggregations
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
       ├── variable: a.f [type=float, outer=(3)]
@@ -254,26 +250,25 @@ project
  ├── cardinality: [0 - 10]
  ├── ordering: +3
  ├── limit
- │    ├── columns: a.f:3(float)
+ │    ├── columns: a.i:2(int) a.f:3(float)
  │    ├── cardinality: [0 - 10]
+ │    ├── keys: weak(2,3)
  │    ├── ordering: +3
  │    ├── offset
- │    │    ├── columns: a.f:3(float)
+ │    │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    ├── keys: weak(2,3)
  │    │    ├── ordering: +3
  │    │    ├── sort
- │    │    │    ├── columns: a.f:3(float)
+ │    │    │    ├── columns: a.i:2(int) a.f:3(float)
+ │    │    │    ├── keys: weak(2,3)
  │    │    │    ├── ordering: +3
- │    │    │    └── project
- │    │    │         ├── columns: a.f:3(float)
- │    │    │         ├── group-by
- │    │    │         │    ├── columns: a.i:2(int) a.f:3(float)
- │    │    │         │    ├── grouping columns: a.i:2(int) a.f:3(float)
- │    │    │         │    ├── keys: weak(2,3)
- │    │    │         │    ├── scan a
- │    │    │         │    │    └── columns: a.i:2(int) a.f:3(float)
- │    │    │         │    └── aggregations
- │    │    │         └── projections [outer=(3)]
- │    │    │              └── variable: a.f [type=float, outer=(3)]
+ │    │    │    └── group-by
+ │    │    │         ├── columns: a.i:2(int) a.f:3(float)
+ │    │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
+ │    │    │         ├── keys: weak(2,3)
+ │    │    │         ├── scan a
+ │    │    │         │    └── columns: a.i:2(int) a.f:3(float)
+ │    │    │         └── aggregations
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(3)]

@@ -150,6 +150,10 @@ func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
 	return f.mem.LookupPrivate(private).(opt.ColList)
 }
 
+func (f *Factory) extractOrdering(private memo.PrivateID) memo.Ordering {
+	return f.mem.LookupPrivate(private).(memo.Ordering)
+}
+
 // ----------------------------------------------------------------------
 //
 // List functions
@@ -431,40 +435,6 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 // with any aggregate functions operating over the entire input expression.
 func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
 	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
-}
-
-// ----------------------------------------------------------------------
-//
-// Project Rules
-//   Custom match and replace functions used with project.opt rules.
-//
-// ----------------------------------------------------------------------
-
-// projectNoCycle constructs a Project operator and adds its fingerprint to the
-// ruleCycles map. Rules which have the DetectCycle tag will see that the
-// expression is already in the map, and will not match. Adding to the map in
-// this way is purely a performance optimization, and is used in patterns where
-// it's known that re-matching the operator is unnecessary.
-func (f *Factory) projectNoCycle(input, projections memo.GroupID) memo.GroupID {
-	projectExpr := memo.MakeProjectExpr(input, projections)
-	f.ruleCycles[projectExpr.Fingerprint()] = true
-	return f.ConstructProject(input, projections)
-}
-
-// limitNoCycle is similar to projectNoCycle, except that it constructs a Limit
-// operator. See projectNoCycle for details.
-func (f *Factory) limitNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
-	limitExpr := memo.MakeLimitExpr(input, limit, ordering)
-	f.ruleCycles[limitExpr.Fingerprint()] = true
-	return f.ConstructLimit(input, limit, ordering)
-}
-
-// offsetNoCycle is similar to projectNoCycle, except that it constructs an
-// Offset operator. See projectNoCycle for details.
-func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
-	offsetExpr := memo.MakeOffsetExpr(input, limit, ordering)
-	f.ruleCycles[offsetExpr.Fingerprint()] = true
-	return f.ConstructOffset(input, limit, ordering)
 }
 
 // ----------------------------------------------------------------------
