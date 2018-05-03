@@ -525,6 +525,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THAN THEN
 %token <str>   TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
+%token <str>   TRACING
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str>   UPDATE UPSERT USE USER USERS USING UUID
@@ -2516,6 +2517,7 @@ set_exprs_internal:
 // SET [SESSION] <var> { TO | = } <values...>
 // SET [SESSION] TIME ZONE <tz>
 // SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
+// SET [SESSION] TRACING { TO | = } { off | cluster | on | kv | local } [,...]
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
 // WEBDOCS/set-vars.html
@@ -2560,11 +2562,21 @@ set_transaction_stmt:
 generic_set:
   var_name TO var_list
   {
-    $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
+    // We need to recognize the "set tracing" specially here; couldn't make "set
+    // tracing" a different grammar rule because of ambiguity.
+    if $1.strs()[0] == "tracing" {
+      $$.val = &tree.SetTracing{Values: $3.exprs()}
+    } else {
+      $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
+    }
   }
 | var_name '=' var_list
   {
-    $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
+    if $1.strs()[0] == "tracing" {
+      $$.val = &tree.SetTracing{Values: $3.exprs()}
+    } else {
+      $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
+    }
   }
 
 set_rest_more:

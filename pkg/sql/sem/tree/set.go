@@ -82,3 +82,14 @@ func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
 	node.Modes.Format(ctx)
 }
+
+// SetTracing represents a SET TRACING statement.
+type SetTracing struct {
+	Values Exprs
+}
+
+// Format implements the NodeFormatter interface.
+func (node *SetTracing) Format(ctx *FmtCtx) {
+	ctx.WriteString("SET TRACING = ")
+	ctx.FormatNode(&node.Values)
+}

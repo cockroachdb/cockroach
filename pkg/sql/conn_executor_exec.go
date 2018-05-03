@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var errSavepointNotUsed = pgerror.NewErrorf(
@@ -899,6 +903,9 @@ func (ex *connExecutor) runObserverStatement(
 		return ex.runShowTransactionState(ctx, res)
 	case *tree.ShowSyntax:
 		return ex.runShowSyntax(ctx, sqlStmt.Statement, res)
+	case *tree.SetTracing:
+		ex.runSetTracing(ctx, sqlStmt, res)
+		return nil
 	default:
 		res.SetError(pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: unrecognized observer statement type %T", stmt.AST))
@@ -939,6 +946,57 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+func (ex *connExecutor) runSetTracing(
+	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
+) {
+	if len(n.Values) == 0 {
+		res.SetError(fmt.Errorf("set tracing missing argument"))
+		return
+	}
+
+	modes := make([]string, len(n.Values))
+	for i, v := range n.Values {
+		v = unresolvedNameToStrVal(v)
+		strVal, ok := v.(*tree.StrVal)
+		if !ok {
+			res.SetError(fmt.Errorf("expected string for set tracing argument, not %T", v))
+			return
+		}
+		modes[i] = strVal.RawString()
+	}
+
+	if err := ex.enableTracing(modes); err != nil {
+		res.SetError(err)
+	}
+}
+
+func (ex *connExecutor) enableTracing(modes []string) error {
+	traceKV := false
+	recordingType := tracing.SnowballRecording
+	enableMode := true
+
+	for _, s := range modes {
+		switch strings.ToLower(s) {
+		case "on":
+			enableMode = true
+		case "off":
+			enableMode = false
+		case "kv":
+			traceKV = true
+		case "local":
+			recordingType = tracing.SingleNodeRecording
+		case "cluster":
+			recordingType = tracing.SnowballRecording
+		default:
+			return errors.Errorf("set tracing: unknown mode %q", s)
+		}
+	}
+	if !enableMode {
+		return ex.sessionTracing.StopTracing()
+	}
+	return ex.sessionTracing.StartTracing(recordingType, traceKV)
 }
 
 // addActiveQuery adds a running query to the list of running queries.
