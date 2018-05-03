@@ -3501,6 +3501,35 @@ func ensureExpectedType(exp types.T, d Datum) error {
 }
 
 // Eval implements the TypedExpr interface.
+func (expr *IfErrExpr) Eval(ctx *EvalContext) (Datum, error) {
+	cond, evalErr := expr.Cond.(TypedExpr).Eval(ctx)
+	if evalErr == nil {
+		if expr.Else == nil {
+			return DBoolFalse, nil
+		}
+		return cond, nil
+	}
+	if expr.ErrCode != nil {
+		errpat, err := expr.ErrCode.(TypedExpr).Eval(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if errpat == DNull {
+			return nil, evalErr
+		}
+		errpatStr := string(MustBeDString(errpat))
+		pqErr, ok := pgerror.GetPGCause(evalErr)
+		if !ok || pqErr.Code != errpatStr {
+			return nil, evalErr
+		}
+	}
+	if expr.Else == nil {
+		return DBoolTrue, nil
+	}
+	return expr.Else.(TypedExpr).Eval(ctx)
+}
+
+// Eval implements the TypedExpr interface.
 func (expr *IfExpr) Eval(ctx *EvalContext) (Datum, error) {
 	cond, err := expr.Cond.(TypedExpr).Eval(ctx)
 	if err != nil {

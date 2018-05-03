@@ -1039,6 +1039,12 @@ func TestEval(t *testing.T) {
 		{`IF(true, 1, 2/0)`, `1`},
 		{`IF(false, 1/0, 2)`, `2`},
 		{`IF(NULL, 1/0, 2)`, `2`},
+		{`IFERROR(2, 123)`, `2`},
+		{`IFERROR(1/0, 123)`, `123`},
+		{`IFERROR(1/0, 123, '22012')`, `123`},
+		{`ISERROR(2)`, `false`},
+		{`ISERROR(1/0)`, `true`},
+		{`ISERROR(1/0, '22012')`, `true`},
 		{`NULLIF(1, 1)`, `NULL`},
 		{`NULLIF(1, 2)`, `1`},
 		{`NULLIF(2, 1)`, `2`},
@@ -1405,6 +1411,8 @@ func TestEvalError(t *testing.T) {
 		{`'Inf'::float::int`, `integer out of range`},
 		{`'NaN'::float::int`, `integer out of range`},
 		{`'1.1'::int`, `could not parse "1.1" as type int`},
+		{`IFERROR(1/0, 123, 'unknown')`, `division by zero`},
+		{`ISERROR(1/0, 'unknown')`, `division by zero`},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)
