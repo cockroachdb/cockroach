@@ -22,6 +22,7 @@ SELECT * FROM a WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
+ ├── used: (1)
  ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan a

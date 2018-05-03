@@ -92,6 +92,18 @@ type RelationalProps struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
+	// UsedCols is the subset of output columns that are being referenced
+	// somewhere in the expression's subtree in a way that precludes pruning
+	// them as unused. For example:
+	//
+	//   SELECT y FROM xyz WHERE x=1
+	//
+	// While the where expression's OutputCols would contain all the columns
+	// in table a, its UsedCols would only contain the x column. The higher-
+	// level projection operator uses that information to help decide that it
+	// can only safely prune the z column.
+	UsedCols opt.ColSet
+
 	// Cardinality is the number of rows that can be returned from this relational
 	// expression. The number of rows will always be between the inclusive Min and
 	// Max bounds. If Max=math.MaxUint32, then there is no limit to the number of

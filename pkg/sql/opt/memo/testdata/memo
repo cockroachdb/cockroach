@@ -25,6 +25,7 @@ LIMIT 10
 ----
 limit
  ├── columns: y:2(int) x:3(string!null) column5:5(int)
+ ├── used: (2)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 102119.00
@@ -40,6 +41,7 @@ limit
  │         ├── cost: 102000.00
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
+ │         │    ├── used: (1-3)
  │         │    ├── stats: [rows=476, distinct(2)=1]
  │         │    ├── cost: 102000.00
  │         │    ├── inner-join
@@ -88,6 +90,7 @@ project
  ├── ordering: +2
  ├── limit
  │    ├── columns: a.y:2(int) b.x:3(string!null)
+ │    ├── used: (2)
  │    ├── cardinality: [0 - 10]
  │    ├── stats: [rows=10]
  │    ├── cost: 2125.00
@@ -103,10 +106,12 @@ project
  │    │         ├── cost: 2100.00
  │    │         ├── inner-join
  │    │         │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null)
+ │    │         │    ├── used: (1-3)
  │    │         │    ├── stats: [rows=100]
  │    │         │    ├── cost: 2100.00
  │    │         │    ├── select
  │    │         │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │         │    │    ├── used: (2)
  │    │         │    │    ├── stats: [rows=1, distinct(2)=1]
  │    │         │    │    ├── cost: 1100.00
  │    │         │    │    ├── keys: (1)

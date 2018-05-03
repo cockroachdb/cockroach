@@ -203,6 +203,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			m := map[string]memo.ExprFmtFlags{
 				"show-all":         memo.ExprFmtShowAll,
 				"hide-all":         memo.ExprFmtHideAll,
+				"hide-used":        memo.ExprFmtHideUsedCols,
 				"hide-stats":       memo.ExprFmtHideStats,
 				"hide-cost":        memo.ExprFmtHideCost,
 				"hide-constraints": memo.ExprFmtHideConstraints,

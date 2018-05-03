@@ -138,6 +138,13 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 	}
 
+	// UsedCols are inherited from input, and any additional columns used by the
+	// filter need to be recorded as well.
+	if !filterProps.OuterCols.Empty() {
+		props.Relational.UsedCols = props.Relational.UsedCols.Union(filterProps.OuterCols)
+		props.Relational.UsedCols.IntersectionWith(props.Relational.OutputCols)
+	}
+
 	// Select filter can filter any or all rows.
 	props.Relational.Cardinality = inputProps.Cardinality.AsLowAs(0)
 
@@ -168,6 +175,10 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = projectionProps.OuterCols.Difference(inputProps.OutputCols)
 	}
 	props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+
+	// NOTE: Don't set any UsedCols for Project, since even if the columns were
+	//       used in the subtree, they don't need to preserved above the level
+	//       of the Project, since it's capable of filtering columns.
 
 	// Inherit weak keys that are composed entirely of output columns.
 	props.Relational.WeakKeys = inputProps.WeakKeys
@@ -236,6 +247,14 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 	}
 	props.Relational.OuterCols.UnionWith(leftProps.OuterCols)
 
+	// UsedCols are inherited from both the left and the right side. Any
+	// additional columns used by right side (i.e. in Apply case) or the join
+	// filter need to be counted as well.
+	props.Relational.UsedCols = leftProps.UsedCols.Union(rightProps.UsedCols)
+	props.Relational.UsedCols.UnionWith(rightProps.OuterCols)
+	props.Relational.UsedCols.UnionWith(onProps.OuterCols)
+	props.Relational.UsedCols.IntersectionWith(props.Relational.OutputCols)
+
 	// TODO(andyk): Need to derive weak keys for joins, for example when weak
 	//              keys on both sides are equivalent cols.
 
@@ -270,6 +289,10 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) LogicalProps {
 	// input columns are outer columns.
 	props.Relational.OuterCols = aggProps.OuterCols.Difference(inputProps.OutputCols)
 	props.Relational.OuterCols.UnionWith(inputProps.OuterCols)
+
+	// Grouping columns were used to group rows, so they need to be added to the
+	// UsedCols set. Aggregation columns have not yet been used.
+	props.Relational.UsedCols = groupingColSet
 
 	// Scalar group by has no grouping columns and always a single row.
 	if groupingColSet.Empty() {
@@ -334,6 +357,23 @@ func (b *logicalPropsBuilder) buildSetProps(ev ExprView) LogicalProps {
 	// Outer columns from either side are outer columns for set operation.
 	props.Relational.OuterCols = leftProps.OuterCols.Union(rightProps.OuterCols)
 
+	// Most set operators use all the columns to determine set membership. But
+	// UnionAllOp simply concatenates the sets, and so some columns might not
+	// need to be marked as used.
+	if ev.Operator() == opt.UnionAllOp {
+		// If either the left or right column has been used, then mark the
+		// corresponding output column as having been used in the subtree.
+		for i := range colMap.Out {
+			if leftProps.UsedCols.Contains(int((colMap.Left)[i])) ||
+				rightProps.UsedCols.Contains(int((colMap.Right)[i])) {
+				props.Relational.UsedCols.Add(int((colMap.Out)[i]))
+			}
+		}
+	} else {
+		// All columns have already been used to determine set membership.
+		props.Relational.UsedCols = props.Relational.OutputCols
+	}
+
 	// Calculate cardinality of the set operator.
 	props.Relational.Cardinality = calcSetCardinality(
 		ev, leftProps.Cardinality, rightProps.Cardinality,
@@ -393,6 +433,10 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) LogicalProps {
 		props.Relational.OuterCols = limitProps.OuterCols.Union(inputProps.OuterCols)
 	}
 
+	// Inherit UsedCols from input and mark any columns used in the ordering key
+	// as used.
+	props.Relational.UsedCols = inputProps.UsedCols.Union(ev.Private().(Ordering).ColSet())
+
 	// Limit puts a cap on the number of rows returned by input.
 	if limit.Operator() == opt.ConstOp {
 		constLimit := int64(*limit.Private().(*tree.DInt))
@@ -423,6 +467,10 @@ func (b *logicalPropsBuilder) buildOffsetProps(ev ExprView) LogicalProps {
 	if !offsetProps.OuterCols.Empty() {
 		props.Relational.OuterCols = offsetProps.OuterCols.Union(inputProps.OuterCols)
 	}
+
+	// Inherit UsedCols from input and mark any columns used in the ordering key
+	// as used.
+	props.Relational.UsedCols = inputProps.UsedCols.Union(ev.Private().(Ordering).ColSet())
 
 	// Offset decreases the number of rows that are passed through from input.
 	if offset.Operator() == opt.ConstOp {

@@ -236,6 +236,9 @@ const (
 	// ExprFmtHideOuterCols does not show outer columns in the output.
 	ExprFmtHideOuterCols ExprFmtFlags = 1 << (iota - 1)
 
+	// ExprFmtHideUsedCols does not show used columns in the output.
+	ExprFmtHideUsedCols
+
 	// ExprFmtHideRowCard does not show row cardinality in the output.
 	ExprFmtHideRowCard
 
@@ -358,6 +361,10 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		def := ev.Private().(*LookupJoinDef)
 		tableID := def.Table
 		tp.Childf("table: %s", ev.Metadata().Table(tableID).TabName())
+	}
+
+	if !flags.HasFlags(ExprFmtHideUsedCols) && !logProps.Relational.UsedCols.Empty() {
+		tp.Childf("used: %s", logProps.Relational.UsedCols.String())
 	}
 
 	if !flags.HasFlags(ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {

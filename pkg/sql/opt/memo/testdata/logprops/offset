@@ -160,11 +160,13 @@ SELECT s, x FROM (SELECT * FROM xyzs LIMIT 100) WHERE x=1 OFFSET 4294967296
 ----
 offset
  ├── columns: s:4(string) x:1(int!null)
+ ├── used: (1)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
  ├── keys: (1)
  ├── select
  │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
+ │    ├── used: (1)
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── keys: (1)
@@ -178,3 +180,38 @@ offset
  │              ├── variable: xyzs.x [type=int, outer=(1)]
  │              └── const: 1 [type=int]
  └── const: 4294967296 [type=int]
+
+# Test pass through UsedCols + columns used by ordering.
+build
+SELECT * FROM (SELECT * FROM xyzs WHERE x=1) ORDER BY s OFFSET 1
+----
+sort
+ ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── used: (1,4)
+ ├── stats: [rows=0]
+ ├── keys: (1) weak(3,4)
+ ├── ordering: +4
+ └── offset
+      ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      ├── used: (1,4)
+      ├── stats: [rows=0]
+      ├── keys: (1) weak(3,4)
+      ├── sort
+      │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      │    ├── used: (1)
+      │    ├── stats: [rows=1, distinct(1)=1]
+      │    ├── keys: (1) weak(3,4)
+      │    ├── ordering: +4
+      │    └── select
+      │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      │         ├── used: (1)
+      │         ├── stats: [rows=1, distinct(1)=1]
+      │         ├── keys: (1) weak(3,4)
+      │         ├── scan xyzs
+      │         │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      │         │    ├── stats: [rows=1000, distinct(1)=1000]
+      │         │    └── keys: (1) weak(3,4)
+      │         └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      │              ├── variable: xyzs.x [type=int, outer=(1)]
+      │              └── const: 1 [type=int]
+      └── const: 1 [type=int]
