@@ -13,3 +13,14 @@
 )
 =>
 (ConstrainScan $filter $def)
+
+[ConstrainLookupJoinIndexScan, Explore]
+(Select
+  (LookupJoin
+    (Scan $def:* & (CanConstrainScan $def))
+    $outerdef:*
+  )
+  $filter:*
+)
+=>
+(ConstrainLookupJoinIndexScan $filter $def $outerdef)

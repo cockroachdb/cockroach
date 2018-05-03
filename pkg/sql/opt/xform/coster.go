@@ -15,6 +15,8 @@
 package xform
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
@@ -50,6 +52,14 @@ func newCoster(mem *memo.Memo) *coster {
 	return &coster{mem: mem}
 }
 
+const (
+	// These costs have been copied from the Postgres optimizer:
+	// https://github.com/postgres/postgres/blob/master/src/include/optimizer/cost.h
+	cpuCost    = 0.01
+	seqIOCost  = 1
+	randIOCost = 4
+)
+
 // computeCost calculates the estimated cost of the candidate best expression,
 // based on its logical properties as well as the cost of its children. Each
 // expression's cost must always be >= the total costs of its children, so that
@@ -70,9 +80,13 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	case opt.ValuesOp:
 		return c.computeValuesCost(candidate, props)
 
+	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
+		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
+		return c.computeJoinCost(candidate, props)
+
 	case opt.LookupJoinOp:
-		// TODO(justin): remove this once we can execbuild index joins.
-		return 1000000000000
+		return c.computeLookupJoinCost(candidate, props)
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -88,23 +102,50 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 }
 
 func (c *coster) computeSortCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	cost := memo.Cost(props.Relational.Stats.RowCount) * 0.25
+	rowCount := float64(props.Relational.Stats.RowCount)
+	var cost memo.Cost
+	if rowCount > 0 {
+		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCost
+	}
+
+	// The sort should have some overhead even if there are very few rows.
+	if cost < cpuCost {
+		cost = cpuCost
+	}
+
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeScanCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount)
+	return memo.Cost(props.Relational.Stats.RowCount) * seqIOCost
 }
 
 func (c *coster) computeSelectCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
-	cost := memo.Cost(inputRowCount) * 0.1
+	cost := memo.Cost(inputRowCount) * cpuCost
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeValuesCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount)
+	return memo.Cost(props.Relational.Stats.RowCount) * cpuCost
+}
+
+func (c *coster) computeJoinCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
+	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCost
+	return cost + c.computeChildrenCost(candidate)
+}
+
+func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+	leftCost := c.mem.BestExprCost(candidate.Child(0))
+	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+
+	// The rows in the left table are used to probe into an index on the right
+	// table. Since the matching rows in the right table may not all be in the
+	// same range, this counts as random I/O.
+	return leftCost + memo.Cost(leftRowCount)*(randIOCost+cpuCost)
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {
