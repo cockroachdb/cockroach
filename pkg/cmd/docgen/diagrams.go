@@ -646,6 +646,16 @@ var specs = []stmtSpec{
 		},
 	},
 	{
+		name: "export_stmt",
+		replace: map[string]string{
+			"import_data_format":    "CSV",
+			"string_or_placeholder": "file_location",
+			"opt_with_options":      "kv_options",
+			"select_stmt":           "(| 'select_stmt' | 'table_name')",
+		},
+		unlink: []string{"CSV", "file_location", "kv_options"},
+	},
+	{
 		name:   "family_def",
 		inline: []string{"name_list"},
 	},
