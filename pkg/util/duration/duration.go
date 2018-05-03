@@ -21,16 +21,25 @@ import (
 	"math"
 	"math/big"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/arith"
 )
 
 const (
-	daysInMonth  = 30
-	nanosInDay   = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
-	nanosInMonth = daysInMonth * nanosInDay
+	daysInMonth   = 30
+	nanosInDay    = 24 * int64(time.Hour) // Try as I might, couldn't do this without the cast.
+	nanosInMonth  = daysInMonth * nanosInDay
+	nanosInSecond = 1000 * 1000 * 1000
 
 	// Used in overflow calculations.
 	maxYearsInDuration = math.MaxInt64 / nanosInMonth
 	minYearsInDuration = math.MinInt64 / nanosInMonth
+)
+
+var (
+	bigDaysInMonth  = big.NewInt(daysInMonth)
+	bigNanosInDay   = big.NewInt(nanosInDay)
+	bigNanosInMonth = big.NewInt(nanosInMonth)
 )
 
 // ErrEncodeOverflow is returned by Encode when the sortNanos returned would
@@ -75,6 +84,82 @@ func (d Duration) Compare(x Duration) int {
 		return 1
 	}
 	return 0
+}
+
+// FromInt64 converts an int64 number of seconds to a
+// duration. Inverse conversion of AsInt64.
+func FromInt64(x int64) Duration {
+	days := x / (nanosInDay / nanosInSecond)
+	seconds := x % (nanosInDay / nanosInSecond)
+	d := Duration{Days: days, Nanos: seconds * nanosInSecond}
+	return d.normalize()
+}
+
+// FromFloat64 converts a float64 number of seconds to a
+// duration. Inverse conversion of AsFloat64.
+func FromFloat64(x float64) Duration {
+	months := int64(x / float64(nanosInMonth/nanosInSecond))
+	secDays := math.Mod(x, float64(nanosInMonth/nanosInSecond))
+	days := int64(secDays / float64(nanosInDay/nanosInSecond))
+	secsRem := math.Mod(secDays, float64(nanosInDay/nanosInSecond))
+	d := Duration{Months: months, Days: days, Nanos: int64(secsRem * 1e9)}
+	return d.normalize()
+}
+
+// FromBigInt converts a big.Int number of nanoseconds to a
+// duration. Inverse conversion of AsBigInt. Boolean false
+// if the result overflows.
+func FromBigInt(src *big.Int) (Duration, bool) {
+	var rem big.Int
+	var monthsDec big.Int
+	monthsDec.QuoRem(src, bigNanosInMonth, &rem)
+	if !monthsDec.IsInt64() {
+		return Duration{}, false
+	}
+
+	var daysDec big.Int
+	var nanosRem big.Int
+	daysDec.QuoRem(&rem, bigNanosInDay, &nanosRem)
+	// Note: we do not need to check for overflow of daysDec because any
+	// excess bits were spilled into months above already.
+
+	d := Duration{Months: monthsDec.Int64(), Days: daysDec.Int64(), Nanos: nanosRem.Int64()}
+	return d.normalize(), true
+}
+
+// AsInt64 converts a duration to an int64 number of seconds.
+// The conversion may overflow, in which case the boolean return
+// value is false.
+func (d Duration) AsInt64() (int64, bool) {
+	mSecs, ok := arith.MulHalfPositiveWithOverflow(d.Months, nanosInMonth/nanosInSecond)
+	if !ok {
+		return 0, ok
+	}
+	dSecs, ok := arith.MulHalfPositiveWithOverflow(d.Days, nanosInDay/nanosInSecond)
+	if !ok {
+		return 0, ok
+	}
+	if dSecs, ok = arith.AddWithOverflow(mSecs, dSecs); !ok {
+		return 0, ok
+	}
+	return arith.AddWithOverflow(dSecs, d.Nanos/nanosInSecond)
+}
+
+// AsFloat64 converts a duration to a float64 number of seconds.
+func (d Duration) AsFloat64() float64 {
+	mSecs := float64(d.Months) * float64(nanosInMonth/nanosInSecond)
+	dSecs := float64(d.Days) * float64(nanosInDay/nanosInSecond)
+	return float64(d.Nanos)/float64(nanosInSecond) + mSecs + dSecs
+}
+
+// AsBigInt converts a duration to a big.Int with the number of
+// nanoseconds.
+func (d Duration) AsBigInt(dst *big.Int) {
+	dst.SetInt64(d.Months)
+	dst.Mul(dst, bigDaysInMonth)
+	dst.Add(dst, big.NewInt(d.Days))
+	dst.Mul(dst, bigNanosInDay)
+	dst.Add(dst, big.NewInt(d.Nanos))
 }
 
 // Format emits a string representation of a Duration to a Buffer.
