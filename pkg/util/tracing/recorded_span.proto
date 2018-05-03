@@ -17,6 +17,7 @@ package cockroach.util.tracing;
 option go_package = "tracing";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
@@ -57,4 +58,7 @@ message RecordedSpan {
   }
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
+
+  // Stats collected in this span.
+  google.protobuf.Any stats = 10;
 }
