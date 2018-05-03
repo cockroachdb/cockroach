@@ -59,6 +59,10 @@ export function getEventDescription(e: Event$Properties): string {
         return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
       }
       return `Cluster Setting Changed: User ${info.User} changed ${info.SettingName}`;
+    case eventTypes.SET_ZONE_CONFIG:
+    return `Zone Config Changed: User ${info.User} set the zone config for ${info.Target} to ${info.Config}`;
+    case eventTypes.REMOVE_ZONE_CONFIG:
+      return `Zone Config Removed: User ${info.User} removed the zone config for ${info.Target}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -76,6 +80,8 @@ export interface EventInfo {
   SequenceName?: string;
   SettingName?: string;
   Value?: string;
+  Target?: string;
+  Config?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
   DroppedTables?: string[];
