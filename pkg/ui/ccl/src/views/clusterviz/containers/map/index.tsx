@@ -74,8 +74,8 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
               onChange={this.handleMapTableToggle}
             />
           </div>
-          <div style={{ float: "right" }}><TimeScaleDropdown /></div>
-          <div style={{ textAlign: "center", paddingTop: 4 }}><Breadcrumbs tiers={tiers} /></div>
+          <div style={{ float: "right", display: showingLicensePage ? "none" : null }}><TimeScaleDropdown /></div>
+          <div style={{ textAlign: "center", paddingTop: 4, display: showingLicensePage ? "none" : null }}><Breadcrumbs tiers={tiers} /></div>
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
