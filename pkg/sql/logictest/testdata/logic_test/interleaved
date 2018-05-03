@@ -168,8 +168,11 @@ SELECT * FROM p1_0
 2  2  2.01  2
 7  5  7.01  7.0
 
-statement ok
+statement error "p2" is interleaved by table "p1_0"
 TRUNCATE TABLE p2
+
+statement ok
+TRUNCATE TABLE p2 CASCADE
 
 statement error unimplemented
 DROP TABLE p2
@@ -312,7 +315,7 @@ EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
 ----
 scan  ·      ·
 ·     table  orders@primary
-·     spans  /1/#/66/1/1000-/1/#/66/1/1000/#
+·     spans  /1/#/68/1/1000-/1/#/68/1/1000/#
 
 # Check that interleaving can occur across databases
 statement ok
