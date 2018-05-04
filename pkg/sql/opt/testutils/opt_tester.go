@@ -207,6 +207,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 				"hide-stats":       memo.ExprFmtHideStats,
 				"hide-cost":        memo.ExprFmtHideCost,
 				"hide-constraints": memo.ExprFmtHideConstraints,
+				"hide-rules":       memo.ExprFmtHideRulesProps,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
