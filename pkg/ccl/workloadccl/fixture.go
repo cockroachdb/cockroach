@@ -107,6 +107,10 @@ func generatorToGCSFolder(config FixtureConfig, gen workload.Generator) string {
 	)
 }
 
+func FixtureURL(config FixtureConfig, gen workload.Generator) string {
+	return fmt.Sprintf("gs://%s/%s", config.GCSBucket, generatorToGCSFolder(config, gen))
+}
+
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
 // is expected that the generator will have had Configure called on it.
 func GetFixture(

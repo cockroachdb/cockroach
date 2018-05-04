@@ -68,6 +68,10 @@ var fixturesLoadCmd = setCmdDefaults(&cobra.Command{
 	Use:   `load`,
 	Short: `Load a fixture into a running cluster. An enterprise license is required.`,
 })
+var fixturesURLCmd = setCmdDefaults(&cobra.Command{
+	Use:   `url`,
+	Short: `Generate the GCS URL for a fixture`,
+})
 
 var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
 	`csv-server`, ``,
