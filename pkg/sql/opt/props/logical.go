@@ -136,7 +136,9 @@ type Relational struct {
 		// columns (e.g. Scan, Project). A pruning Project operator pushed down
 		// the tree must journey downwards until it finds a pruning-capable
 		// operator. If a column is part of PruneCols, then it is guaranteed that
-		// such an operator exists at the end of the journey.
+		// such an operator exists at the end of the journey. Operators that are
+		// not capable of filtering columns (like Explain) will not add any of
+		// their columns to this set.
 		PruneCols opt.ColSet
 	}
 }
@@ -229,9 +231,7 @@ func (p *Logical) FormatColList(
 //
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
-func (p *Logical) FormatCol(
-	buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID,
-) {
+func (p *Logical) FormatCol(buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID) {
 	if label == "" {
 		label = md.ColumnLabel(id)
 	}
