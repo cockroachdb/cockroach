@@ -17,6 +17,7 @@ package memo
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -81,7 +82,7 @@ type ScanOpDef struct {
 
 // CanProvideOrdering returns true if the scan operator returns rows that
 // satisfy the given required ordering.
-func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required Ordering) bool {
+func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering) bool {
 	// Scan naturally orders according to the order of the scanned index.
 	index := md.Table(s.Table).Index(s.Index)
 
@@ -116,14 +117,14 @@ type ExplainOpDef struct {
 	ColList opt.ColList
 
 	// Props stores the required physical properties for the enclosed expression.
-	Props PhysicalProps
+	Props props.Physical
 }
 
 // RowNumberDef defines the value of the Def private field of the RowNumber
 // operator.
 type RowNumberDef struct {
 	// Ordering denotes the required ordering of the input.
-	Ordering Ordering
+	Ordering props.Ordering
 
 	// ColID holds the id of the column introduced by this operator.
 	ColID opt.ColumnID
@@ -131,7 +132,7 @@ type RowNumberDef struct {
 
 // CanProvideOrdering returns true if the row number operator returns rows that
 // can satisfy the given required ordering.
-func (w *RowNumberDef) CanProvideOrdering(required Ordering) bool {
+func (w *RowNumberDef) CanProvideOrdering(required props.Ordering) bool {
 	// RowNumber can provide the same ordering it requires from its input.
 
 	// By construction, the ordinality is a key, and the output is always ordered
