@@ -57,9 +57,14 @@ type Code int
 
 // Color codes.
 const (
-	Red Code = iota
+	Black Code = iota
+	Red
+	Green
 	Yellow
+	Blue
+	Magenta
 	Cyan
+	White
 	Gray
 	Reset
 )
@@ -71,21 +76,31 @@ type Profile map[Code][]byte
 // For terminals with 8-color support.
 var profile8 = Profile{
 	// Keep these in the same order as the color codes above.
-	Red:    []byte("\033[0;31;49m"),
-	Yellow: []byte("\033[0;33;49m"),
-	Cyan:   []byte("\033[0;36;49m"),
-	Gray:   []byte("\033[2;37;49m"),
-	Reset:  []byte("\033[0m"),
+	Black:   []byte("\033[0;30;49m"),
+	Red:     []byte("\033[0;31;49m"),
+	Green:   []byte("\033[0;32;49m"),
+	Yellow:  []byte("\033[0;33;49m"),
+	Blue:    []byte("\033[0;34;49m"),
+	Magenta: []byte("\033[0;35;49m"),
+	Cyan:    []byte("\033[0;36;49m"),
+	White:   []byte("\033[0;37;49m"),
+	Gray:    []byte("\033[2;37;49m"),
+	Reset:   []byte("\033[0m"),
 }
 
 // For terminals with 256-color support.
 var profile256 = Profile{
 	// Keep these in the same order as the color codes above.
-	Red:    []byte("\033[38;5;160m"),
-	Yellow: []byte("\033[38;5;214m"),
-	Cyan:   []byte("\033[38;5;33m"),
-	Gray:   []byte("\033[38;5;246m"),
-	Reset:  []byte("\033[0m"),
+	Black:   []byte("\033[38;5;0m"),
+	Red:     []byte("\033[38;5;160m"),
+	Green:   []byte("\033[38;5;2m"),
+	Yellow:  []byte("\033[38;5;214m"),
+	Blue:    []byte("\033[38;5;4m"),
+	Magenta: []byte("\033[38;5;5m"),
+	Cyan:    []byte("\033[38;5;33m"),
+	White:   []byte("\033[38;5;315"),
+	Gray:    []byte("\033[38;5;246m"),
+	Reset:   []byte("\033[0m"),
 }
 
 // Stdout sets the color for future output to os.Stdout.
