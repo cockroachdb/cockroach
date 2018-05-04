@@ -373,7 +373,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// The expected behavior is for the pgServer to immediately cancel any
 		// ongoing sessions and wait for 1s for the cancellation to take effect.
 		if err := pgServer.DrainImpl(
-			0 /* drainWait */, 1*time.Second, /* cancelWait */
+			0 /* drainWait */, 2*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
