@@ -101,6 +101,44 @@ type Relational struct {
 	// Stats is the set of statistics that apply to this relational expression.
 	// See opt/statistics.go and statistics_builder.go for more details.
 	Stats opt.Statistics
+
+	// Rules encapsulates the set of properties that are maintained to assist
+	// with specific sets of transformation rules. They are not intended to be
+	// general purpose in nature. Typically, they're used by rules which need to
+	// decide whether to push operators down into the tree. These properties
+	// "bubble up" information about the subtree which can aid in that decision.
+	//
+	// Whereas the other logical relational properties are filled in by the memo
+	// package upon creation of a new memo group, the rules properties are filled
+	// in by one of the transformation packages, since deriving rule properties
+	// is so closely tied with maintenance of the rules that depend upon them.
+	Rules struct {
+		// PruneCols is the subset of output columns that can potentially be
+		// eliminated by one of the PruneCols normalization rules. Those rules
+		// operate by pushing a Project operator down the tree that discards
+		// unused columns. For example:
+		//
+		//   SELECT y FROM xyz WHERE x=1
+		//
+		// The z column is never referenced, either by the filter or by the
+		// final projection, and would be part of the PruneCols set.
+		//
+		// PruneCols is built bottom-up. It typically starts out containing the
+		// complete set of output columns in a leaf expression, but quickly
+		// empties out at higher levels of the expression tree as the columns
+		// are referenced. Drawing from the example above:
+		//
+		//   Project PruneCols: [z]
+		//   Select PruneCols : [y, z]
+		//   Scan PruneCols   : [x, y, z]
+		//
+		// Only a small number of relational operators are capable of pruning
+		// columns (e.g. Scan, Project). A pruning Project operator pushed down
+		// the tree must journey downwards until it finds a pruning-capable
+		// operator. If a column is part of PruneCols, then it is guaranteed that
+		// such an operator exists at the end of the journey.
+		PruneCols opt.ColSet
+	}
 }
 
 // Scalar properties are the subset of logical properties that are computed for

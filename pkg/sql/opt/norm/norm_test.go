@@ -40,8 +40,7 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
-
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRulesProps
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
