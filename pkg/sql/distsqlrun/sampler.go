@@ -66,7 +66,12 @@ var supportedSketchTypes = map[SketchType]struct{}{
 }
 
 func newSamplerProcessor(
-	flowCtx *FlowCtx, spec *SamplerSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *SamplerSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*samplerProcessor, error) {
 	for _, s := range spec.Sketches {
 		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
@@ -122,7 +127,7 @@ func newSamplerProcessor(
 	s.outTypes = outTypes
 
 	if err := s.init(
-		post, outTypes, flowCtx, output,
+		post, outTypes, flowCtx, processorID, output,
 		// this proc doesn't implement RowSource and doesn't use processorBase to drain
 		procStateOpts{},
 	); err != nil {

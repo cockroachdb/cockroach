@@ -132,6 +132,7 @@ type aggregatorBase struct {
 // are in aggregatorBase.
 func (ag *aggregatorBase) init(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *AggregatorSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -187,7 +188,7 @@ func (ag *aggregatorBase) init(
 		ag.outputTypes[i] = retType
 	}
 
-	return ag.processorBase.init(post, ag.outputTypes, flowCtx, output, procStateOpts{
+	return ag.processorBase.init(post, ag.outputTypes, flowCtx, processorID, output, procStateOpts{
 		inputsToDrain:        []RowSource{ag.input},
 		trailingMetaCallback: trailingMetaCallback,
 	})
@@ -239,19 +240,21 @@ const (
 
 func newAggregator(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *AggregatorSpec,
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
-		return newOrderedAggregator(flowCtx, spec, input, post, output)
+		return newOrderedAggregator(flowCtx, processorID, spec, input, post, output)
 	}
 
 	ag := &hashAggregator{buckets: make(map[string]aggregateFuncs)}
 
 	if err := ag.init(
 		flowCtx,
+		processorID,
 		spec,
 		input,
 		post,
@@ -269,6 +272,7 @@ func newAggregator(
 
 func newOrderedAggregator(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *AggregatorSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -278,6 +282,7 @@ func newOrderedAggregator(
 
 	if err := ag.init(
 		flowCtx,
+		processorID,
 		spec,
 		input,
 		post,

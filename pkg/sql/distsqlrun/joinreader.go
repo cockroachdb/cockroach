@@ -68,6 +68,7 @@ const joinReaderProcName = "join reader"
 
 func newJoinReader(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *JoinReaderSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -97,6 +98,7 @@ func newJoinReader(
 	if jr.isLookupJoin() {
 		if err := jr.joinerBase.init(
 			flowCtx,
+			processorID,
 			input.OutputTypes(),
 			jr.desc.ColumnTypes(),
 			sqlbase.InnerJoin,
@@ -112,7 +114,7 @@ func newJoinReader(
 		}
 	} else {
 		if err := jr.processorBase.init(
-			post, jr.desc.ColumnTypes(), flowCtx, output,
+			post, jr.desc.ColumnTypes(), flowCtx, processorID, output,
 			procStateOpts{}, // joinReader doesn't implement RowSource and so doesn't use it.
 		); err != nil {
 			return nil, err
