@@ -44,6 +44,10 @@ Use 'roachtest run -n' to see a list of all tests.
 				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
 			}
 
+			if count <= 0 {
+				return fmt.Errorf("--count (%d) must by greater than 0", count)
+			}
+
 			initBinaries()
 
 			r := newRegistry()
@@ -55,6 +59,8 @@ Use 'roachtest run -n' to see a list of all tests.
 
 	rootCmd.AddCommand(runCmd)
 
+	runCmd.Flags().IntVar(
+		&count, "count", 1, "the number of times to run each test")
 	runCmd.Flags().BoolVarP(
 		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
 	runCmd.Flags().BoolVarP(
