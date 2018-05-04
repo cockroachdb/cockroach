@@ -20,210 +20,220 @@
 # recursively reaches an operator that is capable of filtering columns, like
 # Scan or Project, and it will be merged into that operator.
 #
-# Pruning unused columns is not desirable if the Project operator "get stuck"
+# Pruning unused columns is not desirable if the Project operator "gets stuck"
 # during push down, and is unable to merge with another column filtering
 # operator. This situation causes the expression tree to become littered with
 # extra Project operators that impede pattern matching. To avoid this problem,
 # the RelationalProps.Rules.PruneCols property tracks columns which can be
 # pruned without requiring extra Project operators. The Prune rules use this to
 # only push down Project operators that are sure to merge into another operator
-# at the end of their journey.
+# at the end of their journey. See the PruneCols comment for more details.
 # =============================================================================
 
-# FilterUnusedProjectCols discards nested project columns that are never used.
-[FilterUnusedProjectCols, Normalize]
+
+# PruneProjectCols discards nested project columns that are never used.
+[PruneProjectCols, Normalize]
 (Project
     (Project
         $innerInput:*
         $innerProjections:*
     )
-    $projections:* & (HasUnusedColumns $innerProjections (NeededCols $projections))
+    $projections:* & (CanPruneCols $innerProjections (NeededCols $projections))
 )
 =>
 (Project
     (Project
         $innerInput
-        (FilterUnusedColumns $innerProjections (NeededCols $projections))
+        (PruneCols $innerProjections (NeededCols $projections))
     )
     $projections
 )
 
-# FilterUnusedScanCols discards Scan operator columns that are never used. The
-# needed columns are pushed down into the Scan's opt.ScanOpDef private.
-[FilterUnusedScanCols, Normalize]
+# PruneScanCols discards Scan operator columns that are never used. The needed
+#  columns are pushed down into the Scan's opt.ScanOpDef private.
+[PruneScanCols, Normalize]
 (Project
     $input:(Scan)
-    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+    $projections:* & (CanPruneCols $input (NeededCols $projections))
 )
 =>
 (Project
-    (FilterUnusedColumns $input (NeededCols $projections))
+    (PruneCols $input (NeededCols $projections))
     $projections
 )
 
-# FilterUnusedSelectCols discards Select input columns that are never used.
+# PruneSelectCols discards Select input columns that are never used.
 #
-# This rule triggers a cycle with the PushSelectIntoProject rule. Because this
-# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
-# gives the PushSelectIntoProject rule one last chance to push Select below
-# Project, and therefore causes the normal form to be (Project (Select)) rather
-# than (Select (Project)) when the choice is ambiguous. This and other rules
-# will try to push Project down as far as possible, but if it gets stopped along
-# the way, it will be ordered above Select.
-[FilterUnusedSelectCols, Normalize, DetectCycle]
+# While the PruneCols property should prevent this rule (which pushes Project
+# below Select) from cycling with the PushSelectIntoProject rule (which pushes
+# Select below Project), the DetectCycle flag is used anyway. This will prevent
+# cycles if existing or new bugs do not populate PruneCols correctly, and the
+# pushed-down Project doesn't get merged into another operator at the end of its
+# journey downwards.
+[PruneSelectCols, Normalize, DetectCycle]
 (Project
     (Select
         $input:*
         $filter:*
     )
-    $projections:* & (HasUnusedColumns $input (NeededCols2 $projections $filter))
+    $projections:* & (CanPruneCols $input (NeededCols2 $projections $filter))
 )
 =>
 (Project
     (Select
-        (FilterUnusedColumns $input (NeededCols2 $projections $filter))
+        (PruneCols $input (NeededCols2 $projections $filter))
         $filter
     )
     $projections
 )
 
-# FilterUnusedLimitCols discards Limit input columns that are never used.
+# PruneLimitCols discards Limit input columns that are never used.
 #
-# This rule triggers a cycle with the PushLimitIntoProject rule. That rule
-# has the DetectCycle tag to break the cycle. In addition, this rule uses
-# LimitNoCycle to minimize the overhead of detecting the cycle by creating a
-# Limit which will not match the PushLimitIntoProject rule (or any other rule
-# which has the DetectCycle tag).
-[FilterUnusedLimitCols, Normalize]
+# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
+# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
+# bug in building the PruneCols property.
+[PruneLimitCols, Normalize, DetectCycle]
 (Project
     (Limit
         $input:*
         $limit:*
         $ordering:*
     )
-    $projections:* & (HasUnusedColumns $input (NeededColsLimit $projections $ordering))
+    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
 )
 =>
 (Project
-    (LimitNoCycle
-        (FilterUnusedColumns $input (NeededColsLimit $projections $ordering))
+    (Limit
+        (PruneCols $input (NeededColsLimit $projections $ordering))
         $limit
         $ordering
     )
     $projections
 )
 
-# FilterUnusedOffsetCols discards Offset input columns that are never used.
+# PruneOffsetCols discards Offset input columns that are never used.
 #
-# This rule triggers a cycle with the PushOffsertIntoProject rule. That rule
-# has the DetectCycle tag to break the cycle. In addition, this rule uses
-# OffsetNoCycle to minimize the overhead of detecting the cycle by creating an
-# Offset which will not match the PushOffsetIntoProject rule (or any other rule
-# which has the DetectCycle tag).
-[FilterUnusedOffsetCols, Normalize]
+# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
+# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
+# bug in building the PruneCols property.
+[PruneOffsetCols, Normalize, DetectCycle]
 (Project
     (Offset
         $input:*
         $offset:*
         $ordering:*
     )
-    $projections:* & (HasUnusedColumns $input (NeededColsLimit $projections $ordering))
+    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
 )
 =>
 (Project
-    (OffsetNoCycle
-        (FilterUnusedColumns $input (NeededColsLimit $projections $ordering))
+    (Offset
+        (PruneCols $input (NeededColsLimit $projections $ordering))
         $offset
         $ordering
     )
     $projections
 )
 
-# FilterUnusedJoinLeftCols discards columns on the left side of a join that are
-# never used.
-[FilterUnusedJoinLeftCols, Normalize]
+# PruneJoinLeftCols discards columns on the left side of a join that are never
+# used.
+[PruneJoinLeftCols, Normalize]
 (Project
     $input:(Join
         $left:*
         $right:*
         $on:*
     )
-    $projections:* & (HasUnusedColumns $left (NeededCols3 $projections $right $on))
+    $projections:* & (CanPruneCols $left (NeededCols3 $projections $right $on))
 )
 =>
 (Project
     ((OpName $input)
-        (FilterUnusedColumns $left (NeededCols3 $projections $right $on))
+        (PruneCols $left (NeededCols3 $projections $right $on))
         $right
         $on
     )
     $projections
 )
 
-# FilterUnusedJoinRightCols discards columns on the right side of a join that
-# are never used.
-[FilterUnusedJoinRightCols, Normalize]
+# PruneJoinRightCols discards columns on the right side of a join that are never
+# used.
+[PruneJoinRightCols, Normalize]
 (Project
     $input:(Join
         $left:*
         $right:*
         $on:*
     )
-    $projections:* & (HasUnusedColumns $right (NeededCols2 $projections $on))
+    $projections:* & (CanPruneCols $right (NeededCols2 $projections $on))
 )
 =>
 (Project
     ((OpName $input)
         $left
-        (FilterUnusedColumns $right (NeededCols2 $projections $on))
+        (PruneCols $right (NeededCols2 $projections $on))
         $on
     )
     $projections
 )
 
-# FilterUnusedAggCols discards aggregation columns in a GroupBy that are never
-# used.
-[FilterUnusedAggCols, Normalize]
+# PruneAggCols discards aggregation columns in a GroupBy that are never used.
+[PruneAggCols, Normalize]
 (Project
     (GroupBy
-        $innerInput:*
+        $input:*
         $aggregations:*
         $groupingCols:*
     )
-    $projections:* & (HasUnusedColumns $aggregations (NeededCols $projections))
+    $projections:* & (CanPruneCols $aggregations (NeededCols $projections))
 )
 =>
 (Project
     (GroupBy
-        $innerInput
-        (FilterUnusedColumns $aggregations (NeededCols $projections))
+        $input
+        (PruneCols $aggregations (NeededCols $projections))
         $groupingCols
     )
     $projections
 )
 
-# FilterUnusedGroupByCols discards GroupBy input columns that are never used.
-[FilterUnusedGroupByCols, Normalize]
+# PruneGroupByCols discards GroupBy input columns that are never used.
+[PruneGroupByCols, Normalize]
 (GroupBy
     $input:*
     $aggregations:*
-    $groupingCols:* & (HasUnusedColumns $input (NeededColsGroupBy $aggregations $groupingCols))
+    $groupingCols:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
 )
 =>
 (GroupBy
-    (FilterUnusedColumns $input (NeededColsGroupBy $aggregations $groupingCols))
+    (PruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
     $aggregations
     $groupingCols
 )
 
-# FilterUnusedValuesCols discards Values columns that are never used.
-[FilterUnusedValuesCols, Normalize]
+# PruneValuesCols discards Values columns that are never used.
+[PruneValuesCols, Normalize]
 (Project
     $input:(Values)
-    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+    $projections:* & (CanPruneCols $input (NeededCols $projections))
 )
 =>
 (Project
-    (FilterUnusedColumns $input (NeededCols $projections))
+    (PruneCols $input (NeededCols $projections))
+    $projections
+)
+
+# PruneRowNumberCols discards RowNumber input columns that are never used.
+[PruneRowNumberCols, Normalize]
+(Project
+    (RowNumber $input:* $def:*)
+    $projections:* & (CanPruneCols $input (NeededColsRowNumber $projections $def))
+)
+=>
+(Project
+    (RowNumber
+        (PruneCols $input (NeededColsRowNumber $projections $def))
+        $def
+    )
     $projections
 )

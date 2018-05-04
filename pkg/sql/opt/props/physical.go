@@ -184,6 +184,15 @@ func (o Ordering) format(buf *bytes.Buffer) {
 	}
 }
 
+// ColSet returns the set of column IDs used in the ordering.
+func (o Ordering) ColSet() opt.ColSet {
+	var colSet opt.ColSet
+	for _, col := range o {
+		colSet.Add(int(col.ID()))
+	}
+	return colSet
+}
+
 // Provides returns true if the required ordering is a prefix of this ordering.
 func (o Ordering) Provides(required Ordering) bool {
 	if len(o) < len(required) {
