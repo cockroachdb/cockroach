@@ -26,6 +26,8 @@ import (
 )
 
 var (
+	columns = flag.Int("columns", 0, "check that N columns are actually decoded")
+
 	lineSep     = flag.String("lines-terminated-by", "\n", "line separator character")
 	fieldsSep   = flag.String("fields-terminated-by", "\t", "field separator character")
 	encloseChar = flag.String("fields-enclosed-by", "", "field enclosing character")
@@ -63,6 +65,7 @@ func main() {
 	dest := flag.Arg(1)
 
 	d := dumpReader{
+		width:          *columns,
 		fieldSep:       runeFromString(*fieldsSep),
 		rowSep:         runeFromString(*lineSep),
 		hasEncloseChar: *encloseChar != "",

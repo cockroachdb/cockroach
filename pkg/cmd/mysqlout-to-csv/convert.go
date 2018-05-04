@@ -18,7 +18,7 @@ package main
 import (
 	"bufio"
 	"io"
-	"unicode/utf8"
+	"unicode"
 
 	"github.com/pkg/errors"
 )
@@ -77,8 +77,8 @@ func (d *dumpReader) Process(in io.Reader) error {
 			}
 			return err
 		}
-		if c == utf8.RuneError && w == 1 {
-			return errors.New("Invalid UTF8")
+		if c == unicode.ReplacementChar && w == 1 {
+			return errors.New("Invalid unicode encoding")
 		}
 
 		// Do we need to check for escaping?
