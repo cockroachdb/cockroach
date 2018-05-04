@@ -63,6 +63,7 @@ type AppliedRuleFunc func(ruleName opt.RuleName, group memo.GroupID, added int)
 type Factory struct {
 	mem     *memo.Memo
 	evalCtx *tree.EvalContext
+	props   rulePropsBuilder
 
 	// ruleCycles is used to detect cyclical rule invocations. Each rule with
 	// the "DetectCycles" tag adds its expression fingerprint into this map
@@ -86,9 +87,11 @@ type Factory struct {
 // NewFactory returns a new Factory structure with a new, blank memo structure
 // inside.
 func NewFactory(evalCtx *tree.EvalContext) *Factory {
+	mem := memo.New()
 	return &Factory{
-		mem:        memo.New(),
+		mem:        mem,
 		evalCtx:    evalCtx,
+		props:      rulePropsBuilder{mem: mem},
 		ruleCycles: make(map[memo.Fingerprint]bool),
 	}
 }
@@ -137,7 +140,9 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
-	return f.mem.MemoizeNormExpr(f.evalCtx, e)
+	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
+	f.props.buildProps(memo.MakeNormExprView(f.mem, group))
+	return group
 }
 
 // ----------------------------------------------------------------------
@@ -149,6 +154,10 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 
 func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
 	return f.mem.LookupPrivate(private).(opt.ColList)
+}
+
+func (f *Factory) extractOrdering(private memo.PrivateID) props.Ordering {
+	return f.mem.LookupPrivate(private).(props.Ordering)
 }
 
 // ----------------------------------------------------------------------
@@ -432,40 +441,6 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 // with any aggregate functions operating over the entire input expression.
 func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
 	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
-}
-
-// ----------------------------------------------------------------------
-//
-// Project Rules
-//   Custom match and replace functions used with project.opt rules.
-//
-// ----------------------------------------------------------------------
-
-// projectNoCycle constructs a Project operator and adds its fingerprint to the
-// ruleCycles map. Rules which have the DetectCycle tag will see that the
-// expression is already in the map, and will not match. Adding to the map in
-// this way is purely a performance optimization, and is used in patterns where
-// it's known that re-matching the operator is unnecessary.
-func (f *Factory) projectNoCycle(input, projections memo.GroupID) memo.GroupID {
-	projectExpr := memo.MakeProjectExpr(input, projections)
-	f.ruleCycles[projectExpr.Fingerprint()] = true
-	return f.ConstructProject(input, projections)
-}
-
-// limitNoCycle is similar to projectNoCycle, except that it constructs a Limit
-// operator. See projectNoCycle for details.
-func (f *Factory) limitNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
-	limitExpr := memo.MakeLimitExpr(input, limit, ordering)
-	f.ruleCycles[limitExpr.Fingerprint()] = true
-	return f.ConstructLimit(input, limit, ordering)
-}
-
-// offsetNoCycle is similar to projectNoCycle, except that it constructs an
-// Offset operator. See projectNoCycle for details.
-func (f *Factory) offsetNoCycle(input, limit memo.GroupID, ordering memo.PrivateID) memo.GroupID {
-	offsetExpr := memo.MakeOffsetExpr(input, limit, ordering)
-	f.ruleCycles[offsetExpr.Fingerprint()] = true
-	return f.ConstructOffset(input, limit, ordering)
 }
 
 // ----------------------------------------------------------------------

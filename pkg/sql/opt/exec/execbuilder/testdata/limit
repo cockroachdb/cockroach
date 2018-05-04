@@ -83,13 +83,13 @@ EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                         ·            ·          (column4)         ·
  │                             render 0     column4    ·                 ·
- └── limit                     ·            ·          ("t.v", column4)  -"t.v"
-      │                        count        10         ·                 ·
-      └── sort                 ·            ·          ("t.v", column4)  -"t.v"
-           │                   order        -"t.v"     ·                 ·
-           └── render          ·            ·          ("t.v", column4)  ·
-                │              render 0     v          ·                 ·
-                │              render 1     agg0       ·                 ·
+ └── render                    ·            ·          (column4, "t.v")  ·
+      │                        render 0     agg0       ·                 ·
+      │                        render 1     v          ·                 ·
+      └── limit                ·            ·          (k, v, agg0)      -v
+           │                   count        10         ·                 ·
+           └── sort            ·            ·          (k, v, agg0)      -v
+                │              order        -v         ·                 ·
                 └── group      ·            ·          (k, v, agg0)      ·
                      │         aggregate 0  k          ·                 ·
                      │         aggregate 1  v          ·                 ·

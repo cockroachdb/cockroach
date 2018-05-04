@@ -22,15 +22,14 @@ TABLE b
 opt
 SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 ----
-inner-join
+project
  ├── columns: k:1(int!null) x:5(int)
  ├── stats: [rows=100]
  ├── cost: 2100.00
- ├── project
- │    ├── columns: a.k:1(int!null)
- │    ├── stats: [rows=1]
- │    ├── cost: 1100.00
- │    ├── keys: (1)
+ ├── inner-join
+ │    ├── columns: a.k:1(int!null) a.d:4(decimal!null) b.x:5(int)
+ │    ├── stats: [rows=100]
+ │    ├── cost: 2100.00
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
  │    │    ├── stats: [rows=1, distinct(4)=1]
@@ -45,13 +44,14 @@ inner-join
  │    │         └── eq [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
  │    │              ├── variable: a.d [type=decimal, outer=(4)]
  │    │              └── const: 1.0 [type=decimal]
- │    └── projections [outer=(1)]
- │         └── variable: a.k [type=int, outer=(1)]
- ├── scan b
- │    ├── columns: b.x:5(int)
- │    ├── stats: [rows=1000]
- │    └── cost: 1000.00
- └── filters [type=bool, outer=(1,5)]
-      └── eq [type=bool, outer=(1,5)]
-           ├── variable: a.k [type=int, outer=(1)]
-           └── variable: b.x [type=int, outer=(5)]
+ │    ├── scan b
+ │    │    ├── columns: b.x:5(int)
+ │    │    ├── stats: [rows=1000]
+ │    │    └── cost: 1000.00
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.k [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(1,5)]
+      ├── variable: a.k [type=int, outer=(1)]
+      └── variable: b.x [type=int, outer=(5)]

@@ -102,7 +102,7 @@ type Relational struct {
 	// See opt/statistics.go and statistics_builder.go for more details.
 	Stats opt.Statistics
 
-	// Rules encapsulates the set of properties that are maintained to assist
+	// Rule encapsulates the set of properties that are maintained to assist
 	// with specific sets of transformation rules. They are not intended to be
 	// general purpose in nature. Typically, they're used by rules which need to
 	// decide whether to push operators down into the tree. These properties
@@ -112,31 +112,39 @@ type Relational struct {
 	// package upon creation of a new memo group, the rules properties are filled
 	// in by one of the transformation packages, since deriving rule properties
 	// is so closely tied with maintenance of the rules that depend upon them.
-	Rules struct {
+	// For example, the PruneCols set is connected to the PruneCols normalization
+	// rules. The decision about which columns to add to PruneCols depends upon
+	// what works best for those rules. Neither the rules nor their properties
+	// can be considered in isolation, without considering the other.
+	Rule struct {
 		// PruneCols is the subset of output columns that can potentially be
 		// eliminated by one of the PruneCols normalization rules. Those rules
 		// operate by pushing a Project operator down the tree that discards
 		// unused columns. For example:
 		//
-		//   SELECT y FROM xyz WHERE x=1
+		//   SELECT y FROM xyz WHERE x=1 ORDER BY y LIMIT 1
 		//
 		// The z column is never referenced, either by the filter or by the
-		// final projection, and would be part of the PruneCols set.
+		// limit, and would be part of the PruneCols set for the Limit operator.
+		// The final Project operator could then push down a pruning Project
+		// operator that eliminated the z column from its subtree.
 		//
 		// PruneCols is built bottom-up. It typically starts out containing the
 		// complete set of output columns in a leaf expression, but quickly
 		// empties out at higher levels of the expression tree as the columns
 		// are referenced. Drawing from the example above:
 		//
-		//   Project PruneCols: [z]
-		//   Select PruneCols : [y, z]
-		//   Scan PruneCols   : [x, y, z]
+		//   Limit PruneCols : [z]
+		//   Select PruneCols: [y, z]
+		//   Scan PruneCols  : [x, y, z]
 		//
 		// Only a small number of relational operators are capable of pruning
 		// columns (e.g. Scan, Project). A pruning Project operator pushed down
 		// the tree must journey downwards until it finds a pruning-capable
 		// operator. If a column is part of PruneCols, then it is guaranteed that
-		// such an operator exists at the end of the journey.
+		// such an operator exists at the end of the journey. Operators that are
+		// not capable of filtering columns (like Explain) will not add any of
+		// their columns to this set.
 		PruneCols opt.ColSet
 	}
 }
@@ -229,9 +237,7 @@ func (p *Logical) FormatColList(
 //
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
-func (p *Logical) FormatCol(
-	buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID,
-) {
+func (p *Logical) FormatCol(buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID) {
 	if label == "" {
 		label = md.ColumnLabel(id)
 	}
