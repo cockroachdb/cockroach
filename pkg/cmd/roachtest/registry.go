@@ -18,7 +18,7 @@ package main
 func registerTests(r *registry) {
 	// Helpful shell pipeline to generate the list below:
 	//
-	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | sort | awk '{printf "\t%s(r)\n", $0}'
+	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep -v '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
 
 	registerAllocator(r)
 	registerBackup(r)
@@ -44,4 +44,12 @@ func registerTests(r *registry) {
 	registerTPCC(r)
 	registerUpgrade(r)
 	registerVersion(r)
+}
+
+func registerBenchmarks(r *registry) {
+	// Helpful shell pipeline to generate the list below:
+	//
+	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
+
+	registerTPCCBench(r)
 }
