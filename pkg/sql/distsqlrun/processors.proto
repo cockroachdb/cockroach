@@ -154,6 +154,9 @@ message ValuesCoreSpec {
   // There is one DatumInfo for each element in a row.
   repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
 
+  // The number of rows is especially useful when we have zero columns.
+  optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
+
   // Each raw block encodes one or more data rows; each datum is encoded
   // according to the corresponding DatumInfo.
   repeated bytes raw_bytes = 2;
