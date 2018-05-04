@@ -37,6 +37,7 @@ import (
 
 var (
 	parallelism   = 10
+	count         = 1
 	debug         = false
 	dryrun        = false
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -51,7 +52,7 @@ type testSpec struct {
 }
 
 type registry struct {
-	m              map[string]*test
+	m              map[string]*testSpec
 	clusters       map[string]string
 	out            io.Writer
 	statusInterval time.Duration
@@ -59,7 +60,7 @@ type registry struct {
 
 func newRegistry() *registry {
 	return &registry{
-		m:        make(map[string]*test),
+		m:        make(map[string]*testSpec),
 		clusters: make(map[string]string),
 		out:      os.Stdout,
 	}
@@ -86,14 +87,14 @@ func (r *registry) Add(spec testSpec) {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
 	}
-	r.m[spec.Name] = &test{spec: &spec}
+	r.m[spec.Name] = &spec
 	if err := r.verifyClusterName(spec.Name); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 }
 
-func (r *registry) List(filter []string) []*test {
+func (r *registry) List(filter []string) []*testSpec {
 	if len(filter) == 0 {
 		filter = []string{"."}
 	}
@@ -102,11 +103,11 @@ func (r *registry) List(filter []string) []*test {
 		re[i] = regexp.MustCompile(filter[i])
 	}
 
-	var results []*test
+	var results []*testSpec
 	for _, t := range r.m {
 		var matched bool
 		for _, r := range re {
-			if r.MatchString(t.Name()) {
+			if r.MatchString(t.Name) {
 				matched = true
 				break
 			}
@@ -117,7 +118,7 @@ func (r *registry) List(filter []string) []*test {
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name() < results[j].Name()
+		return results[i].Name < results[j].Name
 	})
 	return results
 }
@@ -125,7 +126,7 @@ func (r *registry) List(filter []string) []*test {
 func (r *registry) Run(filter []string) int {
 	tests := r.List(filter)
 	wg := &sync.WaitGroup{}
-	wg.Add(len(tests))
+	wg.Add(count * len(tests))
 
 	// We can't run tests in parallel on local clusters or on an existing
 	// cluster.
@@ -150,29 +151,31 @@ func (r *registry) Run(filter []string) int {
 
 	go func() {
 		sem := make(chan struct{}, parallelism)
-		for i := range tests {
-			t := tests[i]
-			sem <- struct{}{}
-			if teamCity {
-				fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
-			} else {
-				fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
-			}
-			status.Lock()
-			status.running[t] = struct{}{}
-			status.Unlock()
-			t.run(r.out, func(failed bool) {
-				status.Lock()
-				delete(status.running, t)
-				if failed {
-					status.fail[t] = struct{}{}
+		for j := 0; j < count; j++ {
+			for i := range tests {
+				t := &test{spec: tests[i]}
+				sem <- struct{}{}
+				if teamCity {
+					fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
 				} else {
-					status.pass[t] = struct{}{}
+					fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
 				}
+				status.Lock()
+				status.running[t] = struct{}{}
 				status.Unlock()
-				wg.Done()
-				<-sem
-			})
+				t.run(r.out, func(failed bool) {
+					status.Lock()
+					delete(status.running, t)
+					if failed {
+						status.fail[t] = struct{}{}
+					} else {
+						status.pass[t] = struct{}{}
+					}
+					status.Unlock()
+					wg.Done()
+					<-sem
+				})
+			}
 		}
 	}()
 
