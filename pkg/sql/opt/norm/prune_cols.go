@@ -17,7 +17,6 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // neededCols returns the set of columns needed by the given group. It is an
@@ -49,37 +48,61 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 // neededColsLimit unions the columns needed by Projections with the columns in
 // the Ordering of a Limit/Offset operator.
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
-	colSet := f.outerCols(projections).Copy()
-	for _, col := range f.mem.LookupPrivate(ordering).(props.Ordering) {
-		colSet.Add(int(col.ID()))
+	return f.outerCols(projections).Union(f.extractOrdering(ordering).ColSet())
+}
+
+// neededColsRowNumber unions the columns needed by Projections with the columns
+// in the Ordering of a RowNumber operator.
+func (f *Factory) neededColsRowNumber(projections memo.GroupID, def memo.PrivateID) opt.ColSet {
+	rowNumberDef := f.mem.LookupPrivate(def).(*memo.RowNumberDef)
+	return f.outerCols(projections).Union(rowNumberDef.Ordering.ColSet())
+}
+
+// canPrune returns true if the target group has extra columns that are not
+// needed at this level of the tree, and can be eliminated by one of the
+// PruneCols rules. canPrune uses the PruneCols property to determine the set of
+// columns which can be pruned, and subtracts the given set of additional needed
+// columns from that. See the props.Relational.Rule.PruneCols comment for more
+// details.
+func (f *Factory) canPruneCols(target memo.GroupID, neededCols opt.ColSet) bool {
+	return !f.candidatePruneCols(target).Difference(neededCols).Empty()
+}
+
+// candidatePruneCols returns the subset of the given target group's output
+// columns that can be pruned. Projections and Aggregations return all output
+// columns, since they are projecting a new set of columns that haven't yet been
+// used, and therefore are all possible candidates for pruning. Relational
+// expressions consult the PruneCols property, which has been built bottom-up to
+// only include columns that are candidates for pruning.
+func (f *Factory) candidatePruneCols(target memo.GroupID) opt.ColSet {
+	switch f.mem.NormExpr(target).Operator() {
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		return f.outputCols(target)
 	}
-	return colSet
+	return f.lookupLogical(target).Relational.Rule.PruneCols
 }
 
-// hasUnusedColumns returns true if the target group has additional columns
-// that are not part of the neededCols set.
-func (f *Factory) hasUnusedColumns(target memo.GroupID, neededCols opt.ColSet) bool {
-	return !f.outputCols(target).Difference(neededCols).Empty()
-}
-
-// filterUnusedColumns creates an expression that discards any outputs columns
-// of the given group that are not used. If the target expression type supports
-// column filtering (like Scan, Values, Projections, etc.), then create a new
-// instance of that operator that does the filtering. Otherwise, construct a
-// Project operator that wraps the operator and does the filtering.
-func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet) memo.GroupID {
+// pruneCols creates an expression that discards any outputs columns of the
+// given group that are not used. If the target expression type supports column
+// filtering (like Scan, Values, Projections, etc.), then create a new instance
+// of that operator that does the filtering. Otherwise, construct a Project
+// operator that wraps the operator and does the filtering. The new Project
+// operator will be pushed down the tree until it merges with another operator
+// that supports column filtering.
+func (f *Factory) pruneCols(target memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	targetExpr := f.mem.NormExpr(target)
 	switch targetExpr.Operator() {
 	case opt.ScanOp:
-		return f.filterUnusedScanColumns(target, neededCols)
+		return f.pruneScanCols(target, neededCols)
 
 	case opt.ValuesOp:
-		return f.filterUnusedValuesColumns(target, neededCols)
+		return f.pruneValuesCols(target, neededCols)
 	}
 
-	// Get the subset of the target group's output columns that are in the
-	// needed set (and discard those that aren't).
-	colSet := f.outputCols(target).Intersection(neededCols)
+	// Get the subset of the target group's output columns that should not be
+	// pruned. Don't prune if the target output column is needed by a higher-
+	// level expression, or if it's not part of the PruneCols set.
+	colSet := f.outputCols(target).Difference(f.candidatePruneCols(target).Difference(neededCols))
 	cnt := colSet.Len()
 
 	// Create a new list of groups to project, along with the list of column
@@ -131,9 +154,9 @@ func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet
 	return f.ConstructProject(target, projections)
 }
 
-// filterUnusedScanColumns constructs a new Scan operator based on the given
-// existing Scan operator, but projecting only the needed columns.
-func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
+// pruneScanCols constructs a new Scan operator based on the given existing Scan
+// operator, but projecting only the needed columns.
+func (f *Factory) pruneScanCols(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	colSet := f.outputCols(scan).Intersection(neededCols)
 	scanExpr := f.mem.NormExpr(scan).AsScan()
 	existing := f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
@@ -141,12 +164,10 @@ func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColS
 	return f.ConstructScan(f.mem.InternScanOpDef(&new))
 }
 
-// filterUnusedValuesColumns constructs a new Values operator based on the
-// given existing Values operator. The new operator will have the same set of
-// rows, but containing only the needed columns. Other columns are discarded.
-func (f *Factory) filterUnusedValuesColumns(
-	values memo.GroupID, neededCols opt.ColSet,
-) memo.GroupID {
+// pruneValuesCols constructs a new Values operator based on the given existing
+// Values operator. The new operator will have the same set of rows, but
+// containing only the needed columns. Other columns are discarded.
+func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	valuesExpr := f.mem.NormExpr(values).AsValues()
 	existingCols := f.extractColList(valuesExpr.Cols())
 	newCols := make(opt.ColList, 0, neededCols.Len())

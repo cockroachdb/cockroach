@@ -252,8 +252,8 @@ const (
 	// ExprFmtHideKeys does not show keys in the output.
 	ExprFmtHideKeys
 
-	// ExprFmtHideRulesProps does not show rule-specific properties in the output.
-	ExprFmtHideRulesProps
+	// ExprFmtHideRuleProps does not show rule-specific properties in the output.
+	ExprFmtHideRuleProps
 
 	// ExprFmtHideAll shows only the most basic properties of the expression.
 	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
@@ -394,9 +394,9 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
 
-	if !flags.HasFlags(ExprFmtHideRulesProps) {
-		if !logProps.Relational.Rules.PruneCols.Empty() {
-			tp.Childf("prune: %s", logProps.Relational.Rules.PruneCols.String())
+	if !flags.HasFlags(ExprFmtHideRuleProps) {
+		if !logProps.Relational.Rule.PruneCols.Empty() {
+			tp.Childf("prune: %s", logProps.Relational.Rule.PruneCols.String())
 		}
 	}
 

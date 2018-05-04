@@ -91,7 +91,7 @@ func TestExecBuild(t *testing.T) {
 			defer eng.Close()
 
 			tester := testutils.NewOptTester(eng.Catalog(), d.Input)
-			tester.Flags.ExprFormat = memo.ExprFmtHideRulesProps
+			tester.Flags.ExprFormat = memo.ExprFmtHideRuleProps
 
 			var rowSort bool
 			var partialSortColumns []int
