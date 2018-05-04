@@ -1011,18 +1011,22 @@ var csvOutputTypes = []sqlbase.ColumnType{
 }
 
 func newReadCSVProcessor(
-	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
+	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
+	spec distsqlrun.ReadCSVSpec,
+	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
-		flowCtx:    flowCtx,
-		csvOptions: spec.Options,
-		sampleSize: spec.SampleSize,
-		tableDesc:  spec.TableDesc,
-		uri:        spec.Uri,
-		output:     output,
-		settings:   flowCtx.Settings,
-		registry:   flowCtx.JobRegistry,
-		progress:   spec.Progress,
+		flowCtx:     flowCtx,
+		processorID: processorID,
+		csvOptions:  spec.Options,
+		sampleSize:  spec.SampleSize,
+		tableDesc:   spec.TableDesc,
+		uri:         spec.Uri,
+		output:      output,
+		settings:    flowCtx.Settings,
+		registry:    flowCtx.JobRegistry,
+		progress:    spec.Progress,
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1031,16 +1035,17 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
-	flowCtx    *distsqlrun.FlowCtx
-	csvOptions roachpb.CSVOptions
-	sampleSize int32
-	tableDesc  sqlbase.TableDescriptor
-	uri        map[int32]string
-	out        distsqlrun.ProcOutputHelper
-	output     distsqlrun.RowReceiver
-	settings   *cluster.Settings
-	registry   *jobs.Registry
-	progress   distsqlrun.JobProgress
+	flowCtx     *distsqlrun.FlowCtx
+	processorID int32
+	csvOptions  roachpb.CSVOptions
+	sampleSize  int32
+	tableDesc   sqlbase.TableDescriptor
+	uri         map[int32]string
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
+	settings    *cluster.Settings
+	registry    *jobs.Registry
+	progress    distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -1203,12 +1208,14 @@ var sstOutputTypes = []sqlbase.ColumnType{
 
 func newSSTWriterProcessor(
 	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
 	spec distsqlrun.SSTWriterSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
 		flowCtx:     flowCtx,
+		processorID: processorID,
 		spec:        spec,
 		input:       input,
 		output:      output,
@@ -1226,6 +1233,7 @@ func newSSTWriterProcessor(
 
 type sstWriter struct {
 	flowCtx     *distsqlrun.FlowCtx
+	processorID int32
 	spec        distsqlrun.SSTWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper

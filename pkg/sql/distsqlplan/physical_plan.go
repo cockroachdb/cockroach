@@ -69,7 +69,8 @@ type Stream struct {
 // unconnected output routers of a subset of processors; all these routers
 // output the same kind of data (same schema).
 type PhysicalPlan struct {
-	// Processors in the plan.
+	// Processors in the plan. Add processors through AddProcessor rather than
+	// appending directly.
 	Processors []Processor
 
 	// Streams accumulates the streams in the plan - both local (intra-node) and
@@ -105,8 +106,9 @@ type PhysicalPlan struct {
 	// want to pay this cost if we don't have multiple streams to merge.
 	MergeOrdering distsqlrun.Ordering
 
-	// Used internally for numbering stages.
-	stageCounter int32
+	// Used internally for numbering stages and processors.
+	stageCounter     int32
+	processorCounter int32
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.
@@ -116,9 +118,12 @@ func (p *PhysicalPlan) NewStageID() int32 {
 }
 
 // AddProcessor adds a processor to a PhysicalPlan and returns the index that
-// can be used to refer to that processor.
+// can be used to refer to that processor. A ProcessorID is generated for this
+// processor.
 func (p *PhysicalPlan) AddProcessor(proc Processor) ProcessorIdx {
 	idx := ProcessorIdx(len(p.Processors))
+	p.processorCounter++
+	proc.Spec.ProcessorID = p.processorCounter
 	p.Processors = append(p.Processors, proc)
 	return idx
 }
@@ -766,14 +771,18 @@ func MergePlans(
 		mergedPlan.Streams[i].DestProcessor += rightProcStart
 	}
 
-	// Renumber the stages from the right plan.
+	// Renumber the stages and processors from the right plan.
 	for i := rightProcStart; int(i) < len(mergedPlan.Processors); i++ {
 		s := &mergedPlan.Processors[i].Spec
 		if s.StageID != 0 {
 			s.StageID += left.stageCounter
 		}
+		if s.ProcessorID != 0 {
+			s.ProcessorID += left.processorCounter
+		}
 	}
 	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
+	mergedPlan.processorCounter = left.processorCounter + right.processorCounter
 
 	leftRouters = left.ResultRouters
 	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)
@@ -841,7 +850,9 @@ func (p *PhysicalPlan) AddJoinStage(
 				StageID: stageID,
 			},
 		}
-		p.Processors = append(p.Processors, proc)
+		// TODO(asubiotto): Any reason why AddProcessor wasn't called?
+		//p.Processors = append(p.Processors, proc)
+		p.AddProcessor(proc)
 	}
 
 	if len(nodes) > 1 {

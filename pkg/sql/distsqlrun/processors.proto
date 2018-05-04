@@ -70,6 +70,9 @@ message ProcessorSpec {
   // useful for plan diagrams.
   optional int32 stage_id = 5 [(gogoproto.nullable) = false,
                                (gogoproto.customname) = "StageID"];
+
+  optional int32 processor_id = 6 [(gogoproto.nullable) = false,
+                                  (gogoproto.customname) = "ProcessorID"];
 }
 
 // PostProcessSpec describes the processing required to obtain the output

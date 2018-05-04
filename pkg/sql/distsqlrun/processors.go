@@ -20,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -484,6 +486,8 @@ func (h *ProcOutputHelper) consumerClosed() {
 //   }
 //
 type processorBase struct {
+	processorID int32
+
 	out     ProcOutputHelper
 	flowCtx *FlowCtx
 
@@ -752,10 +756,12 @@ func (pb *processorBase) init(
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
 	flowCtx *FlowCtx,
+	processorID int32,
 	output RowReceiver,
 	opts procStateOpts,
 ) error {
 	pb.flowCtx = flowCtx
+	pb.processorID = processorID
 	pb.evalCtx = flowCtx.NewEvalCtx()
 	pb.trailingMetaCallback = opts.trailingMetaCallback
 	pb.inputsToDrain = opts.inputsToDrain
@@ -766,13 +772,14 @@ func (pb *processorBase) init(
 // annotated context that's also stored in pb.ctx.
 func (pb *processorBase) startInternal(ctx context.Context, name string) context.Context {
 	logTag := procNameToLogTag[name]
-	if logTag != "" {
-		pb.ctx = log.WithLogTag(ctx, logTag, nil)
-	} else {
-		pb.ctx = ctx
-	}
+	logTag += fmt.Sprintf("/%d", pb.processorID)
+	pb.ctx = log.WithLogTag(ctx, logTag, nil)
+
 	pb.origCtx = pb.ctx
 	pb.ctx, pb.span = processorSpan(pb.ctx, name)
+	if pb.span != nil {
+		pb.span.SetTag("cockroach.processorid", pb.processorID)
+	}
 	pb.evalCtx.CtxProvider = tree.FixedCtxProvider{Context: pb.ctx}
 	return pb.ctx
 }
@@ -853,6 +860,7 @@ func processorSpan(ctx context.Context, name string) (context.Context, opentraci
 func newProcessor(
 	ctx context.Context,
 	flowCtx *FlowCtx,
+	processorID int32,
 	core *ProcessorCoreUnion,
 	post *PostProcessSpec,
 	inputs []RowSource,
@@ -862,53 +870,53 @@ func newProcessor(
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newNoopProcessor(flowCtx, inputs[0], post, outputs[0])
+		return newNoopProcessor(flowCtx, processorID, inputs[0], post, outputs[0])
 	}
 	if core.Values != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		return newValuesProcessor(flowCtx, core.Values, post, outputs[0])
+		return newValuesProcessor(flowCtx, processorID, core.Values, post, outputs[0])
 	}
 	if core.TableReader != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
 		if core.TableReader.IsCheck {
-			return newScrubTableReader(flowCtx, core.TableReader, post, outputs[0])
+			return newScrubTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 		}
-		return newTableReader(flowCtx, core.TableReader, post, outputs[0])
+		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
 	if core.JoinReader != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newJoinReader(flowCtx, core.JoinReader, inputs[0], post, outputs[0])
+		return newJoinReader(flowCtx, processorID, core.JoinReader, inputs[0], post, outputs[0])
 	}
 	if core.Sorter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSorter(ctx, flowCtx, core.Sorter, inputs[0], post, outputs[0])
+		return newSorter(ctx, flowCtx, processorID, core.Sorter, inputs[0], post, outputs[0])
 	}
 	if core.Distinct != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newDistinct(flowCtx, core.Distinct, inputs[0], post, outputs[0])
+		return newDistinct(flowCtx, processorID, core.Distinct, inputs[0], post, outputs[0])
 	}
 	if core.Aggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newAggregator(flowCtx, core.Aggregator, inputs[0], post, outputs[0])
+		return newAggregator(flowCtx, processorID, core.Aggregator, inputs[0], post, outputs[0])
 	}
 	if core.MergeJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
 		return newMergeJoiner(
-			flowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
+			flowCtx, processorID, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
 		)
 	}
 	if core.InterleavedReaderJoiner != nil {
@@ -916,14 +924,14 @@ func newProcessor(
 			return nil, err
 		}
 		return newInterleavedReaderJoiner(
-			flowCtx, core.InterleavedReaderJoiner, post, outputs[0],
+			flowCtx, processorID, core.InterleavedReaderJoiner, post, outputs[0],
 		)
 	}
 	if core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err
 		}
-		return newHashJoiner(flowCtx, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
+		return newHashJoiner(flowCtx, processorID, core.HashJoiner, inputs[0], inputs[1], post, outputs[0])
 	}
 	if core.Backfiller != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
@@ -931,22 +939,22 @@ func newProcessor(
 		}
 		switch core.Backfiller.Type {
 		case BackfillerSpec_Index:
-			return newIndexBackfiller(flowCtx, *core.Backfiller, post, outputs[0])
+			return newIndexBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		case BackfillerSpec_Column:
-			return newColumnBackfiller(flowCtx, *core.Backfiller, post, outputs[0])
+			return newColumnBackfiller(flowCtx, processorID, *core.Backfiller, post, outputs[0])
 		}
 	}
 	if core.Sampler != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSamplerProcessor(flowCtx, core.Sampler, inputs[0], post, outputs[0])
+		return newSamplerProcessor(flowCtx, processorID, core.Sampler, inputs[0], post, outputs[0])
 	}
 	if core.SampleAggregator != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newSampleAggregator(flowCtx, core.SampleAggregator, inputs[0], post, outputs[0])
+		return newSampleAggregator(flowCtx, processorID, core.SampleAggregator, inputs[0], post, outputs[0])
 	}
 	if core.ReadCSV != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
@@ -955,7 +963,7 @@ func newProcessor(
 		if NewReadCSVProcessor == nil {
 			return nil, errors.New("ReadCSV processor unimplemented")
 		}
-		return NewReadCSVProcessor(flowCtx, *core.ReadCSV, outputs[0])
+		return NewReadCSVProcessor(flowCtx, processorID, *core.ReadCSV, outputs[0])
 	}
 	if core.SSTWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -964,7 +972,7 @@ func newProcessor(
 		if NewSSTWriterProcessor == nil {
 			return nil, errors.New("SSTWriter processor unimplemented")
 		}
-		return NewSSTWriterProcessor(flowCtx, *core.SSTWriter, inputs[0], outputs[0])
+		return NewSSTWriterProcessor(flowCtx, processorID, *core.SSTWriter, inputs[0], outputs[0])
 	}
 	if core.CSVWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -973,20 +981,22 @@ func newProcessor(
 		if NewCSVWriterProcessor == nil {
 			return nil, errors.New("CSVWriter processor unimplemented")
 		}
-		return NewCSVWriterProcessor(flowCtx, *core.CSVWriter, inputs[0], outputs[0])
+		return NewCSVWriterProcessor(flowCtx, processorID, *core.CSVWriter, inputs[0], outputs[0])
 	}
 	if core.MetadataTestSender != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
-		return newMetadataTestSender(flowCtx, inputs[0], post, outputs[0], core.MetadataTestSender.ID)
+		// TODO(asubiotto): We're probably duplicating some functionality here with
+		// the sender id.
+		return newMetadataTestSender(flowCtx, processorID, inputs[0], post, outputs[0], core.MetadataTestSender.ID)
 	}
 	if core.MetadataTestReceiver != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
 			return nil, err
 		}
 		return newMetadataTestReceiver(
-			flowCtx, inputs[0], post, outputs[0], core.MetadataTestReceiver.SenderIDs,
+			flowCtx, processorID, inputs[0], post, outputs[0], core.MetadataTestReceiver.SenderIDs,
 		)
 	}
 	return nil, errors.Errorf("unsupported processor core %s", core)
@@ -994,14 +1004,14 @@ func newProcessor(
 
 // NewReadCSVProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
+var NewReadCSVProcessor func(*FlowCtx, int32, ReadCSVSpec, RowReceiver) (Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewSSTWriterProcessor func(*FlowCtx, SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewSSTWriterProcessor func(*FlowCtx, int32, SSTWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // NewCSVWriterProcessor is externally implemented.
-var NewCSVWriterProcessor func(*FlowCtx, CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
+var NewCSVWriterProcessor func(*FlowCtx, int32, CSVWriterSpec, RowSource, RowReceiver) (Processor, error)
 
 // Equals returns true if two aggregation specifiers are identical (and thus
 // will always yield the same result).
