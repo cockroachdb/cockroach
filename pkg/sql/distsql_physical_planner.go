@@ -2174,6 +2174,7 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 	}
 	defer n.Close(planCtx.ctx)
 
+	s.NumRows = uint64(n.rows.Len())
 	s.RawBytes = make([][]byte, n.rows.Len())
 	for i := 0; i < n.rows.Len(); i++ {
 		if next, err := n.Next(runParams{ctx: planCtx.ctx}); !next {

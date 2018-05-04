@@ -151,8 +151,12 @@ message MetadataTestReceiverSpec {
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
 // "pre-canned" rows. This is not intended to be used for very large datasets.
 message ValuesCoreSpec {
-  // There is one DatumInfo for each element in a row.
+  // There is one DatumInfo for each element in a row. Can be empty, in which
+  // case raw_bytes must be empty.
   repeated DatumInfo columns = 1 [(gogoproto.nullable) = false];
+
+  // The number of rows is especially useful when we have zero columns.
+  optional uint64 num_rows = 3 [(gogoproto.nullable) = false];
 
   // Each raw block encodes one or more data rows; each datum is encoded
   // according to the corresponding DatumInfo.
