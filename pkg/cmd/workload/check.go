@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var checkCmd = &cobra.Command{
+var checkCmd = setCmdDefaults(&cobra.Command{
 	Use:   `check`,
 	Short: `Check a running cluster's data for consistency`,
-}
+})
 
 func init() {
 	for _, meta := range workload.Registered() {
@@ -53,10 +53,10 @@ func init() {
 			}
 		}
 
-		genCheckCmd := &cobra.Command{
+		genCheckCmd := setCmdDefaults(&cobra.Command{
 			Use:  meta.Name + ` [CRDB URI]`,
 			Args: cobra.RangeArgs(0, 1),
-		}
+		})
 		genCheckCmd.Flags().AddFlagSet(genFlags)
 		genCheckCmd.Run = cmdHelper(gen, check)
 		checkCmd.AddCommand(genCheckCmd)
