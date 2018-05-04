@@ -74,7 +74,6 @@ type adminServer struct {
 	server     *Server
 	memMonitor mon.BytesMonitor
 	memMetrics *sql.MemoryMetrics
-	executor   *sql.InternalExecutor
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
@@ -84,8 +83,8 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
-	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics, executor: ie}
+func newAdminServer(s *Server) *adminServer {
+	server := &adminServer{server: s, memMetrics: &s.adminMemMetrics}
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.MakeUnlimitedMonitor(
@@ -150,36 +149,21 @@ func (s *adminServer) isNotFoundError(err error) bool {
 	return err != nil && strings.HasSuffix(err.Error(), "does not exist")
 }
 
-// NewContextAndSessionForRPC creates a context and SQL session to be used for
-// serving an RPC request.
-// The session will be initialized with a context derived from the returned one.
-func (s *adminServer) NewContextAndSessionForRPC(
-	ctx context.Context, args sql.SessionArgs,
-) (context.Context, *sql.Session) {
-	ctx = propagateGatewayMetadata(ctx)
-	ctx = s.server.AnnotateCtx(ctx)
-	session := sql.NewSession(
-		ctx, args, s.server.sqlExecutor, s.memMetrics, nil /* conn */)
-	session.StartMonitor(&s.memMonitor, mon.BoundAccount{})
-	return ctx, session
-}
-
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
 ) (*serverpb.DatabasesResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, "SHOW DATABASES;", nil, 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admi-show-db", nil /* txn */, args, "SHOW DATABASES",
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
 	var resp serverpb.DatabasesResponse
-	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-		row := r.ResultList[0].Rows.At(i)
+	for _, row := range rows {
 		dbDatum, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
@@ -196,26 +180,26 @@ func (s *adminServer) Databases(
 func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (*serverpb.DatabaseDetailsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
 	//
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
-	query := fmt.Sprintf("SHOW GRANTS ON DATABASE %s; SHOW TABLES FROM %s;", escDBName, escDBName)
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 2)
+
+	// Marshal grants.
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-show-grants", nil /* txn */, args,
+		fmt.Sprintf("SHOW GRANTS ON DATABASE %s", escDBName),
+	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
-
-	// Marshal grants.
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
@@ -224,10 +208,8 @@ func (s *adminServer) DatabaseDetails(
 			privilegesCol = "Privileges"
 		)
 
-		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-			row := r.ResultList[0].Rows.At(i)
-
+		scanner := makeResultScanner(cols)
+		for _, row := range rows {
 			var schemaName string
 			if err := scanner.Scan(row, schemaCol, &schemaName); err != nil {
 				return nil, err
@@ -252,14 +234,25 @@ func (s *adminServer) DatabaseDetails(
 	}
 
 	// Marshal table names.
+	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-show-tables", nil /* txn */, args,
+		fmt.Sprintf("SHOW TABLES FROM %s", escDBName),
+	)
+	if s.isNotFoundError(err) {
+		return nil, status.Errorf(codes.NotFound, "%s", err)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Marshal table names.
 	{
 		const tableCol = "Table"
-		scanner := makeResultScanner(r.ResultList[1].Columns)
-		if a, e := len(r.ResultList[1].Columns), 1; a != e {
+		scanner := makeResultScanner(cols)
+		if a, e := len(cols), 1; a != e {
 			return nil, s.serverErrorf("show tables columns mismatch: %d != expected %d", a, e)
 		}
-		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
-			row := r.ResultList[1].Rows.At(i)
+		for _, row := range rows {
 			var tableName string
 			if err := scanner.Scan(row, tableCol, &tableName); err != nil {
 				return nil, err
@@ -270,13 +263,13 @@ func (s *adminServer) DatabaseDetails(
 
 	// Query the descriptor ID and zone configuration for this database.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database})
+		path, err := s.queryDescriptorIDPath(ctx, args, []string{req.Database})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		resp.DescriptorID = int64(path[1])
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, args, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -302,30 +295,28 @@ func (s *adminServer) DatabaseDetails(
 func (s *adminServer) TableDetails(
 	ctx context.Context, req *serverpb.TableDetailsRequest,
 ) (*serverpb.TableDetailsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
 	escTableName := tree.NameStringP(&req.Table)
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
-	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
-		escQualTable)
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 4)
+
+	var resp serverpb.TableDetailsResponse
+
+	// Marshal SHOW COLUMNS result.
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-show-columns",
+		nil /* txn */, args, fmt.Sprintf("SHOW COLUMNS FROM %s", escQualTable),
+	)
 	if s.isNotFoundError(err) {
 		return nil, status.Errorf(codes.NotFound, "%s", err)
 	}
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
-
-	var resp serverpb.TableDetailsResponse
-
-	// Marshal SHOW COLUMNS result.
-	//
 	// TODO(cdo): protobuf v3's default behavior for fields with zero values (e.g. empty strings)
 	// is to suppress them. So, if protobuf field "foo" is an empty string, "foo" won't show
 	// up in the marshaled JSON. I feel that this is counterintuitive, and this should be fixed
@@ -337,9 +328,8 @@ func (s *adminServer) TableDetails(
 			nullCol    = "Null"
 			defaultCol = "Default"
 		)
-		scanner := makeResultScanner(r.ResultList[0].Columns)
-		for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-			row := r.ResultList[0].Rows.At(i)
+		scanner := makeResultScanner(cols)
+		for _, row := range rows {
 			var col serverpb.TableDetailsResponse_Column
 			if err := scanner.Scan(row, fieldCol, &col.Name); err != nil {
 				return nil, err
@@ -364,6 +354,16 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW INDEX result.
+	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-showindex",
+		nil /* txn */, args, fmt.Sprintf("SHOW INDEX FROM %s", escQualTable),
+	)
+	if s.isNotFoundError(err) {
+		return nil, status.Errorf(codes.NotFound, "%s", err)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
+	}
 	{
 		const (
 			nameCol      = "Name"
@@ -374,9 +374,8 @@ func (s *adminServer) TableDetails(
 			storingCol   = "Storing"
 			implicitCol  = "Implicit"
 		)
-		scanner := makeResultScanner(r.ResultList[1].Columns)
-		for i, nRows := 0, r.ResultList[1].Rows.Len(); i < nRows; i++ {
-			row := r.ResultList[1].Rows.At(i)
+		scanner := makeResultScanner(cols)
+		for _, row := range rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var index serverpb.TableDetailsResponse_Index
 			if err := scanner.Scan(row, nameCol, &index.Name); err != nil {
@@ -405,14 +404,23 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW GRANTS result.
+	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-show-grants",
+		nil /* txn */, args, fmt.Sprintf("SHOW GRANTS ON TABLE %s", escQualTable),
+	)
+	if s.isNotFoundError(err) {
+		return nil, status.Errorf(codes.NotFound, "%s", err)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
+	}
 	{
 		const (
 			userCol       = "User"
 			privilegesCol = "Privileges"
 		)
-		scanner := makeResultScanner(r.ResultList[2].Columns)
-		for i, nRows := 0, r.ResultList[2].Rows.Len(); i < nRows; i++ {
-			row := r.ResultList[2].Rows.At(i)
+		scanner := makeResultScanner(cols)
+		for _, row := range rows {
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.TableDetailsResponse_Grant
 			var privileges string
@@ -428,16 +436,25 @@ func (s *adminServer) TableDetails(
 	}
 
 	// Marshal SHOW CREATE TABLE result.
+	rows, cols, err = s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-show-create",
+		nil /* txn */, args, fmt.Sprintf("SHOW CREATE TABLE %s", escQualTable),
+	)
+	if s.isNotFoundError(err) {
+		return nil, status.Errorf(codes.NotFound, "%s", err)
+	}
+	if err != nil {
+		return nil, s.serverError(err)
+	}
 	{
 		const createTableCol = "CreateTable"
-		showResult := r.ResultList[3]
-		if showResult.Rows.Len() != 1 {
+		if len(rows) != 1 {
 			return nil, s.serverErrorf("CreateTable response not available.")
 		}
 
-		scanner := makeResultScanner(showResult.Columns)
+		scanner := makeResultScanner(cols)
 		var createStmt string
-		if err := scanner.Scan(showResult.Rows.At(0), createTableCol, &createStmt); err != nil {
+		if err := scanner.Scan(rows[0], createTableCol, &createStmt); err != nil {
 			return nil, err
 		}
 
@@ -447,14 +464,14 @@ func (s *adminServer) TableDetails(
 	var tableID sqlbase.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
-		path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database, req.Table})
+		path, err := s.queryDescriptorIDPath(ctx, args, []string{req.Database, req.Table})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
 		tableID = path[2]
 		resp.DescriptorID = int64(tableID)
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
+		id, zone, zoneExists, err := s.queryZonePath(ctx, args, path)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
@@ -514,12 +531,10 @@ func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
-
 	// Get table span.
-	path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database, req.Table})
+	path, err := s.queryDescriptorIDPath(
+		ctx, sql.SessionArgs{User: s.getUser(req)}, []string{req.Database, req.Table},
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -666,19 +681,18 @@ func (s *adminServer) tableStatsForSpan(
 func (s *adminServer) Users(
 	ctx context.Context, req *serverpb.UsersRequest,
 ) (*serverpb.UsersResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 	query := `SELECT username FROM system.users WHERE "isRole" = false`
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-users", nil /* txn */, args, query,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
 	var resp serverpb.UsersResponse
-	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-		row := r.ResultList[0].Rows.At(i)
+	for _, row := range rows {
 		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
 	}
 	return &resp, nil
@@ -692,9 +706,8 @@ func (s *adminServer) Users(
 func (s *adminServer) Events(
 	ctx context.Context, req *serverpb.EventsRequest,
 ) (*serverpb.EventsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	limit := req.Limit
 	if limit == 0 {
@@ -707,29 +720,28 @@ func (s *adminServer) Events(
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
-		q.Append(`AND "eventType" = $ `, tree.NewDString(req.Type))
+		q.Append(`AND "eventType" = $ `, req.Type)
 	}
 	if req.TargetId > 0 {
-		q.Append(`AND "targetID" = $ `, tree.NewDInt(tree.DInt(req.TargetId)))
+		q.Append(`AND "targetID" = $ `, req.TargetId)
 	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
-		q.Append("LIMIT $", tree.NewDInt(tree.DInt(limit)))
+		q.Append("LIMIT $", limit)
 	}
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-events", nil /* txn */, args, q.String(), q.QueryArguments()...)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
 	// Marshal response.
 	var resp serverpb.EventsResponse
-	scanner := makeResultScanner(r.ResultList[0].Columns)
-	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-		row := r.ResultList[0].Rows.At(i)
+	scanner := makeResultScanner(cols)
+	for _, row := range rows {
 		var event serverpb.EventsResponse_Event
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
@@ -781,9 +793,9 @@ func redactSettingsChange(info string) string {
 func (s *adminServer) RangeLog(
 	ctx context.Context, req *serverpb.RangeLogRequest,
 ) (*serverpb.RangeLogResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	limit := req.Limit
 	if limit == 0 {
@@ -807,20 +819,21 @@ func (s *adminServer) RangeLog(
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
 	}
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-range-log",
+		nil /* txn */, args, q.String(), q.QueryArguments()...,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
 	// Marshal response.
 	var resp serverpb.RangeLogResponse
-	scanner := makeResultScanner(r.ResultList[0].Columns)
-	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-		row := r.ResultList[0].Rows.At(i)
-		if row.Len() != 6 {
-			return nil, errors.Errorf("incorrect number of columns in response, expected 6, got %d", row.Len())
-		}
+	if len(cols) != 6 {
+		return nil, errors.Errorf("incorrect number of columns in response, expected 6, got %d", len(cols))
+	}
+	scanner := makeResultScanner(cols)
+	for _, row := range rows {
 		var event storage.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
@@ -899,7 +912,7 @@ func (s *adminServer) RangeLog(
 // getUIData returns the values and timestamps for the given UI keys. Keys
 // that are not found will not be returned.
 func (s *adminServer) getUIData(
-	ctx context.Context, session *sql.Session, user string, keys []string,
+	ctx context.Context, args sql.SessionArgs, user string, keys []string,
 ) (*serverpb.GetUIDataResponse, error) {
 	if len(keys) == 0 {
 		return &serverpb.GetUIDataResponse{}, nil
@@ -918,16 +931,16 @@ func (s *adminServer) getUIData(
 	if err := query.Errors(); err != nil {
 		return nil, s.serverErrorf("error constructing query: %v", err)
 	}
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query.String(), query.QueryArguments(), 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-getUIData", nil /* txn */, args, query.String(), query.QueryArguments()...,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
 	// Marshal results.
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
-	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
-		row := r.ResultList[0].Rows.At(i)
+	for _, row := range rows {
 		dKey, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
@@ -954,28 +967,25 @@ func (s *adminServer) getUIData(
 func (s *adminServer) SetUIData(
 	ctx context.Context, req *serverpb.SetUIDataRequest,
 ) (*serverpb.SetUIDataResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
+
 	if len(req.KeyValues) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "KeyValues cannot be empty")
 	}
 
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, NOW())`
-		qargs := tree.MakePlaceholderInfo()
-		qargs.SetValue(`1`, tree.NewDString(key))
-		qargs.SetValue(`2`, tree.NewDBytes(tree.DBytes(val)))
-		r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &qargs, 1)
+		rowsAffected, err := s.server.internalExecutor.ExecWithSessionArgs(
+			ctx, "admin-set-ui-data", nil /* txn */, args, query, key, val)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		defer r.Close(ctx)
-		if a, e := r.ResultList[0].RowsAffected, 1; a != e {
-			return nil, s.serverErrorf("rows affected %d != expected %d", a, e)
+		if rowsAffected != 1 {
+			return nil, s.serverErrorf("rows affected %d != expected %d", rowsAffected, 1)
 		}
 	}
 
@@ -991,15 +1001,14 @@ func (s *adminServer) SetUIData(
 func (s *adminServer) GetUIData(
 	ctx context.Context, req *serverpb.GetUIDataRequest,
 ) (*serverpb.GetUIDataResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	if len(req.Keys) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "keys cannot be empty")
 	}
 
-	resp, err := s.getUIData(ctx, session, s.getUser(req), req.Keys)
+	resp, err := s.getUIData(ctx, args, s.getUser(req), req.Keys)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
@@ -1094,9 +1103,8 @@ func (s *adminServer) Liveness(
 func (s *adminServer) Jobs(
 	ctx context.Context, req *serverpb.JobsRequest,
 ) (*serverpb.JobsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	q := makeSQLQuery()
 	q.Append(`
@@ -1106,29 +1114,30 @@ func (s *adminServer) Jobs(
        WHERE true
 	`)
 	if req.Status != "" {
-		q.Append(" AND status = $", tree.NewDString(req.Status))
+		q.Append(" AND status = $", req.Status)
 	}
 	if req.Type != jobs.TypeUnspecified {
-		q.Append(" AND type = $", tree.NewDString(req.Type.String()))
+		q.Append(" AND type = $", req.Type.String())
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {
-		q.Append(" LIMIT $", tree.NewDInt(tree.DInt(req.Limit)))
+		q.Append(" LIMIT $", tree.DInt(req.Limit))
 	}
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-jobs", nil /* txn */, args, q.String(), q.QueryArguments()...,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
-	scanner := makeResultScanner(r.ResultList[0].Columns)
+	scanner := makeResultScanner(cols)
 	resp := serverpb.JobsResponse{
-		Jobs: make([]serverpb.JobsResponse_Job, r.ResultList[0].Rows.Len()),
+		Jobs: make([]serverpb.JobsResponse_Job, len(rows)),
 	}
-	for i := 0; i < len(resp.Jobs); i++ {
+	for i, row := range rows {
 		job := &resp.Jobs[i]
 		if err := scanner.ScanAll(
-			r.ResultList[0].Rows.At(i),
+			row,
 			&job.ID,
 			&job.Type,
 			&job.Description,
@@ -1152,27 +1161,27 @@ func (s *adminServer) Jobs(
 func (s *adminServer) Locations(
 	ctx context.Context, req *serverpb.LocationsRequest,
 ) (*serverpb.LocationsResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	q := makeSQLQuery()
 	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), nil, 1)
+	rows, cols, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-locations", nil /* txn */, args, q.String(),
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
-	scanner := makeResultScanner(r.ResultList[0].Columns)
+	scanner := makeResultScanner(cols)
 	resp := serverpb.LocationsResponse{
-		Locations: make([]serverpb.LocationsResponse_Location, r.ResultList[0].Rows.Len()),
+		Locations: make([]serverpb.LocationsResponse_Location, len(rows)),
 	}
-	for i := 0; i < len(resp.Locations); i++ {
+	for i, row := range rows {
 		loc := &resp.Locations[i]
 		lat, lon := new(apd.Decimal), new(apd.Decimal)
 		if err := scanner.ScanAll(
-			r.ResultList[0].Rows.At(i), &loc.LocalityKey, &loc.LocalityValue, lat, lon); err != nil {
+			row, &loc.LocalityKey, &loc.LocalityValue, lat, lon); err != nil {
 			return nil, s.serverError(err)
 		}
 		if loc.Latitude, err = lat.Float64(); err != nil {
@@ -1191,9 +1200,8 @@ func (s *adminServer) Locations(
 func (s *adminServer) QueryPlan(
 	ctx context.Context, req *serverpb.QueryPlanRequest,
 ) (*serverpb.QueryPlanResponse, error) {
+	ctx = s.server.AnnotateCtx(ctx)
 	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
 
 	// As long as there's only one query provided it's safe to construct the
 	// explain query.
@@ -1208,16 +1216,17 @@ func (s *adminServer) QueryPlan(
 	explain := fmt.Sprintf(
 		"SELECT \"JSON\" FROM [EXPLAIN (distsql) %s]",
 		strings.Trim(req.Query, ";"))
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, explain, nil, 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-query-plan", nil /* txn */, args, explain,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r.Close(ctx)
 
-	row := r.ResultList[0].Rows.At(0)
+	row := rows[0]
 	dbDatum, ok := tree.AsDString(row[0])
 	if !ok {
-		return nil, s.serverErrorf("type assertion failed on json: %T", row[0])
+		return nil, s.serverErrorf("type assertion failed on json: %T", row)
 	}
 
 	return &serverpb.QueryPlanResponse{
@@ -1364,10 +1373,6 @@ func (s *adminServer) Decommission(
 func (s *adminServer) ReplicaMatrix(
 	ctx context.Context, req *serverpb.ReplicaMatrixRequest,
 ) (*serverpb.ReplicaMatrixResponse, error) {
-	args := sql.SessionArgs{User: s.getUser(req)}
-	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
-	defer session.Finish(s.server.sqlExecutor)
-
 	resp := &serverpb.ReplicaMatrixResponse{
 		DatabaseInfo: make(map[string]serverpb.ReplicaMatrixResponse_DatabaseInfo),
 		ZoneConfigs:  make(map[int64]serverpb.ReplicaMatrixResponse_ZoneConfig),
@@ -1379,20 +1384,19 @@ func (s *adminServer) ReplicaMatrix(
 	// This relies on crdb_internal.tables returning data even for newly added tables
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
+	args := sql.SessionArgs{User: s.getUser(req)}
 	tablesQuery := `SELECT name, table_id, database_name, parent_id FROM "".crdb_internal.tables`
-	r1, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, tablesQuery, nil, 1)
+	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-replica-matrix", nil /* txn */, args, tablesQuery,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r1.Close(ctx)
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
 	tableInfosByTableID := map[uint64]serverpb.ReplicaMatrixResponse_TableInfo{}
 
-	rows1 := r1.ResultList[0].Rows
-	for idx := 0; idx < rows1.Len(); idx++ {
-		row := rows1.At(idx)
-
+	for _, row := range rows1 {
 		tableName := (*string)(row[0].(*tree.DString))
 		tableID := uint64(tree.MustBeDInt(row[1]))
 		dbName := (*string)(row[2].(*tree.DString))
@@ -1411,20 +1415,20 @@ func (s *adminServer) ReplicaMatrix(
 			`SELECT id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 			(*tree.Name)(dbName), (*tree.Name)(tableName),
 		)
-		r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, zoneConfigQuery, nil, 1)
+		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+			ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigQuery,
+		)
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		defer r.Close(ctx)
 
-		rows := r.ResultList[0].Rows
-		if rows.Len() != 1 {
+		if len(rows) != 1 {
 			return nil, s.serverError(fmt.Errorf(
-				"could not get zone config for table %s; %d rows returned", *tableName, rows.Len(),
+				"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
 			))
 		}
 
-		zcRow := rows.At(0)
+		zcRow := rows[0]
 		zcID := int64(tree.MustBeDInt(zcRow[0]))
 
 		// Insert table.
@@ -1481,16 +1485,14 @@ func (s *adminServer) ReplicaMatrix(
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
 	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
-	r2, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, zoneConfigsQuery, nil, 1)
+	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigsQuery,
+	)
 	if err != nil {
 		return nil, s.serverError(err)
 	}
-	defer r2.Close(ctx)
 
-	rows2 := r2.ResultList[0].Rows
-	for idx := 0; idx < rows2.Len(); idx++ {
-		row := rows2.At(idx)
-
+	for _, row := range rows2 {
 		zcID := int64(tree.MustBeDInt(row[0]))
 		zcCliSpecifier := string(tree.MustBeDString(row[1]))
 		zcYaml := tree.MustBeDBytes(row[2])
@@ -1516,13 +1518,12 @@ func (s *adminServer) ReplicaMatrix(
 type sqlQuery struct {
 	buf   bytes.Buffer
 	pidx  int
-	qargs tree.PlaceholderInfo
+	qargs []interface{}
 	errs  []error
 }
 
 func makeSQLQuery() *sqlQuery {
 	res := &sqlQuery{}
-	res.qargs.Clear()
 	return res
 }
 
@@ -1542,8 +1543,8 @@ func (q *sqlQuery) Errors() []error {
 
 // QueryArguments returns a filled map of placeholders containing all arguments
 // provided to this query through Append.
-func (q *sqlQuery) QueryArguments() *tree.PlaceholderInfo {
-	return &q.qargs
+func (q *sqlQuery) QueryArguments() []interface{} {
+	return q.qargs
 }
 
 // Append appends the provided string and any number of query parameters.
@@ -1563,9 +1564,8 @@ func (q *sqlQuery) QueryArguments() *tree.PlaceholderInfo {
 // Note that this method does NOT return any errors. Instead, we queue up
 // errors, which can later be accessed. Returning an error here would make
 // query construction code exceedingly tedious.
-func (q *sqlQuery) Append(s string, params ...tree.Datum) {
+func (q *sqlQuery) Append(s string, params ...interface{}) {
 	var placeholders int
-	firstpidx := q.pidx
 	for _, r := range s {
 		q.buf.WriteRune(r)
 		if r == '$' {
@@ -1579,9 +1579,7 @@ func (q *sqlQuery) Append(s string, params ...tree.Datum) {
 		q.errs = append(q.errs,
 			errors.Errorf("# of placeholders %d != # of params %d", placeholders, len(params)))
 	}
-	for i, param := range params {
-		q.qargs.SetValue(fmt.Sprint(firstpidx+i+1), param)
-	}
+	q.qargs = append(q.qargs, params...)
 }
 
 // resultScanner scans columns from sql.ResultRow instances into variables,
@@ -1728,35 +1726,29 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // TODO(mrtracy): The following methods, used to look up the zone configuration
 // for a database or table, use the same algorithm as a set of methods in
 // cli/zone.go for the same purpose. However, as that code connects to the
-// server with a SQL connections, while this code uses a sql.Executor directly,
-// the code cannot be commonized.
+// server with a SQL connections, while this code uses the InternalExecutor, the
+// code cannot be commonized.
 //
-// Github issue #4869 is the most likely candidate for addressing this
-// incompatibility; when that issue has been resolved, this code from
-// cli/zone.go should be moved to a common location and shared with this system.
-
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, session *sql.Session, id sqlbase.ID,
+	ctx context.Context, sargs sql.SessionArgs, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	params := tree.MakePlaceholderInfo()
-	params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-query-zone", nil /* txn */, sargs, query, id,
+	)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
-	defer r.Close(ctx)
 
-	result := r.ResultList[0]
-	if result.Rows.Len() == 0 {
+	if len(rows) == 0 {
 		return config.ZoneConfig{}, false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
-	err = scanner.ScanIndex(result.Rows.At(0), 0, &zoneBytes)
+	err = scanner.ScanIndex(rows[0], 0, &zoneBytes)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
 	}
@@ -1772,10 +1764,10 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, session *sql.Session, path []sqlbase.ID,
+	ctx context.Context, sargs sql.SessionArgs, path []sqlbase.ID,
 ) (sqlbase.ID, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
-		zone, zoneExists, err := s.queryZone(ctx, session, path[i])
+		zone, zoneExists, err := s.queryZone(ctx, sargs, path[i])
 		if err != nil || zoneExists {
 			return path[i], zone, true, err
 		}
@@ -1786,26 +1778,23 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
+	ctx context.Context, sargs sql.SessionArgs, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	params := tree.MakePlaceholderInfo()
-	params.SetValue(`1`, tree.NewDInt(tree.DInt(parentID)))
-	params.SetValue(`2`, tree.NewDString(name))
-	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
+		ctx, "admin-query-namespace-ID", nil /* txn */, sargs, query, parentID, name,
+	)
 	if err != nil {
 		return 0, err
 	}
-	defer r.Close(ctx)
 
-	result := r.ResultList[0]
-	if result.Rows.Len() == 0 {
+	if len(rows) == 0 {
 		return 0, errors.Errorf("namespace %s with ParentID %d not found", name, parentID)
 	}
 
 	var id int64
 	scanner := resultScanner{}
-	err = scanner.ScanIndex(result.Rows.At(0), 0, &id)
+	err = scanner.ScanIndex(rows[0], 0, &id)
 	if err != nil {
 		return 0, err
 	}
@@ -1818,11 +1807,11 @@ func (s *adminServer) queryNamespaceID(
 // it will return a list of IDs consisting of the root namespace ID, the
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
-	ctx context.Context, session *sql.Session, names []string,
+	ctx context.Context, sargs sql.SessionArgs, names []string,
 ) ([]sqlbase.ID, error) {
 	path := []sqlbase.ID{keys.RootNamespaceID}
 	for _, name := range names {
-		id, err := s.queryNamespaceID(ctx, session, path[len(path)-1], name)
+		id, err := s.queryNamespaceID(ctx, sargs, path[len(path)-1], name)
 		if err != nil {
 			return nil, err
 		}

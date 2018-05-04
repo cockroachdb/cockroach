@@ -116,7 +116,7 @@ func (ex *connExecutor) execStmt(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.server.StatementCounters.incrementCount(stmt.AST)
+	ex.incrementStmtCounter(stmt)
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
@@ -340,6 +340,24 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.avoidCachedDescriptors = true
 			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
 		}
+	} else {
+		// If we're in an explicit txn, we allow AOST but only if it matches with
+		// the transaction's timestamp. This is useful for running AOST statements
+		// using the InternalExecutor inside an external transaction; one might want
+		// to do that to force p.avoidCachedDescriptors to be set below.
+		ts, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now())
+		if err != nil {
+			return makeErrEvent(err)
+		}
+		if ts != nil {
+			if *ts != ex.state.mu.txn.OrigTimestamp() {
+				return makeErrEvent(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
+					"Generally \"as of system time\" cannot be used inside a transaction.",
+					ex.state.mu.txn.OrigTimestamp()))
+			}
+			p.asOfSystemTime = true
+			p.avoidCachedDescriptors = true
+		}
 	}
 
 	p.semaCtx.Placeholders.Assign(pinfo)
@@ -417,22 +435,19 @@ func (ex *connExecutor) execStmtInOpenState(
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	commitType := commit
+	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
-		commitType = release
+		isRelease = true
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
 
-	switch commitType {
-	case commit:
+	if !isRelease {
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
-	case release:
-		return eventTxnReleased{}, nil
 	}
-	panic("unreached")
+	return eventTxnReleased{}, nil
 }
 
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
@@ -497,7 +512,7 @@ func (ex *connExecutor) execStmtInParallel(
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
-		res := &errOnlyRestrictedCommandResult{}
+		res := &bufferedCommandResult{errOnly: true}
 
 		defer queryDone(ctx, res)
 
@@ -517,9 +532,10 @@ func (ex *connExecutor) execStmtInParallel(
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-		recordStatementSummary(
+		ex.recordStatementSummary(
 			planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
-			res.RowsAffected(), err, &ex.server.EngineMetrics)
+			res.RowsAffected(), err, &ex.server.EngineMetrics,
+		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 		}
@@ -616,7 +632,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if err != nil {
 		return err
 	}
-	recordStatementSummary(
+	ex.recordStatementSummary(
 		planner, stmt, useDistSQL, ex.extraTxnState.autoRetryCounter,
 		res.RowsAffected(), res.Err(), &ex.server.EngineMetrics,
 	)
@@ -745,7 +761,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 ) (fsm.Event, fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
-		ex.server.StatementCounters.incrementCount(stmt.AST)
+		ex.incrementStmtCounter(stmt)
 		iso, err := ex.isolationToProto(s.Modes.Isolation)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -876,7 +892,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 func (ex *connExecutor) execStmtInCommitWaitState(
 	stmt Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
-	ex.server.StatementCounters.incrementCount(stmt.AST)
+	ex.incrementStmtCounter(stmt)
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
@@ -1059,4 +1075,10 @@ func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statemen
 	err := txn.Commit(ctx)
 	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
 	return err
+}
+
+func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
+	if !ex.stmtCounterDisabled {
+		ex.server.StatementCounters.incrementCount(stmt.AST)
+	}
 }

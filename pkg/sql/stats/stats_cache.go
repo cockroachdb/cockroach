@@ -284,14 +284,10 @@ FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC
 `
-	var rows []tree.Datums
-	if err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		rows, _ /* cols */, err = sc.SQLExecutor.QueryRowsInTransaction(
-			ctx, "get-table-statistics", txn, getTableStatisticsStmt, tableID,
-		)
-		return err
-	}); err != nil {
+	rows, _ /* cols */, err := sc.SQLExecutor.Query(
+		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
+	)
+	if err != nil {
 		return nil, err
 	}
 

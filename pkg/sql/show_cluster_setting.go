@@ -43,7 +43,11 @@ func (p *planner) showStateMachineSetting(
 	// update its persisted state; see #22796).
 	const maxAttempts = 10
 	if err := retry.WithMaxAttempts(ctx, retry.Options{}, maxAttempts, func() error {
-		datums, err := p.queryRow(ctx, "SELECT value FROM system.settings WHERE name = $1", name)
+		datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+			ctx, "read-setting",
+			p.txn,
+			"SELECT value FROM system.settings WHERE name = $1", name,
+		)
 		if err != nil {
 			return err
 		}

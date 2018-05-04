@@ -241,13 +241,6 @@ type Config struct {
 	// the Admin API's HTTP endpoints.
 	EnableWebSessionAuthentication bool
 
-	// UseLegacyConnHandling, if set, makes the Server use the old code for
-	// handling pgwire connections.
-	//
-	// TODO(andrei): remove this once the code for the old v3Conn and Executor is
-	// deleted.
-	UseLegacyConnHandling bool
-
 	// ConnResultsBufferBytes is the size of the buffer in which each connection
 	// accumulates results set. Results are flushed to the network when this
 	// buffer overflows.
@@ -613,8 +606,6 @@ func (cfg *Config) readEnvironmentVariables() {
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
-	cfg.UseLegacyConnHandling = envutil.EnvOrDefaultBool(
-		"COCKROACH_USE_LEGACY_CONN_HANDLING", false)
 }
 
 // parseGossipBootstrapResolvers parses list of gossip bootstrap resolvers.

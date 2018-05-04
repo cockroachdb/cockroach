@@ -464,14 +464,11 @@ func AddResumeHook(fn ResumeHookFn) {
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
-	var rows []tree.Datums
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
-		rows, _ /* cols */, err = r.ex.QueryRowsInTransaction(
-			ctx, "adopt-job", txn, stmt, StatusPending, StatusRunning)
-		return err
-	}); err != nil {
+	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
+	rows, _ /* cols */, err := r.ex.Query(
+		ctx, "adopt-job", nil /* txn */, stmt, StatusPending, StatusRunning,
+	)
+	if err != nil {
 		return err
 	}
 

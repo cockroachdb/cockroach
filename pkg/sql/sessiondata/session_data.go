@@ -73,9 +73,6 @@ type SessionData struct {
 	SequenceState *SequenceState
 }
 
-// Copy() is not used yet.
-var _ = (*SessionData).Copy
-
 // Copy performs a deep copy of SessionData.
 func (s *SessionData) Copy() SessionData {
 	cp := *s

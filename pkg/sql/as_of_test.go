@@ -210,7 +210,7 @@ func TestAsOfTime(t *testing.T) {
 	// Can't use in a transaction.
 	_, err = db.Query(
 		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
-	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top-level statement") {
+	if !testutils.IsError(err, "cannot be used inside a transaction") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
 }

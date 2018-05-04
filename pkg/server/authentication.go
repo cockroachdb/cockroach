@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -58,16 +57,14 @@ var webSessionTimeout = settings.RegisterNonNegativeDurationSetting(
 
 type authenticationServer struct {
 	server     *Server
-	executor   *sql.InternalExecutor
 	memMetrics *sql.MemoryMetrics
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
-func newAuthenticationServer(s *Server, ie *sql.InternalExecutor) *authenticationServer {
+func newAuthenticationServer(s *Server) *authenticationServer {
 	return &authenticationServer{
 		server:     s,
-		executor:   ie,
 		memMetrics: &s.adminMemMetrics,
 	}
 }
@@ -169,49 +166,32 @@ FROM system.web_sessions
 WHERE id = $1`
 
 	var (
-		sessionFound bool
 		hashedSecret []byte
 		username     string
 		expiresAt    time.Time
 		isRevoked    bool
 	)
 
-	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		datum, err := s.executor.QueryRowInTransaction(
-			ctx,
-			"lookup-auth-session",
-			txn,
-			sessionQuery,
-			cookie.ID,
-		)
-		if err != nil {
-			return err
-		}
-
-		if datum.Len() == 0 {
-			return nil
-		}
-		if datum.Len() != 4 ||
-			datum[0].ResolvedType() != types.Bytes ||
-			datum[1].ResolvedType() != types.String ||
-			datum[2].ResolvedType() != types.Timestamp {
-			return errors.Errorf("values returned from auth session lookup do not match expectation")
-		}
-
-		// Extract datum values.
-		sessionFound = true
-		hashedSecret = []byte(*datum[0].(*tree.DBytes))
-		username = string(*datum[1].(*tree.DString))
-		expiresAt = datum[2].(*tree.DTimestamp).Time
-		isRevoked = datum[3].ResolvedType() != types.Unknown
-		return nil
-	}); err != nil {
+	row, err := s.server.internalExecutor.QueryRow(
+		ctx,
+		"lookup-auth-session",
+		nil /* txn */, sessionQuery, cookie.ID)
+	if row == nil || err != nil {
 		return false, "", err
 	}
 
-	if !sessionFound {
-		return false, "", nil
+	if row.Len() != 4 ||
+		row[0].ResolvedType() != types.Bytes ||
+		row[1].ResolvedType() != types.String ||
+		row[2].ResolvedType() != types.Timestamp {
+		return false, "", errors.Errorf("values returned from auth session lookup do not match expectation")
 	}
+
+	// Extract datum values.
+	hashedSecret = []byte(*row[0].(*tree.DBytes))
+	username = string(*row[1].(*tree.DString))
+	expiresAt = row[2].(*tree.DTimestamp).Time
+	isRevoked = row[3].ResolvedType() != types.Unknown
 
 	if isRevoked {
 		return false, "", nil
@@ -270,32 +250,27 @@ RETURNING id
 `
 	var id int64
 
-	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		datum, err := s.executor.QueryRowInTransaction(
-			ctx,
-			"create-auth-session",
-			txn,
-			insertSessionStmt,
-			hashedSecret,
-			username,
-			expiration,
-		)
-		if err != nil {
-			return err
-		}
-		if datum.Len() != 1 || datum[0].ResolvedType() != types.Int {
-			return errors.Errorf(
-				"expected create auth session statement to return exactly one integer, returned %v",
-				datum,
-			)
-		}
-
-		// Extract integer value from single datum.
-		id = int64(*datum[0].(*tree.DInt))
-		return nil
-	}); err != nil {
+	row, err := s.server.internalExecutor.QueryRow(
+		ctx,
+		"create-auth-session",
+		nil, /* txn */
+		insertSessionStmt,
+		hashedSecret,
+		username,
+		expiration,
+	)
+	if err != nil {
 		return 0, nil, err
 	}
+	if row.Len() != 1 || row[0].ResolvedType() != types.Int {
+		return 0, nil, errors.Errorf(
+			"expected create auth session statement to return exactly one integer, returned %v",
+			row,
+		)
+	}
+
+	// Extract integer value from single datum.
+	id = int64(*row[0].(*tree.DInt))
 
 	return id, secret, nil
 }

@@ -92,7 +92,6 @@ type cancelChanMap map[chan struct{}]context.CancelFunc
 type Server struct {
 	AmbientCtx log.AmbientContext
 	cfg        *base.Config
-	executor   *sql.Executor
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
@@ -152,7 +151,6 @@ func MakeServer(
 	ambientCtx log.AmbientContext,
 	cfg *base.Config,
 	st *cluster.Settings,
-	executor *sql.Executor,
 	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
@@ -162,7 +160,6 @@ func MakeServer(
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		execCfg:    executorConfig,
-		executor:   executor,
 		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.MakeMonitor("sql",
@@ -339,132 +336,9 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 	return nil
 }
 
-// ServeConn serves a single connection, driving the handshake process
-// and delegating to the appropriate connection type.
+// ServeConn serves a single connection, driving the handshake process and
+// delegating to the appropriate connection type.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
-	s.mu.Lock()
-	draining := s.mu.draining
-	if !draining {
-		var cancel context.CancelFunc
-		ctx, cancel = contextutil.WithCancel(ctx)
-		done := make(chan struct{})
-		s.mu.connCancelMap[done] = cancel
-		defer func() {
-			cancel()
-			close(done)
-			s.mu.Lock()
-			delete(s.mu.connCancelMap, done)
-			s.mu.Unlock()
-		}()
-	}
-	s.mu.Unlock()
-
-	// If the Server is draining, we will use the connection only to send an
-	// error, so we don't count it in the stats. This makes sense since
-	// DrainClient() waits for that number to drop to zero,
-	// so we don't want it to oscillate unnecessarily.
-	if !draining {
-		s.metrics.Conns.Inc(1)
-		defer s.metrics.Conns.Dec(1)
-	}
-
-	var buf pgwirebase.ReadBuffer
-	n, err := buf.ReadUntypedMsg(conn)
-	if err != nil {
-		return err
-	}
-	s.metrics.BytesInCount.Inc(int64(n))
-	version, err := buf.GetUint32()
-	if err != nil {
-		return err
-	}
-	errSSLRequired := false
-	if version == versionSSL {
-		if len(buf.Msg) > 0 {
-			return errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
-		}
-
-		if s.cfg.Insecure {
-			if _, err := conn.Write(sslUnsupported); err != nil {
-				return err
-			}
-		} else {
-			if _, err := conn.Write(sslSupported); err != nil {
-				return err
-			}
-			tlsConfig, err := s.cfg.GetServerTLSConfig()
-			if err != nil {
-				return err
-			}
-			conn = tls.Server(conn, tlsConfig)
-		}
-
-		n, err := buf.ReadUntypedMsg(conn)
-		if err != nil {
-			return err
-		}
-		s.metrics.BytesInCount.Inc(int64(n))
-		version, err = buf.GetUint32()
-		if err != nil {
-			return err
-		}
-	} else if !s.cfg.Insecure {
-		errSSLRequired = true
-	}
-
-	if version == version30 {
-		// We make a connection before anything. If there is an error
-		// parsing the connection arguments, the connection will only be
-		// used to send a report of that error.
-		v3conn := makeV3Conn(conn, &s.metrics, &s.sqlMemoryPool, s.executor)
-		defer v3conn.finish(ctx)
-
-		if v3conn.sessionArgs, err = parseOptions(ctx, buf.Msg); err != nil {
-			return v3conn.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, err.Error()))
-		}
-
-		if errSSLRequired {
-			return v3conn.sendError(pgerror.NewError(pgerror.CodeProtocolViolationError, ErrSSLRequired))
-		}
-		if draining {
-			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
-		}
-
-		v3conn.sessionArgs.User = tree.Name(v3conn.sessionArgs.User).Normalize()
-		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
-			return v3conn.sendError(pgerror.NewError(pgerror.CodeInvalidPasswordError, err.Error()))
-		}
-
-		// Reserve some memory for this connection using the server's
-		// monitor. This reduces pressure on the shared pool because the
-		// server monitor allocates in chunks from the shared pool and
-		// these chunks should be larger than baseSQLMemoryBudget.
-		//
-		// We only reserve memory to the connection monitor after
-		// authentication has completed successfully, so as to prevent a DoS
-		// attack: many open-but-unauthenticated connections that exhaust
-		// the memory available to connections already open.
-		acc := s.connMonitor.MakeBoundAccount()
-		if err := acc.Grow(ctx, baseSQLMemoryBudget); err != nil {
-			return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
-				baseSQLMemoryBudget, err)
-		}
-
-		err := v3conn.serve(ctx, s.IsDraining, acc)
-		// If the error that closed the connection is related to an
-		// administrative shutdown, relay that information to the client.
-		if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeAdminShutdownError {
-			return v3conn.sendError(err)
-		}
-		return err
-	}
-
-	return errors.Errorf("unknown protocol version %d", version)
-}
-
-// ServeConn2 serves a single connection, driving the handshake process
-// and delegating to the appropriate connection type.
-func (s *Server) ServeConn2(ctx context.Context, conn net.Conn) error {
 	s.mu.Lock()
 	draining := s.mu.draining
 	if !draining {
@@ -569,4 +443,39 @@ func (s *Server) ServeConn2(ctx context.Context, conn net.Conn) error {
 	}
 	return serveConn(ctx, conn, sArgs, &s.metrics, reserved, s.SQLServer,
 		s.IsDraining, s.execCfg, s.stopper, s.cfg.Insecure)
+}
+
+func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
+	args := sql.SessionArgs{}
+	buf := pgwirebase.ReadBuffer{Msg: data}
+	for {
+		key, err := buf.GetString()
+		if err != nil {
+			return sql.SessionArgs{}, errors.Errorf("error reading option key: %s", err)
+		}
+		if len(key) == 0 {
+			break
+		}
+		value, err := buf.GetString()
+		if err != nil {
+			return sql.SessionArgs{}, errors.Errorf("error reading option value: %s", err)
+		}
+		switch key {
+		case "database":
+			args.Database = value
+		case "user":
+			args.User = value
+		case "application_name":
+			args.ApplicationName = value
+		default:
+			if log.V(1) {
+				log.Warningf(ctx, "unrecognized configuration parameter %q", key)
+			}
+		}
+	}
+	return args, nil
+}
+
+func newAdminShutdownErr(err error) error {
+	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
 }

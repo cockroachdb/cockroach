@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 
 	"github.com/elazarl/go-bindata-assetfs"
@@ -150,8 +152,8 @@ type Server struct {
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
 	stopper            *stop.Stopper
-	sqlExecutor        *sql.Executor
 	execCfg            *sql.ExecutorConfig
+	internalExecutor   *sql.InternalExecutor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
@@ -320,7 +322,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nil, /* execCfg - will be set later because of circular dependencies */
 		lmKnobs,
 		s.stopper,
-		&s.internalMemMetrics,
 		s.cfg.LeaseManagerConfig,
 	)
 
@@ -470,7 +471,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
-	s.admin = newAdminServer(s, internalExecutor)
+	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		st,
@@ -485,7 +486,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	s.authentication = newAuthenticationServer(s, internalExecutor)
+	s.authentication = newAuthenticationServer(s)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
@@ -577,10 +578,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	if s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.sqlExecutor)
-	}
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.sqlMemMetrics = sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
@@ -589,19 +586,38 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
 		s.ClusterSettings(),
-		s.sqlExecutor,
 		s.sqlMemMetrics,
 		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
 		&execCfg,
 	)
-	s.registry.AddMetricStruct(s.pgServer.Metrics())
-	if !s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.pgServer.StatementCounters())
-		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
-	}
 
-	internalExecutor.ExecCfg = &execCfg
+	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
+	// circular dependency between the distsqlrun.Server and sql.Server and set
+	// SessionBoundInternalExecutorCtor.
+	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
+		func(
+			ctx context.Context, sessionData *sessiondata.SessionData,
+		) sqlutil.InternalExecutor {
+			ie := sql.MakeSessionBoundInternalExecutor(
+				ctx,
+				sessionData,
+				s.pgServer.SQLServer,
+				s.sqlMemMetrics,
+				s.st,
+			)
+			return &ie
+		}
+
+	s.registry.AddMetricStruct(s.pgServer.Metrics())
+	s.registry.AddMetricStruct(s.pgServer.StatementCounters())
+	s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
+	*internalExecutor = sql.MakeInternalExecutor(
+		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.ClusterSettings(),
+	)
+	s.internalExecutor = internalExecutor
+	execCfg.InternalExecutor = internalExecutor
+
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetExecCfg(&execCfg)
@@ -1443,7 +1459,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.execCfg.DistSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 
@@ -1521,10 +1536,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	migMgr := sqlmigrations.NewManager(
 		s.stopper,
 		s.db,
-		s.sqlExecutor,
+		s.internalExecutor,
 		s.clock,
 		mmKnobs,
-		&s.internalMemMetrics,
 		s.NodeID().String(),
 	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
@@ -1553,13 +1567,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			var serveFn func(ctx context.Context, conn net.Conn) error
-			if !s.cfg.UseLegacyConnHandling {
-				serveFn = s.pgServer.ServeConn2
-			} else {
-				serveFn = s.pgServer.ServeConn
-			}
-			if err := serveFn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
 				// the logs.
@@ -1799,6 +1807,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // It is empty for an in-memory temp storage.
 func (s *Server) TempDir() string {
 	return s.cfg.TempStorageConfig.Path
+}
+
+// PGServer exports the pgwire server. Used by tests.
+func (s *Server) PGServer() *pgwire.Server {
+	return s.pgServer
 }
 
 type gzipResponseWriter struct {

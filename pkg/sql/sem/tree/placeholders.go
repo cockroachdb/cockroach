@@ -142,32 +142,14 @@ func (p *PlaceholderInfo) Value(name string) (TypedExpr, bool) {
 	return nil, false
 }
 
-// SetValue assigns a known value to a placeholder.
-// If no type is known yet, it is inferred from the assigned value.
-func (p *PlaceholderInfo) SetValue(name string, val Datum) {
-	if _, ok := p.Values[name]; ok {
-		panic(fmt.Sprintf("placeholder $%s already has a value", name))
-	}
-	p.Values[name] = val
-	if _, ok := p.Types[name]; !ok {
-		// No type yet, infer from value
-		p.Types[name] = val.ResolvedType()
-	}
-}
-
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
 func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
 	t, ok := p.Types[name]
 	if ok && !typ.Equivalent(t) {
-		// If we already have a *value* for this expression, then we're good to go.
-		// This can happen when we're running statements with placeholders from the
-		// internal executor, which directly assigns placeholder values and types.
-		// If the directly-assigned placeholder value is null, then the type
-		// assigned will be NULL. We should set it properly rather than fail.
-		if _, ok := p.Value(name); !ok {
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)
-		}
+		return pgerror.NewErrorf(
+			pgerror.CodeDatatypeMismatchError,
+			"placeholder %s already has type %s, cannot assign %s", name, t, typ)
 	}
 	p.Types[name] = typ
 	if _, ok := p.TypeHints[name]; !ok {

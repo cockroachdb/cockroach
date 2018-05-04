@@ -2292,15 +2292,22 @@ type EvalDatabase interface {
 // EvalPlanner is a limited planner that can be used from EvalContext.
 type EvalPlanner interface {
 	EvalDatabase
-	// QueryRow executes a SQL query string where exactly 1 result row is
-	// expected and returns that row.
-	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
-
 	// ParseType parses a column type.
 	ParseType(sql string) (coltypes.CastTargetType, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
+}
+
+// SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
+// this sem/tree package which can't even import sqlutil. Executor used through
+// this interface are always "session-bound" - they inherit session variables
+// from a parent session.
+type SessionBoundInternalExecutor interface {
+	// QueryRow is part of the sqlutil.InternalExecutor interface.
+	QueryRow(
+		ctx context.Context, opName string, txn *client.Txn, stmt string, qargs ...interface{},
+	) (Datums, error)
 }
 
 // SequenceOperators is used for various sql related functions that can
@@ -2427,6 +2434,13 @@ type EvalContext struct {
 	// and also at the time of writing, EvalContexts are initialized with the
 	// planner and not mutated.
 	CtxProvider CtxProvider
+
+	// InternalExecutor gives access to an executor to be used for running
+	// "internal" statements. It may seem bizarre that "expression evaluation" may
+	// need to run a statement, and yet many builting function do it.
+	// Note that the executor will be "session-bound" - it will inherit session
+	// variables from a parent session.
+	InternalExecutor SessionBoundInternalExecutor
 
 	Planner EvalPlanner
 
@@ -2771,8 +2785,9 @@ func queryOidWithJoin(
 	default:
 		panic(fmt.Sprintf("invalid argument to OID cast: %s", d))
 	}
-	results, err := ctx.Planner.QueryRow(
-		ctx.Ctx(),
+	results, err := ctx.InternalExecutor.QueryRow(
+		ctx.Ctx(), "queryOidWithJoin",
+		ctx.Txn,
 		fmt.Sprintf(
 			"SELECT %s.oid, %s FROM pg_catalog.%s %s WHERE %s = $1 %s",
 			info.tableName, info.nameCol, info.tableName, joinClause, queryCol, additionalWhere),

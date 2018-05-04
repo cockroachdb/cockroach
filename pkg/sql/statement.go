@@ -30,27 +30,3 @@ type Statement struct {
 func (s Statement) String() string {
 	return s.AST.String()
 }
-
-// StatementList is a list of statements.
-type StatementList []Statement
-
-// NewStatementList creates a StatementList from a tree.StatementList.
-func NewStatementList(stmts tree.StatementList) StatementList {
-	sl := make(StatementList, len(stmts))
-	for i, s := range stmts {
-		sl[i] = Statement{AST: s}
-	}
-	return sl
-}
-
-func (l *StatementList) String() string { return tree.AsString(l) }
-
-// Format implements the NodeFormatter interface.
-func (l *StatementList) Format(ctx *tree.FmtCtx) {
-	for i := range *l {
-		if i > 0 {
-			ctx.WriteString("; ")
-		}
-		ctx.FormatNode((*l)[i].AST)
-	}
-}

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,11 +40,10 @@ func TestRegistryCancelation(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var db *client.DB
-	var ex sqlutil.InternalExecutor
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
 	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, FakeNodeID, cluster.NoSettings, FakePHS)
+	registry := MakeRegistry(log.AmbientContext{}, clock, db, nil /* ex */, FakeNodeID, cluster.NoSettings, FakePHS)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(nodeCount)

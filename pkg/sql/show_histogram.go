@@ -43,8 +43,10 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			rows, _ /* cols */, err := p.queryRows(
+			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 				ctx,
+				"read-histogram",
+				p.txn,
 				`SELECT histogram
 				 FROM system.table_statistics
 				 WHERE "statisticID" = $1`,
@@ -53,21 +55,15 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			if err != nil {
 				return nil, err
 			}
-			if len(rows) == 0 {
-				return nil, errors.Errorf("histogram %d not found", n.HistogramID)
+			if row == nil {
+				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
-			if len(rows) == 2 {
-				// This should never happen, because we use unique_rowid() to generate
-				// statisticIDs.
-				return nil, errors.Errorf("multiple histograms with id %d", n.HistogramID)
-			}
-			row := rows[0]
 			if len(row) != 1 {
-				return nil, errors.Errorf("expected 1 column from internal query")
+				return nil, errors.Errorf("programming error: expected 1 column from internal query")
 			}
 			if row[0] == tree.DNull {
 				// We found a statistic, but it has no histogram.
-				return nil, errors.Errorf("histogram %d not found", n.HistogramID)
+				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 
 			histogram := &stats.HistogramData{}

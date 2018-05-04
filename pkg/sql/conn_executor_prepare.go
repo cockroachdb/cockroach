@@ -137,13 +137,17 @@ func (ex *connExecutor) addPreparedStmt(
 // prepare prepares the given statement.
 //
 // placeholderHints may contain partial type information for placeholders.
-// prepare will populate the missing types.
+// prepare will populate the missing types. It can be nil.
 //
 // The PreparedStatement is returned (or nil if there are no results). The
 // returned PreparedStatement needs to be close()d once its no longer in use.
 func (ex *connExecutor) prepare(
 	ctx context.Context, stmt Statement, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
+	if placeholderHints == nil {
+		placeholderHints = make(tree.PlaceholderTypes)
+	}
+
 	prepared := &PreparedStatement{
 		TypeHints: placeholderHints,
 		memAcc:    ex.sessionMon.MakeBoundAccount(),
@@ -256,46 +260,68 @@ func (ex *connExecutor) execBind(
 	}
 
 	numQArgs := uint16(len(ps.InTypes))
-	qArgFormatCodes := bindCmd.ArgFormatCodes
 
-	// If a single code is specified, it is applied to all arguments.
-	if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
-		return retErr(pgwirebase.NewProtocolViolationErrorf(
-			"wrong number of format codes specified: %d for %d arguments",
-			len(qArgFormatCodes), numQArgs))
-	}
-	// If a single format code was specified, it applies to all the arguments.
-	if len(qArgFormatCodes) == 1 {
-		fmtCode := qArgFormatCodes[0]
-		qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgs)
-		for i := range qArgFormatCodes {
-			qArgFormatCodes[i] = fmtCode
-		}
-	}
-
-	if len(bindCmd.Args) != int(numQArgs) {
-		return retErr(
-			pgwirebase.NewProtocolViolationErrorf(
-				"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
-	}
+	// Decode the arguments, except for internal queries for which we just verify
+	// that the arguments match what's expected.
 	qargs := tree.QueryArguments{}
-	for i, arg := range bindCmd.Args {
-		k := strconv.Itoa(i + 1)
-		t := ps.InTypes[i]
-		if arg == nil {
-			// nil indicates a NULL argument value.
-			qargs[k] = tree.DNull
-		} else {
-			d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], arg)
-			if err != nil {
-				if _, ok := err.(*pgerror.Error); ok {
-					return retErr(err)
-				}
-				return retErr(pgwirebase.NewProtocolViolationErrorf(
-					"error in argument for $%d: %s", i+1, err.Error()))
-
+	if bindCmd.internalArgs != nil {
+		if len(bindCmd.internalArgs) != int(numQArgs) {
+			return retErr(
+				pgwirebase.NewProtocolViolationErrorf(
+					"expected %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
+		}
+		for i, datum := range bindCmd.internalArgs {
+			t := ps.InTypes[i]
+			if oid := datum.ResolvedType().Oid(); datum != tree.DNull && oid != t {
+				return retErr(
+					pgwirebase.NewProtocolViolationErrorf(
+						"for argument %d expected OID %d, got %d", i, t, oid))
 			}
-			qargs[k] = d
+			k := strconv.Itoa(i + 1)
+			qargs[k] = datum
+		}
+	} else {
+		qArgFormatCodes := bindCmd.ArgFormatCodes
+
+		// If a single code is specified, it is applied to all arguments.
+		if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
+			return retErr(pgwirebase.NewProtocolViolationErrorf(
+				"wrong number of format codes specified: %d for %d arguments",
+				len(qArgFormatCodes), numQArgs))
+		}
+		// If a single format code was specified, it applies to all the arguments.
+		if len(qArgFormatCodes) == 1 {
+			fmtCode := qArgFormatCodes[0]
+			qArgFormatCodes = make([]pgwirebase.FormatCode, numQArgs)
+			for i := range qArgFormatCodes {
+				qArgFormatCodes[i] = fmtCode
+			}
+		}
+
+		if len(bindCmd.Args) != int(numQArgs) {
+			return retErr(
+				pgwirebase.NewProtocolViolationErrorf(
+					"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
+		}
+
+		for i, arg := range bindCmd.Args {
+			k := strconv.Itoa(i + 1)
+			t := ps.InTypes[i]
+			if arg == nil {
+				// nil indicates a NULL argument value.
+				qargs[k] = tree.DNull
+			} else {
+				d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], arg)
+				if err != nil {
+					if _, ok := err.(*pgerror.Error); ok {
+						return retErr(err)
+					}
+					return retErr(pgwirebase.NewProtocolViolationErrorf(
+						"error in argument for $%d: %s", i+1, err.Error()))
+
+				}
+				qargs[k] = d
+			}
 		}
 	}
 
