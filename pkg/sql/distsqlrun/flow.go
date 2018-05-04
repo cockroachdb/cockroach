@@ -306,10 +306,12 @@ func (f *Flow) makeProcessor(
 		outputs[i] = r
 		f.startables = append(f.startables, r)
 	}
-	proc, err := newProcessor(ctx, &f.FlowCtx, &ps.Core, &ps.Post, inputs, outputs)
+
+	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs)
 	if err != nil {
 		return nil, err
 	}
+
 	// Initialize any routers (the setupRouter case above) and outboxes.
 	types := proc.OutputTypes()
 	for _, o := range outputs {

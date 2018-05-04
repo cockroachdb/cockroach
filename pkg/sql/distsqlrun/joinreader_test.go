@@ -184,6 +184,7 @@ func TestJoinReader(t *testing.T) {
 			out := &RowBuffer{}
 			jr, err := newJoinReader(
 				&flowCtx,
+				0, /* processorID */
 				&JoinReaderSpec{Table: *td, LookupColumns: c.lookupCols, OnExpr: Expression{Expr: c.onExpr}},
 				in,
 				&c.post,
@@ -263,7 +264,9 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &RowBuffer{}
 		out.ConsumerClosed()
-		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out)
+		jr, err := newJoinReader(
+			&flowCtx, 0 /* processorID */, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +285,9 @@ func TestJoinReaderDrain(t *testing.T) {
 
 		out := &RowBuffer{}
 		out.ConsumerDone()
-		jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out)
+		jr, err := newJoinReader(
+			&flowCtx, 0 /* processorID */, &JoinReaderSpec{Table: *td}, in, &PostProcessSpec{}, out,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -357,7 +362,7 @@ func BenchmarkJoinReader(b *testing.B) {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			b.SetBytes(int64(numRows * (numCols + numInputCols) * 8))
 			for i := 0; i < b.N; i++ {
-				jr, err := newJoinReader(&flowCtx, &spec, input, &post, &output)
+				jr, err := newJoinReader(&flowCtx, 0 /* processorID */, &spec, input, &post, &output)
 				if err != nil {
 					b.Fatal(err)
 				}

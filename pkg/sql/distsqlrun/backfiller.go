@@ -54,9 +54,10 @@ type backfiller struct {
 	// chunkBackfiller.
 	filter backfill.MutationFilter
 
-	spec    BackfillerSpec
-	output  RowReceiver
-	flowCtx *FlowCtx
+	spec        BackfillerSpec
+	output      RowReceiver
+	flowCtx     *FlowCtx
+	processorID int32
 }
 
 // OutputTypes is part of the processor interface.

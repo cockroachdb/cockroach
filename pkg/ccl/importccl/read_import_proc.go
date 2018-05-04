@@ -317,10 +317,14 @@ var csvOutputTypes = []sqlbase.ColumnType{
 }
 
 func newReadImportDataProcessor(
-	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadImportDataSpec, output distsqlrun.RowReceiver,
+	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
+	spec distsqlrun.ReadImportDataSpec,
+	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readImportDataProcessor{
 		flowCtx:     flowCtx,
+		processorID: processorID,
 		inputFromat: spec.Format,
 		sampleSize:  spec.SampleSize,
 		tableDesc:   spec.TableDesc,
@@ -352,6 +356,7 @@ type inputConverter interface {
 
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
+	processorID int32
 	sampleSize  int32
 	tableDesc   sqlbase.TableDescriptor
 	uri         map[int32]string

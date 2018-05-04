@@ -36,11 +36,16 @@ var _ RowSource = &noopProcessor{}
 const noopProcName = "noop"
 
 func newNoopProcessor(
-	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx, processorID int32, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{input: input}
 	if err := n.init(
-		post, input.OutputTypes(), flowCtx, output, procStateOpts{inputsToDrain: []RowSource{n.input}},
+		post,
+		input.OutputTypes(),
+		flowCtx,
+		processorID,
+		output,
+		procStateOpts{inputsToDrain: []RowSource{n.input}},
 	); err != nil {
 		return nil, err
 	}

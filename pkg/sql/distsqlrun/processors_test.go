@@ -406,7 +406,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := NewRepeatableRowSource(oneIntCol, makeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, input, &PostProcessSpec{}, &RowDisposer{})
+		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &PostProcessSpec{}, &RowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

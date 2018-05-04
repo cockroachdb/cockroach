@@ -405,7 +405,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			}
 
 			out := &RowBuffer{}
-			irj, err := newInterleavedReaderJoiner(&flowCtx, &tc.spec, &tc.post, out)
+			irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -534,7 +534,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 			}
 
 			out := &RowBuffer{}
-			_, err := newInterleavedReaderJoiner(&flowCtx, &tc.spec, &tc.post, out)
+			_, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &tc.spec, &tc.post, out)
 			if err == nil {
 				t.Fatalf("expected an error")
 			}
@@ -604,7 +604,7 @@ func TestInterleavedReaderJoinerTrailingMetadata(t *testing.T) {
 	}
 
 	out := &RowBuffer{}
-	irj, err := newInterleavedReaderJoiner(&flowCtx, &innerJoinSpec, &PostProcessSpec{}, out)
+	irj, err := newInterleavedReaderJoiner(&flowCtx, 0 /* processorID */, &innerJoinSpec, &PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}

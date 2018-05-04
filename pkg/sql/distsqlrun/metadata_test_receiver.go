@@ -49,7 +49,12 @@ var _ RowSource = &metadataTestReceiver{}
 const metadataTestReceiverProcName = "meta receiver"
 
 func newMetadataTestReceiver(
-	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver, senders []string,
+	flowCtx *FlowCtx,
+	processorID int32,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
+	senders []string,
 ) (*metadataTestReceiver, error) {
 	mtr := &metadataTestReceiver{
 		input:     input,
@@ -60,6 +65,7 @@ func newMetadataTestReceiver(
 		post,
 		input.OutputTypes(),
 		flowCtx,
+		processorID,
 		output,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
