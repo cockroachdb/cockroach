@@ -1692,7 +1692,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 
 	// This test is relatively slow and resource intensive. When run under
 	// stressrace on a loaded machine (as in the nightly tests), sometimes the
-	// SucceedsSoon conditions below take longer than the alotted time (#25273).
+	// SucceedsSoon conditions below take longer than the allotted time (#25273).
 	if testing.Short() || testutils.NightlyStress() {
 		t.Skip()
 	}
@@ -1706,6 +1706,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	})
 	ctx := context.TODO()
 	defer tc.Stopper().Stop(ctx)
+	log.Info(ctx, "TestSystemZoneConfig: test cluster started")
 
 	expectedRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
@@ -1747,6 +1748,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	// waits until nothing is underreplicated but not until all rebalancing has
 	// settled down.
 	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: initial replication succeeded")
 
 	// Allow for inserting zone configs without having to go through (or
 	// duplicate the logic from) the CLI.
@@ -1760,6 +1762,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
 	expectedReplicas += 2
 	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of meta ranges succeeded")
 
 	// Do the same thing, but down-replicating the timeseries range.
 	zoneConfig = config.DefaultZoneConfig()
@@ -1767,6 +1770,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 	config.TestingSetZoneConfig(keys.TimeseriesRangesID, zoneConfig)
 	expectedReplicas -= 2
 	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: down-replication of timeseries ranges succeeded")
 
 	// Finally, verify the system ranges. Note that in a new cluster there are
 	// two system ranges, which we have to take into account here.
@@ -1775,4 +1779,5 @@ func TestSystemZoneConfigs(t *testing.T) {
 	config.TestingSetZoneConfig(keys.SystemRangesID, zoneConfig)
 	expectedReplicas += 6
 	testutils.SucceedsSoon(t, waitForReplicas)
+	log.Info(ctx, "TestSystemZoneConfig: up-replication of system ranges succeeded")
 }
