@@ -44,6 +44,7 @@ type sorterBase struct {
 
 func (s *sorterBase) init(
 	flowCtx *FlowCtx,
+	processorID int32,
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
@@ -63,12 +64,13 @@ func (s *sorterBase) init(
 	s.matchLen = matchLen
 	s.count = count
 	s.tempStorage = flowCtx.TempStorage
-	return s.processorBase.init(post, input.OutputTypes(), flowCtx, output, opts)
+	return s.processorBase.init(post, input.OutputTypes(), flowCtx, processorID, output, opts)
 }
 
 func newSorter(
 	ctx context.Context,
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *SorterSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -88,13 +90,13 @@ func newSorter(
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			return newSortAllProcessor(ctx, flowCtx, spec, input, post, output)
+			return newSortAllProcessor(ctx, flowCtx, processorID, spec, input, post, output)
 		}
 		// No specified ordering match length but specified limit; we can optimize
 		// our sort procedure by maintaining a max-heap populated with only the
 		// smallest k rows seen. It has a worst-case time complexity of
 		// O(n*log(k)) and a worst-case space complexity of O(k).
-		return newSortTopKProcessor(flowCtx, spec, input, post, output, count)
+		return newSortTopKProcessor(flowCtx, processorID, spec, input, post, output, count)
 	}
 	// Ordering match length is specified. We will be able to use existing
 	// ordering in order to avoid loading all the rows into memory. If we're
@@ -103,8 +105,7 @@ func newSorter(
 	// chunk and then output.
 	// TODO(irfansharif): Add optimization for case where both ordering match
 	// length and limit is specified.
-	return newSortChunksProcessor(flowCtx, spec, input, post, output)
-
+	return newSortChunksProcessor(flowCtx, processorID, spec, input, post, output)
 }
 
 // sortAllProcessor reads in all values into the wrapped rows and
@@ -133,6 +134,7 @@ const sortAllProcName = "sortAll"
 func newSortAllProcessor(
 	ctx context.Context,
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *SorterSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -164,7 +166,7 @@ func newSortAllProcessor(
 		useTempStorage:  useTempStorage,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, input, post, out,
+		flowCtx, processorID, input, post, out,
 		convertToColumnOrdering(spec.OutputOrdering),
 		spec.OrderingMatchLen,
 		procStateOpts{
@@ -388,6 +390,7 @@ const sortTopKProcName = "sortTopK"
 
 func newSortTopKProcessor(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *SorterSpec,
 	input RowSource,
 	post *PostProcessSpec,
@@ -401,7 +404,7 @@ func newSortTopKProcessor(
 		k:               k,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, input, post, out,
+		flowCtx, processorID, input, post, out,
 		ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
@@ -529,7 +532,12 @@ var _ RowSource = &sortChunksProcessor{}
 const sortChunksProcName = "sortChunks"
 
 func newSortChunksProcessor(
-	flowCtx *FlowCtx, spec *SorterSpec, input RowSource, post *PostProcessSpec, out RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *SorterSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	out RowReceiver,
 ) (Processor, error) {
 	rowContainerMon := flowCtx.EvalCtx.Mon
 	ordering := convertToColumnOrdering(spec.OutputOrdering)
@@ -538,7 +546,7 @@ func newSortChunksProcessor(
 		rowContainerMon: rowContainerMon,
 	}
 	if err := proc.sorterBase.init(
-		flowCtx, input, post, out, ordering, spec.OrderingMatchLen,
+		flowCtx, processorID, input, post, out, ordering, spec.OrderingMatchLen,
 		procStateOpts{
 			inputsToDrain: []RowSource{input},
 			trailingMetaCallback: func() []ProducerMetadata {

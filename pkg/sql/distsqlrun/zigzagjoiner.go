@@ -263,6 +263,7 @@ const zigzagJoinerProcName = "zigzagJoiner"
 // holding the values of the prefix columns of the index specified in the spec.
 func newZigzagJoiner(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *ZigzagJoinerSpec,
 	fixedValues []sqlbase.EncDatumRow,
 	post *PostProcessSpec,
@@ -276,6 +277,7 @@ func newZigzagJoiner(
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
 		flowCtx,
+		processorID,
 		leftColumnTypes,
 		rightColumnTypes,
 		spec.Type,

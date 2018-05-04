@@ -502,7 +502,7 @@ func TestZigzagJoiner(t *testing.T) {
 
 			out := &RowBuffer{}
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			z, err := newZigzagJoiner(&flowCtx, &c.spec, c.fixedValues, &post, out)
+			z, err := newZigzagJoiner(&flowCtx, 0 /* processorID */, &c.spec, c.fixedValues, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -573,6 +573,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		out.ConsumerClosed()
 		zz, err := newZigzagJoiner(
 			&flowCtx,
+			0, /* processorID */
 			&ZigzagJoinerSpec{
 				Tables:    []sqlbase.TableDescriptor{*td, *td},
 				EqColumns: []Columns{{[]uint32{0, 1}}, {[]uint32{0, 1}}},

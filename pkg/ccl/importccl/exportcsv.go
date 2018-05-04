@@ -171,15 +171,17 @@ func exportPlanHook(
 
 func newCSVWriterProcessor(
 	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
 	spec distsqlrun.CSVWriterSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	c := &csvWriter{
-		flowCtx: flowCtx,
-		spec:    spec,
-		input:   input,
-		output:  output,
+		flowCtx:     flowCtx,
+		processorID: processorID,
+		spec:        spec,
+		input:       input,
+		output:      output,
 	}
 	if err := c.out.Init(&distsqlrun.PostProcessSpec{}, sql.ExportPlanResultTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -188,11 +190,12 @@ func newCSVWriterProcessor(
 }
 
 type csvWriter struct {
-	flowCtx *distsqlrun.FlowCtx
-	spec    distsqlrun.CSVWriterSpec
-	input   distsqlrun.RowSource
-	out     distsqlrun.ProcOutputHelper
-	output  distsqlrun.RowReceiver
+	flowCtx     *distsqlrun.FlowCtx
+	processorID int32
+	spec        distsqlrun.CSVWriterSpec
+	input       distsqlrun.RowSource
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
 }
 
 var _ distsqlrun.Processor = &csvWriter{}

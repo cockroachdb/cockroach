@@ -107,7 +107,7 @@ func TestSampleAggregator(t *testing.T) {
 		outputs[i] = NewRowBuffer(samplerOutTypes, nil /* rows */, RowBufferArgs{})
 
 		spec := &SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
-		p, err := newSamplerProcessor(&flowCtx, spec, in, &PostProcessSpec{}, outputs[i])
+		p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, outputs[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,9 @@ func TestSampleAggregator(t *testing.T) {
 		TableID:          13,
 	}
 
-	agg, err := newSampleAggregator(&flowCtx, spec, samplerResults, &PostProcessSpec{}, finalOut)
+	agg, err := newSampleAggregator(
+		&flowCtx, 0 /* processorID */, spec, samplerResults, &PostProcessSpec{}, finalOut,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -48,6 +48,7 @@ type joinerBase struct {
 // if the processor using the joinerBase is not implementing RowSource.
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
+	processorID int32,
 	leftTypes []sqlbase.ColumnType,
 	rightTypes []sqlbase.ColumnType,
 	jType sqlbase.JoinType,
@@ -104,7 +105,9 @@ func (jb *joinerBase) init(
 	}
 	outputTypes := condTypes[:outputSize]
 
-	if err := jb.processorBase.init(post, outputTypes, flowCtx, output, opts); err != nil {
+	if err := jb.processorBase.init(
+		post, outputTypes, flowCtx, processorID, output, opts,
+	); err != nil {
 		return err
 	}
 	return jb.onCond.init(onExpr, condTypes, jb.evalCtx)

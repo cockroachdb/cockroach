@@ -63,7 +63,11 @@ var scrubTableReaderProcName = "scrub"
 
 // newScrubTableReader creates a scrubTableReader.
 func newScrubTableReader(
-	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *TableReaderSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*scrubTableReader, error) {
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
@@ -83,6 +87,7 @@ func newScrubTableReader(
 		post,
 		ScrubTypes,
 		flowCtx,
+		processorID,
 		output,
 		procStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
