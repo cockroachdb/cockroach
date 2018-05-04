@@ -115,8 +115,9 @@ func registerClockJump(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("clockjump/tc=%s", tc.name),
-			Nodes: nodes(numNodes),
+			Name:   fmt.Sprintf("clockjump/tc=%s", tc.name),
+			Nodes:  nodes(numNodes),
+			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(t, c, tc)
 			},

@@ -74,8 +74,9 @@ func registerRoachmart(r *registry) {
 	for _, v := range []bool{true, false} {
 		v := v
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("roachmart/partition=%v", v),
-			Nodes: nodes(9, geo()),
+			Name:   fmt.Sprintf("roachmart/partition=%v", v),
+			Nodes:  nodes(9, geo()),
+			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

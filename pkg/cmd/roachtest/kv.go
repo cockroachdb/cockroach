@@ -47,8 +47,9 @@ func registerKV(r *registry) {
 		p := p
 		for _, n := range []int{1, 3} {
 			r.Add(testSpec{
-				Name:  fmt.Sprintf("kv%d/nodes=%d", p, n),
-				Nodes: nodes(n + 1),
+				Name:   fmt.Sprintf("kv%d/nodes=%d", p, n),
+				Nodes:  nodes(n + 1),
+				Stable: true, // DO NOT COPY to new tests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runKV(ctx, t, c, p)
 				},
@@ -59,8 +60,9 @@ func registerKV(r *registry) {
 
 func registerKVSplits(r *registry) {
 	r.Add(testSpec{
-		Name:  "kv/splits/nodes=3",
-		Nodes: nodes(4),
+		Name:   "kv/splits/nodes=3",
+		Nodes:  nodes(4),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))

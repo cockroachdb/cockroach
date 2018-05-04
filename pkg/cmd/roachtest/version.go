@@ -210,8 +210,9 @@ func registerVersion(r *registry) {
 	const version = "v2.0.0"
 	for _, n := range []int{3, 5} {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
-			Nodes: nodes(n + 1),
+			Name:   fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
+			Nodes:  nodes(n + 1),
+			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runVersion(ctx, t, c, version)
 			},

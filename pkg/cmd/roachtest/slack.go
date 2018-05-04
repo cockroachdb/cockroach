@@ -48,7 +48,32 @@ func findChannel(client *slack.Client, name string) (string, error) {
 	return "", fmt.Errorf("not found")
 }
 
+func sortTests(tests []*test) {
+	sort.Slice(tests, func(i, j int) bool {
+		return tests[i].Name() < tests[j].Name()
+	})
+}
+
 func postSlackReport(pass, fail map[*test]struct{}, skip int) {
+	var stablePass []*test
+	var stableFail []*test
+	var unstablePass []*test
+	var unstableFail []*test
+	for t := range pass {
+		if t.spec.Stable {
+			stablePass = append(stablePass, t)
+		} else {
+			unstablePass = append(unstablePass, t)
+		}
+	}
+	for t := range fail {
+		if t.spec.Stable {
+			stableFail = append(stableFail, t)
+		} else {
+			unstableFail = append(unstableFail, t)
+		}
+	}
+
 	client := makeSlackClient()
 	if client == nil {
 		return
@@ -68,46 +93,52 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 		branch = b
 	}
 	message := fmt.Sprintf("%s: %d passed, %d failed, %d skipped",
-		branch, len(pass), len(fail), skip)
+		branch, len(stablePass), len(stableFail), skip)
 
-	status := "good"
-	if len(fail) > 0 {
-		status = "warning"
-	}
-	var link string
-	if buildID := os.Getenv("TC_BUILD_ID"); buildID != "" {
-		link = fmt.Sprintf("https://teamcity.cockroachdb.com/viewLog.html?"+
-			"buildId=%s&buildTypeId=Cockroach_Nightlies_WorkloadNightly",
-			buildID)
-	}
-	params.Attachments = append(params.Attachments,
-		slack.Attachment{
-			Color:     status,
-			Title:     message,
-			TitleLink: link,
-			Fallback:  message,
-		})
-
-	if len(fail) > 0 {
-		var failTests []*test
-		for t := range fail {
-			failTests = append(failTests, t)
+	{
+		status := "good"
+		if len(stableFail) > 0 {
+			status = "warning"
 		}
-		sort.Slice(failTests, func(i, j int) bool {
-			return failTests[i].Name() < failTests[j].Name()
-		})
-		var failures bytes.Buffer
-		for _, t := range failTests {
-			fmt.Fprintf(&failures, "%s\n", t.Name())
+		var link string
+		if buildID := os.Getenv("TC_BUILD_ID"); buildID != "" {
+			link = fmt.Sprintf("https://teamcity.cockroachdb.com/viewLog.html?"+
+				"buildId=%s&buildTypeId=Cockroach_Nightlies_WorkloadNightly",
+				buildID)
 		}
-
 		params.Attachments = append(params.Attachments,
 			slack.Attachment{
-				Color:    "danger",
-				Title:    "Failures",
-				Text:     failures.String(),
-				Fallback: message,
+				Color:     status,
+				Title:     message,
+				TitleLink: link,
+				Fallback:  message,
 			})
+	}
+
+	data := []struct {
+		tests []*test
+		title string
+		color string
+	}{
+		{stableFail, "Failures", "danger"},
+		{unstablePass, "Successes [unstable]", "good"},
+		{unstableFail, "Failures [unstable]", "warning"},
+	}
+	for _, d := range data {
+		if len(d.tests) > 0 {
+			sortTests(d.tests)
+			var buf bytes.Buffer
+			for _, t := range d.tests {
+				fmt.Fprintf(&buf, "%s\n", t.Name())
+			}
+			params.Attachments = append(params.Attachments,
+				slack.Attachment{
+					Color:    d.color,
+					Title:    d.title,
+					Text:     buf.String(),
+					Fallback: message,
+				})
+		}
 	}
 
 	if _, _, err := client.PostMessage(channel, "", params); err != nil {

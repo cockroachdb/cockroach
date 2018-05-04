@@ -128,8 +128,9 @@ func registerClockMonotonicity(r *registry) {
 	for i := range testCases {
 		tc := testCases[i]
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
-			Nodes: nodes(numNodes),
+			Name:   fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
+			Nodes:  nodes(numNodes),
+			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(t, c, tc)
 			},
