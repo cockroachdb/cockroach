@@ -81,40 +81,60 @@ Use 'roachtest run -n' to see a list of all tests.
 		},
 	}
 
-	rootCmd.AddCommand(runCmd)
-
-	runCmd.Flags().IntVar(
-		&count, "count", 1, "the number of times to run each test")
-	runCmd.Flags().BoolVarP(
-		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
-	runCmd.Flags().BoolVarP(
-		&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
-	runCmd.Flags().IntVarP(
-		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
-	runCmd.Flags().StringVar(
-		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
 	runCmd.Flags().StringVar(
 		&buildTag, "build-tag", "", "build tag (auto-detect if empty)")
 	runCmd.Flags().StringVar(
-		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
-	runCmd.Flags().BoolVar(
-		&clusterWipe, "wipe", true,
-		"wipe existing cluster before starting test (for use with --cluster)")
-	runCmd.Flags().StringVar(
 		&slackToken, "slack-token", "", "Slack bot token")
-	runCmd.Flags().StringVar(
-		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 	runCmd.Flags().BoolVar(
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
-	runCmd.Flags().StringVar(
-		&roachprod, "roachprod", "", "path to roachprod binary to use")
+
+	var benchCmd = &cobra.Command{
+		Use:   "bench [benchmarks]",
+		Short: "run automated benchmarks on cockroach cluster",
+		Long: `Run automated benchmarks on existing or ephemeral cockroach clusters.
+
+Use 'roachtest bench -n' to see a list of all benchmarks.
+`,
+		RunE: func(_ *cobra.Command, args []string) error {
+			if count <= 0 {
+				return fmt.Errorf("--count (%d) must by greater than 0", count)
+			}
+			r := newRegistry()
+			registerBenchmarks(r)
+			os.Exit(r.Run(args))
+			return nil
+		},
+	}
+
+	// Register flags shared between `run` and `bench`.
+	for _, cmd := range []*cobra.Command{runCmd, benchCmd} {
+		cmd.Flags().StringVar(
+			&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+		cmd.Flags().StringVar(
+			&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+		cmd.Flags().IntVar(
+			&count, "count", 1, "the number of times to run each test")
+		cmd.Flags().BoolVarP(
+			&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVarP(
+			&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
+		cmd.Flags().IntVarP(
+			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
+		cmd.Flags().StringVar(
+			&roachprod, "roachprod", "", "path to roachprod binary to use")
+		cmd.Flags().BoolVar(
+			&clusterWipe, "wipe", cmd == runCmd, // default depends on test vs. bench
+			"wipe existing cluster before starting test (for use with --cluster)")
+		cmd.Flags().StringVar(
+			&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+	}
 
 	var storeGenCmd = &cobra.Command{
 		Use:   "store-gen [workload]",
 		Short: "generate store directory dumps\n",
 		Long: `Generate store directory dumps that can quickly bootstrap a
-	Cockroach cluster with existing data.
-	`,
+Cockroach cluster with existing data.
+`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			r := newRegistry()
@@ -128,6 +148,9 @@ Use 'roachtest run -n' to see a list of all tests.
 	storeGenCmd.Flags().IntVarP(
 		&stores, "stores", "n", stores, "number of stores to distribute data across")
 	storeGenCmd.Flags().SetInterspersed(false) // ignore workload flags
+
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(storeGenCmd)
 
 	if err := rootCmd.Execute(); err != nil {
