@@ -67,6 +67,10 @@ var fixturesLoadCmd = setCmdDefaults(&cobra.Command{
 	Use:   `load`,
 	Short: `Load a fixture into a running cluster. An enterprise license is required.`,
 })
+var fixturesURLCmd = setCmdDefaults(&cobra.Command{
+	Use:   `url`,
+	Short: `Generate the GCS URL for a fixture`,
+})
 
 var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
 	`csv-server`, ``,
@@ -135,10 +139,19 @@ func init() {
 		genLoadCmd.Flags().AddFlagSet(genFlags)
 		genLoadCmd.Run = cmdHelper(gen, fixturesLoad)
 		fixturesLoadCmd.AddCommand(genLoadCmd)
+
+		genURLCmd := setCmdDefaults(&cobra.Command{
+			Use:  meta.Name,
+			Args: cobra.NoArgs,
+		})
+		genURLCmd.Flags().AddFlagSet(genFlags)
+		genURLCmd.Run = fixturesURL(gen)
+		fixturesURLCmd.AddCommand(genURLCmd)
 	}
 	fixturesCmd.AddCommand(fixturesListCmd)
 	fixturesCmd.AddCommand(fixturesMakeCmd)
 	fixturesCmd.AddCommand(fixturesLoadCmd)
+	fixturesCmd.AddCommand(fixturesURLCmd)
 	rootCmd.AddCommand(fixturesCmd)
 }
 
@@ -248,4 +261,17 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	}
 
 	return nil
+}
+
+func fixturesURL(gen workload.Generator) func(*cobra.Command, []string) {
+	return handleErrs(func(*cobra.Command, []string) error {
+		if h, ok := gen.(workload.Hookser); ok {
+			if err := h.Hooks().Validate(); err != nil {
+				return err
+			}
+		}
+
+		fmt.Println(workloadccl.FixtureURL(config(), gen))
+		return nil
+	})
 }
