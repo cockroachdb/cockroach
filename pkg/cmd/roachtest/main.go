@@ -71,6 +71,8 @@ Use 'roachtest run -n' to see a list of all tests.
 
 	rootCmd.AddCommand(runCmd)
 
+	runCmd.Flags().BoolVar(
+		&bench, "bench", false, "whether to run benchmarks or not")
 	runCmd.Flags().IntVar(
 		&count, "count", 1, "the number of times to run each test")
 	runCmd.Flags().BoolVarP(

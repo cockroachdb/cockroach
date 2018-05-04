@@ -40,6 +40,7 @@ import (
 var (
 	parallelism   = 10
 	count         = 1
+	bench         = false
 	debug         = false
 	dryrun        = false
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -63,6 +64,9 @@ type testSpec struct {
 	// to stable once they have passed successfully on multiple nightly (not
 	// local) runs.
 	Stable bool
+	// Benchmark indicates that the test is a benchmark and should not be run
+	// unless the --bench flag is passed.
+	Benchmark bool
 	// Nodes provides the specification for the cluster to use for the test. Only
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
@@ -167,7 +171,7 @@ func (r *registry) Add(spec testSpec) {
 func (r *registry) List(re *regexp.Regexp) []*testSpec {
 	var results []*testSpec
 	for _, t := range r.m {
-		if t.matchRegex(re) {
+		if t.matchRegex(re) && t.Benchmark == bench {
 			results = append(results, t)
 		}
 	}

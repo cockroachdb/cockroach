@@ -912,7 +912,13 @@ func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
 // ExpectDeath lets the monitor know that a node is about to be killed, and that
 // this should be ignored.
 func (m *monitor) ExpectDeath() {
-	atomic.AddInt32(&m.expDeaths, 1)
+	m.ExpectDeaths(1)
+}
+
+// ExpectDeaths lets the monitor know that a specific number of nodes are about
+// to be killed, and that they should be ignored.
+func (m *monitor) ExpectDeaths(count int32) {
+	atomic.AddInt32(&m.expDeaths, count)
 }
 
 func (m *monitor) Go(fn func(context.Context) error) {
