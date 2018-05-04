@@ -43,15 +43,17 @@ func registerTPCC(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:  "tpcc/w=1/nodes=3",
-		Nodes: nodes(4),
+		Name:   "tpcc/w=1/nodes=3",
+		Nodes:  nodes(4),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, 1, " --wait=false")
 		},
 	})
 	r.Add(testSpec{
-		Name:  "tpmc/w=1/nodes=3",
-		Nodes: nodes(4),
+		Name:   "tpmc/w=1/nodes=3",
+		Nodes:  nodes(4),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, 1, "")
 		},
