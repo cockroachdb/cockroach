@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -331,17 +332,17 @@ func (f *Factory) canConstructBinary(op opt.Operator, left, right memo.GroupID) 
 // ----------------------------------------------------------------------
 
 // lookupLogical returns the given group's logical properties.
-func (f *Factory) lookupLogical(group memo.GroupID) *memo.LogicalProps {
+func (f *Factory) lookupLogical(group memo.GroupID) *props.Logical {
 	return f.mem.GroupProperties(group)
 }
 
 // lookupRelational returns the given group's logical relational properties.
-func (f *Factory) lookupRelational(group memo.GroupID) *memo.RelationalProps {
+func (f *Factory) lookupRelational(group memo.GroupID) *props.Relational {
 	return f.lookupLogical(group).Relational
 }
 
 // lookupScalar returns the given group's logical scalar properties.
-func (f *Factory) lookupScalar(group memo.GroupID) *memo.ScalarProps {
+func (f *Factory) lookupScalar(group memo.GroupID) *props.Scalar {
 	return f.lookupLogical(group).Scalar
 }
 
@@ -470,7 +471,7 @@ func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.Private
 // the Ordering of a Limit/Offset operator.
 func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
-	for _, col := range f.mem.LookupPrivate(ordering).(memo.Ordering) {
+	for _, col := range f.mem.LookupPrivate(ordering).(props.Ordering) {
 		colSet.Add(int(col.ID()))
 	}
 	return colSet

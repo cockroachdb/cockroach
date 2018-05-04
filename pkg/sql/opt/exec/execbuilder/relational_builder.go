@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -554,7 +555,7 @@ func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node,
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
 func (b *Builder) applyPresentation(
-	input execPlan, md *opt.Metadata, p memo.Presentation,
+	input execPlan, md *opt.Metadata, p props.Presentation,
 ) (execPlan, error) {
 	colList := make(opt.ColList, len(p))
 	colNames := make([]string, len(p))

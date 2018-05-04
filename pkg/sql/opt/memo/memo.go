@@ -16,7 +16,22 @@ package memo
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
+// PhysicalPropsID identifies a set of physical properties that has been
+// interned by a memo instance. If two ids are the same, then the physical
+// properties are the same.
+type PhysicalPropsID uint32
+
+const (
+	// MinPhysPropsID is the id of the well-known set of physical properties
+	// that requires nothing of an operator. Therefore, every operator is
+	// guaranteed to provide this set of properties. This is typically the most
+	// commonly used set of physical properties in the memo, since most
+	// operators do not require any physical properties from their children.
+	MinPhysPropsID PhysicalPropsID = 1
 )
 
 // Memo is a data structure for efficiently storing a forest of query plans.
@@ -107,7 +122,7 @@ type Memo struct {
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
 	physPropsMap map[string]PhysicalPropsID
-	physProps    []PhysicalProps
+	physProps    []props.Physical
 
 	// Some memoExprs have a variable number of children. The Expr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
@@ -135,11 +150,11 @@ func New() *Memo {
 		exprMap:      make(map[Fingerprint]GroupID),
 		groups:       make([]group, 1),
 		physPropsMap: make(map[string]PhysicalPropsID),
-		physProps:    make([]PhysicalProps, 1, 2),
+		physProps:    make([]props.Physical, 1, 2),
 	}
 
 	// Intern physical properties that require nothing of operator.
-	physProps := PhysicalProps{}
+	physProps := props.Physical{}
 	m.physProps = append(m.physProps, physProps)
 	m.physPropsMap[physProps.Fingerprint()] = MinPhysPropsID
 
@@ -184,7 +199,7 @@ func (m *Memo) isOptimized() bool {
 // --------------------------------------------------------------------
 
 // GroupProperties returns the logical properties of the given group.
-func (m *Memo) GroupProperties(group GroupID) *LogicalProps {
+func (m *Memo) GroupProperties(group GroupID) *props.Logical {
 	return &m.groups[group].logical
 }
 
@@ -304,7 +319,7 @@ func (m *Memo) BestExprCost(best BestExprID) Cost {
 }
 
 // BestExprLogical returns the logical properties of the given best expression.
-func (m *Memo) BestExprLogical(best BestExprID) *LogicalProps {
+func (m *Memo) BestExprLogical(best BestExprID) *props.Logical {
 	return m.GroupProperties(best.group)
 }
 
@@ -337,12 +352,12 @@ func (m *Memo) LookupList(id ListID) []GroupID {
 // been added, and returns an ID which can later be used to look up the props.
 // If the same list was added previously, then this method is a no-op and
 // returns the same ID as did the previous call.
-func (m *Memo) InternPhysicalProps(props *PhysicalProps) PhysicalPropsID {
-	fingerprint := props.Fingerprint()
+func (m *Memo) InternPhysicalProps(physical *props.Physical) PhysicalPropsID {
+	fingerprint := physical.Fingerprint()
 	id, ok := m.physPropsMap[fingerprint]
 	if !ok {
 		id = PhysicalPropsID(len(m.physProps))
-		m.physProps = append(m.physProps, *props)
+		m.physProps = append(m.physProps, *physical)
 		m.physPropsMap[fingerprint] = id
 	}
 	return id
@@ -350,7 +365,7 @@ func (m *Memo) InternPhysicalProps(props *PhysicalProps) PhysicalPropsID {
 
 // LookupPhysicalProps returns the set of physical props that was earlier
 // interned in the memo by a call to InternPhysicalProps.
-func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *PhysicalProps {
+func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *props.Physical {
 	return &m.physProps[id]
 }
 

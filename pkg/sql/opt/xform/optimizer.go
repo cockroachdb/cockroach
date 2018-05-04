@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -142,7 +143,7 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *memo.PhysicalProps) memo.ExprView {
+func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) memo.ExprView {
 	required := o.mem.InternPhysicalProps(requiredProps)
 	state := o.optimizeGroup(root, required)
 	ev := memo.MakeExprView(o.mem, state.best)
