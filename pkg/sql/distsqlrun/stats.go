@@ -15,14 +15,13 @@
 package distsqlrun
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-// StatSummarizer summarizes stats.
-type StatSummarizer interface {
-	SummarizeStats() string
+// InputStats represents the stats collected from an input.
+type InputStats struct {
+	NumRows *metric.Counter
 }
 
 // InputStatCollector wraps a RowSource and collects stats from it.
@@ -32,12 +31,11 @@ type InputStatCollector struct {
 }
 
 var _ RowSource = &InputStatCollector{}
-var _ StatSummarizer = &InputStatCollector{}
 
 // NewInputStatCollector creates a new InputStatCollector that wraps the given
-// input described by name.
-func NewInputStatCollector(input RowSource, name string) *InputStatCollector {
-	return &InputStatCollector{RowSource: input, InputStats: InputStats{Name: name}}
+// input and updates the given stats.
+func NewInputStatCollector(input RowSource, stats InputStats) *InputStatCollector {
+	return &InputStatCollector{RowSource: input, InputStats: stats}
 }
 
 // Next implements the RowSource interface. It calls Next on the embedded
@@ -45,16 +43,7 @@ func NewInputStatCollector(input RowSource, name string) *InputStatCollector {
 func (isc *InputStatCollector) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	row, meta := isc.RowSource.Next()
 	if row != nil {
-		isc.NumRows++
+		isc.NumRows.Inc(1)
 	}
 	return row, meta
-}
-
-// SummarizeStats implements the StatSummarizer interface.
-func (is InputStats) SummarizeStats() string {
-	return fmt.Sprintf(
-		"stat summary for %s: %d rows read",
-		is.Name,
-		is.NumRows,
-	)
 }

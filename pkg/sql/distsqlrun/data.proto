@@ -259,14 +259,6 @@ message RemoteProducerMetadata {
   }
 }
 
-// InputStats represents the stats collected from an input.
-message InputStats {
-  // name describes the input whose stats were collected.
-  optional string name = 1 [(gogoproto.nullable) = false];
-  // num_rows is the number of rows received from the input.
-  optional int32 num_rows = 2 [(gogoproto.nullable) = false];
-}
-
 // DistSQLVersionGossipInfo represents the DistSQL server version information
 // that gets gossiped for each node. This is used by planners to avoid planning
 // on nodes with incompatible version during rolling cluster updates.

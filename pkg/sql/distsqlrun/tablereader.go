@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -53,6 +54,26 @@ var _ Processor = &tableReader{}
 var _ RowSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
+
+type statInputRows struct {
+	tracing.SpanStatDescriptorBase
+}
+
+func (statInputRows) Render(s string) string {
+	return "rows read : " + s
+}
+
+// TableReaderStatInputRows is a stat that represents the number of rows read.
+var TableReaderStatInputRows = statInputRows{
+	tracing.SpanStatDescriptorBase{
+		Name: "tablereader.input.rows",
+		Help: "Number of rows the tablereader has read.",
+	},
+}
+
+func init() {
+	tracing.RegisterSpanStat(TableReaderStatInputRows)
+}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -189,12 +210,6 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	// If stats have been collected, output a summary to the trace.
-	if len(tr.stats) != 0 {
-		for _, stat := range tr.stats {
-			log.VEventf(tr.ctx, 2, stat.SummarizeStats())
-		}
-	}
 
 	if tr.flowCtx.txn.Type() == client.LeafTxn {
 		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
@@ -213,9 +228,7 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		isc := NewInputStatCollector(tr.input, "tableReader input")
-		tr.stats = append(tr.stats, isc)
-		tr.input = isc
+		tr.registry = tr.collectStats()
 	}
 
 	// Like every processor, the tableReader will have a context with a log tag
@@ -268,4 +281,23 @@ func (tr *tableReader) ConsumerDone() {
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	tr.internalClose()
+}
+
+// collectStats instruments the tableReader to collect stats and returns a
+// registry of all of these stats.
+func (tr *tableReader) collectStats() *metric.Registry {
+	r := metric.NewRegistry()
+
+	is := InputStats{
+		NumRows: metric.NewCounter(
+			metric.Metadata{
+				Name: TableReaderStatInputRows.Name,
+				Help: TableReaderStatInputRows.Help,
+			},
+		),
+	}
+	r.AddMetricStruct(is)
+	tr.input = NewInputStatCollector(tr.input, is)
+
+	return r
 }
