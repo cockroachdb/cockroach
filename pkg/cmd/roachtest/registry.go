@@ -42,5 +42,6 @@ func registerTests(r *registry) {
 	registerScaleData(r)
 	registerSchemaChange(r)
 	registerTPCC(r)
+	registerTPCCBench(r)
 	registerVersion(r)
 }
