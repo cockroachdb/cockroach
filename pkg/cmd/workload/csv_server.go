@@ -25,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var csvServerCmd = &cobra.Command{
+var csvServerCmd = setCmdDefaults(&cobra.Command{
 	Use:   `csv-server`,
 	Short: `Serves csv table data through an HTTP interface`,
 	Args:  cobra.NoArgs,
 	RunE:  runCSVServer,
-}
+})
 
 var port *int
 
