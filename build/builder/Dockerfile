@@ -172,6 +172,8 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
  && apt-get update
 
 # ccache - speed up C and C++ compilation
+# lsof - roachprod monitor
+# netcat - roachprod monitor
 # nodejs - ui
 # openjdk-8-jre - railroad diagram generation
 # google-cloud-sdk - roachprod acceptance tests
@@ -180,6 +182,8 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 RUN apt-get install -y --no-install-recommends \
     ccache \
     google-cloud-sdk \
+    lsof \
+    netcat \
     nodejs \
     openjdk-8-jre \
     openssh-client \
