@@ -12,11 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
-
+// This is the default entry point for a CockroachDB binary.
+//
 // The ccl hook import below means building this will produce CCL'ed binaries.
 // This file itself remains Apache2 to preserve the organization of ccl code
 // under the /pkg/ccl subtree, but is unused for pure FLOSS builds.
+package main
+
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/cli"
