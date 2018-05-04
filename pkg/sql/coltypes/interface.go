@@ -66,6 +66,7 @@ func (*TBytes) columnType()          {}
 func (*TCollatedString) columnType() {}
 func (*TArray) columnType()          {}
 func (*TVector) columnType()         {}
+func (TTuple) columnType()           {}
 func (*TOid) columnType()            {}
 
 // All Ts also implement CastTargetType.
@@ -88,6 +89,7 @@ func (*TBytes) castTargetType()          {}
 func (*TCollatedString) castTargetType() {}
 func (*TArray) castTargetType()          {}
 func (*TVector) castTargetType()         {}
+func (TTuple) castTargetType()           {}
 func (*TOid) castTargetType()            {}
 
 func (node *TBool) String() string           { return ColTypeAsString(node) }
@@ -109,4 +111,5 @@ func (node *TBytes) String() string          { return ColTypeAsString(node) }
 func (node *TCollatedString) String() string { return ColTypeAsString(node) }
 func (node *TArray) String() string          { return ColTypeAsString(node) }
 func (node *TVector) String() string         { return ColTypeAsString(node) }
+func (node TTuple) String() string           { return ColTypeAsString(node) }
 func (node *TOid) String() string            { return ColTypeAsString(node) }
