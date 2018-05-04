@@ -46,9 +46,13 @@ var (
 type testSpec struct {
 	SkippedBecause string // if nonzero, test will be skipped
 	Name           string
-	// TODO(peter): Help string
-	Nodes []nodeSpec
-	Run   func(ctx context.Context, t *test, c *cluster)
+	// Stable indicates whether failure of the test will result in failure of the
+	// test run. Tests should be added initially as unstable, and only converted
+	// to stable once they have passed successfully on multiple nightly (not
+	// local) runs.
+	Stable bool
+	Nodes  []nodeSpec
+	Run    func(ctx context.Context, t *test, c *cluster)
 }
 
 type registry struct {
@@ -158,7 +162,11 @@ func (r *registry) Run(filter []string) int {
 				if teamCity {
 					fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
 				} else {
-					fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
+					stability := ""
+					if !t.spec.Stable {
+						stability = " [unstable]"
+					}
+					fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), stability)
 				}
 				status.Lock()
 				status.running[t] = struct{}{}
@@ -202,11 +210,22 @@ func (r *registry) Run(filter []string) int {
 			status.Lock()
 			defer status.Unlock()
 			postSlackReport(status.pass, status.fail, len(r.m)-len(tests))
-			if len(status.fail) > 0 {
+
+			stableFails := 0
+			for t := range status.fail {
+				if t.spec.Stable {
+					stableFails++
+				}
+			}
+			if stableFails > 0 {
 				fmt.Fprintln(r.out, "FAIL")
 				return 1
 			}
-			fmt.Fprintln(r.out, "PASS")
+			unstableFails := ""
+			if n := len(status.fail) - stableFails; n > 0 {
+				unstableFails = fmt.Sprintf(" (%d unstable FAIL)", n)
+			}
+			fmt.Fprintf(r.out, "PASS%s\n", unstableFails)
 			return 0
 
 		case <-ticker.C:
@@ -469,6 +488,10 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
+				stability := ""
+				if !t.spec.Stable {
+					stability = "[unstable] "
+				}
 
 				if t.Failed() {
 					if teamCity {
@@ -477,9 +500,9 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 							t.Name(), teamCityEscape(string(t.mu.output)), t.Name(),
 						)
 					}
-					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
+					fmt.Fprintf(out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, t.mu.output)
 				} else if t.spec.SkippedBecause == "" {
-					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
+					fmt.Fprintf(out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 				} else {

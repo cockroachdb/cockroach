@@ -21,8 +21,9 @@ import (
 
 func registerRestore(r *registry) {
 	r.Add(testSpec{
-		Name:  `restore2TB`,
-		Nodes: nodes(10),
+		Name:   `restore2TB`,
+		Nodes:  nodes(10),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx)

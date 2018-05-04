@@ -111,6 +111,7 @@ func registerHotSpotSplits(r *registry) {
 		SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25036",
 		Name:           fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
 		Nodes:          nodes(numNodes),
+		Stable:         true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 50
