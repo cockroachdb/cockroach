@@ -30,26 +30,38 @@ func main() {
 		Short: "roachtest tool for testing cockroach clusters",
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
+
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			if clusterName != "" && local {
+				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
+			}
+			initBinaries()
+			return nil
+		},
 	}
+
+	rootCmd.PersistentFlags().StringVarP(
+		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
+	rootCmd.PersistentFlags().BoolVarP(
+		&local, "local", "l", local, "run tests locally")
+	rootCmd.PersistentFlags().StringVarP(
+		&username, "user", "u", username, "username to run under, detect if blank")
+	rootCmd.PersistentFlags().StringVar(
+		&cockroach, "cockroach", "", "path to cockroach binary to use")
+	rootCmd.PersistentFlags().StringVar(
+		&workload, "workload", "", "path to workload binary to use")
 
 	var runCmd = &cobra.Command{
 		Use:   "run [tests]",
-		Short: "run automated tests on cockroach cluster\n",
+		Short: "run automated tests on cockroach cluster",
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
 Use 'roachtest run -n' to see a list of all tests.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			if clusterName != "" && local {
-				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
-			}
-
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-
-			initBinaries()
-
 			r := newRegistry()
 			registerTests(r)
 			os.Exit(r.Run(args))
@@ -65,31 +77,42 @@ Use 'roachtest run -n' to see a list of all tests.
 		&debug, "debug", "d", debug, "don't wipe and destroy cluster if test fails")
 	runCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
-	runCmd.Flags().BoolVarP(
-		&local, "local", "l", local, "run tests locally")
 	runCmd.Flags().IntVarP(
 		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 	runCmd.Flags().StringVar(
 		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
-	runCmd.Flags().StringVarP(
-		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
 	runCmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
 	runCmd.Flags().BoolVar(
 		&clusterWipe, "wipe", true,
 		"wipe existing cluster before starting test (for use with --cluster)")
 	runCmd.Flags().StringVar(
-		&cockroach, "cockroach", "", "path to cockroach binary to use")
-	runCmd.Flags().StringVarP(
-		&username, "user", "u", username, "username to run under, detect if blank")
-	runCmd.Flags().StringVar(
-		&workload, "workload", "", "path to workload binary to use")
-	runCmd.Flags().StringVar(
 		&slackToken, "slack-token", "", "Slack bot token")
 	runCmd.Flags().StringVar(
 		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 	runCmd.Flags().BoolVar(
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
+
+	var storeGenCmd = &cobra.Command{
+		Use:   "store-gen [workload]",
+		Short: "generate store directory dumps\n",
+		Long: `Generate store directory dumps that can quickly bootstrap a
+	Cockroach cluster with existing data.
+	`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			r := newRegistry()
+			registerStoreGen(r, args)
+			// We've only registered one store generation "test" that does its own
+			// argument processing, so no need to provide any arguments to r.Run.
+			os.Exit(r.Run(nil /* filter */))
+			return nil
+		},
+	}
+	storeGenCmd.Flags().IntVarP(
+		&stores, "stores", "n", stores, "number of stores to distribute data across")
+	storeGenCmd.Flags().SetInterspersed(false) // ignore workload flags
+	rootCmd.AddCommand(storeGenCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
