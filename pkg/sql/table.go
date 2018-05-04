@@ -403,19 +403,28 @@ func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) er
 			if !uc.dropped {
 				continue
 			}
+			// The bottom code still suffers from the following problem for
+			// database "a":
+			// node 1: caches database a -> id1
+			// node 2: drop database a; create database a -> id2
+			// node 1: drop database a and sees cached database a -> id1 below.
+			// To be resolved by #14332
 			err := tc.dbCacheSubscriber.waitForCacheState(
 				func(dc *databaseCache) (bool, error) {
-					desc, err := dc.getCachedDatabaseDesc(uc.name, false /*required*/)
-					if err != nil {
-						return false, err
+					// Resolve the database name. This first tries the cache
+					// and then goes to the store if the database is not present
+					// in the cache.
+					dbID, err := dc.getDatabaseID(ctx,
+						tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
+					if err != nil || dbID == 0 {
+						// dbID can still be 0 if required is false and
+						// the database is not found.
+						return true, err
 					}
-					if desc == nil {
-						return true, nil
-					}
+
 					// If the database name still exists but it now references another
-					// db, we're good - it means that the database name has been reused
-					// within the same transaction.
-					return desc.ID != uc.id, nil
+					// db, we're good - it means that the database name has been reused.
+					return dbID != uc.id, nil
 				})
 			if err != nil {
 				return err
