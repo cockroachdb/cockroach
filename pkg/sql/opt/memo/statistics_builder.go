@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -48,7 +49,7 @@ import (
 // See the comments in sql/opt/statistics.go for more details.
 type statisticsBuilder struct {
 	s     *opt.Statistics
-	props *RelationalProps
+	props *props.Relational
 
 	// ev is the ExprView for which these statistics are valid.
 	ev      ExprView
@@ -61,12 +62,12 @@ type statisticsBuilder struct {
 func (sb *statisticsBuilder) init(
 	evalCtx *tree.EvalContext,
 	s *opt.Statistics,
-	props *RelationalProps,
+	relational *props.Relational,
 	ev ExprView,
 	keyBuf *keyBuffer,
 ) {
 	sb.s = s
-	sb.props = props
+	sb.props = relational
 	sb.ev = ev
 	sb.evalCtx = evalCtx
 	sb.keyBuf = keyBuf

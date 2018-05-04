@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -109,7 +110,7 @@ func TestBuilder(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				exprView := o.Optimize(group, &memo.PhysicalProps{})
+				exprView := o.Optimize(group, &props.Physical{})
 				return exprView.FormatString(memo.ExprFmtHideAll)
 
 			default:

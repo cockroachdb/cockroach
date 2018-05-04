@@ -21,24 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-// PhysicalPropsID identifies a set of physical properties that has been
-// interned by a memo instance. If two ids are the same, then the physical
-// properties are the same.
-type PhysicalPropsID uint32
-
-const (
-	// MinPhysPropsID is the id of the well-known set of physical properties
-	// that requires nothing of an operator. Therefore, every operator is
-	// guaranteed to provide this set of properties. This is typically the most
-	// commonly used set of physical properties in the memo, since most
-	// operators do not require any physical properties from their children.
-	MinPhysPropsID PhysicalPropsID = 1
-)
-
-// PhysicalProps are interesting characteristics of an expression that impact
-// its layout, presentation, or location, but not its logical content. Examples
-// include row order, column naming, and data distribution (physical location
-// of data ranges). Physical properties exist outside of the relational
+// Physical properties are interesting characteristics of an expression that
+// impact its layout, presentation, or location, but not its logical content.
+// Examples include row order, column naming, and data distribution (physical
+// location of data ranges). Physical properties exist outside of the relational
 // algebra, and arise from both the SQL query itself (e.g. the non-relational
 // ORDER BY operator) and by the selection of specific implementations during
 // optimization (e.g. a merge join requires the inputs to be sorted in a
@@ -51,7 +37,7 @@ const (
 // is always with respect to a particular set of required physical properties.
 // The goal is to find the lowest cost expression that provides those
 // properties while still remaining logically equivalent.
-type PhysicalProps struct {
+type Physical struct {
 	// Presentation specifies the naming, membership (including duplicates),
 	// and order of result columns. If Presentation is not defined, then no
 	// particular column presentation is required or provided.
@@ -66,12 +52,12 @@ type PhysicalProps struct {
 
 // Defined returns true if any physical property is defined. If none is
 // defined, then this is an instance of MinPhysProps.
-func (p *PhysicalProps) Defined() bool {
+func (p *Physical) Defined() bool {
 	return p.Presentation.Defined() || p.Ordering.Defined()
 }
 
 // FormatString writes physical properties to a human-readable format.
-func (p *PhysicalProps) FormatString(verbose bool) string {
+func (p *Physical) FormatString(verbose bool) string {
 	hasProjection := p.Presentation.Defined()
 	hasOrdering := p.Ordering.Defined()
 
@@ -113,16 +99,16 @@ func (p *PhysicalProps) FormatString(verbose bool) string {
 
 // Fingerprint returns a string that uniquely describes this set of physical
 // properties. It is suitable for use as a hash key in a map.
-func (p *PhysicalProps) Fingerprint() string {
+func (p *Physical) Fingerprint() string {
 	return p.FormatString(false /* verbose */)
 }
 
-func (p *PhysicalProps) String() string {
+func (p *Physical) String() string {
 	return p.FormatString(true /* verbose */)
 }
 
 // Equals returns true if the two physical properties are identical.
-func (p *PhysicalProps) Equals(rhs *PhysicalProps) bool {
+func (p *Physical) Equals(rhs *Physical) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(rhs.Ordering)
 }
 

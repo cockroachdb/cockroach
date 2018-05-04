@@ -16,7 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -45,7 +45,7 @@ func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope, projectionsScope *
 	}
 
 	orderByScope := inScope.push()
-	orderByScope.physicalProps.Ordering = make(memo.Ordering, 0, len(orderBy))
+	orderByScope.physicalProps.Ordering = make(props.Ordering, 0, len(orderBy))
 
 	// TODO(rytaft): rewrite ORDER BY if it uses ORDER BY INDEX tbl@idx or
 	// ORDER BY PRIMARY KEY syntax.
