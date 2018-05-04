@@ -1690,8 +1690,11 @@ func TestDrainRangeRejection(t *testing.T) {
 func TestSystemZoneConfigs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	if testing.Short() {
-		t.Skip("short flag")
+	// This test is relatively slow and resource intensive. When run under
+	// stressrace on a loaded machine (as in the nightly tests), sometimes the
+	// SucceedsSoon conditions below take longer than the alotted time (#25273).
+	if testing.Short() || testutils.NightlyStress() {
+		t.Skip()
 	}
 
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
