@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -104,7 +105,7 @@ func New(
 // (e.g., row and column ordering) that are required of the root memo group.
 // If any subroutines panic with a builderError as part of the build process,
 // the panic is caught here and returned as an error.
-func (b *Builder) Build() (root memo.GroupID, required *memo.PhysicalProps, err error) {
+func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding

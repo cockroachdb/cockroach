@@ -17,6 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // physicalPropsBuilder determines what physical properties a given expression
@@ -57,7 +58,7 @@ func (b physicalPropsBuilder) canProvide(eid memo.ExprID, required memo.Physical
 // required presentation property. Currently, all relational operators are
 // capable of doing this.
 func (b physicalPropsBuilder) canProvidePresentation(
-	eid memo.ExprID, required memo.Presentation,
+	eid memo.ExprID, required props.Presentation,
 ) bool {
 	mexpr := b.mem.Expr(eid)
 	if !mexpr.IsRelational() {
@@ -70,7 +71,7 @@ func (b physicalPropsBuilder) canProvidePresentation(
 
 // canProvideOrdering returns true if the given expression can provide the
 // required ordering property.
-func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.Ordering) bool {
+func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required props.Ordering) bool {
 	// TODO(justin): we should trim any ordering in `required` which contains a
 	// key to its shortest prefix which still contains a key.
 	mexpr := b.mem.Expr(eid)
@@ -104,11 +105,11 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(props.Ordering).Provides(required)
 
 	case opt.OffsetOp:
 		// Offset can provide the same ordering it requires of its input.
-		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering).Provides(required)
+		return b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(props.Ordering).Provides(required)
 	}
 
 	return false
@@ -116,7 +117,7 @@ func (b physicalPropsBuilder) canProvideOrdering(eid memo.ExprID, required memo.
 
 // orderingBoundBy returns whether or not input provides all columns present in
 // ordering.
-func (b physicalPropsBuilder) orderingBoundBy(ordering memo.Ordering, input memo.GroupID) bool {
+func (b physicalPropsBuilder) orderingBoundBy(ordering props.Ordering, input memo.GroupID) bool {
 	inputCols := b.mem.GroupProperties(input).Relational.OutputCols
 	for _, colOrder := range ordering {
 		if colOrder < 0 {
@@ -151,7 +152,7 @@ func (b physicalPropsBuilder) buildChildProps(
 
 	parentProps := b.mem.LookupPhysicalProps(required)
 
-	var childProps memo.PhysicalProps
+	var childProps props.Physical
 
 	// Presentation property is provided by all the relational operators, so
 	// don't add it to childProps.
@@ -167,12 +168,12 @@ func (b physicalPropsBuilder) buildChildProps(
 	case opt.LimitOp, opt.OffsetOp, opt.RowNumberOp:
 		// Limit/Offset/RowNumber require the ordering in their private.
 		if nth == 0 {
-			var ordering memo.Ordering
+			var ordering props.Ordering
 			switch mexpr.Operator() {
 			case opt.LimitOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(memo.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsLimit().Ordering()).(props.Ordering)
 			case opt.OffsetOp:
-				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(memo.Ordering)
+				ordering = b.mem.LookupPrivate(mexpr.AsOffset().Ordering()).(props.Ordering)
 			case opt.RowNumberOp:
 				def := b.mem.LookupPrivate(mexpr.AsRowNumber().Def()).(*memo.RowNumberDef)
 				ordering = def.Ordering

@@ -12,31 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package props
+package props_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 func TestPhysicalProps(t *testing.T) {
 	// Empty props.
-	props := &memo.PhysicalProps{}
-	testPhysicalProps(t, props, "")
+	phys := &props.Physical{}
+	testPhysicalProps(t, phys, "")
 
-	if props.Defined() {
+	if phys.Defined() {
 		t.Error("no props should be defined")
 	}
 
 	// Presentation props.
-	presentation := memo.Presentation{
+	presentation := props.Presentation{
 		opt.LabeledColumn{Label: "a", ID: 1},
 		opt.LabeledColumn{Label: "b", ID: 2},
 	}
-	props = &memo.PhysicalProps{Presentation: presentation}
-	testPhysicalProps(t, props, "p:a:1,b:2")
+	phys = &props.Physical{Presentation: presentation}
+	testPhysicalProps(t, phys, "p:a:1,b:2")
 
 	if !presentation.Defined() {
 		t.Error("presentation should be defined")
@@ -46,14 +46,14 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should equal itself")
 	}
 
-	if presentation.Equals(memo.Presentation{}) {
+	if presentation.Equals(props.Presentation{}) {
 		t.Error("presentation should not equal the empty presentation")
 	}
 
 	// Add Ordering props.
-	ordering := memo.Ordering{1, 5}
-	props.Ordering = ordering
-	testPhysicalProps(t, props, "p:a:1,b:2 o:+1,+5")
+	ordering := props.Ordering{1, 5}
+	phys.Ordering = ordering
+	testPhysicalProps(t, phys, "p:a:1,b:2 o:+1,+5")
 
 	if !ordering.Defined() {
 		t.Error("ordering should be defined")
@@ -63,15 +63,15 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("ordering should provide itself")
 	}
 
-	if !ordering.Provides(memo.Ordering{1}) {
+	if !ordering.Provides(props.Ordering{1}) {
 		t.Error("ordering should provide the prefix ordering")
 	}
 
-	if (memo.Ordering{}).Provides(ordering) {
+	if (props.Ordering{}).Provides(ordering) {
 		t.Error("empty ordering should not provide ordering")
 	}
 
-	if !ordering.Provides(memo.Ordering{}) {
+	if !ordering.Provides(props.Ordering{}) {
 		t.Error("ordering should provide the empty ordering")
 	}
 
@@ -79,16 +79,16 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("ordering should be equal with itself")
 	}
 
-	if ordering.Equals(memo.Ordering{}) {
+	if ordering.Equals(props.Ordering{}) {
 		t.Error("ordering should not equal the empty ordering")
 	}
 
-	if (memo.Ordering{}).Equals(ordering) {
+	if (props.Ordering{}).Equals(ordering) {
 		t.Error("empty ordering should not equal ordering")
 	}
 }
 
-func testPhysicalProps(t *testing.T, physProps *memo.PhysicalProps, expected string) {
+func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {
 	actual := physProps.Fingerprint()
 	if actual != expected {
 		t.Errorf("\nexpected: %s\nactual: %s", expected, actual)

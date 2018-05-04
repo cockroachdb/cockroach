@@ -12,13 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package props
+package props_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -41,16 +41,16 @@ func TestLogicalProps(t *testing.T) {
 	tp := treeprinter.New()
 	nd := tp.Child("props")
 
-	relational := &memo.LogicalProps{
-		Relational: &memo.RelationalProps{
+	relational := &props.Logical{
+		Relational: &props.Relational{
 			OutputCols:  outCols,
 			OuterCols:   outerCols,
 			NotNullCols: outCols,
 		},
 	}
 
-	scalar := &memo.LogicalProps{
-		Scalar: &memo.ScalarProps{OuterCols: outerCols},
+	scalar := &props.Logical{
+		Scalar: &props.Scalar{OuterCols: outerCols},
 	}
 
 	relational.FormatColSet(nd, md, "output:", relational.Relational.OutputCols)

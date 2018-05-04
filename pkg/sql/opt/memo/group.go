@@ -17,6 +17,8 @@ package memo
 import (
 	"fmt"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // GroupID identifies a memo group. Groups have numbers greater than 0; a
@@ -45,7 +47,7 @@ type group struct {
 
 	// logical is the set of logical properties that all memo expressions in
 	// the group share.
-	logical LogicalProps
+	logical props.Logical
 
 	// normExpr holds the first expression in the group, which is always the
 	// group's normalized expression. otherExprs holds any expressions beyond
