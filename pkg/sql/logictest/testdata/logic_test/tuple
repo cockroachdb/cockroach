@@ -664,3 +664,24 @@ render     ·         ·                      (a, b, c)                         
 ·          table     abc@abc_a_b_c_idx      ·                                 ·
 ·          spans     /1-                    ·                                 ·
 ·          filter    (a, b, c) > (1, 2, 3)  ·                                 ·
+
+subtest tuple_placeholders
+
+statement ok
+PREPARE x AS SELECT $1 = (1,2)
+
+statement ok
+PREPARE y AS SELECT (1,2) = $1
+
+query B
+EXECUTE x((1,2))
+----
+true
+
+query B
+EXECUTE y((1,2))
+----
+true
+
+query error expected EXECUTE parameter expression to have type tuple\{int, int\}, but '\(1, 2, 3\)' has type tuple\{int, int, int\}
+EXECUTE x((1,2,3))
