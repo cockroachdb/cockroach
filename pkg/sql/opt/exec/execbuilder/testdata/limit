@@ -3,7 +3,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v));
 INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 125), (6, -36, 216)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k LIMIT 5
 ----
 scan  ·      ·          (k, v)  +k
@@ -21,7 +21,7 @@ k:int  v:int
 4      -16
 5      25
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY k OFFSET 5
 ----
 limit      ·       ·          (k, v)  +k
@@ -36,7 +36,7 @@ SELECT k, v FROM t ORDER BY k OFFSET 5
 k:int  v:int
 6      -36
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
 ----
 limit      ·       ·          (k, v)  +v
@@ -56,7 +56,7 @@ k:int  v:int
 3      9
 5      25
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 ----
 limit           ·       ·          (k, v)  -v
@@ -78,7 +78,7 @@ k:int  v:int
 4      -16
 6      -36
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                         ·            ·          (column4)         ·
@@ -110,7 +110,7 @@ column4:decimal
 94
 216
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·
@@ -129,7 +129,7 @@ k:int
 2
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 ----
 render     ·         ·          (k)     ·

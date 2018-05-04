@@ -1,5 +1,5 @@
 # Tests for the implicit one row, zero column values operator.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1
 ----
 render       ·         ·                 (column1)  ·
@@ -13,7 +13,7 @@ SELECT 1
 column1:int
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
 render       ·         ·                 (column1)  ·
@@ -27,7 +27,7 @@ SELECT 1 + 2
 column1:int
 3
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) VALUES (1, 2, 3), (4, 5, 6)
 ----
 values  ·              ·                  (column1, column2, column3)  ·
@@ -46,7 +46,7 @@ column1:int  column2:int  column3:int
 1            2            3
 4            5            6
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
 values  ·              ·                 (column1)  ·
@@ -65,7 +65,7 @@ column1:int
 3
 4
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
 render       ·              ·                  (column3)           ·
