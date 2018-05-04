@@ -548,8 +548,7 @@ type StoreConfig struct {
 	Transport    *RaftTransport
 	RPCContext   *rpc.Context
 
-	// SQLExecutor is used by the store to execute SQL statements in a way that
-	// is more direct than using a sql.Executor.
+	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
 
 	// TimeSeriesDataStore is an interface used by the store's time series

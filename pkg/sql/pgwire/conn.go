@@ -30,6 +30,7 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -44,6 +45,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+)
+
+const (
+	authOK                int32 = 0
+	authCleartextPassword int32 = 3
 )
 
 // conn implements a pgwire network connection (version 3 of the protocol,
@@ -258,7 +264,7 @@ func (c *conn) serveImpl(
 		wg.Add(1)
 		go func() {
 			writerErr = sqlServer.ServeConn(
-				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, &c.metrics.SQLMemMetrics, stopProcessor)
+				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, stopProcessor)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
@@ -724,10 +730,7 @@ func (c *conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) 
 	for range columns {
 		c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
 	}
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
-		return sql.NewWireFailureError(err)
-	}
-	return nil
+	return c.msgBuilder.finishMsg(c.conn)
 }
 
 // SendCommandComplete is part of the pgwirebase.Conn interface.
@@ -738,7 +741,7 @@ func (c *conn) SendCommandComplete(tag []byte) error {
 
 // Rd is part of the pgwirebase.Conn interface.
 func (c *conn) Rd() pgwirebase.BufferedReader {
-	return &pgwireReader2{conn: c}
+	return &pgwireReader{conn: c}
 }
 
 // flushInfo encapsulates information about what results have been flushed to
@@ -1176,33 +1179,31 @@ func (c *conn) CreateCopyInResult(pos sql.CmdPos) sql.CopyInResult {
 	return &res
 }
 
-// pgwireReader2 is an io.Reader that wraps a conn, maintaining its metrics as
+// pgwireReader is an io.Reader that wraps a conn, maintaining its metrics as
 // it is consumed.
-//
-// TODO(andrei): rename when pgwireReader goes away.
-type pgwireReader2 struct {
+type pgwireReader struct {
 	conn *conn
 }
 
-// pgwireReader2 implements the pgwirebase.BufferedReader interface.
-var _ pgwirebase.BufferedReader = &pgwireReader2{}
+// pgwireReader implements the pgwirebase.BufferedReader interface.
+var _ pgwirebase.BufferedReader = &pgwireReader{}
 
 // Read is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) Read(p []byte) (int, error) {
+func (r *pgwireReader) Read(p []byte) (int, error) {
 	n, err := r.conn.rd.Read(p)
 	r.conn.metrics.BytesInCount.Inc(int64(n))
 	return n, err
 }
 
 // ReadString is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) ReadString(delim byte) (string, error) {
+func (r *pgwireReader) ReadString(delim byte) (string, error) {
 	s, err := r.conn.rd.ReadString(delim)
 	r.conn.metrics.BytesInCount.Inc(int64(len(s)))
 	return s, err
 }
 
 // ReadByte is part of the pgwirebase.BufferedReader interface.
-func (r *pgwireReader2) ReadByte() (byte, error) {
+func (r *pgwireReader) ReadByte() (byte, error) {
 	b, err := r.conn.rd.ReadByte()
 	if err == nil {
 		r.conn.metrics.BytesInCount.Inc(1)
@@ -1290,4 +1291,76 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 	}
 
 	return c.readBuf.GetString()
+}
+
+// statusReportParams is a static mapping from run-time parameters to their respective
+// hard-coded values, each of which is to be returned as part of the status report
+// during connection initialization.
+var statusReportParams = map[string]string{
+	"client_encoding": "UTF8",
+	"DateStyle":       "ISO",
+	// All datetime binary formats expect 64-bit integer microsecond values.
+	// This param needs to be provided to clients or some may provide 64-bit
+	// floating-point microsecond values instead, which was a legacy datetime
+	// binary format.
+	"integer_datetimes": "on",
+	// The latest version of the docs that was consulted during the development
+	// of this package. We specify this version to avoid having to support old
+	// code paths which various client tools fall back to if they can't
+	// determine that the server is new enough.
+	"server_version": sql.PgServerVersion,
+	// The current CockroachDB version string.
+	"crdb_version": build.GetInfo().Short(),
+	// If this parameter is not present, some drivers (including Python's psycopg2)
+	// will add redundant backslash escapes for compatibility with non-standard
+	// backslash handling in older versions of postgres.
+	"standard_conforming_strings": "on",
+}
+
+// readTimeoutConn overloads net.Conn.Read by periodically calling
+// checkExitConds() and aborting the read if an error is returned.
+type readTimeoutConn struct {
+	net.Conn
+	checkExitConds func() error
+}
+
+func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+	// net.Pipe does not support setting deadlines. See
+	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
+	//
+	// TODO(andrei): starting with Go 1.10, pipes are supposed to support
+	// timeouts, so this should go away when we upgrade the compiler.
+	if c.LocalAddr().Network() == "pipe" {
+		return c
+	}
+	return &readTimeoutConn{
+		Conn:           c,
+		checkExitConds: checkExitConds,
+	}
+}
+
+func (c *readTimeoutConn) Read(b []byte) (int, error) {
+	// readTimeout is the amount of time ReadTimeoutConn should wait on a
+	// read before checking for exit conditions. The tradeoff is between the
+	// time it takes to react to session context cancellation and the overhead
+	// of waking up and checking for exit conditions.
+	const readTimeout = 150 * time.Millisecond
+
+	// Remove the read deadline when returning from this function to avoid
+	// unexpected behavior.
+	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
+	for {
+		if err := c.checkExitConds(); err != nil {
+			return 0, err
+		}
+		if err := c.SetReadDeadline(timeutil.Now().Add(readTimeout)); err != nil {
+			return 0, err
+		}
+		n, err := c.Conn.Read(b)
+		// Continue if the error is due to timing out.
+		if err, ok := err.(net.Error); ok && err.Timeout() {
+			continue
+		}
+		return n, err
+	}
 }

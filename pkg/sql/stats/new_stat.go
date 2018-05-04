@@ -59,7 +59,7 @@ func InsertNewStat(
 		}
 	}
 
-	if _, err := executor.ExecuteStatementInTransaction(
+	if _, err := executor.Exec(
 		ctx, "insert-statistic", txn,
 		`INSERT INTO system.table_statistics (
 					"tableID",

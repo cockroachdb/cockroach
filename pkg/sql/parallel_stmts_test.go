@@ -315,8 +315,9 @@ func TestParallelizeQueueAddAfterError(t *testing.T) {
 func planQuery(t *testing.T, s serverutils.TestServerInterface, sql string) (*planner, func()) {
 	kvDB := s.DB()
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	p, cleanup := newInternalPlanner(
-		"plan", txn, security.RootUser, &MemoryMetrics{}, &s.Executor().(*Executor).cfg)
+		"plan", txn, security.RootUser, &MemoryMetrics{}, &execCfg)
 	p.extendedEvalCtx.Tables.leaseMgr = s.LeaseManager().(*LeaseManager)
 	// HACK: we're mutating the SessionData directly, without going through the
 	// SessionDataMutator. We're not really supposed to do that, but were we to go

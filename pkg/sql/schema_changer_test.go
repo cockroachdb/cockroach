@@ -81,9 +81,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	var id = sqlbase.ID(keys.MaxReservedDescID + 2)
 	var node = roachpb.NodeID(2)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	changer := sql.NewSchemaChangerForTesting(
 		id, 0, node, *kvDB, nil, jobRegistry,
-		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg)
+		&execCfg)
 
 	ctx := context.TODO()
 
@@ -181,18 +182,18 @@ func TestSchemaChangeProcess(t *testing.T) {
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	leaseMgr := sql.NewLeaseManager(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
-		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg,
+		&execCfg,
 		sql.LeaseManagerTestingKnobs{},
 		stopper,
-		&sql.MemoryMetrics{},
 		cfg,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.TODO())
 	changer := sql.NewSchemaChangerForTesting(
-		id, 0, node, *kvDB, leaseMgr, jobRegistry, s.InternalExecutor().(*sql.InternalExecutor).ExecCfg)
+		id, 0, node, *kvDB, leaseMgr, jobRegistry, &execCfg)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -266,7 +267,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	tableDesc.NextIndexID++
 	changer = sql.NewSchemaChangerForTesting(
 		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry,
-		s.InternalExecutor().(*sql.InternalExecutor).ExecCfg,
+		&execCfg,
 	)
 	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
 		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
@@ -611,7 +612,7 @@ func TestRaceWithBackfill(t *testing.T) {
 	defer tc.Stopper().Stop(context.TODO())
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
-	execCfg := tc.Server(0).InternalExecutor().(*sql.InternalExecutor).ExecCfg
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
 
 	if _, err := sqlDB.Exec(`
@@ -658,7 +659,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		2,
 		initBackfillNotification(),
-		execCfg)
+		&execCfg)
 
 	// Drop column.
 	runSchemaChangeWithOperations(
@@ -670,7 +671,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		2,
 		initBackfillNotification(),
-		execCfg)
+		&execCfg)
 
 	// Add index.
 	runSchemaChangeWithOperations(
@@ -682,7 +683,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		3,
 		initBackfillNotification(),
-		execCfg)
+		&execCfg)
 
 	// Drop index.
 	runSchemaChangeWithOperations(
@@ -694,7 +695,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		maxValue,
 		2,
 		initBackfillNotification(),
-		execCfg)
+		&execCfg)
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.

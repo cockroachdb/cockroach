@@ -43,7 +43,7 @@ import (
 // notably the KV client.Txn.  All mutations to txnState are performed through
 // calling fsm.Machine.Apply(event); see conn_fsm.go for the definition of the
 // state machine.
-type txnState2 struct {
+type txnState struct {
 	// Mutable fields accessed from goroutines not synchronized by this txn's
 	// session, such as when a SHOW SESSIONS statement is executed on another
 	// session.
@@ -107,6 +107,10 @@ type txnState2 struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// inExternalTxn, if set, means that mu.txn is not owned by the txnState. This
+	// happens for the InternalExecutor.
+	inExternalTxn bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -133,14 +137,17 @@ const (
 // isolation: The transaction's isolation level.
 // priority: The transaction's priority.
 // readOnly: The read-only character of the new txn.
+// txn: If not nil, this txn will be used instead of creating a new txn. If so,
+//      all the other arguments need to correspond to the attributes of this txn.
 // tranCtx: A bag of extra execution context.
-func (ts *txnState2) resetForNewSQLTxn(
+func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
 	txnType txnType,
 	sqlTimestamp time.Time,
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
+	txn *client.Txn,
 	tranCtx transitionCtx,
 ) {
 	// Reset state vars to defaults.
@@ -190,8 +197,13 @@ func (ts *txnState2) resetForNewSQLTxn(
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 
 	ts.mu.Lock()
-	ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
-	ts.mu.txn.SetDebugName(opName)
+	if txn == nil {
+		ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
+		ts.mu.txn.SetDebugName(opName)
+	} else {
+		ts.mu.txn = txn
+		ts.inExternalTxn = true
+	}
 	ts.mu.Unlock()
 
 	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
@@ -217,7 +229,7 @@ func (ts *txnState2) resetForNewSQLTxn(
 //
 // ctx is the connExecutor's context. This will be used once ts.Ctx is
 // finalized.
-func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
+func (ts *txnState) finishSQLTxn(connCtx context.Context) {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -227,7 +239,7 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
 
-	if !ts.mu.txn.IsFinalized() {
+	if !ts.mu.txn.IsFinalized() && !ts.inExternalTxn {
 		panic(fmt.Sprintf(
 			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
 	}
@@ -253,7 +265,7 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 	ts.recordingThreshold = 0
 }
 
-func (ts *txnState2) setIsolationLevel(isolation enginepb.IsolationType) error {
+func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {
 	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
 		return err
 	}
@@ -261,7 +273,7 @@ func (ts *txnState2) setIsolationLevel(isolation enginepb.IsolationType) error {
 	return nil
 }
 
-func (ts *txnState2) setPriority(userPriority roachpb.UserPriority) error {
+func (ts *txnState) setPriority(userPriority roachpb.UserPriority) error {
 	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
@@ -269,7 +281,7 @@ func (ts *txnState2) setPriority(userPriority roachpb.UserPriority) error {
 	return nil
 }
 
-func (ts *txnState2) setReadOnlyMode(mode tree.ReadWriteMode) error {
+func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 	switch mode {
 	case tree.UnspecifiedReadWriteMode:
 		return nil
@@ -382,7 +394,7 @@ var noRewind = rewindCapability{}
 // setAdvanceInfo sets the adv field. This has to be called as part of any state
 // transition. The connExecutor is supposed to inspect adv after any transition
 // and act on it.
-func (ts *txnState2) setAdvanceInfo(code advanceCode, rewCap rewindCapability, ev txnEvent) {
+func (ts *txnState) setAdvanceInfo(code advanceCode, rewCap rewindCapability, ev txnEvent) {
 	if ts.adv.code != advanceUnknown {
 		panic("previous advanceInfo has not been consume()d")
 	}
@@ -398,7 +410,7 @@ func (ts *txnState2) setAdvanceInfo(code advanceCode, rewCap rewindCapability, e
 
 // consumerAdvanceInfo returns the advanceInfo set by the last transition and
 // resets the state so that another transition can overwrite it.
-func (ts *txnState2) consumeAdvanceInfo() advanceInfo {
+func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	adv := ts.adv
 	ts.adv = advanceInfo{}
 	return adv

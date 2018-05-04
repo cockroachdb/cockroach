@@ -26,28 +26,31 @@ import (
 // nevertheless want to execute SQL queries (presumably against system tables).
 // It is extracted in this "sql/util" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
+//
+// Note that implementations might be "session bound" - meaning they inherit
+// session variables from a parent session - or not.
 type InternalExecutor interface {
-	// ExecuteStatementInTransaction executes the supplied SQL statement as part of
-	// the supplied transaction. Statements are currently executed as the root user.
-	ExecuteStatementInTransaction(
+	// Exec executes the supplied SQL statement. Statements are currently executed
+	// as the root user with the system database as current database.
+	//
+	// If txn is not nil, the statement will be executed in the respective txn.
+	//
+	// Returns the number of rows affected.
+	Exec(
 		ctx context.Context, opName string, txn *client.Txn, statement string, params ...interface{},
 	) (int, error)
 
-	// QueryRowInTransaction executes the supplied SQL statement as part of the
-	// supplied transaction and returns the result. Statements are currently
-	// executed as the root user.
-	QueryRowInTransaction(
+	// Query executes the supplied SQL statement and returns the resulting rows.
+	// The statement is executed as the root user.
+	//
+	// If txn is not nil, the statement will be executed in the respective txn.
+	Query(
+		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+	) ([]tree.Datums, sqlbase.ResultColumns, error)
+
+	// QueryRow is like Query, except it returns a single row, or nil if not row is
+	// found, or an error if more that one row is returned.
+	QueryRow(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
-
-	// QueryRowsInTransaction executes the supplied SQL statement as part of the
-	// supplied transaction and returns the resulting rows. Statements are currently
-	// executed as the root user.
-	QueryRowsInTransaction(
-		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
-
-	QueryRows(
-		ctx context.Context, opName string, statement string, qargs ...interface{},
-	) ([]tree.Datums, sqlbase.ResultColumns, error)
 }

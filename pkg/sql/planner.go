@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -199,55 +199,36 @@ func NewInternalPlanner(
 func newInternalPlanner(
 	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
 ) (*planner, func()) {
-	// init with an empty session. We can't leave this nil because too much code
-	// looks in the session for the current database.
+	// We need a context that outlives all the uses of the planner (since the
+	// planner captures it in the EvalCtx, and so does the cleanup function that
+	// we're going to return. We just create one here instead of asking the caller
+	// for a ctx with this property. This is really ugly, but the alternative of
+	// asking the caller for one is hard to explain. What we need is better and
+	// separate interfaces for planning and running plans, which could take
+	// suitable contexts.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
 
-	s := &Session{
-		data: sessiondata.SessionData{
-			SearchPath:    sqlbase.DefaultSearchPath,
-			Location:      time.UTC,
-			User:          user,
-			Database:      "system",
-			SequenceState: sessiondata.NewSequenceState(),
-		},
-		TxnState: txnState{Ctx: ctx, implicitTxn: true},
-		context:  ctx,
-		tables: TableCollection{
-			leaseMgr:      execCfg.LeaseManager,
-			databaseCache: newDatabaseCache(config.SystemConfig{}),
-		},
-		execCfg:        execCfg,
-		distSQLPlanner: execCfg.DistSQLPlanner,
+	sd := &sessiondata.SessionData{
+		SearchPath:    sqlbase.DefaultSearchPath,
+		Location:      time.UTC,
+		User:          user,
+		Database:      "system",
+		SequenceState: sessiondata.NewSequenceState(),
 	}
-	s.dataMutator = sessionDataMutator{
-		data: &s.data,
+	tables := &TableCollection{
+		leaseMgr:      execCfg.LeaseManager,
+		databaseCache: newDatabaseCache(config.SystemConfig{}),
+	}
+	txnReadOnly := new(bool)
+	dataMutator := &sessionDataMutator{
+		data: sd,
 		defaults: sessionDefaults{
 			applicationName: "crdb-internal",
 			database:        "system",
 		},
 		settings:       execCfg.Settings,
-		curTxnReadOnly: &s.TxnState.readOnly,
+		curTxnReadOnly: txnReadOnly,
 	}
-	s.mon = mon.MakeUnlimitedMonitor(ctx,
-		"internal-root",
-		mon.MemoryResource,
-		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
-
-	s.sessionMon = mon.MakeMonitor("internal-session",
-		mon.MemoryResource,
-		memMetrics.SessionCurBytesCount,
-		memMetrics.SessionMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5, execCfg.Settings)
-	s.sessionMon.Start(ctx, &s.mon, mon.BoundAccount{})
-
-	s.TxnState.mon = mon.MakeMonitor("internal-txn",
-		mon.MemoryResource,
-		memMetrics.TxnCurBytesCount,
-		memMetrics.TxnMaxBytesHist,
-		-1, noteworthyInternalMemoryUsageBytes/5, execCfg.Settings)
-	s.TxnState.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
 	var ts time.Time
 	if txn != nil {
@@ -257,22 +238,91 @@ func newInternalPlanner(
 		}
 		ts = origTimestamp.GoTime()
 	}
-	p := s.newPlanner(
-		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
-		nil /* reCache */, s.statsCollector())
+
+	p := &planner{execCfg: execCfg}
+
+	p.txn = txn
+	p.stmt = nil
+	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
+
+	p.semaCtx = tree.MakeSemaContext(sd.User == security.RootUser /* privileged */)
+	p.semaCtx.Location = &sd.Location
+	p.semaCtx.SearchPath = sd.SearchPath
+
+	plannerMon := mon.MakeUnlimitedMonitor(ctx,
+		"internal-planner",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
+		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
+
+	p.extendedEvalCtx = internalExtendedEvalCtx(
+		ctx, sd, dataMutator, tables, txn, ts, ts, execCfg, &plannerMon,
+	)
+	p.extendedEvalCtx.Planner = p
+	p.extendedEvalCtx.Sequence = p
+	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
+	p.extendedEvalCtx.NodeID = execCfg.NodeID.Get()
+
+	p.sessionDataMutator = dataMutator
+	p.autoCommit = false
 
 	p.extendedEvalCtx.MemMetrics = memMetrics
 	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
-	p.extendedEvalCtx.Tables = &s.tables
-	acc := s.mon.MakeBoundAccount()
+	p.extendedEvalCtx.Tables = tables
+
+	acc := plannerMon.MakeBoundAccount()
 	p.extendedEvalCtx.ActiveMemAcc = &acc
 
 	return p, func() {
+		// Note that we capture ctx here. This is only valid as long as we create
+		// the context as explained at the top of the method.
 		acc.Close(ctx)
-		s.TxnState.mon.Stop(ctx)
-		s.sessionMon.Stop(ctx)
-		s.mon.Stop(ctx)
+		plannerMon.Stop(ctx)
+	}
+}
+
+// internalExtendedEvalCtx creates an evaluation context for an "internal
+// planner". Since the eval context is supposed to be tied to a session and
+// there's no session to speak of here, different fields are filled in here to
+// keep the tests using the internal planner passing.
+func internalExtendedEvalCtx(
+	ctx context.Context,
+	sd *sessiondata.SessionData,
+	dataMutator *sessionDataMutator,
+	tables *TableCollection,
+	txn *client.Txn,
+	txnTimestamp time.Time,
+	stmtTimestamp time.Time,
+	execCfg *ExecutorConfig,
+	plannerMon *mon.BytesMonitor,
+) extendedEvalContext {
+	var evalContextTestingKnobs tree.EvalContextTestingKnobs
+	var statusServer serverpb.StatusServer
+	evalContextTestingKnobs = execCfg.EvalContextTestingKnobs
+	statusServer = execCfg.StatusServer
+
+	return extendedEvalContext{
+		EvalContext: tree.EvalContext{
+			Txn:           txn,
+			SessionData:   sd,
+			TxnReadOnly:   *dataMutator.curTxnReadOnly,
+			TxnImplicit:   true,
+			Settings:      execCfg.Settings,
+			CtxProvider:   tree.FixedCtxProvider{Context: ctx},
+			Mon:           plannerMon,
+			TestingKnobs:  evalContextTestingKnobs,
+			StmtTimestamp: stmtTimestamp,
+			TxnTimestamp:  txnTimestamp,
+		},
+		SessionMutator:  dataMutator,
+		VirtualSchemas:  execCfg.VirtualSchemas,
+		Tracing:         &SessionTracing{},
+		StatusServer:    statusServer,
+		Tables:          tables,
+		ExecCfg:         execCfg,
+		schemaAccessors: newSchemaInterface(tables, execCfg.VirtualSchemas),
+		DistSQLPlanner:  execCfg.DistSQLPlanner,
 	}
 }
 
@@ -327,31 +377,7 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
 }
 
-// makeInternalPlan initializes a plan from a SQL statement string.
-// This clobbers p.curPlan.
-// p.curPlan.Close() must be called after use.
-// This function changes the planner's placeholder map. It is the caller's
-// responsibility to save and restore the old map if desired.
-// This function is not suitable for use in the planNode constructors directly:
-// the returned planNode has already been optimized.
-// Consider also (*planner).delegateQuery(...).
-func (p *planner) makeInternalPlan(ctx context.Context, sql string, args ...interface{}) error {
-	if log.V(2) {
-		log.Infof(ctx, "internal query: %s", sql)
-		if len(args) > 0 {
-			log.Infof(ctx, "placeholders: %q", args)
-		}
-	}
-	stmt, err := parser.ParseOne(sql)
-	if err != nil {
-		return err
-	}
-	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
-	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
-	return p.makePlan(ctx, Statement{AST: stmt})
-}
-
-// ParseType implements the parser.EvalPlanner interface.
+// ParseType implements the tree.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return parser.ParseType(sql)
@@ -368,105 +394,6 @@ func (p *planner) ParseQualifiedTableName(
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
 	_, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
 	return err
-}
-
-// QueryRow implements the parser.EvalPlanner interface.
-func (p *planner) QueryRow(
-	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
-	origP := p
-	p, cleanup := newInternalPlanner("query rows", p.Txn(), p.User(), p.ExtendedEvalContext().MemMetrics, p.ExecCfg())
-	defer cleanup()
-	*p.SessionData() = *origP.SessionData()
-	return p.queryRow(ctx, sql, args...)
-}
-
-func (p *planner) queryRow(
-	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
-	rows, _ /* cols */, err := p.queryRows(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	switch len(rows) {
-	case 0:
-		return nil, nil
-	case 1:
-		return rows[0], nil
-	default:
-		return nil, &tree.MultipleResultsError{SQL: sql}
-	}
-}
-
-// queryRows executes a SQL query string where multiple result rows are returned.
-func (p *planner) queryRows(
-	ctx context.Context, sql string, args ...interface{},
-) (rows []tree.Datums, cols sqlbase.ResultColumns, err error) {
-	// makeInternalPlan() clobbers p.curplan and the placeholder info
-	// map, so we have to save/restore them here.
-	defer func(psave planTop, pisave tree.PlaceholderInfo) {
-		p.semaCtx.Placeholders = pisave
-		p.curPlan = psave
-	}(p.curPlan, p.semaCtx.Placeholders)
-
-	startTime := timeutil.Now()
-	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
-		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return nil, nil, err
-	}
-	cols = planColumns(p.curPlan.plan)
-	defer p.curPlan.close(ctx)
-	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", len(rows), err, startTime) }()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := p.curPlan.start(params); err != nil {
-		return nil, nil, err
-	}
-	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
-		if values != nil {
-			valCopy := append(tree.Datums(nil), values...)
-			rows = append(rows, valCopy)
-		}
-		return nil
-	}); err != nil {
-		return nil, nil, err
-	}
-	return rows, cols, nil
-}
-
-// exec executes a SQL query string and returns the number of rows
-// affected.
-func (p *planner) exec(
-	ctx context.Context, sql string, args ...interface{},
-) (numRows int, err error) {
-	// makeInternalPlan() clobbers p.curplan and the placeholder info
-	// map, so we have to save/restore them here.
-	defer func(psave planTop, pisave tree.PlaceholderInfo) {
-		p.semaCtx.Placeholders = pisave
-		p.curPlan = psave
-	}(p.curPlan, p.semaCtx.Placeholders)
-
-	startTime := timeutil.Now()
-	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
-		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return 0, err
-	}
-	defer p.curPlan.close(ctx)
-	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", numRows, err, startTime) }()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := p.curPlan.start(params); err != nil {
-		return 0, err
-	}
-	return countRowsAffected(params, p.curPlan.plan)
 }
 
 func (p *planner) lookupFKTable(

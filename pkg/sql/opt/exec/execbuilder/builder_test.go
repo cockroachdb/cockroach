@@ -86,7 +86,7 @@ func TestExecBuild(t *testing.T) {
 		}
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+			eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
 			defer eng.Close()
 
 			tester := testutils.NewOptTester(eng.Catalog(), d.Input)
@@ -132,7 +132,7 @@ func TestExecBuild(t *testing.T) {
 				return ""
 
 			case "exec":
-				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+				eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
 				defer eng.Close()
 
 				columns, results, err := tester.Exec(eng)
@@ -188,7 +188,7 @@ func TestExecBuild(t *testing.T) {
 
 			case "catalog":
 				// Create the engine in order to get access to its catalog.
-				eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+				eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
 				defer eng.Close()
 
 				parts := strings.Split(d.Input, ".")
