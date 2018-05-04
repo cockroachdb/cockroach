@@ -28,6 +28,10 @@ type valuesProcessor struct {
 
 	columns []DatumInfo
 	data    [][]byte
+	// numRows is only guaranteed to be set if there are zero columns (because of
+	// backward compatibility). If it set and there are columns, it matches the
+	// number of rows that are encoded in data.
+	numRows uint64
 
 	sd     StreamDecoder
 	rowBuf sqlbase.EncDatumRow
@@ -43,6 +47,7 @@ func newValuesProcessor(
 ) (*valuesProcessor, error) {
 	v := &valuesProcessor{
 		columns: spec.Columns,
+		numRows: spec.NumRows,
 		data:    spec.RawBytes,
 	}
 	types := make([]sqlbase.ColumnType, len(v.columns))
@@ -75,7 +80,8 @@ func (v *valuesProcessor) Start(ctx context.Context) context.Context {
 	// header before any data.
 	m := &ProducerMessage{
 		Typing: v.columns,
-		Header: &ProducerHeader{}}
+		Header: &ProducerHeader{},
+	}
 	if err := v.sd.AddMessage(m); err != nil {
 		v.moveToDraining(err)
 		return ctx
@@ -99,18 +105,27 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		if row == nil {
-			if len(v.data) == 0 {
-				v.moveToDraining(nil /* err */)
-				break
-			}
 			// Push a chunk of data to the stream decoder.
 			m := &ProducerMessage{}
-			m.Data.RawBytes = v.data[0]
+			if len(v.columns) == 0 {
+				if v.numRows == 0 {
+					v.moveToDraining(nil /* err */)
+					break
+				}
+				m.Data.NumEmptyRows = int32(v.numRows)
+				v.numRows = 0
+			} else {
+				if len(v.data) == 0 {
+					v.moveToDraining(nil /* err */)
+					break
+				}
+				m.Data.RawBytes = v.data[0]
+				v.data = v.data[1:]
+			}
 			if err := v.sd.AddMessage(m); err != nil {
 				v.moveToDraining(err)
 				break
 			}
-			v.data = v.data[1:]
 			continue
 		}
 
