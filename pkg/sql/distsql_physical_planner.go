@@ -775,7 +775,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, evalCtx *tree.EvalContext,
+	n *scanNode, evalCtx *tree.EvalContext, indexVarMap []int,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
@@ -804,7 +804,7 @@ func initTableReaderSpec(
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, nil),
+		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, indexVarMap),
 	}
 
 	if n.hardLimit != 0 {
@@ -815,14 +815,54 @@ func initTableReaderSpec(
 	return s, post, nil
 }
 
+// scanNodeOrdinal returns the index of a column with the given ID.
+func tableOrdinal(desc *sqlbase.TableDescriptor, colID sqlbase.ColumnID) int {
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == colID {
+			return i
+		}
+	}
+	panic(fmt.Sprintf("column %d not in desc.Columns", colID))
+}
+
+// getScanNodeToTableReaderMap returns a map from scan node column ordinal to
+// table reader column ordinal. Returns nil if the map is identity.
+//
+// scanNodes can have columns set up in a few different ways, depending on the
+// colCfg. The heuristic planner always creates scanNodes with all public
+// columns (even if some of them aren't even in the index we are scanning).
+// The optimizer creates scanNodes with a specific set of wanted columns; in
+// this case we have to create a map from scanNode column ordinal to table
+// column ordinal (which is what the TableReader uses).
+func getScanNodeToTableReaderMap(n *scanNode) []int {
+	if n.colCfg.visibility != publicColumns {
+		panic("only publicColumns scan visibility supported")
+	}
+
+	if n.colCfg.wantedColumns == nil {
+		return nil
+	}
+	if n.colCfg.addUnwantedAsHidden {
+		panic("addUnwantedAsHidden not supported")
+	}
+	res := make([]int, len(n.cols))
+	for i := range res {
+		res[i] = tableOrdinal(n.desc, n.cols[i].ID)
+	}
+	return res
+}
+
 // getOutputColumnsFromScanNode returns the indices of the columns that are
 // returned by a scanNode.
-func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
-	var outputColumns []uint32
+func getOutputColumnsFromScanNode(n *scanNode, scanNodeToTableReaderMap []int) []uint32 {
+	outputColumns := make([]uint32, 0, n.valNeededForCol.Len())
 	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
 	// the columns needed for the filter, even if they aren't needed for the
 	// next stage.
 	n.valNeededForCol.ForEach(func(i int) {
+		if scanNodeToTableReaderMap != nil {
+			i = scanNodeToTableReaderMap[i]
+		}
 		outputColumns = append(outputColumns, uint32(i))
 	})
 	return outputColumns
@@ -921,9 +961,11 @@ func (dsp *DistSQLPlanner) checkNodeHealthAndVersion(
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
-	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
+	planCtx *planningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID,
 ) (physicalPlan, error) {
-	spec, post, err := initTableReaderSpec(n, planCtx.EvalContext())
+
+	scanNodeToTableReaderMap := getScanNodeToTableReaderMap(n)
+	spec, post, err := initTableReaderSpec(n, planCtx.EvalContext(), scanNodeToTableReaderMap)
 	if err != nil {
 		return physicalPlan{}, err
 	}
@@ -970,7 +1012,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.ResultRouters[i] = pIdx
 	}
 
-	planToStreamColMap := identityMapInPlace(make([]int, len(n.resultColumns)))
+	planToStreamColMap := identityMapInPlace(make([]int, len(n.cols)))
 
 	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
 		// Make a note of the fact that we have to maintain a certain ordering
@@ -981,27 +1023,33 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, planToStreamColMap))
 	}
-	types, err := getTypesForPlanResult(n, planToStreamColMap)
-	if err != nil {
-		return physicalPlan{}, err
+
+	types := make([]sqlbase.ColumnType, len(n.desc.Columns))
+	for i := range n.desc.Columns {
+		types[i] = n.desc.Columns[i].Type
 	}
 	p.SetLastStagePost(post, types)
 
-	outCols := overrideResultColumns
-	if outCols == nil {
-		outCols = getOutputColumnsFromScanNode(n)
+	var outCols []uint32
+	if overrideResultColumns == nil {
+		outCols = getOutputColumnsFromScanNode(n, scanNodeToTableReaderMap)
+	} else {
+		outCols = make([]uint32, len(overrideResultColumns))
+		for i, id := range overrideResultColumns {
+			outCols[i] = uint32(tableOrdinal(n.desc, id))
+		}
+	}
+	for i := range planToStreamColMap {
+		planToStreamColMap[i] = -1
+		for j, c := range outCols {
+			if n.desc.Columns[c].ID == n.cols[i].ID {
+				planToStreamColMap[i] = j
+				break
+			}
+		}
 	}
 	p.AddProjection(outCols)
 
-	post = p.GetLastStagePost()
-	if post.Projection {
-		for i := range planToStreamColMap {
-			planToStreamColMap[i] = -1
-		}
-		for i, col := range post.OutputColumns {
-			planToStreamColMap[col] = i
-		}
-	}
 	p.planToStreamColMap = planToStreamColMap
 	return p, nil
 }
@@ -1624,20 +1672,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *planningCtx, n *indexJoinNode,
 ) (physicalPlan, error) {
-	priCols := make([]uint32, len(n.index.desc.PrimaryIndex.ColumnIDs))
-
-ColLoop:
-	for i, colID := range n.index.desc.PrimaryIndex.ColumnIDs {
-		for j, c := range n.index.desc.Columns {
-			if c.ID == colID {
-				priCols[i] = uint32(j)
-				continue ColLoop
-			}
-		}
-		panic(fmt.Sprintf("PK column %d not found in index", colID))
-	}
-
-	plan, err := dsp.createTableReaders(planCtx, n.index, priCols)
+	plan, err := dsp.createTableReaders(planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs)
 	if err != nil {
 		return physicalPlan{}, err
 	}
@@ -1651,7 +1686,7 @@ ColLoop:
 		Filter: distsqlplan.MakeExpression(
 			n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */),
 		Projection:    true,
-		OutputColumns: getOutputColumnsFromScanNode(n.table),
+		OutputColumns: getOutputColumnsFromScanNode(n.table, getScanNodeToTableReaderMap(n.table)),
 	}
 
 	// Recalculate planToStreamColMap: it now maps to columns in the JoinReader's
