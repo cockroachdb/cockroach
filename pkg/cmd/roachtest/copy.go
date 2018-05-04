@@ -139,8 +139,9 @@ func registerCopy(r *registry) {
 	for _, inTxn := range []bool{true, false} {
 		inTxn := inTxn
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
-			Nodes: nodes(numNodes),
+			Name:   fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
+			Nodes:  nodes(numNodes),
+			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runCopy(ctx, t, c, rows, inTxn)
 			},

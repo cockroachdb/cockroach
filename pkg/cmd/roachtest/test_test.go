@@ -34,12 +34,21 @@ func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
 	r.Add(testSpec{
-		Name: "pass",
+		Name:   "pass",
+		Stable: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 		},
 	})
 	r.Add(testSpec{
-		Name: "fail",
+		Name:   "fail",
+		Stable: true,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+	r.Add(testSpec{
+		Name:   "fail-unstable",
+		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
@@ -52,6 +61,7 @@ func TestRegistryRun(t *testing.T) {
 		{nil, 1},
 		{[]string{"pass"}, 0},
 		{[]string{"fail"}, 1},
+		{[]string{"fail-unstable"}, 0},
 		{[]string{"pass|fail"}, 1},
 		{[]string{"pass", "fail"}, 1},
 	}
