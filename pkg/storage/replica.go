@@ -4015,6 +4015,7 @@ func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
+// TODO(tschottdorf): there's also maybeTransferRaftLeadership. Only one should exist.
 func (r *Replica) maybeTransferRaftLeader(
 	ctx context.Context, status *raft.Status, now hlc.Timestamp,
 ) {
