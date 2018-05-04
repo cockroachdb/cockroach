@@ -39,7 +39,9 @@ type TestEngine interface {
 
 	// Execute runs the given plan (created through the Factory) and returns the
 	// results as a Datum table.
-	Execute(p Plan) ([]tree.Datums, error)
+	// If useDistSQL is true, the plan is converted to a distsql plan and
+	// executed. If the plan cannot be distributed, returns an error.
+	Execute(p Plan, useDistSQL bool) ([]tree.Datums, error)
 
 	// Close cleans up any state associated with construction or execution of
 	// plans. It must always be called as the last step in using an engine

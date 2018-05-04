@@ -35,7 +35,7 @@ project
                                ├── variable: t.k [type=int, outer=(1)]
                                └── variable: t.k [type=int, outer=(1)]
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 root                 ·          ·                 (column4)  ·
@@ -53,19 +53,19 @@ root                 ·          ·                 (column4)  ·
 ·                    table      t@primary         ·          ·
 ·                    spans      ALL               ·          ·
 
-exec
+exec nodist
 SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 column4:bool
 true
 
-exec
+exec nodist
 SELECT EXISTS(SELECT * FROM t WHERE u != k*k)
 ----
 column4:bool
 false
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 root                 ·            ·          (k, u, v)  ·
@@ -84,13 +84,13 @@ root                 ·            ·          (k, u, v)  ·
 ·                    table        t@primary  ·          ·
 ·                    spans        ALL        ·          ·
 
-exec
+exec nodist
 SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t)
 ----
 k:int  u:int  v:int
 4      16     64
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 root                      ·            ·                 (k, u, v)  ·
@@ -120,7 +120,7 @@ root                      ·            ·                 (k, u, v)  ·
 ·                         table        t@primary         ·          ·
 ·                         spans        ALL               ·          ·
 
-exec
+exec nodist
 SELECT * FROM t WHERE u = (SELECT MAX(u) FROM t WHERE EXISTS(SELECT * FROM t WHERE u=k*k))
 ----
 k:int  u:int  v:int

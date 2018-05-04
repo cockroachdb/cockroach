@@ -2,7 +2,7 @@ exec-raw
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
 
-exec
+exec nodist
 EXPLAIN SELECT * FROM xy
 ----
 Tree:string  Field:string  Description:string
@@ -10,7 +10,7 @@ scan         ·             ·
 ·            table         xy@primary
 ·            spans         ALL
 
-exec
+exec nodist
 EXPLAIN (TYPES) SELECT * FROM xy
 ----
 Tree:string  Field:string  Description:string  Columns:string  Ordering:string
@@ -18,7 +18,7 @@ scan         ·             ·                   (x int, y int)  ·
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec
+exec nodist
 EXPLAIN (VERBOSE) SELECT * FROM xy
 ----
 Tree:string  Field:string  Description:string  Columns:string  Ordering:string
@@ -26,7 +26,7 @@ scan         ·             ·                   (x, y)          ·
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec
+exec nodist
 EXPLAIN (VERBOSE) SELECT x, x, y FROM xy
 ----
 Tree:string  Field:string  Description:string  Columns:string  Ordering:string
@@ -38,7 +38,7 @@ render       ·             ·                   (x, x, y)       ·
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec
+exec nodist
 EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y
 ----
 Tree:string  Field:string  Description:string  Columns:string  Ordering:string
@@ -48,7 +48,7 @@ sort         ·             ·                   (x, y)          +y
 ·            table         xy@primary          ·               ·
 ·            spans         ALL                 ·               ·
 
-exec
+exec nodist
 EXPLAIN (VERBOSE) SELECT x, x, y FROM xy ORDER BY y
 ----
 Tree:string     Field:string  Description:string  Columns:string  Ordering:string
@@ -62,7 +62,7 @@ render          ·             ·                   (x, x, y)       ·
 ·               table         xy@primary          ·               ·
 ·               spans         ALL                 ·               ·
 
-exec
+exec nodist
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
 ----
 Tree:string  Field:string   Description:string  Columns:string      Ordering:string
@@ -79,7 +79,7 @@ join         ·              ·                   (x, y, u, v)        ·
 ·            row 1, expr 0  3                   ·                   ·
 ·            row 1, expr 1  4                   ·                   ·
 
-exec
+exec nodist
 SELECT "Tree", "Columns" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
 ----
 Tree:string  Columns:string
@@ -89,7 +89,7 @@ sort         (x, y)
 ·            ·
 ·            ·
 
-exec
+exec nodist
 SELECT "Level", "Type" FROM [ EXPLAIN (VERBOSE) SELECT * FROM xy ORDER BY y ]
 ----
 Level:int  Type:string

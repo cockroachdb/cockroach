@@ -9,7 +9,7 @@ CREATE TABLE kv (
 )
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
 group           ·             ·                   (column6, column7, column8, column9, column10, column11, column12, column13, column15, column17, column19)  ·
@@ -58,7 +58,7 @@ SELECT JSONB_AGG(1) FROM kv
 column6:jsonb
 NULL
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 render               ·            ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column15, column17)  ·
@@ -118,7 +118,7 @@ column5:jsonb
 NULL
 
 # Aggregate functions trigger aggregation and computation when there is no source.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 render                 ·             ·                   (column2, column3, column4, column5, column7, column8, column9, column10, column12, column13, column16)  ·
@@ -205,7 +205,8 @@ column2:jsonb
 '[null]'
 
 # With an explicit cast, this works as expected.
-exec
+# TODO(radu): investigate distsql issue (relate to the input type)
+exec nodist
 SELECT ARRAY_AGG(NULL::TEXT)
 ----
 column2:string[]
@@ -310,7 +311,7 @@ column5:int  k:int
 1            7
 1            8
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
 render          ·            ·             (column5, k)  ·
@@ -391,7 +392,7 @@ column5:int  column6:string
 2            B
 
 # Selecting and grouping on a more complex expression works.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 render               ·            ·             (column6, column5)  ·
@@ -419,7 +420,7 @@ column6:int  column5:int
 1            12
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 render          ·            ·             (column5, column6)  ·
@@ -549,7 +550,9 @@ SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
 column5:int  column6:int  column7:int
 6            6            5
 
-exec
+# TODO(radu): this requires tuples but they are not yet supported in
+# distsql (#15938).
+exec nodist
 SELECT COUNT(kv.*) FROM kv
 ----
 column6:int
@@ -570,33 +573,34 @@ column6:int
 #
 #
 
-exec
+# TODO(radu): these queries require tuples but they are not yet supported in
+# distsql (#15938).
+exec nodist
 SELECT COUNT((k, v)) FROM kv
 ----
 column6:int
 6
 
-
 # TODO(radu): DISTINCT not supported yet.
-#exec
+#exec nodist
 #SELECT COUNT(DISTINCT (k, v)) FROM kv
 #----
 #column6:int
 #6
 
-#exec
+#exec nodist
 #SELECT COUNT(DISTINCT (k, (v))) FROM kv
 #----
 #column6:int
 #6
 
-exec
+exec nodist
 SELECT COUNT((k, v)) FROM kv LIMIT 1
 ----
 column6:int
 6
 
-exec
+exec nodist
 SELECT COUNT((k, v)) FROM kv OFFSET 1
 ----
 column6:int
@@ -607,7 +611,7 @@ SELECT COUNT(k)+COUNT(kv.v) FROM kv
 column7:int
 11
 
-exec
+exec nodist
 SELECT COUNT(NULL::int), COUNT((NULL, NULL))
 ----
 column2:int  column4:int
@@ -681,7 +685,7 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 column7:decimal
 14.0
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
 ----
 group      ·            ·           (column5)  ·
@@ -690,7 +694,7 @@ group      ·            ·           (column5)  ·
 ·          table        kv@primary  ·          ·
 ·          spans        ALL         ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
 group      ·            ·           (column5, column6, column7)  ·
@@ -714,7 +718,7 @@ exec-raw
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
 ----
 group      ·            ·            (column5)  ·
@@ -781,7 +785,7 @@ SELECT MIN(x) FROM xyz
 column4:int
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
 ----
 group      ·            ·            (column4)  ·
@@ -797,7 +801,7 @@ column4:int
 4
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group      ·            ·                        (column4)  ·
@@ -813,7 +817,7 @@ column4:int
 7
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
 ----
 group      ·            ·            (column4)  ·
@@ -828,7 +832,7 @@ SELECT MIN(y) FROM xyz WHERE x = 1
 column4:int
 2
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (column4)  ·
@@ -843,7 +847,7 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 column4:int
 2
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (column4)  ·
@@ -858,7 +862,7 @@ SELECT MIN(y) FROM xyz WHERE x = 7
 column4:int
 NULL
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (column4)  ·
@@ -873,7 +877,7 @@ SELECT MAX(y) FROM xyz WHERE x = 7
 column4:int
 NULL
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 group      ·            ·            (column4)  ·
@@ -888,7 +892,7 @@ SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 column4:int
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group      ·            ·          (column4)  ·
@@ -903,7 +907,7 @@ SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 column4:int
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group      ·            ·          (column4)  ·
@@ -932,7 +936,7 @@ SELECT VARIANCE(x) FROM xyz WHERE x = 1
 column4:decimal
 NULL
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 group      ·            ·            (column4)  ·
@@ -1068,7 +1072,7 @@ INSERT INTO ab VALUES
 ----
 
 # TODO(radu): we don't support the single-row optimization yet.
-#exec
+#exec nodist
 #EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 #----
 #group           ·            ·
@@ -1089,7 +1093,7 @@ INSERT INTO ab VALUES
 #fetched: /ab/primary/1/b -> 10
 #output row: [1]
 #
-#exec
+#exec nodist
 #EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 #----
 #group              ·            ·
@@ -1111,7 +1115,7 @@ INSERT INTO ab VALUES
 #output row: [5]
 
 # TODO(radu): ORDER BY not supported yet.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 #----
 #sort                 ·            ·
@@ -1127,7 +1131,7 @@ INSERT INTO ab VALUES
 #·                    table        kv@primary
 #·                    spans        ALL
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) #SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 #----
 #sort                 ·            ·
@@ -1142,7 +1146,7 @@ INSERT INTO ab VALUES
 #·                    table        kv@primary
 #·                    spans        ALL
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 #----
 #sort                 ·            ·
@@ -1160,7 +1164,7 @@ INSERT INTO ab VALUES
 
 # TODO(radu): we don't propagate filters yet.
 ## Check that filters propagate through no-op aggregation.
-#exec
+#exec nodist
 #EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
 #----
 #group           ·            ·
@@ -1215,7 +1219,7 @@ INSERT INTO ab VALUES
 #NULL true 0 1 5
 #
 ## Check that filter expressions are only rendered once.
-#exec
+#exec nodist
 #EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 #----
 #group           ·            ·
@@ -1229,7 +1233,7 @@ INSERT INTO ab VALUES
 #·               table        filter_test@primary
 #·               spans        ALL
 #
-#exec
+#exec nodist
 #EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 #----
 #group           0  group   ·            ·                                  (count int)                                                    ·
@@ -1243,7 +1247,7 @@ INSERT INTO ab VALUES
 #·               2  ·       spans        ALL                                ·                                                              ·
 
 # Tests with * inside GROUP BY.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*;
 ----
 render     ·         ·           (column5)  ·
@@ -1263,7 +1267,7 @@ column5:int
 1
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 render               ·            ·            (column9)           ·
@@ -1306,7 +1310,7 @@ column9:decimal
 #----
 #
 ## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 #----
 #group           0  group   ·            ·                       (min)            ·
@@ -1331,7 +1335,7 @@ column9:decimal
 #5
 #
 ## Repeat test when there is an existing filter.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                       (min)   ·
@@ -1351,7 +1355,7 @@ column9:decimal
 ## Check the optimization when the argument is non-trivial. The renderNode can't
 ## present an ordering on v+1 so the optimization is not applied, but the IS NOT
 ## NULL filter should be added.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                           (min)            ·
@@ -1364,7 +1368,7 @@ column9:decimal
 #·               2  ·       filter       (v + 1) IS NOT NULL         ·                ·
 #
 ## Verify that we don't use the optimization if there is a GROUP BY.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 #----
 #group      0  group  ·            ·                 (min)   ·
@@ -1430,14 +1434,16 @@ INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
 ----
 
 # Grouping and rendering tuples.
-exec rowsort
+exec rowsort nodist
 SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 column3:tuple{int, int}
 (2, 1)
 (4, 3)
 
-exec hide-colnames
+# TODO(radu): this requires tuples but they are not yet supported in
+# distsql (#15938).
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 render     ·         ·           (column3)  ·
@@ -1446,7 +1452,9 @@ render     ·         ·           (column3)  ·
 ·          table     ab@primary  ·          ·
 ·          spans     ALL         ·          ·
 
-exec rowsort
+# TODO(radu): this requires tuples but they are not yet supported in
+# distsql (#15938).
+exec rowsort nodist
 SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 column6:string  column7:tuple{int, int}
@@ -1455,7 +1463,7 @@ b               (4, 3)
 d               (2, 1)
 d               (4, 3)
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 render               ·            ·           (column6, column7)  ·

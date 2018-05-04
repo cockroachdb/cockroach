@@ -97,6 +97,12 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 	}
 }
 
+// SetCatalog sets the catalog; used when the catalog is not known upfront
+// (a nil catalog was passed to NewOptTester).
+func (ot *OptTester) SetCatalog(catalog opt.Catalog) {
+	ot.catalog = catalog
+}
+
 // RunCommand implements commands that are used by most tests:
 //
 //  - exec-ddl
@@ -402,7 +408,9 @@ func (ot *OptTester) ExecBuild(eng exec.TestEngine) (exec.Plan, error) {
 }
 
 // Exec builds the exec node tree for the SQL query and then executes it.
-func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Datums, error) {
+func (ot *OptTester) Exec(
+	eng exec.TestEngine, useDistSQL bool,
+) (sqlbase.ResultColumns, []tree.Datums, error) {
 	plan, err := ot.ExecBuild(eng)
 	if err != nil {
 		return nil, nil, err
@@ -411,7 +419,7 @@ func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Da
 	columns := eng.Columns(plan)
 
 	var datums []tree.Datums
-	datums, err = eng.Execute(plan)
+	datums, err = eng.Execute(plan, useDistSQL)
 	if err != nil {
 		return nil, nil, err
 	}
