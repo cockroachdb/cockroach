@@ -75,7 +75,7 @@ TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
-BUILDTARGET  := .
+BUILDTARGET  := ./pkg/cmd/cockroach
 SUFFIX       :=
 INSTALL      := install
 prefix       := /usr/local

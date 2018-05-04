@@ -75,7 +75,7 @@ var maxRangeBytes = config.DefaultZoneConfig().RangeMaxBytes
 
 // CockroachBinary is the path to the host-side binary to use.
 var CockroachBinary = flag.String("b", func() string {
-	rootPkg, err := build.Import("github.com/cockroachdb/cockroach", "", 0)
+	rootPkg, err := build.Import("github.com/cockroachdb/cockroach", "", build.FindOnly)
 	if err != nil {
 		panic(err)
 	}
