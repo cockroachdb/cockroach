@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
@@ -106,6 +107,13 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 				log.Infof(context.TODO(), "Skipping non-metric field %s", tfield.Name)
 			}
 		}
+	}
+}
+
+// GetMetricsMetadata gets metadata from all tracked metrics
+func (r *Registry) GetMetricsMetadata(dest map[string]tspb.MetricMetadata) {
+	for _, v := range r.tracked {
+		dest[v.GetName()] = v.GetMetadata()
 	}
 }
 

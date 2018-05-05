@@ -17,6 +17,7 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
+import "ts/tspb/timeseries.proto";
 import "sql/jobs/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -548,9 +549,20 @@ message ReplicaMatrixResponse {
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
+// MetricMetadataRequest requests metadata for all metrics.
+message MetricMetadataRequest {
+}
+
+// MetricMetadataResponse contains the metadata for all metics.
+message MetricMetadataResponse {
+  map<string, cockroach.ts.tspb.MetricMetadata> metadata = 1 [(gogoproto.nullable) = false];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
+
+
   // URL: /_admin/v1/users
   rpc Users(UsersRequest) returns (UsersResponse) {
     option (google.api.http) = {
@@ -725,6 +737,13 @@ service Admin {
   rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/replica_matrix"
+    };
+  }
+  
+  // URL: /_admin/v1/metricmetadata
+  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/metricmetadata"
     };
   }
 }
