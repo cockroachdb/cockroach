@@ -92,7 +92,7 @@
     "mocha": "^3.2.0",
     "nib": "^1.1.2",
     "prop-types": "^15.5.10",
-    "protobufjs": "^6.7.3",
+    "protobufjs": "^6.8.6",
     "rimraf": "^2.6.1",
     "sinon": "2.1.0",
     "source-map-loader": "^0.2.0",

@@ -52,8 +52,11 @@ type Iterable interface {
 	GetHelp() string
 	// GetUnit returns the unit that the metric measures.
 	GetUnit() string
-	// GetDisplayUnit returns how the metric should be displayed (e.g. in bytes).
+	// GetDisplayUnit returns the unit that should be used to display the metric
+	// (e.g. in bytes).
 	GetDisplayUnit() DisplayUnit
+	// GetMetadata returns the metric's metadata, which can be used in charts.
+	GetMetadata() Metadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }
@@ -298,6 +301,12 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
+func (h *Histogram) GetMetadata() Metadata {
+	baseMetadata := h.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return baseMetadata
+}
+
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	Metadata
@@ -337,6 +346,12 @@ func (c *Counter) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
 		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Counter.Count()))},
 	}
+}
+
+func (c *Counter) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
 }
 
 // A Gauge atomically stores a single integer value.
@@ -407,6 +422,12 @@ func (g *Gauge) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
+func (g *Gauge) GetMetadata() Metadata {
+	baseMetadata := g.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
+}
+
 // A GaugeFloat64 atomically stores a single float64 value.
 type GaugeFloat64 struct {
 	Metadata
@@ -436,6 +457,12 @@ func (g *GaugeFloat64) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
 		Gauge: &prometheusgo.Gauge{Value: proto.Float64(g.Value())},
 	}
+}
+
+func (g *GaugeFloat64) GetMetadata() Metadata {
+	baseMetadata := g.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
 }
 
 // A Rate is a exponential weighted moving average.
