@@ -412,6 +412,31 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+// TestMetricsMetadata ensures that each metric has a Name, Help, Unit, and
+// DisplayUnit defined.
+func TestMetricsMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	for _, v := range metricsMetadata {
+		if v.Name == "" {
+			t.Fatal("metric missing name")
+		}
+		if v.Help == "" {
+			t.Fatalf("%s missing Help", v.Name)
+		}
+		if v.Unit == "" {
+			t.Fatalf("%s missing Unit", v.Name)
+		}
+		if v.DisplayUnit == 0 {
+			t.Fatalf("%s missing DisplayUnit", v.Name)
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.EnableLeaseHistory(100)()
