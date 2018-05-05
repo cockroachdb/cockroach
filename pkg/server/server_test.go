@@ -542,6 +542,7 @@ func TestListenURLFileCreation(t *testing.T) {
 		t.Fatalf("expected URL %s to match host %s", u, s.ServingAddr())
 	}
 }
+
 func TestListenerFileCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
