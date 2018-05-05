@@ -412,6 +412,32 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+// TestMetricsMetadata ensures that each metric has a Name, Help, and
+// AxisLabel. Because Metadata.Units has a zero value (of "Count"),
+// it isn't tested.
+func TestMetricsMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	for _, v := range metricsMetadata {
+		if v.Name == "" {
+			t.Fatal("metric missing name")
+		}
+		if v.Help == "" {
+			t.Fatalf("%s missing Help", v.Name)
+		}
+		if v.AxisLabel == "" {
+			t.Fatalf("%s missing AxisLabel", v.Name)
+		}
+		if v.MetricType == "" {
+			t.Fatalf("%s missing MetricType", v.Name)
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.EnableLeaseHistory(100)()
