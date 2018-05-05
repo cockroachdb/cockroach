@@ -126,7 +126,7 @@ func (sc *AbortSpan) Iterate(
 		})
 }
 
-func copySeqCache(
+func copyAbortSpan(
 	e engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	srcID, dstID roachpb.RangeID,
@@ -177,7 +177,7 @@ func copySeqCache(
 func (sc *AbortSpan) CopyInto(
 	e engine.ReadWriter, ms *enginepb.MVCCStats, destRangeID roachpb.RangeID,
 ) (int, error) {
-	return copySeqCache(e, ms, sc.rangeID, destRangeID,
+	return copyAbortSpan(e, ms, sc.rangeID, destRangeID,
 		engine.MakeMVCCMetadataKey(sc.min()), engine.MakeMVCCMetadataKey(sc.max()))
 }
 
@@ -192,7 +192,7 @@ func (sc *AbortSpan) CopyFrom(
 ) (int, error) {
 	originMin := engine.MakeMVCCMetadataKey(keys.AbortSpanKey(originRangeID, txnIDMin))
 	originMax := engine.MakeMVCCMetadataKey(keys.AbortSpanKey(originRangeID, txnIDMax))
-	return copySeqCache(e, ms, originRangeID, sc.rangeID, originMin, originMax)
+	return copyAbortSpan(e, ms, originRangeID, sc.rangeID, originMin, originMax)
 }
 
 // Del removes all AbortSpan entries for the given transaction.
