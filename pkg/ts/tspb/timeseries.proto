@@ -128,6 +128,25 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
+// MetricAxisUnits described the unit of data collected.
+enum MetricAxisUnits {
+  // Units are a simple count.
+  Count = 0;
+  // Units are a count of bytes.
+  Bytes = 1;
+  // Units are durations expressed in nanoseconds.
+  Duration = 2;
+}
+
+// MetricMetadata describes metrics so they can be easily converted into charts
+message MetricMetadata {
+  required string name = 1 [(gogoproto.nullable) = false];
+  required string help = 2 [(gogoproto.nullable) = false];
+  required MetricAxisUnits units = 3 [(gogoproto.nullable) = false];
+  required string axisLabel = 4 [(gogoproto.nullable) = false];
+  required string metricType = 5 [(gogoproto.nullable) = false];
+}
+
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service TimeSeries {

@@ -55,12 +55,7 @@ func NewCounterWithRates(metadata Metadata) *CounterWithRates {
 	for _, scale := range scales {
 		es[scale] = NewRate(scale.d)
 	}
-	c := NewCounter(
-		Metadata{
-			Name:   metadata.Name,
-			Help:   metadata.Help,
-			labels: metadata.labels,
-		})
+	c := NewCounter(metadata)
 	return &CounterWithRates{Counter: c, Rates: es}
 }
 

@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
@@ -50,6 +52,12 @@ type Iterable interface {
 	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
+	// GetHelp returns the units for the metric.
+	GetUnits() tspb.MetricAxisUnits
+	// GetAxisLabel returns the axis label for the metric.
+	GetAxisLabel() string
+	// GetMetadata returns all of the Iterable's metadata
+	GetMetadata() tspb.MetricMetadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }
@@ -61,6 +69,10 @@ type PrometheusExportable interface {
 	GetName() string
 	// GetHelp is a method on Metadata
 	GetHelp() string
+	// GetUnits is a method on Metadata
+	GetUnits() tspb.MetricAxisUnits
+	// GetAxisLabel is a method on Metadata
+	GetAxisLabel() string
 	// GetType returns the prometheus type enum for this metric.
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
@@ -75,9 +87,82 @@ type PrometheusExportable interface {
 // Metadata holds metadata about a metric. It must be embedded in
 // each metric object.
 type Metadata struct {
-	Name, Help string
-	labels     []*prometheusgo.LabelPair
+	Name, Help, AxisLabel, MetricType string
+	Units                             tspb.MetricAxisUnits // Zero value is Counts
+	labels                            []*prometheusgo.LabelPair
 }
+
+// Units constants for metric.Metadata.Units
+const (
+	// UnitsCount are a simple count.
+	UnitsCount = tspb.MetricAxisUnits_Count
+	// UnitsBytes are a count of bytes.
+	UnitsBytes = tspb.MetricAxisUnits_Bytes
+	// UnitsDuration are durations expressed in nanoseconds.
+	UnitsDuration = tspb.MetricAxisUnits_Duration
+)
+
+// AxisLabel constants for metric.Metadata.AxisLabel
+const (
+	AxisBatches               = "Batches"
+	AxisBatchKVRequests       = "Batch KV Requests"
+	AxisBloomFilterOps        = "Bloom Filter Ops"
+	AxisCacheOps              = "Cache Ops"
+	AxisCgoCalls              = "cgo Calls"
+	AxisCommands              = "Commands"
+	AxisCompactionRequests    = "Compaction Requests"
+	AxisCompactions           = "Compactions"
+	AxisConnections           = "Connections"
+	AxisDiskReadsperQuery     = "Disk Reads per Query"
+	AxisEntries               = "Entries"
+	AxisEpochs                = "Epochs"
+	AxisErrors                = "Errors"
+	AxisFileDescriptors       = "File Descriptors"
+	AxisFlows                 = "Flows"
+	AxisFlushes               = "Flushes"
+	AxisGCRuns                = "GC Runs"
+	AxisGoroutines            = "goroutines"
+	AxisID                    = "ID"
+	AxisInfos                 = "Infos"
+	AxisIngestions            = "Ingestions"
+	AxisIntentResolutions     = "Intent Resolutions"
+	AxisIntents               = "Intents"
+	AxisKeys                  = "Keys"
+	AxisKeysPerSec            = "Keys/Sec"
+	AxisKVTransactions        = "KV Transactions"
+	AxisLeaderTransfers       = "Leader Transfers"
+	AxisLeaseRequests         = "Lease Requests"
+	AxisLeaseTransfers        = "Lease Transfers"
+	AxisLogEntries            = "Log Entries"
+	AxisMessages              = "Messages"
+	AxisMetricSamples         = "Metric Samples"
+	AxisNodes                 = "Nodes"
+	AxisPageRotations         = "Page Rotations"
+	AxisPages                 = "Pages"
+	AxisPercent               = "Percent"
+	AxisPushes                = "Pushes"
+	AxisQueries               = "Queries"
+	AxisRaftLeaders           = "Raft Leaders"
+	AxisRangeOps              = "Range Ops"
+	AxisRanges                = "Ranges"
+	AxisReplicaAdditions      = "Replica Additions"
+	AxisReplicaRemovals       = "Replica Removals"
+	AxisReplicas              = "Replicas"
+	AxisRequests              = "Requests"
+	AxisRestartedTransactions = "Restarted Transactions"
+	AxisRetries               = "Retries"
+	AxisRPCs                  = "RPCs"
+	AxisRSS                   = "RSS"
+	AxisSize                  = "Size"
+	AxisSnapshots             = "Snapshots"
+	AxisSSTables              = "SSTables"
+	AxisStatements            = "Statements"
+	AxisTicks                 = "Ticks"
+	AxisTime                  = "Time"
+	AxisTimeSinceUnixEpoch    = "Time since Unix Epoch"
+	AxisTxns                  = "Txns"
+	AxisWrites                = "Writes"
+)
 
 // GetName returns the metric's name.
 func (m *Metadata) GetName() string {
@@ -89,9 +174,30 @@ func (m *Metadata) GetHelp() string {
 	return m.Help
 }
 
+// GetUnits returns the metric's units.
+func (m *Metadata) GetUnits() tspb.MetricAxisUnits {
+	return m.Units
+}
+
+// GetAxisLabel returns the metric's aix labek
+func (m *Metadata) GetAxisLabel() string {
+	return m.AxisLabel
+}
+
 // GetLabels returns the metric's labels.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
 	return m.labels
+}
+
+// GetMetadata returns all of the metric's metadata
+func (m *Metadata) GetMetadata() tspb.MetricMetadata {
+	return tspb.MetricMetadata{
+		Name:       m.Name,
+		Help:       m.Help,
+		Units:      m.Units,
+		AxisLabel:  m.AxisLabel,
+		MetricType: m.MetricType,
+	}
 }
 
 // AddLabel adds a label/value pair for this metric.
@@ -169,6 +275,7 @@ type Histogram struct {
 // track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
 // precision.
 func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
+	metadata.MetricType = "Histogram"
 	dHist := newSlidingHistogram(duration, maxVal, sigFigs)
 	h := &Histogram{
 		Metadata: metadata,
@@ -187,6 +294,7 @@ func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFi
 // The windowed portion of the Histogram retains values for approximately
 // histogramWindow.
 func NewLatency(metadata Metadata, histogramWindow time.Duration) *Histogram {
+	metadata.MetricType = "Latency"
 	return NewHistogram(
 		metadata, histogramWindow, MaxLatency.Nanoseconds(), 1,
 	)
@@ -294,6 +402,7 @@ type Counter struct {
 
 // NewCounter creates a counter.
 func NewCounter(metadata Metadata) *Counter {
+	metadata.MetricType = "Counter"
 	return &Counter{metadata, metrics.NewCounter()}
 }
 
@@ -336,6 +445,7 @@ type Gauge struct {
 
 // NewGauge creates a Gauge.
 func NewGauge(metadata Metadata) *Gauge {
+	metadata.MetricType = "Gauge"
 	return &Gauge{metadata, new(int64), nil}
 }
 
@@ -344,6 +454,7 @@ func NewGauge(metadata Metadata) *Gauge {
 // Note that Update, Inc, and Dec should NOT be called on a Gauge returned
 // from NewFunctionalGauge.
 func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
+	metadata.MetricType = "Gauge"
 	return &Gauge{metadata, nil, f}
 }
 
@@ -403,6 +514,7 @@ type GaugeFloat64 struct {
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
+	metadata.MetricType = "Gauge"
 	return &GaugeFloat64{metadata, metrics.NewGaugeFloat64()}
 }
 

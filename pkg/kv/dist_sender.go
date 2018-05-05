@@ -47,26 +47,47 @@ const (
 
 var (
 	metaDistSenderBatchCount = metric.Metadata{
-		Name: "distsender.batches",
-		Help: "Number of batches processed"}
+		Name:      "distsender.batches",
+		Help:      "Number of batches processed",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisBatches,
+	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
-		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed"}
+		Name:      "distsender.batches.partial",
+		Help:      "Number of partial batches processed",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisBatches,
+	}
 	metaTransportSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent",
-		Help: "Number of RPCs sent"}
+		Name:      "distsender.rpc.sent",
+		Help:      "Number of RPCs sent",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisRPCs,
+	}
 	metaTransportLocalSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent.local",
-		Help: "Number of local RPCs sent"}
+		Name:      "distsender.rpc.sent.local",
+		Help:      "Number of local RPCs sent",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisRPCs,
+	}
 	metaDistSenderNextReplicaErrCount = metric.Metadata{
-		Name: "distsender.rpc.sent.nextreplicaerror",
-		Help: "Number of RPCs sent due to per-replica errors"}
+		Name:      "distsender.rpc.sent.nextreplicaerror",
+		Help:      "Number of RPCs sent due to per-replica errors",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisErrors,
+	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
-		Name: "distsender.errors.notleaseholder",
-		Help: "Number of NotLeaseHolderErrors encountered"}
+		Name:      "distsender.errors.notleaseholder",
+		Help:      "Number of NotLeaseHolderErrors encountered",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisErrors,
+	}
 	metaSlowDistSenderRequests = metric.Metadata{
-		Name: "requests.slow.distsender",
-		Help: "Number of requests that have been stuck for a long time in the dist sender"}
+		Name:      "requests.slow.distsender",
+		Help:      "Number of requests that have been stuck for a long time in the dist sender",
+		Units:     metric.UnitsCount,
+		AxisLabel: metric.AxisErrors,
+	}
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(

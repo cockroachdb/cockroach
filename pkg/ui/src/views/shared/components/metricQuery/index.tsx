@@ -25,25 +25,7 @@ import * as protos from  "src/js/protos";
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
-
-/**
- * AxisUnits is an enumeration used to specify the type of units being displayed
- * on an Axis.
- */
-export enum AxisUnits {
-  /**
-   * Units are a simple count.
-   */
-  Count,
-  /**
-   * Units are a count of bytes.
-   */
-  Bytes,
-  /**
-   * Units are durations expressed in nanoseconds.
-   */
-  Duration,
-}
+export import AxisUnits = protos.cockroach.ts.tspb.MetricAxisUnits;
 
 /**
  * AxisProps represents the properties of an Axis being specified as part of a

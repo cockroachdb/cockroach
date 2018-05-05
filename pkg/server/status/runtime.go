@@ -30,23 +30,57 @@ import (
 )
 
 var (
-	metaCgoCalls       = metric.Metadata{Name: "sys.cgocalls", Help: "Total number of cgo calls"}
-	metaGoroutines     = metric.Metadata{Name: "sys.goroutines", Help: "Current number of goroutines"}
-	metaGoAllocBytes   = metric.Metadata{Name: "sys.go.allocbytes", Help: "Current bytes of memory allocated by go"}
-	metaGoTotalBytes   = metric.Metadata{Name: "sys.go.totalbytes", Help: "Total bytes of memory allocated by go, but not released"}
-	metaCgoAllocBytes  = metric.Metadata{Name: "sys.cgo.allocbytes", Help: "Current bytes of memory allocated by cgo"}
-	metaCgoTotalBytes  = metric.Metadata{Name: "sys.cgo.totalbytes", Help: "Total bytes of memory allocated by cgo, but not released"}
-	metaGCCount        = metric.Metadata{Name: "sys.gc.count", Help: "Total number of GC runs"}
-	metaGCPauseNS      = metric.Metadata{Name: "sys.gc.pause.ns", Help: "Total GC pause in nanoseconds"}
-	metaGCPausePercent = metric.Metadata{Name: "sys.gc.pause.percent", Help: "Current GC pause percentage"}
-	metaCPUUserNS      = metric.Metadata{Name: "sys.cpu.user.ns", Help: "Total user cpu time in nanoseconds"}
-	metaCPUUserPercent = metric.Metadata{Name: "sys.cpu.user.percent", Help: "Current user cpu percentage"}
-	metaCPUSysNS       = metric.Metadata{Name: "sys.cpu.sys.ns", Help: "Total system cpu time in nanoseconds"}
-	metaCPUSysPercent  = metric.Metadata{Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage"}
-	metaRSS            = metric.Metadata{Name: "sys.rss", Help: "Current process RSS"}
-	metaFDOpen         = metric.Metadata{Name: "sys.fd.open", Help: "Process open file descriptors"}
-	metaFDSoftLimit    = metric.Metadata{Name: "sys.fd.softlimit", Help: "Process open FD soft limit"}
-	metaUptime         = metric.Metadata{Name: "sys.uptime", Help: "Process uptime in seconds"}
+	metaCgoCalls = metric.Metadata{
+		Name: "sys.cgocalls", Help: "Total number of cgo calls", Units: metric.UnitsCount, AxisLabel: metric.AxisCgoCalls,
+	}
+	metaGoroutines = metric.Metadata{
+		Name: "sys.goroutines", Help: "Current number of goroutines", Units: metric.UnitsCount, AxisLabel: metric.AxisGoroutines,
+	}
+	metaGoAllocBytes = metric.Metadata{
+		Name: "sys.go.allocbytes", Help: "Current bytes of memory allocated by go", Units: metric.UnitsBytes, AxisLabel: metric.AxisSize,
+	}
+	metaGoTotalBytes = metric.Metadata{
+		Name: "sys.go.totalbytes", Help: "Total bytes of memory allocated by go, but not released", Units: metric.UnitsBytes, AxisLabel: metric.AxisSize,
+	}
+	metaCgoAllocBytes = metric.Metadata{
+		Name: "sys.cgo.allocbytes", Help: "Current bytes of memory allocated by cgo", Units: metric.UnitsBytes, AxisLabel: metric.AxisSize,
+	}
+	metaCgoTotalBytes = metric.Metadata{
+		Name: "sys.cgo.totalbytes", Help: "Total bytes of memory allocated by cgo, but not released", Units: metric.UnitsBytes, AxisLabel: metric.AxisSize,
+	}
+	metaGCCount = metric.Metadata{
+		Name: "sys.gc.count", Help: "Total number of GC runs", Units: metric.UnitsCount, AxisLabel: metric.AxisGCRuns,
+	}
+	metaGCPauseNS = metric.Metadata{
+		Name: "sys.gc.pause.ns", Help: "Total GC pause in nanoseconds", Units: metric.UnitsDuration, AxisLabel: metric.AxisTime,
+	}
+	metaGCPausePercent = metric.Metadata{
+		Name: "sys.gc.pause.percent", Help: "Current GC pause percentage", Units: metric.UnitsCount, AxisLabel: metric.AxisPercent,
+	}
+	metaCPUUserNS = metric.Metadata{
+		Name: "sys.cpu.user.ns", Help: "Total user cpu time in nanoseconds", Units: metric.UnitsDuration, AxisLabel: metric.AxisTime,
+	}
+	metaCPUUserPercent = metric.Metadata{
+		Name: "sys.cpu.user.percent", Help: "Current user cpu percentage", Units: metric.UnitsCount, AxisLabel: metric.AxisPercent,
+	}
+	metaCPUSysNS = metric.Metadata{
+		Name: "sys.cpu.sys.ns", Help: "Total system cpu time in nanoseconds", Units: metric.UnitsDuration, AxisLabel: metric.AxisTime,
+	}
+	metaCPUSysPercent = metric.Metadata{
+		Name: "sys.cpu.sys.percent", Help: "Current system cpu percentage", Units: metric.UnitsCount, AxisLabel: metric.AxisPercent,
+	}
+	metaRSS = metric.Metadata{
+		Name: "sys.rss", Help: "Current process RSS", Units: metric.UnitsBytes, AxisLabel: metric.AxisRSS,
+	}
+	metaFDOpen = metric.Metadata{
+		Name: "sys.fd.open", Help: "Process open file descriptors", Units: metric.UnitsCount, AxisLabel: metric.AxisFileDescriptors,
+	}
+	metaFDSoftLimit = metric.Metadata{
+		Name: "sys.fd.softlimit", Help: "Process open FD soft limit", Units: metric.UnitsCount, AxisLabel: metric.AxisFileDescriptors,
+	}
+	metaUptime = metric.Metadata{
+		Name: "sys.uptime", Help: "Process uptime in seconds", Units: metric.UnitsDuration, AxisLabel: metric.AxisTime,
+	}
 )
 
 // getCgoMemStats is a function that fetches stats for the C++ portion of the code.
@@ -110,7 +144,9 @@ func MakeRuntimeStatSampler(clock *hlc.Clock) RuntimeStatSampler {
 	}
 
 	// Build information.
-	metaBuildTimestamp := metric.Metadata{Name: "build.timestamp", Help: "Build information"}
+	metaBuildTimestamp := metric.Metadata{
+		Name: "build.timestamp", Help: "Build information", Units: metric.UnitsDuration, AxisLabel: metric.AxisTimeSinceUnixEpoch,
+	}
 	metaBuildTimestamp.AddLabel("tag", info.Tag)
 	metaBuildTimestamp.AddLabel("go_version", info.GoVersion)
 
