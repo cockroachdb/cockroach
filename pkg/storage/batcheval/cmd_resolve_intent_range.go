@@ -75,8 +75,14 @@ func ResolveIntentRange(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
+
+	var res result.Result
+	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
+
 	if WriteAbortSpanOnResolve(args.Status) {
-		return result.Result{}, SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+		if err := SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+			return result.Result{}, err
+		}
 	}
-	return result.Result{}, nil
+	return res, nil
 }

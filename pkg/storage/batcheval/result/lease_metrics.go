@@ -14,14 +14,24 @@
 
 package result
 
-// LeaseMetricsType is used to distinguish between various lease
+// Metrics is used to distinguish between various lease
 // operations and potentially outcomes.
-type LeaseMetricsType int
+type Metrics struct {
+	LeaseRequestSuccess  int // lease request evaluated successfully
+	LeaseRequestError    int // lease request error at evaluation time
+	LeaseTransferSuccess int // lease transfer evaluated successfully
+	LeaseTransferError   int // lease transfer error at evaluation time
+	ResolveCommit        int // intent commit evaluated successfully
+	ResolveAbort         int // non-poisoning intent abort evaluated successfully
+	ResolvePoison        int // poisoning intent abort evaluated successfully
+}
 
-// Lease metrics enum.
-const (
-	LeaseRequestSuccess LeaseMetricsType = iota
-	LeaseRequestError
-	LeaseTransferSuccess
-	LeaseTransferError
-)
+func (mt *Metrics) Add(o Metrics) {
+	mt.LeaseRequestSuccess += o.LeaseRequestSuccess
+	mt.LeaseRequestError += o.LeaseRequestError
+	mt.LeaseTransferSuccess += o.LeaseTransferSuccess
+	mt.LeaseTransferError += o.LeaseTransferError
+	mt.ResolveCommit += o.ResolveCommit
+	mt.ResolveAbort += o.ResolveAbort
+	mt.ResolvePoison += o.ResolvePoison
+}
