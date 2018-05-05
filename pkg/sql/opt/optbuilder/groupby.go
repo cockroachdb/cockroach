@@ -330,6 +330,18 @@ func (b *Builder) buildAggregateFunction(
 			pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet"),
 		})
 	}
+	if f.Type == tree.DistinctFuncType {
+		panic(builderError{pgerror.Unimplemented(
+			"aggregate with DISTINCT",
+			"aggregates with DISTINCT are not supported yet",
+		)})
+	}
+	if f.Filter != nil {
+		panic(builderError{pgerror.Unimplemented(
+			"aggregate with FILTER",
+			"aggregates with FILTER are not supported yet",
+		)})
+	}
 
 	aggInScope, aggOutScope := inScope.startAggFunc()
 
