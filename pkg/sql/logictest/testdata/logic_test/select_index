@@ -1023,7 +1023,7 @@ render           ·         ·                 (x, y)                           
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
       ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
       │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     /!NULL-/4 /5-     ·                                        ·
+      │          spans     -/4 /5-           ·                                        ·
       └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
 ·                table     xy@primary        ·                                        ·
 
@@ -1064,3 +1064,101 @@ query II
 SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
 1  1
+
+# Test index constraints for IS (NOT) TRUE/FALSE.
+statement ok
+CREATE TABLE bool1 (
+  a BOOL,
+  INDEX (a)
+);
+INSERT INTO bool1 VALUES (NULL), (TRUE), (FALSE)
+
+query B
+SELECT * FROM bool1 WHERE a IS NULL
+----
+NULL
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT NULL
+----
+false
+true
+
+query B
+SELECT * FROM bool1 WHERE a IS TRUE
+----
+true
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT TRUE
+----
+NULL
+false
+
+query B
+SELECT * FROM bool1 WHERE a IS FALSE
+----
+false
+
+query B rowsort
+SELECT * FROM bool1 WHERE a IS NOT FALSE
+----
+NULL
+true
+
+statement ok
+CREATE TABLE bool2 (
+  a BOOL NOT NULL,
+  INDEX (a)
+);
+INSERT INTO bool2 VALUES (TRUE), (FALSE)
+
+query B
+SELECT * FROM bool2 WHERE a IS NULL
+----
+
+query B rowsort
+SELECT * FROM bool2 WHERE a IS NOT NULL
+----
+false
+true
+
+query B
+SELECT * FROM bool2 WHERE a IS TRUE
+----
+true
+
+query B
+SELECT * FROM bool2 WHERE a IS NOT TRUE
+----
+false
+
+query B
+SELECT * FROM bool2 WHERE a IS FALSE
+----
+false
+
+query B
+SELECT * FROM bool2 WHERE a IS NOT FALSE
+----
+true
+
+# Test index constraints for IS (NOT) DISTINCT FROM on an integer column.
+statement ok
+CREATE TABLE int (
+  a INT,
+  INDEX (a)
+);
+INSERT INTO int VALUES (NULL), (0), (1), (2)
+
+query I
+SELECT * FROM int WHERE a IS NOT DISTINCT FROM 2
+----
+2
+
+query I rowsort
+SELECT * FROM int WHERE a IS DISTINCT FROM 2
+----
+NULL
+0
+1
