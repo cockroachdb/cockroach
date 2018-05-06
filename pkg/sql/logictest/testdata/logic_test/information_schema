@@ -222,6 +222,7 @@ crdb_internal       leases
 crdb_internal       node_build_info
 crdb_internal       node_queries
 crdb_internal       node_runtime_info
+crdb_internal       node_metrics
 crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
 crdb_internal       partitions
@@ -335,6 +336,7 @@ kv_node_status
 kv_store_status
 leases
 node_build_info
+node_metrics
 node_queries
 node_runtime_info
 node_sessions
@@ -457,6 +459,7 @@ system         crdb_internal       kv_node_status                     SYSTEM VIE
 system         crdb_internal       kv_store_status                    SYSTEM VIEW  NO                  1
 system         crdb_internal       leases                             SYSTEM VIEW  NO                  1
 system         crdb_internal       node_build_info                    SYSTEM VIEW  NO                  1
+system         crdb_internal       node_metrics                       SYSTEM VIEW  NO                  1
 system         crdb_internal       node_queries                       SYSTEM VIEW  NO                  1
 system         crdb_internal       node_runtime_info                  SYSTEM VIEW  NO                  1
 system         crdb_internal       node_sessions                      SYSTEM VIEW  NO                  1
@@ -961,18 +964,18 @@ NULL     public   system         information_schema  columns                    
 NULL     public   system         information_schema  constraint_column_usage            SELECT          NULL          NULL
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          NULL
 NULL     root     system         public              descriptor                         GRANT           NULL          NULL
-NULL     admin    system         public              descriptor                         SELECT          NULL          NULL
 NULL     root     system         public              descriptor                         SELECT          NULL          NULL
+NULL     admin    system         public              descriptor                         SELECT          NULL          NULL
 NULL     admin    system         public              descriptor                         GRANT           NULL          NULL
 NULL     public   system         information_schema  enabled_roles                      SELECT          NULL          NULL
 NULL     root     system         public              eventlog                           DELETE          NULL          NULL
-NULL     root     system         public              eventlog                           GRANT           NULL          NULL
-NULL     root     system         public              eventlog                           INSERT          NULL          NULL
 NULL     root     system         public              eventlog                           SELECT          NULL          NULL
-NULL     admin    system         public              eventlog                           INSERT          NULL          NULL
-NULL     root     system         public              eventlog                           UPDATE          NULL          NULL
-NULL     admin    system         public              eventlog                           DELETE          NULL          NULL
 NULL     admin    system         public              eventlog                           GRANT           NULL          NULL
+NULL     root     system         public              eventlog                           INSERT          NULL          NULL
+NULL     root     system         public              eventlog                           UPDATE          NULL          NULL
+NULL     root     system         public              eventlog                           GRANT           NULL          NULL
+NULL     admin    system         public              eventlog                           DELETE          NULL          NULL
+NULL     admin    system         public              eventlog                           INSERT          NULL          NULL
 NULL     admin    system         public              eventlog                           SELECT          NULL          NULL
 NULL     admin    system         public              eventlog                           UPDATE          NULL          NULL
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          NULL
@@ -980,45 +983,46 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_nodes                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       index_columns                      SELECT          NULL          NULL
 NULL     root     system         public              jobs                               SELECT          NULL          NULL
+NULL     admin    system         public              jobs                               DELETE          NULL          NULL
+NULL     admin    system         public              jobs                               INSERT          NULL          NULL
+NULL     admin    system         public              jobs                               SELECT          NULL          NULL
 NULL     admin    system         public              jobs                               UPDATE          NULL          NULL
 NULL     root     system         public              jobs                               DELETE          NULL          NULL
-NULL     admin    system         public              jobs                               SELECT          NULL          NULL
 NULL     root     system         public              jobs                               GRANT           NULL          NULL
-NULL     admin    system         public              jobs                               INSERT          NULL          NULL
-NULL     admin    system         public              jobs                               DELETE          NULL          NULL
+NULL     root     system         public              jobs                               INSERT          NULL          NULL
 NULL     public   system         crdb_internal       jobs                               SELECT          NULL          NULL
 NULL     root     system         public              jobs                               UPDATE          NULL          NULL
 NULL     admin    system         public              jobs                               GRANT           NULL          NULL
-NULL     root     system         public              jobs                               INSERT          NULL          NULL
 NULL     public   system         information_schema  key_column_usage                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       kv_node_status                     SELECT          NULL          NULL
 NULL     public   system         crdb_internal       kv_store_status                    SELECT          NULL          NULL
-NULL     root     system         public              lease                              SELECT          NULL          NULL
-NULL     root     system         public              lease                              UPDATE          NULL          NULL
-NULL     root     system         public              lease                              INSERT          NULL          NULL
-NULL     admin    system         public              lease                              UPDATE          NULL          NULL
-NULL     admin    system         public              lease                              SELECT          NULL          NULL
 NULL     admin    system         public              lease                              INSERT          NULL          NULL
-NULL     admin    system         public              lease                              DELETE          NULL          NULL
-NULL     root     system         public              lease                              GRANT           NULL          NULL
+NULL     admin    system         public              lease                              SELECT          NULL          NULL
+NULL     root     system         public              lease                              SELECT          NULL          NULL
+NULL     admin    system         public              lease                              UPDATE          NULL          NULL
 NULL     root     system         public              lease                              DELETE          NULL          NULL
 NULL     admin    system         public              lease                              GRANT           NULL          NULL
+NULL     root     system         public              lease                              GRANT           NULL          NULL
+NULL     root     system         public              lease                              INSERT          NULL          NULL
+NULL     root     system         public              lease                              UPDATE          NULL          NULL
+NULL     admin    system         public              lease                              DELETE          NULL          NULL
 NULL     public   system         crdb_internal       leases                             SELECT          NULL          NULL
-NULL     admin    system         public              locations                          INSERT          NULL          NULL
-NULL     admin    system         public              locations                          UPDATE          NULL          NULL
-NULL     root     system         public              locations                          GRANT           NULL          NULL
-NULL     admin    system         public              locations                          DELETE          NULL          NULL
+NULL     admin    system         public              locations                          SELECT          NULL          NULL
 NULL     root     system         public              locations                          DELETE          NULL          NULL
+NULL     root     system         public              locations                          INSERT          NULL          NULL
+NULL     admin    system         public              locations                          DELETE          NULL          NULL
+NULL     root     system         public              locations                          GRANT           NULL          NULL
 NULL     admin    system         public              locations                          GRANT           NULL          NULL
+NULL     admin    system         public              locations                          INSERT          NULL          NULL
 NULL     root     system         public              locations                          UPDATE          NULL          NULL
 NULL     root     system         public              locations                          SELECT          NULL          NULL
-NULL     root     system         public              locations                          INSERT          NULL          NULL
-NULL     admin    system         public              locations                          SELECT          NULL          NULL
+NULL     admin    system         public              locations                          UPDATE          NULL          NULL
 NULL     root     system         public              namespace                          SELECT          NULL          NULL
 NULL     root     system         public              namespace                          GRANT           NULL          NULL
-NULL     admin    system         public              namespace                          GRANT           NULL          NULL
 NULL     admin    system         public              namespace                          SELECT          NULL          NULL
+NULL     admin    system         public              namespace                          GRANT           NULL          NULL
 NULL     public   system         crdb_internal       node_build_info                    SELECT          NULL          NULL
+NULL     public   system         crdb_internal       node_metrics                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_queries                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_runtime_info                  SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          NULL
@@ -1059,27 +1063,27 @@ NULL     public   system         pg_catalog          pg_user                    
 NULL     public   system         pg_catalog          pg_user_mapping                    SELECT          NULL          NULL
 NULL     public   system         pg_catalog          pg_views                           SELECT          NULL          NULL
 NULL     root     system         public              rangelog                           INSERT          NULL          NULL
-NULL     root     system         public              rangelog                           GRANT           NULL          NULL
 NULL     root     system         public              rangelog                           DELETE          NULL          NULL
 NULL     admin    system         public              rangelog                           UPDATE          NULL          NULL
-NULL     admin    system         public              rangelog                           INSERT          NULL          NULL
+NULL     admin    system         public              rangelog                           SELECT          NULL          NULL
 NULL     admin    system         public              rangelog                           GRANT           NULL          NULL
 NULL     admin    system         public              rangelog                           DELETE          NULL          NULL
-NULL     root     system         public              rangelog                           SELECT          NULL          NULL
-NULL     admin    system         public              rangelog                           SELECT          NULL          NULL
+NULL     root     system         public              rangelog                           GRANT           NULL          NULL
+NULL     admin    system         public              rangelog                           INSERT          NULL          NULL
 NULL     root     system         public              rangelog                           UPDATE          NULL          NULL
+NULL     root     system         public              rangelog                           SELECT          NULL          NULL
 NULL     public   system         crdb_internal       ranges                             SELECT          NULL          NULL
 NULL     public   system         information_schema  referential_constraints            SELECT          NULL          NULL
-NULL     root     system         public              role_members                       INSERT          NULL          NULL
-NULL     root     system         public              role_members                       UPDATE          NULL          NULL
 NULL     root     system         public              role_members                       GRANT           NULL          NULL
-NULL     admin    system         public              role_members                       SELECT          NULL          NULL
+NULL     admin    system         public              role_members                       UPDATE          NULL          NULL
+NULL     root     system         public              role_members                       UPDATE          NULL          NULL
 NULL     admin    system         public              role_members                       INSERT          NULL          NULL
 NULL     admin    system         public              role_members                       GRANT           NULL          NULL
-NULL     root     system         public              role_members                       SELECT          NULL          NULL
-NULL     root     system         public              role_members                       DELETE          NULL          NULL
-NULL     admin    system         public              role_members                       UPDATE          NULL          NULL
 NULL     admin    system         public              role_members                       DELETE          NULL          NULL
+NULL     root     system         public              role_members                       INSERT          NULL          NULL
+NULL     admin    system         public              role_members                       SELECT          NULL          NULL
+NULL     root     system         public              role_members                       DELETE          NULL          NULL
+NULL     root     system         public              role_members                       SELECT          NULL          NULL
 NULL     public   system         information_schema  role_table_grants                  SELECT          NULL          NULL
 NULL     public   system         crdb_internal       schema_changes                     SELECT          NULL          NULL
 NULL     public   system         information_schema  schema_privileges                  SELECT          NULL          NULL
@@ -1087,76 +1091,76 @@ NULL     public   system         information_schema  schemata                   
 NULL     public   system         information_schema  sequences                          SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_trace                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          NULL
-NULL     root     system         public              settings                           INSERT          NULL          NULL
-NULL     root     system         public              settings                           UPDATE          NULL          NULL
-NULL     root     system         public              settings                           DELETE          NULL          NULL
+NULL     root     system         public              settings                           GRANT           NULL          NULL
 NULL     root     system         public              settings                           SELECT          NULL          NULL
+NULL     root     system         public              settings                           INSERT          NULL          NULL
 NULL     admin    system         public              settings                           UPDATE          NULL          NULL
 NULL     admin    system         public              settings                           SELECT          NULL          NULL
 NULL     admin    system         public              settings                           INSERT          NULL          NULL
 NULL     admin    system         public              settings                           GRANT           NULL          NULL
-NULL     root     system         public              settings                           GRANT           NULL          NULL
 NULL     admin    system         public              settings                           DELETE          NULL          NULL
+NULL     root     system         public              settings                           UPDATE          NULL          NULL
+NULL     root     system         public              settings                           DELETE          NULL          NULL
 NULL     public   system         information_schema  statistics                         SELECT          NULL          NULL
 NULL     public   system         crdb_internal       table_columns                      SELECT          NULL          NULL
 NULL     public   system         information_schema  table_constraints                  SELECT          NULL          NULL
 NULL     public   system         crdb_internal       table_indexes                      SELECT          NULL          NULL
 NULL     public   system         information_schema  table_privileges                   SELECT          NULL          NULL
+NULL     admin    system         public              table_statistics                   DELETE          NULL          NULL
+NULL     root     system         public              table_statistics                   UPDATE          NULL          NULL
+NULL     root     system         public              table_statistics                   GRANT           NULL          NULL
+NULL     root     system         public              table_statistics                   DELETE          NULL          NULL
+NULL     admin    system         public              table_statistics                   SELECT          NULL          NULL
+NULL     admin    system         public              table_statistics                   UPDATE          NULL          NULL
+NULL     root     system         public              table_statistics                   INSERT          NULL          NULL
 NULL     root     system         public              table_statistics                   SELECT          NULL          NULL
 NULL     admin    system         public              table_statistics                   INSERT          NULL          NULL
-NULL     root     system         public              table_statistics                   UPDATE          NULL          NULL
-NULL     admin    system         public              table_statistics                   DELETE          NULL          NULL
-NULL     admin    system         public              table_statistics                   UPDATE          NULL          NULL
-NULL     root     system         public              table_statistics                   DELETE          NULL          NULL
-NULL     root     system         public              table_statistics                   GRANT           NULL          NULL
-NULL     root     system         public              table_statistics                   INSERT          NULL          NULL
 NULL     admin    system         public              table_statistics                   GRANT           NULL          NULL
-NULL     admin    system         public              table_statistics                   SELECT          NULL          NULL
-NULL     public   system         crdb_internal       tables                             SELECT          NULL          NULL
 NULL     public   system         information_schema  tables                             SELECT          NULL          NULL
-NULL     admin    system         public              ui                                 GRANT           NULL          NULL
-NULL     admin    system         public              ui                                 SELECT          NULL          NULL
-NULL     admin    system         public              ui                                 UPDATE          NULL          NULL
-NULL     root     system         public              ui                                 UPDATE          NULL          NULL
-NULL     root     system         public              ui                                 DELETE          NULL          NULL
-NULL     root     system         public              ui                                 GRANT           NULL          NULL
-NULL     root     system         public              ui                                 INSERT          NULL          NULL
+NULL     public   system         crdb_internal       tables                             SELECT          NULL          NULL
 NULL     root     system         public              ui                                 SELECT          NULL          NULL
-NULL     admin    system         public              ui                                 DELETE          NULL          NULL
+NULL     root     system         public              ui                                 INSERT          NULL          NULL
+NULL     root     system         public              ui                                 GRANT           NULL          NULL
+NULL     admin    system         public              ui                                 UPDATE          NULL          NULL
+NULL     admin    system         public              ui                                 SELECT          NULL          NULL
 NULL     admin    system         public              ui                                 INSERT          NULL          NULL
+NULL     admin    system         public              ui                                 GRANT           NULL          NULL
+NULL     admin    system         public              ui                                 DELETE          NULL          NULL
+NULL     root     system         public              ui                                 DELETE          NULL          NULL
+NULL     root     system         public              ui                                 UPDATE          NULL          NULL
 NULL     public   system         information_schema  user_privileges                    SELECT          NULL          NULL
-NULL     admin    system         public              users                              GRANT           NULL          NULL
-NULL     admin    system         public              users                              DELETE          NULL          NULL
-NULL     admin    system         public              users                              UPDATE          NULL          NULL
-NULL     root     system         public              users                              GRANT           NULL          NULL
-NULL     root     system         public              users                              INSERT          NULL          NULL
 NULL     root     system         public              users                              UPDATE          NULL          NULL
+NULL     root     system         public              users                              GRANT           NULL          NULL
 NULL     root     system         public              users                              DELETE          NULL          NULL
+NULL     admin    system         public              users                              UPDATE          NULL          NULL
 NULL     admin    system         public              users                              SELECT          NULL          NULL
 NULL     admin    system         public              users                              INSERT          NULL          NULL
+NULL     admin    system         public              users                              GRANT           NULL          NULL
+NULL     admin    system         public              users                              DELETE          NULL          NULL
 NULL     root     system         public              users                              SELECT          NULL          NULL
+NULL     root     system         public              users                              INSERT          NULL          NULL
 NULL     public   system         information_schema  views                              SELECT          NULL          NULL
-NULL     admin    system         public              web_sessions                       INSERT          NULL          NULL
-NULL     root     system         public              web_sessions                       SELECT          NULL          NULL
-NULL     root     system         public              web_sessions                       INSERT          NULL          NULL
-NULL     root     system         public              web_sessions                       GRANT           NULL          NULL
-NULL     root     system         public              web_sessions                       DELETE          NULL          NULL
-NULL     admin    system         public              web_sessions                       UPDATE          NULL          NULL
-NULL     admin    system         public              web_sessions                       GRANT           NULL          NULL
-NULL     admin    system         public              web_sessions                       SELECT          NULL          NULL
-NULL     root     system         public              web_sessions                       UPDATE          NULL          NULL
 NULL     admin    system         public              web_sessions                       DELETE          NULL          NULL
-NULL     root     system         public              zones                              GRANT           NULL          NULL
-NULL     root     system         public              zones                              INSERT          NULL          NULL
+NULL     admin    system         public              web_sessions                       GRANT           NULL          NULL
+NULL     admin    system         public              web_sessions                       INSERT          NULL          NULL
+NULL     admin    system         public              web_sessions                       SELECT          NULL          NULL
+NULL     root     system         public              web_sessions                       INSERT          NULL          NULL
+NULL     root     system         public              web_sessions                       DELETE          NULL          NULL
+NULL     root     system         public              web_sessions                       GRANT           NULL          NULL
+NULL     root     system         public              web_sessions                       UPDATE          NULL          NULL
+NULL     root     system         public              web_sessions                       SELECT          NULL          NULL
+NULL     admin    system         public              web_sessions                       UPDATE          NULL          NULL
+NULL     public   system         crdb_internal       zones                              SELECT          NULL          NULL
+NULL     root     system         public              zones                              DELETE          NULL          NULL
 NULL     admin    system         public              zones                              DELETE          NULL          NULL
 NULL     admin    system         public              zones                              GRANT           NULL          NULL
 NULL     admin    system         public              zones                              INSERT          NULL          NULL
-NULL     public   system         crdb_internal       zones                              SELECT          NULL          NULL
-NULL     admin    system         public              zones                              UPDATE          NULL          NULL
-NULL     root     system         public              zones                              DELETE          NULL          NULL
-NULL     root     system         public              zones                              SELECT          NULL          NULL
-NULL     root     system         public              zones                              UPDATE          NULL          NULL
 NULL     admin    system         public              zones                              SELECT          NULL          NULL
+NULL     admin    system         public              zones                              UPDATE          NULL          NULL
+NULL     root     system         public              zones                              GRANT           NULL          NULL
+NULL     root     system         public              zones                              UPDATE          NULL          NULL
+NULL     root     system         public              zones                              SELECT          NULL          NULL
+NULL     root     system         public              zones                              INSERT          NULL          NULL
 
 query TTTTTTTT colnames
 SELECT * FROM system.information_schema.role_table_grants
@@ -1177,6 +1181,7 @@ NULL     public   system         crdb_internal       kv_node_status             
 NULL     public   system         crdb_internal       kv_store_status                    SELECT          NULL          NULL
 NULL     public   system         crdb_internal       leases                             SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_build_info                    SELECT          NULL          NULL
+NULL     public   system         crdb_internal       node_metrics                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_queries                       SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_runtime_info                  SELECT          NULL          NULL
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          NULL
