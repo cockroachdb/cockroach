@@ -112,6 +112,25 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 
 		return cb.singleSpan(col, startKey, startBoundary, endKey, endBoundary), true
 
+	case opt.NeOp, opt.IsNotOp:
+		// Build constraint that doesn't contain the key:
+		//   IsNotOp  : [ - key) (key - ]
+		//   NeOp     : (/NULL - key) (key - ]
+		startKey, startBoundary := emptyKey, includeBoundary
+		if op == opt.NeOp {
+			startKey, startBoundary = constraint.MakeKey(tree.DNull), excludeBoundary
+		}
+		key := constraint.MakeKey(datum)
+		c := constraint.Contradiction
+		if !datum.IsMin(cb.evalCtx) {
+			c = cb.singleSpan(col, startKey, startBoundary, key, excludeBoundary)
+		}
+		if !datum.IsMax(cb.evalCtx) {
+			other := cb.singleSpan(col, key, excludeBoundary, emptyKey, includeBoundary)
+			c = c.Union(cb.evalCtx, other)
+		}
+		return c, true
+
 		// TODO(radu): handle other ops.
 	}
 	return unconstrained, false
@@ -206,7 +225,7 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 				c = c.Intersect(cb.evalCtx, ci)
 				tight = tight && tighti
 			}
-			return c, tight
+			return c, (tight || c == constraint.Contradiction)
 		}
 	}
 
