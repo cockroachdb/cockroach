@@ -87,7 +87,21 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 		return unconstrained, false
 	}
 	if datum == tree.DNull {
-		// TODO(radu): handle NULL datum
+		switch op {
+		case opt.EqOp, opt.LtOp, opt.GtOp, opt.LeOp, opt.GeOp, opt.NeOp:
+			// The result of this expression is always NULL. Normally, this expression
+			// should have been converted to NULL during type checking; but if the
+			// NULL is coming from a placeholder, that doesn't happen.
+			return constraint.Contradiction, true
+
+		case opt.IsOp:
+			return cb.eqSpan(col, tree.DNull), true
+
+		case opt.IsNotOp:
+			return cb.singleSpan(
+				col, constraint.MakeKey(tree.DNull), excludeBoundary, emptyKey, includeBoundary,
+			), true
+		}
 		return unconstrained, false
 	}
 
