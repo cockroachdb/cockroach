@@ -1021,7 +1021,7 @@ render           ·         ·                 (x, y)                           
  └── index-join  ·         ·                 (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
       ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
       │          table     xy@xy_y_idx       ·                                        ·
-      │          spans     /!NULL-/4 /5-     ·                                        ·
+      │          spans     -/4 /5-           ·                                        ·
       └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
 ·                table     xy@primary        ·                                        ·
 
