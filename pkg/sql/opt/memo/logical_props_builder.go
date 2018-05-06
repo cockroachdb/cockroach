@@ -491,7 +491,6 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 	case opt.VariableOp:
 		// Variable introduces outer column.
 		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
-		return props
 
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
 		// Inherit outer columns from input query.
@@ -499,17 +498,17 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) LogicalProps {
 		if !props.Scalar.OuterCols.Empty() {
 			props.Scalar.HasCorrelatedSubquery = true
 		}
-		return props
-	}
 
-	// By default, union outer cols from all children, both relational and scalar.
-	for i := 0; i < ev.ChildCount(); i++ {
-		logical := &ev.childGroup(i).logical
-		props.Scalar.OuterCols.UnionWith(logical.OuterCols())
+	default:
+		// By default, union outer cols from all children, both relational and scalar.
+		for i := 0; i < ev.ChildCount(); i++ {
+			logical := &ev.childGroup(i).logical
+			props.Scalar.OuterCols.UnionWith(logical.OuterCols())
 
-		// Propagate HasCorrelatedSubquery up the scalar expression tree.
-		if logical.Scalar != nil && logical.Scalar.HasCorrelatedSubquery {
-			props.Scalar.HasCorrelatedSubquery = true
+			// Propagate HasCorrelatedSubquery up the scalar expression tree.
+			if logical.Scalar != nil && logical.Scalar.HasCorrelatedSubquery {
+				props.Scalar.HasCorrelatedSubquery = true
+			}
 		}
 	}
 
