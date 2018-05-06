@@ -249,6 +249,22 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 	case opt.NullOp:
 		return contradiction, true
 
+	case opt.VariableOp:
+		// Support (x) as (x = TRUE) if x is boolean.
+		if col := ev.Private().(opt.ColumnID); cb.md.ColumnType(col).Equivalent(types.Bool) {
+			return cb.buildSingleColumnConstraintConst(col, opt.EqOp, tree.DBoolTrue)
+		}
+		return unconstrained, false
+
+	case opt.NotOp:
+		// Support (NOT x) as (x = FALSE) if x is boolean.
+		if child := ev.Child(0); child.Operator() == opt.VariableOp {
+			if col := child.Private().(opt.ColumnID); cb.md.ColumnType(col).Equivalent(types.Bool) {
+				return cb.buildSingleColumnConstraintConst(col, opt.EqOp, tree.DBoolFalse)
+			}
+		}
+		return unconstrained, false
+
 	case opt.AndOp, opt.FiltersOp:
 		// ChildCount can be zero if this is not a fully normalized expression
 		// (e.g. when using optsteps).

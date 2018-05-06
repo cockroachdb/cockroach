@@ -494,7 +494,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
            └── true [type=bool]
 
 opt
@@ -508,7 +508,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
            └── false [type=bool]
 
 opt
@@ -522,7 +522,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
            └── true [type=bool]
 
 opt
@@ -536,8 +536,48 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
            └── false [type=bool]
+
+opt
+SELECT * FROM abc WHERE b
+----
+select
+ ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── stats: [rows=1, distinct(2)=1]
+ ├── scan abc
+ │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
+ │    └── stats: [rows=1000, distinct(2)=700]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+      └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+
+opt
+SELECT * FROM abc WHERE NOT b
+----
+select
+ ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── stats: [rows=1, distinct(2)=1]
+ ├── scan abc
+ │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
+ │    └── stats: [rows=1000, distinct(2)=700]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
+      └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
+           └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+
+opt
+SELECT * FROM abc WHERE a > 5 AND b
+----
+select
+ ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── stats: [rows=1, distinct(2)=1]
+ ├── scan abc
+ │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
+ │    └── stats: [rows=1000, distinct(2)=700]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight)]
+      ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      │    ├── variable: abc.a [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
 opt
 SELECT * FROM abc WHERE c != 'foo'
