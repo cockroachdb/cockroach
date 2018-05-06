@@ -261,10 +261,16 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 		}
 		key := constraint.MakeKey(datum)
 		descending := c.columns[offset].Descending()
-		c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
-		var other constraint.Constraint
-		c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
-		out.UnionWith(c.evalCtx, &other)
+		if !datum.IsMin(c.evalCtx) {
+			c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
+		} else {
+			c.contradiction(offset, out)
+		}
+		if !datum.IsMax(c.evalCtx) {
+			var other constraint.Constraint
+			c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
+			out.UnionWith(c.evalCtx, &other)
+		}
 		return true
 
 	case opt.LikeOp:
