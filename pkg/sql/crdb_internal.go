@@ -70,6 +70,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLeasesTable,
 		crdbInternalLocalQueriesTable,
 		crdbInternalLocalSessionsTable,
+		crdbInternalLocalMetricsTable,
 		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
 		crdbInternalRuntimeInfoTable,
@@ -865,6 +866,46 @@ func populateSessionsTable(
 	}
 
 	return nil
+}
+
+// crdbInternalLocalMetricsTable exposes a snapshot of the metrics on the
+// current node.
+var crdbInternalLocalMetricsTable = virtualSchemaTable{
+	schema: `CREATE TABLE crdb_internal.node_metrics (
+  store_id 	         INT NULL,       -- the store, if any, to which this metric belongs
+  name               STRING,         -- name of the metric
+  value							 FLOAT           -- value of the metric
+);`,
+
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.node_metrics"); err != nil {
+			return err
+		}
+
+		mr := p.ExecCfg().MetricsRecorder
+		if mr == nil {
+			return nil
+		}
+		nodeStatus := mr.GetStatusSummary(ctx)
+		for i := 0; i <= len(nodeStatus.StoreStatuses); i++ {
+			storeID := tree.DNull
+			mtr := nodeStatus.Metrics
+			if i > 0 {
+				storeID = tree.NewDInt(tree.DInt(nodeStatus.StoreStatuses[i-1].Desc.StoreID))
+				mtr = nodeStatus.StoreStatuses[i-1].Metrics
+			}
+			for name, value := range mtr {
+				if err := addRow(
+					storeID,
+					tree.NewDString(name),
+					tree.NewDFloat(tree.DFloat(value)),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
 }
 
 // crdbInternalBuiltinFunctionsTable exposes the built-in function

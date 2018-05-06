@@ -27,6 +27,7 @@ kv_node_status
 kv_store_status
 leases
 node_build_info
+node_metrics
 node_queries
 node_runtime_info
 node_sessions
@@ -313,6 +314,9 @@ select * from crdb_internal.gossip_nodes
 
 query error pq: only superusers are allowed to read crdb_internal.gossip_liveness
 select * from crdb_internal.gossip_liveness
+
+query error pq: only superusers are allowed to read crdb_internal.node_metrics
+select * from crdb_internal.node_metrics
 
 query error pq: only superusers are allowed to read crdb_internal.kv_node_status
 select * from crdb_internal.kv_node_status

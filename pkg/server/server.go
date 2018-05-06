@@ -523,6 +523,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientCtx:              s.cfg.AmbientCtx,
 		DB:                      s.db,
 		Gossip:                  s.gossip,
+		MetricsRecorder:         s.recorder,
 		DistSender:              s.distSender,
 		RPCContext:              s.rpcContext,
 		LeaseManager:            s.leaseMgr,
