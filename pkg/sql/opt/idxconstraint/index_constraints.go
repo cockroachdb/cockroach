@@ -255,16 +255,31 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 		// Build constraint that doesn't contain the key:
 		//   if nullable or IsNotOp   : [ - key) (key - ]
 		//   if not nullable and NeOp : (/NULL - key) (key - ]
+		//
+		// If the key is the minimum possible value for the column type, the span
+		// (/NULL - key) will never contain any values and can be omitted. The span
+		// [ - key) is similar if the column is not nullable.
+		//
+		// Similarly, if the key is the maximum possible value, the span (key - ]
+		// can be omitted.
 		startKey, startBoundary := emptyKey, includeBoundary
 		if op == opt.NeOp {
 			startKey, startBoundary = c.notNullStartKey(offset)
 		}
 		key := constraint.MakeKey(datum)
 		descending := c.columns[offset].Descending()
-		c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
-		var other constraint.Constraint
-		c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
-		out.UnionWith(c.evalCtx, &other)
+		if !(startKey.IsEmpty() && c.isNullable(offset)) && datum.IsMin(c.evalCtx) {
+			// Omit the (/NULL - key) span by setting a contradiction, so that the
+			// UnionWith call below will result in just the second span.
+			c.contradiction(offset, out)
+		} else {
+			c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
+		}
+		if !datum.IsMax(c.evalCtx) {
+			var other constraint.Constraint
+			c.singleSpan(offset, key, excludeBoundary, emptyKey, includeBoundary, descending, &other)
+			out.UnionWith(c.evalCtx, &other)
+		}
 		return true
 
 	case opt.LikeOp:
