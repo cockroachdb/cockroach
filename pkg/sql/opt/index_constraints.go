@@ -176,7 +176,11 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		return LogicalSpans{sp}, true, true
 
 	case neOp, isNotOp:
-		spans := LogicalSpans{c.makeNotNullSpan(offset), c.makeNotNullSpan(offset)}
+		spans := LogicalSpans{MakeFullSpan(), MakeFullSpan()}
+		if op == neOp {
+			spans[0] = c.makeNotNullSpan(offset)
+			spans[1] = c.makeNotNullSpan(offset)
+		}
 		spans[0].End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		spans[1].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: false}
 		c.preferInclusive(offset, &spans[0])
