@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -194,6 +195,7 @@ type ExecutorConfig struct {
 	Clock            *hlc.Clock
 	DistSQLSrv       *distsqlrun.ServerImpl
 	StatusServer     serverpb.StatusServer
+	MetricsRecorder  *status.MetricsRecorder
 	SessionRegistry  *SessionRegistry
 	JobRegistry      *jobs.Registry
 	VirtualSchemas   *VirtualSchemaHolder

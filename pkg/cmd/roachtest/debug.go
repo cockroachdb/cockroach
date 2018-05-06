@@ -37,7 +37,7 @@ func registerDebug(r *registry) {
 				return err
 			}
 
-			if err := c.RunE(ctx, c.Node(node), "sudo apt-get install unzip"); err != nil {
+			if err := c.RunE(ctx, c.Node(node), "unzip -v || sudo apt-get install unzip"); err != nil {
 				return err
 			}
 
@@ -53,6 +53,9 @@ func registerDebug(r *registry) {
 				return err
 			}
 
+			if err := c.RunE(ctx, c.Node(node), "grep -F 'liveness.heartbeatlatency-p99' ./debug/metrics"); err != nil {
+				return err
+			}
 			if err := c.RunE(ctx, c.Node(node), "rm -rf debug"); err != nil {
 				return err
 			}
