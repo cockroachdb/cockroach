@@ -437,10 +437,10 @@ project
  │    └── keys: (1)
  └── projections [outer=(1,2)]
       ├── true [type=bool]
-      ├── is-not [type=bool, outer=(1)]
+      ├── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── null [type=unknown]
-      └── is-not [type=bool, outer=(2)]
+      └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
            └── null [type=unknown]
 

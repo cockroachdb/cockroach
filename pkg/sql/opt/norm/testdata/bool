@@ -412,7 +412,7 @@ select
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2), constraints=(/2: [/3 - /3] [/4 - /4])]
+ └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── not-in [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
@@ -423,10 +423,10 @@ select
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 3 [type=int]
       │         └── const: 4 [type=int]
-      ├── is-not [type=bool, outer=(2)]
+      ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── null [type=unknown]
-      └── is [type=bool, outer=(2)]
+      └── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
            └── null [type=unknown]
 
