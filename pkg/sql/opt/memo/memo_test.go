@@ -23,7 +23,7 @@ import (
 )
 
 func TestMemo(t *testing.T) {
-	runDataDrivenTest(t, "testdata/memo", memo.ExprFmtHideRuleProps)
+	runDataDrivenTest(t, "testdata/memo", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form

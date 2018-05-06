@@ -65,6 +65,9 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		b.buildJoinProps(ev)
 
+	case opt.LookupJoinOp:
+		b.buildLookupJoinProps(ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		b.buildSetProps(ev)
@@ -131,6 +134,17 @@ func (b *rulePropsBuilder) buildJoinProps(ev memo.ExprView) {
 	relational.Rule.PruneCols = leftProps.Rule.PruneCols.Union(rightProps.Rule.PruneCols)
 	relational.Rule.PruneCols.DifferenceWith(rightProps.OuterCols)
 	relational.Rule.PruneCols.DifferenceWith(onProps.OuterCols)
+}
+
+func (b *rulePropsBuilder) buildLookupJoinProps(ev memo.ExprView) {
+	relational := ev.Logical().Relational
+
+	inputProps := ev.Child(0).Logical().Relational
+	joinedCols := relational.OutputCols.Difference(inputProps.OutputCols)
+
+	// Any pruneable columns from the input can potentially be pruned, as well as
+	// any new columns from the joined table.
+	relational.Rule.PruneCols = inputProps.Rule.PruneCols.Union(joinedCols)
 }
 
 func (b *rulePropsBuilder) buildGroupByProps(ev memo.ExprView) {
