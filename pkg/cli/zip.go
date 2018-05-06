@@ -103,6 +103,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		eventsName   = base + "/events"
 		gossipLName  = base + "/gossip/liveness"
 		gossipNName  = base + "/gossip/nodes"
+		metricsName  = base + "/metrics"
 		livenessName = base + "/liveness"
 		nodesPrefix  = base + "/nodes"
 		schemaPrefix = base + "/schema"
@@ -190,11 +191,15 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	{
 		queryLiveness := "SELECT * FROM crdb_internal.gossip_liveness;"
 		queryNodes := "SELECT * FROM crdb_internal.gossip_nodes;"
+		queryMetrics := "SELECT * FROM crdb_internal.node_metrics;"
 
-		if err := dumpGossipData(z, sqlConn, queryLiveness, gossipLName); err != nil {
+		if err := dumpTableDataForZip(z, sqlConn, queryLiveness, gossipLName); err != nil {
 			return err
 		}
-		if err := dumpGossipData(z, sqlConn, queryNodes, gossipNName); err != nil {
+		if err := dumpTableDataForZip(z, sqlConn, queryNodes, gossipNName); err != nil {
+			return err
+		}
+		if err := dumpTableDataForZip(z, sqlConn, queryMetrics, metricsName); err != nil {
 			return err
 		}
 	}
@@ -358,7 +363,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func dumpGossipData(z *zipper, conn *sqlConn, query string, name string) error {
+func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) error {
 	w, err := z.create(name)
 	if err != nil {
 		return err
