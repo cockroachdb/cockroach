@@ -281,7 +281,8 @@ func (e *explorer) canConstrainScan(def memo.PrivateID) bool {
 }
 
 // constrainedScanOpDef tries to push a filter into a scanOpDef as a
-// constraint.
+// constraint. If it cannot push the filter down (i.e. the resulting constraint
+// is unconstrained), then it returns ok = false in the third return value.
 func (e *explorer) constrainedScanOpDef(
 	filterGroup memo.GroupID, scanDef memo.PrivateID,
 ) (newDef memo.ScanOpDef, remainingFilter memo.GroupID, ok bool) {
@@ -373,6 +374,11 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 //  - if the filter cannot be converted to constraints, does and returns
 //    nothing.
 //
+// TODO(rytaft): In the future we want to do the following:
+// 1. push constraints in the scan.
+// 2. put whatever part of the remaining filter that uses just index columns
+//    into a select above the index scan (and below the lookup join).
+// 3. put what is left of the filter on top of the lookup join.
 func (e *explorer) constrainLookupJoinIndexScan(
 	filterGroup memo.GroupID, scanDef, lookupJoinDef memo.PrivateID,
 ) []memo.Expr {

@@ -55,9 +55,9 @@ func newCoster(mem *memo.Memo) *coster {
 const (
 	// These costs have been copied from the Postgres optimizer:
 	// https://github.com/postgres/postgres/blob/master/src/include/optimizer/cost.h
-	cpuCost    = 0.01
-	seqIOCost  = 1
-	randIOCost = 4
+	cpuCostFactor    = 0.01
+	seqIOCostFactor  = 1
+	randIOCostFactor = 4
 )
 
 // computeCost calculates the estimated cost of the candidate best expression,
@@ -83,10 +83,14 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
-		return c.computeJoinCost(candidate, props)
+		// All join ops currently use hash join by default. In the future, we'll
+		// add physical operators for merge join.
+		return c.computeHashJoinCost(candidate, props)
 
 	case opt.LookupJoinOp:
 		return c.computeLookupJoinCost(candidate, props)
+
+	// TODO(rytaft): Add linear cost functions for GROUP BY, set ops, etc.
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -105,47 +109,51 @@ func (c *coster) computeSortCost(candidate *memo.BestExpr, props *memo.LogicalPr
 	rowCount := float64(props.Relational.Stats.RowCount)
 	var cost memo.Cost
 	if rowCount > 0 {
-		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCost
+		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCostFactor
 	}
 
 	// The sort should have some overhead even if there are very few rows.
-	if cost < cpuCost {
-		cost = cpuCost
+	if cost < cpuCostFactor {
+		cost = cpuCostFactor
 	}
 
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeScanCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount) * seqIOCost
+	return memo.Cost(props.Relational.Stats.RowCount) * seqIOCostFactor
 }
 
 func (c *coster) computeSelectCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
-	cost := memo.Cost(inputRowCount) * cpuCost
+	cost := memo.Cost(inputRowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeValuesCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount) * cpuCost
+	return memo.Cost(props.Relational.Stats.RowCount) * cpuCostFactor
 }
 
-func (c *coster) computeJoinCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 	rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
-	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCost
+
+	// A hash join must process every row from both tables once.
+	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
-func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+func (c *coster) computeLookupJoinCost(
+	candidate *memo.BestExpr, props *memo.LogicalProps,
+) memo.Cost {
 	leftCost := c.mem.BestExprCost(candidate.Child(0))
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 
 	// The rows in the left table are used to probe into an index on the right
 	// table. Since the matching rows in the right table may not all be in the
 	// same range, this counts as random I/O.
-	return leftCost + memo.Cost(leftRowCount)*(randIOCost+cpuCost)
+	return leftCost + memo.Cost(leftRowCount)*(randIOCostFactor+cpuCostFactor)
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {

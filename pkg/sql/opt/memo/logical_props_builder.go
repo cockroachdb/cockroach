@@ -64,6 +64,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) LogicalProps {
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return b.buildJoinProps(ev)
 
+	case opt.LookupJoinOp:
+		return b.buildLookupJoinProps(ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return b.buildSetProps(ev)
@@ -250,6 +253,44 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) LogicalProps {
 
 	b.sb.init(b.evalCtx, &props.Relational.Stats, props.Relational, ev, &keyBuffer{})
 	b.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
+
+	return props
+}
+
+func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
+
+	inputProps := ev.childGroup(0).logical.Relational
+
+	// Inherit input properties as starting point.
+	*props.Relational = *inputProps
+
+	md := ev.Metadata()
+	def := ev.Private().(*LookupJoinDef)
+	tab := md.Table(def.Table)
+
+	// Lookup join output columns are stored in the definition.
+	props.Relational.OutputCols = def.Cols
+
+	// Add not-NULL columns from the table schema.
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			colID := md.TableColumn(def.Table, i)
+			if def.Cols.Contains(int(colID)) {
+				props.Relational.NotNullCols.Add(int(colID))
+			}
+		}
+	}
+
+	// Add weak keys from the table schema.
+	tableWeakKeys := md.TableWeakKeys(def.Table)
+	for _, weakKey := range tableWeakKeys {
+		props.Relational.WeakKeys.Add(weakKey)
+	}
+	filterWeakKeys(props.Relational)
+
+	b.sb.init(b.evalCtx, &props.Relational.Stats, props.Relational, ev, &keyBuffer{})
+	b.sb.buildLookupJoin(&inputProps.Stats)
 
 	return props
 }
