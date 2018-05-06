@@ -56,17 +56,19 @@ func newCoster(mem *memo.Memo) *coster {
 const (
 	// These costs have been copied from the Postgres optimizer:
 	// https://github.com/postgres/postgres/blob/master/src/include/optimizer/cost.h
-	cpuCost    = 0.01
-	seqIOCost  = 1
-	randIOCost = 4
+	// TODO(rytaft): "How Good are Query Optimizers, Really?" says that the
+	// PostgreSQL ratio between CPU and I/O is probably unrealistic in modern
+	// systems since much of the data can be cached in memory. Consider
+	// increasing the cpuCostFactor to account for this.
+	cpuCostFactor    = 0.01
+	seqIOCostFactor  = 1
+	randIOCostFactor = 4
 )
 
 // computeCost calculates the estimated cost of the candidate best expression,
 // based on its logical properties as well as the cost of its children. Each
 // expression's cost must always be >= the total costs of its children, so that
 // branch-and-bound pruning will work properly.
-//
-// TODO: This is just a skeleton, and needs to compute real costs.
 func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	switch candidate.Operator() {
 	case opt.SortOp:
@@ -84,10 +86,14 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) m
 	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
-		return c.computeJoinCost(candidate, logical)
+		// All join ops currently use hash join by default. In the future, we'll
+		// add physical operators for merge join.
+		return c.computeHashJoinCost(candidate, logical)
 
 	case opt.LookupJoinOp:
 		return c.computeLookupJoinCost(candidate, logical)
+
+	// TODO(rytaft): Add linear cost functions for GROUP BY, set ops, etc.
 
 	case opt.ExplainOp:
 		// Technically, the cost of an Explain operation is independent of the cost
@@ -106,36 +112,44 @@ func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logica
 	rowCount := float64(logical.Relational.Stats.RowCount)
 	var cost memo.Cost
 	if rowCount > 0 {
-		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCost
+		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
+		// certain amount of memory is used, distsql switches to a disk-based sort
+		// with a temp RocksDB store.
+		cost = memo.Cost(rowCount*math.Log2(rowCount)) * cpuCostFactor
 	}
 
 	// The sort should have some overhead even if there are very few rows.
-	if cost < cpuCost {
-		cost = cpuCost
+	if cost < cpuCostFactor {
+		cost = cpuCostFactor
 	}
 
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	return memo.Cost(logical.Relational.Stats.RowCount) * seqIOCost
+	return memo.Cost(logical.Relational.Stats.RowCount) * seqIOCostFactor
 }
 
 func (c *coster) computeSelectCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
-	cost := memo.Cost(inputRowCount) * cpuCost
+	cost := memo.Cost(inputRowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
 func (c *coster) computeValuesCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	return memo.Cost(logical.Relational.Stats.RowCount) * cpuCost
+	return memo.Cost(logical.Relational.Stats.RowCount) * cpuCostFactor
 }
 
-func (c *coster) computeJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+func (c *coster) computeHashJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 	rightRowCount := c.mem.BestExprLogical(candidate.Child(1)).Relational.Stats.RowCount
-	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCost
+
+	// A hash join must process every row from both tables once.
+	// TODO(rytaft): This is the cost of an in-memory hash join. When a certain
+	// amount of memory is used, distsql switches to a disk-based hash join with
+	// a temp RocksDB store.
+	cost := memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
 	return cost + c.computeChildrenCost(candidate)
 }
 
@@ -146,7 +160,7 @@ func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.
 	// The rows in the left table are used to probe into an index on the right
 	// table. Since the matching rows in the right table may not all be in the
 	// same range, this counts as random I/O.
-	return leftCost + memo.Cost(leftRowCount)*(randIOCost+cpuCost)
+	return leftCost + memo.Cost(leftRowCount)*(randIOCostFactor+cpuCostFactor)
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {

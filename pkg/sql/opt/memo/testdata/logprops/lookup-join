@@ -1,0 +1,81 @@
+exec-ddl
+CREATE TABLE a (
+  x INT PRIMARY KEY,
+  y INT,
+  s STRING,
+  d DECIMAL NOT NULL,
+  UNIQUE (s DESC, d),
+  UNIQUE (y, s)
+)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX secondary
+ │    ├── s string desc
+ │    ├── d decimal not null
+ │    └── x int not null (storing)
+ └── INDEX secondary
+      ├── y int
+      ├── s string
+      └── x int not null (storing)
+
+# In order to actually create new logical props for the lookup join, we
+# need to call ConstructLookupJoin, which only happens when where is a
+# remaining filter.
+opt
+SELECT * FROM a WHERE s = 'foo' AND x + y = 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=1, distinct(3)=1]
+ ├── keys: (1) weak(3,4) weak(2,3)
+ ├── lookup-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── table: a
+ │    ├── stats: [rows=1]
+ │    ├── keys: (1) weak(3,4) weak(2,3)
+ │    └── scan a@secondary
+ │         ├── columns: a.x:1(int!null) a.s:3(string) a.d:4(decimal!null)
+ │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │         ├── stats: [rows=1, distinct(3)=1]
+ │         └── keys: (1) weak(3,4)
+ └── filters [type=bool, outer=(1,2)]
+      └── eq [type=bool, outer=(1,2)]
+           ├── plus [type=int, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=int, outer=(2)]
+           └── const: 10 [type=int]
+
+opt
+SELECT y FROM a WHERE s = 'foo' AND x + y = 10
+----
+project
+ ├── columns: y:2(int)
+ ├── stats: [rows=1]
+ ├── select
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    ├── stats: [rows=1, distinct(3)=1]
+ │    ├── keys: (1) weak(2,3)
+ │    ├── lookup-join
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │    ├── table: a
+ │    │    ├── stats: [rows=1]
+ │    │    ├── keys: (1) weak(2,3)
+ │    │    └── scan a@secondary
+ │    │         ├── columns: a.x:1(int!null) a.s:3(string)
+ │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │    │         ├── stats: [rows=1, distinct(3)=1]
+ │    │         └── keys: (1)
+ │    └── filters [type=bool, outer=(1,2)]
+ │         └── eq [type=bool, outer=(1,2)]
+ │              ├── plus [type=int, outer=(1,2)]
+ │              │    ├── variable: a.x [type=int, outer=(1)]
+ │              │    └── variable: a.y [type=int, outer=(2)]
+ │              └── const: 10 [type=int]
+ └── projections [outer=(2)]
+      └── variable: a.y [type=int, outer=(2)]
