@@ -490,147 +490,222 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	})
 }
 
-func TestRangeTransferLease(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+type leaseTransferTest struct {
+	mtc                        *multiTestContext
+	replica0, replica1         *storage.Replica
+	replica0Desc, replica1Desc roachpb.ReplicaDescriptor
+	leftKey                    roachpb.Key
+	filterMu                   syncutil.Mutex
+	filter                     func(filterArgs storagebase.FilterArgs) *roachpb.Error
+	waitForTransferBlocked     atomic.Value
+	transferBlocked            chan struct{}
+}
+
+func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
+	l := &leaseTransferTest{
+		leftKey: roachpb.Key("a"),
+	}
+
 	cfg := storage.TestStoreConfig(nil)
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
-	var filterMu syncutil.Mutex
-	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			filterMu.Lock()
-			filterCopy := filter
-			filterMu.Unlock()
+			l.filterMu.Lock()
+			filterCopy := l.filter
+			l.filterMu.Unlock()
 			if filterCopy != nil {
 				return filterCopy(filterArgs)
 			}
 			return nil
 		}
-	var waitForTransferBlocked atomic.Value
-	waitForTransferBlocked.Store(false)
-	transferBlocked := make(chan struct{})
+
+	l.waitForTransferBlocked.Store(false)
+	l.transferBlocked = make(chan struct{})
 	cfg.TestingKnobs.LeaseTransferBlockedOnExtensionEvent = func(
 		_ roachpb.ReplicaDescriptor) {
-		if waitForTransferBlocked.Load().(bool) {
-			transferBlocked <- struct{}{}
-			waitForTransferBlocked.Store(false)
+		if l.waitForTransferBlocked.Load().(bool) {
+			l.transferBlocked <- struct{}{}
+			l.waitForTransferBlocked.Store(false)
 		}
 	}
-	mtc := &multiTestContext{}
-	mtc.storeConfig = &cfg
-	defer mtc.Stop()
-	mtc.Start(t, 2)
-	mtc.initGossipNetwork()
+
+	l.mtc = &multiTestContext{}
+	l.mtc.storeConfig = &cfg
+	l.mtc.Start(t, 2)
+	l.mtc.initGossipNetwork()
 
 	// First, do a write; we'll use it to determine when the dust has settled.
-	leftKey := roachpb.Key("a")
-	incArgs := incrementArgs(leftKey, 1)
-	if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], incArgs); pErr != nil {
+	l.leftKey = roachpb.Key("a")
+	incArgs := incrementArgs(l.leftKey, 1)
+	if _, pErr := client.SendWrapped(context.Background(), l.mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	// Get the left range's ID.
-	rangeID := mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil).RangeID
+	rangeID := l.mtc.stores[0].LookupReplica(keys.MustAddr(l.leftKey), nil).RangeID
 
 	// Replicate the left range onto node 1.
-	mtc.replicateRange(rangeID, 1)
+	l.mtc.replicateRange(rangeID, 1)
 
-	replicas := make([]*storage.Replica, len(mtc.stores))
-	replicaDescs := make([]roachpb.ReplicaDescriptor, len(mtc.stores))
-	for i, store := range mtc.stores {
+	l.replica0 = l.mtc.stores[0].LookupReplica(roachpb.RKey("a"), nil)
+	l.replica1 = l.mtc.stores[1].LookupReplica(roachpb.RKey("a"), nil)
+	{
 		var err error
-		replicas[i] = store.LookupReplica(roachpb.RKey("a"), nil)
-		replicaDescs[i], err = replicas[i].GetReplicaDescriptor()
-		if err != nil {
+		if l.replica0Desc, err = l.replica0.GetReplicaDescriptor(); err != nil {
+			t.Fatal(err)
+		}
+		if l.replica1Desc, err = l.replica1.GetReplicaDescriptor(); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	sendRead := func(storeIdx int) *roachpb.Error {
-		_, pErr := client.SendWrappedWith(
-			context.Background(),
-			mtc.senders[storeIdx],
-			roachpb.Header{RangeID: rangeID, Replica: replicaDescs[storeIdx]},
-			getArgs(leftKey),
-		)
-		return pErr
-	}
-
 	// Check that replica0 can serve reads OK.
-	if pErr := sendRead(0); pErr != nil {
+	if pErr := l.sendRead(0); pErr != nil {
 		t.Fatal(pErr)
 	}
+	return l
+}
 
-	// checkHasLease checks that a lease for the left range is owned by a
-	// replica. The check is executed in a retry loop because the lease may not
-	// have been applied yet.
-	checkHasLease := func(t *testing.T, storeIdx int) {
-		t.Helper()
-		testutils.SucceedsSoon(t, func() error {
-			return sendRead(storeIdx).GoError()
-		})
+func (l *leaseTransferTest) sendRead(storeIdx int) *roachpb.Error {
+	desc := l.mtc.stores[storeIdx].LookupReplica(keys.MustAddr(l.leftKey), nil)
+	replicaDesc, err := desc.GetReplicaDescriptor()
+	if err != nil {
+		return roachpb.NewError(err)
 	}
+	_, pErr := client.SendWrappedWith(
+		context.Background(),
+		l.mtc.senders[storeIdx],
+		roachpb.Header{RangeID: desc.RangeID, Replica: replicaDesc},
+		getArgs(l.leftKey),
+	)
+	if pErr != nil {
+		log.Warning(context.TODO(), pErr)
+	}
+	return pErr
+}
 
-	// setFilter is a helper function to enable/disable the blocking of
-	// RequestLeaseRequests on replica1. This function will notify that an
-	// extension is blocked on the passed in channel and will wait on the same
-	// channel to unblock the extension. Note that once an extension is blocked,
-	// the filter is cleared.
-	setFilter := func(setTo bool, extensionSem chan struct{}) {
-		filterMu.Lock()
-		defer filterMu.Unlock()
-		if !setTo {
-			filter = nil
-			return
-		}
-		filter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if filterArgs.Sid != mtc.stores[1].Ident.StoreID {
-				return nil
-			}
-			llReq, ok := filterArgs.Req.(*roachpb.RequestLeaseRequest)
-			if !ok {
-				return nil
-			}
-			if llReq.Lease.Replica == replicaDescs[1] {
-				// Notify the main thread that the extension is in progress and wait for
-				// the signal to proceed.
-				filterMu.Lock()
-				filter = nil
-				filterMu.Unlock()
-				extensionSem <- struct{}{}
-				<-extensionSem
-			}
+// checkHasLease checks that a lease for the left range is owned by a
+// replica. The check is executed in a retry loop because the lease may not
+// have been applied yet.
+func (l *leaseTransferTest) checkHasLease(t *testing.T, storeIdx int) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		return l.sendRead(storeIdx).GoError()
+	})
+}
+
+// setFilter is a helper function to enable/disable the blocking of
+// RequestLeaseRequests on replica1. This function will notify that an
+// extension is blocked on the passed in channel and will wait on the same
+// channel to unblock the extension. Note that once an extension is blocked,
+// the filter is cleared.
+func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
+	l.filterMu.Lock()
+	defer l.filterMu.Unlock()
+	if !setTo {
+		l.filter = nil
+		return
+	}
+	l.filter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+		if filterArgs.Sid != l.mtc.stores[1].Ident.StoreID {
 			return nil
 		}
-	}
-
-	forceLeaseExtension := func(storeIdx int, lease roachpb.Lease) error {
-		shouldRenewTS := lease.Expiration.Add(-1, 0)
-		mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
-		err := sendRead(storeIdx).GoError()
-		if err != nil {
-			// We can sometimes receive an error from our renewal attempt because the
-			// lease transfer ends up causing the renewal to re-propose and second
-			// attempt fails because it's already been renewed. This used to work
-			// before we compared the proposer's lease with the actual lease because
-			// the renewed lease still encompassed the previous request.
-			if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
-				err = nil
-			}
+		llReq, ok := filterArgs.Req.(*roachpb.RequestLeaseRequest)
+		if !ok {
+			return nil
 		}
-		return err
+		if llReq.Lease.Replica == l.replica1Desc {
+			// Notify the main thread that the extension is in progress and wait for
+			// the signal to proceed.
+			l.filterMu.Lock()
+			l.filter = nil
+			l.filterMu.Unlock()
+			extensionSem <- struct{}{}
+			<-extensionSem
+		}
+		return nil
 	}
+}
+
+func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Lease) error {
+	shouldRenewTS := lease.Expiration.Add(-1, 0)
+	l.mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
+	err := l.sendRead(storeIdx).GoError()
+	if err != nil {
+		// We can sometimes receive an error from our renewal attempt because the
+		// lease transfer ends up causing the renewal to re-propose and second
+		// attempt fails because it's already been renewed. This used to work
+		// before we compared the proposer's lease with the actual lease because
+		// the renewed lease still encompassed the previous request.
+		if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+			err = nil
+		}
+	}
+	return err
+}
+
+// ensureLeaderAndRaftState is a helper function that blocks until leader is
+// the raft leader and follower is up to date.
+func (l *leaseTransferTest) ensureLeaderAndRaftState(
+	t *testing.T, leader *storage.Replica, follower roachpb.ReplicaDescriptor,
+) {
+	t.Helper()
+	leaderDesc, err := leader.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		r := l.mtc.getRaftLeader(l.replica0.RangeID)
+		if r == nil {
+			return errors.Errorf("could not find raft leader replica for range %d", l.replica0.RangeID)
+		}
+		desc, err := r.GetReplicaDescriptor()
+		if err != nil {
+			return errors.Wrap(err, "could not get replica descriptor")
+		}
+		if desc != leaderDesc {
+			return errors.Errorf(
+				"expected replica with id %v to be raft leader, instead got id %v",
+				leaderDesc.ReplicaID,
+				desc.ReplicaID,
+			)
+		}
+		return nil
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		status := leader.RaftStatus()
+		progress, ok := status.Progress[uint64(follower.ReplicaID)]
+		if !ok {
+			return errors.Errorf(
+				"replica %v progress not found in progress map: %v",
+				follower.ReplicaID,
+				status.Progress,
+			)
+		}
+		if progress.Match < status.Commit {
+			return errors.Errorf("replica %v failed to catch up", follower.ReplicaID)
+		}
+		return nil
+	})
+}
+
+func TestRangeTransferLeaseExpirationBased(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	t.Run("Transfer", func(t *testing.T) {
-		origLease, _ := replicas[0].GetLease()
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
+		origLease, _ := l.replica0.GetLease()
 		{
 			// Transferring the lease to ourself should be a no-op.
-			if err := replicas[0].AdminTransferLease(context.Background(), replicaDescs[0].StoreID); err != nil {
+			if err := l.replica0.AdminTransferLease(context.Background(), l.replica0Desc.StoreID); err != nil {
 				t.Fatal(err)
 			}
-			newLease, _ := replicas[0].GetLease()
+			newLease, _ := l.replica0.GetLease()
 			if !origLease.Equivalent(newLease) {
 				t.Fatalf("original lease %v and new lease %v not equivalent", origLease, newLease)
 			}
@@ -639,30 +714,30 @@ func TestRangeTransferLease(t *testing.T) {
 		{
 			// An invalid target should result in an error.
 			const expected = "unable to find store .* in range"
-			if err := replicas[0].AdminTransferLease(context.Background(), 1000); !testutils.IsError(err, expected) {
+			if err := l.replica0.AdminTransferLease(context.Background(), 1000); !testutils.IsError(err, expected) {
 				t.Fatalf("expected %s, but found %v", expected, err)
 			}
 		}
 
-		if err := replicas[0].AdminTransferLease(context.Background(), replicaDescs[1].StoreID); err != nil {
+		if err := l.replica0.AdminTransferLease(context.Background(), l.replica1Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
 
-		// Check that replicas[0] doesn't serve reads any more.
-		pErr := sendRead(0)
+		// Check that replica0 doesn't serve reads any more.
+		pErr := l.sendRead(0)
 		nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if *(nlhe.LeaseHolder) != replicaDescs[1] {
+		if *(nlhe.LeaseHolder) != l.replica1Desc {
 			t.Fatalf("expected lease holder %+v, got %+v",
-				replicaDescs[1], nlhe.LeaseHolder)
+				l.replica1Desc, nlhe.LeaseHolder)
 		}
 
 		// Check that replica1 now has the lease.
-		checkHasLease(t, 1)
+		l.checkHasLease(t, 1)
 
-		replica1Lease, _ := replicas[1].GetLease()
+		replica1Lease, _ := l.replica1.GetLease()
 
 		// We'd like to verify the timestamp cache's low water mark, but this is
 		// impossible to determine precisely in all cases because it may have
@@ -670,7 +745,7 @@ func TestRangeTransferLease(t *testing.T) {
 		// low water mark, we make sure that the high water mark is equal to or
 		// greater than the new lease start time, which is less than the
 		// previous lease's expiration time.
-		if highWater := replicas[1].GetTSCacheHighWater(); highWater.Less(replica1Lease.Start) {
+		if highWater := l.replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start) {
 			t.Fatalf("expected timestamp cache high water %s, but found %s",
 				replica1Lease.Start, highWater)
 		}
@@ -680,30 +755,32 @@ func TestRangeTransferLease(t *testing.T) {
 	// that. Test that the transfer still happens (it'll wait until the extension
 	// is done).
 	t.Run("TransferWithExtension", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// Ensure that replica1 has the lease.
-		if err := replicas[0].AdminTransferLease(context.Background(), replicaDescs[1].StoreID); err != nil {
+		if err := l.replica0.AdminTransferLease(context.Background(), l.replica1Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
-		checkHasLease(t, 1)
+		l.checkHasLease(t, 1)
 
 		extensionSem := make(chan struct{})
-		setFilter(true, extensionSem)
+		l.setFilter(true, extensionSem)
 
 		// Initiate an extension.
 		renewalErrCh := make(chan error)
 		go func() {
-			lease, _ := replicas[1].GetLease()
-			renewalErrCh <- forceLeaseExtension(1, lease)
+			lease, _ := l.replica1.GetLease()
+			renewalErrCh <- l.forceLeaseExtension(1, lease)
 		}()
 
 		// Wait for extension to be blocked.
 		<-extensionSem
-		waitForTransferBlocked.Store(true)
+		l.waitForTransferBlocked.Store(true)
 		// Initiate a transfer.
 		transferErrCh := make(chan error)
 		go func() {
-			// Transfer back from replica1 to replicas[0].
-			err := replicas[1].AdminTransferLease(context.Background(), replicaDescs[0].StoreID)
+			// Transfer back from replica1 to replica0.
+			err := l.replica1.AdminTransferLease(context.Background(), l.replica0Desc.StoreID)
 			// Ignore not leaseholder errors which can arise due to re-proposals.
 			if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
 				err = nil
@@ -711,11 +788,11 @@ func TestRangeTransferLease(t *testing.T) {
 			transferErrCh <- err
 		}()
 		// Wait for the transfer to be blocked by the extension.
-		<-transferBlocked
+		<-l.transferBlocked
 		// Now unblock the extension.
 		extensionSem <- struct{}{}
-		checkHasLease(t, 0)
-		setFilter(false, nil)
+		l.checkHasLease(t, 0)
+		l.setFilter(false, nil)
 
 		if err := <-renewalErrCh; err != nil {
 			t.Errorf("unexpected error from lease renewal: %s", err)
@@ -725,111 +802,71 @@ func TestRangeTransferLease(t *testing.T) {
 		}
 	})
 
-	// ensureLeaderAndRaftState is a helper function that blocks until leader is
-	// the raft leader and follower is up to date.
-	ensureLeaderAndRaftState := func(leader *storage.Replica, follower roachpb.ReplicaDescriptor) {
-		t.Helper()
-		leaderDesc, err := leader.GetReplicaDescriptor()
-		if err != nil {
-			t.Fatal(err)
-		}
-		testutils.SucceedsSoon(t, func() error {
-			r := mtc.getRaftLeader(rangeID)
-			if r == nil {
-				return errors.Errorf("could not find raft leader replica for range %d", rangeID)
-			}
-			desc, err := r.GetReplicaDescriptor()
-			if err != nil {
-				return errors.Wrap(err, "could not get replica descriptor")
-			}
-			if desc != leaderDesc {
-				return errors.Errorf(
-					"expected replica with id %v to be raft leader, instead got id %v",
-					leaderDesc.ReplicaID,
-					desc.ReplicaID,
-				)
-			}
-			return nil
-		})
-
-		testutils.SucceedsSoon(t, func() error {
-			status := leader.RaftStatus()
-			progress, ok := status.Progress[uint64(follower.ReplicaID)]
-			if !ok {
-				return errors.Errorf(
-					"replica %v progress not found in progress map: %v",
-					follower.ReplicaID,
-					status.Progress,
-				)
-			}
-			if progress.Match < status.Commit {
-				return errors.Errorf("replica %v failed to catch up", follower.ReplicaID)
-			}
-			return nil
-		})
-	}
-
 	// DrainTransfer verifies that a draining store attempts to transfer away
 	// range leases owned by its replicas.
 	t.Run("DrainTransfer", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// We have to ensure that replica0 is the raft leader and that replica1 has
 		// caught up to replica0 as draining code doesn't transfer leases to
 		// behind replicas.
-		ensureLeaderAndRaftState(replicas[0], replicaDescs[1])
-		mtc.stores[0].SetDraining(true)
+		l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
+		l.mtc.stores[0].SetDraining(true)
 
 		// Check that replica0 doesn't serve reads any more.
-		pErr := sendRead(0)
+		pErr := l.sendRead(0)
 		nlhe, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 		if !ok {
 			t.Fatalf("expected %T, got %s", &roachpb.NotLeaseHolderError{}, pErr)
 		}
-		if nlhe.LeaseHolder == nil || *nlhe.LeaseHolder != replicaDescs[1] {
+		if nlhe.LeaseHolder == nil || *nlhe.LeaseHolder != l.replica1Desc {
 			t.Fatalf("expected lease holder %+v, got %+v",
-				replicaDescs[1], nlhe.LeaseHolder)
+				l.replica1Desc, nlhe.LeaseHolder)
 		}
 
 		// Check that replica1 now has the lease.
-		checkHasLease(t, 1)
+		l.checkHasLease(t, 1)
 
-		mtc.stores[0].SetDraining(false)
+		l.mtc.stores[0].SetDraining(false)
 	})
 
 	// DrainTransferWithExtension verifies that a draining store waits for any
 	// in-progress lease requests to complete before transferring away the new
 	// lease.
 	t.Run("DrainTransferWithExtension", func(t *testing.T) {
+		l := setupLeaseTransferTest(t)
+		defer l.mtc.Stop()
 		// Ensure that replica1 has the lease.
-		if err := replicas[0].AdminTransferLease(context.Background(), replicaDescs[1].StoreID); err != nil {
+		if err := l.replica0.AdminTransferLease(context.Background(), l.replica1Desc.StoreID); err != nil {
 			t.Fatal(err)
 		}
-		checkHasLease(t, 1)
+		l.checkHasLease(t, 1)
 
 		extensionSem := make(chan struct{})
-		setFilter(true, extensionSem)
+		l.setFilter(true, extensionSem)
 
 		// Initiate an extension.
 		renewalErrCh := make(chan error)
 		go func() {
-			lease, _ := replicas[1].GetLease()
-			renewalErrCh <- forceLeaseExtension(1, lease)
+			lease, _ := l.replica1.GetLease()
+			renewalErrCh <- l.forceLeaseExtension(1, lease)
 		}()
 
 		// Wait for extension to be blocked.
 		<-extensionSem
 
 		// Make sure that replica 0 is up to date enough to receive the lease.
-		ensureLeaderAndRaftState(replicas[1], replicaDescs[0])
+		l.ensureLeaderAndRaftState(t, l.replica1, l.replica0Desc)
 
 		// Drain node 1 with an extension in progress.
 		go func() {
-			mtc.stores[1].SetDraining(true)
+			l.mtc.stores[1].SetDraining(true)
 		}()
 		// Now unblock the extension.
 		extensionSem <- struct{}{}
 
-		checkHasLease(t, 0)
-		setFilter(false, nil)
+		l.checkHasLease(t, 0)
+		l.setFilter(false, nil)
 
 		if err := <-renewalErrCh; err != nil {
 			t.Errorf("unexpected error from lease renewal: %s", err)
