@@ -371,8 +371,8 @@ project
  ├── columns: column7:7(bool) column8:8(bool)
  ├── scan a
  └── projections
-      ├── null [type=bool]
-      └── null [type=bool]
+      ├── null [type=bool, constraints=(contradiction; tight)]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 # --------------------------------------------------
 # FoldInNull
@@ -384,8 +384,8 @@ project
  ├── columns: column7:7(bool) column8:8(bool)
  ├── scan a
  └── projections
-      ├── null [type=bool]
-      └── null [type=bool]
+      ├── null [type=bool, constraints=(contradiction; tight)]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 # --------------------------------------------------
 # NormalizeInConst
