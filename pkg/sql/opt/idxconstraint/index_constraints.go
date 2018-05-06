@@ -253,9 +253,12 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.NeOp, opt.IsNotOp:
 		// Build constraint that doesn't contain the key:
-		//   if nullable    : [ - key) (key - ]
-		//   if not nullable: (/NULL - key) (key - ]
-		startKey, startBoundary := c.notNullStartKey(offset)
+		//   if nullable or IsNotOp   : [ - key) (key - ]
+		//   if not nullable and NeOp : (/NULL - key) (key - ]
+		startKey, startBoundary := emptyKey, includeBoundary
+		if op == opt.NeOp {
+			startKey, startBoundary = c.notNullStartKey(offset)
+		}
 		key := constraint.MakeKey(datum)
 		descending := c.columns[offset].Descending()
 		c.singleSpan(offset, startKey, startBoundary, key, excludeBoundary, descending, out)
