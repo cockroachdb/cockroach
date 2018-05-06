@@ -149,3 +149,36 @@ index-constraints vars=(bool) index=(@1)
 NOT @1
 ----
 [/false - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS TRUE
+----
+[/true - /true]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS FALSE
+----
+[/false - /false]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS NOT TRUE
+----
+[ - /false]
+(/true - ]
+
+index-constraints vars=(bool) index=(@1)
+@1 IS NOT FALSE
+----
+[ - /false)
+[/true - ]
+
+index-constraints vars=(int) index=(@1)
+@1 IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+index-constraints vars=(int) index=(@1)
+@1 IS DISTINCT FROM 5
+----
+[ - /4]
+[/6 - ]
