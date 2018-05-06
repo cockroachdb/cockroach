@@ -15,9 +15,8 @@
 package memo
 
 import (
-	"math"
-
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -80,8 +79,7 @@ func (sb *statisticsBuilder) init(
 // If the column statistic is not available in the current statisticsBuilder object,
 // colStat recursively tries to find it in the children of the expression,
 // lazily populating either s.ColStats or s.MultiColStats with the statistic
-// as it gets passed up the expression tree. If the statistic cannot be
-// determined from the children, colStat returns ok=false.
+// as it gets passed up the expression tree.
 func (sb *statisticsBuilder) colStat(colSet opt.ColSet) *opt.ColumnStatistic {
 	if colSet.Len() == 0 {
 		return nil
@@ -138,6 +136,9 @@ func (sb *statisticsBuilder) colStatFromChildren(colSet opt.ColSet) *opt.ColumnS
 		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return sb.colStatJoin(colSet)
+
+	case opt.LookupJoinOp:
+		return sb.colStatLookupJoin(colSet)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
@@ -726,6 +727,57 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet) *opt.ColumnStatistic
 	}
 }
 
+func (sb *statisticsBuilder) buildLookupJoin(inputStats *opt.Statistics) {
+	sb.s.RowCount = inputStats.RowCount
+}
+
+func (sb *statisticsBuilder) colStatLookupJoin(colSet opt.ColSet) *opt.ColumnStatistic {
+	inputCols := sb.ev.Child(0).Logical().Relational.OutputCols
+	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
+
+	colStat := sb.makeColStat(colSet)
+	colStat.DistinctCount = uint64(1)
+
+	// Some of the requested columns may be from the input index.
+	reqInputCols := colSet.Intersection(inputCols)
+	if !reqInputCols.Empty() {
+		inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
+		inputColStat := inputStatsBuilder.colStat(reqInputCols)
+		colStat.DistinctCount = inputColStat.DistinctCount
+	}
+
+	// Other requested columns may be from the joined table.
+	reqJoinedCols := colSet.Difference(inputCols)
+	if !reqJoinedCols.Empty() {
+		def := sb.ev.Private().(*LookupJoinDef)
+		joinedTableStatsBuilder := statisticsBuilder{
+			s:      sb.ev.Metadata().TableStatistics(def.Table),
+			props:  sb.props,
+			keyBuf: sb.keyBuf,
+		}
+		joinedTableColStat := joinedTableStatsBuilder.colStat(reqJoinedCols)
+
+		// Apply the selectivity from the input index.
+		joinedTableStatsBuilder.s.Selectivity = inputStats.Selectivity
+		joinedTableStatsBuilder.applySelectivityToColStat(
+			joinedTableColStat,
+			joinedTableStatsBuilder.s.RowCount,
+		)
+
+		// Multiply the distinct counts in case colStat.DistinctCount is
+		// already populated with a statistic from the subset of columns
+		// provided by the input index. Multiplying the counts gives a worst-case
+		// estimate of the joint distinct count.
+		colStat.DistinctCount *= joinedTableColStat.DistinctCount
+	}
+
+	// The distinct count should be no larger than the row count.
+	if colStat.DistinctCount > sb.s.RowCount {
+		colStat.DistinctCount = sb.s.RowCount
+	}
+	return colStat
+}
+
 func (sb *statisticsBuilder) buildGroupBy(inputStats *opt.Statistics, groupingColSet opt.ColSet) {
 	if groupingColSet.Empty() {
 		// Scalar group by.
@@ -986,11 +1038,6 @@ func (sb *statisticsBuilder) buildRowNumber(inputStats *opt.Statistics) {
 
 func (sb *statisticsBuilder) colStatRowNumber(colSet opt.ColSet) *opt.ColumnStatistic {
 	def := sb.ev.Private().(*RowNumberDef)
-	inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
-	inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
-
-	inputCols := sb.ev.Child(0).Logical().Relational.OutputCols
-	reqInputCols := colSet.Intersection(inputCols)
 
 	colStat := sb.makeColStat(colSet)
 
@@ -998,10 +1045,9 @@ func (sb *statisticsBuilder) colStatRowNumber(colSet opt.ColSet) *opt.ColumnStat
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = sb.ev.Logical().Relational.Stats.RowCount
 	} else {
-		if reqInputCols.Empty() {
-			panic("reqInputCols should have been non-empty, since the ordinality column was not requested")
-		}
-		inputColStat := inputStatsBuilder.colStat(reqInputCols)
+		inputStats := &sb.ev.childGroup(0).logical.Relational.Stats
+		inputStatsBuilder := sb.makeStatisticsBuilder(inputStats, sb.ev.Child(0))
+		inputColStat := inputStatsBuilder.colStat(colSet)
 		colStat.DistinctCount = inputColStat.DistinctCount
 	}
 

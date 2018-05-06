@@ -65,6 +65,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return b.buildJoinProps(ev)
 
+	case opt.LookupJoinOp:
+		return b.buildLookupJoinProps(ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return b.buildSetProps(ev)
@@ -96,20 +99,12 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 
 	md := ev.Metadata()
 	def := ev.Private().(*ScanOpDef)
-	tab := md.Table(def.Table)
 
 	// Scan output columns are stored in the definition.
 	logical.Relational.OutputCols = def.Cols
 
 	// Initialize not-NULL columns from the table schema.
-	for i := 0; i < tab.ColumnCount(); i++ {
-		if !tab.Column(i).IsNullable() {
-			colID := md.TableColumn(def.Table, i)
-			if def.Cols.Contains(int(colID)) {
-				logical.Relational.NotNullCols.Add(int(colID))
-			}
-		}
-	}
+	addNotNullColsFromTable(logical.Relational, md, def.Table, def.Cols)
 
 	// Initialize weak keys from the table schema.
 	logical.Relational.WeakKeys = md.TableWeakKeys(def.Table)
@@ -251,6 +246,37 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 
 	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
 	b.sb.buildJoin(ev.Operator(), &leftProps.Stats, &rightProps.Stats, ev.Child(2))
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildLookupJoinProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+
+	inputProps := ev.childGroup(0).logical.Relational
+
+	// Inherit input properties as starting point.
+	*logical.Relational = *inputProps
+
+	md := ev.Metadata()
+	def := ev.Private().(*LookupJoinDef)
+
+	// Lookup join output columns are stored in the definition.
+	logical.Relational.OutputCols = def.Cols
+
+	// Add not-NULL columns from the table schema.
+	addNotNullColsFromTable(logical.Relational, md, def.Table, def.Cols)
+
+	// Add weak keys from the table schema. There may already be some weak keys
+	// present from the input index.
+	tableWeakKeys := md.TableWeakKeys(def.Table)
+	for _, weakKey := range tableWeakKeys {
+		logical.Relational.WeakKeys.Add(weakKey)
+	}
+	filterWeakKeys(logical.Relational)
+
+	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
+	b.sb.buildLookupJoin(&inputProps.Stats)
 
 	return logical
 }
@@ -608,4 +634,21 @@ func calcSetCardinality(ev ExprView, left, right props.Cardinality) props.Cardin
 		card = card.AsLowAs(1)
 	}
 	return card
+}
+
+// addNotNullColsFromTable adds not-NULL columns to the given relational props
+// from the given table schema.
+func addNotNullColsFromTable(
+	relational *props.Relational, md *opt.Metadata, tabID opt.TableID, cols opt.ColSet,
+) {
+	tab := md.Table(tabID)
+
+	for i := 0; i < tab.ColumnCount(); i++ {
+		if !tab.Column(i).IsNullable() {
+			colID := md.TableColumn(tabID, i)
+			if cols.Contains(int(colID)) {
+				relational.NotNullCols.Add(int(colID))
+			}
+		}
+	}
 }
