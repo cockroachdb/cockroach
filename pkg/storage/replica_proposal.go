@@ -419,6 +419,8 @@ func addSSTablePreApply(
 // away from this node to target, if this node is the current raft
 // leader. We don't attempt to transfer leadership if the transferee
 // is behind on applying the log.
+//
+// TODO(tschottdorf): there's also maybeTransferRaftLeader. Only one should exist.
 func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachpb.ReplicaID) {
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// Only the raft leader can attempt a leadership transfer.
