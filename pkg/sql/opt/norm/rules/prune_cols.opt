@@ -158,7 +158,11 @@
 
 # PruneJoinRightCols discards columns on the right side of a join that are never
 # used.
-[PruneJoinRightCols, Normalize]
+#
+# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
+# which is to prevent a cycle with the TryDecorrelateProject rule in case of a
+# bug in building the PruneCols property.
+[PruneJoinRightCols, Normalize, DetectCycle]
 (Project
     $input:(Join
         $left:*
