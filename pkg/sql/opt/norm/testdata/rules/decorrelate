@@ -630,18 +630,15 @@ project
  │    │    │    │    │    ├── columns: column8:8(int)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    ├── project
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: xy.y:7(int)
  │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    ├── select
- │    │    │    │    │    │    │    ├── columns: xy.y:7(int)
- │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    │    └── columns: xy.y:7(int)
- │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,7)]
- │    │    │    │    │    │    │         └── eq [type=bool, outer=(1,7)]
- │    │    │    │    │    │    │              ├── variable: xy.y [type=int, outer=(7)]
- │    │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
- │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    └── columns: xy.y:7(int)
+ │    │    │    │    │    │    └── filters [type=bool, outer=(1,7)]
+ │    │    │    │    │    │         └── eq [type=bool, outer=(1,7)]
+ │    │    │    │    │    │              ├── variable: xy.y [type=int, outer=(7)]
+ │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
  │    │    │    │    │    └── aggregations
  │    │    │    │    │         └── count-rows [type=int]
  │    │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
@@ -918,18 +915,15 @@ project
  │    │    ├── columns: column22:22(int)
  │    │    ├── outer: (1)
  │    │    ├── cardinality: [1 - 1]
- │    │    ├── project
+ │    │    ├── select
+ │    │    │    ├── columns: xy.y:21(int)
  │    │    │    ├── outer: (1)
- │    │    │    ├── select
- │    │    │    │    ├── columns: xy.y:21(int)
- │    │    │    │    ├── outer: (1)
- │    │    │    │    ├── scan xy
- │    │    │    │    │    └── columns: xy.y:21(int)
- │    │    │    │    └── filters [type=bool, outer=(1,21)]
- │    │    │    │         └── eq [type=bool, outer=(1,21)]
- │    │    │    │              ├── variable: xy.y [type=int, outer=(21)]
- │    │    │    │              └── variable: a.k [type=int, outer=(1)]
- │    │    │    └── projections
+ │    │    │    ├── scan xy
+ │    │    │    │    └── columns: xy.y:21(int)
+ │    │    │    └── filters [type=bool, outer=(1,21)]
+ │    │    │         └── eq [type=bool, outer=(1,21)]
+ │    │    │              ├── variable: xy.y [type=int, outer=(21)]
+ │    │    │              └── variable: a.k [type=int, outer=(1)]
  │    │    └── aggregations
  │    │         └── count-rows [type=int]
  │    └── true [type=bool]
