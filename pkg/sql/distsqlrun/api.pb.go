@@ -51,7 +51,7 @@
 		BackfillerSpec
 		FlowSpec
 		JobProgress
-		ReadCSVSpec
+		ReadImportDataSpec
 		SSTWriterSpec
 		CSVWriterSpec
 		SketchSpec
