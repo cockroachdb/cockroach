@@ -14,3 +14,19 @@
 )
 =>
 $input
+
+# EliminateGroupByProject discards a nested Project operator that is only
+# removing columns from its input (and not synthesizing new ones). That's
+# something the GroupBy operator can do on its own.
+[EliminateGroupByProject, Normalize]
+(GroupBy
+    $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
+    $aggregations:*
+    $groupingCols:*
+)
+=>
+(GroupBy
+    $innerInput
+    $aggregations
+    $groupingCols
+)
