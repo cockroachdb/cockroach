@@ -100,8 +100,8 @@ type WeakKeys []ColSet
 // ContainsSubsetOf returns true if the weak key list contains a key that is a
 // subset of the given key. In that case, there's no reason to add the key to
 // the list, since it's redundant.
-func (wk *WeakKeys) ContainsSubsetOf(weakKey ColSet) bool {
-	for _, existing := range *wk {
+func (wk WeakKeys) ContainsSubsetOf(weakKey ColSet) bool {
+	for _, existing := range wk {
 		if existing.SubsetOf(weakKey) {
 			return true
 		}
@@ -135,8 +135,26 @@ func (wk *WeakKeys) Add(new ColSet) {
 }
 
 // Copy returns a copy of the list of weak keys.
-func (wk *WeakKeys) Copy() WeakKeys {
-	res := make(WeakKeys, len(*wk))
-	copy(res, *wk)
+func (wk WeakKeys) Copy() WeakKeys {
+	res := make(WeakKeys, len(wk))
+	copy(res, wk)
+	return res
+}
+
+// Combine combines this set of weak keys with the given set by constructing a
+// new set and then adding keys from both sets to it, using the same semantics
+// as the Add method.
+func (wk WeakKeys) Combine(other WeakKeys) WeakKeys {
+	if len(wk) == 0 {
+		return other
+	}
+	if len(other) == 0 {
+		return wk
+	}
+	res := make(WeakKeys, len(wk), len(wk)+len(other))
+	copy(res, wk)
+	for _, k := range other {
+		res.Add(k)
+	}
 	return res
 }

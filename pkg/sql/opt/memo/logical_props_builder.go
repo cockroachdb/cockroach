@@ -236,8 +236,21 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 	}
 	logical.Relational.OuterCols.UnionWith(leftProps.OuterCols)
 
-	// TODO(andyk): Need to derive weak keys for joins, for example when weak
-	//              keys on both sides are equivalent cols.
+	// TODO(andyk): Need to derive additional weak keys for joins, for example
+	//              when weak keys on both sides are equivalent cols.
+	switch ev.Operator() {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		logical.Relational.WeakKeys = leftProps.WeakKeys
+
+	default:
+		// If cardinality of one side is <= 1, then inherit other side's keys.
+		if rightProps.Cardinality.IsZeroOrOne() {
+			logical.Relational.WeakKeys = leftProps.WeakKeys
+		}
+		if leftProps.Cardinality.IsZeroOrOne() {
+			logical.Relational.WeakKeys = logical.Relational.WeakKeys.Combine(rightProps.WeakKeys)
+		}
+	}
 
 	// Calculate cardinality of each join type.
 	logical.Relational.Cardinality = calcJoinCardinality(
@@ -303,10 +316,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 	logical.Relational.OuterCols.UnionWith(inputProps.OuterCols)
 
 	// Scalar group by has no grouping columns and always a single row.
-	if groupingColSet.Empty() {
-		// Any combination of columns is a weak key when there is one row.
-		logical.Relational.WeakKeys = opt.WeakKeys{groupingColSet}
-	} else {
+	if !groupingColSet.Empty() {
 		// The grouping columns always form a key because the GroupBy operation
 		// eliminates all duplicates. The result WeakKeys property either contains
 		// only the grouping column set, or else it contains one or more weak keys

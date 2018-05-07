@@ -64,7 +64,6 @@ group-by
  ├── columns: column5:5(decimal) column6:6(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── keys: ()
  ├── project
  │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int)
  │    ├── stats: [rows=1000]
