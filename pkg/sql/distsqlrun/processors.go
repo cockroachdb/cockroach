@@ -948,14 +948,14 @@ func newProcessor(
 		}
 		return newSampleAggregator(flowCtx, core.SampleAggregator, inputs[0], post, outputs[0])
 	}
-	if core.ReadCSV != nil {
+	if core.ReadImport != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
 		}
-		if NewReadCSVProcessor == nil {
-			return nil, errors.New("ReadCSV processor unimplemented")
+		if NewReadImportDataProcessor == nil {
+			return nil, errors.New("ReadImportData processor unimplemented")
 		}
-		return NewReadCSVProcessor(flowCtx, *core.ReadCSV, outputs[0])
+		return NewReadImportDataProcessor(flowCtx, *core.ReadImport, outputs[0])
 	}
 	if core.SSTWriter != nil {
 		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
@@ -992,9 +992,9 @@ func newProcessor(
 	return nil, errors.Errorf("unsupported processor core %s", core)
 }
 
-// NewReadCSVProcessor is externally implemented and registered by
+// NewReadImportDataProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.
-var NewReadCSVProcessor func(*FlowCtx, ReadCSVSpec, RowReceiver) (Processor, error)
+var NewReadImportDataProcessor func(*FlowCtx, ReadImportDataSpec, RowReceiver) (Processor, error)
 
 // NewSSTWriterProcessor is externally implemented and registered by
 // ccl/sqlccl/csv.go.

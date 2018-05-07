@@ -196,12 +196,12 @@ func LoadCSV(
 	// Setup common to both stages.
 
 	// For each input file, assign it to a node.
-	csvSpecs := make([]*distsqlrun.ReadCSVSpec, 0, len(nodes))
+	csvSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
 	for i, input := range from {
 		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
-			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
+			csvSpecs = append(csvSpecs, &distsqlrun.ReadImportDataSpec{
 				TableDesc: *tableDesc,
 				Format:    format,
 				Progress: distsqlrun.JobProgress{
@@ -299,7 +299,7 @@ func LoadCSV(
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
 			Spec: distsqlrun.ProcessorSpec{
-				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
+				Core: distsqlrun.ProcessorCoreUnion{ReadImport: rcs},
 				Output: []distsqlrun.OutputRouterSpec{{
 					Type:             distsqlrun.OutputRouterSpec_BY_RANGE,
 					RangeRouterSpec:  routerSpec,
@@ -403,7 +403,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	from []string,
 	splitSize int64,
 	planCtx *planningCtx,
-	csvSpecs []*distsqlrun.ReadCSVSpec,
+	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
 ) ([][]byte, error) {
 	// splitSize is the target number of bytes at which to create SST files. We
@@ -436,7 +436,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
 			Spec: distsqlrun.ProcessorSpec{
-				Core:    distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
+				Core:    distsqlrun.ProcessorCoreUnion{ReadImport: rcs},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
 				StageID: stageID,
 			},

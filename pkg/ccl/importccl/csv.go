@@ -863,10 +863,10 @@ var csvOutputTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_BYTES},
 }
 
-func newReadCSVProcessor(
-	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
+func newReadImportDataProcessor(
+	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadImportDataSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
-	cp := &readCSVProcessor{
+	cp := &readImportDataProcessor{
 		flowCtx:     flowCtx,
 		inputFromat: spec.Format,
 		sampleSize:  spec.SampleSize,
@@ -889,7 +889,7 @@ func newReadCSVProcessor(
 	return cp, nil
 }
 
-type readCSVProcessor struct {
+type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	sampleSize  int32
 	tableDesc   sqlbase.TableDescriptor
@@ -902,13 +902,13 @@ type readCSVProcessor struct {
 	progress    distsqlrun.JobProgress
 }
 
-var _ distsqlrun.Processor = &readCSVProcessor{}
+var _ distsqlrun.Processor = &readImportDataProcessor{}
 
-func (cp *readCSVProcessor) OutputTypes() []sqlbase.ColumnType {
+func (cp *readImportDataProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
 }
 
-func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
+func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
 	defer tracing.FinishSpan(span)
 
@@ -1179,7 +1179,6 @@ func importResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 
 func init() {
 	sql.AddPlanHook(importPlanHook)
-	distsqlrun.NewSSTWriterProcessor = newSSTWriterProcessor
-	distsqlrun.NewReadImportDataProcessor = NewReadImportDataProcessor
+	distsqlrun.NewReadImportDataProcessor = newReadImportDataProcessor
 	jobs.AddResumeHook(importResumeHook)
 }
