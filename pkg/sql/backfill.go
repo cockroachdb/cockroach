@@ -331,7 +331,7 @@ func (sc *SchemaChanger) getMutationToBackfill(
 	ctx context.Context,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
-	filter distsqlrun.MutationFilter,
+	filter sqlbase.MutationFilter,
 ) (*sqlbase.DescriptorMutation, int, error) {
 	var mutation *sqlbase.DescriptorMutation
 	var mutationIdx int
@@ -441,7 +441,7 @@ func (sc *SchemaChanger) distBackfill(
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
-	filter distsqlrun.MutationFilter,
+	filter sqlbase.MutationFilter,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -597,7 +597,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	return sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
-		distsqlrun.IndexMutationFilter)
+		sqlbase.IndexMutationFilter)
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
@@ -609,5 +609,5 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return sc.distBackfill(
 		ctx, evalCtx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		distsqlrun.ColumnMutationFilter)
+		sqlbase.ColumnMutationFilter)
 }
