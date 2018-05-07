@@ -427,7 +427,7 @@ func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 
 // hasZeroOrOneRow returns true if the given group returns at most one row.
 func (f *Factory) hasZeroOrOneRow(group memo.GroupID) bool {
-	return f.mem.GroupProperties(group).Relational.Cardinality.Max <= 1
+	return f.mem.GroupProperties(group).Relational.Cardinality.IsZeroOrOne()
 }
 
 // hasCorrelatedSubquery returns true if the given scalar group contains a
