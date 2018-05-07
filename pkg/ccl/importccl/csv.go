@@ -195,8 +195,7 @@ func groupWorkers(ctx context.Context, num int, f func(context.Context) error) e
 // reported only after each file has been read.
 func readCSV(
 	ctx context.Context,
-	comma, comment rune,
-	skip uint32,
+	opts roachpb.CSVOptions,
 	expectedCols int,
 	dataFiles map[int32]string,
 	recordCh chan<- csvRecord,
@@ -207,8 +206,8 @@ func readCSV(
 	expectedColsExtra := expectedCols + 1
 	done := ctx.Done()
 	var count int64
-	if comma == 0 {
-		comma = ','
+	if opts.Comma == 0 {
+		opts.Comma = ','
 	}
 
 	var totalBytes, readBytes int64
@@ -260,10 +259,10 @@ func readCSV(
 			}
 			bc := byteCounter{r: f}
 			cr := csv.NewReader(&bc)
-			cr.Comma = comma
+			cr.Comma = opts.Comma
 			cr.FieldsPerRecord = -1
 			cr.LazyQuotes = true
-			cr.Comment = comment
+			cr.Comment = opts.Comment
 
 			batch := csvRecord{
 				file:      dataFile,
@@ -305,7 +304,7 @@ func readCSV(
 					return errors.Wrapf(err, "row %d: reading CSV record", i)
 				}
 				// Ignore the first N lines.
-				if uint32(i) <= skip {
+				if uint32(i) <= opts.Skip {
 					continue
 				}
 				if len(record) == expectedCols {
@@ -624,30 +623,29 @@ func importPlanHook(
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
 		}
 
-		var comma rune
+		format := roachpb.IOFileFormat{Format: roachpb.IOFileFormat_CSV}
 		if override, ok := opts[importOptionDelimiter]; ok {
-			comma, err = util.GetSingleRune(override)
+			comma, err := util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comma value")
 			}
+			format.Csv.Comma = comma
 		}
 
-		var comment rune
 		if override, ok := opts[importOptionComment]; ok {
-			comment, err = util.GetSingleRune(override)
+			comment, err := util.GetSingleRune(override)
 			if err != nil {
 				return errors.Wrap(err, "invalid comment value")
 			}
+			format.Csv.Comment = comment
 		}
 
-		var nullif *string
 		if override, ok := opts[importOptionNullIf]; ok {
-			nullif = &override
+			format.Csv.NullEncoding = &override
 		}
 
-		var skip int
 		if override, ok := opts[importOptionSkip]; ok {
-			skip, err = strconv.Atoi(override)
+			skip, err := strconv.Atoi(override)
 			if err != nil {
 				return errors.Wrapf(err, "invalid %s value", importOptionSkip)
 			}
@@ -660,6 +658,7 @@ func importPlanHook(
 				return errors.Errorf("Using %s requires all nodes to be upgraded to %s",
 					importOptionSkip, cluster.VersionByKey(cluster.VersionImportSkipRecords))
 			}
+			format.Csv.Skip = uint32(skip)
 		}
 
 		// sstSize, if 0, will be set to an appropriate default by the specific
@@ -734,8 +733,8 @@ func importPlanHook(
 		}
 
 		var nullifVal *jobs.ImportDetails_Table_Nullif
-		if nullif != nil {
-			nullifVal = &jobs.ImportDetails_Table_Nullif{Nullif: *nullif}
+		if format.Csv.NullEncoding != nil {
+			nullifVal = &jobs.ImportDetails_Table_Nullif{Nullif: *format.Csv.NullEncoding}
 		}
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
@@ -743,16 +742,17 @@ func importPlanHook(
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
 				Tables: []jobs.ImportDetails_Table{{
-					Desc:       tableDesc,
-					URIs:       files,
-					BackupPath: transform,
-					ParentID:   parentID,
-					Comma:      comma,
-					Comment:    comment,
-					Nullif:     nullifVal,
-					Skip:       uint32(skip),
-					SSTSize:    sstSize,
-					Walltime:   walltime,
+
+					Desc:          tableDesc,
+					URIs:          files,
+					BackupPath:    transform,
+					ParentID:      parentID,
+					SSTSize:       sstSize,
+					Walltime:      walltime,
+					LegacyComma:   format.Csv.Comma,
+					LegacyComment: format.Csv.Comment,
+					LegacyNullif:  nullifVal,
+					LegacySkip:    format.Csv.Skip,
 				}},
 			},
 		})
@@ -771,10 +771,8 @@ func doDistributedCSVTransform(
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
-	temp string,
-	comma, comment rune,
-	skip uint32,
-	nullif *string,
+	transformOnly string,
+	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
 ) error {
@@ -801,10 +799,8 @@ func doDistributedCSVTransform(
 		sql.NewRowResultWriter(rows),
 		tableDesc,
 		files,
-		temp,
-		comma, comment,
-		skip,
-		nullif,
+		transformOnly,
+		format,
 		walltime,
 		sstSize,
 	); err != nil {
@@ -823,7 +819,7 @@ func doDistributedCSVTransform(
 		}
 		return err
 	}
-	if temp == "" {
+	if transformOnly == "" {
 		return nil
 	}
 
@@ -849,7 +845,7 @@ func doDistributedCSVTransform(
 		})
 	}
 
-	dest, err := storageccl.ExportStorageConfFromURI(temp)
+	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
 		return err
 	}
@@ -871,15 +867,21 @@ func newReadCSVProcessor(
 	flowCtx *distsqlrun.FlowCtx, spec distsqlrun.ReadCSVSpec, output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	cp := &readCSVProcessor{
-		flowCtx:    flowCtx,
-		csvOptions: spec.Options,
-		sampleSize: spec.SampleSize,
-		tableDesc:  spec.TableDesc,
-		uri:        spec.Uri,
-		output:     output,
-		settings:   flowCtx.Settings,
-		registry:   flowCtx.JobRegistry,
-		progress:   spec.Progress,
+		flowCtx:     flowCtx,
+		inputFormat: spec.Format,
+		sampleSize:  spec.SampleSize,
+		tableDesc:   spec.TableDesc,
+		uri:         spec.Uri,
+		output:      output,
+		settings:    flowCtx.Settings,
+		registry:    flowCtx.JobRegistry,
+		progress:    spec.Progress,
+	}
+
+	// Check if this was was sent by an older node.
+	if spec.Format.Format == roachpb.IOFileFormat_Unknown {
+		spec.Format.Format = roachpb.IOFileFormat_CSV
+		spec.Format.Csv = spec.LegacyCsvOptions
 	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -888,16 +890,16 @@ func newReadCSVProcessor(
 }
 
 type readCSVProcessor struct {
-	flowCtx    *distsqlrun.FlowCtx
-	csvOptions roachpb.CSVOptions
-	sampleSize int32
-	tableDesc  sqlbase.TableDescriptor
-	uri        map[int32]string
-	out        distsqlrun.ProcOutputHelper
-	output     distsqlrun.RowReceiver
-	settings   *cluster.Settings
-	registry   *jobs.Registry
-	progress   distsqlrun.JobProgress
+	flowCtx     *distsqlrun.FlowCtx
+	sampleSize  int32
+	tableDesc   sqlbase.TableDescriptor
+	uri         map[int32]string
+	inputFormat roachpb.IOFileFormat
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
+	settings    *cluster.Settings
+	registry    *jobs.Registry
+	progress    distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &readCSVProcessor{}
@@ -944,8 +946,8 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 			})
 		}
 
-		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment, cp.csvOptions.Skip,
-			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
+		_, err = readCSV(sCtx, cp.inputFormat.Csv, len(cp.tableDesc.VisibleColumns()),
+			cp.uri, recordCh, progFn, cp.settings)
 		return err
 	})
 	// Convert CSV records to KVs
@@ -955,7 +957,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		defer close(kvCh)
 		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.csvOptions.NullEncoding, &cp.tableDesc)
+			return convertRecord(ctx, recordCh, kvCh, cp.inputFormat.Csv.NullEncoding, &cp.tableDesc)
 		})
 	})
 	// Sample KVs
@@ -1060,18 +1062,23 @@ func (r *importResumer) Resume(
 ) error {
 	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
 	p := phs.(sql.PlanHookState)
-	comma := details.Comma
-	comment := details.Comment
 	walltime := details.Walltime
 	transform := details.BackupPath
 	files := details.URIs
 	tableDesc := details.Desc
 	parentID := details.ParentID
-	skip := details.Skip
 	sstSize := details.SSTSize
-	var nullif *string
-	if details.Nullif != nil {
-		nullif = &details.Nullif.Nullif
+
+	format := details.Format
+	if format.Format == roachpb.IOFileFormat_Unknown {
+		format.Format = roachpb.IOFileFormat_CSV
+		format.Csv.Comma = details.LegacyComma
+		format.Csv.Comment = details.LegacyComment
+		format.Csv.Skip = details.LegacySkip
+		if details.LegacyNullif != nil {
+			format.Csv.NullEncoding = &details.LegacyNullif.Nullif
+		}
+
 	}
 
 	if sstSize == 0 {
@@ -1086,9 +1093,7 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tableDesc, transform,
-		comma, comment, skip, nullif, walltime,
-		sstSize,
+		ctx, job, files, p, parentID, tableDesc, transform, format, walltime, sstSize,
 	)
 }
 
@@ -1175,6 +1180,6 @@ func importResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 func init() {
 	sql.AddPlanHook(importPlanHook)
 	distsqlrun.NewSSTWriterProcessor = newSSTWriterProcessor
-	distsqlrun.NewReadImportDataProcessor = NewReadImportDataProcessor
+	distsqlrun.NewReadCSVProcessor = newReadCSVProcessor
 	jobs.AddResumeHook(importResumeHook)
 }

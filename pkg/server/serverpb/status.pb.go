@@ -8,7 +8,7 @@ import fmt "fmt"
 import math "math"
 import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
 import cockroach_gossip "github.com/cockroachdb/cockroach/pkg/gossip"
-import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_server_diagnosticspb "github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 import cockroach_server_status "github.com/cockroachdb/cockroach/pkg/server/status"
 import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -305,7 +305,7 @@ type RangeInfo struct {
 	SourceNodeID  github_com_cockroachdb_cockroach_pkg_roachpb.NodeID  `protobuf:"varint,5,opt,name=source_node_id,json=sourceNodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"source_node_id,omitempty"`
 	SourceStoreID github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,6,opt,name=source_store_id,json=sourceStoreId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"source_store_id,omitempty"`
 	ErrorMessage  string                                               `protobuf:"bytes,7,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	LeaseHistory  []cockroach_roachpb2.Lease                           `protobuf:"bytes,8,rep,name=lease_history,json=leaseHistory" json:"lease_history"`
+	LeaseHistory  []cockroach_roachpb1.Lease                           `protobuf:"bytes,8,rep,name=lease_history,json=leaseHistory" json:"lease_history"`
 	Problems      RangeProblems                                        `protobuf:"bytes,9,opt,name=problems" json:"problems"`
 	Stats         RangeStatistics                                      `protobuf:"bytes,10,opt,name=stats" json:"stats"`
 	CmdQLocal     CommandQueueMetrics                                  `protobuf:"bytes,11,opt,name=cmd_q_local,json=cmdQLocal" json:"cmd_q_local"`
@@ -7304,7 +7304,7 @@ func (m *RangeInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LeaseHistory = append(m.LeaseHistory, cockroach_roachpb2.Lease{})
+			m.LeaseHistory = append(m.LeaseHistory, cockroach_roachpb1.Lease{})
 			if err := m.LeaseHistory[len(m.LeaseHistory)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
