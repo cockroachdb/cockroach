@@ -1067,7 +1067,6 @@ SELECT MIN(i), MAX(k), MAX(k) FROM a
 group-by
  ├── columns: column5:5(int) column6:6(int) column6:6(int)
  ├── cardinality: [1 - 1]
- ├── keys: ()
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    └── keys: (1)
