@@ -18,6 +18,17 @@ option go_package = "roachpb";
 
 import "gogoproto/gogo.proto";
 
+
+message IOFileFormat {
+  enum FileFormat {
+    Unknown = 0;
+    CSV = 1;
+  }
+
+  optional FileFormat format = 1 [(gogoproto.nullable) = false];
+  optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
+}
+
 // CSVOptions describe the format of csv data (delimiter, comment, etc).
 message CSVOptions {
   // comma is an delimiter used by the CSV file; defaults to a comma.
@@ -26,6 +37,6 @@ message CSVOptions {
   optional int32 comment = 2 [(gogoproto.nullable) = false];
   // null_encoding, if not nil, is the string which identifies a NULL. Can be the empty string.
   optional string null_encoding = 3 [(gogoproto.nullable) = true];
-  // skip the first N lines of the input (e.g. to ignore column headers).
+  // skip the first N lines of the input (e.g. to ignore column headers) when reading.
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
 }

@@ -17,8 +17,8 @@ package cockroach.sql.jobs;
 option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
-import "roachpb/csv.proto";
 import "roachpb/data.proto";
+import "roachpb/io-formats.proto";
 import "sql/sqlbase/structured.proto";
 import "util/hlc/timestamp.proto";
 
@@ -66,7 +66,8 @@ message ImportDetails {
   message Table {
     sqlbase.TableDescriptor desc = 1;
     repeated string uris = 2 [(gogoproto.customname) = "URIs"];
-    roachpb.CSVOptions options = 3;
+    roachpb.IOFileFormat format = 18 [(gogoproto.nullable) = false];
+    roachpb.CSVOptions legacy_csv_options = 3;
     string backup_path = 4;
     repeated float sampling_progress = 5;
     repeated float read_progress = 6;
@@ -75,13 +76,13 @@ message ImportDetails {
       (gogoproto.customname) = "ParentID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
     ];
-    int32 comma = 9;
-    int32 comment = 10;
+    int32 legacy_comma = 9;
+    int32 legacy_comment = 10;
     message Nullif {
       string nullif = 1;
     }
     // nullif needs to differentiate between not present and the empty string.
-    Nullif nullif = 11;
+    Nullif legacy_nullif = 11;
     int64 sst_size = 12 [(gogoproto.customname) = "SSTSize"];
     int64 walltime = 13;
     reserved 14;
@@ -90,7 +91,7 @@ message ImportDetails {
     // to add ranges with an old split point within them.
     repeated bytes samples = 15;
     // Skip the first N lines of the input (e.g. to ignore column headers)
-    uint32 skip = 16;
+    uint32 legacy_skip = 16;
     // The spans of split keys which have had their SSTable's generated.
     // This allows us to skip the shuffle stage for already-completed
     // spans when resuming an import job.

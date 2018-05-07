@@ -160,9 +160,7 @@ func LoadCSV(
 	tableDesc *sqlbase.TableDescriptor,
 	from []string,
 	to string,
-	comma, comment rune,
-	skip uint32,
-	nullif *string,
+	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
 ) error {
@@ -205,12 +203,7 @@ func LoadCSV(
 		if i < len(nodes) {
 			csvSpecs = append(csvSpecs, &distsqlrun.ReadCSVSpec{
 				TableDesc: *tableDesc,
-				Options: roachpb.CSVOptions{
-					Comma:        comma,
-					Comment:      comment,
-					NullEncoding: nullif,
-					Skip:         skip,
-				},
+				Format:    format,
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
 					Slot:  int32(i),
