@@ -14,28 +14,15 @@
 
 package engine
 
-import "C"
-
 import (
-	"unsafe"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func nonZeroingMakeByteSlice(len int) []byte {
-	ptr := mallocgc(uintptr(len), nil, false)
-	return (*[maxArrayLen]byte)(ptr)[:len:len]
-}
-
-// Replacement for C.GoBytes which does not zero initialize the returned slice
-// before overwriting it.
-//
-// TODO(peter): Remove when go1.11 is released which has a similar change to
-// C.GoBytes.
-func gobytes(ptr unsafe.Pointer, len int) []byte {
-	if len == 0 {
-		return make([]byte, 0)
-	}
-	x := nonZeroingMakeByteSlice(len)
-	src := (*[maxArrayLen]byte)(ptr)[:len:len]
-	copy(x, src)
-	return x
+// Regression test for #25289: calling gobytes() on an invalid pointer is fine
+// as long as we're asking for 0 bytes.
+func TestGoBytesNil(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	_ = gobytes(nil, 0)
 }
