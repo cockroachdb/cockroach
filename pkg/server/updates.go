@@ -257,7 +257,7 @@ func (s *Server) maybeReportDiagnostics(
 
 func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
-	n := s.node.recorder.GetStatusSummary(ctx)
+	n := s.node.recorder.GenerateNodeStatus(ctx)
 	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
 
 	secret := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
