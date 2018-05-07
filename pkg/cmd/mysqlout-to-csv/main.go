@@ -17,10 +17,13 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -32,6 +35,7 @@ var (
 	fieldsSep   = flag.String("fields-terminated-by", "\t", "field separator character")
 	encloseChar = flag.String("fields-enclosed-by", "", "field enclosing character")
 	escapeChar  = flag.String("fields-escaped-by", "\\", "escape character")
+	hexColList  = flag.String("hex-cols", "", "list of columns (0 indexed) to hex encode")
 
 	chunkCSVRows = flag.Int("chunk-rows", 10000, "chunk csv into N rows per file (0 no chunking)")
 
@@ -55,6 +59,17 @@ func main() {
 	if flags := len(flag.Args()); flags != 2 {
 		fmt.Printf("usage: %s <mysql outfile> <csv>\n", os.Args[0])
 		os.Exit(1)
+	}
+	var hexCols []int
+	for _, s := range strings.Split(*hexColList, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			i, err := strconv.Atoi(s)
+			if err != nil {
+				panic("cannot parse column id in hex list")
+			}
+			hexCols = append(hexCols, i)
+		}
 	}
 
 	in, err := os.Open(flag.Arg(0))
@@ -100,6 +115,9 @@ func main() {
 	}
 
 	d.f = func(r []string) error {
+		for _, i := range hexCols {
+			r[i] = hex.EncodeToString([]byte(r[i]))
+		}
 		err := writer.Write(r)
 		if err != nil {
 			return err

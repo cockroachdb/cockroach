@@ -19,6 +19,7 @@ import (
 	"bytes"
 	gosql "database/sql"
 	"encoding/csv"
+	"encoding/hex"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -205,9 +206,14 @@ func TestConvert(t *testing.T) {
 				if len(r) != 3 {
 					t.Fatalf("bad row len for %v", r)
 				}
+				// If the csv writing part of our conversion encodes as hex, we can
+				// round-trip bytes though the go csv parser.
+				orig := r[2]
+				r[2] = hex.EncodeToString([]byte(r[2]))
 				if err := w.Write(r); err != nil {
 					t.Fatal(err)
 				}
+				r[2] = orig
 				res = append(res, r)
 				return nil
 			}
@@ -258,7 +264,17 @@ func TestConvert(t *testing.T) {
 				if !bytes.Equal(expected, actual) {
 					t.Fatalf("row %d (i %d=%s): expected:\n%q\ngot:\n%q\n", i, row.i, res[i][0], expected, actual)
 				}
+
+				csvVal, err := hex.DecodeString(csvRows[i][2])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(expected, csvVal) {
+					t.Fatalf("row %d: expected bytes value to round-trip via csv expected %d bytes:\n%q, got %d:\n%q",
+						row.i, len(expected), expected, len(csvVal), csvVal)
+				}
 			}
+
 		})
 	}
 }
