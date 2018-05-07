@@ -55,7 +55,7 @@ func (d *dumpReader) Process(in io.Reader) error {
 	// The current row being read.
 	var row []string
 	// the current field being read.
-	var field []rune
+	var field []byte
 
 	// If we have an escaping char defined, seeing it means the next char is to be
 	// treated as escaped -- usually that means literal but has some specific
@@ -78,7 +78,15 @@ func (d *dumpReader) Process(in io.Reader) error {
 			return err
 		}
 		if c == unicode.ReplacementChar && w == 1 {
-			return errors.New("Invalid unicode encoding")
+			if err := reader.UnreadRune(); err != nil {
+				return err
+			}
+			raw, err := reader.ReadByte()
+			if err != nil {
+				return err
+			}
+			field = append(field, raw)
+			continue
 		}
 
 		// Do we need to check for escaping?
@@ -88,7 +96,7 @@ func (d *dumpReader) Process(in io.Reader) error {
 				// See https://dev.mysql.com/doc/refman/8.0/en/load-data.html.
 				switch c {
 				case '0':
-					field = append(field, rune(0))
+					field = append(field, byte(0))
 				case 'b':
 					field = append(field, '\b')
 				case 'n':
@@ -98,11 +106,11 @@ func (d *dumpReader) Process(in io.Reader) error {
 				case 't':
 					field = append(field, '\t')
 				case 'Z':
-					field = append(field, rune(26))
+					field = append(field, byte(26))
 				case 'N':
 					field = append(field, '\\', 'N')
 				default:
-					field = append(field, c)
+					field = append(field, string(c)...)
 				}
 				continue
 			}
@@ -136,7 +144,7 @@ func (d *dumpReader) Process(in io.Reader) error {
 			continue
 		}
 
-		field = append(field, c)
+		field = append(field, string(c)...)
 	}
 
 	if nextLiteral {

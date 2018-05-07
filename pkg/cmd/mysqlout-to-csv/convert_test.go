@@ -16,6 +16,7 @@
 package main
 
 import (
+	"bytes"
 	gosql "database/sql"
 	"encoding/csv"
 	"math/rand"
@@ -32,6 +33,7 @@ import (
 type testRow struct {
 	i int
 	s string
+	b []byte
 }
 
 type dumpCfg struct {
@@ -53,17 +55,18 @@ func genTestData(t *testing.T, rows []testRow, configs []dumpCfg) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(
-		`CREATE TABLE test (i INT PRIMARY KEY, s text)`,
+		`CREATE TABLE test (i INT PRIMARY KEY, s text, b binary(200))`,
 	); err != nil {
 		t.Fatal(err)
 	}
+
 	for _, tc := range rows {
 		s := &tc.s
 		if *s == injectNull {
 			s = nil
 		}
 		if _, err := db.Exec(
-			`INSERT INTO test VALUES (?, ?)`, tc.i, s,
+			`INSERT INTO test VALUES (?, ?, ?)`, tc.i, s, tc.b,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -120,34 +123,36 @@ func TestConvert(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
 
 	testRows := []testRow{
-		{0, `str`},
-		{1, ``},
-		{2, ` `},
-		{3, `,`},
-		{4, "\n"},
-		{5, `\n`},
-		{6, "\r\n"},
-		{7, "\r"},
-		{9, `"`},
+		{i: 0, s: `str`},
+		{i: 1, s: ``},
+		{i: 2, s: ` `},
+		{i: 3, s: `,`},
+		{i: 4, s: "\n"},
+		{i: 5, s: `\n`},
+		{i: 6, s: "\r\n"},
+		{i: 7, s: "\r"},
+		{i: 9, s: `"`},
 
-		{10, injectNull},
-		{11, `\N`},
-		{12, `NULL`},
+		{i: 10, s: injectNull},
+		{i: 11, s: `\N`},
+		{i: 12, s: `NULL`},
 
 		// Unicode
-		{13, `¢`},
-		{14, ` ¢ `},
-		{15, `✅`},
-		{16, `","\n,™¢`},
-		{17, string([]rune{rune(0)})},
-		{19, `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
-
-		{20, `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
-		{21, `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
+		{i: 13, s: `¢`},
+		{i: 14, s: ` ¢ `},
+		{i: 15, s: `✅`},
+		{i: 16, s: `","\n,™¢`},
+		{i: 17, s: string([]rune{rune(0)})},
+		{i: 19, s: `✅¢©ƒƒƒƒåß∂√œ∫∑∆πœ∑˚¬≤µµç∫ø∆œ∑∆¬œ∫œ∑´´†¥¨ˆˆπ‘“æ…¬…¬˚ß∆å˚˙ƒ∆©˙©∂˙≥≤Ω˜˜µ√∫∫Ω¥∑`},
+		{i: 20, s: `a quote " or two quotes "" and a quote-comma ", , and then a quote and newline "` + "\n"},
+		{i: 21, s: `"a slash \, a double slash \\, a slash+quote \",  \` + "\n"},
 	}
 
 	for i := 0; i < 10; i++ {
-		testRows = append(testRows, testRow{i + 100, randStr(r, badChars, 1000)})
+		buf := make([]byte, 200)
+		r.Seed(int64(i))
+		r.Read(buf)
+		testRows = append(testRows, testRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
 	}
 
 	configs := []dumpCfg{
@@ -197,7 +202,7 @@ func TestConvert(t *testing.T) {
 
 			var res [][]string
 			converter.f = func(r []string) error {
-				if len(r) != 2 {
+				if len(r) != 3 {
 					t.Fatalf("bad row len for %v", r)
 				}
 				if err := w.Write(r); err != nil {
@@ -243,6 +248,17 @@ func TestConvert(t *testing.T) {
 				}
 			}
 
+			for i, row := range testRows {
+				expected := row.b
+				if expected == nil {
+					expected = []byte(config.null)
+				}
+
+				actual := []byte(res[i][2])
+				if !bytes.Equal(expected, actual) {
+					t.Fatalf("row %d (i %d=%s): expected:\n%q\ngot:\n%q\n", i, row.i, res[i][0], expected, actual)
+				}
+			}
 		})
 	}
 }
