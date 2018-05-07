@@ -7,11 +7,11 @@
 	It is generated from these files:
 		roachpb/api.proto
 		roachpb/app_stats.proto
-		roachpb/csv.proto
 		roachpb/data.proto
 		roachpb/errors.proto
 		roachpb/internal.proto
 		roachpb/internal_raft.proto
+		roachpb/io-formats.proto
 		roachpb/metadata.proto
 
 	It has these top-level messages:
@@ -108,7 +108,6 @@
 		NumericStat
 		StatementStatisticsKey
 		CollectedStatementStatistics
-		CSVOptions
 		Span
 		Value
 		KeyValue
@@ -160,6 +159,8 @@
 		RaftTruncatedState
 		RaftTombstone
 		RaftSnapshotData
+		IOFileFormat
+		CSVOptions
 		Attributes
 		ReplicationTarget
 		ReplicaDescriptor

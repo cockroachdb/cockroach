@@ -375,7 +375,7 @@ func (c *ReadCSVSpec) summary() (string, []string) {
 	for _, s := range c.Uri {
 		ss = append(ss, s)
 	}
-	return "ReadCSV", ss
+	return "ReadImportData", ss
 }
 
 // summary implements the diagramCellType interface.
