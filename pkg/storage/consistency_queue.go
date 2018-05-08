@@ -133,6 +133,6 @@ func (q *consistencyQueue) timer(duration time.Duration) time.Duration {
 }
 
 // purgatoryChan returns nil.
-func (*consistencyQueue) purgatoryChan() <-chan struct{} {
+func (*consistencyQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }

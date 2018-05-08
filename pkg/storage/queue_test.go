@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // testQueueImpl implements queueImpl with a closure for shouldQueue.
@@ -44,7 +45,7 @@ type testQueueImpl struct {
 	processed     int32 // accessed atomically
 	duration      time.Duration
 	blocker       chan struct{} // timer() blocks on this if not nil
-	pChan         chan struct{}
+	pChan         chan time.Time
 	err           error // always returns this error on process
 }
 
@@ -73,7 +74,7 @@ func (tq *testQueueImpl) timer(_ time.Duration) time.Duration {
 	return 0
 }
 
-func (tq *testQueueImpl) purgatoryChan() <-chan struct{} {
+func (tq *testQueueImpl) purgatoryChan() <-chan time.Time {
 	return tq.pChan
 }
 
@@ -658,7 +659,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 			priority = float64(r.RangeID)
 			return
 		},
-		pChan: make(chan struct{}, 1),
+		pChan: make(chan time.Time, 1),
 		err:   &testError{},
 	}
 
@@ -704,7 +705,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 	})
 
 	// Now, signal that purgatoried replicas should retry.
-	testQueue.pChan <- struct{}{}
+	testQueue.pChan <- timeutil.Now()
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount*2 {
@@ -739,7 +740,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 
 	// Remove error and reprocess.
 	testQueue.err = nil
-	testQueue.pChan <- struct{}{}
+	testQueue.pChan <- timeutil.Now()
 
 	testutils.SucceedsSoon(t, func() error {
 		if pc := testQueue.getProcessed(); pc != replicaCount*3 {

@@ -744,6 +744,9 @@ type StoreTestingKnobs struct {
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
 	ReplicateQueueAcceptsUnsplit bool
+	// SplitQueuePurgatoryChan allows a test to control the channel used to
+	// trigger split queue purgatory processing.
+	SplitQueuePurgatoryChan <-chan time.Time
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
