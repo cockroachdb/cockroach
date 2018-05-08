@@ -98,7 +98,7 @@ inner-join
  │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    ├── keys: (5)
  │    └── prune: (5,6)
- └── eq [type=bool, outer=(1,5)]
+ └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       ├── variable: a.k [type=int, outer=(1)]
       └── variable: xy.x [type=int, outer=(5)]
 
@@ -158,8 +158,8 @@ project
  │    │    │         │    │    ├── columns: xy.x:5(int!null)
  │    │    │         │    │    ├── keys: (5)
  │    │    │         │    │    └── prune: (5)
- │    │    │         │    └── filters [type=bool, outer=(1,5)]
- │    │    │         │         └── eq [type=bool, outer=(1,5)]
+ │    │    │         │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │    │         │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │    │         │              ├── variable: xy.x [type=int, outer=(5)]
  │    │    │         │              └── variable: a.k [type=int, outer=(1)]
  │    │    │         └── projections [outer=(1)]
