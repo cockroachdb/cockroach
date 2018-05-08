@@ -536,6 +536,16 @@ func (c *cluster) destroy(ctx context.Context) {
 	}
 }
 
+// Run a command with output redirected to the logs instead of to os.Stdout
+// (which doesn't go anywhere I've been able to find) Don't use this if you're
+// going to call cmd.CombinedOutput or cmd.Output.
+func (c *cluster) LoggedCommand(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, arg0, args...)
+	cmd.Stdout = c.l.stdout
+	cmd.Stderr = c.l.stderr
+	return cmd
+}
+
 // Put a local file to all of the machines in a cluster.
 func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	if c.t.Failed() {
