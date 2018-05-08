@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -108,25 +107,10 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
 
 	// Get the IP addresses for all our workers.
-	cmd := exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(workers), "--", "hostname", "-I")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var workerIPs []string
+	workerIPs := c.InternalIP(ctx, workers)
 	var nodeFlags []string
-	lines := strings.Split(string(output), "\n")
-	// TODO(bdarnell): add an option to `roachprod run` for
-	// machine-friendly output (or merge roachprod into roachtest so we
-	// can access it here).
-	lineRE := regexp.MustCompile(`\s*[0-9]+:\s*([0-9.]+)`)
-	for i := range lines {
-		fields := lineRE.FindStringSubmatch(lines[i])
-		if len(fields) == 0 {
-			continue
-		}
-		workerIPs = append(workerIPs, fields[1])
-		nodeFlags = append(nodeFlags, "-n "+fields[1])
+	for _, ip := range workerIPs {
+		nodeFlags = append(nodeFlags, "-n "+ip)
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
@@ -137,7 +121,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
