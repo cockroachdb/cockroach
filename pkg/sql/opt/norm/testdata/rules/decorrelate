@@ -1363,23 +1363,15 @@ project
  │    │         │    │    ├── columns: a.k:1(int) a.i:2(int)
  │    │         │    │    ├── outer: (1,2)
  │    │         │    │    ├── cardinality: [1 - 1]
- │    │         │    │    ├── inner-join
+ │    │         │    │    ├── project
  │    │         │    │    │    ├── columns: a.i:2(int)
  │    │         │    │    │    ├── outer: (2)
  │    │         │    │    │    ├── cardinality: [1 - 1]
  │    │         │    │    │    ├── values
  │    │         │    │    │    │    ├── cardinality: [1 - 1]
  │    │         │    │    │    │    └── tuple [type=tuple{}]
- │    │         │    │    │    ├── project
- │    │         │    │    │    │    ├── columns: a.i:2(int)
- │    │         │    │    │    │    ├── outer: (2)
- │    │         │    │    │    │    ├── cardinality: [1 - 1]
- │    │         │    │    │    │    ├── values
- │    │         │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │         │    │    │    │    │    └── tuple [type=tuple{}]
- │    │         │    │    │    │    └── projections [outer=(2)]
- │    │         │    │    │    │         └── variable: a.i [type=int, outer=(2)]
- │    │         │    │    │    └── true [type=bool]
+ │    │         │    │    │    └── projections [outer=(2)]
+ │    │         │    │    │         └── variable: a.i [type=int, outer=(2)]
  │    │         │    │    ├── project
  │    │         │    │    │    ├── columns: a.k:1(int)
  │    │         │    │    │    ├── outer: (1)
@@ -1427,37 +1419,29 @@ project
  │    │    │    ├── columns: column1:8(bool) exists_agg:10(bool)
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── inner-join
+ │    │    │    ├── group-by
  │    │    │    │    ├── columns: exists_agg:10(bool)
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── values
- │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    └── tuple [type=tuple{}]
- │    │    │    │    ├── group-by
- │    │    │    │    │    ├── columns: exists_agg:10(bool)
+ │    │    │    │    ├── project
+ │    │    │    │    │    ├── columns: true:9(bool)
  │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: true:9(bool)
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
  │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── keys: (6)
+ │    │    │    │    │    │    ├── scan xy
  │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    ├── keys: (6)
- │    │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
- │    │    │    │    │    │    │    │    └── keys: (6)
- │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,6)]
- │    │    │    │    │    │    │         └── eq [type=bool, outer=(1,6)]
- │    │    │    │    │    │    │              ├── variable: xy.x [type=int, outer=(6)]
- │    │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         └── const: true [type=bool]
- │    │    │    │    │    └── aggregations [outer=(9)]
- │    │    │    │    │         └── exists-agg [type=bool, outer=(9)]
- │    │    │    │    │              └── variable: true [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
- │    │    │    │    └── true [type=bool]
+ │    │    │    │    │    │    │    └── keys: (6)
+ │    │    │    │    │    │    └── filters [type=bool, outer=(1,6)]
+ │    │    │    │    │    │         └── eq [type=bool, outer=(1,6)]
+ │    │    │    │    │    │              ├── variable: xy.x [type=int, outer=(6)]
+ │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
+ │    │    │    │    │    └── projections
+ │    │    │    │    │         └── const: true [type=bool]
+ │    │    │    │    └── aggregations [outer=(9)]
+ │    │    │    │         └── exists-agg [type=bool, outer=(9)]
+ │    │    │    │              └── variable: true [type=bool, outer=(9)]
  │    │    │    ├── values
  │    │    │    │    ├── columns: column1:8(bool)
  │    │    │    │    ├── outer: (10)
@@ -1491,67 +1475,59 @@ project
  │    │    │    ├── columns: column1:9(bool) case:12(bool)
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [1 - 1]
- │    │    │    ├── inner-join
+ │    │    │    ├── project
  │    │    │    │    ├── columns: case:12(bool)
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    ├── values
- │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    └── tuple [type=tuple{}]
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: case:12(bool)
+ │    │    │    │    ├── group-by
+ │    │    │    │    │    ├── columns: bool_or:11(bool)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    ├── group-by
- │    │    │    │    │    │    ├── columns: bool_or:11(bool)
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: not_null:10(bool)
  │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    │    ├── project
- │    │    │    │    │    │    │    ├── columns: not_null:10(bool)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: column8:8(bool)
  │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── project
  │    │    │    │    │    │    │    │    ├── columns: column8:8(bool)
  │    │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    │    ├── project
- │    │    │    │    │    │    │    │    │    ├── columns: column8:8(bool)
+ │    │    │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
  │    │    │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    │    │    ├── keys: (6)
+ │    │    │    │    │    │    │    │    │    ├── scan xy
  │    │    │    │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
- │    │    │    │    │    │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    │    │    │    │    │    ├── keys: (6)
- │    │    │    │    │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null) xy.y:7(int)
- │    │    │    │    │    │    │    │    │    │    │    └── keys: (6)
- │    │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,6)]
- │    │    │    │    │    │    │    │    │    │         └── eq [type=bool, outer=(1,6)]
- │    │    │    │    │    │    │    │    │    │              ├── variable: xy.x [type=int, outer=(6)]
- │    │    │    │    │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
- │    │    │    │    │    │    │    │    │    └── projections [outer=(7)]
- │    │    │    │    │    │    │    │    │         └── eq [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
- │    │    │    │    │    │    │    │    │              ├── variable: xy.y [type=int, outer=(7)]
- │    │    │    │    │    │    │    │    │              └── const: 5 [type=int]
- │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: [ - /false) [/true - ]; tight)]
- │    │    │    │    │    │    │    │         └── is-not [type=bool, outer=(8), constraints=(/8: [ - /false) [/true - ]; tight)]
- │    │    │    │    │    │    │    │              ├── variable: column8 [type=bool, outer=(8), constraints=(/8: [/true - /true]; tight)]
- │    │    │    │    │    │    │    │              └── false [type=bool]
- │    │    │    │    │    │    │    └── projections [outer=(8)]
- │    │    │    │    │    │    │         └── is-not [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
- │    │    │    │    │    │    │              ├── variable: column8 [type=bool, outer=(8), constraints=(/8: [/true - /true]; tight)]
- │    │    │    │    │    │    │              └── null [type=bool, constraints=(contradiction; tight)]
- │    │    │    │    │    │    └── aggregations [outer=(10)]
- │    │    │    │    │    │         └── bool-or [type=bool, outer=(10)]
- │    │    │    │    │    │              └── variable: not_null [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
- │    │    │    │    │    └── projections [outer=(11)]
- │    │    │    │    │         └── case [type=bool, outer=(11)]
- │    │    │    │    │              ├── variable: bool_or [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
- │    │    │    │    │              ├── when [type=bool]
- │    │    │    │    │              │    ├── true [type=bool]
- │    │    │    │    │              │    └── true [type=bool]
- │    │    │    │    │              ├── when [type=bool]
- │    │    │    │    │              │    ├── false [type=bool]
- │    │    │    │    │              │    └── null [type=bool, constraints=(contradiction; tight)]
- │    │    │    │    │              └── false [type=bool]
- │    │    │    │    └── true [type=bool]
+ │    │    │    │    │    │    │    │    │    │    └── keys: (6)
+ │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,6)]
+ │    │    │    │    │    │    │    │    │         └── eq [type=bool, outer=(1,6)]
+ │    │    │    │    │    │    │    │    │              ├── variable: xy.x [type=int, outer=(6)]
+ │    │    │    │    │    │    │    │    │              └── variable: a.k [type=int, outer=(1)]
+ │    │    │    │    │    │    │    │    └── projections [outer=(7)]
+ │    │    │    │    │    │    │    │         └── eq [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight)]
+ │    │    │    │    │    │    │    │              ├── variable: xy.y [type=int, outer=(7)]
+ │    │    │    │    │    │    │    │              └── const: 5 [type=int]
+ │    │    │    │    │    │    │    └── filters [type=bool, outer=(8), constraints=(/8: [ - /false) [/true - ]; tight)]
+ │    │    │    │    │    │    │         └── is-not [type=bool, outer=(8), constraints=(/8: [ - /false) [/true - ]; tight)]
+ │    │    │    │    │    │    │              ├── variable: column8 [type=bool, outer=(8)]
+ │    │    │    │    │    │    │              └── false [type=bool]
+ │    │    │    │    │    │    └── projections [outer=(8)]
+ │    │    │    │    │    │         └── is-not [type=bool, outer=(8), constraints=(/8: (/NULL - ]; tight)]
+ │    │    │    │    │    │              ├── variable: column8 [type=bool, outer=(8)]
+ │    │    │    │    │    │              └── null [type=bool]
+ │    │    │    │    │    └── aggregations [outer=(10)]
+ │    │    │    │    │         └── bool-or [type=bool, outer=(10)]
+ │    │    │    │    │              └── variable: not_null [type=bool, outer=(10)]
+ │    │    │    │    └── projections [outer=(11)]
+ │    │    │    │         └── case [type=bool, outer=(11)]
+ │    │    │    │              ├── variable: bool_or [type=bool, outer=(11)]
+ │    │    │    │              ├── when [type=bool]
+ │    │    │    │              │    ├── true [type=bool]
+ │    │    │    │              │    └── true [type=bool]
+ │    │    │    │              ├── when [type=bool]
+ │    │    │    │              │    ├── false [type=bool]
+ │    │    │    │              │    └── null [type=bool]
+ │    │    │    │              └── false [type=bool]
  │    │    │    ├── values
  │    │    │    │    ├── columns: column1:9(bool)
  │    │    │    │    ├── outer: (12)
