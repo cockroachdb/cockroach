@@ -634,7 +634,7 @@ func (n *Node) bootstrapStores(
 	}
 	// write a new status summary after all stores have been bootstrapped; this
 	// helps the UI remain responsive when new nodes are added.
-	if err := n.writeSummaries(ctx); err != nil {
+	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
 		log.Warningf(ctx, "error writing node summary after store bootstrap: %s", err)
 	}
 }
@@ -758,15 +758,15 @@ func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
 	})
 }
 
-// startWriteSummaries begins periodically persisting status summaries for the
+// startWriteNodeStatus begins periodically persisting status summaries for the
 // node and its stores.
-func (n *Node) startWriteSummaries(frequency time.Duration) {
+func (n *Node) startWriteNodeStatus(frequency time.Duration) {
 	ctx := log.WithLogTag(n.AnnotateCtx(context.Background()), "summaries", nil)
 	// Immediately record summaries once on server startup.
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
-		if err := n.writeSummaries(ctx); err != nil {
+		if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
 			log.Warningf(ctx, "error recording initial status summaries: %s", err)
 		}
 		ticker := time.NewTicker(frequency)
@@ -774,7 +774,11 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
-				if err := n.writeSummaries(ctx); err != nil {
+				// Use an alertTTL of twice the ticker frequency. This makes sure that
+				// alerts don't disappear and reappear spuriously while at the same
+				// time ensuring that an alert doesn't linger for too long after having
+				// resolved.
+				if err := n.writeNodeStatus(ctx, 2*frequency); err != nil {
 					log.Warningf(ctx, "error recording status summaries: %s", err)
 				}
 			case <-n.stopper.ShouldStop():
@@ -784,12 +788,30 @@ func (n *Node) startWriteSummaries(frequency time.Duration) {
 	})
 }
 
-// writeSummaries retrieves status summaries from the supplied
+// writeNodeStatus retrieves status summaries from the supplied
 // NodeStatusRecorder and persists them to the cockroach data store.
-func (n *Node) writeSummaries(ctx context.Context) error {
+func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration) error {
 	var err error
 	if runErr := n.stopper.RunTask(ctx, "node.Node: writing summary", func(ctx context.Context) {
-		err = n.recorder.WriteStatusSummary(ctx, n.storeCfg.DB)
+		nodeStatus := n.recorder.GenerateNodeStatus(ctx)
+		if nodeStatus == nil {
+			return
+		}
+
+		if result := n.recorder.CheckHealth(ctx, *nodeStatus); len(result.Alerts) != 0 {
+			log.Warningf(ctx, "health alerts detected: %+v", result)
+			if err := n.storeCfg.Gossip.AddInfoProto(
+				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, alertTTL,
+			); err != nil {
+				log.Warningf(ctx, "unable to gossip health alerts: %+v", result)
+			}
+
+			// TODO(tschottdorf): add a metric that we increment every time there are
+			// alerts. This can help understand how long the cluster has been in that
+			// state (since it'll be incremented every ~10s).
+		}
+
+		err = n.recorder.WriteNodeStatus(ctx, n.storeCfg.DB, *nodeStatus)
 	}); runErr != nil {
 		err = runErr
 	}
