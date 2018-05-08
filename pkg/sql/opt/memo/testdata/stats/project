@@ -226,7 +226,7 @@ select
            │    │    ├── stats: [rows=2000, distinct(7)=10]
            │    │    └── keys: (5)
            │    └── projections [outer=(3,7)]
-           │         └── lt [type=bool, outer=(3,7)]
+           │         └── lt [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
            │              ├── variable: a.s [type=string, outer=(3)]
            │              └── variable: kuv.v [type=string, outer=(7)]
            └── aggregations
