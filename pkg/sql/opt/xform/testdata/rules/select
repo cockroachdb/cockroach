@@ -278,8 +278,8 @@ project
  │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
  │    │    ├── constraint: /2/1: (/NULL - ]
  │    │    └── keys: (1) weak(3)
- │    └── filters [type=bool, outer=(2,3)]
- │         └── eq [type=bool, outer=(2,3)]
+ │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+ │         └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
  │              ├── variable: a.u [type=int, outer=(2)]
  │              └── variable: a.v [type=int, outer=(3)]
  └── projections [outer=(1)]
