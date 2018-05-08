@@ -282,7 +282,7 @@ project
            ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
            │    ├── variable: a.s [type=string, outer=(4)]
            │    └── const: 'foo' [type=string]
-           └── ne [type=bool, outer=(4)]
+           └── ne [type=bool, outer=(4), constraints=(/4: (/NULL - /'bar') [/e'bar\x00' - ]; tight)]
                 ├── variable: a.s [type=string, outer=(4)]
                 └── const: 'bar' [type=string]
 
@@ -380,8 +380,8 @@ select
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2), constraints=(contradiction)]
-      ├── ne [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
+      ├── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
       ├── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
@@ -412,7 +412,7 @@ select
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2), constraints=(/2: [/3 - /3] [/4 - /4])]
+ └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── not-in [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
@@ -423,10 +423,10 @@ select
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 3 [type=int]
       │         └── const: 4 [type=int]
-      ├── is-not [type=bool, outer=(2)]
+      ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── null [type=unknown]
-      └── is [type=bool, outer=(2)]
+      └── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
            └── null [type=unknown]
 
@@ -636,7 +636,7 @@ select
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(1-3), constraints=(contradiction)]
+ └── filters [type=bool, outer=(1-3), constraints=(contradiction; tight)]
       ├── lt [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: a.i [type=int, outer=(2)]
