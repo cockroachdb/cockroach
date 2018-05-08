@@ -425,9 +425,25 @@ func (f *Factory) hasSubsetCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).SubsetOf(f.outputCols(right))
 }
 
+// HasZeroRows returns true if the given group never returns any rows.
+func (f *Factory) hasZeroRows(group memo.GroupID) bool {
+	return f.mem.GroupProperties(group).Relational.Cardinality.IsZero()
+}
+
+// hasOneRow returns true if the given group always returns exactly one row.
+func (f *Factory) hasOneRow(group memo.GroupID) bool {
+	return f.mem.GroupProperties(group).Relational.Cardinality.IsOne()
+}
+
 // hasZeroOrOneRow returns true if the given group returns at most one row.
 func (f *Factory) hasZeroOrOneRow(group memo.GroupID) bool {
 	return f.mem.GroupProperties(group).Relational.Cardinality.IsZeroOrOne()
+}
+
+// hasOneOrMoreRows returns true if the given group will always return at least
+// one row.
+func (f *Factory) hasOneOrMoreRows(group memo.GroupID) bool {
+	return !f.mem.GroupProperties(group).Relational.Cardinality.CanBeZero()
 }
 
 // hasCorrelatedSubquery returns true if the given scalar group contains a
@@ -560,6 +576,45 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 		conditions = append(conditions, right)
 	}
 	return f.ConstructFilters(f.InternList(conditions))
+}
+
+// ----------------------------------------------------------------------
+//
+// Join Rules
+//   Custom match and replace functions used with join.opt rules.
+//
+// ----------------------------------------------------------------------
+
+func (f *Factory) constructNonLeftJoin(
+	joinOp opt.Operator, left, right, on memo.GroupID,
+) memo.GroupID {
+	switch joinOp {
+	case opt.LeftJoinOp:
+		return f.ConstructInnerJoin(left, right, on)
+	case opt.LeftJoinApplyOp:
+		return f.ConstructInnerJoinApply(left, right, on)
+	case opt.FullJoinOp:
+		return f.ConstructRightJoin(left, right, on)
+	case opt.FullJoinApplyOp:
+		return f.ConstructRightJoinApply(left, right, on)
+	}
+	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
+}
+
+func (f *Factory) constructNonRightJoin(
+	joinOp opt.Operator, left, right, on memo.GroupID,
+) memo.GroupID {
+	switch joinOp {
+	case opt.RightJoinOp:
+		return f.ConstructInnerJoin(left, right, on)
+	case opt.RightJoinApplyOp:
+		return f.ConstructInnerJoinApply(left, right, on)
+	case opt.FullJoinOp:
+		return f.ConstructLeftJoin(left, right, on)
+	case opt.FullJoinApplyOp:
+		return f.ConstructLeftJoinApply(left, right, on)
+	}
+	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
 
 // ----------------------------------------------------------------------
