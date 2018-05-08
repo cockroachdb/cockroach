@@ -254,6 +254,6 @@ func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 }
 
 // purgatoryChan returns nil.
-func (*replicaGCQueue) purgatoryChan() <-chan struct{} {
+func (*replicaGCQueue) purgatoryChan() <-chan time.Time {
 	return nil
 }

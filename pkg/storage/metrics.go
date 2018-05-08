@@ -400,6 +400,9 @@ var (
 	metaSplitQueueProcessingNanos = metric.Metadata{
 		Name: "queue.split.processingnanos",
 		Help: "Nanoseconds spent processing replicas in the split queue"}
+	metaSplitQueuePurgatory = metric.Metadata{
+		Name: "queue.split.purgatory",
+		Help: "Number of replicas in the split queue's purgatory, waiting to become splittable"}
 	metaTimeSeriesMaintenanceQueueSuccesses = metric.Metadata{
 		Name: "queue.tsmaintenance.process.success",
 		Help: "Number of replicas successfully processed by the time series maintenance queue"}
@@ -637,6 +640,7 @@ type StoreMetrics struct {
 	SplitQueueFailures                        *metric.Counter
 	SplitQueuePending                         *metric.Gauge
 	SplitQueueProcessingNanos                 *metric.Counter
+	SplitQueuePurgatory                       *metric.Gauge
 	TimeSeriesMaintenanceQueueSuccesses       *metric.Counter
 	TimeSeriesMaintenanceQueueFailures        *metric.Counter
 	TimeSeriesMaintenanceQueuePending         *metric.Gauge
@@ -824,6 +828,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitQueueFailures:                        metric.NewCounter(metaSplitQueueFailures),
 		SplitQueuePending:                         metric.NewGauge(metaSplitQueuePending),
 		SplitQueueProcessingNanos:                 metric.NewCounter(metaSplitQueueProcessingNanos),
+		SplitQueuePurgatory:                       metric.NewGauge(metaSplitQueuePurgatory),
 		TimeSeriesMaintenanceQueueSuccesses:       metric.NewCounter(metaTimeSeriesMaintenanceQueueFailures),
 		TimeSeriesMaintenanceQueueFailures:        metric.NewCounter(metaTimeSeriesMaintenanceQueueSuccesses),
 		TimeSeriesMaintenanceQueuePending:         metric.NewGauge(metaTimeSeriesMaintenanceQueuePending),

@@ -32,6 +32,13 @@ const (
 	// splitQueueTimerDuration is the duration between splits of queued ranges.
 	splitQueueTimerDuration = 0 // zero duration to process splits greedily.
 
+	// splitQueuePurgatoryCheckInterval is the interval at which replicas in
+	// purgatory make split attempts. Purgatory is used by the splitQueue to
+	// store ranges that are large enough to require a split but are
+	// unsplittable because they do not contain a suitable split key. Purgatory
+	// prevents them from repeatedly attempting to split at an unbounded rate.
+	splitQueuePurgatoryCheckInterval = 1 * time.Minute
+
 	// splits should be relatively isolated, other than requiring expensive
 	// RocksDB scans over part of the splitting range to recompute stats. We
 	// allow a limitted number of splits to be processed at once.
@@ -42,13 +49,23 @@ const (
 // or along intersecting zone config boundaries.
 type splitQueue struct {
 	*baseQueue
-	db *client.DB
+	db       *client.DB
+	purgChan <-chan time.Time
 }
 
 // newSplitQueue returns a new instance of splitQueue.
 func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQueue {
+	var purgChan <-chan time.Time
+	if c := store.TestingKnobs().SplitQueuePurgatoryChan; c != nil {
+		purgChan = c
+	} else {
+		purgTicker := time.NewTicker(splitQueuePurgatoryCheckInterval)
+		purgChan = purgTicker.C
+	}
+
 	sq := &splitQueue{
-		db: db,
+		db:       db,
+		purgChan: purgChan,
 	}
 	sq.baseQueue = newBaseQueue(
 		"split", sq, store, gossip,
@@ -62,6 +79,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 			failures:             store.metrics.SplitQueueFailures,
 			pending:              store.metrics.SplitQueuePending,
 			processingNanos:      store.metrics.SplitQueueProcessingNanos,
+			purgatory:            store.metrics.SplitQueuePurgatory,
 		},
 	)
 	return sq
@@ -89,6 +107,15 @@ func (sq *splitQueue) shouldQueue(
 	return
 }
 
+// unsplittableRangeError indicates that a split attempt failed because a no
+// suitable split key could be found.
+type unsplittableRangeError struct{}
+
+func (unsplittableRangeError) Error() string         { return "could not find valid split key" }
+func (unsplittableRangeError) purgatoryErrorMarker() {}
+
+var _ purgatoryError = unsplittableRangeError{}
+
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
 	err := sq.processAttempt(ctx, r, sysCfg)
@@ -113,7 +140,7 @@ func (sq *splitQueue) processAttempt(
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
-		if _, _, pErr := r.adminSplitWithDescriptor(
+		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{
 				Span: roachpb.Span{
@@ -122,8 +149,8 @@ func (sq *splitQueue) processAttempt(
 				SplitKey: splitKey.AsRawKey(),
 			},
 			desc,
-		); pErr != nil {
-			return errors.Wrapf(pErr.GoError(), "unable to split %s at key %q", r, splitKey)
+		); err != nil {
+			return errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
 		return nil
 	}
@@ -134,27 +161,12 @@ func (sq *splitQueue) processAttempt(
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && float64(size)/float64(maxBytes) > 1 {
-		if _, validSplitKey, pErr := r.adminSplitWithDescriptor(
+		_, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
 			desc,
-		); pErr != nil {
-			return pErr.GoError()
-		} else if !validSplitKey {
-			// If we couldn't find a split key, set the max-bytes for the range to
-			// double its current size to prevent future attempts to split the range
-			// until it grows again.
-			newMaxBytes := size * 2
-			r.SetMaxBytes(newMaxBytes)
-			log.VEventf(ctx, 2, "couldn't find valid split key, growing max bytes to %d", newMaxBytes)
-		} else {
-			// We successfully split the range, reset max-bytes to the zone setting.
-			zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-			if err != nil {
-				return err
-			}
-			r.SetMaxBytes(zone.RangeMaxBytes)
-		}
+		)
+		return err
 	}
 	return nil
 }
@@ -164,7 +176,7 @@ func (*splitQueue) timer(_ time.Duration) time.Duration {
 	return splitQueueTimerDuration
 }
 
-// purgatoryChan returns nil.
-func (*splitQueue) purgatoryChan() <-chan struct{} {
-	return nil
+// purgatoryChan returns the split queue's purgatory channel.
+func (sq *splitQueue) purgatoryChan() <-chan time.Time {
+	return sq.purgChan
 }
