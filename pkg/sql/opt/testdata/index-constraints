@@ -1223,3 +1223,36 @@ build-scalar,normalize,index-constraints vars=(string) index=(@1)
 ----
 [/'ABC' - /'ABD')
 Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF)%'
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 IS TRUE
+----
+[/true - /true]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 IS FALSE
+----
+[/false - /false]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 IS NOT TRUE
+----
+[ - /false]
+(/true - ]
+
+build-scalar,normalize,index-constraints vars=(bool) index=(@1)
+@1 IS NOT FALSE
+----
+[ - /false)
+[/true - ]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS NOT DISTINCT FROM 5
+----
+[/5 - /5]
+
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IS DISTINCT FROM 5
+----
+[ - /4]
+[/6 - ]
