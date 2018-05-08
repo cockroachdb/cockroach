@@ -244,7 +244,7 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,z:3] [ordering: +2]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1037.90
+ │    │    └── cost: 1017.54
  │    └── ""
  │         ├── best: (project G2 G3)
  │         └── cost: 1010.00
@@ -254,7 +254,7 @@ memo (optimized)
  │    │    └── cost: 1010.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1037.90
+ │         └── cost: 1017.54
  ├── G3: (projections G9 G6)
  ├── G4: (scan a,cols=(1-3))
  │    ├── ""
