@@ -152,6 +152,10 @@ func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 //
 // ----------------------------------------------------------------------
 
+func (f *Factory) extractColID(private memo.PrivateID) opt.ColumnID {
+	return f.mem.LookupPrivate(private).(opt.ColumnID)
+}
+
 func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
 	return f.mem.LookupPrivate(private).(opt.ColList)
 }
@@ -452,13 +456,6 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 	return f.lookupScalar(group).HasCorrelatedSubquery
 }
 
-// isScalarGroupBy returns true if the given grouping columns come from a
-// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
-// with any aggregate functions operating over the entire input expression.
-func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
-	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
-}
-
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -585,6 +582,9 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 //
 // ----------------------------------------------------------------------
 
+// constructNonLeftJoin maps a left join to an inner join and a full join to a
+// right join when it can be proved that the right side of the join always
+// produces at least one row for every row on the left.
 func (f *Factory) constructNonLeftJoin(
 	joinOp opt.Operator, left, right, on memo.GroupID,
 ) memo.GroupID {
@@ -601,6 +601,9 @@ func (f *Factory) constructNonLeftJoin(
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
 
+// constructNonRightJoin maps a right join to an inner join and a full join to a
+// left join when it can be proved that the left side of the join always
+// produces at least one row for every row on the right.
 func (f *Factory) constructNonRightJoin(
 	joinOp opt.Operator, left, right, on memo.GroupID,
 ) memo.GroupID {
@@ -636,6 +639,13 @@ func (f *Factory) colsAreKey(cols memo.PrivateID, group memo.GroupID) bool {
 		}
 	}
 	return false
+}
+
+// isScalarGroupBy returns true if the given grouping columns come from a
+// "scalar" GroupBy operator. A scalar GroupBy always returns exactly one row,
+// with any aggregate functions operating over the entire input expression.
+func (f *Factory) isScalarGroupBy(groupingCols memo.PrivateID) bool {
+	return f.mem.LookupPrivate(groupingCols).(opt.ColSet).Empty()
 }
 
 // ----------------------------------------------------------------------

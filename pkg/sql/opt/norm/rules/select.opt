@@ -60,9 +60,6 @@
 # is typically preferable because it minimizes the number of rows which Project
 # needs to process. This is especially important if Project is adding expensive
 # computed columns.
-#
-# This rule triggers a cycle with the FilterUnusedSelectCols rule. That rule
-# has the DetectCycle tag to break the cycle.
 [PushSelectIntoProject, Normalize]
 (Select
     (Project
