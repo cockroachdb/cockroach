@@ -42,7 +42,7 @@ func registerDrop(r *registry) {
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			t.Status("importing TPCC fixture")
+			t.WorkerStatus("importing TPCC fixture")
 			c.Run(ctx, c.Node(1), fmt.Sprintf(
 				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
 
@@ -53,9 +53,9 @@ func registerDrop(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			run := func(stmt string) {
-				t.Status(stmt)
-				_, err := db.ExecContext(ctx, stmt)
+			run := func(stmt string, args ...interface{}) {
+				t.WorkerStatus(stmt)
+				_, err := db.ExecContext(ctx, stmt, args...)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -88,22 +88,9 @@ func registerDrop(r *registry) {
 				}
 			}
 
-			deleted := int64(0)
-
 			for i := minWarehouse; i <= maxWarehouse; i++ {
-				t.Progress(float64(deleted) / float64(rows))
-				res, err := db.ExecContext(ctx,
-					"DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
-				if err != nil {
-					return err
-				}
-
-				rowsDeleted, err := res.RowsAffected()
-				if err != nil {
-					return err
-				}
-
-				deleted += rowsDeleted
+				t.Progress(float64(i) / float64(maxWarehouse))
+				run("DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
