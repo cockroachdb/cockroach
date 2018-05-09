@@ -477,8 +477,8 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 
 	for _, store := range node.stores {
 		storeSpec := base.StoreSpec{
-			Path:        store.dir,
-			SizeInBytes: int64(store.config.MaxRanges) * maxRangeBytes,
+			Path: store.dir,
+			Size: base.SizeSpec{InBytes: int64(store.config.MaxRanges) * maxRangeBytes},
 		}
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
