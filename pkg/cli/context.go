@@ -92,6 +92,7 @@ func initCLIDefaults() {
 	debugCtx.inputFile = ""
 	debugCtx.printSystemConfig = false
 	debugCtx.maxResults = 1000
+	debugCtx.ballastSize = base.SizeSpec{}
 
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
@@ -186,6 +187,7 @@ var debugCtx struct {
 	sizes             bool
 	replicated        bool
 	inputFile         string
+	ballastSize       base.SizeSpec
 	printSystemConfig bool
 	maxResults        int64
 }
