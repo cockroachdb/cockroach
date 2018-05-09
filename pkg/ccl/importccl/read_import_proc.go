@@ -35,6 +35,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+type readFileFunc func(context.Context, io.Reader, int32, string, func(finished bool) error) error
+
 type ctxProvider struct {
 	context.Context
 }
@@ -54,43 +56,33 @@ func groupWorkers(ctx context.Context, num int, f func(context.Context) error) e
 	return group.Wait()
 }
 
-// readCSV sends records on ch from CSV listed by dataFiles. The key part
-// of dataFiles is the unique index of the CSV file among all CSV files in
-// the IMPORT. comma, if non-zero, specifies the field separator. comment,
-// if non-zero, specifies the comment character. It returns the number of rows
-// read. progressFn, if not nil, is periodically invoked with a percentage of
-// the total progress of reading through all of the files. This percentage
+// readInputFile reads each of the passed dataFiles using the passed func. The
+// key part of dataFiles is the unique index of the data file among all files in
+// the IMPORT. progressFn, if not nil, is periodically invoked with a percentage
+// of the total progress of reading through all of the files. This percentage
 // attempts to use the Size() method of ExportStorage to determine how many
-// bytes must be read of the CSV files, and reports the percent of bytes read
+// bytes must be read of the input files, and reports the percent of bytes read
 // among all dataFiles. If any Size() fails for any file, then progress is
 // reported only after each file has been read.
-func readCSV(
+func readInputFiles(
 	ctx context.Context,
-	opts roachpb.CSVOptions,
-	expectedCols int,
 	dataFiles map[int32]string,
-	recordCh chan<- csvRecord,
+	fileFunc readFileFunc,
 	progressFn func(float32) error,
 	settings *cluster.Settings,
-) (int64, error) {
-	const batchSize = 500
-	expectedColsExtra := expectedCols + 1
+) error {
 	done := ctx.Done()
-	var count int64
-	if opts.Comma == 0 {
-		opts.Comma = ','
-	}
 
 	var totalBytes, readBytes int64
 	// Attempt to fetch total number of bytes for all files.
 	for _, dataFile := range dataFiles {
 		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		sz, err := es.Size(ctx, "")
 		es.Close()
@@ -110,96 +102,53 @@ func readCSV(
 		currentFile++
 		select {
 		case <-done:
-			return 0, ctx.Err()
+			return ctx.Err()
 		default:
 		}
-
-		err := func() error {
-			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
-			if err != nil {
-				return err
-			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, settings)
-			if err != nil {
-				return err
-			}
-			defer es.Close()
-			f, err := es.ReadFile(ctx, "")
-			if err != nil {
-				return err
-			}
-			bc := byteCounter{r: f}
-			cr := csv.NewReader(&bc)
-			cr.Comma = opts.Comma
-			cr.FieldsPerRecord = -1
-			cr.LazyQuotes = true
-			cr.Comment = opts.Comment
-
-			batch := csvRecord{
-				file:      dataFile,
-				fileIndex: dataFileIndex,
-				rowOffset: 1,
-				r:         make([][]string, 0, batchSize),
-			}
-
-			for i := 1; ; i++ {
-				record, err := cr.Read()
-				if err == io.EOF || len(batch.r) >= batchSize {
-					// if the batch isn't empty, we need to flush it.
-					if len(batch.r) > 0 {
-						select {
-						case <-done:
-							return ctx.Err()
-						case recordCh <- batch:
-							count += int64(len(batch.r))
-						}
-					}
-					// progressBytes is the number of read bytes at which to report job progress. A
-					// low value may cause excessive updates in the job table which can lead to
-					// very large rows due to MVCC saving each version.
-					const progressBytes = 100 << 20
-					if updateFromBytes && (err == io.EOF || bc.n > progressBytes) {
-						readBytes += bc.n
-						bc.n = 0
-						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
-							return err
-						}
-					}
-					if err == io.EOF {
-						break
-					}
-					batch.rowOffset = i
-					batch.r = make([][]string, 0, batchSize)
-				}
-				if err != nil {
-					return errors.Wrapf(err, "row %d: reading CSV record", i)
-				}
-				// Ignore the first N lines.
-				if uint32(i) <= opts.Skip {
-					continue
-				}
-				if len(record) == expectedCols {
-					// Expected number of columns.
-				} else if len(record) == expectedColsExtra && record[expectedCols] == "" {
-					// Line has the optional trailing comma, ignore the empty field.
-					record = record[:expectedCols]
-				} else {
-					return errors.Errorf("row %d: expected %d fields, got %d", i, expectedCols, len(record))
-				}
-				batch.r = append(batch.r, record)
-			}
-			return nil
-		}()
+		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
 		if err != nil {
-			return 0, errors.Wrap(err, dataFile)
+			return err
+		}
+		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		if err != nil {
+			return err
+		}
+		defer es.Close()
+		f, err := es.ReadFile(ctx, "")
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		bc := byteCounter{r: f}
+
+		wrappedProgressFn := func(finished bool) error { return nil }
+		if updateFromBytes {
+			const progressBytes = 100 << 20
+			wrappedProgressFn = func(finished bool) error {
+				// progressBytes is the number of read bytes at which to report job progress. A
+				// low value may cause excessive updates in the job table which can lead to
+				// very large rows due to MVCC saving each version.
+				if finished || bc.n > progressBytes {
+					readBytes += bc.n
+					bc.n = 0
+					if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+		}
+
+		if err := fileFunc(ctx, &bc, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
+			return errors.Wrap(err, dataFile)
 		}
 		if updateFromFiles {
 			if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
-				return 0, err
+				return err
 			}
 		}
 	}
-	return count, nil
+	return nil
 }
 
 type byteCounter struct {
@@ -213,6 +162,112 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	return n, err
 }
 
+type csvInputReader struct {
+	expectedCols int
+	recordCh     chan csvRecord
+	opts         roachpb.CSVOptions
+	tableDesc    *sqlbase.TableDescriptor
+}
+
+func newCSVInputReader(
+	ctx context.Context,
+	opts roachpb.CSVOptions,
+	tableDesc *sqlbase.TableDescriptor,
+	expectedCols int,
+) *csvInputReader {
+	return &csvInputReader{
+		opts:         opts,
+		expectedCols: expectedCols,
+		tableDesc:    tableDesc,
+		recordCh:     make(chan csvRecord),
+	}
+}
+
+func (c *csvInputReader) start(
+	ctx context.Context, group *errgroup.Group, kvCh chan []roachpb.KeyValue,
+) {
+	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(ctx, "convertcsv")
+		defer tracing.FinishSpan(span)
+
+		defer close(kvCh)
+		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
+			return c.convertRecord(ctx, kvCh)
+		})
+	})
+}
+
+func (c *csvInputReader) inputFinished() {
+	close(c.recordCh)
+}
+
+func (c *csvInputReader) readFile(
+	ctx context.Context,
+	input io.Reader,
+	inputIdx int32,
+	inputName string,
+	progressFn func(finished bool) error,
+) error {
+	done := ctx.Done()
+	cr := csv.NewReader(input)
+	if c.opts.Comma != 0 {
+		cr.Comma = c.opts.Comma
+	}
+	cr.FieldsPerRecord = -1
+	cr.LazyQuotes = true
+	cr.Comment = c.opts.Comment
+
+	const batchSize = 500
+
+	batch := csvRecord{
+		file:      inputName,
+		fileIndex: inputIdx,
+		rowOffset: 1,
+		r:         make([][]string, 0, batchSize),
+	}
+
+	var count int64
+	for i := 1; ; i++ {
+		record, err := cr.Read()
+		if err == io.EOF || len(batch.r) >= batchSize {
+			// if the batch isn't empty, we need to flush it.
+			if len(batch.r) > 0 {
+				select {
+				case <-done:
+					return ctx.Err()
+				case c.recordCh <- batch:
+					count += int64(len(batch.r))
+				}
+			}
+			if progressErr := progressFn(err == io.EOF); progressErr != nil {
+				return progressErr
+			}
+			if err == io.EOF {
+				break
+			}
+			batch.rowOffset = i
+			batch.r = make([][]string, 0, batchSize)
+		}
+		if err != nil {
+			return errors.Wrapf(err, "row %d: reading CSV record", i)
+		}
+		// Ignore the first N lines.
+		if uint32(i) <= c.opts.Skip {
+			continue
+		}
+		if len(record) == c.expectedCols {
+			// Expected number of columns.
+		} else if len(record) == c.expectedCols+1 && record[c.expectedCols] == "" {
+			// Line has the optional trailing comma, ignore the empty field.
+			record = record[:c.expectedCols]
+		} else {
+			return errors.Errorf("row %d: expected %d fields, got %d", i, c.expectedCols, len(record))
+		}
+		batch.r = append(batch.r, record)
+	}
+	return nil
+}
+
 type csvRecord struct {
 	r         [][]string
 	file      string
@@ -222,21 +277,15 @@ type csvRecord struct {
 
 // convertRecord converts CSV records into KV pairs and sends them on the
 // kvCh chan.
-func convertRecord(
-	ctx context.Context,
-	recordCh <-chan csvRecord,
-	kvCh chan<- []roachpb.KeyValue,
-	nullif *string,
-	tableDesc *sqlbase.TableDescriptor,
-) error {
+func (c *csvInputReader) convertRecord(ctx context.Context, kvCh chan<- []roachpb.KeyValue) error {
 	done := ctx.Done()
 
 	const kvBatchSize = 1000
-	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
-	visibleCols := tableDesc.VisibleColumns()
+	padding := 2 * (len(c.tableDesc.Indexes) + len(c.tableDesc.Families))
+	visibleCols := c.tableDesc.VisibleColumns()
 
-	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
-		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	ri, err := sqlbase.MakeRowInserter(nil /* txn */, c.tableDesc, nil, /* fkTables */
+		c.tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return errors.Wrap(err, "make row inserter")
 	}
@@ -246,7 +295,7 @@ func convertRecord(
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(c.tableDesc.Columns, c.tableDesc, &txCtx, &evalCtx)
 	if err != nil {
 		return errors.Wrap(err, "process default columns")
 	}
@@ -272,15 +321,15 @@ func convertRecord(
 
 	computedIVarContainer := sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    tableDesc.Columns,
+		Cols:    c.tableDesc.Columns,
 	}
 
-	for batch := range recordCh {
+	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
 			rowNum := batch.rowOffset + batchIdx
 			for i, v := range record {
 				col := visibleCols[i]
-				if nullif != nil && v == *nullif {
+				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
 					datums[i] = tree.DNull
 				} else {
 					var err error
@@ -312,7 +361,7 @@ func convertRecord(
 			var computedCols []sqlbase.ColumnDescriptor
 
 			row, err := sql.GenerateInsertRow(
-				defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, datums, &computedIVarContainer)
+				defaultExprs, computeExprs, cols, computedCols, evalCtx, c.tableDesc, datums, &computedIVarContainer)
 			if err != nil {
 				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
 			}
@@ -398,7 +447,7 @@ func (cp *readImportDataProcessor) OutputTypes() []sqlbase.ColumnType {
 }
 
 func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
-	ctx, span := tracing.ChildSpan(ctx, "readCSVProcessor")
+	ctx, span := tracing.ChildSpan(ctx, "readImportDataProcessor")
 	defer tracing.FinishSpan(span)
 
 	if wg != nil {
@@ -407,23 +456,25 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 
 	group, gCtx := errgroup.WithContext(ctx)
 	done := gCtx.Done()
-	recordCh := make(chan csvRecord)
 	kvCh := make(chan []roachpb.KeyValue)
 	sampleCh := make(chan sqlbase.EncDatumRow)
 
-	// Read CSV into CSV records
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "readcsv")
-		defer tracing.FinishSpan(span)
-		defer close(recordCh)
+	c := newCSVInputReader(ctx, cp.inputFromat.Csv, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
+	c.start(ctx, group, kvCh)
 
-		job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+	// Read input files into kvs
+	group.Go(func() error {
+		sCtx, span := tracing.ChildSpan(gCtx, "readImportFiles")
+		defer tracing.FinishSpan(span)
+		defer c.inputFinished()
+
+		job, err := cp.registry.LoadJob(sCtx, cp.progress.JobID)
 		if err != nil {
 			return err
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+			return job.Progressed(sCtx, func(ctx context.Context, details jobs.Details) float32 {
 				d := details.(*jobs.Payload_Import).Import
 				slotpct := pct * cp.progress.Contribution
 				if len(d.Tables[0].SamplingProgress) > 0 {
@@ -435,23 +486,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			})
 		}
 
-		_, err = readCSV(sCtx, cp.inputFromat.Csv, len(cp.tableDesc.VisibleColumns()),
-			cp.uri, recordCh, progFn, cp.settings)
-		return err
+		return readInputFiles(sCtx, cp.uri, c.readFile, progFn, cp.settings)
 	})
-	// Convert CSV records to KVs
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "convertcsv")
-		defer tracing.FinishSpan(span)
 
-		defer close(kvCh)
-		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return convertRecord(ctx, recordCh, kvCh, cp.inputFromat.Csv.NullEncoding, &cp.tableDesc)
-		})
-	})
 	// Sample KVs
 	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "samplecsv")
+		sCtx, span := tracing.ChildSpan(gCtx, "sampleImportKVs")
 		defer tracing.FinishSpan(span)
 
 		defer close(sampleCh)
@@ -500,7 +540,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	})
 	// Send sampled KVs to dist sql
 	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "sendcsvkv")
+		sCtx, span := tracing.ChildSpan(gCtx, "sendImportKVs")
 		defer tracing.FinishSpan(span)
 
 		for row := range sampleCh {
