@@ -27,6 +27,7 @@ case "${cmd}" in
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "default,cloud-platform"
+    gcloud compute firewall-rules create "mosh" --allow udp:60000-61000
 
     # Retry while vm and sshd to start up.
     retry gcloud compute ssh "${NAME}" --command=true
@@ -50,6 +51,14 @@ case "${cmd}" in
     ;;
     ssh)
     retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    ;;
+    mosh)
+     read -r -a arr <<< "$(gcloud compute ssh "${NAME}" --dry-run)"
+     echo "${arr[@]}"
+     host="${arr[-1]}"
+     echo $host
+     unset 'arr[${#arr[@]}-1]'
+     mosh --ssh=$(printf '%q' "${arr}") $host
     ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
