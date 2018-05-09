@@ -1274,7 +1274,7 @@ CockroachDB supports the following flags:
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
 				return tree.NewDDateFromTime(t, ctx.GetLocation()), nil
 			},
-			Info: "Returns the current date.",
+			Info: "Returns the date of the current transaction." + txnTSContextDoc,
 		},
 	},
 
@@ -1291,7 +1291,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
-			Info: "Returns the current statement's timestamp.",
+			Info: "Returns the start time of the current statement.",
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
@@ -1300,7 +1300,7 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
-			Info: "Returns the current statement's timestamp.",
+			Info: "Returns the start time of the current statement.",
 		},
 	},
 
@@ -1313,7 +1313,13 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
-			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+			Info: `Returns the logical time of the current transaction.
+
+This function is reserved for testing purposes by CockroachDB
+developers and its definition may change without prior notice.
+
+Note that uses of this function disable server-side optimizations and
+may increase either contention or retry errors, or both.`,
 		},
 	},
 
@@ -1326,7 +1332,7 @@ CockroachDB supports the following flags:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
 			},
-			Info: "Returns the current wallclock time.",
+			Info: "Returns the current system time on one of the cluster nodes.",
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
@@ -1335,7 +1341,7 @@ CockroachDB supports the following flags:
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
 			},
-			Info: "Returns the current wallclock time.",
+			Info: "Returns the current system time on one of the cluster nodes.",
 		},
 	},
 
@@ -2561,6 +2567,14 @@ var ceilImpl = []tree.Builtin{
 	}, "Calculates the smallest integer greater than `val`."),
 }
 
+var txnTSContextDoc = `
+
+The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.`
+
+var txnTSDoc = `Returns the time of the current transaction.` + txnTSContextDoc
+
 var txnTSImpl = []tree.Builtin{
 	{
 		Types:             tree.ArgTypes{},
@@ -2570,7 +2584,7 @@ var txnTSImpl = []tree.Builtin{
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestamp(time.Microsecond), nil
 		},
-		Info: "Returns the current transaction's timestamp.",
+		Info: txnTSDoc,
 	},
 	{
 		Types:      tree.ArgTypes{},
@@ -2579,7 +2593,7 @@ var txnTSImpl = []tree.Builtin{
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 		},
-		Info: "Returns the current transaction's timestamp.",
+		Info: txnTSDoc,
 	},
 }
 
