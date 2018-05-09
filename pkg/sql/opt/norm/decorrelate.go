@@ -40,7 +40,7 @@ func (f *Factory) hoistSelectSubquery(input, filter memo.GroupID) memo.GroupID {
 	hoister.init(f.evalCtx, f, input)
 	replaced := hoister.hoistAll(filter)
 	out := f.ConstructSelect(hoister.input(), replaced)
-	return f.ConstructProject(out, f.projectColumns(f.outputCols(input)))
+	return f.ConstructSimpleProject(out, f.outputCols(input))
 }
 
 // hoistProjectSubquery searches the Project operator's projections for
@@ -86,8 +86,7 @@ func (f *Factory) hoistJoinSubquery(op opt.Operator, left, right, on memo.GroupI
 	hoister.init(f.evalCtx, f, right)
 	replaced := hoister.hoistAll(on)
 	out := f.constructApplyJoin(op, left, hoister.input(), replaced)
-	projections := f.projectColumns(f.outputCols(left).Union(f.outputCols(right)))
-	return f.ConstructProject(out, projections)
+	return f.ConstructSimpleProject(out, f.outputCols(left).Union(f.outputCols(right)))
 }
 
 // hoistValuesSubquery searches the Values operator's projections for correlated
@@ -121,9 +120,9 @@ func (f *Factory) hoistValuesSubquery(rows memo.ListID, cols memo.PrivateID) mem
 	}
 
 	out := f.ConstructValues(f.mem.InternList(replaced), cols)
-	projections := f.projectColumns(f.mem.GroupProperties(out).Relational.OutputCols)
+	projCols := f.mem.GroupProperties(out).Relational.OutputCols
 	out = f.ConstructInnerJoinApply(hoister.input(), out, f.ConstructTrue())
-	return f.ConstructProject(out, projections)
+	return f.ConstructSimpleProject(out, projCols)
 }
 
 // projectColumns creates a Projections operator with one column for each of the
@@ -334,7 +333,9 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 // unaffected.
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
 	constColID := r.f.Metadata().AddColumn("true", types.Bool)
-	constCols := r.f.InternColList(opt.ColList{constColID})
+	projDef := memo.ProjectionsOpDef{
+		SynthesizedCols: opt.ColList{constColID},
+	}
 	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
 	return r.f.ConstructGroupBy(
@@ -342,7 +343,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 			subquery,
 			r.f.ConstructProjections(
 				r.internSingletonList(r.f.ConstructConst(r.f.InternDatum(tree.DBoolTrue))),
-				constCols,
+				r.f.InternProjectionsOpDef(&projDef),
 			),
 		),
 		r.f.ConstructAggregations(
@@ -414,14 +415,14 @@ func (r *subqueryHoister) constructGroupByAny(subquery memo.GroupID) memo.GroupI
 	compVar := r.f.referenceSingleColumn(subquery)
 
 	notNullColID := r.f.Metadata().AddColumn("not_null", types.Bool)
-	notNullCols := r.f.InternColList(opt.ColList{notNullColID})
+	notNullCols := memo.ProjectionsOpDef{SynthesizedCols: opt.ColList{notNullColID}}
 	notNullVar := r.f.ConstructVariable(r.f.InternColumnID(notNullColID))
 
 	aggColID := r.f.Metadata().AddColumn("bool_or", types.Bool)
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
 
 	caseColID := r.f.Metadata().AddColumn("case", types.Bool)
-	caseCols := r.f.InternColList(opt.ColList{caseColID})
+	caseCols := memo.ProjectionsOpDef{SynthesizedCols: opt.ColList{caseColID}}
 
 	boolNull := r.f.ConstructNull(r.f.boolType())
 
@@ -434,7 +435,7 @@ func (r *subqueryHoister) constructGroupByAny(subquery memo.GroupID) memo.GroupI
 				),
 				r.f.ConstructProjections(
 					r.internSingletonList(r.f.ConstructIsNot(compVar, boolNull)),
-					notNullCols,
+					r.f.InternProjectionsOpDef(&notNullCols),
 				),
 			),
 			r.f.ConstructAggregations(
@@ -454,7 +455,7 @@ func (r *subqueryHoister) constructGroupByAny(subquery memo.GroupID) memo.GroupI
 					}),
 				),
 			),
-			caseCols,
+			r.f.InternProjectionsOpDef(&caseCols),
 		),
 	)
 }

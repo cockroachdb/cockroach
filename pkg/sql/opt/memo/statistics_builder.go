@@ -648,8 +648,8 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *opt.ColumnStatis
 		// distinct count of x.
 		// TODO(rytaft): This assumption breaks down for certain types of
 		// expressions, such as (x < y).
-		outputCols := sb.ev.Child(1).Private().(opt.ColList)
-		for i, col := range outputCols {
+		def := sb.ev.Child(1).Private().(*ProjectionsOpDef)
+		for i, col := range def.SynthesizedCols {
 			if reqOtherCols.Contains(int(col)) {
 				reqInputCols.UnionWith(sb.ev.Child(1).Child(i).Logical().Scalar.OuterCols)
 			}

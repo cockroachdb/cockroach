@@ -22,12 +22,9 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── ordering: +1
- │    ├── scan t
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    └── ordering: +1
- │    └── projections
- │         ├── variable: t.k [type=int]
- │         └── variable: t.v [type=int]
+ │    └── scan t
+ │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── ordering: +1
  └── const: 5 [type=int]
 
 build
@@ -41,11 +38,8 @@ limit
  │    ├── ordering: +2
  │    └── project
  │         ├── columns: t.k:1(int!null) t.v:2(int)
- │         ├── scan t
- │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │         └── projections
- │              ├── variable: t.k [type=int]
- │              └── variable: t.v [type=int]
+ │         └── scan t
+ │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  └── const: 5 [type=int]
 
 build
@@ -55,11 +49,8 @@ limit
  ├── columns: k:1(int!null) v:2(int)
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
- │    ├── scan t
- │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    └── projections
- │         ├── variable: t.k [type=int]
- │         └── variable: t.v [type=int]
+ │    └── scan t
+ │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  └── const: 3 [type=int]
 
 build
@@ -71,11 +62,9 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null)
  │    ├── ordering: +1
- │    ├── scan t
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    └── ordering: +1
- │    └── projections
- │         └── variable: t.k [type=int]
+ │    └── scan t
+ │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── ordering: +1
  └── const: 1 [type=int]
 
 build
@@ -90,11 +79,9 @@ limit
  │    ├── project
  │    │    ├── columns: t.k:1(int!null)
  │    │    ├── ordering: +1
- │    │    ├── scan t
- │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    │    └── ordering: +1
- │    │    └── projections
- │    │         └── variable: t.k [type=int]
+ │    │    └── scan t
+ │    │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │         └── ordering: +1
  │    └── const: 3 [type=int]
  └── const: 1 [type=int]
 
@@ -107,12 +94,9 @@ offset
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── ordering: +1
- │    ├── scan t
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    └── ordering: +1
- │    └── projections
- │         ├── variable: t.k [type=int]
- │         └── variable: t.v [type=int]
+ │    └── scan t
+ │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── ordering: +1
  └── const: 5 [type=int]
 
 build
@@ -124,11 +108,9 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null)
  │    ├── ordering: +1
- │    ├── scan t
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    └── ordering: +1
- │    └── projections
- │         └── variable: t.k [type=int]
+ │    └── scan t
+ │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── ordering: +1
  └── const: 2 [type=int]
 
 build
@@ -151,18 +133,15 @@ limit
  │    ├── columns: t.v:2(int) column4:4(decimal)
  │    ├── ordering: -2
  │    └── project
- │         ├── columns: column4:4(decimal) t.v:2(int)
- │         ├── group-by
- │         │    ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
- │         │    ├── grouping columns: t.k:1(int!null) t.v:2(int)
- │         │    ├── scan t
- │         │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │         │    └── aggregations
- │         │         └── sum [type=decimal]
- │         │              └── variable: t.w [type=int]
- │         └── projections
- │              ├── variable: column4 [type=decimal]
- │              └── variable: t.v [type=int]
+ │         ├── columns: t.v:2(int) column4:4(decimal)
+ │         └── group-by
+ │              ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
+ │              ├── grouping columns: t.k:1(int!null) t.v:2(int)
+ │              ├── scan t
+ │              │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │              └── aggregations
+ │                   └── sum [type=decimal]
+ │                        └── variable: t.w [type=int]
  └── const: 10 [type=int]
 
 build
@@ -177,13 +156,10 @@ limit
  │    └── group-by
  │         ├── columns: t.v:2(int)
  │         ├── grouping columns: t.v:2(int)
- │         ├── project
- │         │    ├── columns: t.v:2(int)
- │         │    ├── scan t
- │         │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │         │    └── projections
- │         │         └── variable: t.v [type=int]
- │         └── aggregations
+ │         └── project
+ │              ├── columns: t.v:2(int)
+ │              └── scan t
+ │                   └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  └── const: 10 [type=int]
 
 build
@@ -281,21 +257,16 @@ SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 10)
 ----
 project
  ├── columns: k:1(int!null)
- ├── limit
- │    ├── columns: t.k:1(int!null) t.v:2(int)
- │    ├── sort
- │    │    ├── columns: t.k:1(int!null) t.v:2(int)
- │    │    ├── ordering: +2
- │    │    └── project
- │    │         ├── columns: t.k:1(int!null) t.v:2(int)
- │    │         ├── scan t
- │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │         └── projections
- │    │              ├── variable: t.k [type=int]
- │    │              └── variable: t.v [type=int]
- │    └── const: 10 [type=int]
- └── projections
-      └── variable: t.k [type=int]
+ └── limit
+      ├── columns: t.k:1(int!null) t.v:2(int)
+      ├── sort
+      │    ├── columns: t.k:1(int!null) t.v:2(int)
+      │    ├── ordering: +2
+      │    └── project
+      │         ├── columns: t.k:1(int!null) t.v:2(int)
+      │         └── scan t
+      │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+      └── const: 10 [type=int]
 
 # This kind of query can be used to work around memory usage limits. We need to
 # choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
@@ -312,17 +283,14 @@ limit
  │    └── group-by
  │         ├── columns: t.w:3(int)
  │         ├── grouping columns: t.w:3(int)
- │         ├── limit
- │         │    ├── columns: t.w:3(int)
- │         │    ├── sort
- │         │    │    ├── columns: t.w:3(int)
- │         │    │    ├── ordering: +3
- │         │    │    └── project
- │         │    │         ├── columns: t.w:3(int)
- │         │    │         ├── scan t
- │         │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │         │    │         └── projections
- │         │    │              └── variable: t.w [type=int]
- │         │    └── const: 100 [type=int]
- │         └── aggregations
+ │         └── limit
+ │              ├── columns: t.w:3(int)
+ │              ├── sort
+ │              │    ├── columns: t.w:3(int)
+ │              │    ├── ordering: +3
+ │              │    └── project
+ │              │         ├── columns: t.w:3(int)
+ │              │         └── scan t
+ │              │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │              └── const: 100 [type=int]
  └── const: 25 [type=int]

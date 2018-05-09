@@ -84,7 +84,7 @@ func (f *Factory) canInline(group memo.GroupID) bool {
 func (f *Factory) inlineProjections(target, projections memo.GroupID) memo.GroupID {
 	projectionsExpr := f.mem.NormExpr(projections).AsProjections()
 	projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
-	projectionsColList := f.extractColList(projectionsExpr.Cols())
+	projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
 
 	// Recursively walk the tree looking for references to projection expressions
 	// that need to be replaced.
@@ -93,7 +93,7 @@ func (f *Factory) inlineProjections(target, projections memo.GroupID) memo.Group
 		varExpr := f.mem.NormExpr(child).AsVariable()
 		if varExpr != nil {
 			varColID := f.extractColID(varExpr.Col())
-			for i, id := range projectionsColList {
+			for i, id := range projectionsDef.SynthesizedCols {
 				if varColID == id {
 					return projectionsElems[i]
 				}

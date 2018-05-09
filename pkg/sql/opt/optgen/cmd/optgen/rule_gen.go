@@ -487,7 +487,11 @@ func (g *ruleGen) genConstantMatch(
 	// operator. If there are fewer arguments than there are children, then
 	// only the first N children need to be matched.
 	for index, matchArg := range match.Args {
-		fieldName := g.compiled.LookupDefine(opName).Fields[index].Name
+		def := g.compiled.LookupDefine(opName)
+		if index >= len(def.Fields) {
+			panic(fmt.Sprintf("too many match arguments:\n%v", match))
+		}
+		fieldName := def.Fields[index].Name
 		g.genMatch(matchArg, fmt.Sprintf("%s.%s()", exprName, fieldName), false /* noMatch */)
 	}
 }

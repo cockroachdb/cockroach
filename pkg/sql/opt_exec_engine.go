@@ -182,6 +182,22 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 func (ee *execEngine) ConstructSimpleProject(
 	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
+	if r, ok := n.(*renderNode); ok {
+		// If the top node is already a renderNode, just rearrange the columns.
+		// TODO(radu): perhaps don't do this if cols have duplicates? (in case that
+		// render is expensive to compute).
+		oldCols, oldRenders := r.columns, r.render
+		r.columns = make(sqlbase.ResultColumns, len(cols))
+		r.render = make([]tree.TypedExpr, len(cols))
+		for i, ord := range cols {
+			r.columns[i] = oldCols[ord]
+			if colNames != nil {
+				r.columns[i].Name = colNames[i]
+			}
+			r.render[i] = oldRenders[ord]
+		}
+		return r, nil
+	}
 	var inputCols sqlbase.ResultColumns
 	if colNames == nil {
 		// We will need the names of the input columns.
