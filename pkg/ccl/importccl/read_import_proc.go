@@ -215,7 +215,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 
 	group, gCtx := errgroup.WithContext(ctx)
 	done := gCtx.Done()
-	kvCh := make(chan []roachpb.KeyValue)
+	kvCh := make(chan kvBatch)
 	sampleCh := make(chan sqlbase.EncDatumRow)
 
 	c := newCSVInputReader(ctx, cp.inputFromat.Csv, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
