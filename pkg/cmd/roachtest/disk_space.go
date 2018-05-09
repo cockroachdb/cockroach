@@ -22,18 +22,19 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	maxQueryTime        = 10 * time.Second
-	mbInBytes    uint64 = 1024 * 1024
+	mbInBytes    uint64 = 1 << 20
 )
 
 type diskUsageTestCase struct {
@@ -43,7 +44,10 @@ type diskUsageTestCase struct {
 	singleKeyOpProb  float64
 }
 
-func (tc *diskUsageTestCase) numNodes() (numNodes int) {
+func (tc *diskUsageTestCase) numNodes() (numNodes int, err error) {
+	if tc.ratioDiskFilled != nil && tc.diskEmptyInBytes != nil {
+		return 0, errors.Errorf("both ratioDiskFilled and diskEmptyInBytes can't be set in test case")
+	}
 	if tc.ratioDiskFilled != nil {
 		numNodes = len(tc.ratioDiskFilled)
 	} else {
@@ -53,13 +57,13 @@ func (tc *diskUsageTestCase) numNodes() (numNodes int) {
 }
 
 func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestCase) {
-	numNodes := tc.numNodes()
+	numNodes, err := tc.numNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	c.Put(ctx, workload, "./workload", c.Node(numNodes))
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	fillBallast := filepath.Join(filepath.Dir(workload), "fill_ballast")
-	fillBallastBinary := "./fill_ballast"
-	c.Put(ctx, fillBallast, fillBallastBinary, c.All())
 	c.Start(ctx, c.All())
 
 	loadDuration := " --duration=" + (duration / 2).String()
@@ -86,18 +90,28 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	if err := m.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	ballastFilePath := "data/ballast_file_to_fill_store"
+	ballastFilePath := "{store-dir}/ballast_file_to_fill_store"
+	mFillBallast, ctxFillBallast := errgroup.WithContext(ctx)
 	for i := 1; i <= numNodes; i++ {
-		fillBallastCommand := []string{fillBallastBinary, "--ballast_file", ballastFilePath}
-		if tc.ratioDiskFilled != nil {
-			fillBallastCommand = append(fillBallastCommand, "--fill_ratio", fmt.Sprint(tc.ratioDiskFilled[i]))
-		}
-		if tc.diskEmptyInBytes != nil {
-			fillBallastCommand = append(fillBallastCommand, "--disk_left_bytes", fmt.Sprint(tc.diskEmptyInBytes[i-1]))
-		}
-		if err := c.RunE(ctx, c.Node(i), fillBallastCommand...); err != nil {
-			c.l.printf("Failed to create ballast file on node %d due to error: %v\n", i, err)
-		}
+		nodeIdx := i
+		mFillBallast.Go(
+			func() error {
+				fillBallastCommand := []string{"./cockroach", "debug", "ballast", ballastFilePath, "--size"}
+				if ratio, ok := tc.ratioDiskFilled[nodeIdx]; ok {
+					fillBallastCommand = append(fillBallastCommand, fmt.Sprint(ratio))
+				}
+				if diskEmpty, ok := tc.diskEmptyInBytes[nodeIdx]; ok {
+					fillBallastCommand = append(fillBallastCommand, fmt.Sprintf("-%v", diskEmpty))
+				}
+				if err := c.RunE(ctxFillBallast, c.Node(nodeIdx), fillBallastCommand...); err != nil {
+					return errors.Errorf("failed to create ballast file on node %d due to error: %v", i, err)
+				}
+				return nil
+			},
+		)
+	}
+	if err := mFillBallast.Wait(); err != nil {
+		t.Fatal(err)
 	}
 
 	dbOne := c.Conn(ctx, 1)
@@ -122,12 +136,12 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		return diskUsageOnNodes
 	}
 
-	const stmtZone = "CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
+	const stmtZone = "ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
 	run(stmtZone)
 
 	t.Status("Starting inserts and deletes")
 	m2, ctxWorkLoad := errgroup.WithContext(ctx)
-	for j := 3; j <= numNodes; j++ {
+	for j := 1; j <= numNodes; j++ {
 		nodeID := j
 		m2.Go(
 			func() error {
@@ -138,9 +152,11 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 					randomSeed := rand.Float64()
 					var k int64
 					if randomSeed < tc.singleKeyOpProb {
-						// Simulate hot row update loop
+						// Simulate hot row update loop.
 						k = 0
 					} else {
+						// This number is different across nodes across restarts assuming there
+						// are less than math.MaxInt32 inserts per node
 						k = int64(j)*int64(math.MaxInt32) + int64(count)
 					}
 					ctxQuery, cancelQuery1 := context.WithTimeout(ctxWorkLoad, maxQueryTime)
@@ -168,8 +184,8 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 	printDiskUsages := func() {
 		for i := 1; i <= numNodes; i++ {
-			quietL, _ := newLogger("disk_usage", strconv.Itoa(i), "", ioutil.Discard, os.Stderr)
-			output, err := c.RunWithBuffer(ctx, quietL, c.Node(i), "df", "-h", "data/")
+			quietL, _ := newLogger("disk_space", strconv.Itoa(i), "", ioutil.Discard, os.Stderr)
+			output, err := c.RunWithBuffer(ctx, quietL, c.Node(i), "df", "-h", "{store-dir}")
 			if err != nil {
 				c.l.printf("Failed to run df on node %d due to error: %v\n", i, err)
 			} else {
@@ -189,11 +205,19 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 				return
 			case <-ticker.C:
 				printDiskUsages()
-				if i < 2 {
+				// Start checking the steady state from 3rd iteration(i=2), as steady state  is
+				// reached at second iteration. Here, We expect around 10 seconds of MVCC data that
+				// hasn't been GCed. We can't compare the first iteration and second iteration as in
+				// the first iteration, nothing has been written and GCed, the second iteration will
+				// be after 1 minute where cockroach will have extra 10 seconds data.
+				if i == 1 {
 					lastDiskUsages = diskUsages()
-				} else {
+				} else if i > 1 {
 					currentDiskUsages := diskUsages()
-					const maxIncreaseInDiskUsageAllowed = int(10 * mbInBytes)
+					// Assuming 1ms for inserts and deletes, 0.1KB of data per row, and replication factor
+					// of 3 we assume 3MB of data per node per node. Giving GC some free space, we make
+					// the maxIncreaseInDiskUsageAllowed 12MB.
+					const maxIncreaseInDiskUsageAllowed = int(12 * mbInBytes)
 					for j := 0; j < numNodes; j++ {
 						increaseInDiskUsage := currentDiskUsages[j] - lastDiskUsages[j]
 						if increaseInDiskUsage > maxIncreaseInDiskUsageAllowed {
@@ -233,7 +257,7 @@ func registerDiskUsage(r *registry) {
 	const seventyMB = uint64(70) * mbInBytes
 
 	testCases := []diskUsageTestCase{
-		// Check the behaviour when disk space left is of around one range
+		// Check the behavior when disk space left is of around one range
 		{
 			// The workload involves both hot row update and mix rows with equal probability
 			name:             "update_mix_hot_key",
@@ -252,7 +276,7 @@ func registerDiskUsage(r *registry) {
 			diskEmptyInBytes: map[int]uint64{1: seventyMB, 2: seventyMB, 3: seventyMB, 4: seventyMB},
 			singleKeyOpProb:  0.0,
 		},
-		// Check the behaviour when disk space left is around 90%. This is to trigger
+		// Check the behavior when disk space left is around 90%. This is to trigger
 		// specific logic in cockroach that uses specific %age of disk used(Mainly rebalancing).
 		{
 			// The workload involves both hot row update and mix rows with equal probability
@@ -276,10 +300,13 @@ func registerDiskUsage(r *registry) {
 
 	for i := range testCases {
 		testCase := testCases[i]
-		numNodes := testCase.numNodes()
+		numNodes, err := testCase.numNodes()
+		if err != nil {
+			continue
+		}
 		r.Add(
 			testSpec{
-				Name:  fmt.Sprintf("disk_space/nodes=%d/duration=%s/tc=%s", numNodes, duration, testCase.name),
+				Name:  fmt.Sprintf("disk_space/tc=%s", testCase.name),
 				Nodes: nodes(numNodes),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					if local {

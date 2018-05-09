@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -62,6 +65,16 @@ Pretty-prints all keys in a store.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugKeys),
+}
+
+var debugBallastCmd = &cobra.Command{
+	Use:   "ballast <file>",
+	Short: "create a ballast file",
+	Long: `
+Create a ballast file to fill the store directory up to a given amount
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDebugBallast,
 }
 
 func parseRangeID(arg string) (roachpb.RangeID, error) {
@@ -150,6 +163,55 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
+}
+
+func runDebugBallast(cmd *cobra.Command, args []string) error {
+	ballastFile := args[0] // guaranteed to exist
+	dataDirectory := filepath.Dir(ballastFile)
+	fs := sysutil.StatfsT{}
+
+	err := sysutil.Statfs(dataDirectory, &fs)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat the directory %s", dataDirectory)
+	}
+	total := int64(fs.Blocks) * fs.Bsize
+	free := int64(fs.Bavail) * fs.Bsize
+	used := total - free
+	var targetUsage int64
+	p := debugCtx.ballastSize.Percent
+	if math.Abs(p) > 100 {
+		return errors.Errorf("absolute percentage value %f greater than 100", p)
+	}
+	b := debugCtx.ballastSize.InBytes
+	switch {
+	case p > 0:
+		fillRatio := p / float64(100)
+		targetUsage = int64((fillRatio) * float64(total))
+	case p < 0:
+		// negative means leave the absolute %age of disk space
+		fillRatio := 1.0 + (p / float64(100))
+		targetUsage = int64((fillRatio) * float64(total))
+	case b > 0:
+		targetUsage = b
+	case b < 0:
+		// negative means to leave that many bytes of disk space
+		targetUsage = total + b
+	}
+	if used > targetUsage {
+		return errors.Errorf("Used space %v already more than needed to be filled %v\n", used, targetUsage)
+	}
+	if used == targetUsage {
+		return nil
+	}
+	ballastSize := targetUsage - used
+	f, err := os.Create(ballastFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to create ballast file")
+	}
+	if err := sysutil.Fallocate(int(f.Fd()), 0, 0, ballastSize); err != nil {
+		return errors.Wrap(err, "failed to fallocate to ballast file")
+	}
+	return nil
 }
 
 var debugRangeDataCmd = &cobra.Command{
@@ -1031,6 +1093,7 @@ func init() {
 }
 
 var debugCmds = []*cobra.Command{
+	debugBallastCmd,
 	debugKeysCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
