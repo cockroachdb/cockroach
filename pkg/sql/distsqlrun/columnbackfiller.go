@@ -82,6 +82,7 @@ func (cb *columnBackfiller) runChunk(
 			cb.backfiller.spec.OtherTables,
 			sp,
 			chunkSize,
+			true,
 		)
 		return err
 	})

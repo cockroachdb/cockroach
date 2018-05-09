@@ -80,14 +80,12 @@ func (ib *indexBackfiller) runChunk(
 	for i, m := range mutations {
 		added[i] = *m.GetIndex()
 	}
-	secondaryIndexEntries := make([]sqlbase.IndexEntry, len(mutations))
 
 	var key roachpb.Key
 	transactionalChunk := func(ctx context.Context) error {
 		return ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
-			key, err = ib.RunIndexBackfillChunk(ctx, txn, ib.spec.Table, added,
-				secondaryIndexEntries, sp, chunkSize)
+			key, err = ib.RunIndexBackfillChunk(ctx, txn, ib.spec.Table, sp, chunkSize, true)
 			return err
 		})
 	}
@@ -109,8 +107,7 @@ func (ib *indexBackfiller) runChunk(
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		var err error
-		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.spec.Table, added,
-			secondaryIndexEntries, sp, chunkSize)
+		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.spec.Table, sp, chunkSize)
 		return err
 	}); err != nil {
 		return nil, err

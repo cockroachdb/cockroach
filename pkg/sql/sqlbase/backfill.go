@@ -138,6 +138,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	otherTables []TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
+	commit bool,
 ) (roachpb.Key, error) {
 	fkTables, _ := TablesNeededForFKs(
 		ctx,
@@ -250,7 +251,11 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		}
 	}
 	// Write the new row values.
-	if err := txn.CommitInBatch(ctx, b); err != nil {
+	writeBatch := txn.Run
+	if commit {
+		writeBatch = txn.CommitInBatch
+	}
+	if err := writeBatch(ctx, b); err != nil {
 		return roachpb.Key{}, ConvertBackfillError(ctx, &tableDesc, b)
 	}
 	return cb.fetcher.Key(), nil
@@ -278,6 +283,8 @@ func ConvertBackfillError(ctx context.Context, tableDesc *TableDescriptor, b *cl
 // IndexBackfiller is capable of backfilling an index.
 type IndexBackfiller struct {
 	backfiller
+
+	added []IndexDescriptor
 
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[ColumnID]int
@@ -313,6 +320,7 @@ func (ib *IndexBackfiller) Init(desc TableDescriptor) error {
 					valNeededForCol.Add(i)
 				}
 			}
+			ib.added = append(ib.added, *idx)
 		}
 	}
 
@@ -344,12 +352,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *client.Txn,
 	tableDesc TableDescriptor,
-	added []IndexDescriptor,
-	buffer []IndexEntry,
 	sp roachpb.Span,
 	chunkSize int64,
 ) ([]IndexEntry, roachpb.Key, error) {
-	entries := make([]IndexEntry, 0, chunkSize*int64(len(added)))
+	buffer := make([]IndexEntry, len(ib.added))
+	entries := make([]IndexEntry, 0, chunkSize*int64(len(ib.added)))
 
 	// Get the next set of rows.
 	//
@@ -386,9 +393,9 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes which can append entries to the end of the slice. If we don't do this, then everything
 		// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
 		// subsequent rows and we would then have duplicates in entries on output.
-		buffer = buffer[:len(added)]
+		buffer = buffer[:len(ib.added)]
 		if buffer, err = EncodeSecondaryIndexes(
-			&tableDesc, added, ib.colIdxMap,
+			&tableDesc, ib.added, ib.colIdxMap,
 			ib.rowVals, buffer); err != nil {
 			return nil, nil, err
 		}
@@ -402,13 +409,11 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	ctx context.Context,
 	txn *client.Txn,
 	tableDesc TableDescriptor,
-	added []IndexDescriptor,
-	buffer []IndexEntry,
 	sp roachpb.Span,
 	chunkSize int64,
+	commit bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(
-		ctx, txn, tableDesc, added, buffer, sp, chunkSize)
+	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +422,12 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	for _, entry := range entries {
 		batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
 	}
-	if err := txn.CommitInBatch(ctx, batch); err != nil {
+
+	writeBatch := txn.Run
+	if commit {
+		writeBatch = txn.CommitInBatch
+	}
+	if err := writeBatch(ctx, batch); err != nil {
 		return nil, ConvertBackfillError(ctx, &tableDesc, batch)
 	}
 	return key, nil

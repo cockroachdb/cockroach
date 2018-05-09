@@ -154,6 +154,8 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.TableDescriptor
 
+	createdTables []sqlbase.ID
+
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
@@ -400,6 +402,7 @@ func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) er
 		tc.leasedTables = tc.leasedTables[:0]
 	}
 	tc.uncommittedTables = nil
+	tc.createdTables = nil
 
 	if opt == blockForDBCacheUpdate {
 		for _, uc := range tc.uncommittedDatabases {
@@ -440,6 +443,20 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 	}
 	tc.uncommittedTables = append(tc.uncommittedTables, &desc)
 	tc.releaseAllDescriptors()
+}
+
+func (tc *TableCollection) addCreatedTable(id sqlbase.ID) {
+	tc.createdTables = append(tc.createdTables, id)
+	tc.releaseAllDescriptors()
+}
+
+func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
+	for _, t := range tc.createdTables {
+		if t == id {
+			return true
+		}
+	}
+	return false
 }
 
 type dbAction bool
@@ -488,7 +505,9 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 func (tc *TableCollection) getUncommittedTable(
 	dbID sqlbase.ID, tn *tree.TableName, required bool,
 ) (refuseFurtherLookup bool, table *sqlbase.TableDescriptor, err error) {
-	for _, table := range tc.uncommittedTables {
+	// Walk latest to earliest.
+	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
+		table := tc.uncommittedTables[i]
 		// If a table has gotten renamed we'd like to disallow using the old names.
 		// The renames could have happened in another transaction but it's still okay
 		// to disallow the use of the old name in this transaction because the other
@@ -618,6 +637,10 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: virtual descriptors cannot be stored, found: %v", tableDesc)
+	}
+
+	if p.Tables().isCreatedTable(tableDesc.ID) {
+		runSchemaChangesInTxn(ctx, p.txn, p.EvalContext(), tableDesc)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {

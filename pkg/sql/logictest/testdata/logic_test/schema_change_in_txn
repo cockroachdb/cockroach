@@ -1,0 +1,177 @@
+# LogicTest: default parallel-stmts
+
+subtest create_with_other_commands_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT into test.parent values (1)
+
+statement ok
+CREATE TABLE test.chill (id int primary key, parent_id int)
+
+# random schema change that doesn't require a backfill.
+statement ok
+ALTER TABLE test.chill RENAME TO test.child
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# index is over data added in the transaction so the backfill runs
+# within the trasaction.
+statement ok
+CREATE INDEX idx_child_parent_id ON test.child (parent_id)
+
+# FK can be added because the index is visible.
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (2, 1)
+
+# check that the index is indeed visible.
+query II
+SELECT * FROM test.child@idx_child_parent_id
+----
+1 1
+2 1
+
+statement ok
+COMMIT
+
+subtest create_reference_to_create_outside_txn_17949
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE b (parent_id INT REFERENCES parent(id));
+
+# table b is not visible to the transaction #17949
+statement error pgcode 42P01 relation "b" does not exist
+INSERT INTO b VALUES (1);
+
+statement ok
+ROLLBACK
+
+subtest create_as_with_add_column_index_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+# index is only over data added in the transaction so the backfill occurs
+# within the trasaction.
+statement ok
+create INDEX idx_quantity ON stock (quantity)
+
+statement ok
+ALTER TABLE stock ADD COLUMN c INT AS (quantity + 4) STORED
+
+# check that the index is indeed visible.
+query TII
+SELECT * FROM test.stock@idx_quantity
+----
+cups   10 14
+forks  15 19
+plates 30 34
+
+statement ok
+COMMIT
+
+subtest create_as_with_reuse_column_index_name_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE warehouse (item STRING PRIMARY KEY, quantity INT, UNIQUE (quantity), INDEX bar (quantity))
+
+statement ok
+INSERT INTO warehouse VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok 
+DROP INDEX warehouse@bar
+
+statement ok
+ALTER TABLE warehouse DROP quantity
+
+# See if the column and index names can be reused.
+statement ok
+ALTER TABLE warehouse ADD COLUMN quantity INT DEFAULT 23
+
+statement ok
+CREATE INDEX bar ON warehouse (item)
+
+# check that the index is indeed visible.
+query TI
+SELECT * FROM warehouse@bar
+----
+cups   23
+forks  23
+plates 23
+
+statement ok
+COMMIT
+
+subtest create_as_drop_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE hood (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+DROP TABLE hood
+
+statement count 3
+CREATE TABLE hood (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+query TI
+SELECT * FROM hood
+----
+cups   10
+plates 30
+forks  15
+
+statement ok
+COMMIT
+
+subtest create_as_rename_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE shop (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+ALTER TABLE shop RENAME TO ship
+
+statement count 3
+CREATE TABLE shop (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+query TI
+SELECT * FROM shop
+----
+cups   10
+plates 30
+forks  15
+
+query TI
+SELECT * FROM ship
+----
+cups   10
+plates 30
+forks  15
+
+statement ok
+COMMIT
+
