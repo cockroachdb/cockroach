@@ -93,16 +93,16 @@ x:int  column3:int  y:int  column4:int  column5:int
 3      4            30     31           33
 
 exec hide-colnames
-EXPLAIN (VERBOSE) SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
+EXPLAIN (VERBOSE) SELECT u * v + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
-render          ·         ·                  (column5)           ·
- │              render 0  column3 + column4  ·                   ·
- └── render     ·         ·                  (column3, column4)  ·
-      │         render 0  x + 3              ·                   ·
-      │         render 1  y + 10             ·                   ·
-      └── scan  ·         ·                  (x, y)              ·
-·               table     a@primary          ·                   ·
-·               spans     ALL                ·                   ·
+render          ·         ·                              (column5)           ·
+ │              render 0  column4 + (column3 * column4)  ·                   ·
+ └── render     ·         ·                              (column3, column4)  ·
+      │         render 0  x + 3                          ·                   ·
+      │         render 1  y + 10                         ·                   ·
+      └── scan  ·         ·                              (x, y)              ·
+·               table     a@primary                      ·                   ·
+·               spans     ALL                            ·                   ·
 
 exec
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)

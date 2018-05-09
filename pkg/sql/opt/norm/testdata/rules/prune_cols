@@ -235,7 +235,7 @@ project
 
 # Select nested in select.
 opt
-SELECT i FROM (SELECT k, i, s, f+1.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
+SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 ----
 project
  ├── columns: i:2(int)
@@ -249,9 +249,9 @@ project
  │    │    │    └── keys: (1)
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: a.i [type=int, outer=(2)]
- │    │         └── plus [type=float, outer=(3)]
+ │    │         └── div [type=float, outer=(3)]
  │    │              ├── variable: a.f [type=float, outer=(3)]
- │    │              └── const: 1.0 [type=float]
+ │    │              └── const: 2.0 [type=float]
  │    └── filters [type=bool, outer=(2,5)]
  │         └── eq [type=bool, outer=(2,5)]
  │              ├── variable: f [type=float, outer=(5)]
