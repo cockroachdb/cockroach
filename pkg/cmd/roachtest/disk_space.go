@@ -22,28 +22,34 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	maxQueryTime        = 10 * time.Second
-	mbInBytes    uint64 = 1024 * 1024
+	mbInBytes    uint64 = 1 << 20
 )
 
 type diskUsageTestCase struct {
-	name             string
+	name string
+	// Negative values here imply given space has to be left in the store directory.
 	ratioDiskFilled  map[int]float64
 	diskEmptyInBytes map[int]uint64
 	singleKeyOpProb  float64
 }
 
-func (tc *diskUsageTestCase) numNodes() (numNodes int) {
+func (tc *diskUsageTestCase) numNodes() (numNodes int, err error) {
+	if tc.ratioDiskFilled != nil && tc.diskEmptyInBytes != nil {
+		return 0, errors.Errorf("both ratioDiskFilled and diskEmptyInBytes can't be set in test case")
+	}
 	if tc.ratioDiskFilled != nil {
 		numNodes = len(tc.ratioDiskFilled)
 	} else {
@@ -53,13 +59,13 @@ func (tc *diskUsageTestCase) numNodes() (numNodes int) {
 }
 
 func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestCase) {
-	numNodes := tc.numNodes()
+	numNodes, err := tc.numNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	c.Put(ctx, workload, "./workload", c.Node(numNodes))
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	fillBallast := filepath.Join(filepath.Dir(workload), "fill_ballast")
-	fillBallastBinary := "./fill_ballast"
-	c.Put(ctx, fillBallast, fillBallastBinary, c.All())
 	c.Start(ctx, c.All())
 
 	loadDuration := " --duration=" + (duration / 2).String()
@@ -70,8 +76,8 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 	m, ctxWG := errgroup.WithContext(ctx)
 	for i, cmd := range workloads {
-		cmd := cmd // copy is important for goroutine
-		i := i     // ditto
+		cmd := cmd // Copy is important for goroutine.
+		i := i     // Ditto.
 
 		cmd = fmt.Sprintf(cmd, nodes)
 		m.Go(func() error {
@@ -86,18 +92,28 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	if err := m.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	ballastFilePath := "data/ballast_file_to_fill_store"
+	ballastFilePath := "{store-dir}/ballast_file_to_fill_store"
+	mFillBallast, ctxFillBallast := errgroup.WithContext(ctx)
 	for i := 1; i <= numNodes; i++ {
-		fillBallastCommand := []string{fillBallastBinary, "--ballast_file", ballastFilePath}
-		if tc.ratioDiskFilled != nil {
-			fillBallastCommand = append(fillBallastCommand, "--fill_ratio", fmt.Sprint(tc.ratioDiskFilled[i]))
-		}
-		if tc.diskEmptyInBytes != nil {
-			fillBallastCommand = append(fillBallastCommand, "--disk_left_bytes", fmt.Sprint(tc.diskEmptyInBytes[i-1]))
-		}
-		if err := c.RunE(ctx, c.Node(i), fillBallastCommand...); err != nil {
-			c.l.printf("Failed to create ballast file on node %d due to error: %v\n", i, err)
-		}
+		nodeIdx := i
+		mFillBallast.Go(
+			func() error {
+				fillBallastCommand := []string{"./cockroach", "debug", "ballast", ballastFilePath, "--size"}
+				if ratio, ok := tc.ratioDiskFilled[nodeIdx]; ok {
+					fillBallastCommand = append(fillBallastCommand, fmt.Sprint(ratio))
+				}
+				if diskEmpty, ok := tc.diskEmptyInBytes[nodeIdx]; ok {
+					fillBallastCommand = append(fillBallastCommand, fmt.Sprintf("-%v", diskEmpty))
+				}
+				if err := c.RunE(ctxFillBallast, c.Node(nodeIdx), fillBallastCommand...); err != nil {
+					return errors.Errorf("failed to create ballast file on node %d due to error: %v", i, err)
+				}
+				return nil
+			},
+		)
+	}
+	if err := mFillBallast.Wait(); err != nil {
+		t.Fatal(err)
 	}
 
 	dbOne := c.Conn(ctx, 1)
@@ -110,24 +126,24 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		}
 	}
 
-	diskUsages := func() []int {
-		diskUsageOnNodes := make([]int, numNodes)
+	clusterDiskUsage := func() int {
+		totalDiskUsage := 0
 		for i := 1; i <= numNodes; i++ {
-			var err error
-			diskUsageOnNodes[i-1], err = getDiskUsageInByte(ctx, c, i)
+			diskUsageOnNodeI, err := getDiskUsageInByte(ctx, c, i)
 			if err != nil {
 				t.Fatalf("Failed to get disk usage on node %d, error: %v", i, err)
 			}
+			totalDiskUsage += diskUsageOnNodeI
 		}
-		return diskUsageOnNodes
+		return totalDiskUsage
 	}
 
-	const stmtZone = "CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
+	const stmtZone = "ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
 	run(stmtZone)
 
-	t.Status("Starting inserts and deletes")
+	t.Status("Running inserts and deletes")
 	m2, ctxWorkLoad := errgroup.WithContext(ctx)
-	for j := 3; j <= numNodes; j++ {
+	for j := 1; j <= numNodes; j++ {
 		nodeID := j
 		m2.Go(
 			func() error {
@@ -138,19 +154,17 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 					randomSeed := rand.Float64()
 					var k int64
 					if randomSeed < tc.singleKeyOpProb {
-						// Simulate hot row update loop
+						// Simulate hot row update loop.
 						k = 0
 					} else {
+						// This number is different across nodes for the whole test phase assuming there
+						// are less than math.MaxInt32 inserts per node.
 						k = int64(j)*int64(math.MaxInt32) + int64(count)
 					}
 					ctxQuery, cancelQuery1 := context.WithTimeout(ctxWorkLoad, maxQueryTime)
 					defer cancelQuery1()
-					bytes := make([]byte, 10)
-					_, err := rand.Read(bytes)
-					if err != nil {
-						c.l.printf("Failed to generate random bytes, error: %v\n", err)
-						bytes = []byte{1, 2}
-					}
+					rng, _ := randutil.NewPseudoRand()
+					bytes := randutil.RandBytes(rng, 2000)
 					if _, err := db.ExecContext(ctxQuery, "UPSERT INTO kv.kv(k, v) Values($1, $2)", k, bytes); err != nil {
 						return err
 					}
@@ -168,8 +182,8 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 	printDiskUsages := func() {
 		for i := 1; i <= numNodes; i++ {
-			quietL, _ := newLogger("disk_usage", strconv.Itoa(i), "", ioutil.Discard, os.Stderr)
-			output, err := c.RunWithBuffer(ctx, quietL, c.Node(i), "df", "-h", "data/")
+			quietL, _ := newLogger("disk_space", strconv.Itoa(i), "", ioutil.Discard, os.Stderr)
+			output, err := c.RunWithBuffer(ctx, quietL, c.Node(i), "df", "-h", "{store-dir}")
 			if err != nil {
 				c.l.printf("Failed to run df on node %d due to error: %v\n", i, err)
 			} else {
@@ -178,7 +192,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		}
 	}
 
-	var lastDiskUsages []int
+	var steadyStateDiskUsage int
 	done := make(chan struct{})
 	go func() {
 		i := 0
@@ -189,13 +203,22 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 				return
 			case <-ticker.C:
 				printDiskUsages()
-				if i < 2 {
-					lastDiskUsages = diskUsages()
+				// In steady state, we expect around 10 seconds(TTL) of MVCC data that hasn't been GCed,
+				// which should remain constant. As the disk space depends on various things including
+				// when RocksDB memtable gets flushed, we keep a buffer of extra 10 secs MVCC data as
+				// breathing space for GC. We are checking the whole cluster disk space usage to avoid
+				// discrepancies due to range rebalancing.
+				if i == 0 {
+					steadyStateDiskUsage = clusterDiskUsage()
 				} else {
-					currentDiskUsages := diskUsages()
-					const maxIncreaseInDiskUsageAllowed = int(10 * mbInBytes)
-					for j := 0; j < numNodes; j++ {
-						increaseInDiskUsage := currentDiskUsages[j] - lastDiskUsages[j]
+					currentDiskUsages := clusterDiskUsage()
+					// Assuming lower bound of 1ms for inserts and deletes, 2KB of data per row, and
+					// replication factor of 3, we expect 60MB of data per node per 10 second(TTL).
+					// This counts for around 240MB data for the whole cluster. But empirically, there is
+					// less than 150MB increase for ttlInSeconds of 10 secs.
+					const maxIncreaseInDiskUsageAllowed = int(200 * mbInBytes)
+					if currentDiskUsages > steadyStateDiskUsage {
+						increaseInDiskUsage := currentDiskUsages - steadyStateDiskUsage
 						if increaseInDiskUsage > maxIncreaseInDiskUsageAllowed {
 							t.Fatalf(
 								"Difference between disk usage since last checked %d is more than max allowed %d",
@@ -203,8 +226,9 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 								maxIncreaseInDiskUsageAllowed,
 							)
 						}
+					} else {
+						steadyStateDiskUsage = currentDiskUsages
 					}
-					lastDiskUsages = currentDiskUsages
 				}
 				i++
 			}
@@ -215,7 +239,6 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		t.Fatal(err)
 	}
 	close(done)
-	printDiskUsages()
 	for i := 1; i <= numNodes; i++ {
 		if err := c.RunE(
 			ctx,
@@ -230,56 +253,59 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 
 func registerDiskUsage(r *registry) {
 	duration := 20 * time.Minute
-	const seventyMB = uint64(70) * mbInBytes
+	const twoHundredMB = uint64(200) * mbInBytes
 
 	testCases := []diskUsageTestCase{
-		// Check the behaviour when disk space left is of around one range
+		// Check the behavior when disk space left is of around one range.
 		{
-			// The workload involves both hot row update and mix rows with equal probability
+			// The workload involves both hot row update and mix rows with equal probability.
 			name:             "update_mix_hot_key",
-			diskEmptyInBytes: map[int]uint64{1: seventyMB, 2: seventyMB, 3: seventyMB, 4: seventyMB},
+			diskEmptyInBytes: map[int]uint64{1: twoHundredMB, 2: twoHundredMB, 3: twoHundredMB, 4: twoHundredMB},
 			singleKeyOpProb:  0.5,
 		},
 		{
-			// The workload involves only update to a single row (hot row update)
+			// The workload involves only update to a single row (hot row update).
 			name:             "update_hot_key",
-			diskEmptyInBytes: map[int]uint64{1: seventyMB, 2: seventyMB, 3: seventyMB, 4: seventyMB},
+			diskEmptyInBytes: map[int]uint64{1: twoHundredMB, 2: twoHundredMB, 3: twoHundredMB, 4: twoHundredMB},
 			singleKeyOpProb:  1.0,
 		},
 		{
-			// The workload involves only update to a random mix of rows
+			// The workload involves only update to a random mix of rows.
 			name:             "update_mix",
-			diskEmptyInBytes: map[int]uint64{1: seventyMB, 2: seventyMB, 3: seventyMB, 4: seventyMB},
+			diskEmptyInBytes: map[int]uint64{1: twoHundredMB, 2: twoHundredMB, 3: twoHundredMB, 4: twoHundredMB},
 			singleKeyOpProb:  0.0,
 		},
-		// Check the behaviour when disk space left is around 90%. This is to trigger
+		// Check the behavior when disk space left is around 90%. This is to trigger
 		// specific logic in cockroach that uses specific %age of disk used(Mainly rebalancing).
 		{
-			// The workload involves both hot row update and mix rows with equal probability
+			// The workload involves both hot row update and mix rows with equal probability.
 			name:            "update_mix_hot_key_percent",
-			ratioDiskFilled: map[int]float64{1: 0.9, 2: 0.9, 3: 0.9, 4: 0.9},
+			ratioDiskFilled: map[int]float64{1: -0.1, 2: -0.05, 3: -0.1, 4: -0.1},
 			singleKeyOpProb: 0.5,
 		},
 		{
-			// The workload involves only update to a single row (hot row update)
+			// The workload involves only update to a single row (hot row update).
 			name:            "update_hot_key_percent",
-			ratioDiskFilled: map[int]float64{1: 0.9, 2: 0.9, 3: 0.9, 4: 0.9},
+			ratioDiskFilled: map[int]float64{1: -0.1, 2: -0.05, 3: -0.1, 4: -0.1},
 			singleKeyOpProb: 1.0,
 		},
 		{
-			// The workload involves only update to a random mix of rows
+			// The workload involves only update to a random mix of rows.
 			name:            "update_mix_percent",
-			ratioDiskFilled: map[int]float64{1: 0.9, 2: 0.9, 3: 0.9, 4: 0.9},
+			ratioDiskFilled: map[int]float64{1: -0.1, 2: -0.05, 3: -0.1, 4: -0.1},
 			singleKeyOpProb: 0.0,
 		},
 	}
 
 	for i := range testCases {
 		testCase := testCases[i]
-		numNodes := testCase.numNodes()
+		numNodes, err := testCase.numNodes()
+		if err != nil {
+			continue
+		}
 		r.Add(
 			testSpec{
-				Name:  fmt.Sprintf("disk_space/nodes=%d/duration=%s/tc=%s", numNodes, duration, testCase.name),
+				Name:  fmt.Sprintf("disk_space/tc=%s", testCase.name),
 				Nodes: nodes(numNodes),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					if local {
