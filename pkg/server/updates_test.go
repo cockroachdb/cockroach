@@ -265,7 +265,7 @@ func TestReportUsage(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		expectedUsageReports++
 
-		node := ts.node.recorder.GetStatusSummary(ctx)
+		node := ts.node.recorder.GenerateNodeStatus(ctx)
 		ts.reportDiagnostics(ctx, 0)
 
 		keyCounts := make(map[roachpb.StoreID]int64)

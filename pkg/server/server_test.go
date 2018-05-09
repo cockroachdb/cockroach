@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -67,6 +68,46 @@ func TestSelfBootstrap(t *testing.T) {
 
 	if s.RPCContext().ClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
+	}
+}
+
+// TestHealthCheck runs a basic sanity check on the health checker.
+func TestHealthCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx := context.Background()
+
+	recorder := s.(*TestServer).Server.recorder
+
+	{
+		summary := *recorder.GenerateNodeStatus(ctx)
+		result := recorder.CheckHealth(ctx, summary)
+		if len(result.Alerts) != 0 {
+			t.Fatal(result)
+		}
+	}
+
+	store, err := s.(*TestServer).Server.node.stores.GetStore(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store.Metrics().UnavailableRangeCount.Inc(100)
+
+	{
+		summary := *recorder.GenerateNodeStatus(ctx)
+		result := recorder.CheckHealth(ctx, summary)
+		expAlerts := []status.HealthAlert{
+			{StoreID: 1, Category: status.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
+		}
+		if !reflect.DeepEqual(expAlerts, result.Alerts) {
+			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)
+		}
 	}
 }
 
