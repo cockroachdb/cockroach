@@ -349,7 +349,7 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nodeSummary := recorder.GetStatusSummary(context.Background())
+	nodeSummary := recorder.GenerateNodeStatus(context.Background())
 	if nodeSummary == nil {
 		t.Fatalf("recorder did not return nodeSummary")
 	}
@@ -369,7 +369,7 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Errorf("recorder did not produce expected NodeSummary; diff:\n %s", pretty.Diff(e, a))
 	}
 
-	// Make sure that all methods other than GetStatusSummary can operate in
+	// Make sure that all methods other than GenerateNodeStatus can operate in
 	// parallel with each other (i.e. even if recorder.mu is RLocked).
 	recorder.mu.RLock()
 	var wg sync.WaitGroup
