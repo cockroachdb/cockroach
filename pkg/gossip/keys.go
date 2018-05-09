@@ -53,6 +53,10 @@ const (
 	// string address of the node. E.g. node:1 => 127.0.0.1:24001
 	KeyNodeIDPrefix = "node"
 
+	// KeyHealthAlertPrefix is the key prefix for gossiping health alerts. The
+	// value is a proto of type HealthCheckResult.
+	KeyNodeHealthAlertPrefix = "health-alert"
+
 	// KeyNodeLivenessPrefix is the key prefix for gossiping node liveness info.
 	KeyNodeLivenessPrefix = "liveness"
 
@@ -112,8 +116,8 @@ func IsNodeIDKey(key string) bool {
 	return strings.HasPrefix(key, KeyNodeIDPrefix+separator)
 }
 
-// NodeIDFromKey attempts to extract a NodeID from the provided key.
-// The key should have been constructed by MakeNodeIDKey.
+// NodeIDFromKey attempts to extract a NodeID from the provided key. The key
+// should have been constructed by MakeNodeIDKey or MakeNodeHealthAlertKey.
 // Returns an error if the key is not of the correct type or is not parsable.
 func NodeIDFromKey(key string) (roachpb.NodeID, error) {
 	trimmedKey, err := removePrefixFromKey(key, KeyNodeIDPrefix)
@@ -125,6 +129,12 @@ func NodeIDFromKey(key string) (roachpb.NodeID, error) {
 		return 0, errors.Wrapf(err, "failed parsing NodeID from key %q", key)
 	}
 	return roachpb.NodeID(nodeID), nil
+}
+
+// MakeNodeHealthAlertKey returns the gossip key under which the given node can
+// gossip health alerts.
+func MakeNodeHealthAlertKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyNodeHealthAlertPrefix, strconv.Itoa(int(nodeID)))
 }
 
 // MakeNodeLivenessKey returns the gossip key for node liveness info.

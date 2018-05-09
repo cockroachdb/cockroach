@@ -561,7 +561,7 @@ type StoreMetrics struct {
 	RdbNumSSTables              *metric.Gauge
 
 	// TODO(mrtracy): This should be removed as part of #4465. This is only
-	// maintained to keep the current structure of StatusSummaries; it would be
+	// maintained to keep the current structure of NodeStatus; it would be
 	// better to convert the Gauges above into counters which are adjusted
 	// accordingly.
 
@@ -829,8 +829,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		SplitQueuePending:                         metric.NewGauge(metaSplitQueuePending),
 		SplitQueueProcessingNanos:                 metric.NewCounter(metaSplitQueueProcessingNanos),
 		SplitQueuePurgatory:                       metric.NewGauge(metaSplitQueuePurgatory),
-		TimeSeriesMaintenanceQueueSuccesses:       metric.NewCounter(metaTimeSeriesMaintenanceQueueFailures),
-		TimeSeriesMaintenanceQueueFailures:        metric.NewCounter(metaTimeSeriesMaintenanceQueueSuccesses),
+		TimeSeriesMaintenanceQueueSuccesses:       metric.NewCounter(metaTimeSeriesMaintenanceQueueSuccesses),
+		TimeSeriesMaintenanceQueueFailures:        metric.NewCounter(metaTimeSeriesMaintenanceQueueFailures),
 		TimeSeriesMaintenanceQueuePending:         metric.NewGauge(metaTimeSeriesMaintenanceQueuePending),
 		TimeSeriesMaintenanceQueueProcessingNanos: metric.NewCounter(metaTimeSeriesMaintenanceQueueProcessingNanos),
 

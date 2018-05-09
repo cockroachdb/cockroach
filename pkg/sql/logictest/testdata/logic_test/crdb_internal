@@ -19,6 +19,7 @@ cluster_sessions
 cluster_settings
 create_statements
 forward_dependencies
+gossip_alerts
 gossip_liveness
 gossip_nodes
 index_columns
@@ -323,6 +324,9 @@ select * from crdb_internal.kv_node_status
 
 query error pq: only superusers are allowed to read crdb_internal.kv_store_status
 select * from crdb_internal.kv_store_status
+
+query error pq: only superusers are allowed to read crdb_internal.gossip_alerts
+select * from crdb_internal.gossip_alerts
 
 # Anyone can see the executable version.
 query T
