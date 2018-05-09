@@ -110,7 +110,7 @@ project
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  ├── select
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null) uv.u:5(int)
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null) uv.u:5(int!null)
  │    ├── stats: [rows=1000, distinct(5)=1]
  │    ├── keys: (1) weak(3,4)
  │    ├── left-join-apply
@@ -122,12 +122,12 @@ project
  │    │    │    ├── stats: [rows=1000]
  │    │    │    └── keys: (1) weak(3,4)
  │    │    ├── max1-row
- │    │    │    ├── columns: uv.u:5(int)
+ │    │    │    ├── columns: uv.u:5(int!null)
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=1, distinct(5)=1]
  │    │    │    └── select
- │    │    │         ├── columns: uv.u:5(int)
+ │    │    │         ├── columns: uv.u:5(int!null)
  │    │    │         ├── outer: (1)
  │    │    │         ├── stats: [rows=111]
  │    │    │         ├── scan uv
@@ -189,16 +189,16 @@ project
  │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    ├── max1-row
- │    │    │    ├── columns: uv.u:8(int)
+ │    │    │    ├── columns: uv.u:8(int!null)
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=1]
  │    │    │    └── offset
- │    │    │         ├── columns: uv.u:8(int)
+ │    │    │         ├── columns: uv.u:8(int!null)
  │    │    │         ├── outer: (1)
  │    │    │         ├── stats: [rows=110]
  │    │    │         ├── select
- │    │    │         │    ├── columns: uv.u:8(int)
+ │    │    │         │    ├── columns: uv.u:8(int!null)
  │    │    │         │    ├── outer: (1)
  │    │    │         │    ├── stats: [rows=111]
  │    │    │         │    ├── scan uv
@@ -263,16 +263,16 @@ project
  │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    ├── max1-row
- │    │    │    ├── columns: uv.u:8(int)
+ │    │    │    ├── columns: uv.u:8(int!null)
  │    │    │    ├── outer: (1)
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=1]
  │    │    │    └── offset
- │    │    │         ├── columns: uv.u:8(int)
+ │    │    │         ├── columns: uv.u:8(int!null)
  │    │    │         ├── outer: (1)
  │    │    │         ├── stats: [rows=110]
  │    │    │         ├── select
- │    │    │         │    ├── columns: uv.u:8(int)
+ │    │    │         │    ├── columns: uv.u:8(int!null)
  │    │    │         │    ├── outer: (1)
  │    │    │         │    ├── stats: [rows=111]
  │    │    │         │    ├── scan uv
@@ -490,11 +490,11 @@ opt
 SELECT * FROM (SELECT COUNT(*) cnt FROM xysd) WHERE EXISTS(SELECT * FROM uv WHERE cnt=1)
 ----
 semi-join
- ├── columns: cnt:5(int)
+ ├── columns: cnt:5(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1000]
  ├── select
- │    ├── columns: cnt:5(int)
+ │    ├── columns: cnt:5(int!null)
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=1, distinct(5)=1]
  │    ├── group-by
@@ -529,12 +529,12 @@ semi-join-apply
  │    ├── stats: [rows=10]
  │    └── keys: (1) weak(3,4)
  ├── limit
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── select
- │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv
@@ -584,12 +584,12 @@ anti-join-apply
  │    ├── stats: [rows=10]
  │    └── keys: (1) weak(3,4)
  ├── limit
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── select
- │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv

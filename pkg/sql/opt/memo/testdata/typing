@@ -118,7 +118,7 @@ build
 SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool]

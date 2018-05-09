@@ -188,9 +188,9 @@ project
  ├── columns: column5:5(int)
  ├── stats: [rows=120]
  ├── select
- │    ├── columns: a.y:2(int) a.z:3(float!null) a.s:4(string) column5:5(int)
+ │    ├── columns: a.y:2(int) a.z:3(float!null) a.s:4(string!null) column5:5(int)
  │    ├── stats: [rows=120, distinct(4)=2]
- │    ├── keys: weak(3,4)
+ │    ├── keys: (3,4)
  │    ├── group-by
  │    │    ├── columns: a.y:2(int) a.z:3(float!null) a.s:4(string) column5:5(int)
  │    │    ├── grouping columns: a.y:2(int) a.z:3(float!null) a.s:4(string)
@@ -225,11 +225,11 @@ build
 SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 project
- ├── columns: column5:5(decimal) s:4(string)
+ ├── columns: column5:5(decimal!null) s:4(string)
  ├── stats: [rows=1]
  ├── keys: weak(4)
  ├── select
- │    ├── columns: a.s:4(string) column5:5(decimal)
+ │    ├── columns: a.s:4(string) column5:5(decimal!null)
  │    ├── stats: [rows=1, distinct(5)=1]
  │    ├── keys: weak(4)
  │    ├── group-by

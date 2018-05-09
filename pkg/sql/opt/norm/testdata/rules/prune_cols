@@ -159,7 +159,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  ├── select
- │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int!null)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -176,7 +176,7 @@ opt
 SELECT k, i FROM a WHERE k=1 AND i<5
 ----
 select
- ├── columns: k:1(int!null) i:2(int)
+ ├── columns: k:1(int!null) i:2(int!null)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -240,7 +240,7 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 project
  ├── columns: i:2(int)
  ├── select
- │    ├── columns: a.i:2(int) f:5(float)
+ │    ├── columns: a.i:2(int) f:5(float!null)
  │    ├── project
  │    │    ├── columns: a.i:2(int) f:5(float)
  │    │    ├── scan a
@@ -267,7 +267,7 @@ SELECT f, f+1.1 FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
 project
  ├── columns: f:3(float) column6:6(float)
  ├── select
- │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal)
+ │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal!null)
  │    ├── keys: (1)
  │    ├── group-by
  │    │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal)
@@ -1181,9 +1181,9 @@ SELECT a.k, xy.y FROM a INNER JOIN xy ON a.k=xy.x WHERE a.i < 5
 project
  ├── columns: k:1(int!null) y:6(int)
  ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.y:6(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int!null) xy.x:5(int!null) xy.y:6(int)
  │    ├── select
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int!null)
  │    │    ├── keys: (1)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -1210,7 +1210,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  ├── select
- │    ├── columns: a.k:1(int!null) column5:5(decimal)
+ │    ├── columns: a.k:1(int!null) column5:5(decimal!null)
  │    ├── keys: (1)
  │    ├── group-by
  │    │    ├── columns: a.k:1(int!null) column5:5(decimal)

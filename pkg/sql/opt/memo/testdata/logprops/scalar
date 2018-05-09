@@ -76,11 +76,11 @@ select
  │    └── keys: (1)
  └── exists [type=bool, outer=(1)]
       └── project
-           ├── columns: uv.u:3(int) uv.v:4(int!null)
+           ├── columns: uv.u:3(int!null) uv.v:4(int!null)
            ├── outer: (1)
            ├── stats: [rows=111]
            ├── select
-           │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
            │    ├── outer: (1)
            │    ├── stats: [rows=111]
            │    ├── keys: (5)
@@ -112,7 +112,7 @@ select
       │    ├── outer: (1)
       │    ├── stats: [rows=111]
       │    ├── select
-      │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
       │    │    ├── outer: (1)
       │    │    ├── stats: [rows=111]
       │    │    ├── keys: (5)

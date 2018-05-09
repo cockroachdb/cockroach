@@ -1189,7 +1189,7 @@ project
  │              ├── project
  │              │    ├── columns: twocolumn.x:6(int)
  │              │    ├── select
- │              │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │              │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int!null) twocolumn.rowid:8(int!null)
  │              │    │    ├── scan twocolumn
  │              │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
  │              │    │    └── ge [type=bool]
@@ -1548,9 +1548,9 @@ build
 SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ ├── columns: a:1(int) b:2(int!null) n:4(int!null) sq:5(int)
  ├── select
- │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+ │    ├── columns: pairs.a:1(int) pairs.b:2(int!null) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
  │    ├── inner-join
  │    │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
  │    │    ├── scan pairs
@@ -1600,9 +1600,9 @@ build
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
 project
- ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
+ ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int!null)
  ├── select
- │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int) sum:6(int)
+ │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int!null) sum:6(int!null)
  │    ├── project
  │    │    ├── columns: pairs.a:1(int) pairs.b:2(int) sum:6(int) square.n:4(int!null) square.sq:5(int)
  │    │    ├── inner-join
@@ -1691,7 +1691,7 @@ SELECT *
  WHERE b > 1 AND (n IS NULL OR n > 1) AND (n IS NULL OR a  < sq)
 ----
 select
- ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
+ ├── columns: a:1(int) b:2(int!null) n:4(int) sq:5(int)
  ├── project
  │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int) square.sq:5(int)
  │    ├── left-join
@@ -2589,9 +2589,9 @@ build
 SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:7(int) y:8(int) u:3(int) v:6(int)
+ ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
  ├── select
- │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int) y:8(int)
+ │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int!null) y:8(int)
  │    ├── project
  │    │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
  │    │    ├── full-join
@@ -2796,9 +2796,9 @@ build
 SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:7(int) y:8(int) u:3(int) v:6(int)
+ ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
  ├── select
- │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int) y:8(int)
+ │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int!null) y:8(int)
  │    ├── project
  │    │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
  │    │    ├── full-join
@@ -3328,9 +3328,9 @@ build
 SELECT * FROM foo, bar WHERE foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) a:6(int) b:7(float) c:8(float) d:9(int)
+ ├── columns: a:1(int) b:2(int!null) c:3(float) d:4(float) a:6(int) b:7(float!null) c:8(float) d:9(int)
  ├── select
- │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+ │    ├── columns: foo.a:1(int) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
  │    ├── inner-join
  │    │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
  │    │    ├── scan foo
@@ -3356,9 +3356,9 @@ build
 SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) a:6(int) b:7(float) c:8(float) d:9(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(float) d:4(float) a:6(int!null) b:7(float!null) c:8(float) d:9(int)
  ├── select
- │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+ │    ├── columns: foo.a:1(int!null) foo.b:2(int!null) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int!null) bar.b:7(float!null) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
  │    ├── inner-join
  │    │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
  │    │    ├── scan foo
@@ -3388,9 +3388,9 @@ build
 SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 project
- ├── columns: a:1(int) b:2(int) c:3(float) d:4(float) c:8(float) d:9(int)
+ ├── columns: a:1(int) b:2(int) c:3(float!null) d:4(float!null) c:8(float!null) d:9(int!null)
  ├── select
- │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
+ │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float!null) foo.d:4(float!null) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float!null) bar.d:9(int!null) bar.rowid:10(int!null)
  │    ├── inner-join
  │    │    ├── columns: foo.a:1(int) foo.b:2(int) foo.c:3(float) foo.d:4(float) foo.rowid:5(int!null) bar.a:6(int) bar.b:7(float) bar.c:8(float) bar.d:9(int) bar.rowid:10(int!null)
  │    │    ├── scan foo

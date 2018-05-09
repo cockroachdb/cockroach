@@ -609,7 +609,7 @@ opt
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
