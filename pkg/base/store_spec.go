@@ -56,17 +56,115 @@ func GetAbsoluteStorePath(fieldName string, p string) (string, error) {
 	return ret, nil
 }
 
+// SizeSpec contains size in different kinds of formats supported by CLI(%age, bytes).
+type SizeSpec struct {
+	// InBytes is used for calculating free space and making rebalancing
+	// decisions. Zero indicates that there is no maximum size. This value is not
+	// actually used by the engine and thus not enforced.
+	InBytes int64
+	Percent float64
+}
+
+type intInterval struct {
+	min *int64
+	max *int64
+}
+
+type floatInterval struct {
+	min *float64
+	max *float64
+}
+
+// NewSizeSpec parses the string passed into a --size flag and returns a
+// SizeSpec if it is correctly parsed.
+func NewSizeSpec(
+	value string, bytesRange *intInterval, percentRange *floatInterval,
+) (SizeSpec, error) {
+	var size SizeSpec
+	if fractionRegex.MatchString(value) {
+		percentFactor := 100.0
+		factorValue := value
+		if value[len(value)-1] == '%' {
+			percentFactor = 1.0
+			factorValue = value[:len(value)-1]
+		}
+		var err error
+		size.Percent, err = strconv.ParseFloat(factorValue, 64)
+		size.Percent *= percentFactor
+		if err != nil {
+			return SizeSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
+		}
+		if percentRange != nil {
+			if (percentRange.min != nil && size.Percent < *percentRange.min) ||
+				(percentRange.max != nil && size.Percent > *percentRange.max) {
+				return SizeSpec{}, fmt.Errorf(
+					"store size (%s) must be between %f%% and %f%%",
+					value,
+					*percentRange.min,
+					*percentRange.max,
+				)
+			}
+		}
+	} else {
+		var err error
+		size.InBytes, err = humanizeutil.ParseBytes(value)
+		if err != nil {
+			return SizeSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
+		}
+		if bytesRange != nil {
+			if bytesRange.min != nil && size.InBytes < *bytesRange.min {
+				return SizeSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value,
+					humanizeutil.IBytes(*bytesRange.min))
+			}
+			if bytesRange.max != nil && size.InBytes > *bytesRange.max {
+				return SizeSpec{}, fmt.Errorf("store size (%s) must be smaller than %s", value,
+					humanizeutil.IBytes(*bytesRange.max))
+			}
+		}
+	}
+	return size, nil
+}
+
+// String returns a string representation of the SizeSpec. This is part
+// of pflag's value interface.
+func (ss *SizeSpec) String() string {
+	var buffer bytes.Buffer
+	if ss.InBytes != 0 {
+		fmt.Fprintf(&buffer, "--size=%s,", humanizeutil.IBytes(ss.InBytes))
+	}
+	if ss.Percent != 0 {
+		fmt.Fprintf(&buffer, "--size=%s%%,", humanize.Ftoa(ss.Percent))
+	}
+	return buffer.String()
+}
+
+// Type returns the underlying type in string form. This is part of pflag's
+// value interface.
+func (ss *SizeSpec) Type() string {
+	return "SizeSpec"
+}
+
+var _ pflag.Value = &SizeSpec{}
+
+// Set adds a new value to the StoreSpecValue. It is the important part of
+// pflag's value interface.
+func (ss *SizeSpec) Set(value string) error {
+	spec, err := NewSizeSpec(value, nil, nil)
+	if err != nil {
+		return err
+	}
+	ss.InBytes = spec.InBytes
+	ss.Percent = spec.Percent
+	return nil
+}
+
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path string
-	// SizeInBytes is used for calculating free space and making rebalancing
-	// decisions. Zero indicates that there is no maximum size. This value is not
-	// actually used by the engine and thus not enforced.
-	SizeInBytes int64
-	SizePercent float64
-	InMemory    bool
-	Attributes  roachpb.Attributes
+	Path       string
+	Size       SizeSpec
+	InMemory   bool
+	Attributes roachpb.Attributes
 	// UseFileRegistry is true if the "file registry" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseFileRegistry bool
@@ -87,11 +185,11 @@ func (ss StoreSpec) String() string {
 	if ss.InMemory {
 		fmt.Fprint(&buffer, "type=mem,")
 	}
-	if ss.SizeInBytes > 0 {
-		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.SizeInBytes))
+	if ss.Size.InBytes > 0 {
+		fmt.Fprintf(&buffer, "size=%s,", humanizeutil.IBytes(ss.Size.InBytes))
 	}
-	if ss.SizePercent > 0 {
-		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
+	if ss.Size.Percent > 0 {
+		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
 	}
 	if len(ss.Attributes.Attrs) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
@@ -122,7 +220,7 @@ func (ss StoreSpec) String() string {
 // without a decimal separator.
 // Values smaller than 1% and 100% are rejected after parsing using
 // a separate check.
-var fractionRegex = regexp.MustCompile(`^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%)$`)
+var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\.[0-9]*)?%))$`)
 
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
@@ -182,32 +280,17 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 				return StoreSpec{}, err
 			}
 		case "size":
-			if fractionRegex.MatchString(value) {
-				percentFactor := 100.0
-				factorValue := value
-				if value[len(value)-1] == '%' {
-					percentFactor = 1.0
-					factorValue = value[:len(value)-1]
-				}
-				var err error
-				ss.SizePercent, err = strconv.ParseFloat(factorValue, 64)
-				ss.SizePercent *= percentFactor
-				if err != nil {
-					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
-				}
-				if ss.SizePercent > 100 || ss.SizePercent < 1 {
-					return StoreSpec{}, fmt.Errorf("store size (%s) must be between 1%% and 100%%", value)
-				}
-			} else {
-				var err error
-				ss.SizeInBytes, err = humanizeutil.ParseBytes(value)
-				if err != nil {
-					return StoreSpec{}, fmt.Errorf("could not parse store size (%s) %s", value, err)
-				}
-				if ss.SizeInBytes < MinimumStoreSize {
-					return StoreSpec{}, fmt.Errorf("store size (%s) must be larger than %s", value,
-						humanizeutil.IBytes(MinimumStoreSize))
-				}
+			var err error
+			var minBytesAllowed int64 = MinimumStoreSize
+			var minPercent float64 = 1
+			var maxPercent float64 = 100
+			ss.Size, err = NewSizeSpec(
+				value,
+				&intInterval{min: &minBytesAllowed},
+				&floatInterval{min: &minPercent, max: &maxPercent},
+			)
+			if err != nil {
+				return StoreSpec{}, err
 			}
 		case "attrs":
 			// Check to make sure there are no duplicate attributes.
@@ -239,7 +322,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Path != "" {
 			return StoreSpec{}, fmt.Errorf("path specified for in memory store")
 		}
-		if ss.SizePercent == 0 && ss.SizeInBytes == 0 {
+		if ss.Size.Percent == 0 && ss.Size.InBytes == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
 	} else if ss.Path == "" {

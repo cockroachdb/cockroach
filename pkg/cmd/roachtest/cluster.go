@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,7 +45,6 @@ import (
 	// "postgres" gosql driver
 
 	_ "github.com/lib/pq"
-	"strconv"
 )
 
 var (
@@ -866,7 +866,7 @@ func (c *cluster) isLocal() bool {
 }
 
 func getDiskUsageInByte(ctx context.Context, c *cluster, nodeIdx int) (int, error) {
-	out, err := c.RunWithBuffer(ctx, c.l, c.Node(nodeIdx), fmt.Sprint("du -sk 'data/' | grep -oE '^[0-9]+'"))
+	out, err := c.RunWithBuffer(ctx, c.l, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 	if err != nil {
 		return 0, err
 	}
