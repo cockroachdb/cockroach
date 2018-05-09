@@ -26,7 +26,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -697,7 +696,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	recordCh := make(chan csvRecord)
-	kvCh := make(chan []roachpb.KeyValue)
+	kvCh := make(chan kvBatch)
 	group := errgroup.Group{}
 
 	// no-op drain kvs channel.

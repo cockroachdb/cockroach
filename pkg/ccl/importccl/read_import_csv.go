@@ -15,11 +15,11 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -49,9 +49,7 @@ func newCSVInputReader(
 	}
 }
 
-func (c *csvInputReader) start(
-	ctx context.Context, group *errgroup.Group, kvCh chan []roachpb.KeyValue,
-) {
+func (c *csvInputReader) start(ctx context.Context, group *errgroup.Group, kvCh chan kvBatch) {
 	group.Go(func() error {
 		sCtx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
@@ -141,123 +139,174 @@ type csvRecord struct {
 	rowOffset int
 }
 
-// convertRecord converts CSV records into KV pairs and sends them on the
-// kvCh chan.
-func (c *csvInputReader) convertRecord(ctx context.Context, kvCh chan<- []roachpb.KeyValue) error {
-	done := ctx.Done()
+type kvBatch []roachpb.KeyValue
 
-	const kvBatchSize = 1000
-	padding := 2 * (len(c.tableDesc.Indexes) + len(c.tableDesc.Families))
-	visibleCols := c.tableDesc.VisibleColumns()
+type rowConverter struct {
+	// stored ctx allows caching a matching Done channel between calls.
+	ctx  context.Context
+	done <-chan struct{}
 
-	ri, err := sqlbase.MakeRowInserter(nil /* txn */, c.tableDesc, nil, /* fkTables */
-		c.tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+	// current row buf
+	datums []tree.Datum
+
+	// kv destination and current batch
+	kvCh     chan<- kvBatch
+	kvBatch  kvBatch
+	batchCap int
+
+	tableDesc *sqlbase.TableDescriptor
+
+	// The rest of these are derived from tableDesc, just cached here.
+	hidden                int
+	ri                    sqlbase.RowInserter
+	evalCtx               tree.EvalContext
+	cols                  []sqlbase.ColumnDescriptor
+	visibleCols           []sqlbase.ColumnDescriptor
+	defaultExprs          []tree.TypedExpr
+	computedIVarContainer sqlbase.RowIndexedVarContainer
+}
+
+const kvBatchSize = 1000
+
+func newRowConverter(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, kvCh chan<- kvBatch,
+) (*rowConverter, error) {
+	c := &rowConverter{ctx: ctx, done: ctx.Done(), tableDesc: tableDesc, kvCh: kvCh}
+
+	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
+		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
-		return errors.Wrap(err, "make row inserter")
+		return nil, errors.Wrap(err, "make row inserter")
 	}
+	c.ri = ri
 
 	var txCtx transform.ExprTransformContext
 	evalCtx := tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(c.tableDesc.Columns, c.tableDesc, &txCtx, &evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
 	if err != nil {
-		return errors.Wrap(err, "process default columns")
+		return nil, errors.Wrap(err, "process default columns")
 	}
+	c.cols = cols
+	c.defaultExprs = defaultExprs
 
-	datums := make([]tree.Datum, len(visibleCols), len(cols))
+	c.visibleCols = tableDesc.VisibleColumns()
+	c.datums = make([]tree.Datum, len(c.visibleCols), len(cols))
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
-	hidden := -1
+	c.hidden = -1
 	for i, col := range cols {
 		if col.Hidden {
-			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || hidden != -1 {
-				return errors.New("unexpected hidden column")
+			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || c.hidden != -1 {
+				return nil, errors.New("unexpected hidden column")
 			}
-			hidden = i
-			datums = append(datums, nil)
+			c.hidden = i
+			c.datums = append(c.datums, nil)
 		}
 	}
-	if len(datums) != len(cols) {
-		return errors.New("unexpected hidden column")
+	if len(c.datums) != len(cols) {
+		return nil, errors.New("unexpected hidden column")
 	}
 
-	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize+padding)
+	padding := 2 * (len(tableDesc.Indexes) + len(tableDesc.Families))
+	c.batchCap = kvBatchSize + padding
+	c.kvBatch = make(kvBatch, 0, c.batchCap)
 
-	computedIVarContainer := sqlbase.RowIndexedVarContainer{
+	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
-		Cols:    c.tableDesc.Columns,
+		Cols:    tableDesc.Columns,
+	}
+	return c, nil
+}
+
+func (c *rowConverter) row(fileIndex int32, rowIndex int64) error {
+	if c.hidden >= 0 {
+		// We don't want to call unique_rowid() for the hidden PK column because
+		// it is not idempotent. The sampling from the first stage will be useless
+		// during the read phase, producing a single range split with all of the
+		// data. Instead, we will call our own function that mimics that function,
+		// but more-or-less guarantees that it will not interfere with the numbers
+		// that will be produced by it. The lower 15 bits mimic the node id, but as
+		// the CSV file number. The upper 48 bits are the line number and mimic the
+		// timestamp. It would take a file with many more than 2**32 lines to even
+		// begin approaching what unique_rowid would return today, so we assume it
+		// to be safe. Since the timestamp is won't overlap, it is safe to use any
+		// number in the node id portion. The 15 bits in that portion should account
+		// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
+		// the data is xor'd so the final bits are flipped instead of set.
+		c.datums[c.hidden] = tree.NewDInt(builtins.GenerateUniqueID(fileIndex, uint64(rowIndex)))
+	}
+
+	// TODO(justin): we currently disallow computed columns in import statements.
+	var computeExprs []tree.TypedExpr
+	var computedCols []sqlbase.ColumnDescriptor
+
+	row, err := sql.GenerateInsertRow(
+		c.defaultExprs, computeExprs, c.cols, computedCols, c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
+	if err != nil {
+		return errors.Wrapf(err, "generate insert row")
+	}
+	if err := c.ri.InsertRow(
+		c.ctx,
+		inserter(func(kv roachpb.KeyValue) {
+			kv.Value.InitChecksum(kv.Key)
+			c.kvBatch = append(c.kvBatch, kv)
+		}),
+		row,
+		true, /* ignoreConflicts */
+		sqlbase.SkipFKs,
+		false, /* traceKV */
+	); err != nil {
+		return errors.Wrapf(err, "insert row")
+	}
+	// If our batch is full, flush it and start a new one.
+	if len(c.kvBatch) >= kvBatchSize {
+		if err := c.sendBatch(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *rowConverter) sendBatch() error {
+	select {
+	case c.kvCh <- c.kvBatch:
+	case <-c.done:
+		return c.ctx.Err()
+	}
+	c.kvBatch = make(kvBatch, 0, c.batchCap)
+	return nil
+}
+
+// convertRecord converts CSV records into KV pairs and sends them on the
+// kvCh chan.
+func (c *csvInputReader) convertRecord(ctx context.Context, kvCh chan<- kvBatch) error {
+	conv, err := newRowConverter(ctx, c.tableDesc, kvCh)
+	if err != nil {
+		return err
 	}
 
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
-			rowNum := batch.rowOffset + batchIdx
+			rowNum := int64(batch.rowOffset + batchIdx)
 			for i, v := range record {
-				col := visibleCols[i]
+				col := conv.visibleCols[i]
 				if c.opts.NullEncoding != nil && v == *c.opts.NullEncoding {
-					datums[i] = tree.DNull
+					conv.datums[i] = tree.DNull
 				} else {
 					var err error
-					datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, &evalCtx)
+					conv.datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, &conv.evalCtx)
 					if err != nil {
 						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
 					}
 				}
 			}
-			if hidden >= 0 {
-				// We don't want to call unique_rowid() for the hidden PK column because
-				// it is not idempotent. The sampling from the first stage will be useless
-				// during the read phase, producing a single range split with all of the
-				// data. Instead, we will call our own function that mimics that function,
-				// but more-or-less guarantees that it will not interfere with the numbers
-				// that will be produced by it. The lower 15 bits mimic the node id, but as
-				// the CSV file number. The upper 48 bits are the line number and mimic the
-				// timestamp. It would take a file with many more than 2**32 lines to even
-				// begin approaching what unique_rowid would return today, so we assume it
-				// to be safe. Since the timestamp is won't overlap, it is safe to use any
-				// number in the node id portion. The 15 bits in that portion should account
-				// for up to 32k CSV files in a single IMPORT. In the case of > 32k files,
-				// the data is xor'd so the final bits are flipped instead of set.
-				datums[hidden] = tree.NewDInt(builtins.GenerateUniqueID(batch.fileIndex, uint64(rowNum)))
-			}
-
-			// TODO(justin): we currently disallow computed columns in import statements.
-			var computeExprs []tree.TypedExpr
-			var computedCols []sqlbase.ColumnDescriptor
-
-			row, err := sql.GenerateInsertRow(
-				defaultExprs, computeExprs, cols, computedCols, evalCtx, c.tableDesc, datums, &computedIVarContainer)
-			if err != nil {
-				return errors.Wrapf(err, "generate insert row: %s: row %d", batch.file, rowNum)
-			}
-			if err := ri.InsertRow(
-				ctx,
-				inserter(func(kv roachpb.KeyValue) {
-					kv.Value.InitChecksum(kv.Key)
-					kvBatch = append(kvBatch, kv)
-				}),
-				row,
-				true, /* ignoreConflicts */
-				sqlbase.SkipFKs,
-				false, /* traceKV */
-			); err != nil {
-				return errors.Wrapf(err, "insert row: %s: row %d", batch.file, rowNum)
-			}
-			if len(kvBatch) >= kvBatchSize {
-				select {
-				case kvCh <- kvBatch:
-				case <-done:
-					return ctx.Err()
-				}
-				kvBatch = make([]roachpb.KeyValue, 0, kvBatchSize+padding)
+			if err := conv.row(batch.fileIndex, rowNum); err != nil {
+				return errors.Wrapf(err, "converting row: %s: row %d", batch.file, rowNum)
 			}
 		}
 	}
-	select {
-	case kvCh <- kvBatch:
-	case <-done:
-		return ctx.Err()
-	}
-	return nil
+	return conv.sendBatch()
 }
