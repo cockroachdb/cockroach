@@ -43,7 +43,7 @@ opt
 SELECT * FROM t WHERE a IS NOT NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── stats: [rows=333]
  ├── scan t
  │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
@@ -74,7 +74,7 @@ opt
 SELECT * FROM t WHERE b IS NOT NULL AND c IS NOT NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string!null)
  ├── stats: [rows=111]
  ├── scan t
  │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
@@ -105,7 +105,7 @@ opt
 SELECT * FROM xy WHERE x > abs(y)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan xy
  │    ├── columns: xy.x:1(int) xy.y:2(int)
@@ -121,7 +121,7 @@ opt
 SELECT * FROM xy WHERE now()::int < x
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan xy
  │    ├── columns: xy.x:1(int) xy.y:2(int)
@@ -137,7 +137,7 @@ opt
 SELECT * FROM xy WHERE x > y
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=111]
  ├── scan xy
  │    ├── columns: xy.x:1(int) xy.y:2(int)
@@ -152,7 +152,7 @@ opt
 SELECT * FROM xy WHERE x = y
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=111]
  ├── scan xy
  │    ├── columns: xy.x:1(int) xy.y:2(int)

@@ -102,7 +102,7 @@ build
 SELECT * FROM (SELECT CONCAT(s, y::string) FROM a) AS q(v) WHERE v = 'foo'
 ----
 select
- ├── columns: v:5(string)
+ ├── columns: v:5(string!null)
  ├── stats: [rows=20, distinct(5)=1]
  ├── project
  │    ├── columns: column5:5(string)
@@ -150,7 +150,7 @@ build
 SELECT * FROM (SELECT y + 3 FROM a) AS q(v) WHERE v >= 1 AND v <= 100
 ----
 select
- ├── columns: v:5(int)
+ ├── columns: v:5(int!null)
  ├── stats: [rows=142, distinct(5)=100]
  ├── project
  │    ├── columns: column5:5(int)

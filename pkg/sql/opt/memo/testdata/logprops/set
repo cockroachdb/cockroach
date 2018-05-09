@@ -60,11 +60,11 @@ intersect
  │         ├── variable: xy.x [type=int, outer=(1)]
  │         └── variable: xy.y [type=int, outer=(2)]
  └── project
-      ├── columns: uv.v:4(int!null) uv.u:3(int) uv.rowid:5(int!null)
+      ├── columns: uv.v:4(int!null) uv.u:3(int!null) uv.rowid:5(int!null)
       ├── stats: [rows=1, distinct(3-5)=1]
       ├── keys: (5)
       ├── select
-      │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
       │    ├── stats: [rows=1, distinct(3)=1, distinct(3-5)=1]
       │    ├── keys: (5)
       │    ├── scan uv
@@ -99,13 +99,13 @@ except
  │         ├── variable: xy.x [type=int, outer=(1)]
  │         └── variable: xy.y [type=int, outer=(2)]
  └── project
-      ├── columns: uv.u:3(int) uv.v:4(int!null)
+      ├── columns: uv.u:3(int!null) uv.v:4(int!null)
       ├── stats: [rows=1, distinct(3,4)=1]
       ├── project
-      │    ├── columns: uv.u:3(int) uv.v:4(int!null)
+      │    ├── columns: uv.u:3(int!null) uv.v:4(int!null)
       │    ├── stats: [rows=1, distinct(3,4)=1]
       │    ├── select
-      │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
       │    │    ├── stats: [rows=1, distinct(3)=1, distinct(3,4)=1]
       │    │    ├── keys: (5)
       │    │    ├── scan uv
