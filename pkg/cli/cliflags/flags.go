@@ -540,6 +540,31 @@ Also, if you use equal signs in the file path to a store, you must use the
 "path" field label.`,
 	}
 
+	Size = FlagInfo{
+		Name:      "size",
+		Shorthand: "z",
+		Description: `
+The Size to fill Store upto(using a ballast file):
+Negative value means denotes amount of space that should be left after filling the disk.
+<PRE>
+
+  --size=20GiB
+
+</PRE>
+The size can be given in various ways:
+<PRE>
+
+  --size=10000000000     -> 10000000000 bytes
+  --size=20GB            -> 20000000000 bytes
+  --size=20GiB           -> 21474836480 bytes
+  --size=0.02TiB         -> 21474836480 bytes
+  --size=20%             -> 20% of available space
+  --size=0.2             -> 20% of available space
+  --size=.2              -> 20% of available space
+
+</PRE>`,
+	}
+
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
