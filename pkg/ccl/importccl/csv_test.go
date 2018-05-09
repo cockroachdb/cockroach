@@ -706,10 +706,11 @@ func BenchmarkConvertRecord(b *testing.B) {
 		}
 	}()
 
+	c := &csvInputReader{recordCh: recordCh, tableDesc: tableDesc}
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return convertRecord(ctx, recordCh, kvCh, nil, tableDesc)
+			return c.convertRecord(ctx, kvCh)
 		})
 	}
 	const batchSize = 500
