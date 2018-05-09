@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -143,6 +144,11 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 
 	b.sb.init(b.evalCtx, &logical.Relational.Stats, logical.Relational, ev, &keyBuffer{})
 	b.sb.buildSelect(ev.Child(1), &inputProps.Stats)
+
+	if filterProps.Constraints != nil && filterProps.Constraints != constraint.Unconstrained {
+		constraintNotNullCols := filterProps.Constraints.ExtractNotNullCols()
+		logical.Relational.NotNullCols = logical.Relational.NotNullCols.Union(constraintNotNullCols)
+	}
 
 	return logical
 }
