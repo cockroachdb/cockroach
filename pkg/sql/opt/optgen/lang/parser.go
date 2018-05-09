@@ -383,6 +383,9 @@ func (p *Parser) parseMatchItem() Expr {
 	case ASTERISK:
 		return &MatchAnyExpr{}
 
+	case ZERO:
+		return &MatchZeroExpr{}
+
 	case IDENT:
 		name := NameExpr(p.s.Literal())
 		return &name

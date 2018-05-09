@@ -173,6 +173,7 @@ parse
     "hello"       # String
     ^(SubOp)      # Negation
     *             # Any
+    0             # Zero
     [ ... * ... ] # ListAny
     [ * ... ]     # ListFirst
     [ ... * ]     # ListLast
@@ -207,15 +208,16 @@ parse
 						Src=<test.opt:5:5>
 					)
 					(MatchAny)
-					(MatchListAny MatchItem=(MatchAny) Src=<test.opt:7:5>)
-					(MatchListFirst MatchItem=(MatchAny) Src=<test.opt:8:5>)
-					(MatchListLast MatchItem=(MatchAny) Src=<test.opt:9:5>)
-					(MatchListSingle MatchItem=(MatchAny) Src=<test.opt:10:5>)
+					(MatchZero)
+					(MatchListAny MatchItem=(MatchAny) Src=<test.opt:8:5>)
+					(MatchListFirst MatchItem=(MatchAny) Src=<test.opt:9:5>)
+					(MatchListLast MatchItem=(MatchAny) Src=<test.opt:10:5>)
+					(MatchListSingle MatchItem=(MatchAny) Src=<test.opt:11:5>)
 					(MatchListEmpty)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:14:1>)
+			Replace=(Construct Name=Op Args=(List) Src=<test.opt:15:1>)
 			Src=<test.opt:1:1>
 		)
 	)

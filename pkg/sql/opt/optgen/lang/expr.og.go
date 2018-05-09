@@ -1011,6 +1011,47 @@ func (e *MatchAnyExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
+type MatchZeroExpr struct {
+}
+
+func (e *MatchZeroExpr) Op() Operator {
+	return MatchZeroOp
+}
+
+func (e *MatchZeroExpr) ChildCount() int {
+	return 0
+}
+
+func (e *MatchZeroExpr) Child(nth int) Expr {
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchZeroExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *MatchZeroExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchZeroExpr) Visit(visit VisitFunc) Expr {
+	return e
+}
+
+func (e *MatchZeroExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *MatchZeroExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchZeroExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
 type MatchListAnyExpr struct {
 	MatchItem Expr
 	Src       *SourceLoc

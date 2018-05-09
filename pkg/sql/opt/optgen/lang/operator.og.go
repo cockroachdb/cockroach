@@ -26,6 +26,7 @@ const (
 	MatchAndOp
 	MatchNotOp
 	MatchAnyOp
+	MatchZeroOp
 	MatchListAnyOp
 	MatchListFirstOp
 	MatchListLastOp
