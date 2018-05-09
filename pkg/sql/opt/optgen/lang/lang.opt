@@ -130,6 +130,9 @@ define MatchNot {
 define MatchAny {
 }
 
+define MatchZero {
+}
+
 define MatchListAny {
     MatchItem Expr
 }

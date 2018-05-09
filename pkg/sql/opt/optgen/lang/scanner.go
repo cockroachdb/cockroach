@@ -79,6 +79,8 @@ const (
 	ELLIPSES
 	// PIPE is the vertical line rune: |
 	PIPE
+	// ZERO is the zero number rune: 0
+	ZERO
 )
 
 const (
@@ -209,6 +211,10 @@ func (s *Scanner) Scan() Token {
 	case '&':
 		s.tok = AMPERSAND
 		s.lit = "&"
+
+	case '0':
+		s.tok = ZERO
+		s.lit = "0"
 
 	case '=':
 		if s.read() == '>' {
