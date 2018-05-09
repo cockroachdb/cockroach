@@ -177,7 +177,6 @@ select
                 ├── variable: a.k [type=int, outer=(1)]
                 └── const: 5 [type=int]
 
-
 # --------------------------------------------------
 # PushSelectIntoProject
 # --------------------------------------------------
@@ -201,35 +200,35 @@ project
       │    └── const: 1 [type=int]
       └── variable: a.f [type=float, outer=(3)]
 
-# Don't push down select if it depends on computed column.
+# Don't push down select if it depends on computed column that can't be inlined.
 opt
-SELECT * FROM (SELECT i, i+1 plus, f FROM a) a WHERE plus=2
+SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 ----
 select
- ├── columns: i:2(int) plus:6(int) f:3(float)
+ ├── columns: i:2(int) div:6(decimal) f:3(float)
  ├── project
- │    ├── columns: a.i:2(int) plus:6(int) a.f:3(float)
+ │    ├── columns: a.i:2(int) div:6(decimal) a.f:3(float)
  │    ├── scan a
  │    │    └── columns: a.i:2(int) a.f:3(float)
  │    └── projections [outer=(2,3)]
  │         ├── variable: a.i [type=int, outer=(2)]
- │         ├── plus [type=int, outer=(2)]
+ │         ├── div [type=decimal, outer=(2)]
  │         │    ├── variable: a.i [type=int, outer=(2)]
- │         │    └── const: 1 [type=int]
+ │         │    └── const: 2 [type=int]
  │         └── variable: a.f [type=float, outer=(3)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
       └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
-           ├── variable: plus [type=int, outer=(6)]
-           └── const: 2 [type=int]
+           ├── variable: div [type=decimal, outer=(6)]
+           └── const: 2 [type=decimal]
 
 # Push down some conjuncts, but not others.
 opt
-SELECT * FROM (SELECT i, i+1 plus, f FROM a) a WHERE 10.0=f AND 2=plus AND i=1
+SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 ----
 select
- ├── columns: i:2(int) plus:6(int) f:3(float)
+ ├── columns: i:2(int) div:6(decimal) f:3(float)
  ├── project
- │    ├── columns: a.i:2(int) plus:6(int) a.f:3(float)
+ │    ├── columns: a.i:2(int) div:6(decimal) a.f:3(float)
  │    ├── select
  │    │    ├── columns: a.i:2(int) a.f:3(float)
  │    │    ├── scan a
@@ -243,14 +242,14 @@ select
  │    │              └── const: 1 [type=int]
  │    └── projections [outer=(2,3)]
  │         ├── variable: a.i [type=int, outer=(2)]
- │         ├── plus [type=int, outer=(2)]
+ │         ├── div [type=decimal, outer=(2)]
  │         │    ├── variable: a.i [type=int, outer=(2)]
- │         │    └── const: 1 [type=int]
+ │         │    └── const: 2 [type=int]
  │         └── variable: a.f [type=float, outer=(3)]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
       └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
-           ├── variable: plus [type=int, outer=(6)]
-           └── const: 2 [type=int]
+           ├── variable: div [type=decimal, outer=(6)]
+           └── const: 2 [type=decimal]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 opt

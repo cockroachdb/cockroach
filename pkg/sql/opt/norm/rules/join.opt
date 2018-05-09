@@ -100,8 +100,9 @@
 
 # SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
 # FullJoin to a RightJoin) when it's known that the join's right input never
-# returns zero rows. The outer join only populates the right side with NULL
-# values when it would otherwise not be present.
+# returns zero rows and when there's no join condition. The outer join only
+# populates the right side with NULL values when it would otherwise not be
+# present.
 [SimplifyLeftJoin, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
@@ -116,10 +117,11 @@
     $on
 )
 
-# SimplifyRightJoin reduces a RightJoin opeator to an InnerJoin operator (or a
+# SimplifyRightJoin reduces a RightJoin operator to an InnerJoin operator (or a
 # FullJoin to a LeftJoin) when it's known that the join's left input never
-# returns zero rows. The outer join only populates the left side with NULL
-# values when it would otherwise not be present.
+# returns zero rows and when there's no join condition. The outer join only
+# populates the left side with NULL values when it would otherwise not be
+# present.
 [SimplifyRightJoin, Normalize]
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
     $left:* & (HasOneOrMoreRows $left)
@@ -135,7 +137,7 @@
 )
 
 # EliminateSemiJoin discards a SemiJoin operator when it's known that the right
-# input never returns zero rows, and there is no filter condition.
+# input never returns zero rows, and there is no join condition.
 [EliminateSemiJoin, Normalize]
 (SemiJoin | SemiJoinApply
     $left:*
@@ -145,13 +147,13 @@
 =>
 $left
 
-# EliminateAntiJoin discards an AntiJoin operator when it's known that the left
-# input never returns any rows, and there is no filter condition.
+# EliminateAntiJoin discards an AntiJoin operator when it's known that the right
+# input never returns any rows.
 [EliminateAntiJoin, Normalize]
 (AntiJoin | AntiJoinApply
     $left:*
     $right:* & (HasZeroRows $right)
-    (True)
+    *
 )
 =>
 $left
