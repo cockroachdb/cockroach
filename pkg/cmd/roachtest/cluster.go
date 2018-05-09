@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,7 +42,6 @@ import (
 
 	// "postgres" gosql driver
 	_ "github.com/lib/pq"
-	"strconv"
 )
 
 var (

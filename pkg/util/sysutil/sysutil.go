@@ -31,6 +31,19 @@ type Signal = syscall.Signal
 // Errno is syscall.Errno.
 type Errno = syscall.Errno
 
+// StatfsT is syscall.StatfsT.
+type StatfsT = syscall.Statfs_t
+
+// Statfs is syscall.Statfs.
+func Statfs(path string, buf *StatfsT) (err error) {
+	return syscall.Statfs(path, buf)
+}
+
+// Fallocate is syscall.Fallocate.
+func Fallocate(fd int, mode uint32, off int64, len int64) (err error) {
+	return syscall.Fallocate(fd, mode, off, len)
+}
+
 // ExitStatus returns the exit status contained within an exec.ExitError.
 func ExitStatus(err *exec.ExitError) int {
 	// err.Sys() is of type syscall.WaitStatus on all supported platforms.

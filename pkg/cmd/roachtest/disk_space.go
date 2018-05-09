@@ -22,7 +22,6 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -57,9 +56,6 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	ctx := context.Background()
 	c.Put(ctx, workload, "./workload", c.Node(numNodes))
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	fillBallast := filepath.Join(filepath.Dir(workload), "fill_ballast")
-	fillBallastBinary := "./fill_ballast"
-	c.Put(ctx, fillBallast, fillBallastBinary, c.All())
 	c.Start(ctx, c.All())
 
 	loadDuration := " --duration=" + (duration / 2).String()
@@ -88,12 +84,12 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	}
 	ballastFilePath := "data/ballast_file_to_fill_store"
 	for i := 1; i <= numNodes; i++ {
-		fillBallastCommand := []string{fillBallastBinary, "--ballast_file", ballastFilePath}
+		fillBallastCommand := []string{"./cockroach", "debug", "ballast", ballastFilePath, "--size"}
 		if tc.ratioDiskFilled != nil {
-			fillBallastCommand = append(fillBallastCommand, "--fill_ratio", fmt.Sprint(tc.ratioDiskFilled[i]))
+			fillBallastCommand = append(fillBallastCommand, fmt.Sprint(tc.ratioDiskFilled[i]))
 		}
 		if tc.diskEmptyInBytes != nil {
-			fillBallastCommand = append(fillBallastCommand, "--disk_left_bytes", fmt.Sprint(tc.diskEmptyInBytes[i-1]))
+			fillBallastCommand = append(fillBallastCommand, fmt.Sprint(tc.diskEmptyInBytes[i]))
 		}
 		if err := c.RunE(ctx, c.Node(i), fillBallastCommand...); err != nil {
 			c.l.printf("Failed to create ballast file on node %d due to error: %v\n", i, err)
@@ -122,7 +118,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 		return diskUsageOnNodes
 	}
 
-	const stmtZone = "CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
+	const stmtZone = "ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 10}'"
 	run(stmtZone)
 
 	t.Status("Starting inserts and deletes")
@@ -233,7 +229,7 @@ func registerDiskUsage(r *registry) {
 	const seventyMB = uint64(70) * mbInBytes
 
 	testCases := []diskUsageTestCase{
-		// Check the behaviour when disk space left is of around one range
+		// Check the behavior when disk space left is of around one range
 		{
 			// The workload involves both hot row update and mix rows with equal probability
 			name:             "update_mix_hot_key",
@@ -252,7 +248,7 @@ func registerDiskUsage(r *registry) {
 			diskEmptyInBytes: map[int]uint64{1: seventyMB, 2: seventyMB, 3: seventyMB, 4: seventyMB},
 			singleKeyOpProb:  0.0,
 		},
-		// Check the behaviour when disk space left is around 90%. This is to trigger
+		// Check the behavior when disk space left is around 90%. This is to trigger
 		// specific logic in cockroach that uses specific %age of disk used(Mainly rebalancing).
 		{
 			// The workload involves both hot row update and mix rows with equal probability
