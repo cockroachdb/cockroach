@@ -764,3 +764,31 @@ func (g *ruleGen) genConstructList(list *lang.ConstructListExpr) {
 	}
 	g.w.write("})")
 }
+
+// sortRulesByPriority sorts the rules in-place, in priority order. Rules with
+// higher priority are sorted before rules with lower priority. Rule priority
+// is based on the presence or absence of the HighPriority or LowPriority tag
+// on the rule:
+//
+//   - Rules with the HighPriority tag are run first.
+//   - Rules with no priority tag are run next.
+//   - Rules with the LowPriority tag are run last.
+//
+// Rules in the same priority group are run in the same order as they appear in
+// the rules files (and rule files are run in alphabetical order).
+func sortRulesByPriority(rules lang.RuleSetExpr) {
+	rules.Sort(func(left, right *lang.RuleExpr) bool {
+		// Handle case where left is high priority.
+		if left.Tags.Contains("HighPriority") {
+			return !right.Tags.Contains("HighPriority")
+		}
+
+		// Handle case where left is normal priority (no priority tags).
+		if !left.Tags.Contains("LowPriority") {
+			return right.Tags.Contains("LowPriority")
+		}
+
+		// Handle case where left is low priority.
+		return false
+	})
+}

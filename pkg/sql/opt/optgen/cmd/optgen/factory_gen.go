@@ -111,6 +111,7 @@ func (g *factoryGen) genConstructFuncs() {
 
 		// Only include normalization rules for the current define.
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
+		sortRulesByPriority(rules)
 		for _, rule := range rules {
 			g.ruleGen.genRule(rule)
 		}
