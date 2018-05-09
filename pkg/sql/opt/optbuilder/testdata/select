@@ -758,7 +758,7 @@ project
            └── project
                 ├── columns: column2:2(bool)
                 ├── select
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
@@ -786,7 +786,7 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
                 │    │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    │    └── tuple [type=tuple{int, int}]
@@ -820,7 +820,7 @@ project
                 └── project
                      ├── columns: column2:2(bool)
                      ├── select
-                     │    ├── columns: column1:1(int)
+                     │    ├── columns: column1:1(int!null)
                      │    ├── values
                      │    │    ├── columns: column1:1(int)
                      │    │    └── tuple [type=tuple{int}]
@@ -849,7 +849,7 @@ project
                      ├── project
                      │    ├── columns: column3:3(tuple{int, int})
                      │    ├── select
-                     │    │    ├── columns: column1:1(int) column2:2(int)
+                     │    │    ├── columns: column1:1(int!null) column2:2(int)
                      │    │    ├── values
                      │    │    │    ├── columns: column1:1(int) column2:2(int)
                      │    │    │    └── tuple [type=tuple{int, int}]

@@ -51,7 +51,7 @@ build
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+ ├── columns: x:1(int!null) y:2(int!null) ordinality:3(int!null)
  ├── stats: [rows=100, distinct(2)=10]
  ├── keys: (1) (3)
  ├── row-number

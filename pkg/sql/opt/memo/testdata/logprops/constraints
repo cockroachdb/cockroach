@@ -22,7 +22,7 @@ opt
 SELECT * FROM a WHERE x > 1
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -36,7 +36,7 @@ opt
 SELECT * FROM a WHERE x >= 1
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -50,7 +50,7 @@ opt
 SELECT * FROM a WHERE x < 1
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -64,7 +64,7 @@ opt
 SELECT * FROM a WHERE x <= 1
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -78,7 +78,7 @@ opt
 SELECT * FROM a WHERE x = 1
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=1, distinct(1)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -92,7 +92,7 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=4, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -109,7 +109,7 @@ opt
 SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -126,7 +126,7 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -150,7 +150,7 @@ opt
 SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -172,7 +172,7 @@ opt
 SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -227,7 +227,7 @@ opt
 SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
 ----
 select
- ├── columns: k:1(int!null) u:2(float) v:3(string)
+ ├── columns: k:1(int!null) u:2(float) v:3(string!null)
  ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan kuv
@@ -247,7 +247,7 @@ opt
 SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=4, distinct(1)=3]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -275,7 +275,7 @@ opt
 SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=2, distinct(1)=2]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -298,7 +298,7 @@ opt
 SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=1, distinct(1)=1]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -318,7 +318,7 @@ opt
 SELECT * FROM a WHERE (x, y) > (1, 2)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -336,7 +336,7 @@ opt
 SELECT * FROM a WHERE (x, y) >= (1, 2)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -354,7 +354,7 @@ opt
 SELECT * FROM a WHERE (x, y) < (1, 2)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -372,7 +372,7 @@ opt
 SELECT * FROM a WHERE (x, y) <= (1, 2)
 ----
 select
- ├── columns: x:1(int) y:2(int)
+ ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: a.x:1(int) a.y:2(int)
@@ -459,7 +459,7 @@ opt
 SELECT * FROM abc WHERE a != 5
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── stats: [rows=333]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -487,7 +487,7 @@ opt
 SELECT * FROM abc WHERE b != true
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=333]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -501,7 +501,7 @@ opt
 SELECT * FROM abc WHERE b != false
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=333]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -543,7 +543,7 @@ opt
 SELECT * FROM abc WHERE b
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=1, distinct(2)=1]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -555,7 +555,7 @@ opt
 SELECT * FROM abc WHERE NOT b
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string)
  ├── stats: [rows=1, distinct(2)=1]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -568,7 +568,7 @@ opt
 SELECT * FROM abc WHERE a > 5 AND b
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool!null) c:3(string)
  ├── stats: [rows=1, distinct(2)=1]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)
@@ -583,7 +583,7 @@ opt
 SELECT * FROM abc WHERE c != 'foo'
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool) c:3(string!null)
  ├── stats: [rows=333]
  ├── scan abc
  │    ├── columns: abc.a:1(int) abc.b:2(bool) abc.c:3(string)

@@ -19,7 +19,7 @@ project
  └── projections
       └── exists [type=bool]
            └── select
-                ├── columns: t.k:1(int!null) t.u:2(int) t.v:3(int)
+                ├── columns: t.k:1(int!null) t.u:2(int!null) t.v:3(int)
                 ├── stats: [rows=333]
                 ├── cost: 1010.00
                 ├── keys: (1)
