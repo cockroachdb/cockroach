@@ -2114,7 +2114,7 @@ func splitPostApply(
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
 		// the split (the new range) for Raft processing so that the corresponding
 		// Raft group is created. This shouldn't be necessary for correctness, but
-		// some tests rely on this (e.g. server.TestStatusSummaries).
+		// some tests rely on this (e.g. server.TestNodeStatusWritten).
 		r.store.enqueueRaftUpdateCheck(rightRng.RangeID)
 	}
 }
@@ -2579,7 +2579,7 @@ func (s *Store) Metrics() *StoreMetrics {
 
 // MVCCStats returns the current MVCCStats accumulated for this store.
 // TODO(mrtracy): This should be removed as part of #4465, this is only needed
-// to support the current StatusSummary structures which will be changing.
+// to support the current NodeStatus structures which will be changing.
 func (s *Store) MVCCStats() enginepb.MVCCStats {
 	s.metrics.mu.Lock()
 	defer s.metrics.mu.Unlock()

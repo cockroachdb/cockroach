@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -62,6 +63,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalCreateStmtsTable,
 		crdbInternalForwardDependenciesTable,
 		crdbInternalGossipNodesTable,
+		crdbInternalGossipAlertsTable,
 		crdbInternalGossipLivenessTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
@@ -872,9 +874,9 @@ func populateSessionsTable(
 // current node.
 var crdbInternalLocalMetricsTable = virtualSchemaTable{
 	schema: `CREATE TABLE crdb_internal.node_metrics (
-  store_id 	         INT NULL,       -- the store, if any, to which this metric belongs
-  name               STRING,         -- name of the metric
-  value							 FLOAT           -- value of the metric
+  store_id 	         INT NULL,         -- the store, if any, for this metric
+  name               STRING NOT NULL,  -- name of the metric
+  value							 FLOAT NOT NULL    -- value of the metric
 );`,
 
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -886,7 +888,7 @@ var crdbInternalLocalMetricsTable = virtualSchemaTable{
 		if mr == nil {
 			return nil
 		}
-		nodeStatus := mr.GetStatusSummary(ctx)
+		nodeStatus := mr.GenerateNodeStatus(ctx)
 		for i := 0; i <= len(nodeStatus.StoreStatuses); i++ {
 			storeID := tree.DNull
 			mtr := nodeStatus.Metrics
@@ -1800,6 +1802,70 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				tree.MakeDBool(tree.DBool(l.Decommissioning)),
 			); err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipAlertsTable exposes current health alerts in the cluster.
+var crdbInternalGossipAlertsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_alerts (
+  node_id         INT NOT NULL,
+  store_id        INT NULL,        -- null for alerts not associated to a store
+  category        STRING NOT NULL, -- type of alert, usually by subsystem
+  description     STRING NOT NULL, -- name of the alert (depends on subsystem)
+  value           FLOAT NOT NULL   -- value of the alert (depends on subsystem, can be NaN)
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts	"); err != nil {
+			return err
+		}
+
+		g := p.ExecCfg().Gossip
+
+		type resultWithNodeID struct {
+			roachpb.NodeID
+			status.HealthCheckResult
+		}
+		var results []resultWithNodeID
+		if err := g.IterateInfos(gossip.KeyNodeHealthAlertPrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var d status.HealthCheckResult
+			if err := protoutil.Unmarshal(bytes, &d); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+			nodeID, err := gossip.NodeIDFromKey(key)
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse node ID from key %q", key)
+			}
+			results = append(results, resultWithNodeID{nodeID, d})
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		for _, result := range results {
+			for _, alert := range result.Alerts {
+				storeID := tree.DNull
+				if alert.StoreID != 0 {
+					storeID = tree.NewDInt(tree.DInt(alert.StoreID))
+				}
+				if err := addRow(
+					tree.NewDInt(tree.DInt(result.NodeID)),
+					storeID,
+					tree.NewDString(strings.ToLower(alert.Category.String())),
+					tree.NewDString(alert.Description),
+					tree.NewDFloat(tree.DFloat(alert.Value)),
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

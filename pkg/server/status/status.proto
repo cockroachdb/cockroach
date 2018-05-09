@@ -58,3 +58,28 @@ message NodeStatus {
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
 }
+
+// A HealthAlert is an undesired condition detected by a server which should be
+// exposed to the operators.
+message HealthAlert {
+  // store_id is zero for alerts not specific to a store (i.e. apply at the node level).
+  int32 store_id = 1 [
+    // NB: trying to make this nullable does not work with the custom type. You need a
+    // pointer type as the custom type, but that breaks protoc-gen-gogoroach.
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID",
+    (gogoproto.customname) = "StoreID"
+  ];
+  enum Category {
+    METRICS = 0;
+    NETWORK = 1;
+  }
+  Category category = 2;
+  string description = 3;
+  double value = 4;
+}
+
+// HealthCheckResult holds a number of HealthAlerts.
+message HealthCheckResult{
+  repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
+}

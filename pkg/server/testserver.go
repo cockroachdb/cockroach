@@ -450,7 +450,7 @@ func (ts *TestServer) Addr() string {
 
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
-	return ts.node.writeSummaries(context.TODO())
+	return ts.node.writeNodeStatus(context.TODO(), time.Hour)
 }
 
 // AdminURL implements TestServerInterface.

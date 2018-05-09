@@ -89,6 +89,7 @@ type storeMetrics interface {
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
+	*HealthChecker
 	gossip       *gossip.Gossip
 	nodeLiveness *storage.NodeLiveness
 	rpcContext   *rpc.Context
@@ -129,7 +130,7 @@ type MetricsRecorder struct {
 		// prometheus text format.
 		prometheusExporter metric.PrometheusExporter
 	}
-	// WriteStatusSummary is a potentially long-running method (with a network
+	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
@@ -145,10 +146,11 @@ func NewMetricsRecorder(
 	settings *cluster.Settings,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
-		nodeLiveness: nodeLiveness,
-		rpcContext:   rpcContext,
-		gossip:       gossip,
-		settings:     settings,
+		HealthChecker: NewHealthChecker(trackedMetrics),
+		nodeLiveness:  nodeLiveness,
+		rpcContext:    rpcContext,
+		gossip:        gossip,
+		settings:      settings,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -344,10 +346,10 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	return activity
 }
 
-// GetStatusSummary returns a status summary message for the node. The summary
+// GenerateNodeStatus returns a status summary message for the node. The summary
 // includes the recent values of metrics for both the node and all of its
-// component stores.
-func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
+// component stores. When the node isn't initialized yet, nil is returned.
+func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	activity := mr.getNetworkActivity(ctx)
 
 	mr.mu.RLock()
@@ -425,31 +427,28 @@ func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
 	return nodeStat
 }
 
-// WriteStatusSummary generates a summary and immediately writes it to the given
-// client.
-func (mr *MetricsRecorder) WriteStatusSummary(ctx context.Context, db *client.DB) error {
+// WriteNodeStatus writes the supplied summary to the given client.
+func (mr *MetricsRecorder) WriteNodeStatus(
+	ctx context.Context, db *client.DB, nodeStatus NodeStatus,
+) error {
 	mr.writeSummaryMu.Lock()
 	defer mr.writeSummaryMu.Unlock()
-
-	nodeStatus := mr.GetStatusSummary(ctx)
-	if nodeStatus != nil {
-		key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
-		// We use PutInline to store only a single version of the node status.
-		// There's not much point in keeping the historical versions as we keep
-		// all of the constituent data as timeseries. Further, due to the size
-		// of the build info in the node status, writing one of these every 10s
-		// will generate more versions than will easily fit into a range over
-		// the course of a day.
-		if err := db.PutInline(ctx, key, nodeStatus); err != nil {
-			return err
+	key := keys.NodeStatusKey(nodeStatus.Desc.NodeID)
+	// We use PutInline to store only a single version of the node status.
+	// There's not much point in keeping the historical versions as we keep
+	// all of the constituent data as timeseries. Further, due to the size
+	// of the build info in the node status, writing one of these every 10s
+	// will generate more versions than will easily fit into a range over
+	// the course of a day.
+	if err := db.PutInline(ctx, key, &nodeStatus); err != nil {
+		return err
+	}
+	if log.V(2) {
+		statusJSON, err := json.Marshal(&nodeStatus)
+		if err != nil {
+			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
-		if log.V(2) {
-			statusJSON, err := json.Marshal(nodeStatus)
-			if err != nil {
-				log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
-			}
-			log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
-		}
+		log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}
 	return nil
 }
