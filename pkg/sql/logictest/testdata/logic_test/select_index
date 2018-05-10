@@ -1115,7 +1115,7 @@ query B
 SELECT * FROM bool2 WHERE a IS NULL
 ----
 
-query B
+query B rowsort
 SELECT * FROM bool2 WHERE a IS NOT NULL
 ----
 false
