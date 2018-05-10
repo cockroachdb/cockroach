@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -37,7 +38,7 @@ type scope struct {
 	parent        *scope
 	cols          []scopeColumn
 	groupby       groupby
-	physicalProps memo.PhysicalProps
+	physicalProps props.Physical
 
 	// group is the memo.GroupID of the relational operator built with this scope.
 	group memo.GroupID
@@ -95,7 +96,7 @@ func (s *scope) setPresentation() {
 	if s.physicalProps.Presentation != nil {
 		return
 	}
-	presentation := make(memo.Presentation, 0, len(s.cols))
+	presentation := make(props.Presentation, 0, len(s.cols))
 	for i := range s.cols {
 		col := &s.cols[i]
 		if !col.hidden {

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -90,6 +91,7 @@ func TestExecBuild(t *testing.T) {
 			defer eng.Close()
 
 			tester := testutils.NewOptTester(eng.Catalog(), d.Input)
+			tester.Flags.ExprFormat = memo.ExprFmtHideRuleProps
 
 			var rowSort bool
 			var partialSortColumns []int

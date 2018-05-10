@@ -17,6 +17,7 @@ package testutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 )
 
@@ -273,11 +274,11 @@ func (fc *forcingCoster) SuppressExpr(eid memo.ExprID) {
 }
 
 // ComputeCost is part of the xform.Coster interface.
-func (fc *forcingCoster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+func (fc *forcingCoster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	if fc.suppressed[candidate.Expr()] {
 		// Suppressed expressions get assigned MaxCost so that they never have
 		// the lowest cost.
 		return memo.MaxCost
 	}
-	return fc.inner.ComputeCost(candidate, props)
+	return fc.inner.ComputeCost(candidate, logical)
 }

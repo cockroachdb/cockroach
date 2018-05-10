@@ -20,6 +20,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -109,7 +110,7 @@ func (ev ExprView) Operator() opt.Operator {
 }
 
 // Logical returns the set of logical properties that this expression provides.
-func (ev ExprView) Logical() *LogicalProps {
+func (ev ExprView) Logical() *props.Logical {
 	return &ev.mem.group(ev.group).logical
 }
 
@@ -117,7 +118,7 @@ func (ev ExprView) Logical() *LogicalProps {
 // as the ordering of result rows. Note that Physical does not return the
 // properties *provided* by this expression, but those *required* of it by its
 // parent expression, or by the ExprView creator.
-func (ev ExprView) Physical() *PhysicalProps {
+func (ev ExprView) Physical() *props.Physical {
 	if ev.best == normBestOrdinal {
 		panic("physical properties are not available when traversing the normalized tree")
 	}
@@ -251,6 +252,9 @@ const (
 	// ExprFmtHideKeys does not show keys in the output.
 	ExprFmtHideKeys
 
+	// ExprFmtHideRuleProps does not show rule-specific properties in the output.
+	ExprFmtHideRuleProps
+
 	// ExprFmtHideAll shows only the most basic properties of the expression.
 	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )
@@ -290,9 +294,9 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		formatter.formatScanPrivate(ev.Private().(*ScanOpDef), true /* short */)
 	}
 
-	var physProps *PhysicalProps
+	var physProps *props.Physical
 	if ev.best == normBestOrdinal {
-		physProps = &PhysicalProps{}
+		physProps = &props.Physical{}
 	} else {
 		physProps = ev.Physical()
 	}
@@ -364,10 +368,12 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
 	}
 
-	if !flags.HasFlags(ExprFmtHideRowCard) && logProps.Relational.Cardinality != AnyCardinality {
-		// Suppress cardinality for Scan ops if it's redundant with Limit field.
-		if ev.Operator() != opt.ScanOp || !logProps.Relational.Cardinality.AllowsZero() {
-			tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
+	if !flags.HasFlags(ExprFmtHideRowCard) {
+		if logProps.Relational.Cardinality != props.AnyCardinality {
+			// Suppress cardinality for Scan ops if it's redundant with Limit field.
+			if ev.Operator() != opt.ScanOp || !logProps.Relational.Cardinality.AllowsZero() {
+				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
+			}
 		}
 	}
 
@@ -386,6 +392,12 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 
 	if physProps.Ordering.Defined() {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
+	}
+
+	if !flags.HasFlags(ExprFmtHideRuleProps) {
+		if !logProps.Relational.Rule.PruneCols.Empty() {
+			tp.Childf("prune: %s", logProps.Relational.Rule.PruneCols.String())
+		}
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
@@ -489,7 +501,7 @@ func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
 	}
 }
 
-func (ev ExprView) formatPresentation(tp treeprinter.Node, presentation Presentation) {
+func (ev ExprView) formatPresentation(tp treeprinter.Node, presentation props.Presentation) {
 	logProps := ev.Logical()
 
 	var buf bytes.Buffer

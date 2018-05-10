@@ -27,7 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-// TestNormRules runs data-driven testcases of the form:
+// TestNormRules tests the various Optgen normalization rules found in the rules
+// directory. The tests are data-driven cases of the form:
 //   <command>
 //   <SQL statement>
 //   ----
@@ -40,9 +41,28 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps
+	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
+		catalog := testutils.NewTestCatalog()
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.ExprFormat = fmtFlags
+			return tester.RunCommand(t, d)
+		})
+	})
+}
 
-	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+// TestRuleProps tests the rule properties that power some of the normalization
+// rules. The tests are data-driven cases of the form:
+//   <command>
+//   <SQL statement>
+//   ----
+//   <expected results>
+//
+// See OptTester.Handle for supported commands.
+func TestRuleProps(t *testing.T) {
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
+	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)

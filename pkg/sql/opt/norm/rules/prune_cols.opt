@@ -1,0 +1,239 @@
+# =============================================================================
+# prune_cols.opt contains normalization rules that eliminate columns that are
+# never used. For example:
+#
+#   SELECT x FROM (SELECT x, y, z FROM a) WHERE y = 10
+#
+# The "z" column is never referenced, either by the filter condition or by the
+# final projection. Therefore, the query can be rewritten as:
+#
+#   SELECT x FROM (SELECT x, y FROM a) WHERE y = 10
+#
+# Unused columns are very common, especially when the SQL * symbol is used to
+# select all columns in a table. They can be expensive to fetch and transfer, so
+# it's important to retain only columns that are actually needed by the query.
+#
+# The rules work by "pushing down" a new Project operator into any child inputs
+# that have unused columns. The Project only includes columns that are needed by
+# some operator in its subtree. The new Project may then spawn a sub-Project of
+# its own that gets pushed even further down the tree. Eventually, a Project
+# recursively reaches an operator that is capable of filtering columns, like
+# Scan or Project, and it will be merged into that operator.
+#
+# Pruning unused columns is not desirable if the Project operator "gets stuck"
+# during push down, and is unable to merge with another column filtering
+# operator. This situation causes the expression tree to become littered with
+# extra Project operators that impede pattern matching. To avoid this problem,
+# the RelationalProps.Rules.PruneCols property tracks columns which can be
+# pruned without requiring extra Project operators. The Prune rules use this to
+# only push down Project operators that are sure to merge into another operator
+# at the end of their journey. See the PruneCols comment for more details.
+# =============================================================================
+
+
+# PruneProjectCols discards nested project columns that are never used.
+[PruneProjectCols, Normalize]
+(Project
+    (Project
+        $innerInput:*
+        $innerProjections:*
+    )
+    $projections:* & (CanPruneCols $innerProjections (NeededCols $projections))
+)
+=>
+(Project
+    (Project
+        $innerInput
+        (PruneCols $innerProjections (NeededCols $projections))
+    )
+    $projections
+)
+
+# PruneScanCols discards Scan operator columns that are never used. The needed
+#  columns are pushed down into the Scan's opt.ScanOpDef private.
+[PruneScanCols, Normalize]
+(Project
+    $input:(Scan)
+    $projections:* & (CanPruneCols $input (NeededCols $projections))
+)
+=>
+(Project
+    (PruneCols $input (NeededCols $projections))
+    $projections
+)
+
+# PruneSelectCols discards Select input columns that are never used.
+#
+# While the PruneCols property should prevent this rule (which pushes Project
+# below Select) from cycling with the PushSelectIntoProject rule (which pushes
+# Select below Project), the DetectCycle flag is used anyway. This will prevent
+# cycles if existing or new bugs do not populate PruneCols correctly, and the
+# pushed-down Project doesn't get merged into another operator at the end of its
+# journey downwards.
+[PruneSelectCols, Normalize, DetectCycle]
+(Project
+    (Select
+        $input:*
+        $filter:*
+    )
+    $projections:* & (CanPruneCols $input (NeededCols2 $projections $filter))
+)
+=>
+(Project
+    (Select
+        (PruneCols $input (NeededCols2 $projections $filter))
+        $filter
+    )
+    $projections
+)
+
+# PruneLimitCols discards Limit input columns that are never used.
+#
+# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
+# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
+# bug in building the PruneCols property.
+[PruneLimitCols, Normalize, DetectCycle]
+(Project
+    (Limit
+        $input:*
+        $limit:*
+        $ordering:*
+    )
+    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
+)
+=>
+(Project
+    (Limit
+        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $limit
+        $ordering
+    )
+    $projections
+)
+
+# PruneOffsetCols discards Offset input columns that are never used.
+#
+# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
+# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
+# bug in building the PruneCols property.
+[PruneOffsetCols, Normalize, DetectCycle]
+(Project
+    (Offset
+        $input:*
+        $offset:*
+        $ordering:*
+    )
+    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
+)
+=>
+(Project
+    (Offset
+        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $offset
+        $ordering
+    )
+    $projections
+)
+
+# PruneJoinLeftCols discards columns on the left side of a join that are never
+# used.
+[PruneJoinLeftCols, Normalize]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (CanPruneCols $left (NeededCols3 $projections $right $on))
+)
+=>
+(Project
+    ((OpName $input)
+        (PruneCols $left (NeededCols3 $projections $right $on))
+        $right
+        $on
+    )
+    $projections
+)
+
+# PruneJoinRightCols discards columns on the right side of a join that are never
+# used.
+[PruneJoinRightCols, Normalize]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (CanPruneCols $right (NeededCols2 $projections $on))
+)
+=>
+(Project
+    ((OpName $input)
+        $left
+        (PruneCols $right (NeededCols2 $projections $on))
+        $on
+    )
+    $projections
+)
+
+# PruneAggCols discards aggregation columns in a GroupBy that are never used.
+[PruneAggCols, Normalize]
+(Project
+    (GroupBy
+        $input:*
+        $aggregations:*
+        $groupingCols:*
+    )
+    $projections:* & (CanPruneCols $aggregations (NeededCols $projections))
+)
+=>
+(Project
+    (GroupBy
+        $input
+        (PruneCols $aggregations (NeededCols $projections))
+        $groupingCols
+    )
+    $projections
+)
+
+# PruneGroupByCols discards GroupBy input columns that are never used.
+[PruneGroupByCols, Normalize]
+(GroupBy
+    $input:*
+    $aggregations:*
+    $groupingCols:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
+)
+=>
+(GroupBy
+    (PruneCols $input (NeededColsGroupBy $aggregations $groupingCols))
+    $aggregations
+    $groupingCols
+)
+
+# PruneValuesCols discards Values columns that are never used.
+[PruneValuesCols, Normalize]
+(Project
+    $input:(Values)
+    $projections:* & (CanPruneCols $input (NeededCols $projections))
+)
+=>
+(Project
+    (PruneCols $input (NeededCols $projections))
+    $projections
+)
+
+# PruneRowNumberCols discards RowNumber input columns that are never used.
+[PruneRowNumberCols, Normalize]
+(Project
+    (RowNumber $input:* $def:*)
+    $projections:* & (CanPruneCols $input (NeededColsRowNumber $projections $def))
+)
+=>
+(Project
+    (RowNumber
+        (PruneCols $input (NeededColsRowNumber $projections $def))
+        $def
+    )
+    $projections
+)
