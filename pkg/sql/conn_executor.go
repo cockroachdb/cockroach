@@ -1970,6 +1970,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
 		ID:              ex.sessionID.GetBytes(),
+		AllocBytes:      ex.mon.AllocBytes(),
+		MaxAllocBytes:   ex.mon.MaximumBytes(),
 	}
 }
 
