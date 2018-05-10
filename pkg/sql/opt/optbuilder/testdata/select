@@ -6,7 +6,7 @@ build
 SELECT 1
 ----
 project
- ├── columns: column1:1(int)
+ ├── columns: column1:1(int!null)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -26,7 +26,7 @@ build
 SELECT 1+1 AS two, 2+2 AS four
 ----
 project
- ├── columns: two:1(int) four:2(int)
+ ├── columns: two:1(int!null) four:2(int!null)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections

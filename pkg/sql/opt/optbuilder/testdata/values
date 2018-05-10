@@ -164,9 +164,9 @@ values
  ├── tuple [type=tuple{int}]
  │    └── subquery [type=int]
  │         └── max1-row
- │              ├── columns: column1:1(int)
+ │              ├── columns: column1:1(int!null)
  │              └── project
- │                   ├── columns: column1:1(int)
+ │                   ├── columns: column1:1(int!null)
  │                   ├── values
  │                   │    └── tuple [type=tuple{}]
  │                   └── projections
@@ -174,9 +174,9 @@ values
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: column2:2(int)
+                ├── columns: column2:2(int!null)
                 └── project
-                     ├── columns: column2:2(int)
+                     ├── columns: column2:2(int!null)
                      ├── values
                      │    └── tuple [type=tuple{}]
                      └── projections
@@ -192,9 +192,9 @@ values
  └── tuple [type=tuple{int}]
       └── subquery [type=int]
            └── max1-row
-                ├── columns: column1:1(int)
+                ├── columns: column1:1(int!null)
                 └── project
-                     ├── columns: column1:1(int)
+                     ├── columns: column1:1(int!null)
                      ├── values
                      │    └── tuple [type=tuple{}]
                      └── projections

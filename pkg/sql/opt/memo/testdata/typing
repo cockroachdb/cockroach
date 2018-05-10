@@ -41,7 +41,7 @@ build
 SELECT 1, TRUE, FALSE, NULL
 ----
 project
- ├── columns: column1:1(int) column2:2(bool) column3:3(bool) column4:4(unknown)
+ ├── columns: column1:1(int!null) column2:2(bool!null) column3:3(bool!null) column4:4(unknown)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections

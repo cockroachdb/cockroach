@@ -736,7 +736,7 @@ project
  │    │    ├── outer: (2)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── project
- │    │    │    ├── columns: true:8(bool)
+ │    │    │    ├── columns: true:8(bool!null)
  │    │    │    ├── outer: (2)
  │    │    │    ├── select
  │    │    │    │    ├── columns: xy.y:7(int)
@@ -881,7 +881,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(int) column9:9(int) column12:12(int) column16:16(bool) column19:19(bool) column23:23(int)
+ ├── columns: column6:6(int!null) column9:9(int) column12:12(int) column16:16(bool) column19:19(bool) column23:23(int)
  ├── inner-join-apply
  │    ├── columns: a.k:1(int!null) xy.x:7(int) column22:22(int)
  │    ├── keys: (1)
@@ -994,7 +994,7 @@ project
  │    │    ├── outer: (2)
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── project
- │    │    │    ├── columns: true:9(bool)
+ │    │    │    ├── columns: true:9(bool!null)
  │    │    │    ├── outer: (2)
  │    │    │    ├── select
  │    │    │    │    ├── columns: xy.y:7(int)
@@ -1178,7 +1178,7 @@ project
  │    │    │    ├── outer: (7)
  │    │    │    ├── cardinality: [1 - 1]
  │    │    │    ├── project
- │    │    │    │    ├── columns: true:10(bool)
+ │    │    │    │    ├── columns: true:10(bool!null)
  │    │    │    │    ├── outer: (7)
  │    │    │    │    ├── select
  │    │    │    │    │    ├── columns: uv.u:8(int!null)
@@ -1382,7 +1382,7 @@ project
  │    │    │    │    ├── outer: (1)
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:9(bool)
+ │    │    │    │    │    ├── columns: true:9(bool!null)
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── select
  │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
@@ -1611,7 +1611,7 @@ project
  │    │    │    │    ├── outer: (2)
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:11(bool)
+ │    │    │    │    │    ├── columns: true:11(bool!null)
  │    │    │    │    │    ├── outer: (2)
  │    │    │    │    │    ├── select
  │    │    │    │    │    │    ├── columns: uv.v:9(int)

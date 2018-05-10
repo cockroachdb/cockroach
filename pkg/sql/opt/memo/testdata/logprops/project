@@ -27,7 +27,7 @@ build
 SELECT y, x+1, 1, x FROM xysd
 ----
 project
- ├── columns: y:2(int) column5:5(int) column6:6(int) x:1(int!null)
+ ├── columns: y:2(int) column5:5(int) column6:6(int!null) x:1(int!null)
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── scan xysd
@@ -132,3 +132,21 @@ project
  └── projections [outer=(1,2)]
       ├── variable: xysd.x [type=int, outer=(1)]
       └── variable: xysd.y [type=int, outer=(2)]
+
+# Constant null and not-null columns.
+build
+SELECT 1, 'foo', null, 1::decimal + null, null::string FROM xysd
+----
+project
+ ├── columns: column5:5(int!null) column6:6(string!null) column7:7(unknown) column7:7(unknown) column8:8(string)
+ ├── stats: [rows=1000]
+ ├── scan xysd
+ │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1) weak(3,4)
+ └── projections
+      ├── const: 1 [type=int]
+      ├── const: 'foo' [type=string]
+      ├── null [type=unknown]
+      └── cast: string [type=string]
+           └── null [type=unknown]

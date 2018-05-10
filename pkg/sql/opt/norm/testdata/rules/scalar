@@ -194,7 +194,7 @@ opt
 SELECT COALESCE(NULL, 'foo', s) FROM a
 ----
 project
- ├── columns: column7:7(string)
+ ├── columns: column7:7(string!null)
  ├── scan a
  └── projections
       └── const: 'foo' [type=string]
@@ -234,7 +234,7 @@ opt
 SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
 ----
 project
- ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb) column10:10(int)
+ ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb!null) column10:10(int)
  ├── scan a
  │    └── columns: a.i:2(int) a.arr:6(int[])
  └── projections [outer=(2,6)]

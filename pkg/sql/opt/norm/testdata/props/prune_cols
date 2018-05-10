@@ -369,11 +369,11 @@ project
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: column5:5(int)
+                ├── columns: column5:5(int!null)
                 ├── cardinality: [0 - 1]
                 ├── prune: (5)
                 └── project
-                     ├── columns: column5:5(int)
+                     ├── columns: column5:5(int!null)
                      ├── prune: (5)
                      ├── scan a
                      │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)

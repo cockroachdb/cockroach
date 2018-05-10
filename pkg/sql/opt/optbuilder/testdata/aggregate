@@ -23,7 +23,7 @@ SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
 group-by
  ├── columns: column6:6(int) column7:7(int) column8:8(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column17:17(bool) column19:19(bytes)
  ├── project
- │    ├── columns: column5:5(int) column14:14(bool) column16:16(bool) column18:18(bytes)
+ │    ├── columns: column5:5(int!null) column14:14(bool!null) column16:16(bool!null) column18:18(bytes!null)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
@@ -64,7 +64,7 @@ project
  ├── group-by
  │    ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column17:17(bytes)
  │    ├── project
- │    │    ├── columns: kv.v:2(int) column8:8(int) column14:14(bool) column16:16(bytes)
+ │    │    ├── columns: kv.v:2(int) column8:8(int!null) column14:14(bool) column16:16(bytes)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
@@ -117,7 +117,7 @@ project
  ├── group-by
  │    ├── columns: column2:2(int) column3:3(int) column4:4(int) column5:5(int) column6:6(decimal) column8:8(decimal) column9:9(decimal) column10:10(decimal) column13:13(bool) column14:14(bool) column16:16(bytes)
  │    ├── project
- │    │    ├── columns: column1:1(int) column12:12(bool) column15:15(bytes)
+ │    │    ├── columns: column1:1(int!null) column12:12(bool!null) column15:15(bytes!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
@@ -169,7 +169,7 @@ SELECT ARRAY_AGG(1) FROM kv
 group-by
  ├── columns: column6:6(int[])
  ├── project
- │    ├── columns: column5:5(int)
+ │    ├── columns: column5:5(int!null)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
@@ -199,7 +199,7 @@ SELECT JSONB_AGG(1)
 group-by
  ├── columns: column2:2(jsonb)
  ├── project
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -213,7 +213,7 @@ build
 SELECT 1 FROM kv GROUP BY v
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── group-by
  │    ├── columns: kv.v:2(int)
  │    ├── grouping columns: kv.v:2(int)
@@ -282,7 +282,7 @@ project
                      ├── group-by
                      │    ├── columns: column6:6(int)
                      │    ├── project
-                     │    │    ├── columns: column5:5(int)
+                     │    │    ├── columns: column5:5(int!null)
                      │    │    ├── scan kv
                      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
                      │    │    └── projections
@@ -542,10 +542,10 @@ SELECT COUNT(*) FROM kv GROUP BY 1+2
 project
  ├── columns: column6:6(int)
  ├── group-by
- │    ├── columns: column5:5(int) column6:6(int)
- │    ├── grouping columns: column5:5(int)
+ │    ├── columns: column5:5(int!null) column6:6(int)
+ │    ├── grouping columns: column5:5(int!null)
  │    ├── project
- │    │    ├── columns: column5:5(int)
+ │    │    ├── columns: column5:5(int!null)
  │    │    ├── scan kv
  │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
@@ -734,7 +734,7 @@ SELECT COUNT(1)
 group-by
  ├── columns: column2:2(int)
  ├── project
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -749,7 +749,7 @@ SELECT COUNT(1) from kv
 group-by
  ├── columns: column6:6(int)
  ├── project
- │    ├── columns: column5:5(int)
+ │    ├── columns: column5:5(int!null)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
@@ -1750,7 +1750,7 @@ limit
  │                        └── group-by
  │                             ├── columns: column5:5(decimal)
  │                             ├── project
- │                             │    ├── columns: column4:4(int)
+ │                             │    ├── columns: column4:4(int!null)
  │                             │    ├── values
  │                             │    │    └── tuple [type=tuple{}]
  │                             │    └── projections
@@ -1820,7 +1820,7 @@ build
 SELECT 1 FROM kv GROUP BY kv.*;
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── group-by
  │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    ├── grouping columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
@@ -1918,7 +1918,7 @@ SELECT MAX(true), MIN(true)
 group-by
  ├── columns: column2:2(bool) column3:3(bool)
  ├── project
- │    ├── columns: column1:1(bool)
+ │    ├── columns: column1:1(bool!null)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -2103,7 +2103,7 @@ sort
       ├── columns: kv.v:2(int) column6:6(int)
       ├── grouping columns: kv.v:2(int)
       ├── project
-      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── columns: kv.v:2(int) column5:5(int!null)
       │    ├── scan kv
       │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
       │    └── projections
