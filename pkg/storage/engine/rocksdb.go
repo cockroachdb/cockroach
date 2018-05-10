@@ -87,9 +87,10 @@ const debugIteratorLeak = false
 
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
-	// Note that rocksdb logging is only enabled if log.V(3) is true
-	// when RocksDB.Open() is called.
-	log.Info(context.TODO(), C.GoStringN(s, n))
+	if log.V(3) {
+		ctx := log.WithLogTagStr(context.Background(), "rocksdb", "")
+		log.Info(ctx, C.GoStringN(s, n))
+	}
 }
 
 //export prettyPrintKey
@@ -605,7 +606,6 @@ func (r *RocksDB) open() error {
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
-			logging_enabled:   C.bool(log.V(3)),
 			num_cpu:           C.int(rocksdbConcurrency),
 			max_open_files:    C.int(maxOpenFiles),
 			use_file_registry: C.bool(newVersion == versionCurrent),
