@@ -28,8 +28,8 @@ import (
 )
 
 func TestLogicalPropsBuilder(t *testing.T) {
-	runDataDrivenTest(t, "testdata/logprops/", memo.ExprFmtHideCost)
-	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost)
+	runDataDrivenTest(t, "testdata/logprops/", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
+	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
 }
 
 // Test HasCorrelatedSubquery flag manually since it's not important enough

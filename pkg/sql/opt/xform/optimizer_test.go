@@ -27,7 +27,7 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
 //   ...
 func TestCoster(t *testing.T) {
-	runDataDrivenTest(t, "testdata/coster/", memo.ExprFmtShowAll)
+	runDataDrivenTest(t, "testdata/coster/", memo.ExprFmtHideRuleProps)
 }
 
 // TestPhysicalPropsFactory files can be run separately like this:
@@ -43,7 +43,11 @@ func TestPhysicalPropsFactory(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
 //   ...
 func TestRules(t *testing.T) {
-	runDataDrivenTest(t, "testdata/rules/", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
+	runDataDrivenTest(
+		t,
+		"testdata/rules/",
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps,
+	)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form

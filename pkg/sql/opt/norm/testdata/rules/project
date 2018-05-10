@@ -1,0 +1,90 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, f FLOAT, s STRING)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── f float
+ ├── s string
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x INT PRIMARY KEY, z INT)
+----
+TABLE b
+ ├── x int not null
+ ├── z int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# EliminateProject
+# --------------------------------------------------
+
+# Same order, same names.
+opt
+SELECT x, y FROM a
+----
+scan a
+ ├── columns: x:1(int!null) y:2(int)
+ └── keys: (1)
+
+# Different order, aliased names.
+opt
+SELECT a.y AS aliasy, a.x FROM a
+----
+scan a
+ ├── columns: aliasy:2(int) x:1(int!null)
+ └── keys: (1)
+
+# Reordered, duplicate, aliased columns.
+opt
+SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
+----
+scan a
+ ├── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
+ └── keys: (1)
+
+# Added column (projection should not be eliminated).
+opt
+SELECT *, 1 FROM a
+----
+project
+ ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) column5:5(int)
+ ├── keys: (1)
+ ├── scan a
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float) a.s:4(string)
+ │    └── keys: (1)
+ └── projections [outer=(1-4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: a.f [type=float, outer=(3)]
+      ├── variable: a.s [type=string, outer=(4)]
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# EliminateProjectProject
+# --------------------------------------------------
+
+opt
+SELECT y+1 FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
+----
+project
+ ├── columns: column7:7(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null)
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── keys: (1)
+ │    ├── scan b
+ │    │    ├── columns: b.x:5(int!null)
+ │    │    └── keys: (5)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
+ └── projections [outer=(2)]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 1 [type=int]

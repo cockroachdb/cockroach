@@ -62,10 +62,7 @@
 # computed columns.
 #
 # This rule triggers a cycle with the FilterUnusedSelectCols rule. That rule
-# has the DetectCycle tag to break the cycle. In addition, this rule uses
-# ProjectNoCycle to minimize the overhead of detecting the cycle by creating a
-# Project which will not match the FilterUnusedSelectCols rule (or any other
-# rule which has the DetectCycle tag).
+# has the DetectCycle tag to break the cycle.
 [PushSelectIntoProject, Normalize]
 (Select
     (Project
@@ -78,7 +75,7 @@
 )
 =>
 (Select
-    (ProjectNoCycle
+    (Project
         (Select
             $input
             (Filters (ExtractBoundConditions $list $input))

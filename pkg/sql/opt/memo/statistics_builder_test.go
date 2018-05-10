@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -62,7 +63,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, &RelationalProps{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &opt.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)
@@ -91,7 +92,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 			ColStats: singleColStats, MultiColStats: multiColStats, RowCount: 10000000000,
 		}}
 		sb := &statisticsBuilder{}
-		sb.init(&evalCtx, &opt.Statistics{}, &RelationalProps{}, ExprView{}, &keyBuffer{})
+		sb.init(&evalCtx, &opt.Statistics{}, &props.Relational{}, ExprView{}, &keyBuffer{})
 		sb.s.Selectivity = sb.applyConstraintSet(cs, &inputStatsBuilder)
 		sb.applySelectivity(inputStatsBuilder.s.RowCount)
 		testStats(t, sb, sb.s.Selectivity, expectedStats, expectedSelectivity)

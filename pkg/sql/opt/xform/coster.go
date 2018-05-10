@@ -17,6 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
@@ -33,7 +34,7 @@ type Coster interface {
 	// expression. The optimizer does not expect the cost to correspond to any
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
-	ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost
+	ComputeCost(candidate *memo.BestExpr, props *props.Logical) memo.Cost
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -56,19 +57,19 @@ func newCoster(mem *memo.Memo) *coster {
 // branch-and-bound pruning will work properly.
 //
 // TODO: This is just a skeleton, and needs to compute real costs.
-func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+func (c *coster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	switch candidate.Operator() {
 	case opt.SortOp:
-		return c.computeSortCost(candidate, props)
+		return c.computeSortCost(candidate, logical)
 
 	case opt.ScanOp:
-		return c.computeScanCost(candidate, props)
+		return c.computeScanCost(candidate, logical)
 
 	case opt.SelectOp:
-		return c.computeSelectCost(candidate, props)
+		return c.computeSelectCost(candidate, logical)
 
 	case opt.ValuesOp:
-		return c.computeValuesCost(candidate, props)
+		return c.computeValuesCost(candidate, logical)
 
 	case opt.LookupJoinOp:
 		// TODO(justin): remove this once we can execbuild index joins.
@@ -87,24 +88,24 @@ func (c *coster) ComputeCost(candidate *memo.BestExpr, props *memo.LogicalProps)
 	}
 }
 
-func (c *coster) computeSortCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	cost := memo.Cost(props.Relational.Stats.RowCount) * 0.25
+func (c *coster) computeSortCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	cost := memo.Cost(logical.Relational.Stats.RowCount) * 0.25
 	return cost + c.computeChildrenCost(candidate)
 }
 
-func (c *coster) computeScanCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount)
+func (c *coster) computeScanCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	return memo.Cost(logical.Relational.Stats.RowCount)
 }
 
-func (c *coster) computeSelectCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
+func (c *coster) computeSelectCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
 	// The filter has to be evaluated on each input row.
 	inputRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
 	cost := memo.Cost(inputRowCount) * 0.1
 	return cost + c.computeChildrenCost(candidate)
 }
 
-func (c *coster) computeValuesCost(candidate *memo.BestExpr, props *memo.LogicalProps) memo.Cost {
-	return memo.Cost(props.Relational.Stats.RowCount)
+func (c *coster) computeValuesCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
+	return memo.Cost(logical.Relational.Stats.RowCount)
 }
 
 func (c *coster) computeChildrenCost(candidate *memo.BestExpr) memo.Cost {

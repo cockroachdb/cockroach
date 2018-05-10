@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -206,6 +207,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 				"hide-stats":       memo.ExprFmtHideStats,
 				"hide-cost":        memo.ExprFmtHideCost,
 				"hide-constraints": memo.ExprFmtHideConstraints,
+				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
@@ -418,7 +420,7 @@ func (ot *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Da
 
 func (ot *OptTester) buildExpr(
 	factory *norm.Factory,
-) (root memo.GroupID, required *memo.PhysicalProps, _ error) {
+) (root memo.GroupID, required *props.Physical, _ error) {
 	stmt, err := parser.ParseOne(ot.sql)
 	if err != nil {
 		return 0, nil, err

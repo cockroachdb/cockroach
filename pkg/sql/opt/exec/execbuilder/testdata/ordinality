@@ -27,14 +27,12 @@ a         1
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MAX(ordinality) FROM foo WITH ORDINALITY
 ----
-group                 ·            ·                (column3)          ·
- │                    aggregate 0  max(ordinality)  ·                  ·
- └── render           ·            ·                ("ordinality")     ·
-      │               render 0     "ordinality"     ·                  ·
-      └── ordinality  ·            ·                (x, "ordinality")  ·
-           └── scan   ·            ·                (x)                ·
-·                     table        foo@primary      ·                  ·
-·                     spans        ALL              ·                  ·
+group            ·            ·                (column3)       ·
+ │               aggregate 0  max(ordinality)  ·               ·
+ └── ordinality  ·            ·                ("ordinality")  ·
+      └── scan   ·            ·                ()              ·
+·                table        foo@primary      ·               ·
+·                spans        ALL              ·               ·
 
 exec hide-colnames
 SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
