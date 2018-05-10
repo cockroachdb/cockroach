@@ -468,6 +468,22 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	return c
 }
 
+// clone creates a new cluster object that refers to the same cluster as the
+// receiver, but is associated with the specified test.
+func (c *cluster) clone(t *test) *cluster {
+	l, err := rootLogger(t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &cluster{
+		name:   c.name,
+		nodes:  c.nodes,
+		status: t.Status,
+		t:      t,
+		l:      l,
+	}
+}
+
 // All returns a node list containing all of the nodes in the cluster.
 func (c *cluster) All() nodeListOption {
 	return c.Range(1, c.nodes)
