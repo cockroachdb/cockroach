@@ -54,7 +54,7 @@ func makeFilterRE(filter []string) *regexp.Regexp {
 }
 
 type testSpec struct {
-	SkippedBecause string // if nonzero, test will be skipped
+	SkippedBecause string // if non-empty, test will be skipped
 	Name           string
 	// Stable indicates whether failure of the test will result in failure of the
 	// test run. Tests should be added initially as unstable, and only converted
