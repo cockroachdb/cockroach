@@ -503,7 +503,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
+      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int!null)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
@@ -516,10 +516,10 @@ build
 SELECT 1, * FROM t ORDER BY 1
 ----
 sort
- ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
+ ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int) t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: column4:4(int!null) t.a:1(int!null) t.b:2(int) t.c:3(bool)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections

@@ -144,10 +144,10 @@ opt
 SELECT x, 1 one, y FROM a ORDER BY x, one
 ----
 sort
- ├── columns: x:1(int!null) one:5(int) y:2(float!null)
+ ├── columns: x:1(int!null) one:5(int!null) y:2(float!null)
  ├── ordering: +1,+5
  └── project
-      ├── columns: a.x:1(int!null) one:5(int) a.y:2(float!null)
+      ├── columns: a.x:1(int!null) one:5(int!null) a.y:2(float!null)
       ├── scan a
       │    └── columns: a.x:1(int!null) a.y:2(float!null)
       └── projections

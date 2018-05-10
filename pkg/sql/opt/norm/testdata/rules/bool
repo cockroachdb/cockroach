@@ -36,7 +36,7 @@ opt
 SELECT False OR False
 ----
 project
- ├── columns: column1:1(bool)
+ ├── columns: column1:1(bool!null)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -72,7 +72,7 @@ opt
 SELECT k=1 AND False AND f=3.5 FROM a
 ----
 project
- ├── columns: column6:6(bool)
+ ├── columns: column6:6(bool!null)
  ├── scan a
  └── projections
       └── false [type=bool]
@@ -81,7 +81,7 @@ opt
 SELECT False AND s='foo' FROM a
 ----
 project
- ├── columns: column6:6(bool)
+ ├── columns: column6:6(bool!null)
  ├── scan a
  └── projections
       └── false [type=bool]
@@ -158,7 +158,7 @@ opt
 SELECT k=1 OR (i=2 OR True) FROM a
 ----
 project
- ├── columns: column6:6(bool)
+ ├── columns: column6:6(bool!null)
  ├── scan a
  └── projections
       └── true [type=bool]
@@ -167,7 +167,7 @@ opt
 SELECT k=1 OR True OR f=3.5 FROM a
 ----
 project
- ├── columns: column6:6(bool)
+ ├── columns: column6:6(bool!null)
  ├── scan a
  └── projections
       └── true [type=bool]
