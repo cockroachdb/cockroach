@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -95,7 +96,8 @@ func testSetup(capFn storeCapacityFunc) (*Compactor, *wrappedEngine, *int32, fun
 	stopper.AddCloser(eng)
 	compactionCount := new(int32)
 	doneFn := func(_ context.Context) { atomic.AddInt32(compactionCount, 1) }
-	compactor := NewCompactor(eng, capFn, doneFn)
+	st := cluster.MakeTestingClusterSettings()
+	compactor := NewCompactor(st, eng, capFn, doneFn)
 	compactor.Start(context.Background(), tracing.NewTracer(), stopper)
 	return compactor, eng, compactionCount, func() {
 		stopper.Stop(context.Background())
@@ -470,7 +472,7 @@ func TestCompactorThresholds(t *testing.T) {
 			compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 			defer cleanup()
 			// Shorten wait times for compactor processing.
-			compactor.opts.CompactionMinInterval = time.Millisecond
+			minInterval.Override(&compactor.st.SV, time.Millisecond)
 
 			for _, sc := range test.suggestions {
 				compactor.Suggest(context.Background(), sc)
@@ -550,7 +552,8 @@ func TestCompactorDeadlockOnStart(t *testing.T) {
 		return roachpb.StoreCapacity{}, errors.New("never called")
 	}
 	doneFn := func(_ context.Context) {}
-	compactor := NewCompactor(eng, capFn, doneFn)
+	st := cluster.MakeTestingClusterSettings()
+	compactor := NewCompactor(st, eng, capFn, doneFn)
 
 	compactor.ch <- struct{}{}
 
@@ -570,7 +573,7 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 
 	// Add a suggested compaction -- this won't get processed by this
 	// compactor for an hour.
-	compactor.opts.CompactionMinInterval = time.Hour
+	minInterval.Override(&compactor.st.SV, time.Hour)
 	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
 		Compaction: storagebase.Compaction{
@@ -583,8 +586,9 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	// using the same engine so that it sees a non-empty queue.
 	stopper := stop.NewStopper()
 	doneFn := func(_ context.Context) { atomic.AddInt32(compactionCount, 1) }
-	fastCompactor := NewCompactor(we, capacityFn, doneFn)
-	fastCompactor.opts.CompactionMinInterval = time.Millisecond
+	st := cluster.MakeTestingClusterSettings()
+	fastCompactor := NewCompactor(st, we, capacityFn, doneFn)
+	minInterval.Override(&fastCompactor.st.SV, time.Millisecond)
 	fastCompactor.Start(context.Background(), tracing.NewTracer(), stopper)
 	defer stopper.Stop(context.Background())
 
@@ -613,8 +617,8 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 		}, nil
 	}
 	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
-	compactor.opts.CompactionMinInterval = time.Millisecond
-	compactor.opts.MaxSuggestedCompactionRecordAge = 1 * time.Millisecond
+	minInterval.Override(&compactor.st.SV, time.Millisecond)
+	maxSuggestedCompactionRecordAge.Override(&compactor.st.SV, time.Millisecond)
 	defer cleanup()
 
 	// Add a suggested compaction that won't get processed because it's
@@ -634,7 +638,7 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), compactor.opts.ThresholdBytes-1; a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), thresholdBytes.Get(&compactor.st.SV)-1; a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
