@@ -3018,7 +3018,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DCollatedString:
 			s = t.Contents
 		case *DBytes:
-			var buf bytes.Buffer
+			var buf strings.Builder
 			buf.WriteString("\\x")
 			lex.HexEncodeString(&buf, string(*t))
 			s = buf.String()

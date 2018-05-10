@@ -142,7 +142,7 @@ var Builtins = map[string][]tree.Builtin{
 			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				var buffer bytes.Buffer
+				var buffer strings.Builder
 				for _, d := range args {
 					if d == tree.DNull {
 						continue
@@ -172,7 +172,7 @@ var Builtins = map[string][]tree.Builtin{
 					return tree.DNull, nil
 				}
 				sep := string(tree.MustBeDString(args[0]))
-				var buf bytes.Buffer
+				var buf strings.Builder
 				prefix := ""
 				for _, d := range args[1:] {
 					if d == tree.DNull {
@@ -576,7 +576,7 @@ var Builtins = map[string][]tree.Builtin{
 				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
 				switch format {
 				case "hex":
-					var buf bytes.Buffer
+					var buf strings.Builder
 					lex.HexEncodeString(&buf, string(data))
 					return tree.NewDString(buf.String()), nil
 				case "escape":
@@ -1991,7 +1991,7 @@ may increase either contention or retry errors, or both.`,
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				val := int(*args[0].(*tree.DInt))
-				var buf bytes.Buffer
+				var buf strings.Builder
 				if val < 0 {
 					buf.WriteString("minus-")
 					val = -val
@@ -3288,7 +3288,7 @@ func regexpReplace(ctx *tree.EvalContext, s, pattern, to, sqlFlags string) (tree
 	}
 
 	finalIndex := 0
-	var newString bytes.Buffer
+	var newString strings.Builder
 
 	// regexp.ReplaceAllStringFunc cannot be used here because it does not provide
 	// access to regexp submatches for expansion in the replacement string.
@@ -3397,7 +3397,9 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 		}
 	}
 
-	var goFlags bytes.Buffer
+	var goFlags strings.Builder
+	goFlags.WriteString("(?")
+
 	for flag, b := range flagToByte {
 		if flags&flag != 0 {
 			goFlags.WriteByte(b)
@@ -3408,12 +3410,16 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 			goFlags.WriteByte(b)
 		}
 	}
-	// Bytes() instead of String() to save an allocation.
-	bs := goFlags.Bytes()
-	if len(bs) == 0 {
+
+	// Length is 2 only if contents are just "(?"
+	if goFlags.Len() == 2 {
 		return pattern, nil
 	}
-	return fmt.Sprintf("(?%s:%s)", bs, pattern), nil
+
+	goFlags.WriteByte(':')
+	goFlags.WriteString(pattern)
+	goFlags.WriteByte(')')
+	return goFlags.String(), nil
 }
 
 func overlay(s, to string, pos, size int) (tree.Datum, error) {
@@ -3675,7 +3681,7 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 // described "escape converts zero bytes and high-bit-set bytes to octal
 // sequences (\nnn) and doubles backslashes."
 func encodeEscape(input []byte) string {
-	var result bytes.Buffer
+	var result strings.Builder
 	start := 0
 	for i := range input {
 		if input[i] == 0 || input[i]&128 != 0 {

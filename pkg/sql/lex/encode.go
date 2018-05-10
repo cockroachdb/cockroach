@@ -25,6 +25,7 @@ package lex
 
 import (
 	"bytes"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -80,7 +81,7 @@ func EscapeSQLString(in string) string {
 
 // HexEncodeString writes a hexadecimal representation of the string
 // to buf.
-func HexEncodeString(buf *bytes.Buffer, in string) {
+func HexEncodeString(buf *strings.Builder, in string) {
 	for i := 0; i < len(in); i++ {
 		buf.Write(stringencoding.RawHexMap[in[i]])
 	}
