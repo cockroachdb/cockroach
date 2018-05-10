@@ -72,25 +72,39 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		idx := len(toTraverse) - 1
 		tableDesc := toTraverse[idx]
 		toTraverse = toTraverse[:idx]
+
+		maybeEnqueue := func(ref sqlbase.ForeignKeyReference, msg string) error {
+			// Check if we're already truncating the referencing table.
+			if _, ok := toTruncate[ref.Table]; ok {
+				return nil
+			}
+			other, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+			if err != nil {
+				return err
+			}
+
+			if n.DropBehavior != tree.DropCascade {
+				return errors.Errorf("%q is %s table %q", tableDesc.Name, msg, other.Name)
+			}
+			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
+				return err
+			}
+			toTruncate[other.ID] = struct{}{}
+			toTraverse = append(toTraverse, *other)
+			return nil
+		}
+
 		for _, idx := range tableDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
-				// Check if we're already truncating the referencing table.
-				if _, ok := toTruncate[ref.Table]; ok {
-					continue
-				}
-				other, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
-				if err != nil {
+				if err := maybeEnqueue(ref, "referenced by foreign key from"); err != nil {
 					return nil, err
 				}
+			}
 
-				if n.DropBehavior != tree.DropCascade {
-					return nil, errors.Errorf("%q is referenced by foreign key from table %q", tableDesc.Name, other.Name)
-				}
-				if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
+			for _, ref := range idx.InterleavedBy {
+				if err := maybeEnqueue(ref, "interleaved by"); err != nil {
 					return nil, err
 				}
-				toTruncate[other.ID] = struct{}{}
-				toTraverse = append(toTraverse, *other)
 			}
 		}
 	}
