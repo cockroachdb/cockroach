@@ -1,0 +1,88 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL, UNIQUE (s DESC, d))
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── s string
+ ├── d decimal not null
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── d decimal not null
+      └── x int not null (storing)
+
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:40:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100
+  }
+]'
+----
+
+# In order to actually create new logical props for the lookup join, we
+# need to call ConstructLookupJoin, which only happens when where is a
+# remaining filter.
+opt
+SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s, y
+----
+project
+ ├── columns: column5:5(int)
+ ├── stats: [rows=65]
+ ├── group-by
+ │    ├── columns: a.y:2(int) a.s:3(string) column5:5(int)
+ │    ├── grouping columns: a.y:2(int) a.s:3(string)
+ │    ├── stats: [rows=65, distinct(2,3)=65]
+ │    ├── keys: weak(2,3)
+ │    ├── project
+ │    │    ├── columns: a.s:3(string) a.y:2(int)
+ │    │    ├── stats: [rows=66, distinct(2,3)=65]
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │    │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
+ │    │    │    ├── keys: (1)
+ │    │    │    ├── lookup-join
+ │    │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │    │    │    ├── table: a
+ │    │    │    │    ├── stats: [rows=200]
+ │    │    │    │    ├── keys: (1)
+ │    │    │    │    └── scan a@secondary
+ │    │    │    │         ├── columns: a.x:1(int!null) a.s:3(string)
+ │    │    │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │    │    │    │         ├── stats: [rows=200, distinct(3)=1]
+ │    │    │    │         └── keys: (1)
+ │    │    │    └── filters [type=bool, outer=(1,2)]
+ │    │    │         └── eq [type=bool, outer=(1,2)]
+ │    │    │              ├── plus [type=int, outer=(1,2)]
+ │    │    │              │    ├── variable: a.x [type=int, outer=(1)]
+ │    │    │              │    └── variable: a.y [type=int, outer=(2)]
+ │    │    │              └── const: 10 [type=int]
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: a.s [type=string, outer=(3)]
+ │    │         └── variable: a.y [type=int, outer=(2)]
+ │    └── aggregations
+ │         └── count-rows [type=int]
+ └── projections [outer=(5)]
+      └── variable: column5 [type=int, outer=(5)]
