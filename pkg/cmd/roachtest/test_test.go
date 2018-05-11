@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/kr/pretty"
 )
 
 func TestRegistryRun(t *testing.T) {
@@ -198,6 +200,110 @@ func TestRegistryVerifyClusterName(t *testing.T) {
 			}
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
+			}
+		})
+	}
+}
+
+func TestRegistryPrepareSpec(t *testing.T) {
+	dummyRun := func(context.Context, *test, *cluster) {}
+
+	var listTests func(t *testSpec) []string
+	listTests = func(t *testSpec) []string {
+		r := []string{t.Name}
+		for i := range t.SubTests {
+			r = append(r, listTests(&t.SubTests[i])...)
+		}
+		return r
+	}
+
+	testCases := []struct {
+		spec          testSpec
+		expectedErr   string
+		expectedTests []string
+	}{
+		{
+			testSpec{
+				Name: "a",
+				Run:  dummyRun,
+			},
+			"",
+			[]string{"a"},
+		},
+		{
+			testSpec{
+				Name: "a",
+				SubTests: []testSpec{{
+					Name: "b",
+					Run:  dummyRun,
+				}},
+			},
+			"",
+			[]string{"a", "a/b"},
+		},
+		{
+			testSpec{
+				Name: "a",
+				Run:  dummyRun,
+				SubTests: []testSpec{{
+					Name: "b",
+					Run:  dummyRun,
+				}},
+			},
+			"a: must specify only one of Run or SubTests",
+			nil,
+		},
+		{
+			testSpec{
+				Name: "a",
+				SubTests: []testSpec{{
+					Name: "b",
+				}},
+			},
+			"a/b: must specify only one of Run or SubTests",
+			nil,
+		},
+		{
+			testSpec{
+				Name: "a",
+				SubTests: []testSpec{{
+					Name: "b",
+					Run:  dummyRun,
+					SubTests: []testSpec{{
+						Name: "c",
+						Run:  dummyRun,
+					}},
+				}},
+			},
+			"b: must specify only one of Run or SubTests",
+			nil,
+		},
+		{
+			testSpec{
+				Name: "a",
+				SubTests: []testSpec{{
+					Name:  "b",
+					Nodes: nodes(1),
+					Run:   dummyRun,
+				}},
+			},
+			"a/b: subtest may not provide cluster specification",
+			nil,
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			r := newRegistry()
+			err := r.prepareSpec(&c.spec, 0)
+			if !testutils.IsError(err, c.expectedErr) {
+				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
+			}
+			if c.expectedErr == "" {
+				tests := listTests(&c.spec)
+				sort.Strings(tests)
+				if diff := pretty.Diff(c.expectedTests, tests); len(diff) != 0 {
+					t.Fatalf("unexpected tests:\n%s", strings.Join(diff, "\n"))
+				}
 			}
 		})
 	}
