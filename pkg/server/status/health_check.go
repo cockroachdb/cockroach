@@ -16,10 +16,10 @@ package status
 
 import (
 	"context"
-
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type threshold struct {
@@ -124,7 +124,10 @@ func (d metricsMap) update(tracked map[string]threshold, m metricsMap) metricsMa
 // A HealthChecker inspects the node metrics and optionally a NodeStatus for
 // anomalous conditions that the operator should be alerted to.
 type HealthChecker struct {
-	state   metricsMap
+	mu struct {
+		syncutil.Mutex
+		metricsMap // - the last recorded values of all counters
+	}
 	tracked map[string]threshold
 }
 
@@ -134,11 +137,15 @@ type HealthChecker struct {
 // treated as a counter and reports whenever it is incremented between
 // consecutive calls of `CheckHealth`.
 func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
-	return &HealthChecker{state: metricsMap{}, tracked: trackedMetrics}
+	h := &HealthChecker{tracked: trackedMetrics}
+	h.mu.metricsMap = metricsMap{}
+	return h
 }
 
-// CheckHealth performs a (cheap) health check. It is not thread safe.
+// CheckHealth performs a (cheap) health check.
 func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) HealthCheckResult {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	// Gauges that trigger alerts when nonzero.
 	var alerts []HealthAlert
 
@@ -149,7 +156,7 @@ func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) 
 		m[storeStatus.Desc.StoreID] = storeStatus.Metrics
 	}
 
-	diffs := h.state.update(h.tracked, m)
+	diffs := h.mu.update(h.tracked, m)
 
 	for storeID, storeDiff := range diffs {
 		for name, value := range storeDiff {
