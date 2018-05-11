@@ -653,7 +653,7 @@ HoistSelectExists
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-  - ├── keys: (1) weak(3,4)
+    ├── keys: (1) weak(3,4)
   - ├── scan a
   + ├── semi-join-apply
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
@@ -671,6 +671,7 @@ HoistSelectExists
   -                     └── eq [type=bool, outer=(2,7)]
   -                          ├── variable: xy.y [type=int, outer=(7)]
   -                          └── variable: a.i [type=int, outer=(2)]
+  + │    ├── keys: (1) weak(3,4)
   + │    ├── scan a
   + │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   + │    │    └── keys: (1) weak(3,4)
@@ -693,8 +694,10 @@ TryDecorrelateSelect
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
     ├── semi-join-apply
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── keys: (1) weak(3,4)
     │    ├── scan a
     │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
@@ -723,9 +726,11 @@ DecorrelateJoin
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
   - ├── semi-join-apply
   + ├── semi-join
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── keys: (1) weak(3,4)
     │    ├── scan a
     │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
@@ -743,8 +748,10 @@ EliminateEmptyAnd
 ================================================================================
    select
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
     ├── semi-join
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+    │    ├── keys: (1) weak(3,4)
     │    ├── scan a
     │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
     │    │    └── keys: (1) weak(3,4)
@@ -764,9 +771,11 @@ EliminateSelect
   -select
   +semi-join
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
   - ├── semi-join
   + ├── scan a
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  - │    ├── keys: (1) weak(3,4)
   - │    ├── scan a
   - │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
   - │    │    └── keys: (1) weak(3,4)
@@ -791,6 +800,7 @@ GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    semi-join
     ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+    ├── keys: (1) weak(3,4)
   - ├── scan a
   + ├── lookup-join
     │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
@@ -816,6 +826,7 @@ Final best expression
 ================================================================================
   semi-join
    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+   ├── keys: (1) weak(3,4)
    ├── scan a
    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
    │    └── keys: (1) weak(3,4)

@@ -44,12 +44,10 @@ limit
  ├── columns: column5:5(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── keys: ()
  ├── group-by
  │    ├── columns: column5:5(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── keys: ()
  │    ├── project
  │    │    ├── stats: [rows=1000]
  │    │    ├── scan xyzs

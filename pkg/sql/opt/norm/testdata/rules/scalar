@@ -464,7 +464,6 @@ select
            └── group-by
                 ├── columns: column13:13(string)
                 ├── cardinality: [1 - 1]
-                ├── keys: ()
                 ├── scan a
                 │    ├── columns: a.s:10(string)
                 │    └── constraint: /7: contradiction

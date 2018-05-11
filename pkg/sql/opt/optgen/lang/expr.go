@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -158,6 +159,17 @@ func (e RuleSetExpr) WithTag(tag string) RuleSetExpr {
 		}
 	}
 	return rules
+}
+
+// Sort sorts the rules in the set, given a less function, while keeping the
+// original order of equal elements. A rule that is "less than" another rule is
+// stored stored earlier in the set.
+//
+// Note that the rule set is updated in place to reflect the sorted order.
+func (e RuleSetExpr) Sort(less func(left, right *RuleExpr) bool) {
+	sort.SliceStable(e, func(i, j int) bool {
+		return less(e[i], e[j])
+	})
 }
 
 // visitChildren is a helper function called by the Visit function on AST

@@ -371,7 +371,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	if !flags.HasFlags(ExprFmtHideRowCard) {
 		if logProps.Relational.Cardinality != props.AnyCardinality {
 			// Suppress cardinality for Scan ops if it's redundant with Limit field.
-			if ev.Operator() != opt.ScanOp || !logProps.Relational.Cardinality.AllowsZero() {
+			if ev.Operator() != opt.ScanOp || !logProps.Relational.Cardinality.CanBeZero() {
 				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
 			}
 		}

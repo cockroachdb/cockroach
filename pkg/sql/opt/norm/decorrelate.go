@@ -282,7 +282,7 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 		// Hoist the subquery into a single expression that can be accessed via
 		// the subqueries method.
 		subqueryProps := r.mem.GroupProperties(subquery).Relational
-		if subqueryProps.Cardinality.AllowsZero() {
+		if subqueryProps.Cardinality.CanBeZero() {
 			// Zero cardinality allowed, so must use left outer join to preserve
 			// outer row (padded with nulls) in case the subquery returns zero rows.
 			r.hoisted = r.f.ConstructLeftJoinApply(r.hoisted, subquery, r.f.ConstructTrue())

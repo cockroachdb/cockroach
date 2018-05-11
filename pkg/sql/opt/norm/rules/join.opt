@@ -97,3 +97,93 @@
     )
     (Filters (ExtractUnboundConditions $list $right))
 )
+
+# SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
+# FullJoin to a RightJoin) when it's known that the join's right input never
+# returns zero rows and when there's no join condition. The outer join only
+# populates the right side with NULL values when it would otherwise not be
+# present.
+[SimplifyLeftJoin, Normalize]
+(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:* & (HasOneOrMoreRows $right)
+    $on:(True)
+)
+=>
+(ConstructNonLeftJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# SimplifyRightJoin reduces a RightJoin operator to an InnerJoin operator (or a
+# FullJoin to a LeftJoin) when it's known that the join's left input never
+# returns zero rows and when there's no join condition. The outer join only
+# populates the left side with NULL values when it would otherwise not be
+# present.
+[SimplifyRightJoin, Normalize]
+(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+    $left:* & (HasOneOrMoreRows $left)
+    $right:*
+    $on:(True)
+)
+=>
+(ConstructNonRightJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# EliminateSemiJoin discards a SemiJoin operator when it's known that the right
+# input never returns zero rows, and there is no join condition.
+[EliminateSemiJoin, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* & (HasOneOrMoreRows $right)
+    (True)
+)
+=>
+$left
+
+# EliminateAntiJoin discards an AntiJoin operator when it's known that the right
+# input never returns any rows.
+[EliminateAntiJoin, Normalize]
+(AntiJoin | AntiJoinApply
+    $left:*
+    $right:* & (HasZeroRows $right)
+    *
+)
+=>
+$left
+
+# EliminateJoinNoColsLeft eliminates an InnerJoin with a one row, zero column
+# left input set. These can be produced when a Values, scalar GroupBy, or other
+# one-row operator's columns are never used.
+[EliminateJoinNoColsLeft, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:* & (HasNoCols $left) & (HasOneRow $left)
+    $right:*
+    $on:*
+)
+=>
+(Select
+    $right
+    $on
+)
+
+# EliminateJoinNoColsRight eliminates an InnerJoin with a one row, zero column
+# right input set. These can be produced when a Values, scalar GroupBy, or other
+# one-row operator's columns are never used.
+[EliminateJoinNoColsRight, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:*
+    $right:* & (HasNoCols $right) & (HasOneRow $right)
+    $on:*
+)
+=>
+(Select
+    $left
+    $on
+)

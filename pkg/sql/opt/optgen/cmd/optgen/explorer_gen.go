@@ -105,6 +105,7 @@ func (g *explorerGen) genRuleFuncs() {
 		g.w.writeIndent("_rootExpr := _e.mem.Expr(_root).As%s()\n", define.Name)
 		g.w.writeIndent("_fullyExplored = true\n\n")
 
+		sortRulesByPriority(rules)
 		for _, rule := range rules {
 			g.ruleGen.genRule(rule)
 		}
