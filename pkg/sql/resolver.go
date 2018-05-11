@@ -122,10 +122,6 @@ func ResolveExistingObject(
 // use(someVar)
 func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 	if flags.skipCache {
-		defer func(prev bool) { p.revealNewDescriptors = prev }(p.revealNewDescriptors)
-		// Descriptors in the ADDING state are visible to requests
-		// that skip the cache.
-		p.revealNewDescriptors = true
 		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 		p.avoidCachedDescriptors = true
 	}
@@ -215,7 +211,6 @@ func (p *planner) CommonLookupFlags(ctx context.Context, required bool) CommonLo
 func (p *planner) ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags {
 	return ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(ctx, required),
-		allowAdding:       p.revealNewDescriptors,
 	}
 }
 
