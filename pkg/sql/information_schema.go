@@ -1121,7 +1121,7 @@ func forEachTableDescAll(
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, db, virtualOpts, true /* allowAdding */, func(
+	return forEachTableDescWithTableLookupInternal(ctx, p, db, virtualOpts, func(
 		db *sqlbase.DatabaseDescriptor,
 		scName string,
 		table *sqlbase.TableDescriptor,
@@ -1147,20 +1147,16 @@ func forEachTableDescWithTableLookup(
 	virtualOpts virtualOpts,
 	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, virtualOpts, false /* allowAdding */, fn)
+	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, virtualOpts, fn)
 }
 
 // forEachTableDescWithTableLookupInternal is the logic that supports
 // forEachTableDescWithTableLookup.
-//
-// The allowAdding argument if true includes newly added tables that
-// are not yet public.
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
 	prefix *DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	allowAdding bool,
 	fn func(*DatabaseDescriptor, string, *TableDescriptor, tableLookupFn) error,
 ) error {
 	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
@@ -1206,7 +1202,7 @@ func forEachTableDescWithTableLookupInternal(
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
 		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
-		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+		if !userCanSeeTable(ctx, p, table) || !parentExists {
 			continue
 		}
 		if err := fn(dbDesc, tree.PublicSchema, table, lCtx); err != nil {
@@ -1317,13 +1313,6 @@ func userCanSeeDatabase(ctx context.Context, p *planner, db *sqlbase.DatabaseDes
 	return p.CheckAnyPrivilege(ctx, db) == nil
 }
 
-func userCanSeeTable(
-	ctx context.Context, p *planner, table *sqlbase.TableDescriptor, allowAdding bool,
-) bool {
-	return tableIsVisible(table, allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
-}
-
-func tableIsVisible(table *TableDescriptor, allowAdding bool) bool {
-	return table.State == sqlbase.TableDescriptor_PUBLIC ||
-		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)
+func userCanSeeTable(ctx context.Context, p *planner, table *sqlbase.TableDescriptor) bool {
+	return !table.Dropped() && p.CheckAnyPrivilege(ctx, table) == nil
 }

@@ -131,7 +131,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		if !tableIsVisible(table, true /*allowAdding*/) {
+		if table.Dropped() {
 			continue
 		}
 		for _, u := range table.GetPrivileges().Users {

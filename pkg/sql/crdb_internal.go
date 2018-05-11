@@ -968,7 +968,7 @@ CREATE TABLE crdb_internal.create_statements (
 		typeTable := tree.NewDString("table")
 		typeSequence := tree.NewDString("sequence")
 
-		return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOnce, true, /*allowAdding*/
+		return forEachTableDescWithTableLookupInternal(ctx, p, dbContext, virtualOnce,
 			func(db *DatabaseDescriptor, scName string, table *TableDescriptor, lCtx tableLookupFn) error {
 				parentNameStr := tree.DNull
 				if db != nil {
