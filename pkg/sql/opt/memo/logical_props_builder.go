@@ -546,7 +546,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		// Inherit outer columns from input query.
 		logical.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
 
-		// Any has additional scalar value that can contain outer reference.
+		// Any has additional scalar value that can contain outer references.
 		if ev.Operator() == opt.AnyOp {
 			cols := ev.childGroup(1).logical.Scalar.OuterCols
 			logical.Scalar.OuterCols = logical.Scalar.OuterCols.Union(cols)

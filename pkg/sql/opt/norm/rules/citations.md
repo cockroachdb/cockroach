@@ -20,3 +20,8 @@ further information, and in some cases proofs, can be found.
 [4] Galindo-Legaria, C.A.. (2001).
     Parameterized queries and nesting equivalences.
     https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf
+
+[5] Elhemali, Mostafa & Galindo-Legaria, C.A. & Grabs, Torsten & M. Joshi, Milind. (2007).
+    Execution strategies for SQL subqueries.
+    993-1004. 10.1145/1247480.1247598.
+    https://www.researchgate.net/profile/Mostafa_Elhemali/publication/221213885_Execution_strategies_for_SQL_subqueries/links/584f631308aecb6bd8d02aa4/Execution-strategies-for-SQL-subqueries.pdf
