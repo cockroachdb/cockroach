@@ -210,11 +210,6 @@ func (tc *TableCollection) getTableVersion(
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
 
-	if flags.allowAdding {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: unsupported flags passed to getTableVersion: %+v", flags)
-	}
-
 	if tn.SchemaName != tree.PublicSchemaName {
 		if flags.required {
 			return nil, nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
