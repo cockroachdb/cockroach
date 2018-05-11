@@ -126,7 +126,7 @@ func (p *planner) SetSequenceValue(
 	// However tests break if it does.
 	var descriptor *TableDescriptor
 	var err error
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	})
 	if err != nil {
