@@ -438,15 +438,18 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 //
 // The following is a table showing the various interesting cases:
 //
-//                  | before  | after   | after
-//   subquery       | BOOL_OR | BOOL_OR | CASE
-//   ---------------+---------+---------+-------
-//   x=1, z=1       | true    | true    | true
-//   x=1, z=null    | true    | true    | null
-//   x=null, z=1    | false   | false   | null
-//   x=null, z=null | false   | false   | null
-//   x=1, z=2       | (empty) | null    | false
-//   (empty)        | (empty) | null    | false
+//         | subquery  | before        | after   | after
+//     z   | x values  | BOOL_OR       | BOOL_OR | CASE
+//   ------+-----------+---------------+---------+-------
+//     1   | (1)       | (true)        | true    | true
+//     1   | (1, null) | (true, false) | true    | true
+//     1   | (1, 2)    | (true)        | true    | true
+//     1   | (null)    | (false)       | false   | null
+//    null | (1)       | (true)        | true    | null
+//    null | (1, null) | (true, false) | true    | null
+//    null | (null)    | (false)       | false   | null
+//     2   | (1)       | (empty)       | null    | false
+//   *any* | (empty)   | (empty)       | null    | false
 //
 // It is important that the set given to BOOL_OR does not contain any null
 // values (the reason for step #2). Null is reserved for use by the
