@@ -182,20 +182,18 @@
 # addition, the Exists can be transformed into a semi-join.
 [NormalizeAnyFilter, Normalize]
 (Filters
-    $list:[
-        ...
-        $any:
-        (Any
-            (Project $input:* (Projections [ $condition:* ]))
-        )
-        ...
-    ]
+    $list:[ ... $any:(Any $input:* $value:* $cmp:*) ... ]
 )
 =>
 (Filters
     (ReplaceListItem
         $list
         $any
-        (Exists (Select $input (Filters [ $condition ])))
+        (Exists
+            (Select
+                $input
+                (Filters [ (ConstructAnyCondition $input $value $cmp) ])
+            )
+        )
     )
 )

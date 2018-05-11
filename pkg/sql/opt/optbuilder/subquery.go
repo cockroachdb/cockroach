@@ -224,67 +224,53 @@ func (b *Builder) buildSingleRowSubquery(
 }
 
 // buildMultiRowSubquery transforms a multi-row subquery into a single-row
-// subquery for IN, NOT IN, ANY, SOME and ALL expressions. Then it builds a set
-// of memo groups that represent the transformed expression.
-//
-// It performs the transformation using the Any operator. Any is a special
-// operator that does not exist in SQL. However, it is very similar to the
-// SQL ANY, and can be converted to the SQL ANY operator using the following
-// transformation:
-// `Any(<subquery>)` ==> `True = ANY(<subquery>)`
-//
-// The semantics are equivalent to the expression on the right: Any returns
-// true if any of the values returned by the subquery are true, else returns
-// NULL if any of the values are NULL, else returns false.
+// subquery for IN, NOT IN, ANY, SOME and ALL expressions. It performs the
+// transformation using the Any operator, which returns true if any of the
+// values returned by the subquery are true, else returns NULL if any of the
+// values are NULL, else returns false.
 //
 // We use the following transformations:
-// <var> IN (<subquery>)
-//   ==> Any(SELECT <var> = x FROM (<subquery>) AS q(x))
 //
-// <var> NOT IN (<subquery>)`
-//   ==> NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))
+//   <var> IN (<subquery>)
+//     ==> ConstructAny(<subquery>, <var>, EqOp)
 //
-// <var> <comp> {SOME|ANY}(<subquery>)
-//   ==> Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))
+//   <var> NOT IN (<subquery>)
+//    ==> ConstructNot(ConstructAny(<subquery>, <var>, EqOp))
 //
-// <var> <comp> ALL(<subquery>)
-//   ==> NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))
+//   <var> <comp> {SOME|ANY}(<subquery>)
+//     ==> ConstructAny(<subquery>, <var>, <comp>)
+//
+//   <var> <comp> ALL(<subquery>)
+//     ==> ConstructNot(ConstructAny(<subquery>, <var>, Negate(<comp>)))
 //
 func (b *Builder) buildMultiRowSubquery(
 	c *tree.ComparisonExpr, inScope *scope,
 ) (out memo.GroupID, outScope *scope) {
 	out, outScope = b.buildSubqueryProjection(c.Right.(*subquery), inScope)
 
-	leftExpr := c.TypedLeft()
-	rightExpr := &outScope.cols[0]
+	scalar := b.buildScalar(c.TypedLeft(), outScope)
 	outScope = outScope.replace()
 
-	var texpr tree.TypedExpr
+	var cmp opt.Operator
 	switch c.Operator {
 	case tree.In, tree.NotIn:
 		// <var> = x
-		texpr = tree.NewTypedComparisonExpr(tree.EQ, leftExpr, rightExpr)
+		cmp = opt.EqOp
 
 	case tree.Any, tree.Some, tree.All:
 		// <var> <comp> x
-		texpr = tree.NewTypedComparisonExpr(c.SubOperator, leftExpr, rightExpr)
+		cmp = opt.ComparisonOpMap[c.SubOperator]
 		if c.Operator == tree.All {
 			// NOT(<var> <comp> x)
-			texpr = tree.NewTypedNotExpr(texpr)
+			cmp = opt.NegateOpMap[cmp]
 		}
 
 	default:
 		panic(fmt.Errorf("transformSubquery called with operator %v", c.Operator))
 	}
 
-	// Construct the inner boolean projection.
-	comp := b.buildScalar(texpr, outScope)
-	col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, comp)
-	p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
-	out = b.factory.ConstructProject(out, p)
-
 	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(out)
+	out = b.factory.ConstructAny(out, scalar, b.factory.InternOperator(cmp))
 	switch c.Operator {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)
