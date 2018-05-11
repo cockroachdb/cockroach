@@ -40,6 +40,14 @@ func (qt *QueryTimespan) slideForward() {
 	qt.EndNanos += w
 }
 
+// moveForward modifies the timespan so that it has the same width, but
+// both StartNanos and EndNanos is moved forward by the specified number of
+// nanoseconds.
+func (qt *QueryTimespan) moveForward(forwardNanos int64) {
+	qt.StartNanos += forwardNanos
+	qt.EndNanos += forwardNanos
+}
+
 // expand modifies the timespan so that its width is expanded *on each side*
 // by the supplied size; the resulting width will be (2 * size) larger than the
 // original width.
