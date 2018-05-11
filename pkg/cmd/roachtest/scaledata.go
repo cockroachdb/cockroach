@@ -90,6 +90,14 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 	addrStr := strings.Join(addrs, ",")
 
 	m := newMonitor(ctx, c, roachNodes)
+	{
+		// Run chaos for the specific duration.
+		chaosCtx, cancel := context.WithTimeout(ctx, dur)
+		defer cancel()
+		// Kill one node at a time, with a minute of healthy cluster and thirty
+		// seconds of down node.
+		m.Go(randomKillChaos(c, m, chaosTimer(chaosCtx, time.Minute, 30*time.Second), roachNodes))
+	}
 	m.Go(func(ctx context.Context) error {
 		// Sqlapp logs are very noisy - so noisy that if not directed to /dev/null
 		// they often have the effect of slowing down the test so much that it

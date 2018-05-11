@@ -761,8 +761,8 @@ var _ = (&cluster{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
 func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
-	url := c.ExternalPGUrl(ctx, node)
-	db, err := gosql.Open("postgres", url)
+	u := c.ExternalPGUrl(ctx, node)
+	db, err := gosql.Open("postgres", u)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -784,12 +784,13 @@ func (c *cluster) isLocal() bool {
 }
 
 type monitor struct {
-	t      testI
-	l      *logger
-	nodes  string
-	ctx    context.Context
-	cancel func()
-	g      *errgroup.Group
+	t         testI
+	l         *logger
+	nodes     string
+	ctx       context.Context
+	cancel    func()
+	g         *errgroup.Group
+	expDeaths int32 // atomically
 }
 
 func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
@@ -801,6 +802,12 @@ func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.g, m.ctx = errgroup.WithContext(m.ctx)
 	return m
+}
+
+// ExpectDeath lets the monitor know that a node is about to be killed, and that
+// this should be ignored.
+func (m *monitor) ExpectDeath() {
+	atomic.AddInt32(&m.expDeaths, 1)
 }
 
 func (m *monitor) Go(fn func(context.Context) error) {
@@ -918,7 +925,7 @@ func (m *monitor) wait(args ...string) error {
 			var id int
 			var s string
 			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
-				if strings.Contains(s, "dead") {
+				if strings.Contains(s, "dead") && atomic.AddInt32(&m.expDeaths, -1) < 0 {
 					setErr(fmt.Errorf("unexpected node event: %s", msg))
 					return
 				}
