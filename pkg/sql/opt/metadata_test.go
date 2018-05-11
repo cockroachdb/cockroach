@@ -177,6 +177,33 @@ func TestMetadataWeakKeys(t *testing.T) {
 
 	wk.Add(util.MakeFastIntSet(2))
 	test(wk, "[(4) (2)]")
+
+	// Test Combine method.
+	// Combine weak keys with themselves.
+	wk = md.TableWeakKeys(a).Combine(md.TableWeakKeys(a))
+	test(wk, "[(1,2) (4) (2,3)]")
+
+	var wk2 opt.WeakKeys
+
+	// Combine set with empty set.
+	wk = wk.Combine(wk2)
+	test(wk, "[(1,2) (4) (2,3)]")
+
+	// Combine empty set with another set.
+	wk = wk2.Combine(wk)
+	test(wk, "[(1,2) (4) (2,3)]")
+
+	// Combine new key not in the existing set.
+	wk2.Add(util.MakeFastIntSet(5, 1))
+	wk = wk.Combine(wk2)
+	test(wk, "[(1,2) (4) (2,3) (1,5)]")
+
+	// Combine weak keys that overlap with existing keys.
+	wk2.Add(util.MakeFastIntSet(2))
+	wk2.Add(util.MakeFastIntSet(6))
+
+	wk = wk.Combine(wk2)
+	test(wk, "[(4) (1,5) (2) (6)]")
 }
 
 // TestIndexColumns tests that we can extract a set of columns from an index ordinal.

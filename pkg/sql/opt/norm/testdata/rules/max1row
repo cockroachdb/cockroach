@@ -54,7 +54,6 @@ project
            │    └── group-by
            │         ├── columns: column6:6(int)
            │         ├── cardinality: [1 - 1]
-           │         ├── keys: ()
            │         ├── scan a
            │         └── aggregations
            │              └── count-rows [type=int]

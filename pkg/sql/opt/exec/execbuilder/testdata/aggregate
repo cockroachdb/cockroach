@@ -831,13 +831,11 @@ column4:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·            (column4)  ·
- │              aggregate 0  min(xyz.y)   ·          ·
- └── render     ·            ·            ("xyz.y")  ·
-      │         render 0     y            ·          ·
-      └── scan  ·            ·            (x, y)     ·
-·               table        xyz@primary  ·          ·
-·               spans        /1-/1/#      ·          ·
+group      ·            ·            (column4)  ·
+ │         aggregate 0  min(y)       ·          ·
+ └── scan  ·            ·            (x, y)     ·
+·          table        xyz@primary  ·          ·
+·          spans        /1-/1/#      ·          ·
 
 exec
 SELECT MAX(y) FROM xyz WHERE x = 1
@@ -848,13 +846,11 @@ column4:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·            (column4)  ·
- │              aggregate 0  max(xyz.y)   ·          ·
- └── render     ·            ·            ("xyz.y")  ·
-      │         render 0     y            ·          ·
-      └── scan  ·            ·            (x, y)     ·
-·               table        xyz@primary  ·          ·
-·               spans        /1-/1/#      ·          ·
+group      ·            ·            (column4)  ·
+ │         aggregate 0  max(y)       ·          ·
+ └── scan  ·            ·            (x, y)     ·
+·          table        xyz@primary  ·          ·
+·          spans        /1-/1/#      ·          ·
 
 exec
 SELECT MIN(y) FROM xyz WHERE x = 7
@@ -865,13 +861,11 @@ NULL
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-group           ·            ·            (column4)  ·
- │              aggregate 0  min(xyz.y)   ·          ·
- └── render     ·            ·            ("xyz.y")  ·
-      │         render 0     y            ·          ·
-      └── scan  ·            ·            (x, y)     ·
-·               table        xyz@primary  ·          ·
-·               spans        /7-/7/#      ·          ·
+group      ·            ·            (column4)  ·
+ │         aggregate 0  min(y)       ·          ·
+ └── scan  ·            ·            (x, y)     ·
+·          table        xyz@primary  ·          ·
+·          spans        /7-/7/#      ·          ·
 
 exec
 SELECT MAX(y) FROM xyz WHERE x = 7
@@ -882,13 +876,11 @@ NULL
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
-group           ·            ·            (column4)  ·
- │              aggregate 0  max(xyz.y)   ·          ·
- └── render     ·            ·            ("xyz.y")  ·
-      │         render 0     y            ·          ·
-      └── scan  ·            ·            (x, y)     ·
-·               table        xyz@primary  ·          ·
-·               spans        /7-/7/#      ·          ·
+group      ·            ·            (column4)  ·
+ │         aggregate 0  max(y)       ·          ·
+ └── scan  ·            ·            (x, y)     ·
+·          table        xyz@primary  ·          ·
+·          spans        /7-/7/#      ·          ·
 
 exec
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
@@ -899,13 +891,11 @@ column4:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-group           ·            ·           (column4)  ·
- │              aggregate 0  min(xyz.x)  ·          ·
- └── render     ·            ·           ("xyz.x")  ·
-      │         render 0     x           ·          ·
-      └── scan  ·            ·           (x, y, z)  ·
-·               table        xyz@zyx     ·          ·
-·               spans        /3/2-/3/3   ·          ·
+group      ·            ·          (column4)  ·
+ │         aggregate 0  min(x)     ·          ·
+ └── scan  ·            ·          (x, y, z)  ·
+·          table        xyz@zyx    ·          ·
+·          spans        /3/2-/3/3  ·          ·
 
 exec
 SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
@@ -916,13 +906,11 @@ column4:int
 exec hide-colnames
 EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-group           ·            ·           (column4)  ·
- │              aggregate 0  max(xyz.x)  ·          ·
- └── render     ·            ·           ("xyz.x")  ·
-      │         render 0     x           ·          ·
-      └── scan  ·            ·           (x, y, z)  ·
-·               table        xyz@zyx     ·          ·
-·               spans        /3/2-/3/3   ·          ·
+group      ·            ·          (column4)  ·
+ │         aggregate 0  max(x)     ·          ·
+ └── scan  ·            ·          (x, y, z)  ·
+·          table        xyz@zyx    ·          ·
+·          spans        /3/2-/3/3  ·          ·
 
 # VARIANCE/STDDEV
 

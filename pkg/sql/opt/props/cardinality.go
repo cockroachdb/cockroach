@@ -41,8 +41,23 @@ type Cardinality struct {
 	Max uint32
 }
 
-// AllowsZero is true if the expression can return zero rows.
-func (c Cardinality) AllowsZero() bool {
+// IsZero returns true if the expression never returns any rows.
+func (c Cardinality) IsZero() bool {
+	return c.Min == 0 && c.Max == 0
+}
+
+// IsOne returns true if the expression always returns one row.
+func (c Cardinality) IsOne() bool {
+	return c.Min == 1 && c.Max == 1
+}
+
+// IsZeroOrOne is true if the expression never returns more than one row.
+func (c Cardinality) IsZeroOrOne() bool {
+	return c.Max <= 1
+}
+
+// CanBeZero is true if the expression can return zero rows.
+func (c Cardinality) CanBeZero() bool {
 	return c.Min == 0
 }
 

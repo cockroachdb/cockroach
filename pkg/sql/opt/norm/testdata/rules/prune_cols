@@ -235,7 +235,7 @@ project
 
 # Select nested in select.
 opt
-SELECT i FROM (SELECT k, i, s, f+1.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
+SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 ----
 project
  ├── columns: i:2(int)
@@ -249,9 +249,9 @@ project
  │    │    │    └── keys: (1)
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: a.i [type=int, outer=(2)]
- │    │         └── plus [type=float, outer=(3)]
+ │    │         └── div [type=float, outer=(3)]
  │    │              ├── variable: a.f [type=float, outer=(3)]
- │    │              └── const: 1.0 [type=float]
+ │    │              └── const: 2.0 [type=float]
  │    └── filters [type=bool, outer=(2,5)]
  │         └── eq [type=bool, outer=(2,5)]
  │              ├── variable: f [type=float, outer=(5)]
@@ -1067,7 +1067,6 @@ SELECT MIN(i), MAX(k), MAX(k) FROM a
 group-by
  ├── columns: column5:5(int) column6:6(int) column6:6(int)
  ├── cardinality: [1 - 1]
- ├── keys: ()
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    └── keys: (1)
@@ -1104,21 +1103,16 @@ group-by
  ├── columns: column7:7(decimal) i:2(int)
  ├── grouping columns: a.i:2(int)
  ├── keys: weak(2)
- ├── project
- │    ├── columns: a.i:2(int) sm:5(decimal)
- │    ├── group-by
- │    │    ├── columns: a.i:2(int) a.s:4(string) sm:5(decimal)
- │    │    ├── grouping columns: a.i:2(int) a.s:4(string)
- │    │    ├── keys: weak(2,4)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    │    └── keys: (1)
- │    │    └── aggregations [outer=(1)]
- │    │         └── sum [type=decimal, outer=(1)]
- │    │              └── variable: a.k [type=int, outer=(1)]
- │    └── projections [outer=(2,5)]
- │         ├── variable: a.i [type=int, outer=(2)]
- │         └── variable: sm [type=decimal, outer=(5)]
+ ├── group-by
+ │    ├── columns: a.i:2(int) a.s:4(string) sm:5(decimal)
+ │    ├── grouping columns: a.i:2(int) a.s:4(string)
+ │    ├── keys: weak(2,4)
+ │    ├── scan a
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+ │    │    └── keys: (1)
+ │    └── aggregations [outer=(1)]
+ │         └── sum [type=decimal, outer=(1)]
+ │              └── variable: a.k [type=int, outer=(1)]
  └── aggregations [outer=(5)]
       └── min [type=decimal, outer=(5)]
            └── variable: sm [type=decimal, outer=(5)]

@@ -96,12 +96,10 @@ select
  ├── columns: column3:3(int)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(3)=1]
- ├── keys: ()
  ├── group-by
  │    ├── columns: column3:3(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1, distinct(3)=1]
- │    ├── keys: ()
  │    ├── project
  │    │    ├── stats: [rows=1000]
  │    │    ├── scan xy

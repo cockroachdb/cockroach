@@ -56,32 +56,26 @@ project
  │    ├── grouping columns: a.y:2(int) a.s:3(string)
  │    ├── stats: [rows=65, distinct(2,3)=65]
  │    ├── keys: weak(2,3)
- │    ├── project
- │    │    ├── columns: a.s:3(string) a.y:2(int)
- │    │    ├── stats: [rows=66, distinct(2,3)=65]
- │    │    ├── select
+ │    ├── select
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
+ │    │    ├── keys: (1)
+ │    │    ├── lookup-join
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    │    │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
+ │    │    │    ├── table: a
+ │    │    │    ├── stats: [rows=200]
  │    │    │    ├── keys: (1)
- │    │    │    ├── lookup-join
- │    │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    │    │    │    ├── table: a
- │    │    │    │    ├── stats: [rows=200]
- │    │    │    │    ├── keys: (1)
- │    │    │    │    └── scan a@secondary
- │    │    │    │         ├── columns: a.x:1(int!null) a.s:3(string)
- │    │    │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
- │    │    │    │         ├── stats: [rows=200, distinct(3)=1]
- │    │    │    │         └── keys: (1)
- │    │    │    └── filters [type=bool, outer=(1,2)]
- │    │    │         └── eq [type=bool, outer=(1,2)]
- │    │    │              ├── plus [type=int, outer=(1,2)]
- │    │    │              │    ├── variable: a.x [type=int, outer=(1)]
- │    │    │              │    └── variable: a.y [type=int, outer=(2)]
- │    │    │              └── const: 10 [type=int]
- │    │    └── projections [outer=(2,3)]
- │    │         ├── variable: a.s [type=string, outer=(3)]
- │    │         └── variable: a.y [type=int, outer=(2)]
+ │    │    │    └── scan a@secondary
+ │    │    │         ├── columns: a.x:1(int!null) a.s:3(string)
+ │    │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │    │    │         ├── stats: [rows=200, distinct(3)=1]
+ │    │    │         └── keys: (1)
+ │    │    └── filters [type=bool, outer=(1,2)]
+ │    │         └── eq [type=bool, outer=(1,2)]
+ │    │              ├── plus [type=int, outer=(1,2)]
+ │    │              │    ├── variable: a.x [type=int, outer=(1)]
+ │    │              │    └── variable: a.y [type=int, outer=(2)]
+ │    │              └── const: 10 [type=int]
  │    └── aggregations
  │         └── count-rows [type=int]
  └── projections [outer=(5)]
