@@ -80,6 +80,8 @@ Use 'roachtest run -n' to see a list of all tests.
 		"wipe existing cluster before starting test (for use with --cluster)")
 	runCmd.Flags().StringVar(
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
+	runCmd.Flags().StringVar(
+		&store, "store", "", "path to cockroach store")
 	runCmd.Flags().StringVarP(
 		&username, "user", "u", username, "username to run under, detect if blank")
 	runCmd.Flags().StringVar(
