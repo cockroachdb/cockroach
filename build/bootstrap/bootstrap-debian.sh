@@ -14,6 +14,7 @@ echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/source
 sudo apt-get update
 sudo apt-get dist-upgrade -y
 sudo apt-get install -y --no-install-recommends \
+  mosh \
   autoconf \
   cmake \
   ccache \
