@@ -44,14 +44,8 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
 
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger(bool enabled) : enabled_(enabled) {}
+  DBLogger() {}
   virtual void Logv(const char* format, va_list ap) {
-    // TODO(pmattis): Benchmark calling Go exported methods from C++
-    // to determine if this is too slow.
-    if (!enabled_) {
-      return;
-    }
-
     // First try with a small fixed size buffer.
     char space[1024];
 
@@ -94,9 +88,6 @@ class DBLogger : public rocksdb::Logger {
       delete[] buf;
     }
   }
-
- private:
-  const bool enabled_;
 };
 
 class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
@@ -162,7 +153,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(new DBLogger(db_opts.logging_enabled));
+  options.info_log.reset(new DBLogger());
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
