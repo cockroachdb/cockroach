@@ -458,6 +458,36 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 
 // ----------------------------------------------------------------------
 //
+// Projection construction functions
+//   General helper functions to construct Projections.
+//
+// ----------------------------------------------------------------------
+
+// projectExtraCol constructs a new Project operator that passes through all
+// columns in the given "in" expression, and then adds the given "extra"
+// expression as an additional column.
+func (f *Factory) projectExtraCol(in, extra memo.GroupID, extraID opt.ColumnID) memo.GroupID {
+	// Start with existing columns.
+	inCols := f.outputCols(in)
+	elems := make([]memo.GroupID, 0, inCols.Len()+1)
+	outCols := make(opt.ColList, 0, len(elems))
+	inCols.ForEach(func(i int) {
+		elems = append(elems, f.ConstructVariable(f.mem.InternColumnID(opt.ColumnID(i))))
+		outCols = append(outCols, opt.ColumnID(i))
+	})
+
+	// Append the extra column.
+	elems = append(elems, extra)
+	outCols = append(outCols, extraID)
+
+	return f.ConstructProject(
+		in,
+		f.ConstructProjections(f.InternList(elems), f.InternColList(outCols)),
+	)
+}
+
+// ----------------------------------------------------------------------
+//
 // Select Rules
 //   Custom match and replace functions used with select.opt rules.
 //
@@ -789,50 +819,9 @@ func (f *Factory) negateConditions(conditions memo.ListID) memo.ListID {
 // to:
 //   a.x <> 5
 func (f *Factory) negateComparison(cmp opt.Operator, left, right memo.GroupID) memo.GroupID {
-	switch cmp {
-	case opt.EqOp:
-		return f.ConstructNe(left, right)
-	case opt.NeOp:
-		return f.ConstructEq(left, right)
-	case opt.GtOp:
-		return f.ConstructLe(left, right)
-	case opt.GeOp:
-		return f.ConstructLt(left, right)
-	case opt.LtOp:
-		return f.ConstructGe(left, right)
-	case opt.LeOp:
-		return f.ConstructGt(left, right)
-	case opt.InOp:
-		return f.ConstructNotIn(left, right)
-	case opt.NotInOp:
-		return f.ConstructIn(left, right)
-	case opt.LikeOp:
-		return f.ConstructNotLike(left, right)
-	case opt.NotLikeOp:
-		return f.ConstructLike(left, right)
-	case opt.ILikeOp:
-		return f.ConstructNotILike(left, right)
-	case opt.NotILikeOp:
-		return f.ConstructILike(left, right)
-	case opt.SimilarToOp:
-		return f.ConstructNotSimilarTo(left, right)
-	case opt.NotSimilarToOp:
-		return f.ConstructSimilarTo(left, right)
-	case opt.RegMatchOp:
-		return f.ConstructNotRegMatch(left, right)
-	case opt.NotRegMatchOp:
-		return f.ConstructRegMatch(left, right)
-	case opt.RegIMatchOp:
-		return f.ConstructNotRegIMatch(left, right)
-	case opt.NotRegIMatchOp:
-		return f.ConstructRegIMatch(left, right)
-	case opt.IsOp:
-		return f.ConstructIsNot(left, right)
-	case opt.IsNotOp:
-		return f.ConstructIs(left, right)
-	default:
-		panic(fmt.Sprintf("unexpected operator: %v", cmp))
-	}
+	negate := opt.NegateOpMap[cmp]
+	operands := memo.DynamicOperands{memo.DynamicID(left), memo.DynamicID(right)}
+	return f.DynamicConstruct(negate, operands)
 }
 
 // commuteInequality swaps the operands of an inequality comparison expression,

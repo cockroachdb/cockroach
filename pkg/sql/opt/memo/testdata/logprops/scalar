@@ -1,64 +1,128 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
 ----
-TABLE a
+TABLE xy
  ├── x int not null
  ├── y int
  └── INDEX primary
       └── x int not null
 
 exec-ddl
-CREATE TABLE b (x INT, z INT NOT NULL)
+CREATE TABLE uv (u INT, v INT NOT NULL)
 ----
-TABLE b
- ├── x int
- ├── z int not null
+TABLE uv
+ ├── u int
+ ├── v int not null
  ├── rowid int not null (hidden)
  └── INDEX primary
       └── rowid int not null (hidden)
 
 build
-SELECT * FROM a WHERE x < 5
+SELECT * FROM xy WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── keys: (1)
- ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    ├── stats: [rows=1000]
  │    └── keys: (1)
  └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: xy.x [type=int, outer=(1)]
       └── const: 5 [type=int]
 
 build
-SELECT a.x + 1 = length('foo') + a.y, b.rowid * a.x FROM a, b
+SELECT xy.x + 1 = length('foo') + xy.y, uv.rowid * xy.x FROM xy, uv
 ----
 project
  ├── columns: column6:6(bool) column7:7(int)
  ├── stats: [rows=1000000]
  ├── inner-join
- │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int) uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
  │    ├── stats: [rows=1000000]
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── scan xy
+ │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1)
- │    ├── scan b
- │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+ │    ├── scan uv
+ │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (5)
  │    └── true [type=bool]
  └── projections [outer=(1,2,5)]
       ├── eq [type=bool, outer=(1,2)]
       │    ├── plus [type=int, outer=(1)]
-      │    │    ├── variable: a.x [type=int, outer=(1)]
+      │    │    ├── variable: xy.x [type=int, outer=(1)]
       │    │    └── const: 1 [type=int]
       │    └── plus [type=int, outer=(2)]
       │         ├── function: length [type=int]
       │         │    └── const: 'foo' [type=string]
-      │         └── variable: a.y [type=int, outer=(2)]
+      │         └── variable: xy.y [type=int, outer=(2)]
       └── mult [type=int, outer=(1,5)]
-           ├── variable: b.rowid [type=int, outer=(5)]
-           └── variable: a.x [type=int, outer=(1)]
+           ├── variable: uv.rowid [type=int, outer=(5)]
+           └── variable: xy.x [type=int, outer=(1)]
+
+build
+SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=333]
+ ├── keys: (1)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
+ └── exists [type=bool, outer=(1)]
+      └── project
+           ├── columns: uv.u:3(int) uv.v:4(int!null)
+           ├── outer: (1)
+           ├── stats: [rows=333]
+           ├── select
+           │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │    ├── outer: (1)
+           │    ├── stats: [rows=333]
+           │    ├── keys: (5)
+           │    ├── scan uv
+           │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │    │    ├── stats: [rows=1000]
+           │    │    └── keys: (5)
+           │    └── eq [type=bool, outer=(1,3)]
+           │         ├── variable: uv.u [type=int, outer=(3)]
+           │         └── variable: xy.x [type=int, outer=(1)]
+           └── projections [outer=(3,4)]
+                ├── variable: uv.u [type=int, outer=(3)]
+                └── variable: uv.v [type=int, outer=(4)]
+
+build
+SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=333]
+ ├── keys: (1)
+ ├── scan xy
+ │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── stats: [rows=1000]
+ │    └── keys: (1)
+ └── any: eq [type=bool, outer=(1,2)]
+      ├── project
+      │    ├── columns: uv.v:4(int!null)
+      │    ├── outer: (1)
+      │    ├── stats: [rows=333]
+      │    ├── select
+      │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    │    ├── outer: (1)
+      │    │    ├── stats: [rows=333]
+      │    │    ├── keys: (5)
+      │    │    ├── scan uv
+      │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    │    │    ├── stats: [rows=1000]
+      │    │    │    └── keys: (5)
+      │    │    └── eq [type=bool, outer=(1,3)]
+      │    │         ├── variable: uv.u [type=int, outer=(3)]
+      │    │         └── variable: xy.x [type=int, outer=(1)]
+      │    └── projections [outer=(4)]
+      │         └── variable: uv.v [type=int, outer=(4)]
+      └── variable: xy.y [type=int, outer=(2)]

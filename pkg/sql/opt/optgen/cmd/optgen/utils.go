@@ -50,6 +50,8 @@ func mapPrivateType(typ string) string {
 		return "opt.ColSet"
 	case "ColList":
 		return "opt.ColList"
+	case "Operator":
+		return "opt.Operator"
 	case "Ordering":
 		return "props.Ordering"
 	case "FuncOpDef":
