@@ -36,12 +36,10 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 
 	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the constraints without
-	// taking a lease, like other SHOW commands. We also use
-	// allowAdding=true so we can look at the constraints of a table
-	// added in the same transaction.
+	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	})
 	if err != nil {
