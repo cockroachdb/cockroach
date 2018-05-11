@@ -61,6 +61,10 @@ case "${cmd}" in
     unset 'arr[${#arr[@]}-1]'
     mosh --ssh=$(printf '%q' "${arr}") $host
     ;;
+    scp)
+    # Example: $0 scp gceworker-youruser:go/src/github.com/cockroachdb/cockroach/cockroach-data/logs gcelogs --recurse
+    retry gcloud compute scp "$@"
+    ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
     ;;
