@@ -16,6 +16,10 @@ fi
 
 reset_password() {
   gcloud compute reset-windows-password --quiet "${NAME}"
+  cat <<EOF
+
+You can now connect to this machine using Microsoft Remote Desktop.
+EOF
 }
 
 case "${cmd}" in
@@ -41,9 +45,6 @@ case "${cmd}" in
     ;;
     delete|destroy)
     gcloud compute instances delete "${NAME}"
-    ;;
-    ssh)
-    retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
