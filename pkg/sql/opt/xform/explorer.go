@@ -281,26 +281,12 @@ func (e *explorer) canConstrainScan(def memo.PrivateID) bool {
 	return scanOpDef.Constraint == nil && scanOpDef.HardLimit == 0
 }
 
-// constrainScan tries to push filters into Scan operations as constraints. It
-// is applied on a Select -> Scan pattern. The scan operation is assumed to have
-// no constraints.
-//
-// There are three cases:
-//
-//  - if the filter can be completely converted to constraints, we return a
-//    constrained scan expression (to be added to the same group as the select
-//    operator).
-//
-//  - if the filter can be partially converted to constraints, we construct the
-//    constrained scan and we return a select expression with the remaining
-//    filter (to be added to the same group as the select operator).
-//
-//  - if the filter cannot be converted to constraints, does and returns
-//    nothing.
-//
-func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateID) []memo.Expr {
-	e.exprs = e.exprs[:0]
-
+// constrainedScanOpDef tries to push a filter into a scanOpDef as a
+// constraint. If it cannot push the filter down (i.e. the resulting constraint
+// is unconstrained), then it returns ok = false in the third return value.
+func (e *explorer) constrainedScanOpDef(
+	filterGroup memo.GroupID, scanDef memo.PrivateID,
+) (newDef memo.ScanOpDef, remainingFilter memo.GroupID, ok bool) {
 	scanOpDef := e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
 
 	// Fill out data structures needed to initialize the idxconstraint library.
@@ -323,12 +309,40 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 	ic.Init(filter, columns, notNullCols, false /* isInverted */, e.evalCtx, e.f)
 	constraint := ic.Constraint()
 	if constraint.IsUnconstrained() {
-		return nil
+		return memo.ScanOpDef{}, 0, false
 	}
-	newDef := *scanOpDef
+	newDef = *scanOpDef
 	newDef.Constraint = constraint
 
-	remainingFilter := ic.RemainingFilter()
+	remainingFilter = ic.RemainingFilter()
+	return newDef, remainingFilter, true
+}
+
+// constrainScan tries to push filters into Scan operations as constraints. It
+// is applied on a Select -> Scan pattern. The scan operation is assumed to have
+// no constraints.
+//
+// There are three cases:
+//
+//  - if the filter can be completely converted to constraints, we return a
+//    constrained scan expression (to be added to the same group as the select
+//    operator).
+//
+//  - if the filter can be partially converted to constraints, we construct the
+//    constrained scan and we return a select expression with the remaining
+//    filter (to be added to the same group as the select operator).
+//
+//  - if the filter cannot be converted to constraints, does and returns
+//    nothing.
+//
+func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateID) []memo.Expr {
+	e.exprs = e.exprs[:0]
+
+	newDef, remainingFilter, ok := e.constrainedScanOpDef(filterGroup, scanDef)
+	if !ok {
+		return nil
+	}
+
 	if e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
 		// No remaining filter. Add the constrained scan node to select's group.
 		constrainedScan := memo.MakeScanExpr(e.mem.InternScanOpDef(&newDef))
@@ -338,6 +352,56 @@ func (e *explorer) constrainScan(filterGroup memo.GroupID, scanDef memo.PrivateI
 		// and create a select node in the same group with the original select.
 		constrainedScan := e.f.ConstructScan(e.mem.InternScanOpDef(&newDef))
 		newSelect := memo.MakeSelectExpr(constrainedScan, remainingFilter)
+		e.exprs = append(e.exprs, memo.Expr(newSelect))
+	}
+	return e.exprs
+}
+
+// constrainLookupJoinIndexScan tries to push filters into Lookup Join index
+// scan operations as constraints. It is applied on a Select -> LookupJoin ->
+// Scan pattern. The scan operation is assumed to have no constraints.
+//
+// There are three cases, similar to constrainScan:
+//
+//  - if the filter can be completely converted to constraints, we return a
+//    constrained scan expression wrapped in a lookup join (to be added to the
+//    same group as the select operator).
+//
+//  - if the filter can be partially converted to constraints, we construct the
+//    constrained scan wrapped in a lookup join, and we return a select
+//    expression with the remaining filter (to be added to the same group as
+//    the select operator).
+//
+//  - if the filter cannot be converted to constraints, does and returns
+//    nothing.
+//
+// TODO(rytaft): In the future we want to do the following:
+// 1. push constraints in the scan.
+// 2. put whatever part of the remaining filter that uses just index columns
+//    into a select above the index scan (and below the lookup join).
+// 3. put what is left of the filter on top of the lookup join.
+func (e *explorer) constrainLookupJoinIndexScan(
+	filterGroup memo.GroupID, scanDef, lookupJoinDef memo.PrivateID,
+) []memo.Expr {
+	e.exprs = e.exprs[:0]
+
+	newDef, remainingFilter, ok := e.constrainedScanOpDef(filterGroup, scanDef)
+	if !ok {
+		return nil
+	}
+	constrainedScan := e.f.ConstructScan(e.mem.InternScanOpDef(&newDef))
+
+	if e.mem.NormExpr(remainingFilter).Operator() == opt.TrueOp {
+		// No remaining filter. Add the constrained lookup join index scan node to
+		// select's group.
+		lookupJoin := memo.MakeLookupJoinExpr(constrainedScan, lookupJoinDef)
+		e.exprs = append(e.exprs, memo.Expr(lookupJoin))
+	} else {
+		// We have a remaining filter. We create the constrained lookup join index
+		// scan in a new group and create a select node in the same group with the
+		// original select.
+		lookupJoin := e.f.ConstructLookupJoin(constrainedScan, lookupJoinDef)
+		newSelect := memo.MakeSelectExpr(lookupJoin, remainingFilter)
 		e.exprs = append(e.exprs, memo.Expr(newSelect))
 	}
 	return e.exprs

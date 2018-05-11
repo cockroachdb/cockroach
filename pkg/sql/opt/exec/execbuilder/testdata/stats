@@ -55,7 +55,7 @@ SELECT * FROM b WHERE u = 1 AND v = 1
 select
  ├── columns: u:1(int) v:2(int)
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
- ├── cost: 1.10
+ ├── cost: 1.01
  ├── scan b@b_v_idx
  │    ├── columns: b.u:1(int) b.v:2(int)
  │    ├── constraint: /2/3: [/1 - /1]

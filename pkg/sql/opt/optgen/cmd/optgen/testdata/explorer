@@ -217,7 +217,7 @@ func (_e *explorer) exploreSelect(_rootState *exploreState, _root memo.ExprID) (
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
-		for _ord := 0; _ord < _state.end; _ord++ {
+		for _ord := memo.ExprOrdinal(0); _ord < _state.end; _ord++ {
 			_partlyExplored := _partlyExplored && _ord < _state.start
 			_eid := memo.ExprID{Group: _rootExpr.Input(), Expr: _ord}
 			_groupByExpr := _e.mem.Expr(_eid).AsGroupBy()

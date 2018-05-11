@@ -23,6 +23,30 @@ TABLE a
       ├── k int not null (storing)
       └── u int (storing)
 
+exec-ddl
+CREATE TABLE b
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    INDEX u(u),
+    UNIQUE INDEX v(v)
+)
+----
+TABLE b
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX u
+ │    ├── u int
+ │    └── k int not null
+ └── INDEX v
+      ├── v int
+      └── k int not null (storing)
+
+
 # --------------------------------------------------
 # ConstrainScan
 # --------------------------------------------------
@@ -161,11 +185,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.10
+ │         └── cost: 1.01
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 1.10
+ │         └── cost: 1.01
  ├── G3: (projections G12)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
@@ -211,11 +235,11 @@ memo (optimized)
  ├── G1: (project G2 G3)
  │    └── "[presentation: k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.10
+ │         └── cost: 1.01
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G9)
  │    └── ""
  │         ├── best: (select G6 G7)
- │         └── cost: 1.10
+ │         └── cost: 1.01
  ├── G3: (projections G10)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
@@ -277,3 +301,123 @@ select
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
+
+# --------------------------------------------------
+# ConstrainLookupJoinIndexScan
+# --------------------------------------------------
+
+opt
+SELECT * FROM b WHERE v = 1
+----
+lookup-join
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── table: b
+ ├── keys: (1) weak(3)
+ └── scan b@v
+      ├── columns: b.k:1(int!null) b.v:3(int)
+      ├── constraint: /3: [/1 - /1]
+      └── keys: (1) weak(3)
+
+memo
+SELECT * FROM b WHERE v = 1
+----
+memo (optimized)
+ ├── G1: (select G2 G3) (lookup-join G4 b,cols=(1-3))
+ │    └── "[presentation: k:1,u:2,v:3]"
+ │         ├── best: (lookup-join G4 b,cols=(1-3))
+ │         └── cost: 5.01
+ ├── G2: (scan b) (lookup-join G5 b,cols=(1-3)) (lookup-join G6 b,cols=(1-3))
+ │    └── ""
+ │         ├── best: (scan b)
+ │         └── cost: 1000.00
+ ├── G3: (filters G7)
+ ├── G4: (scan b@v,cols=(1,3),constrained)
+ │    └── ""
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 1.00
+ ├── G5: (scan b@u,cols=(1,2))
+ │    └── ""
+ │         ├── best: (scan b@u,cols=(1,2))
+ │         └── cost: 1000.00
+ ├── G6: (scan b@v,cols=(1,3))
+ │    └── ""
+ │         ├── best: (scan b@v,cols=(1,3))
+ │         └── cost: 1000.00
+ ├── G7: (eq G8 G9)
+ ├── G8: (variable b.v)
+ └── G9: (const 1)
+
+# Don't choose lookup join if it's not beneficial.
+opt
+SELECT * FROM b WHERE v > 1
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── keys: (1) weak(3)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null) b.u:2(int) b.v:3(int)
+ │    └── keys: (1) weak(3)
+ └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+      └── gt [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+           ├── variable: b.v [type=int, outer=(3)]
+           └── const: 1 [type=int]
+
+# Constraint + remaining filter.
+opt
+SELECT * FROM b WHERE v = 1 AND k+u = 1
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int)
+ ├── keys: (1) weak(3)
+ ├── lookup-join
+ │    ├── columns: b.k:1(int!null) b.u:2(int) b.v:3(int)
+ │    ├── table: b
+ │    ├── keys: (1) weak(3)
+ │    └── scan b@v
+ │         ├── columns: b.k:1(int!null) b.v:3(int)
+ │         ├── constraint: /3: [/1 - /1]
+ │         └── keys: (1) weak(3)
+ └── filters [type=bool, outer=(1,2)]
+      └── eq [type=bool, outer=(1,2)]
+           ├── plus [type=int, outer=(1,2)]
+           │    ├── variable: b.k [type=int, outer=(1)]
+           │    └── variable: b.u [type=int, outer=(2)]
+           └── const: 1 [type=int]
+
+memo
+SELECT * FROM b WHERE v = 1 AND k+u = 1
+----
+memo (optimized)
+ ├── G1: (select G2 G3) (select G4 G5)
+ │    └── "[presentation: k:1,u:2,v:3]"
+ │         ├── best: (select G4 G5)
+ │         └── cost: 5.02
+ ├── G2: (scan b) (lookup-join G6 b,cols=(1-3)) (lookup-join G7 b,cols=(1-3))
+ │    └── ""
+ │         ├── best: (scan b)
+ │         └── cost: 1000.00
+ ├── G3: (filters G8 G10)
+ ├── G4: (lookup-join G9 b,cols=(1-3))
+ │    └── ""
+ │         ├── best: (lookup-join G9 b,cols=(1-3))
+ │         └── cost: 5.01
+ ├── G5: (filters G10)
+ ├── G6: (scan b@u,cols=(1,2))
+ │    └── ""
+ │         ├── best: (scan b@u,cols=(1,2))
+ │         └── cost: 1000.00
+ ├── G7: (scan b@v,cols=(1,3))
+ │    └── ""
+ │         ├── best: (scan b@v,cols=(1,3))
+ │         └── cost: 1000.00
+ ├── G8: (eq G11 G13)
+ ├── G9: (scan b@v,cols=(1,3),constrained)
+ │    └── ""
+ │         ├── best: (scan b@v,cols=(1,3),constrained)
+ │         └── cost: 1.00
+ ├── G10: (eq G12 G13)
+ ├── G11: (variable b.v)
+ ├── G12: (plus G14 G15)
+ ├── G13: (const 1)
+ ├── G14: (variable b.k)
+ └── G15: (variable b.u)

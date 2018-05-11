@@ -13,3 +13,21 @@
 )
 =>
 (ConstrainScan $filter $def)
+
+# ConstrainLookupJoinIndexScan matches a Select over a lookup join with an
+# unconstrained Scan and tries to push down the filter (or part of it) as
+# index constraints. The result is either a lookup join with a constrained
+# index Scan or a Select (with a remaining filter) on top of a lookup join with
+# a constrained index Scan.
+# TODO(rytaft): in the future we'll want to push part or all of the remaining
+# filter below the lookup join if it uses only columns from the index scan.
+[ConstrainLookupJoinIndexScan, Explore]
+(Select
+  (LookupJoin
+    (Scan $def:* & (CanConstrainScan $def))
+    $outerdef:*
+  )
+  $filter:*
+)
+=>
+(ConstrainLookupJoinIndexScan $filter $def $outerdef)

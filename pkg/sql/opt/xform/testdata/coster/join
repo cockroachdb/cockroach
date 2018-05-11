@@ -25,15 +25,15 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 project
  ├── columns: k:1(int!null) x:5(int)
  ├── stats: [rows=100]
- ├── cost: 2100.00
+ ├── cost: 2020.01
  ├── inner-join
  │    ├── columns: a.k:1(int!null) a.d:4(decimal!null) b.x:5(int)
  │    ├── stats: [rows=100]
- │    ├── cost: 2100.00
+ │    ├── cost: 2020.01
  │    ├── select
  │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
  │    │    ├── stats: [rows=1, distinct(4)=1]
- │    │    ├── cost: 1100.00
+ │    │    ├── cost: 1010.00
  │    │    ├── keys: (1)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
@@ -55,3 +55,44 @@ project
  └── projections [outer=(1,5)]
       ├── variable: a.k [type=int, outer=(1)]
       └── variable: b.x [type=int, outer=(5)]
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX c_idx
+      ├── c int
+      └── a int not null
+
+exec-ddl
+ALTER TABLE abc INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 500000000,
+    "distinct_count": 500000000
+  }
+]'
+----
+
+# Check that we choose the lookup join when it makes sense.
+opt
+SELECT * FROM abc WHERE c = 1
+----
+lookup-join
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
+ ├── table: abc
+ ├── stats: [rows=1, distinct(3)=1]
+ ├── cost: 5.01
+ ├── keys: (1)
+ └── scan abc@c_idx
+      ├── columns: abc.a:1(int!null) abc.c:3(int)
+      ├── constraint: /3/1: [/1 - /1]
+      ├── stats: [rows=1, distinct(3)=1]
+      ├── cost: 1.00
+      └── keys: (1)
