@@ -493,11 +493,6 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 		if !t.spec.Stable {
 			stability = " [unstable]"
 		}
-		if c == nil {
-			stability += " (create cluster)"
-		} else {
-			stability += " (reuse cluster)"
-		}
 		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), stability)
 	}
 	r.status.Lock()
@@ -605,8 +600,6 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 			} else {
 				c = c.clone(t)
 			}
-		} else if dryrun && c == nil {
-			c = &cluster{} // TODO(peter): remove this
 		}
 
 		if t.spec.Run != nil {
