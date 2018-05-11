@@ -397,10 +397,8 @@ func (tc *TxnCoordSender) Send(
 			return nil, roachpb.NewError(err)
 		}
 
-		txnID := ba.Txn.ID
-
 		// Associate the txnID with the trace.
-		txnIDStr := txnID.String()
+		txnIDStr := ba.Txn.ID.String()
 		sp.SetBaggageItem("txnID", txnIDStr)
 
 		var et *roachpb.EndTransactionRequest
@@ -903,7 +901,8 @@ func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.B
 }
 
 // cleanupTxnLocked is called when a transaction ends. The heartbeat
-// goroutine is signaled to clean up the transaction gracefully.
+// goroutine is signaled to stop. The TxnCoordSender's state is set to `state`.
+// Future Send() calls are rejected.
 func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordState) {
 	tc.mu.state = state
 	if tc.mu.onFinishFn != nil {
@@ -994,38 +993,19 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-// tryAsyncAbort (synchronously) grabs a copy of the txn proto and the
-// intents (which it then clears from meta), and asynchronously tries
-// to abort the transaction.
-func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
-	// Clone the intents and the txn to avoid data races.
-	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
-	tc.cleanupTxnLocked(ctx, aborted)
-	txn := tc.mu.meta.Txn.Clone()
-
-	// Since we don't hold the lock continuously, it's possible that two aborts
-	// raced here. That's fine (and probably better than the alternative, which
-	// is missing new intents sometimes). Note that the txn may be uninitialized
-	// here if a failure occurred before the first write succeeded.
-	if txn.Status != roachpb.PENDING {
-		return
-	}
-
-	// Update out status to Aborted, since we're about to send a rollback. Besides
-	// being sane, this prevents the heartbeat loop from incrementing an
-	// "Abandons" metric.
-	tc.mu.meta.Txn.Status = roachpb.ABORTED
-
-	// NB: use context.Background() here because we may be called when the
-	// caller's context has been canceled.
-	if err := tc.stopper.RunAsyncTask(
-		tc.AnnotateCtx(context.Background()), "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
-			// Use the wrapped sender since the normal Sender does not allow
-			// clients to specify intents.
-			resp, pErr := client.SendWrappedWith(
-				ctx, tc.wrapped, roachpb.Header{Txn: &txn}, &roachpb.EndTransactionRequest{
+// abortTxnAsync sends an EndTransaction asynchronously to the wrapped Sender.
+func abortTxnAsync(
+	ctx context.Context,
+	txn roachpb.Transaction,
+	intentSpans []roachpb.Span,
+	wrapped client.Sender,
+	stopper *stop.Stopper,
+) {
+	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
+	if err := stopper.RunAsyncTask(
+		ctx, "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
+			_, pErr := client.SendWrappedWith(
+				ctx, wrapped, roachpb.Header{Txn: &txn}, &roachpb.EndTransactionRequest{
 					RequestHeader: roachpb.RequestHeader{
 						Key: txn.Key,
 					},
@@ -1037,17 +1017,9 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 					Poison: true,
 				},
 			)
-			tc.mu.Lock()
-			defer tc.mu.Unlock()
 			if pErr != nil {
-				if log.V(1) {
-					log.Warningf(ctx, "abort due to inactivity failed for %s: %s ", txn, pErr)
-				}
-				if errTxn := pErr.GetTxn(); errTxn != nil {
-					tc.mu.meta.Txn.Update(errTxn)
-				}
-			} else {
-				tc.mu.meta.Txn.Update(resp.(*roachpb.EndTransactionResponse).Txn)
+				log.VErrEventf(ctx, 1,
+					"abort due to inactivity failed for %s: %s ", txn, pErr)
 			}
 		},
 	); err != nil {
@@ -1055,6 +1027,11 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	}
 }
 
+// heartbeat sends a HeartbeatTxnRequest to the txn record.
+// Errors that carry update txn information (e.g.  TransactionAbortedError) will
+// update the txn. Other errors are swallowed.
+// Returns true if heartbeating should continue, false if the transaction is no
+// longer Pending and so there's no point in heartbeating further.
 func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	tc.mu.Lock()
 	txn := tc.mu.meta.Txn.Clone()
@@ -1062,53 +1039,46 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 
 	if txn.Status != roachpb.PENDING {
 		// A previous iteration has already determined that the transaction is
-		// already finalized, so we wait for the client to realize that and
-		// want to keep our state for the time being (to dish out the right
-		// error once it returns).
-		return true
+		// already finalized.
+		return false
 	}
 
 	ba := roachpb.BatchRequest{}
 	ba.Txn = &txn
 
 	hb := &roachpb.HeartbeatTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
 		Now: tc.clock.Now(),
 	}
-	hb.Key = txn.Key
 	ba.Add(hb)
 
 	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := tc.wrapped.Send(ctx, ba)
 
-	// Correctness mandates that when we can't heartbeat the transaction, we
-	// make sure the client doesn't keep going. This is particularly relevant
-	// in the case of an ABORTED transaction, but event if we can't reach the
-	// transaction record at all, we have to assume it's been aborted as well.
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
 
 		// If the heartbeat request arrived to find a missing transaction record
-		// then we ignore the error and continue the heartbeat loop. This is
-		// possible if the heartbeat loop was started before a BeginTxn request
-		// succeeds because of ambiguity in the first write request's response.
+		// then we ignore the error. This is possible if the heartbeat loop was
+		// started before a BeginTxn request succeeds because of ambiguity in the
+		// first write request's response.
 		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
 			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
 			return true
 		}
 
+		// If the error contains updated txn info, ingest it. For example, we might
+		// find out this way that the transaction has been Aborted in the meantime
+		// (e.g. someone else pushed it).
 		if errTxn := pErr.GetTxn(); errTxn != nil {
 			tc.mu.Lock()
 			tc.mu.meta.Txn.Update(errTxn)
 			tc.mu.Unlock()
 		}
-		// We're not going to let the client carry out additional requests, so
-		// try to clean up if the known txn disposition remains PENDING.
-		if txn.Status == roachpb.PENDING {
-			log.VEventf(ctx, 2, "transaction heartbeat failed: %s", pErr)
-			tc.tryAsyncAbort(ctx)
-		}
-		// Stop the heartbeat.
-		return false
+
+		return tc.mu.meta.Txn.Status == roachpb.PENDING
 	}
 	txn.Update(br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn)
 
@@ -1249,8 +1219,34 @@ func (tc *TxnCoordSender) updateState(
 			}
 			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
 
-			// Reset state as this is a retryable txn error. Note that
-			// intents are tracked cumulatively across epochs on retries.
+			// We'll pass a HandledRetryableTxnError up to the next layer.
+			pErr = roachpb.NewError(
+				roachpb.NewHandledRetryableTxnError(
+					pErr.Message,
+					errTxnID, // the id of the transaction that encountered the error
+					newTxn))
+
+			// If the ID changed, it means we had to start a new transaction and the
+			// old one is toast. This TxnCoordSender cannot be used any more - future
+			// Send() calls will be rejected; the client is supposed to create a new
+			// one.
+			if errTxnID != newTxn.ID {
+				tc.mu.Lock()
+				tc.cleanupTxnLocked(ctx, aborted)
+
+				// NB: We use context.Background() here because we don't want a canceled
+				// context to interrupt the aborting.
+				abortCtx := tc.AnnotateCtx(context.Background())
+				// Clone the intents and the txn to avoid data races.
+				intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
+				txn := tc.mu.meta.Txn.Clone()
+
+				abortTxnAsync(abortCtx, txn, intentSpans, tc.wrapped, tc.stopper)
+				tc.mu.Unlock()
+				return pErr
+			}
+			// Reset state as this is a retryable txn error. Note that intents are
+			// tracked cumulatively across epochs on retries.
 			log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
 			tc.mu.Lock()
 			tc.mu.meta.CommandCount = 0
@@ -1259,23 +1255,6 @@ func (tc *TxnCoordSender) updateState(
 			tc.mu.meta.RefreshValid = true
 			tc.mu.refreshSpansBytes = 0
 			tc.mu.Unlock()
-
-			// Pass a HandledRetryableTxnError up to the next layer.
-			pErr = roachpb.NewError(
-				roachpb.NewHandledRetryableTxnError(
-					pErr.Message,
-					errTxnID, // the id of the transaction that encountered the error
-					newTxn))
-
-			// If the ID changed, it means we had to start a new transaction
-			// and the old one is toast. Try an asynchronous abort of the
-			// bound transaction to clean up its intents immediately, which
-			// likely will otherwise require synchronous cleanup by the
-			// restated transaction and return without any update to
-			if errTxnID != newTxn.ID {
-				tc.tryAsyncAbort(ctx)
-				return pErr
-			}
 		} else {
 			// We got a non-retryable error, or a retryable error at a leaf
 			// transaction, and need to pass responsibility for handling it
