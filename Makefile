@@ -1022,6 +1022,8 @@ CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.
 
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
+$(GOGOPROTO_PROTO): $(SUBMODULES_TARGET)
+
 $(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) bin/protoc-gen-gogoroach
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
