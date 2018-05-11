@@ -51,7 +51,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	var tableDesc *TableDescriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tableDesc, err = ResolveExistingObject(ctx, p, oldTn, !n.IfExists, toRequire)
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// Check if target database exists.
 	// We also look at uncached descriptors here.
 	var targetDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		targetDbDesc, err = ResolveTargetObject(ctx, p, newTn)
 	})
 	if err != nil {
