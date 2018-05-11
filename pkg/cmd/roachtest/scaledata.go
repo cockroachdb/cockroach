@@ -83,11 +83,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 
 	// Sqlapps each take a `--cockroach_ip_addresses_csv` flag, which is a
 	// comma-separated list of node IP addresses with optional port specifiers.
-	var addrs []string
-	for i := 1; i <= roachNodeCount; i++ {
-		addrs = append(addrs, c.InternalIP(ctx, i))
-	}
-	addrStr := strings.Join(addrs, ",")
+	addrStr := strings.Join(c.InternalAddr(ctx, c.All()), ",")
 
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {

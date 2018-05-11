@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -41,44 +40,47 @@ var jepsenTests = []string{
 	"sets",
 }
 
-var jepsenNemeses = []string{
-	"--nemesis majority-ring",
-	"--nemesis split",
-	"--nemesis start-kill-2",
-	"--nemesis start-stop-2",
-	"--nemesis strobe-skews",
-	"--nemesis subcritical-skews",
-	"--nemesis majority-ring --nemesis2 subcritical-skews",
-	"--nemesis subcritical-skews --nemesis2 start-kill-2",
-	"--nemesis majority-ring --nemesis2 start-kill-2",
-	"--nemesis parts --nemesis2 start-kill-2",
+var jepsenNemeses = []struct {
+	name, config string
+}{
+	{"majority-ring", "--nemesis majority-ring"},
+	{"split", "--nemesis split"},
+	{"start-kill-2", "--nemesis start-kill-2"},
+	{"start-stop-2", "--nemesis start-stop-2"},
+	{"strobe-skews", "--nemesis strobe-skews"},
+	{"subcritical-skews", "--nemesis subcritical-skews"},
+	{"majority-ring-subcritical-skews", "--nemesis majority-ring --nemesis2 subcritical-skews"},
+	{"subcritical-skews-start-kill-2", "--nemesis subcritical-skews --nemesis2 start-kill-2"},
+	{"majority-ring-start-kill-2", "--nemesis majority-ring --nemesis2 start-kill-2"},
+	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
 
-func runJepsen(ctx context.Context, t *test, c *cluster) {
-	if c.name == "local" {
+func initJepsen(ctx context.Context, t *test, c *cluster) {
+	// NB: comment this out to see the commands jepsen would run locally.
+	if c.isLocal() {
 		t.Fatal("local execution not supported")
 	}
+
+	// Check to see if the cluster has already been initialized.
+	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
+		c.l.printf("cluster already initialized\n")
+		return
+	}
+	c.l.printf("initializing cluster\n")
+	t.Status("initializing cluster")
+	defer func() {
+		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
+	}()
+
+	if c.isLocal() {
+		// We can't perform any of the remaining setup locally and while we can't
+		// run jepsen locally we let the test run to indicate which commands it
+		// would have run remotely.
+		return
+	}
+
 	controller := c.Node(c.nodes)
 	workers := c.Range(1, c.nodes-1)
-
-	// Wrap roachtest's primitive logging in something more like util/log
-	logf := func(f string, args ...interface{}) {
-		// This log prefix matches the one (sometimes) used in roachprod
-		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
-		c.l.printf(f, args...)
-		c.l.printf("\n")
-	}
-
-	// Run a command with output redirected to the logs instead of to
-	// os.Stdout (which doesn't go anywhere I've been able to find)
-	// Don't use this if you're going to call cmd.CombinedOutput or
-	// cmd.Output.
-	loggedCommand := func(ctx context.Context, arg0 string, args ...string) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, arg0, args...)
-		cmd.Stdout = c.l.stdout
-		cmd.Stderr = c.l.stderr
-		return cmd
-	}
 
 	// TODO(bdarnell): Does this blanket apt update matter? I just
 	// copied it from the old jepsen scripts. It's slow, so we should
@@ -107,29 +109,6 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
 	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
 
-	// Get the IP addresses for all our workers.
-	cmd := exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(workers), "--", "hostname", "-I")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var workerIPs []string
-	var nodeFlags []string
-	lines := strings.Split(string(output), "\n")
-	// TODO(bdarnell): add an option to `roachprod run` for
-	// machine-friendly output (or merge roachprod into roachtest so we
-	// can access it here).
-	lineRE := regexp.MustCompile(`\s*[0-9]+:\s*([0-9.]+)`)
-	for i := range lines {
-		fields := lineRE.FindStringSubmatch(lines[i])
-		if len(fields) == 0 {
-			continue
-		}
-		workerIPs = append(workerIPs, fields[1])
-		nodeFlags = append(nodeFlags, "-n "+fields[1])
-	}
-	nodesStr := strings.Join(nodeFlags, " ")
-
 	// SSH setup: create a key on the controller.
 	tempDir, err := ioutil.TempDir("", "jepsen")
 	if err != nil {
@@ -137,7 +116,7 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -146,26 +125,54 @@ func runJepsen(ctx context.Context, t *test, c *cluster) {
 	c.Run(ctx, workers, "sh", "-c", `"cat controller_id_rsa.pub >> .ssh/authorized_keys"`)
 	// Prime the known hosts file, and use the unhashed format to
 	// work around JSCH auth error: https://github.com/jepsen-io/jepsen/blob/master/README.md
-	for _, ip := range workerIPs {
+	for _, ip := range c.InternalIP(ctx, workers) {
 		c.Run(ctx, controller, "sh", "-c", fmt.Sprintf(`"ssh-keyscan -t rsa %s >> .ssh/known_hosts"`, ip))
 	}
+}
 
-	var failures []string
-	testIdx := 0
-	numTests := len(jepsenTests) * len(jepsenNemeses)
-	for _, testName := range jepsenTests {
-		for _, nemesis := range jepsenNemeses {
-			testIdx++
-			testCfg := fmt.Sprintf("%s %s", testName, nemesis)
-			t.Status(fmt.Sprintf("%d/%d: %s (%d failures)", testIdx, numTests, testCfg, len(failures)))
-			logf("%s: running", testCfg)
+func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis string) {
+	initJepsen(ctx, t, c)
 
-			// Reset the "latest" alias for the next run.
-			c.Run(ctx, controller, "rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
+	controller := c.Node(c.nodes)
 
-			errCh := make(chan error, 1)
-			go func() {
-				errCh <- c.RunE(ctx, controller, "bash", "-e", "-c", fmt.Sprintf(`"\
+	// Get the IP addresses for all our workers.
+	var nodeFlags []string
+	for _, ip := range c.InternalIP(ctx, c.Range(1, c.nodes-1)) {
+		nodeFlags = append(nodeFlags, "-n "+ip)
+	}
+	nodesStr := strings.Join(nodeFlags, " ")
+
+	// Wrap roachtest's primitive logging in something more like util/log
+	logf := func(f string, args ...interface{}) {
+		// This log prefix matches the one (sometimes) used in roachprod
+		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
+		c.l.printf(f, args...)
+		c.l.printf("\n")
+	}
+	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
+		if !c.isLocal() {
+			c.Run(ctx, node, args...)
+			return
+		}
+		args = append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)
+		c.l.printf("> %s\n", strings.Join(args, " "))
+	}
+	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
+		if !c.isLocal() {
+			return c.RunE(ctx, node, args...)
+		}
+		args = append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)
+		c.l.printf("> %s\n", strings.Join(args, " "))
+		return nil
+	}
+
+	// Reset the "latest" alias for the next run.
+	t.Status("running")
+	run(c, ctx, controller, "rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- runE(c, ctx, controller, "bash", "-e", "-c", fmt.Sprintf(`"\
 cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
  ~/lein run test \
    --tarball file://${PWD}/cockroach.tgz \
@@ -180,93 +187,101 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
    --test %s %s \
 > invoke.log 2>&1 \
 "`, nodesStr, testName, nemesis))
-			}()
+	}()
 
-			outputDir := filepath.Join(artifacts, c.t.Name(), testCfg)
-			if err := os.MkdirAll(outputDir, 0777); err != nil {
-				t.Fatal(err)
-			}
-			var failed bool
-			select {
-			case testErr := <-errCh:
-				if testErr == nil {
-					logf("%s: passed, grabbing minimal logs", testCfg)
-				} else {
-					logf("%s: failed: %s", testCfg, testErr)
-					failed = true
-				}
+	outputDir := filepath.Join(artifacts, t.Name())
+	if err := os.MkdirAll(outputDir, 0777); err != nil {
+		t.Fatal(err)
+	}
+	var testErr error
+	select {
+	case testErr = <-errCh:
+		if testErr == nil {
+			logf("passed, grabbing minimal logs")
+		} else {
+			logf("failed: %s", testErr)
+		}
 
-			case <-time.After(20 * time.Minute):
-				// Although we run tests of 6 minutes each, we use a timeout
-				// much larger than that. This is because Jepsen for some
-				// tests (e.g. register) runs a potentially long analysis
-				// after the test itself has completed, before determining
-				// whether the test has succeeded or not.
-				//
-				// Try to get any running jvm to log its stack traces for
-				// extra debugging help.
-				c.Run(ctx, controller, "pkill -QUIT java")
-				time.Sleep(10 * time.Second)
-				c.Run(ctx, controller, "pkill java")
-				logf("%s: timed out", testCfg)
-				failed = true
-			}
+	case <-time.After(20 * time.Minute):
+		// Although we run tests of 6 minutes each, we use a timeout
+		// much larger than that. This is because Jepsen for some
+		// tests (e.g. register) runs a potentially long analysis
+		// after the test itself has completed, before determining
+		// whether the test has succeeded or not.
+		//
+		// Try to get any running jvm to log its stack traces for
+		// extra debugging help.
+		run(c, ctx, controller, "pkill -QUIT java")
+		time.Sleep(10 * time.Second)
+		run(c, ctx, controller, "pkill java")
+		logf("timed out")
+		testErr = fmt.Errorf("timed out")
+	}
 
-			if failed {
-				failures = append(failures, testCfg)
-
-				logf("%s: grabbing artifacts from controller. Tail of controller log:", testCfg)
-				c.Run(ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
-				cmd = exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
-					// -h causes tar to follow symlinks; needed by the "latest" symlink.
-					// -f- sends the output to stdout, we read it and save it to a local file.
-					"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log /var/log/")
-				output, err := cmd.Output()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				collectFiles := []string{
-					"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
-				}
-				anyFailed := false
-				for _, file := range collectFiles {
-					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-						"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
-						filepath.Join(outputDir, file))
-					cmd.Stdout = c.l.stdout
-					cmd.Stderr = c.l.stderr
-					if err := cmd.Run(); err != nil {
-						logf("failed to retrieve %s: %s", file, err)
-					}
-				}
-				if anyFailed {
-					// Try to figure out why this is so common.
-					cmd = loggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
-						"/mnt/data1/jepsen/cockroachdb/invoke.log",
-						filepath.Join(outputDir, "invoke.log"))
-					cmd.Stdout = c.l.stdout
-					cmd.Stderr = c.l.stderr
-					if err := cmd.Run(); err != nil {
-						logf("failed to retrieve invoke.log: %s", err)
-					}
-				}
+	if testErr != nil {
+		logf("grabbing artifacts from controller. Tail of controller log:")
+		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
+		cmd := exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
+			// -h causes tar to follow symlinks; needed by the "latest" symlink.
+			// -f- sends the output to stdout, we read it and save it to a local file.
+			"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log /var/log/")
+		output, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatal(testErr)
+	} else {
+		collectFiles := []string{
+			"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
+		}
+		anyFailed := false
+		for _, file := range collectFiles {
+			cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
+				filepath.Join(outputDir, file))
+			cmd.Stdout = c.l.stdout
+			cmd.Stderr = c.l.stderr
+			if err := cmd.Run(); err != nil {
+				logf("failed to retrieve %s: %s", file, err)
 			}
 		}
-	}
-	if len(failures) > 0 {
-		logf("jepsen tests failed: %v", failures)
-		t.Fatalf("jepsen tests failed: %v", failures)
+		if anyFailed {
+			// Try to figure out why this is so common.
+			cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+				"/mnt/data1/jepsen/cockroachdb/invoke.log",
+				filepath.Join(outputDir, "invoke.log"))
+			cmd.Stdout = c.l.stdout
+			cmd.Stderr = c.l.stderr
+			if err := cmd.Run(); err != nil {
+				logf("failed to retrieve invoke.log: %s", err)
+			}
+		}
 	}
 }
 
 func registerJepsen(r *registry) {
-	r.Add(testSpec{
+	spec := testSpec{
 		Name:  "jepsen",
 		Nodes: nodes(6),
-		Run:   runJepsen,
-	})
+	}
+
+	for _, testName := range jepsenTests {
+		testName := testName
+		sub := testSpec{Name: testName}
+		for _, nemesis := range jepsenNemeses {
+			nemesis := nemesis
+			sub.SubTests = append(sub.SubTests, testSpec{
+				Name: nemesis.name,
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runJepsen(ctx, t, c, testName, nemesis.config)
+				},
+			})
+		}
+		spec.SubTests = append(spec.SubTests, sub)
+	}
+
+	r.Add(spec)
 }

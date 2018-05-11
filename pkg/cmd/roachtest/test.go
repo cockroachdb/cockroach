@@ -43,16 +43,47 @@ var (
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
+func makeFilterRE(filter []string) *regexp.Regexp {
+	if len(filter) == 0 {
+		return regexp.MustCompile(`.`)
+	}
+	for i := range filter {
+		filter[i] = "(" + filter[i] + ")"
+	}
+	return regexp.MustCompile(strings.Join(filter, "|"))
+}
+
 type testSpec struct {
-	SkippedBecause string // if nonzero, test will be skipped
+	SkippedBecause string // if non-empty, test will be skipped
 	Name           string
 	// Stable indicates whether failure of the test will result in failure of the
 	// test run. Tests should be added initially as unstable, and only converted
 	// to stable once they have passed successfully on multiple nightly (not
 	// local) runs.
 	Stable bool
-	Nodes  []nodeSpec
-	Run    func(ctx context.Context, t *test, c *cluster)
+	// Nodes provides the specification for the cluster to use for the test. Only
+	// a top-level testSpec may contain a nodes specification. The cluster is
+	// shared by all subtests.
+	Nodes []nodeSpec
+	// A testSpec must specify only one of Run or SubTests. A SubTest should not
+	// assume any particular state for the cluster as the SubTest may be run in
+	// isolation.
+	Run      func(ctx context.Context, t *test, c *cluster)
+	SubTests []testSpec
+}
+
+// matchRegex returns true if the regex matches the test's name or any of the
+// subtest names.
+func (t *testSpec) matchRegex(re *regexp.Regexp) bool {
+	if re.MatchString(t.Name) {
+		return true
+	}
+	for i := range t.SubTests {
+		if t.SubTests[i].matchRegex(re) {
+			return true
+		}
+	}
+	return false
 }
 
 type registry struct {
@@ -60,6 +91,13 @@ type registry struct {
 	clusters       map[string]string
 	out            io.Writer
 	statusInterval time.Duration
+
+	status struct {
+		syncutil.Mutex
+		running map[*test]struct{}
+		pass    map[*test]struct{}
+		fail    map[*test]struct{}
+	}
 }
 
 func newRegistry() *registry {
@@ -86,37 +124,48 @@ func (r *registry) verifyClusterName(testName string) error {
 	return nil
 }
 
+func (r *registry) prepareSpec(spec *testSpec, depth int) error {
+	if depth == 0 {
+		// Only top-level tests can create clusters, so those are the only ones for
+		// which we need to verify the cluster name.
+		if err := r.verifyClusterName(spec.Name); err != nil {
+			return err
+		}
+	}
+
+	if (spec.Run != nil) == (len(spec.SubTests) > 0) {
+		return fmt.Errorf("%s: must specify only one of Run or SubTests", spec.Name)
+	}
+
+	if depth > 0 && len(spec.Nodes) > 0 {
+		return fmt.Errorf("%s: subtest may not provide cluster specification", spec.Name)
+	}
+
+	for i := range spec.SubTests {
+		spec.SubTests[i].Name = spec.Name + "/" + spec.SubTests[i].Name
+		if err := r.prepareSpec(&spec.SubTests[i], depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *registry) Add(spec testSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
 	}
-	r.m[spec.Name] = &spec
-	if err := r.verifyClusterName(spec.Name); err != nil {
+	if err := r.prepareSpec(&spec, 0); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
+	r.m[spec.Name] = &spec
 }
 
-func (r *registry) List(filter []string) []*testSpec {
-	if len(filter) == 0 {
-		filter = []string{"."}
-	}
-	re := make([]*regexp.Regexp, len(filter))
-	for i := range filter {
-		re[i] = regexp.MustCompile(filter[i])
-	}
-
+func (r *registry) List(re *regexp.Regexp) []*testSpec {
 	var results []*testSpec
 	for _, t := range r.m {
-		var matched bool
-		for _, r := range re {
-			if r.MatchString(t.Name) {
-				matched = true
-				break
-			}
-		}
-		if matched {
+		if t.matchRegex(re) {
 			results = append(results, t)
 		}
 	}
@@ -128,7 +177,8 @@ func (r *registry) List(filter []string) []*testSpec {
 }
 
 func (r *registry) Run(filter []string) int {
-	tests := r.List(filter)
+	filterRE := makeFilterRE(filter)
+	tests := r.List(filterRE)
 	wg := &sync.WaitGroup{}
 	wg.Add(count * len(tests))
 
@@ -143,43 +193,16 @@ func (r *registry) Run(filter []string) int {
 		parallelism = len(tests)
 	}
 
-	var status struct {
-		syncutil.Mutex
-		running map[*test]struct{}
-		pass    map[*test]struct{}
-		fail    map[*test]struct{}
-	}
-	status.running = make(map[*test]struct{})
-	status.pass = make(map[*test]struct{})
-	status.fail = make(map[*test]struct{})
+	r.status.running = make(map[*test]struct{})
+	r.status.pass = make(map[*test]struct{})
+	r.status.fail = make(map[*test]struct{})
 
 	go func() {
 		sem := make(chan struct{}, parallelism)
 		for j := 0; j < count; j++ {
 			for i := range tests {
-				t := &test{spec: tests[i]}
 				sem <- struct{}{}
-				if teamCity {
-					fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
-				} else {
-					stability := ""
-					if !t.spec.Stable {
-						stability = " [unstable]"
-					}
-					fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), stability)
-				}
-				status.Lock()
-				status.running[t] = struct{}{}
-				status.Unlock()
-				t.run(r.out, func(failed bool) {
-					status.Lock()
-					delete(status.running, t)
-					if failed {
-						status.fail[t] = struct{}{}
-					} else {
-						status.pass[t] = struct{}{}
-					}
-					status.Unlock()
+				r.run(tests[i], filterRE, nil, func() {
 					wg.Done()
 					<-sem
 				})
@@ -207,12 +230,12 @@ func (r *registry) Run(filter []string) int {
 	for i := 1; ; i++ {
 		select {
 		case <-done:
-			status.Lock()
-			defer status.Unlock()
-			postSlackReport(status.pass, status.fail, len(r.m)-len(tests))
+			r.status.Lock()
+			defer r.status.Unlock()
+			postSlackReport(r.status.pass, r.status.fail, len(r.m)-len(tests))
 
 			stableFails := 0
-			for t := range status.fail {
+			for t := range r.status.fail {
 				if t.spec.Stable {
 					stableFails++
 				}
@@ -222,16 +245,16 @@ func (r *registry) Run(filter []string) int {
 				return 1
 			}
 			unstableFails := ""
-			if n := len(status.fail) - stableFails; n > 0 {
+			if n := len(r.status.fail) - stableFails; n > 0 {
 				unstableFails = fmt.Sprintf(" (%d unstable FAIL)", n)
 			}
 			fmt.Fprintf(r.out, "PASS%s\n", unstableFails)
 			return 0
 
 		case <-ticker.C:
-			status.Lock()
-			runningTests := make([]*test, 0, len(status.running))
-			for t := range status.running {
+			r.status.Lock()
+			runningTests := make([]*test, 0, len(r.status.running))
+			for t := range r.status.running {
 				runningTests = append(runningTests, t)
 			}
 			sort.Slice(runningTests, func(i, j int) bool {
@@ -239,6 +262,11 @@ func (r *registry) Run(filter []string) int {
 			})
 			var buf bytes.Buffer
 			for _, t := range runningTests {
+				if t.spec.Run == nil {
+					// Ignore tests with subtests.
+					continue
+				}
+
 				t.mu.Lock()
 				done := t.mu.done
 				var status map[int64]testStatus
@@ -294,7 +322,7 @@ func (r *registry) Run(filter []string) int {
 				}
 			}
 			fmt.Fprint(r.out, buf.String())
-			status.Unlock()
+			r.status.Unlock()
 
 		case <-sig:
 			destroyAllClusters()
@@ -455,7 +483,22 @@ func (t *test) Failed() bool {
 	return failed
 }
 
-func (t *test) run(out io.Writer, done func(failed bool)) {
+func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done func()) {
+	t := &test{spec: spec}
+
+	if teamCity {
+		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
+	} else {
+		stability := ""
+		if !t.spec.Stable {
+			stability = " [unstable]"
+		}
+		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), stability)
+	}
+	r.status.Lock()
+	r.status.running[t] = struct{}{}
+	r.status.Unlock()
+
 	callerName := func() string {
 		// Make room for the skip PC.
 		var pc [2]uintptr
@@ -496,34 +539,43 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 				if t.Failed() {
 					if teamCity {
 						fmt.Fprintf(
-							out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
+							r.out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
 							t.Name(), teamCityEscape(string(t.mu.output)), t.Name(),
 						)
 					}
-					fmt.Fprintf(out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, t.mu.output)
+					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, t.mu.output)
 				} else if t.spec.SkippedBecause == "" {
-					fmt.Fprintf(out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
+					fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 				} else {
 					if teamCity {
-						fmt.Fprintf(out, "##teamcity[testIgnored name='%s' message='%s']\n",
+						fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
 							t.Name(), t.spec.SkippedBecause)
 					}
-					fmt.Fprintf(out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.SkippedBecause)
+					fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.SkippedBecause)
 				}
 
 				if teamCity {
-					fmt.Fprintf(out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
+					fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
 
 					escapedTestName := teamCityNameEscape(t.Name())
 					artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
 					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-					fmt.Fprintf(out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
 				}
 			}
 
-			done(t.Failed())
+			r.status.Lock()
+			delete(r.status.running, t)
+			if t.Failed() {
+				r.status.fail[t] = struct{}{}
+			} else {
+				r.status.pass[t] = struct{}{}
+			}
+			r.status.Unlock()
+
+			done()
 		}()
 
 		t.start = timeutil.Now()
@@ -532,17 +584,39 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			return
 		}
 
+		ctx := context.Background()
 		if !dryrun {
-			ctx := context.Background()
-			c := newCluster(ctx, t, t.spec.Nodes)
-			defer func() {
-				if !debug || !t.Failed() {
-					c.Destroy(ctx)
-				} else {
-					c.l.printf("not destroying cluster to allow debugging\n")
+			if c == nil {
+				c = newCluster(ctx, t, t.spec.Nodes)
+				if c != nil {
+					defer func() {
+						if !debug || !t.Failed() {
+							c.Destroy(ctx)
+						} else {
+							c.l.printf("not destroying cluster to allow debugging\n")
+						}
+					}()
 				}
-			}()
-			t.spec.Run(ctx, t, c)
+			} else {
+				c = c.clone(t)
+			}
+		}
+
+		if t.spec.Run != nil {
+			if !dryrun {
+				t.spec.Run(ctx, t, c)
+			}
+		} else {
+			for i := range t.spec.SubTests {
+				if t.spec.SubTests[i].matchRegex(filter) {
+					var wg sync.WaitGroup
+					wg.Add(1)
+					r.run(&t.spec.SubTests[i], filter, c, func() {
+						wg.Done()
+					})
+					wg.Wait()
+				}
+			}
 		}
 	}()
 }
