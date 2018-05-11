@@ -1185,24 +1185,19 @@ project
  │         ├── eq [type=bool]
  │         │    ├── variable: twocolumn.x [type=int]
  │         │    └── variable: onecolumn.x [type=int]
- │         └── any [type=bool]
- │              └── project
- │                   ├── columns: column9:9(bool)
- │                   ├── project
- │                   │    ├── columns: twocolumn.x:6(int)
- │                   │    ├── select
- │                   │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
- │                   │    │    ├── scan twocolumn
- │                   │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
- │                   │    │    └── ge [type=bool]
- │                   │    │         ├── variable: twocolumn.y [type=int]
- │                   │    │         └── const: 52 [type=int]
- │                   │    └── projections
- │                   │         └── variable: twocolumn.x [type=int]
- │                   └── projections
- │                        └── eq [type=bool]
- │                             ├── variable: onecolumn.x [type=int]
- │                             └── variable: twocolumn.x [type=int]
+ │         └── any: eq [type=bool]
+ │              ├── project
+ │              │    ├── columns: twocolumn.x:6(int)
+ │              │    ├── select
+ │              │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │              │    │    ├── scan twocolumn
+ │              │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │              │    │    └── ge [type=bool]
+ │              │    │         ├── variable: twocolumn.y [type=int]
+ │              │    │         └── const: 52 [type=int]
+ │              │    └── projections
+ │              │         └── variable: twocolumn.x [type=int]
+ │              └── variable: onecolumn.x [type=int]
  └── projections
       ├── variable: onecolumn.x [type=int]
       ├── variable: twocolumn.x [type=int]
@@ -3479,19 +3474,14 @@ select
  │    │    └── projections
  │    │         └── const: 2 [type=int]
  │    └── true [type=bool]
- └── any [type=bool]
-      └── project
-           ├── columns: column7:7(bool)
-           ├── project
-           │    ├── columns: kv.k:3(int!null)
-           │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
-           │    └── projections
-           │         └── variable: kv.k [type=int]
-           └── projections
-                └── eq [type=bool]
-                     ├── const: 1 [type=int]
-                     └── variable: kv.k [type=int]
+ └── any: eq [type=bool]
+      ├── project
+      │    ├── columns: kv.k:3(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
+      │    └── projections
+      │         └── variable: kv.k [type=int]
+      └── const: 1 [type=int]
 
 # Test natural outer join when the left side has unknown type
 build

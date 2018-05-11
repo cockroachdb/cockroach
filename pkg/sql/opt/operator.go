@@ -40,9 +40,13 @@ func (i Operator) String() string {
 	return opNames[opIndexes[i]:opIndexes[i+1]]
 }
 
+// ComparisonOpMap maps from a semantic tree comparison operator type to an
+// optimizer operator type.
+var ComparisonOpMap [tree.NumComparisonOperators]Operator
+
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
-var ComparisonOpReverseMap = [...]tree.ComparisonOperator{
+var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 	EqOp:             tree.EQ,
 	LtOp:             tree.LT,
 	GtOp:             tree.GT,
@@ -71,7 +75,7 @@ var ComparisonOpReverseMap = [...]tree.ComparisonOperator{
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // binary operator type.
-var BinaryOpReverseMap = [...]tree.BinaryOperator{
+var BinaryOpReverseMap = map[Operator]tree.BinaryOperator{
 	BitandOp:        tree.Bitand,
 	BitorOp:         tree.Bitor,
 	BitxorOp:        tree.Bitxor,
@@ -93,14 +97,14 @@ var BinaryOpReverseMap = [...]tree.BinaryOperator{
 
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // unary operator type.
-var UnaryOpReverseMap = [...]tree.UnaryOperator{
+var UnaryOpReverseMap = map[Operator]tree.UnaryOperator{
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
 }
 
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an
 // aggregation function.
-var AggregateOpReverseMap = [...]string{
+var AggregateOpReverseMap = map[Operator]string{
 	ArrayAggOp:      "array_agg",
 	AvgOp:           "avg",
 	BoolAndOp:       "bool_and",
@@ -120,4 +124,36 @@ var AggregateOpReverseMap = [...]string{
 	XorAggOp:        "xor_agg",
 	JsonAggOp:       "json_agg",
 	JsonbAggOp:      "jsonb_agg",
+}
+
+// NegateOpMap maps from a comparison operator type to its negated operator
+// type, as if the Not operator was applied to it. Some comparison operators,
+// like Contains and JsonExists, do not have negated versions.
+var NegateOpMap = map[Operator]Operator{
+	EqOp:           NeOp,
+	LtOp:           GeOp,
+	GtOp:           LeOp,
+	LeOp:           GtOp,
+	GeOp:           LtOp,
+	NeOp:           EqOp,
+	InOp:           NotInOp,
+	NotInOp:        InOp,
+	LikeOp:         NotLikeOp,
+	NotLikeOp:      LikeOp,
+	ILikeOp:        NotILikeOp,
+	NotILikeOp:     ILikeOp,
+	SimilarToOp:    NotSimilarToOp,
+	NotSimilarToOp: SimilarToOp,
+	RegMatchOp:     NotRegMatchOp,
+	NotRegMatchOp:  RegMatchOp,
+	RegIMatchOp:    NotRegIMatchOp,
+	NotRegIMatchOp: RegIMatchOp,
+	IsOp:           IsNotOp,
+	IsNotOp:        IsOp,
+}
+
+func init() {
+	for optOp, treeOp := range ComparisonOpReverseMap {
+		ComparisonOpMap[treeOp] = optOp
+	}
 }

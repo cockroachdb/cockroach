@@ -152,6 +152,24 @@ func TestInternSetOpColMap(t *testing.T) {
 	test(&SetOpColMap{list1, list2, list3}, &SetOpColMap{list1, list3, list2}, false)
 }
 
+func TestInternOperator(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right opt.Operator, expected bool) {
+		t.Helper()
+		leftID := ps.internOperator(left)
+		rightID := ps.internOperator(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	test(opt.PlusOp, opt.PlusOp, true)
+	test(opt.PlusOp, opt.MinusOp, false)
+	test(opt.MinusOp, opt.PlusOp, false)
+}
+
 func TestInternOrdering(t *testing.T) {
 	var ps privateStorage
 	ps.init()
@@ -263,6 +281,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
 	ordering := props.Ordering{1, -2, 3}
+	op := opt.PlusOp
 	funcOpDef := &FuncOpDef{
 		Name:     "concat",
 		Type:     types.String,
@@ -277,6 +296,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internColumnID(colID)
 		ps.internColSet(colSet)
 		ps.internColList(colList)
+		ps.internOperator(op)
 		ps.internOrdering(ordering)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
@@ -295,6 +315,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
 	ordering := props.Ordering{1, -2, 3}
+	op := opt.PlusOp
 	funcOpDef := &FuncOpDef{
 		Name:     "concat",
 		Type:     types.String,
@@ -311,6 +332,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internColumnID(colID)
 		ps.internColSet(colSet)
 		ps.internColList(colList)
+		ps.internOperator(op)
 		ps.internOrdering(ordering)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
