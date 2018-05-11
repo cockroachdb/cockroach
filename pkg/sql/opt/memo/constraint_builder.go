@@ -29,6 +29,7 @@ const excludeBoundary = constraint.ExcludeBoundary
 
 var emptyKey = constraint.EmptyKey
 var unconstrained = constraint.Unconstrained
+var contradiction = constraint.Contradiction
 
 // constraintsBuilder is used to create constraints (constraint.Set) from
 // boolean scalar expressions. The constraints are stored in the logical
@@ -92,7 +93,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 			// The result of this expression is always NULL. Normally, this expression
 			// should have been converted to NULL during type checking; but if the
 			// NULL is coming from a placeholder, that doesn't happen.
-			return constraint.Contradiction, true
+			return contradiction, true
 
 		case opt.IsOp:
 			return cb.eqSpan(col, tree.DNull), true
@@ -141,7 +142,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 			startKey, startBoundary = constraint.MakeKey(tree.DNull), excludeBoundary
 		}
 		key := constraint.MakeKey(datum)
-		c := constraint.Contradiction
+		c := contradiction
 		if startKey.IsEmpty() || !datum.IsMin(cb.evalCtx) {
 			c = cb.singleSpan(col, startKey, startBoundary, key, excludeBoundary)
 		}
@@ -231,22 +232,52 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	return constraint.SingleSpanConstraint(&keyCtx, &span), true
 }
 
-func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, tight bool) {
-	// TODO(radu): handle const bool value.
+// getConstraints retrieves the constraints already calculated for an
+// expression.
+func (cb *constraintsBuilder) getConstraints(ev ExprView) (_ *constraint.Set, tight bool) {
+	if ev.Operator() == opt.NullOp {
+		// Special case: a NullOp might be used as a boolean expression, but we
+		// don't generate constraints for this op.
+		return contradiction, true
+	}
+	s := ev.Logical().Scalar
+	return s.Constraints, s.TightConstraints
+}
 
+func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, tight bool) {
 	switch ev.Operator() {
+	case opt.NullOp:
+		return contradiction, true
+
+	case opt.VariableOp:
+		// (x) is equivalent to (x = TRUE) if x is boolean.
+		if col := ev.Private().(opt.ColumnID); cb.md.ColumnType(col).Equivalent(types.Bool) {
+			return cb.buildSingleColumnConstraintConst(col, opt.EqOp, tree.DBoolTrue)
+		}
+		return unconstrained, false
+
+	case opt.NotOp:
+		// (NOT x) is equivalent to (x = FALSE) if x is boolean.
+		if child := ev.Child(0); child.Operator() == opt.VariableOp {
+			if col := child.Private().(opt.ColumnID); cb.md.ColumnType(col).Equivalent(types.Bool) {
+				return cb.buildSingleColumnConstraintConst(col, opt.EqOp, tree.DBoolFalse)
+			}
+		}
+		return unconstrained, false
+
 	case opt.AndOp, opt.FiltersOp:
 		// ChildCount can be zero if this is not a fully normalized expression
 		// (e.g. when using optsteps).
 		if ev.ChildCount() > 0 {
-			c, tight := cb.buildConstraints(ev.Child(0))
+			c, tight := cb.getConstraints(ev.Child(0))
 			for i := 1; i < ev.ChildCount(); i++ {
-				ci, tighti := cb.buildConstraints(ev.Child(i))
+				ci, tighti := cb.getConstraints(ev.Child(i))
 				c = c.Intersect(cb.evalCtx, ci)
 				tight = tight && tighti
 			}
-			return c, (tight || c == constraint.Contradiction)
+			return c, (tight || c == contradiction)
 		}
+		return unconstrained, false
 	}
 
 	if ev.ChildCount() < 2 {

@@ -328,7 +328,7 @@ project
  ├── columns: column6:6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 opt
 SELECT null or null FROM a
@@ -337,7 +337,7 @@ project
  ├── columns: column6:6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 opt
 SELECT null or (null and null and null) or null FROM a
@@ -346,7 +346,7 @@ project
  ├── columns: column6:6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 # Don't fold.
 opt
@@ -360,7 +360,7 @@ project
  └── projections [outer=(1)]
       └── or [type=bool, outer=(1)]
            ├── null [type=unknown]
-           └── and [type=bool, outer=(1), constraints=(/1: [/1 - /1])]
+           └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
                 ├── null [type=unknown]
                 └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
                      ├── variable: a.k [type=int, outer=(1)]
