@@ -1082,6 +1082,10 @@ func (txn *Txn) Send(
 					requestTxnID, retryErr.TxnID, retryErr)
 			}
 			txn.updateStateOnRetryableErrLocked(ctx, retryErr)
+		default:
+			if errTxn := pErr.GetTxn(); txn != nil {
+				txn.mu.Proto.Update(errTxn)
+			}
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to

@@ -446,6 +446,8 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 
 	// Verify that the abort is discovered and the heartbeat discontinued.
+	// This relies on the heartbeat loop stopping once it figures out that the txn
+	// has been aborted.
 	testutils.SucceedsSoon(t, func() error {
 		tc.mu.Lock()
 		done := tc.mu.txnEnd == nil
@@ -706,7 +708,6 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 		ctx := context.Background()
 		txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 		tc := txn.Sender().(*TxnCoordSender)
-		defer teardownHeartbeat(tc)
 		if !errOnFirst {
 			otherKey := roachpb.Key("other")
 			if err := txn.Put(ctx, otherKey, []byte("value")); err != nil {
@@ -1493,46 +1494,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Test that, after a heartbeat fails, requests start being rejected.
-func TestRejectionAfterFailedHeartbeat(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	key := roachpb.Key("a")
-	value := []byte("value")
-	// We're going to fail all heartbeats.
-	knobs := &storage.StoreTestingKnobs{
-		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, req := range ba.Requests {
-				if hb, ok := req.GetInner().(*roachpb.HeartbeatTxnRequest); ok && hb.Key.Equal(key) {
-					return roachpb.NewErrorf("induced heartbeat failure")
-				}
-			}
-			return nil
-		},
-	}
-
-	s := createTestDBWithContextAndKnobs(t, client.DefaultDBContext(), knobs)
-	defer s.Stop()
-
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	tc := txn.Sender().(*TxnCoordSender)
-	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
-
-	// Do a write, to start the heartbeat.
-	if err := txn.Put(context.TODO(), key, value); err != nil {
-		t.Fatal(err)
-	}
-
-	// The heartbeat failure and the resulting cleanup are async, so it might take
-	// a bit for the client to see the effects.
-	testutils.SucceedsSoon(t, func() error {
-		if _, err := txn.Get(context.TODO(), key); !testutils.IsError(err, "txn aborted") {
-			return fmt.Errorf("expected transaction aborted err, found %v", err)
-		}
-		return nil
-	})
 }
 
 // mockSender is a client.Sender implementation that passes requests to a list
