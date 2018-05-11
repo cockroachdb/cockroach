@@ -23,11 +23,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func runClockMonotonicity(t *test, c *cluster, tc clockMonotonicityTestCase) {
-	ctx := context.Background()
-
-	c.l.printf("Running %s\n", tc.name)
-
+func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMonotonicityTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
 	if c.nodes != 1 {
@@ -38,8 +34,10 @@ func runClockMonotonicity(t *test, c *cluster, tc clockMonotonicityTestCase) {
 	offsetInjector := newOffsetInjector(c)
 	offsetInjector.deploy(ctx)
 
-	t.Status("starting cockroach")
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
+		c.Put(ctx, cockroach, "./cockroach", c.All())
+	}
+	c.Wipe(ctx)
 	c.Start(ctx)
 
 	db := c.Conn(ctx, c.nodes)
@@ -105,9 +103,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func registerClockMonotonicity(r *registry) {
-	const numNodes = 1
-
+func makeClockMonotonicTests() testSpec {
 	testCases := []clockMonotonicityTestCase{
 		{
 			// Without enabling the feature to persist wall time, wall time is
@@ -125,15 +121,21 @@ func registerClockMonotonicity(r *registry) {
 		},
 	}
 
+	spec := testSpec{
+		Name:   "monotonic",
+		Stable: true, // DO NOT COPY to new tests
+	}
+
 	for i := range testCases {
 		tc := testCases[i]
-		r.Add(testSpec{
-			Name:   fmt.Sprintf("clockmonotonic/tc=%s", tc.name),
-			Nodes:  nodes(numNodes),
+		spec.SubTests = append(spec.SubTests, testSpec{
+			Name:   tc.name,
 			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runClockMonotonicity(t, c, tc)
+				runClockMonotonicity(ctx, t, c, tc)
 			},
 		})
 	}
+
+	return spec
 }
