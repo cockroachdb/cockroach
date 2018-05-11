@@ -16,7 +16,7 @@ package status
 
 import (
 	"context"
-
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -124,7 +124,8 @@ func (d metricsMap) update(tracked map[string]threshold, m metricsMap) metricsMa
 // A HealthChecker inspects the node metrics and optionally a NodeStatus for
 // anomalous conditions that the operator should be alerted to.
 type HealthChecker struct {
-	state   metricsMap
+	stateLk sync.Mutex // guards the following state:
+	state   metricsMap // - the last recorded values of all counters
 	tracked map[string]threshold
 }
 
@@ -137,8 +138,10 @@ func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
 	return &HealthChecker{state: metricsMap{}, tracked: trackedMetrics}
 }
 
-// CheckHealth performs a (cheap) health check. It is not thread safe.
+// CheckHealth performs a (cheap) health check.
 func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) HealthCheckResult {
+	h.stateLk.Lock()
+	defer h.stateLk.Unlock()
 	// Gauges that trigger alerts when nonzero.
 	var alerts []HealthAlert
 
