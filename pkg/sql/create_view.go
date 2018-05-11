@@ -49,7 +49,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	}
 
 	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		dbDesc, err = ResolveTargetObject(ctx, p, name)
 	})
 	if err != nil {

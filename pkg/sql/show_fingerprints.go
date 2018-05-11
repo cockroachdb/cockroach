@@ -61,12 +61,10 @@ func (p *planner) ShowFingerprints(
 
 	var tableDesc *TableDescriptor
 	// We avoid the cache so that we can observe the fingerprints without
-	// taking a lease, like other SHOW commands. We also use
-	// allowAdding=true so we can look at the fingerprints of a table
-	// added in the same transaction.
+	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	})
 	if err != nil {
