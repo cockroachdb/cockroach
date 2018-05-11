@@ -45,16 +45,19 @@ type offsetInjector struct {
 
 // deploy installs ntp and downloads / compiles bumptime used to create a clock offset
 func (oi *offsetInjector) deploy(ctx context.Context) {
-	oi.c.Install(ctx, oi.c.All(), "ntp")
-	oi.c.Install(ctx, oi.c.All(), "gcc")
-	oi.c.Run(ctx, oi.c.All(), "sudo", "service", "ntp", "stop")
-	oi.c.Run(ctx,
-		oi.c.All(),
-		"curl",
-		"-kO",
-		"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
-	)
-	oi.c.Run(ctx, oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c")
+	if err := oi.c.RunE(ctx, oi.c.All(), "test -x ./bumptime"); err != nil {
+		oi.c.Install(ctx, oi.c.All(), "ntp")
+		oi.c.Install(ctx, oi.c.All(), "gcc")
+		oi.c.Run(ctx, oi.c.All(), "sudo", "service", "ntp", "stop")
+		oi.c.Run(ctx,
+			oi.c.All(),
+			"curl",
+			"-kO",
+			"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
+		)
+		oi.c.Run(ctx, oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c")
+	}
+
 	oi.deployed = true
 }
 
