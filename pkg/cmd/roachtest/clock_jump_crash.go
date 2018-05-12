@@ -83,8 +83,11 @@ func makeClockJumpTests() testSpec {
 			aliveAfterOffset: false,
 		},
 		{
-			name:             "small_forward_enabled",
-			offset:           150 * time.Millisecond,
+			name: "small_forward_enabled",
+			// NB: The offset here needs to be small enough such that this jump plus
+			// the forward jump check interval (125ms) is less than the tolerated
+			// forward clock jump (250ms).
+			offset:           100 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
