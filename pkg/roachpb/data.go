@@ -877,6 +877,9 @@ func (t *Transaction) Restart(
 	t.WriteTooOld = false
 	t.RetryOnPush = false
 	t.Sequence = 0
+	// Reset Writing. Since we're using a new epoch, we don't care about the abort
+	// cache.
+	t.Writing = false
 }
 
 // BumpEpoch increments the transaction's epoch, allowing for an in-place

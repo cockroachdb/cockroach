@@ -78,6 +78,9 @@ type TxnSender interface {
 	// if this method is invoked multiple times, the most recent callback
 	// is the only one which will be invoked.
 	OnFinish(func(error))
+
+	// StartTracking starts a heartbeat loop and tracking of intents.
+	StartTracking(ctx context.Context) error
 }
 
 // TxnSenderFactory is the interface used to create new instances
@@ -105,26 +108,37 @@ func (f SenderFunc) Send(
 	return f(ctx, ba)
 }
 
-// TxnSenderFunc is an adapter to allow the use of ordinary functions
-// as TxnSenders with GetMeta or AugmentMeta panicing with unimplemented.
-// This is a helper mechanism to facilitate testing.
-type TxnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+// TxnSenderAdapter is an adapter to allow the use of ordinary functions as
+// TxnSenders with GetMeta or AugmentMeta panicing with unimplemented. This is
+// a helper mechanism to facilitate testing.
+type TxnSenderAdapter struct {
+	Wrapped              func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	StartTrackingWrapped func(context.Context) error
+}
 
 // Send calls f(ctx, c).
-func (f TxnSenderFunc) Send(
+func (f TxnSenderAdapter) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	return f(ctx, ba)
+	return f.Wrapped(ctx, ba)
 }
 
 // GetMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (f TxnSenderAdapter) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
 
 // AugmentMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic("unimplemented") }
+func (f TxnSenderAdapter) AugmentMeta(context.Context, roachpb.TxnCoordMeta) { panic("unimplemented") }
 
 // OnFinish is part of the TxnSender interface.
-func (f TxnSenderFunc) OnFinish(_ func(error)) { panic("unimplemented") }
+func (f TxnSenderAdapter) OnFinish(_ func(error)) { panic("unimplemented") }
+
+// StartTracking is part the TxnSender interface.
+func (f TxnSenderAdapter) StartTracking(ctx context.Context) error {
+	if f.StartTrackingWrapped != nil {
+		return f.StartTrackingWrapped(ctx)
+	}
+	panic("unimplemented")
+}
 
 // TxnSenderFactoryFunc is an adapter to allow the use of ordinary functions
 // as TxnSenderFactories. This is a helper mechanism to facilitate testing.

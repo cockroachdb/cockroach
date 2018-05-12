@@ -70,7 +70,11 @@ func TestTxnSnowballTrace(t *testing.T) {
 	//    0.275ms      0.171ms    event:client.Txn did AutoCommit. err: <nil>
 	//txn: "internal/client/txn_test.go:67 TestTxnSnowballTrace" id=<nil> key=/Min rw=false pri=0.00000000 iso=SERIALIZABLE stat=COMMITTED epo=0 ts=0.000000000,0 orig=0.000000000,0 max=0.000000000,0 wto=false rop=false
 	//    0.278ms      0.173ms    event:txn complete
-	found, err := regexp.MatchString(".*event:inside txn\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*", dump)
+	found, err := regexp.MatchString(
+		// The (?s) makes "." match \n. This makes the test resilient to other log
+		// lines being interspersed.
+		"(?s).*event:inside txn\n.*event:client.Txn did AutoCommit. err: <nil>\n.*\n.*event:txn complete.*",
+		dump)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,55 +86,58 @@ func TestTxnSnowballTrace(t *testing.T) {
 func newTestTxnFactory(
 	createReply func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error),
 ) TxnSenderFactoryFunc {
-	return TxnSenderFactoryFunc(func(_ TxnType) TxnSender {
-		return TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest,
-		) (*roachpb.BatchResponse, *roachpb.Error) {
-			if ba.UserPriority == 0 {
-				ba.UserPriority = 1
-			}
+	return TxnSenderFactoryFunc(func(TxnType) TxnSender {
+		return TxnSenderAdapter{
+			StartTrackingWrapped: func(context.Context) error { return nil },
+			Wrapped: func(_ context.Context, ba roachpb.BatchRequest,
+			) (*roachpb.BatchResponse, *roachpb.Error) {
+				if ba.UserPriority == 0 {
+					ba.UserPriority = 1
+				}
 
-			var br *roachpb.BatchResponse
-			var pErr *roachpb.Error
-			if createReply != nil {
-				br, pErr = createReply(ba)
-			} else {
-				br = ba.CreateReply()
-			}
-			if pErr != nil {
-				return nil, pErr
-			}
-			var writing bool
-			status := roachpb.PENDING
-			for i, req := range ba.Requests {
-				args := req.GetInner()
-				if _, ok := args.(*roachpb.PutRequest); ok {
-					testPutRespCopy := testPutResp
-					union := &br.Responses[i] // avoid operating on copy
-					union.MustSetInner(&testPutRespCopy)
-				}
-				if roachpb.IsTransactionWrite(args) {
-					writing = true
-				}
-			}
-			if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
-				et := args.(*roachpb.EndTransactionRequest)
-				writing = true
-				if et.Commit {
-					status = roachpb.COMMITTED
+				var br *roachpb.BatchResponse
+				var pErr *roachpb.Error
+				if createReply != nil {
+					br, pErr = createReply(ba)
 				} else {
-					status = roachpb.ABORTED
+					br = ba.CreateReply()
 				}
-			}
-			if ba.Txn != nil && br.Txn == nil {
-				txnClone := ba.Txn.Clone()
-				br.Txn = &txnClone
-				if pErr == nil {
-					br.Txn.Writing = writing
-					br.Txn.Status = status
+				if pErr != nil {
+					return nil, pErr
 				}
-			}
-			return br, pErr
-		})
+				var writing bool
+				status := roachpb.PENDING
+				for i, req := range ba.Requests {
+					args := req.GetInner()
+					if _, ok := args.(*roachpb.PutRequest); ok {
+						testPutRespCopy := testPutResp
+						union := &br.Responses[i] // avoid operating on copy
+						union.MustSetInner(&testPutRespCopy)
+					}
+					if roachpb.IsTransactionWrite(args) {
+						writing = true
+					}
+				}
+				if args, ok := ba.GetArg(roachpb.EndTransaction); ok {
+					et := args.(*roachpb.EndTransactionRequest)
+					writing = true
+					if et.Commit {
+						status = roachpb.COMMITTED
+					} else {
+						status = roachpb.ABORTED
+					}
+				}
+				if ba.Txn != nil && br.Txn == nil {
+					txnClone := ba.Txn.Clone()
+					br.Txn = &txnClone
+					if pErr == nil {
+						br.Txn.Writing = writing
+						br.Txn.Status = status
+					}
+				}
+				return br, pErr
+			},
+		}
 	})
 }
 

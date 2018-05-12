@@ -5368,7 +5368,6 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		expTxn.Timestamp = test.expTS
 		expTxn.Status = roachpb.ABORTED
 		expTxn.LastHeartbeat = test.startTS
-		expTxn.Writing = true
 
 		if !reflect.DeepEqual(expTxn, reply.PusheeTxn) {
 			t.Fatalf("unexpected push txn in trial %d: %s", i, pretty.Diff(expTxn, reply.PusheeTxn))

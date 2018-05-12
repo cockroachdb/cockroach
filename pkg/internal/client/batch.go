@@ -167,8 +167,8 @@ func (b *Batch) fillResults(ctx context.Context) {
 						// instead; this effectively just leaks here.
 						// TODO(tschottdorf): returning an error here seems
 						// to get swallowed.
-						panic(errors.Errorf("not enough responses for calls: %+v, %+v",
-							b.reqs, b.response))
+						panic(errors.Errorf("not enough responses for calls: (%T) %+v\nresponses: %+v",
+							args, args, b.response))
 					}
 				}
 			}

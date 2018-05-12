@@ -226,6 +226,8 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 sql txn      CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
 dist sender  querying next range at /Table/54/1/1/0
 dist sender  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender  querying next range at /Table/54/1/1/0
+dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
 
 statement error duplicate key value
 set tracing=kv;
@@ -238,6 +240,8 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 sql txn      CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
 dist sender  querying next range at /Table/54/1/2/0
 dist sender  r1: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn, 1 InitPut to (n1,s1):1
+dist sender  querying next range at /Table/54/1/2/0
+dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
 
 query TT
 SET tracing=kv;
@@ -283,6 +287,8 @@ sql txn      Del /Table/54/2/3/0
 sql txn      CPut /Table/54/2/2/0 -> /BYTES/Š
 dist sender  querying next range at /Table/54/1/2/0
 dist sender  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
+dist sender  querying next range at /Table/54/1/2/0
+dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
 
 query TT
 SET tracing=kv;
