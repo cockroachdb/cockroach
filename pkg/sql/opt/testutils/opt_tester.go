@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -157,11 +158,15 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	switch d.Cmd {
 	case "exec-ddl":
-		testCatalog, ok := ot.catalog.(*TestCatalog)
+		testCatalog, ok := ot.catalog.(*testcat.Catalog)
 		if !ok {
 			tb.Fatal("exec-ddl can only be used with TestCatalog")
 		}
-		return ExecuteTestDDL(tb, d.Input, testCatalog)
+		s, err := testCatalog.ExecuteDDL(d.Input)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		return s
 
 	case "build":
 		ev, err := ot.OptBuild()

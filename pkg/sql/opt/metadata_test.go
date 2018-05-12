@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -73,10 +73,10 @@ func TestMetadataTables(t *testing.T) {
 	md := opt.NewMetadata()
 
 	// Add a table reference to the metadata.
-	a := &testutils.TestTable{}
+	a := &testcat.Table{}
 	a.Name = tree.MakeUnqualifiedTableName(tree.Name("a"))
-	x := &testutils.TestColumn{Name: "x"}
-	y := &testutils.TestColumn{Name: "y"}
+	x := &testcat.Column{Name: "x"}
+	y := &testcat.Column{Name: "y"}
 	a.Columns = append(a.Columns, x, y)
 
 	tabID := md.AddTable(a)
@@ -100,8 +100,8 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	// Add a table reference without a name to the metadata.
-	b := &testutils.TestTable{}
-	b.Columns = append(b.Columns, &testutils.TestColumn{Name: "x"})
+	b := &testcat.Table{}
+	b.Columns = append(b.Columns, &testcat.Column{Name: "x"})
 
 	tabID = md.AddTable(b)
 	if tabID != 3 {
@@ -140,20 +140,22 @@ func TestMetadataWeakKeys(t *testing.T) {
 	//   4. Non-unique index (should always be superset of primary key).
 	//   5. Unique index that has subset of cols of another unique index, but
 	//      which is defined afterwards (triggers removal of previous weak key).
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(t,
-		"CREATE TABLE a ("+
-			"k INT, "+
-			"i INT, "+
-			"d DECIMAL, "+
-			"f FLOAT, "+
-			"s STRING, "+
-			"PRIMARY KEY (k, i), "+
-			"UNIQUE INDEX (f) STORING (s, i),"+
-			"UNIQUE INDEX (d DESC, i, s),"+
-			"UNIQUE INDEX (d, i DESC) STORING (f),"+
-			"INDEX (s DESC, i))",
-		cat)
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL(
+		"CREATE TABLE a (" +
+			"k INT, " +
+			"i INT, " +
+			"d DECIMAL, " +
+			"f FLOAT, " +
+			"s STRING, " +
+			"PRIMARY KEY (k, i), " +
+			"UNIQUE INDEX (f) STORING (s, i)," +
+			"UNIQUE INDEX (d DESC, i, s)," +
+			"UNIQUE INDEX (d, i DESC) STORING (f)," +
+			"INDEX (s DESC, i))")
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := md.AddTable(cat.Table("a"))
 
 	wk := md.TableWeakKeys(a)
@@ -208,18 +210,18 @@ func TestMetadataWeakKeys(t *testing.T) {
 
 // TestIndexColumns tests that we can extract a set of columns from an index ordinal.
 func TestIndexColumns(t *testing.T) {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(
-		t,
-		"CREATE TABLE a ("+
-			"k INT PRIMARY KEY, "+
-			"i INT, "+
-			"s STRING, "+
-			"f FLOAT, "+
-			"INDEX (i, k), "+
-			"INDEX (s DESC) STORING(f))",
-		cat,
-	)
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL(
+		"CREATE TABLE a (" +
+			"k INT PRIMARY KEY, " +
+			"i INT, " +
+			"s STRING, " +
+			"f FLOAT, " +
+			"INDEX (i, k), " +
+			"INDEX (s DESC) STORING(f))")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))
