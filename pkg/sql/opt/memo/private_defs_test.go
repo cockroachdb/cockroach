@@ -20,22 +20,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 )
 
 func TestCanProvideOrdering(t *testing.T) {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(
-		t,
-		"CREATE TABLE a ("+
-			"k INT PRIMARY KEY, "+
-			"i INT, "+
-			"s STRING, "+
-			"f FLOAT, "+
-			"INDEX (i, k), "+
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL(
+		"CREATE TABLE a (" +
+			"k INT PRIMARY KEY, " +
+			"i INT, " +
+			"s STRING, " +
+			"f FLOAT, " +
+			"INDEX (i, k), " +
 			"INDEX (s DESC) STORING(f))",
-		cat,
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	md := opt.NewMetadata()
 	a := md.AddTable(cat.Table("a"))

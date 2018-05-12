@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -43,7 +44,7 @@ import (
 func TestNormRules(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
-		catalog := testutils.NewTestCatalog()
+		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
@@ -63,7 +64,7 @@ func TestNormRules(t *testing.T) {
 func TestRuleProps(t *testing.T) {
 	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost
 	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
-		catalog := testutils.NewTestCatalog()
+		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
@@ -111,60 +112,4 @@ func TestRuleBinaryAssumption(t *testing.T) {
 	fn(opt.BitandOp)
 	fn(opt.BitorOp)
 	fn(opt.BitxorOp)
-}
-
-// TestSimplifyFilters tests factory.simplifyFilters. It's hard to fully test
-// using SQL, as And operator rules simplify the expression before the Filters
-// operator is created.
-func TestSimplifyFilters(t *testing.T) {
-	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := norm.NewFactory(&evalCtx)
-
-	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
-
-	variable := f.ConstructVariable(f.InternColumnID(ax))
-	constant := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))
-	eq := f.ConstructEq(variable, constant)
-
-	// Filters expression evaluates to False if any operand is False.
-	conditions := []memo.GroupID{eq, f.ConstructFalse(), eq}
-	result := f.ConstructFilters(f.InternList(conditions))
-	ev := memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FalseOp {
-		t.Fatalf("result should have been False")
-	}
-
-	// Filters expression evaluates to False if any operand is Null.
-	conditions = []memo.GroupID{f.ConstructNull(f.InternType(types.Unknown)), eq, eq}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FalseOp {
-		t.Fatalf("result should have been False")
-	}
-
-	// Filters operator skips True operands.
-	conditions = []memo.GroupID{eq, f.ConstructTrue(), eq, f.ConstructTrue()}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 2 {
-		t.Fatalf("filters result should have filtered True operators")
-	}
-
-	// Filters operator flattens nested And operands.
-	conditions = []memo.GroupID{eq, eq}
-	and := f.ConstructAnd(f.InternList(conditions))
-	conditions = []memo.GroupID{and, eq, and}
-	result = f.ConstructFilters(f.InternList(conditions))
-	ev = memo.MakeNormExprView(f.Memo(), result)
-	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 5 {
-		t.Fatalf("result should have flattened And operators")
-	}
-}
-
-func createFiltersCatalog(t *testing.T) *testutils.TestCatalog {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(t, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", cat)
-	return cat
 }

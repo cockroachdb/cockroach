@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -58,7 +59,7 @@ func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
-		catalog := testutils.NewTestCatalog()
+		catalog := testcat.New()
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			var varTypes []types.T

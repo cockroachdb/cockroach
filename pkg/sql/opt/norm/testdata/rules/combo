@@ -992,51 +992,84 @@ EnsureSelectFilters
     └── projections [outer=(11)]
          └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
 ================================================================================
-PruneJoinLeftCols
-  Cost: 2020.01
+TryDecorrelateProject
+  Cost: 2030.01
 ================================================================================
    project
     ├── columns: column8:8(bool)
-    ├── inner-join-apply
-  - │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
-  + │    ├── columns: xy.x:1(int!null) case:11(bool)
+  - ├── inner-join-apply
+  + ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
     │    ├── keys: (1)
-    │    ├── scan xy
+  - │    ├── scan xy
   - │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
-  + │    │    ├── columns: xy.x:1(int!null)
-    │    │    └── keys: (1)
+  - │    │    └── keys: (1)
     │    ├── project
-    │    │    ├── columns: case:11(bool)
-    │    │    ├── outer: (1)
-    │    │    ├── cardinality: [1 - 1]
-    │    │    ├── group-by
-    │    │    │    ├── columns: bool_or:10(bool)
-    │    │    │    ├── outer: (1)
-    │    │    │    ├── cardinality: [1 - 1]
-    │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    ├── columns: case:11(bool)
+  - │    │    ├── outer: (1)
+  - │    │    ├── cardinality: [1 - 1]
+  - │    │    ├── group-by
+  - │    │    │    ├── columns: bool_or:10(bool)
+  - │    │    │    ├── outer: (1)
+  - │    │    │    ├── cardinality: [1 - 1]
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:9(bool)
+  + │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+  + │    │    ├── keys: (1)
+  + │    │    ├── inner-join-apply
+  + │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  + │    │    │    ├── keys: (1)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    └── keys: (1)
+  + │    │    │    ├── group-by
+  + │    │    │    │    ├── columns: bool_or:10(bool)
     │    │    │    │    ├── outer: (1)
-    │    │    │    │    ├── select
-    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    ├── select
+  - │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    ├── cardinality: [1 - 1]
+  + │    │    │    │    ├── project
+  + │    │    │    │    │    ├── columns: notnull:9(bool)
     │    │    │    │    │    ├── outer: (1)
-    │    │    │    │    │    ├── keys: (3)
-    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    ├── keys: (3)
+  - │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── select
     │    │    │    │    │    │    ├── columns: a.k:3(int!null)
-    │    │    │    │    │    │    └── keys: (3)
-    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
-    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
-    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
-    │    │    │    │    │              └── false [type=bool]
-    │    │    │    │    └── projections [outer=(3)]
-    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
-    │    │    │    │              └── null [type=unknown]
-    │    │    │    └── aggregations [outer=(9)]
-    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
-    │    │    └── projections [outer=(1,10)]
+  - │    │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │    │              └── false [type=bool]
+  - │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │              └── null [type=unknown]
+  - │    │    │    └── aggregations [outer=(9)]
+  - │    │    │         └── bool-or [type=bool, outer=(9)]
+  - │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  - │    │    └── projections [outer=(1,10)]
+  + │    │    │    │    │    │    ├── outer: (1)
+  + │    │    │    │    │    │    ├── keys: (3)
+  + │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │    │    │    │              └── false [type=bool]
+  + │    │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │              └── null [type=unknown]
+  + │    │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    │         └── bool-or [type=bool, outer=(9)]
+  + │    │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + │    │    │    └── true [type=bool]
+  + │    │    └── projections [outer=(1,2,10)]
     │    │         └── case [type=bool, outer=(1,10)]
     │    │              ├── true [type=bool]
     │    │              ├── when [type=bool, outer=(1,10)]
@@ -1055,6 +1088,981 @@ PruneJoinLeftCols
     │    └── true [type=bool]
     └── projections [outer=(11)]
          └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+TryDecorrelateScalarGroupBy
+  Cost: 2036.66
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+    │    ├── keys: (1)
+    │    ├── project
+    │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    │    ├── keys: (1)
+  - │    │    ├── inner-join-apply
+  + │    │    ├── select
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    ├── keys: (1)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    └── keys: (1)
+    │    │    │    ├── group-by
+  - │    │    │    │    ├── columns: bool_or:10(bool)
+  - │    │    │    │    ├── outer: (1)
+  - │    │    │    │    ├── cardinality: [1 - 1]
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    ├── select
+  - │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  + │    │    │    │    ├── grouping columns: xy.x:1(int!null)
+  + │    │    │    │    ├── keys: (1)
+  + │    │    │    │    ├── left-join-apply
+  + │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) notnull:9(bool)
+  + │    │    │    │    │    ├── scan xy
+  + │    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    │    │    └── keys: (1)
+  + │    │    │    │    │    ├── project
+  + │    │    │    │    │    │    ├── columns: notnull:9(bool)
+    │    │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    │    ├── keys: (3)
+  - │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    ├── select
+    │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │    │    │              └── false [type=bool]
+  - │    │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │              └── null [type=unknown]
+  - │    │    │    │    └── aggregations [outer=(9)]
+  - │    │    │    │         └── bool-or [type=bool, outer=(9)]
+  - │    │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + │    │    │    │    │    │    │    ├── outer: (1)
+  + │    │    │    │    │    │    │    ├── keys: (3)
+  + │    │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │    │    │    │    │              └── false [type=bool]
+  + │    │    │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │    │              └── null [type=unknown]
+  + │    │    │    │    │    └── true [type=bool]
+  + │    │    │    │    └── aggregations [outer=(2,9)]
+  + │    │    │    │         ├── bool-or [type=bool, outer=(9)]
+  + │    │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + │    │    │    │         └── any-not-null [type=int, outer=(2)]
+  + │    │    │    │              └── variable: xy.y [type=int, outer=(2)]
+    │    │    │    └── true [type=bool]
+    │    │    └── projections [outer=(1,2,10)]
+    │    │         └── case [type=bool, outer=(1,10)]
+    │    │              ├── true [type=bool]
+    │    │              ├── when [type=bool, outer=(1,10)]
+    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │    │              │    │         └── null [type=unknown]
+    │    │              │    └── true [type=bool]
+    │    │              ├── when [type=bool, outer=(10)]
+    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── null [type=unknown]
+    │    │              │    └── false [type=bool]
+    │    │              └── null [type=unknown]
+    │    └── true [type=bool]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+TryDecorrelateProjectSelect
+  Cost: 2033.33
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+    │    ├── keys: (1)
+    │    ├── project
+    │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    │    ├── keys: (1)
+    │    │    ├── select
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    ├── keys: (1)
+    │    │    │    ├── group-by
+    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    │    │    ├── keys: (1)
+  - │    │    │    │    ├── left-join-apply
+  + │    │    │    │    ├── project
+    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) notnull:9(bool)
+  - │    │    │    │    │    ├── scan xy
+  - │    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    │    │    └── keys: (1)
+  - │    │    │    │    │    ├── project
+  - │    │    │    │    │    │    ├── columns: notnull:9(bool)
+  - │    │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    │    ├── select
+  - │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    │    │    ├── outer: (1)
+  - │    │    │    │    │    │    │    ├── keys: (3)
+  - │    │    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │    │    │    │              └── false [type=bool]
+  - │    │    │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │    │              └── null [type=unknown]
+  - │    │    │    │    │    └── true [type=bool]
+  + │    │    │    │    │    └── left-join-apply
+  + │    │    │    │    │         ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │    │    │         ├── scan xy
+  + │    │    │    │    │         │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    │         │    └── keys: (1)
+  + │    │    │    │    │         ├── project
+  + │    │    │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    │    │         │    ├── keys: (3)
+  + │    │    │    │    │         │    ├── scan a
+  + │    │    │    │    │         │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │         │    │    └── keys: (3)
+  + │    │    │    │    │         │    └── projections [outer=(3)]
+  + │    │    │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │         │              └── null [type=unknown]
+  + │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
+  + │    │    │    │    │              └── is-not [type=bool, outer=(1,3)]
+  + │    │    │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │    │    │                   └── false [type=bool]
+    │    │    │    │    └── aggregations [outer=(2,9)]
+    │    │    │    │         ├── bool-or [type=bool, outer=(9)]
+    │    │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    │    │    │         └── any-not-null [type=int, outer=(2)]
+    │    │    │    │              └── variable: xy.y [type=int, outer=(2)]
+    │    │    │    └── true [type=bool]
+    │    │    └── projections [outer=(1,2,10)]
+    │    │         └── case [type=bool, outer=(1,10)]
+    │    │              ├── true [type=bool]
+    │    │              ├── when [type=bool, outer=(1,10)]
+    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │    │              │    │         └── null [type=unknown]
+    │    │              │    └── true [type=bool]
+    │    │              ├── when [type=bool, outer=(10)]
+    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── null [type=unknown]
+    │    │              │    └── false [type=bool]
+    │    │              └── null [type=unknown]
+    │    └── true [type=bool]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+DecorrelateJoin
+  Cost: 2033.33
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+    │    ├── keys: (1)
+    │    ├── project
+    │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    │    ├── keys: (1)
+    │    │    ├── select
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    ├── keys: (1)
+    │    │    │    ├── group-by
+    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    │    │    ├── keys: (1)
+    │    │    │    │    ├── project
+    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) notnull:9(bool)
+  - │    │    │    │    │    └── left-join-apply
+  + │    │    │    │    │    └── left-join
+    │    │    │    │    │         ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+    │    │    │    │    │         ├── scan xy
+    │    │    │    │    │         │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+    │    │    │    │    │         │    └── keys: (1)
+    │    │    │    │    │         ├── project
+    │    │    │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+    │    │    │    │    │         │    ├── keys: (3)
+    │    │    │    │    │         │    ├── scan a
+    │    │    │    │    │         │    │    ├── columns: a.k:3(int!null)
+    │    │    │    │    │         │    │    └── keys: (3)
+    │    │    │    │    │         │    └── projections [outer=(3)]
+    │    │    │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+    │    │    │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+    │    │    │    │    │         │              └── null [type=unknown]
+    │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
+    │    │    │    │    │              └── is-not [type=bool, outer=(1,3)]
+    │    │    │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+    │    │    │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+    │    │    │    │    │                   └── false [type=bool]
+    │    │    │    │    └── aggregations [outer=(2,9)]
+    │    │    │    │         ├── bool-or [type=bool, outer=(9)]
+    │    │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    │    │    │         └── any-not-null [type=int, outer=(2)]
+    │    │    │    │              └── variable: xy.y [type=int, outer=(2)]
+    │    │    │    └── true [type=bool]
+    │    │    └── projections [outer=(1,2,10)]
+    │    │         └── case [type=bool, outer=(1,10)]
+    │    │              ├── true [type=bool]
+    │    │              ├── when [type=bool, outer=(1,10)]
+    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │    │              │    │         └── null [type=unknown]
+    │    │              │    └── true [type=bool]
+    │    │              ├── when [type=bool, outer=(10)]
+    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── null [type=unknown]
+    │    │              │    └── false [type=bool]
+    │    │              └── null [type=unknown]
+    │    └── true [type=bool]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+EliminateGroupByProject
+  Cost: 2033.33
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+    │    ├── keys: (1)
+    │    ├── project
+    │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    │    ├── keys: (1)
+    │    │    ├── select
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    ├── keys: (1)
+    │    │    │    ├── group-by
+    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    │    │    ├── keys: (1)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) notnull:9(bool)
+  - │    │    │    │    │    └── left-join
+  - │    │    │    │    │         ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  - │    │    │    │    │         ├── scan xy
+  - │    │    │    │    │         │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    │         │    └── keys: (1)
+  - │    │    │    │    │         ├── project
+  - │    │    │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │    │    │         │    ├── keys: (3)
+  - │    │    │    │    │         │    ├── scan a
+  - │    │    │    │    │         │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │         │    │    └── keys: (3)
+  - │    │    │    │    │         │    └── projections [outer=(3)]
+  - │    │    │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │         │              └── null [type=unknown]
+  - │    │    │    │    │         └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │    │              └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │    │                   └── false [type=bool]
+  + │    │    │    │    ├── left-join
+  + │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │    │    │    ├── scan xy
+  + │    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    │    │    └── keys: (1)
+  + │    │    │    │    │    ├── project
+  + │    │    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    │    │    │    ├── keys: (3)
+  + │    │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │    │              └── null [type=unknown]
+  + │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │    │    │              └── false [type=bool]
+    │    │    │    │    └── aggregations [outer=(2,9)]
+    │    │    │    │         ├── bool-or [type=bool, outer=(9)]
+    │    │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    │    │    │         └── any-not-null [type=int, outer=(2)]
+    │    │    │    │              └── variable: xy.y [type=int, outer=(2)]
+    │    │    │    └── true [type=bool]
+    │    │    └── projections [outer=(1,2,10)]
+    │    │         └── case [type=bool, outer=(1,10)]
+    │    │              ├── true [type=bool]
+    │    │              ├── when [type=bool, outer=(1,10)]
+    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │    │              │    │         └── null [type=unknown]
+    │    │              │    └── true [type=bool]
+    │    │              ├── when [type=bool, outer=(10)]
+    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── null [type=unknown]
+    │    │              │    └── false [type=bool]
+    │    │              └── null [type=unknown]
+    │    └── true [type=bool]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+EliminateSelect
+  Cost: 2030.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── select
+    │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+    │    ├── keys: (1)
+    │    ├── project
+    │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    │    ├── keys: (1)
+  - │    │    ├── select
+  + │    │    ├── group-by
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  + │    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    │    ├── keys: (1)
+  - │    │    │    ├── group-by
+  - │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  - │    │    │    │    ├── grouping columns: xy.x:1(int!null)
+  - │    │    │    │    ├── keys: (1)
+  - │    │    │    │    ├── left-join
+  - │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  - │    │    │    │    │    ├── scan xy
+  - │    │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    │    │    └── keys: (1)
+  - │    │    │    │    │    ├── project
+  - │    │    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │    │    │    │    ├── keys: (3)
+  - │    │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │    │              └── null [type=unknown]
+  - │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │    │              └── false [type=bool]
+  - │    │    │    │    └── aggregations [outer=(2,9)]
+  - │    │    │    │         ├── bool-or [type=bool, outer=(9)]
+  - │    │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  - │    │    │    │         └── any-not-null [type=int, outer=(2)]
+  - │    │    │    │              └── variable: xy.y [type=int, outer=(2)]
+  - │    │    │    └── true [type=bool]
+  + │    │    │    ├── left-join
+  + │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │    │    ├── scan xy
+  + │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    │    └── keys: (1)
+  + │    │    │    │    ├── project
+  + │    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    │    │    ├── keys: (3)
+  + │    │    │    │    │    ├── scan a
+  + │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │    │              └── null [type=unknown]
+  + │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │    │              └── false [type=bool]
+  + │    │    │    └── aggregations [outer=(2,9)]
+  + │    │    │         ├── bool-or [type=bool, outer=(9)]
+  + │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + │    │    │         └── any-not-null [type=int, outer=(2)]
+  + │    │    │              └── variable: xy.y [type=int, outer=(2)]
+    │    │    └── projections [outer=(1,2,10)]
+    │    │         └── case [type=bool, outer=(1,10)]
+    │    │              ├── true [type=bool]
+    │    │              ├── when [type=bool, outer=(1,10)]
+    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │    │              │    │         └── null [type=unknown]
+    │    │              │    └── true [type=bool]
+    │    │              ├── when [type=bool, outer=(10)]
+    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │    │              │    │    └── null [type=unknown]
+    │    │              │    └── false [type=bool]
+    │    │              └── null [type=unknown]
+    │    └── true [type=bool]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+EliminateSelect
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+  - ├── select
+  - │    ├── columns: xy.x:1(int!null) xy.y:2(int) case:11(bool)
+  + ├── project
+  + │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+    │    ├── keys: (1)
+  - │    ├── project
+  - │    │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+  + │    ├── group-by
+  + │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  + │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+  - │    │    ├── group-by
+  - │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  - │    │    │    ├── grouping columns: xy.x:1(int!null)
+  - │    │    │    ├── keys: (1)
+  - │    │    │    ├── left-join
+  - │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  - │    │    │    │    ├── scan xy
+  - │    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    │    └── keys: (1)
+  - │    │    │    │    ├── project
+  - │    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │    │    │    ├── keys: (3)
+  - │    │    │    │    │    ├── scan a
+  - │    │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │    │              └── null [type=unknown]
+  - │    │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │    │              └── false [type=bool]
+  - │    │    │    └── aggregations [outer=(2,9)]
+  - │    │    │         ├── bool-or [type=bool, outer=(9)]
+  - │    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  - │    │    │         └── any-not-null [type=int, outer=(2)]
+  - │    │    │              └── variable: xy.y [type=int, outer=(2)]
+  - │    │    └── projections [outer=(1,2,10)]
+  - │    │         └── case [type=bool, outer=(1,10)]
+  - │    │              ├── true [type=bool]
+  - │    │              ├── when [type=bool, outer=(1,10)]
+  - │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+  - │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  - │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+  - │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+  - │    │              │    │         └── null [type=unknown]
+  - │    │              │    └── true [type=bool]
+  - │    │              ├── when [type=bool, outer=(10)]
+  - │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+  - │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  - │    │              │    │    └── null [type=unknown]
+  - │    │              │    └── false [type=bool]
+  - │    │              └── null [type=unknown]
+  - │    └── true [type=bool]
+  + │    │    ├── left-join
+  + │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │    │    └── keys: (1)
+  + │    │    │    ├── project
+  + │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    │    ├── keys: (3)
+  + │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │              └── null [type=unknown]
+  + │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │              └── false [type=bool]
+  + │    │    └── aggregations [outer=(2,9)]
+  + │    │         ├── bool-or [type=bool, outer=(9)]
+  + │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + │    │         └── any-not-null [type=int, outer=(2)]
+  + │    │              └── variable: xy.y [type=int, outer=(2)]
+  + │    └── projections [outer=(1,2,10)]
+  + │         └── case [type=bool, outer=(1,10)]
+  + │              ├── true [type=bool]
+  + │              ├── when [type=bool, outer=(1,10)]
+  + │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+  + │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  + │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+  + │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+  + │              │    │         └── null [type=unknown]
+  + │              │    └── true [type=bool]
+  + │              ├── when [type=bool, outer=(10)]
+  + │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+  + │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  + │              │    │    └── null [type=unknown]
+  + │              │    └── false [type=bool]
+  + │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+PruneProjectCols
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── project
+  - │    ├── columns: case:11(bool) xy.x:1(int!null) xy.y:2(int)
+  - │    ├── keys: (1)
+  + │    ├── columns: case:11(bool)
+    │    ├── group-by
+    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+    │    │    ├── left-join
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+    │    │    │    │    └── keys: (1)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+    │    │    │    │    ├── keys: (3)
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: a.k:3(int!null)
+    │    │    │    │    │    └── keys: (3)
+    │    │    │    │    └── projections [outer=(3)]
+    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+    │    │    │    │              └── null [type=unknown]
+    │    │    │    └── filters [type=bool, outer=(1,3)]
+    │    │    │         └── is-not [type=bool, outer=(1,3)]
+    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+    │    │    │              └── false [type=bool]
+    │    │    └── aggregations [outer=(2,9)]
+    │    │         ├── bool-or [type=bool, outer=(9)]
+    │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    │         └── any-not-null [type=int, outer=(2)]
+    │    │              └── variable: xy.y [type=int, outer=(2)]
+  - │    └── projections [outer=(1,2,10)]
+  + │    └── projections [outer=(1,10)]
+    │         └── case [type=bool, outer=(1,10)]
+    │              ├── true [type=bool]
+    │              ├── when [type=bool, outer=(1,10)]
+    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │              │    │         └── null [type=unknown]
+    │              │    └── true [type=bool]
+    │              ├── when [type=bool, outer=(10)]
+    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── null [type=unknown]
+    │              │    └── false [type=bool]
+    │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+PruneAggCols
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── project
+    │    ├── columns: case:11(bool)
+    │    ├── group-by
+  - │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) bool_or:10(bool)
+  + │    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+    │    │    ├── left-join
+    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+    │    │    │    ├── scan xy
+    │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+    │    │    │    │    └── keys: (1)
+    │    │    │    ├── project
+    │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+    │    │    │    │    ├── keys: (3)
+    │    │    │    │    ├── scan a
+    │    │    │    │    │    ├── columns: a.k:3(int!null)
+    │    │    │    │    │    └── keys: (3)
+    │    │    │    │    └── projections [outer=(3)]
+    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+    │    │    │    │              └── null [type=unknown]
+    │    │    │    └── filters [type=bool, outer=(1,3)]
+    │    │    │         └── is-not [type=bool, outer=(1,3)]
+    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+    │    │    │              └── false [type=bool]
+  - │    │    └── aggregations [outer=(2,9)]
+  - │    │         ├── bool-or [type=bool, outer=(9)]
+  - │    │         │    └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  - │    │         └── any-not-null [type=int, outer=(2)]
+  - │    │              └── variable: xy.y [type=int, outer=(2)]
+  + │    │    └── aggregations [outer=(9)]
+  + │    │         └── bool-or [type=bool, outer=(9)]
+  + │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    └── projections [outer=(1,10)]
+    │         └── case [type=bool, outer=(1,10)]
+    │              ├── true [type=bool]
+    │              ├── when [type=bool, outer=(1,10)]
+    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │              │    │         └── null [type=unknown]
+    │              │    └── true [type=bool]
+    │              ├── when [type=bool, outer=(10)]
+    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── null [type=unknown]
+    │              │    └── false [type=bool]
+    │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+PruneGroupByCols
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── project
+    │    ├── columns: case:11(bool)
+    │    ├── group-by
+    │    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+  - │    │    ├── left-join
+  - │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  - │    │    │    │    └── keys: (1)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │    │    ├── keys: (3)
+  - │    │    │    │    ├── scan a
+  - │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │              └── null [type=unknown]
+  - │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │              └── false [type=bool]
+  + │    │    ├── project
+  + │    │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+  + │    │    │    └── left-join
+  + │    │    │         ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │         ├── scan xy
+  + │    │    │         │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │         │    └── keys: (1)
+  + │    │    │         ├── project
+  + │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │         │    ├── keys: (3)
+  + │    │    │         │    ├── scan a
+  + │    │    │         │    │    ├── columns: a.k:3(int!null)
+  + │    │    │         │    │    └── keys: (3)
+  + │    │    │         │    └── projections [outer=(3)]
+  + │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │         │              └── null [type=unknown]
+  + │    │    │         └── filters [type=bool, outer=(1,3)]
+  + │    │    │              └── is-not [type=bool, outer=(1,3)]
+  + │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │                   └── false [type=bool]
+    │    │    └── aggregations [outer=(9)]
+    │    │         └── bool-or [type=bool, outer=(9)]
+    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    └── projections [outer=(1,10)]
+    │         └── case [type=bool, outer=(1,10)]
+    │              ├── true [type=bool]
+    │              ├── when [type=bool, outer=(1,10)]
+    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │              │    │         └── null [type=unknown]
+    │              │    └── true [type=bool]
+    │              ├── when [type=bool, outer=(10)]
+    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── null [type=unknown]
+    │              │    └── false [type=bool]
+    │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+PruneJoinLeftCols
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── project
+    │    ├── columns: case:11(bool)
+    │    ├── group-by
+    │    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+    │    │    ├── project
+    │    │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+    │    │    │    └── left-join
+  - │    │    │         ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int) notnull:9(bool)
+  + │    │    │         ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+    │    │    │         ├── scan xy
+  - │    │    │         │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+  + │    │    │         │    ├── columns: xy.x:1(int!null)
+    │    │    │         │    └── keys: (1)
+    │    │    │         ├── project
+    │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+    │    │    │         │    ├── keys: (3)
+    │    │    │         │    ├── scan a
+    │    │    │         │    │    ├── columns: a.k:3(int!null)
+    │    │    │         │    │    └── keys: (3)
+    │    │    │         │    └── projections [outer=(3)]
+    │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+    │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+    │    │    │         │              └── null [type=unknown]
+    │    │    │         └── filters [type=bool, outer=(1,3)]
+    │    │    │              └── is-not [type=bool, outer=(1,3)]
+    │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+    │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+    │    │    │                   └── false [type=bool]
+    │    │    └── aggregations [outer=(9)]
+    │    │         └── bool-or [type=bool, outer=(9)]
+    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    └── projections [outer=(1,10)]
+    │         └── case [type=bool, outer=(1,10)]
+    │              ├── true [type=bool]
+    │              ├── when [type=bool, outer=(1,10)]
+    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │              │    │         └── null [type=unknown]
+    │              │    └── true [type=bool]
+    │              ├── when [type=bool, outer=(10)]
+    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── null [type=unknown]
+    │              │    └── false [type=bool]
+    │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+EliminateProject
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+    ├── project
+    │    ├── columns: case:11(bool)
+    │    ├── group-by
+    │    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+    │    │    ├── grouping columns: xy.x:1(int!null)
+    │    │    ├── keys: (1)
+  - │    │    ├── project
+  + │    │    ├── left-join
+    │    │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+  - │    │    │    └── left-join
+  - │    │    │         ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+  - │    │    │         ├── scan xy
+  - │    │    │         │    ├── columns: xy.x:1(int!null)
+  - │    │    │         │    └── keys: (1)
+  - │    │    │         ├── project
+  - │    │    │         │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │         │    ├── keys: (3)
+  - │    │    │         │    ├── scan a
+  - │    │    │         │    │    ├── columns: a.k:3(int!null)
+  - │    │    │         │    │    └── keys: (3)
+  - │    │    │         │    └── projections [outer=(3)]
+  - │    │    │         │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │         │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │         │              └── null [type=unknown]
+  - │    │    │         └── filters [type=bool, outer=(1,3)]
+  - │    │    │              └── is-not [type=bool, outer=(1,3)]
+  - │    │    │                   ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │                   │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │                   │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │                   └── false [type=bool]
+  + │    │    │    ├── scan xy
+  + │    │    │    │    ├── columns: xy.x:1(int!null)
+  + │    │    │    │    └── keys: (1)
+  + │    │    │    ├── project
+  + │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    │    ├── keys: (3)
+  + │    │    │    │    ├── scan a
+  + │    │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    │    └── keys: (3)
+  + │    │    │    │    └── projections [outer=(3)]
+  + │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │    │              └── null [type=unknown]
+  + │    │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │    │              └── false [type=bool]
+    │    │    └── aggregations [outer=(9)]
+    │    │         └── bool-or [type=bool, outer=(9)]
+    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    │    └── projections [outer=(1,10)]
+    │         └── case [type=bool, outer=(1,10)]
+    │              ├── true [type=bool]
+    │              ├── when [type=bool, outer=(1,10)]
+    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+    │              │    │         └── null [type=unknown]
+    │              │    └── true [type=bool]
+    │              ├── when [type=bool, outer=(10)]
+    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+    │              │    │    └── null [type=unknown]
+    │              │    └── false [type=bool]
+    │              └── null [type=unknown]
+    └── projections [outer=(11)]
+         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+================================================================================
+InlineProjectInProject
+  Cost: 2020.00
+================================================================================
+   project
+    ├── columns: column8:8(bool)
+  - ├── project
+  - │    ├── columns: case:11(bool)
+  - │    ├── group-by
+  - │    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+  - │    │    ├── grouping columns: xy.x:1(int!null)
+  - │    │    ├── keys: (1)
+  - │    │    ├── left-join
+  - │    │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+  - │    │    │    ├── scan xy
+  - │    │    │    │    ├── columns: xy.x:1(int!null)
+  - │    │    │    │    └── keys: (1)
+  - │    │    │    ├── project
+  - │    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  - │    │    │    │    ├── keys: (3)
+  - │    │    │    │    ├── scan a
+  - │    │    │    │    │    ├── columns: a.k:3(int!null)
+  - │    │    │    │    │    └── keys: (3)
+  - │    │    │    │    └── projections [outer=(3)]
+  - │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  - │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │    │              └── null [type=unknown]
+  - │    │    │    └── filters [type=bool, outer=(1,3)]
+  - │    │    │         └── is-not [type=bool, outer=(1,3)]
+  - │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  - │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  - │    │    │              └── false [type=bool]
+  - │    │    └── aggregations [outer=(9)]
+  - │    │         └── bool-or [type=bool, outer=(9)]
+  - │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  - │    └── projections [outer=(1,10)]
+  - │         └── case [type=bool, outer=(1,10)]
+  - │              ├── true [type=bool]
+  - │              ├── when [type=bool, outer=(1,10)]
+  - │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+  - │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  - │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+  - │              │    │         ├── variable: xy.x [type=int, outer=(1)]
+  - │              │    │         └── null [type=unknown]
+  - │              │    └── true [type=bool]
+  - │              ├── when [type=bool, outer=(10)]
+  - │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+  - │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  - │              │    │    └── null [type=unknown]
+  - │              │    └── false [type=bool]
+  - │              └── null [type=unknown]
+  - └── projections [outer=(11)]
+  -      └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+  + ├── group-by
+  + │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+  + │    ├── grouping columns: xy.x:1(int!null)
+  + │    ├── keys: (1)
+  + │    ├── left-join
+  + │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+  + │    │    ├── scan xy
+  + │    │    │    ├── columns: xy.x:1(int!null)
+  + │    │    │    └── keys: (1)
+  + │    │    ├── project
+  + │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+  + │    │    │    ├── keys: (3)
+  + │    │    │    ├── scan a
+  + │    │    │    │    ├── columns: a.k:3(int!null)
+  + │    │    │    │    └── keys: (3)
+  + │    │    │    └── projections [outer=(3)]
+  + │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+  + │    │    │              ├── variable: a.k [type=int, outer=(3)]
+  + │    │    │              └── null [type=unknown]
+  + │    │    └── filters [type=bool, outer=(1,3)]
+  + │    │         └── is-not [type=bool, outer=(1,3)]
+  + │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │              │    ├── variable: a.k [type=int, outer=(3)]
+  + │    │              │    └── variable: xy.x [type=int, outer=(1)]
+  + │    │              └── false [type=bool]
+  + │    └── aggregations [outer=(9)]
+  + │         └── bool-or [type=bool, outer=(9)]
+  + │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+  + └── projections [outer=(1,10)]
+  +      └── case [type=bool, outer=(1,10)]
+  +           ├── true [type=bool]
+  +           ├── when [type=bool, outer=(1,10)]
+  +           │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+  +           │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  +           │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+  +           │    │         ├── variable: xy.x [type=int, outer=(1)]
+  +           │    │         └── null [type=unknown]
+  +           │    └── true [type=bool]
+  +           ├── when [type=bool, outer=(10)]
+  +           │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+  +           │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+  +           │    │    └── null [type=unknown]
+  +           │    └── false [type=bool]
+  +           └── null [type=unknown]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -1063,128 +2071,98 @@ GenerateIndexScans (higher cost)
 --------------------------------------------------------------------------------
    project
     ├── columns: column8:8(bool)
-    ├── inner-join-apply
-    │    ├── columns: xy.x:1(int!null) case:11(bool)
+    ├── group-by
+    │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+    │    ├── grouping columns: xy.x:1(int!null)
     │    ├── keys: (1)
-    │    ├── scan xy
-    │    │    ├── columns: xy.x:1(int!null)
-    │    │    └── keys: (1)
-    │    ├── project
-    │    │    ├── columns: case:11(bool)
-    │    │    ├── outer: (1)
-    │    │    ├── cardinality: [1 - 1]
-    │    │    ├── group-by
-    │    │    │    ├── columns: bool_or:10(bool)
-    │    │    │    ├── outer: (1)
-    │    │    │    ├── cardinality: [1 - 1]
-    │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
-    │    │    │    │    ├── outer: (1)
-    │    │    │    │    ├── select
-    │    │    │    │    │    ├── columns: a.k:3(int!null)
-    │    │    │    │    │    ├── outer: (1)
-    │    │    │    │    │    ├── keys: (3)
-  - │    │    │    │    │    ├── scan a
-  + │    │    │    │    │    ├── scan a@secondary
-    │    │    │    │    │    │    ├── columns: a.k:3(int!null)
-    │    │    │    │    │    │    └── keys: (3)
-    │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-    │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
-    │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
-    │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
-    │    │    │    │    │              └── false [type=bool]
-    │    │    │    │    └── projections [outer=(3)]
-    │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-    │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
-    │    │    │    │              └── null [type=unknown]
-    │    │    │    └── aggregations [outer=(9)]
-    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
-    │    │    └── projections [outer=(1,10)]
-    │    │         └── case [type=bool, outer=(1,10)]
-    │    │              ├── true [type=bool]
-    │    │              ├── when [type=bool, outer=(1,10)]
-    │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
-    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
-    │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-    │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
-    │    │              │    │         └── null [type=unknown]
-    │    │              │    └── true [type=bool]
-    │    │              ├── when [type=bool, outer=(10)]
-    │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
-    │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
-    │    │              │    │    └── null [type=unknown]
-    │    │              │    └── false [type=bool]
-    │    │              └── null [type=unknown]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
-         └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
---------------------------------------------------------------------------------
-ConstrainScan (no changes)
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-ConstrainScan (no changes)
---------------------------------------------------------------------------------
+    │    ├── left-join
+    │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+    │    │    ├── scan xy
+    │    │    │    ├── columns: xy.x:1(int!null)
+    │    │    │    └── keys: (1)
+    │    │    ├── project
+    │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+    │    │    │    ├── keys: (3)
+  - │    │    │    ├── scan a
+  + │    │    │    ├── scan a@secondary
+    │    │    │    │    ├── columns: a.k:3(int!null)
+    │    │    │    │    └── keys: (3)
+    │    │    │    └── projections [outer=(3)]
+    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+    │    │    │              ├── variable: a.k [type=int, outer=(3)]
+    │    │    │              └── null [type=unknown]
+    │    │    └── filters [type=bool, outer=(1,3)]
+    │    │         └── is-not [type=bool, outer=(1,3)]
+    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │              │    ├── variable: a.k [type=int, outer=(3)]
+    │    │              │    └── variable: xy.x [type=int, outer=(1)]
+    │    │              └── false [type=bool]
+    │    └── aggregations [outer=(9)]
+    │         └── bool-or [type=bool, outer=(9)]
+    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+    └── projections [outer=(1,10)]
+         └── case [type=bool, outer=(1,10)]
+              ├── true [type=bool]
+              ├── when [type=bool, outer=(1,10)]
+              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+              │    │         ├── variable: xy.x [type=int, outer=(1)]
+              │    │         └── null [type=unknown]
+              │    └── true [type=bool]
+              ├── when [type=bool, outer=(10)]
+              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+              │    │    └── null [type=unknown]
+              │    └── false [type=bool]
+              └── null [type=unknown]
 ================================================================================
 Final best expression
-  Cost: 2020.01
+  Cost: 2020.00
 ================================================================================
   project
    ├── columns: column8:8(bool)
-   ├── inner-join-apply
-   │    ├── columns: xy.x:1(int!null) case:11(bool)
+   ├── group-by
+   │    ├── columns: xy.x:1(int!null) bool_or:10(bool)
+   │    ├── grouping columns: xy.x:1(int!null)
    │    ├── keys: (1)
-   │    ├── scan xy
-   │    │    ├── columns: xy.x:1(int!null)
-   │    │    └── keys: (1)
-   │    ├── project
-   │    │    ├── columns: case:11(bool)
-   │    │    ├── outer: (1)
-   │    │    ├── cardinality: [1 - 1]
-   │    │    ├── group-by
-   │    │    │    ├── columns: bool_or:10(bool)
-   │    │    │    ├── outer: (1)
-   │    │    │    ├── cardinality: [1 - 1]
-   │    │    │    ├── project
-   │    │    │    │    ├── columns: notnull:9(bool)
-   │    │    │    │    ├── outer: (1)
-   │    │    │    │    ├── select
-   │    │    │    │    │    ├── columns: a.k:3(int!null)
-   │    │    │    │    │    ├── outer: (1)
-   │    │    │    │    │    ├── keys: (3)
-   │    │    │    │    │    ├── scan a
-   │    │    │    │    │    │    ├── columns: a.k:3(int!null)
-   │    │    │    │    │    │    └── keys: (3)
-   │    │    │    │    │    └── filters [type=bool, outer=(1,3)]
-   │    │    │    │    │         └── is-not [type=bool, outer=(1,3)]
-   │    │    │    │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-   │    │    │    │    │              │    ├── variable: a.k [type=int, outer=(3)]
-   │    │    │    │    │              │    └── variable: xy.x [type=int, outer=(1)]
-   │    │    │    │    │              └── false [type=bool]
-   │    │    │    │    └── projections [outer=(3)]
-   │    │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-   │    │    │    │              ├── variable: a.k [type=int, outer=(3)]
-   │    │    │    │              └── null [type=unknown]
-   │    │    │    └── aggregations [outer=(9)]
-   │    │    │         └── bool-or [type=bool, outer=(9)]
-   │    │    │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
-   │    │    └── projections [outer=(1,10)]
-   │    │         └── case [type=bool, outer=(1,10)]
-   │    │              ├── true [type=bool]
-   │    │              ├── when [type=bool, outer=(1,10)]
-   │    │              │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
-   │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
-   │    │              │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-   │    │              │    │         ├── variable: xy.x [type=int, outer=(1)]
-   │    │              │    │         └── null [type=unknown]
-   │    │              │    └── true [type=bool]
-   │    │              ├── when [type=bool, outer=(10)]
-   │    │              │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
-   │    │              │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
-   │    │              │    │    └── null [type=unknown]
-   │    │              │    └── false [type=bool]
-   │    │              └── null [type=unknown]
-   │    └── true [type=bool]
-   └── projections [outer=(11)]
-        └── variable: case [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]
+   │    ├── left-join
+   │    │    ├── columns: xy.x:1(int!null) a.k:3(int) notnull:9(bool)
+   │    │    ├── scan xy
+   │    │    │    ├── columns: xy.x:1(int!null)
+   │    │    │    └── keys: (1)
+   │    │    ├── project
+   │    │    │    ├── columns: notnull:9(bool) a.k:3(int!null)
+   │    │    │    ├── keys: (3)
+   │    │    │    ├── scan a
+   │    │    │    │    ├── columns: a.k:3(int!null)
+   │    │    │    │    └── keys: (3)
+   │    │    │    └── projections [outer=(3)]
+   │    │    │         └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+   │    │    │              ├── variable: a.k [type=int, outer=(3)]
+   │    │    │              └── null [type=unknown]
+   │    │    └── filters [type=bool, outer=(1,3)]
+   │    │         └── is-not [type=bool, outer=(1,3)]
+   │    │              ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+   │    │              │    ├── variable: a.k [type=int, outer=(3)]
+   │    │              │    └── variable: xy.x [type=int, outer=(1)]
+   │    │              └── false [type=bool]
+   │    └── aggregations [outer=(9)]
+   │         └── bool-or [type=bool, outer=(9)]
+   │              └── variable: notnull [type=bool, outer=(9), constraints=(/9: [/true - /true]; tight)]
+   └── projections [outer=(1,10)]
+        └── case [type=bool, outer=(1,10)]
+             ├── true [type=bool]
+             ├── when [type=bool, outer=(1,10)]
+             │    ├── and [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: [/true - /true]; tight)]
+             │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+             │    │    └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+             │    │         ├── variable: xy.x [type=int, outer=(1)]
+             │    │         └── null [type=unknown]
+             │    └── true [type=bool]
+             ├── when [type=bool, outer=(10)]
+             │    ├── is [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight)]
+             │    │    ├── variable: bool_or [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+             │    │    └── null [type=unknown]
+             │    └── false [type=bool]
+             └── null [type=unknown]
