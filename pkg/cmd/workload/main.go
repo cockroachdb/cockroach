@@ -23,9 +23,9 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/allccl"
 )
 
-var rootCmd = &cobra.Command{
+var rootCmd = setCmdDefaults(&cobra.Command{
 	Use: `workload`,
-}
+})
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
