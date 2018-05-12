@@ -115,11 +115,9 @@ project
  │    ├── columns: a.x:1(int!null) a.y:2(float!null)
  │    └── ordering: +1,-2
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 1 [type=int]
-      ├── variable: a.y [type=float]
-      └── variable: a.x [type=int]
+      └── plus [type=int]
+           ├── variable: a.x [type=int]
+           └── const: 1 [type=int]
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -133,8 +131,6 @@ sort
       ├── scan a
       │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
       └── projections
-           ├── variable: a.y [type=float]
-           ├── variable: a.x [type=int]
            └── plus [type=decimal]
                 ├── variable: a.z [type=decimal]
                 └── const: 1 [type=decimal]
@@ -151,9 +147,7 @@ sort
       ├── scan a
       │    └── columns: a.x:1(int!null) a.y:2(float!null)
       └── projections
-           ├── variable: a.x [type=int]
-           ├── const: 1 [type=int]
-           └── variable: a.y [type=float]
+           └── const: 1 [type=int]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).
@@ -177,11 +171,9 @@ project
  │              ├── variable: a.x [type=int]
  │              └── variable: a.y [type=float]
  └── projections
-      ├── variable: a.y [type=float]
-      ├── minus [type=int]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 1 [type=int]
-      └── variable: a.x [type=int]
+      └── minus [type=int]
+           ├── variable: a.x [type=int]
+           └── const: 1 [type=int]
 
 memo
 SELECT y, x-1 FROM a WHERE x>y ORDER BY x, y DESC
@@ -225,17 +217,14 @@ sort
  ├── ordering: +2
  └── project
       ├── columns: a.y:2(float!null) a.z:3(decimal)
-      ├── select
-      │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
-      │    ├── scan a
-      │    │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
-      │    └── filters [type=bool]
-      │         └── gt [type=bool]
-      │              ├── variable: a.x [type=int]
-      │              └── variable: a.y [type=float]
-      └── projections
-           ├── variable: a.y [type=float]
-           └── variable: a.z [type=decimal]
+      └── select
+           ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
+           ├── scan a
+           │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: a.x [type=int]
+                     └── variable: a.y [type=float]
 
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y

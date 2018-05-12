@@ -194,11 +194,9 @@ project
  │              ├── variable: a.f [type=float, outer=(3)]
  │              └── const: 10.0 [type=float]
  └── projections [outer=(2,3)]
-      ├── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 1 [type=int]
-      └── variable: a.f [type=float, outer=(3)]
+      └── plus [type=int, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── const: 1 [type=int]
 
 # Don't push down select if it depends on computed column that can't be inlined.
 opt
@@ -211,11 +209,9 @@ select
  │    ├── scan a
  │    │    └── columns: a.i:2(int) a.f:3(float)
  │    └── projections [outer=(2,3)]
- │         ├── variable: a.i [type=int, outer=(2)]
- │         ├── div [type=decimal, outer=(2)]
- │         │    ├── variable: a.i [type=int, outer=(2)]
- │         │    └── const: 2 [type=int]
- │         └── variable: a.f [type=float, outer=(3)]
+ │         └── div [type=decimal, outer=(2)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 2 [type=int]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
       └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
            ├── variable: div [type=decimal, outer=(6)]
@@ -241,11 +237,9 @@ select
  │    │              ├── variable: a.i [type=int, outer=(2)]
  │    │              └── const: 1 [type=int]
  │    └── projections [outer=(2,3)]
- │         ├── variable: a.i [type=int, outer=(2)]
- │         ├── div [type=decimal, outer=(2)]
- │         │    ├── variable: a.i [type=int, outer=(2)]
- │         │    └── const: 2 [type=int]
- │         └── variable: a.f [type=float, outer=(3)]
+ │         └── div [type=decimal, outer=(2)]
+ │              ├── variable: a.i [type=int, outer=(2)]
+ │              └── const: 2 [type=int]
  └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
       └── eq [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
            ├── variable: div [type=decimal, outer=(6)]
@@ -274,7 +268,6 @@ project
  │              ├── variable: column6 [type=float, outer=(6)]
  │              └── const: 10.0 [type=float]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
@@ -787,15 +780,14 @@ group-by
  ├── columns: i:2(int)
  ├── grouping columns: a.i:2(int)
  ├── keys: weak(2)
- ├── select
- │    ├── columns: a.i:2(int)
- │    ├── scan a
- │    │    └── columns: a.i:2(int)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │         └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │              ├── variable: a.i [type=int, outer=(2)]
- │              └── const: 1 [type=int]
- └── aggregations
+ └── select
+      ├── columns: a.i:2(int)
+      ├── scan a
+      │    └── columns: a.i:2(int)
+      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+           └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── const: 1 [type=int]
 
 # Push down only conditions that do not depend on aggregations.
 opt

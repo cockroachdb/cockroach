@@ -425,6 +425,10 @@ func (ev ExprView) formatStats(tp treeprinter.Node, s *opt.Statistics) {
 }
 
 func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
+	// Omit empty AggregationsOp.
+	if ev.Operator() == opt.AggregationsOp && ev.ChildCount() == 0 {
+		return
+	}
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "%v", ev.op)
@@ -472,6 +476,24 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 			}
 			buf.WriteString("]")
 		}
+	}
+
+	// Special case for ProjectionsOp.
+	if ev.Operator() == opt.ProjectionsOp {
+		cols := ev.Private().(opt.ColList)
+		first := true
+		for i, colID := range cols {
+			child := ev.Child(i)
+			if child.Operator() == opt.VariableOp && child.Private().(opt.ColumnID) == colID {
+				continue
+			}
+			if first {
+				tp = tp.Child(buf.String())
+				first = false
+			}
+			child.format(tp, flags)
+		}
+		return
 	}
 
 	tp = tp.Child(buf.String())

@@ -102,11 +102,10 @@ select
  │    ├── stats: [rows=1, distinct(3)=1]
  │    ├── project
  │    │    ├── stats: [rows=1000]
- │    │    ├── scan xy
- │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    └── keys: (1)
- │    │    └── projections
+ │    │    └── scan xy
+ │    │         ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    │         ├── stats: [rows=1000]
+ │    │         └── keys: (1)
  │    └── aggregations
  │         └── count-rows [type=int]
  └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]

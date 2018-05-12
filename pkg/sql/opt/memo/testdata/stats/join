@@ -141,25 +141,18 @@ SELECT * FROM a, b
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
  ├── stats: [rows=40000000]
- ├── inner-join
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=40000000]
- │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    │    ├── stats: [rows=4000]
- │    │    └── keys: (1) weak(3,4)
- │    ├── scan b
- │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    ├── stats: [rows=10000]
- │    │    └── keys: (7)
- │    └── true [type=bool]
- └── projections [outer=(1-6)]
-      ├── variable: a.x [type=int, outer=(1)]
-      ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: a.s [type=string, outer=(3)]
-      ├── variable: a.d [type=decimal, outer=(4)]
-      ├── variable: b.x [type=int, outer=(5)]
-      └── variable: b.z [type=int, outer=(6)]
+ └── inner-join
+      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      ├── stats: [rows=40000000]
+      ├── scan a
+      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │    ├── stats: [rows=4000]
+      │    └── keys: (1) weak(3,4)
+      ├── scan b
+      │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    ├── stats: [rows=10000]
+      │    └── keys: (7)
+      └── true [type=bool]
 
 build
 SELECT * FROM a, a AS a
@@ -183,31 +176,24 @@ SELECT * FROM a, b WHERE b.z = 5
 project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
  ├── stats: [rows=400000]
- ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    ├── stats: [rows=400000, distinct(6)=1]
- │    ├── inner-join
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    ├── stats: [rows=40000000, distinct(6)=100]
- │    │    ├── scan a
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    │    │    ├── stats: [rows=4000]
- │    │    │    └── keys: (1) weak(3,4)
- │    │    ├── scan b
- │    │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    │    ├── stats: [rows=10000, distinct(6)=100]
- │    │    │    └── keys: (7)
- │    │    └── true [type=bool]
- │    └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
- │         ├── variable: b.z [type=int, outer=(6)]
- │         └── const: 5 [type=int]
- └── projections [outer=(1-6)]
-      ├── variable: a.x [type=int, outer=(1)]
-      ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: a.s [type=string, outer=(3)]
-      ├── variable: a.d [type=decimal, outer=(4)]
-      ├── variable: b.x [type=int, outer=(5)]
-      └── variable: b.z [type=int, outer=(6)]
+ └── select
+      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      ├── stats: [rows=400000, distinct(6)=1]
+      ├── inner-join
+      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    ├── stats: [rows=40000000, distinct(6)=100]
+      │    ├── scan a
+      │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │    │    ├── stats: [rows=4000]
+      │    │    └── keys: (1) weak(3,4)
+      │    ├── scan b
+      │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    │    ├── stats: [rows=10000, distinct(6)=100]
+      │    │    └── keys: (7)
+      │    └── true [type=bool]
+      └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
+           ├── variable: b.z [type=int, outer=(6)]
+           └── const: 5 [type=int]
 
 # Force calculation of the distinct count for the column set spanning both
 # tables in the join.
@@ -218,33 +204,26 @@ project
  ├── columns: column8:8(decimal) x:1(int!null) z:6(int!null)
  ├── stats: [rows=500000]
  ├── keys: (1,6)
- ├── group-by
- │    ├── columns: a.x:1(int!null) b.z:6(int!null) column8:8(decimal)
- │    ├── grouping columns: a.x:1(int!null) b.z:6(int!null)
- │    ├── stats: [rows=500000, distinct(1,6)=500000]
- │    ├── keys: (1,6)
- │    ├── project
- │    │    ├── columns: a.x:1(int!null) b.z:6(int!null)
- │    │    ├── stats: [rows=40000000, distinct(1,6)=500000]
- │    │    ├── inner-join
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    │    ├── stats: [rows=40000000, distinct(1,6)=500000]
- │    │    │    ├── scan a
- │    │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
- │    │    │    │    ├── stats: [rows=4000, distinct(1)=5000]
- │    │    │    │    └── keys: (1) weak(3,4)
- │    │    │    ├── scan b
- │    │    │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
- │    │    │    │    ├── stats: [rows=10000, distinct(6)=100]
- │    │    │    │    └── keys: (7)
- │    │    │    └── true [type=bool]
- │    │    └── projections [outer=(1,6)]
- │    │         ├── variable: a.x [type=int, outer=(1)]
- │    │         └── variable: b.z [type=int, outer=(6)]
- │    └── aggregations [outer=(6)]
- │         └── sum [type=decimal, outer=(6)]
- │              └── variable: b.z [type=int, outer=(6)]
- └── projections [outer=(1,6,8)]
-      ├── variable: column8 [type=decimal, outer=(8)]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── variable: b.z [type=int, outer=(6)]
+ └── group-by
+      ├── columns: a.x:1(int!null) b.z:6(int!null) column8:8(decimal)
+      ├── grouping columns: a.x:1(int!null) b.z:6(int!null)
+      ├── stats: [rows=500000, distinct(1,6)=500000]
+      ├── keys: (1,6)
+      ├── project
+      │    ├── columns: a.x:1(int!null) b.z:6(int!null)
+      │    ├── stats: [rows=40000000, distinct(1,6)=500000]
+      │    └── inner-join
+      │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │         ├── stats: [rows=40000000, distinct(1,6)=500000]
+      │         ├── scan a
+      │         │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │         │    ├── stats: [rows=4000, distinct(1)=5000]
+      │         │    └── keys: (1) weak(3,4)
+      │         ├── scan b
+      │         │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │         │    ├── stats: [rows=10000, distinct(6)=100]
+      │         │    └── keys: (7)
+      │         └── true [type=bool]
+      └── aggregations [outer=(6)]
+           └── sum [type=decimal, outer=(6)]
+                └── variable: b.z [type=int, outer=(6)]
