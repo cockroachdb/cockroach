@@ -1110,7 +1110,7 @@ func TestTxnCoordIdempotentCleanup(t *testing.T) {
 }
 
 // TestTxnMultipleCoord checks that multiple txn coordinators can be
-// used by a single transaction, and their state can be combined.
+// used for reads by a single transaction, and their state can be combined.
 func TestTxnMultipleCoord(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := createTestDB(t)
@@ -1119,66 +1119,36 @@ func TestTxnMultipleCoord(t *testing.T) {
 	ctx := context.Background()
 	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
 	tc := txn.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc)
 
 	// Start the transaction.
 	key := roachpb.Key("a")
-	if err := txn.Put(ctx, key, []byte("value")); err != nil {
-		t.Fatalf("expected error %s", err)
+	if _, err := txn.Get(ctx, key); err != nil {
+		t.Fatal(err)
 	}
 
 	// New create a second, leaf coordinator.
 	txn2 := client.NewTxnWithProto(s.DB, 0 /* gatewayNodeID */, client.LeafTxn, *txn.Proto())
-	tc2 := txn2.Sender().(*TxnCoordSender)
-	defer teardownHeartbeat(tc2)
 
 	// Start the second transaction.
 	key2 := roachpb.Key("b")
-	if err := txn2.Put(ctx, key2, []byte("value2")); err != nil {
-		t.Fatalf("expected error %s", err)
-	}
-
-	// Verify heartbeat started on root txn.
-	testutils.SucceedsSoon(t, func() error {
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-		if tc.mu.txnEnd == nil {
-			return errors.New("expected heartbeat on root coordinator")
-		}
-		return nil
-	})
-	// Verify no heartbeat started on leaf txn.
-	tc2.mu.Lock()
-	if tc2.mu.txnEnd != nil {
-		t.Fatalf("unexpected heartbeat on leaf coordinator")
-	}
-	tc2.mu.Unlock()
-
-	// Verify it's an error to commit on the leaf txn node.
-	ba := txn2.NewBatch()
-	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
-	if err := txn2.Run(context.TODO(), ba); !testutils.IsError(err, "cannot commit on a leaf transaction coordinator") {
-		t.Fatalf("expected cannot commit on leaf coordinator error; got %v", err)
+	if _, err := txn2.Get(ctx, key2); err != nil {
+		t.Fatal(err)
 	}
 
 	// Augment txn with txn2's meta & commit.
 	txn.AugmentTxnCoordMeta(txn2.GetTxnCoordMeta())
 	// Verify presence of both intents.
 	tc.mu.Lock()
-	if a, e := tc.mu.meta.Intents, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
-		t.Fatalf("expected intents %+v; got %+v", e, a)
-	}
-	if a, e := tc.mu.intentsSizeBytes, int64(len(key)+len(key2)); a != e {
-		t.Fatalf("expected intentsSizeBytes %d; got %d", e, a)
+	if a, e := tc.mu.meta.RefreshReads, []roachpb.Span{{Key: key}, {Key: key2}}; !reflect.DeepEqual(a, e) {
+		tc.mu.Unlock()
+		t.Fatalf("expected read spans %+v; got %+v", e, a)
 	}
 	tc.mu.Unlock()
-	ba = txn.NewBatch()
+	ba := txn.NewBatch()
 	ba.AddRawRequest(&roachpb.EndTransactionRequest{Commit: true})
-	if err := txn.Run(context.TODO(), ba); err != nil {
+	if err := txn.Run(ctx, ba); err != nil {
 		t.Fatal(err)
 	}
-
-	verifyCleanup(key, s.Eng, t, tc, tc2)
 }
 
 // TestTxnCoordSenderSingleRoundtripTxn checks that a batch which completely
@@ -1460,13 +1430,28 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	defer cleanupFn()
 	value := []byte("value")
 
-	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	ctx := context.TODO()
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		key := []byte("key-commit")
 		b := txn.NewBatch()
 		b.Put(key, value)
 		return txn.CommitInBatch(ctx, b)
 	}); err != nil {
 		t.Fatal(err)
+	}
+	kv, err := s.DB.Get(ctx, []byte("key-commit"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kv.Value == nil {
+		t.Fatal("expected value not found")
+	}
+	val, err := kv.Value.GetBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(val, value) {
+		t.Fatalf("expected: %s, got: %s", value, val)
 	}
 	checkTxnMetrics(t, metrics, "commit 1PC txn", 1, 1 /* 1PC */, 0, 0, 0)
 }
@@ -1488,9 +1473,14 @@ func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
 	// context's lifetime instead. In this test, we are testing timeout-based
 	// abandonment, so we need to supply a non-cancelable context.
 	var factory client.TxnSenderFactoryFunc = func(_ client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return tc.Send(context.Background(), ba)
-		})
+		return client.TxnSenderAdapter{
+			Wrapped: func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+				return tc.Send(context.Background(), ba)
+			},
+			StartTrackingWrapped: func(_ context.Context) error {
+				return tc.StartTracking(context.Background())
+			},
+		}
 	}
 	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock), tc
 }

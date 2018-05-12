@@ -738,7 +738,7 @@ END;
 							t.Fatal(err)
 						}
 						if count != 1 {
-							t.Fatalf("Expected 1 rows, got %d", count)
+							t.Fatalf("Expected 1 rows, got %d from %s", count, table)
 						}
 					}
 				})
