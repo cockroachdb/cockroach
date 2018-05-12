@@ -565,16 +565,6 @@ define SqrDiff {
 }
 
 [Scalar, Aggregate]
-define FinalVariance {
-    Input Expr
-}
-
-[Scalar, Aggregate]
-define FinalStdDev {
-    Input Expr
-}
-
-[Scalar, Aggregate]
 define Variance {
     Input Expr
 }
@@ -599,7 +589,7 @@ define JsonbAgg {
     Input Expr
 }
 
-# ExistsAgg evalutes to True if there is at least one non-null value in the
+# ExistsAgg evaluates to True if there is at least one non-null value in the
 # grouping set. Otherwise, it returns False. Its behavior is exactly equivalent
 # to:
 #
@@ -613,5 +603,15 @@ define JsonbAgg {
 # Exists subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
 define ExistsAgg {
+    Input Expr
+}
+
+# FirstAgg returns the first non-null value in the grouping set, or null if
+# there are no non-null values.
+#
+# FirstAgg is not part of SQL, but it's used internally to rewrite correlated
+# subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define FirstAgg {
     Input Expr
 }
