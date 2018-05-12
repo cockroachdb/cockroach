@@ -130,7 +130,5 @@ func BeginTransaction(
 	// we bump the record's heartbeat timestamp right before laying it down.
 	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
-	// Write the txn record.
-	reply.Txn.Writing = true
 	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
 }

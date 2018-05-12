@@ -2933,15 +2933,8 @@ func (r *Replica) evaluateProposal(
 	if pErr != nil {
 		pErr = r.maybeSetCorrupt(ctx, pErr)
 
-		// Restore the original txn's Writing bool if the error specifies
-		// a transaction.
-		if txn := pErr.GetTxn(); txn != nil {
-			if ba.Txn == nil {
-				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
-			}
-			if txn.ID == ba.Txn.ID {
-				txn.Writing = ba.Txn.Writing
-			}
+		if txn := pErr.GetTxn(); txn != nil && ba.Txn == nil {
+			log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
 		}
 
 		// Failed proposals can't have any Result except for what's
@@ -5243,7 +5236,6 @@ func (r *Replica) evaluateWriteBatch(
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
 			(retryLocally && !isEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
 			clonedTxn := ba.Txn.Clone()
-			clonedTxn.Writing = true
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
 			// timestamp. This can be different if the stripped batch was

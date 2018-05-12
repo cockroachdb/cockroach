@@ -441,6 +441,8 @@ type Transaction struct {
 	ObservedTimestamps []ObservedTimestamp `protobuf:"bytes,8,rep,name=observed_timestamps,json=observedTimestamps" json:"observed_timestamps"`
 	// Writing is true if the transaction has previously executed a successful
 	// write request, i.e. a request that may have left intents (across retries).
+	// When set, the AbortCache must be checked by reads so that they don't miss
+	// to see the txn's previous writes.
 	Writing bool `protobuf:"varint,9,opt,name=writing,proto3" json:"writing,omitempty"`
 	// If this is true, the transaction must retry. Relevant only for
 	// SNAPSHOT transactions: a SERIALIZABLE transaction would have to
