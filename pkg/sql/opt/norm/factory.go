@@ -65,6 +65,7 @@ type Factory struct {
 	mem     *memo.Memo
 	evalCtx *tree.EvalContext
 	props   rulePropsBuilder
+	items   []memo.GroupID
 
 	// ruleCycles is used to detect cyclical rule invocations. Each rule with
 	// the "DetectCycles" tag adds its expression fingerprint into this map
@@ -245,6 +246,13 @@ func (f *Factory) replaceListItem(list memo.ListID, search, replace memo.GroupID
 	return f.mem.InternList(newList)
 }
 
+// internSingletonList interns a list containing the single given item and
+// returns its id.
+func (f *Factory) internSingletonList(item memo.GroupID) memo.ListID {
+	f.items = append(f.items[:0], item)
+	return f.InternList(f.items)
+}
+
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
@@ -363,6 +371,11 @@ func (f *Factory) canConstructBinary(op opt.Operator, left, right memo.GroupID) 
 //
 // ----------------------------------------------------------------------
 
+// operator returns the type of the given group's normalized expression.
+func (f *Factory) operator(group memo.GroupID) opt.Operator {
+	return f.mem.NormExpr(group).Operator()
+}
+
 // lookupLogical returns the given group's logical properties.
 func (f *Factory) lookupLogical(group memo.GroupID) *props.Logical {
 	return f.mem.GroupProperties(group)
@@ -473,12 +486,126 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 	return f.lookupScalar(group).HasCorrelatedSubquery
 }
 
+// shortestKey returns the strong key in the given memo group that is composed
+// of the fewest columns. If there are multiple keys with the same number of
+// columns, any one of them may be returned. If there are no strong keys in the
+// group, then shortestKey returns ok=false.
+func (f *Factory) shortestKey(group memo.GroupID) (key opt.ColSet, ok bool) {
+	var shortest opt.ColSet
+	var shortestLen int
+	props := f.lookupLogical(group).Relational
+	for _, wk := range props.WeakKeys {
+		// A strong key requires all columns to be non-nullable.
+		if wk.SubsetOf(props.NotNullCols) {
+			l := wk.Len()
+			if !ok || l < shortestLen {
+				shortestLen = l
+				shortest = wk
+				ok = true
+			}
+		}
+	}
+	return shortest, ok
+}
+
+// ensureKey finds the shortest strong key for the input memo group. If no
+// strong key exists, then ensureKey wraps the input in a RowNumber operator,
+// which provides a key column by uniquely numbering the rows. ensureKey returns
+// the input group (perhaps wrapped by RowNumber) and the set of columns that
+// form the shortest available key.
+func (f *Factory) ensureKey(in memo.GroupID) (out memo.GroupID, key opt.ColSet) {
+	key, ok := f.shortestKey(in)
+	if ok {
+		return in, key
+	}
+
+	colID := f.Metadata().AddColumn("rownum", types.Int)
+	def := &memo.RowNumberDef{ColID: colID}
+	out = f.ConstructRowNumber(in, f.InternRowNumberDef(def))
+	key.Add(int(colID))
+	return out, key
+}
+
 // ----------------------------------------------------------------------
 //
 // Projection construction functions
 //   General helper functions to construct Projections.
 //
 // ----------------------------------------------------------------------
+
+// projectColsFrom returns a Projections operator that projects the output
+// columns from the given group as passthrough columns. If the group is already
+// a Projections operator, then projectColsFrom is a no-op.
+func (f *Factory) projectColsFrom(group memo.GroupID) memo.GroupID {
+	// If group is already a ProjectionsOp, then no more to do.
+	if f.mem.NormExpr(group).Operator() == opt.ProjectionsOp {
+		return group
+	}
+
+	def := memo.ProjectionsOpDef{PassthroughCols: f.lookupLogical(group).Relational.OutputCols}
+	return f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def))
+}
+
+// projectColsFromBoth returns a Projections operator that combines distinct
+// columns from both the provided left and right groups. If the group is a
+// Projections operator, then the projected expressions will be directly added
+// to the new Projections operator. Otherwise, the group's output columns will
+// be added as passthrough columns to the new Projections operator.
+func (f *Factory) projectColsFromBoth(left, right memo.GroupID) memo.GroupID {
+	leftCols := f.outputCols(left)
+	rightCols := f.outputCols(right)
+	if leftCols.SubsetOf(rightCols) {
+		return f.projectColsFrom(right)
+	}
+	if rightCols.SubsetOf(leftCols) {
+		return f.projectColsFrom(left)
+	}
+
+	synthLen := 0
+	if f.operator(left) == opt.ProjectionsOp {
+		synthLen += leftCols.Len()
+	}
+	if f.operator(right) == opt.ProjectionsOp {
+		synthLen += rightCols.Len()
+	}
+
+	remaining := leftCols.Union(rightCols)
+	elems := make([]memo.GroupID, 0, synthLen)
+	def := memo.ProjectionsOpDef{SynthesizedCols: make(opt.ColList, 0, synthLen)}
+
+	// Define function that can append either existing Projections columns or
+	// synthesize new columns from other operators' output columns.
+	appendCols := func(group memo.GroupID, groupCols opt.ColSet) {
+		projectionsExpr := f.mem.NormExpr(group).AsProjections()
+		if projectionsExpr != nil {
+			// Projections case.
+			projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
+			projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
+
+			// Add synthesized columns.
+			for i := 0; i < len(projectionsDef.SynthesizedCols); i++ {
+				colID := projectionsDef.SynthesizedCols[i]
+				if remaining.Contains(int(colID)) {
+					elems = append(elems, projectionsElems[i])
+					def.SynthesizedCols = append(def.SynthesizedCols, colID)
+				}
+			}
+
+			// Add pass-through columns.
+			def.PassthroughCols.UnionWith(projectionsDef.PassthroughCols)
+		} else {
+			// Non-projections case.
+			def.PassthroughCols.UnionWith(groupCols)
+		}
+
+		// Remove all appended columns from the remaining column set.
+		remaining.DifferenceWith(groupCols)
+	}
+
+	appendCols(left, leftCols)
+	appendCols(right, rightCols)
+	return f.ConstructProjections(f.mem.InternList(elems), f.mem.InternProjectionsOpDef(&def))
+}
 
 // projectExtraCol constructs a new Project operator that passes through all
 // columns in the given "in" expression, and then adds the given "extra"

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package testcat
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ const (
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
-func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
+func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	tn, err := stmt.Table.Normalize()
 	if err != nil {
 		panic(fmt.Errorf("%s", err))
@@ -44,7 +44,7 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 	tc.qualifyTableName(tn)
 
 	// Add the columns and primary index (if there is one defined).
-	tab := &TestTable{Name: *tn}
+	tab := &Table{Name: *tn}
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
@@ -59,7 +59,7 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 
 	// If there is no primary index, add the hidden rowid column.
 	if len(tab.Indexes) == 0 {
-		rowid := &TestColumn{Name: "rowid", Type: types.Int, Hidden: true}
+		rowid := &Column{Name: "rowid", Type: types.Int, Hidden: true}
 		tab.Columns = append(tab.Columns, rowid)
 		tab.addPrimaryColumnIndex(rowid)
 	}
@@ -88,7 +88,7 @@ func (tc *TestCatalog) CreateTable(stmt *tree.CreateTable) *TestTable {
 
 // qualifyTableName updates the given table name to include catalog and schema
 // if not already included.
-func (tc *TestCatalog) qualifyTableName(name *tree.TableName) {
+func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	if name.ExplicitSchema {
 		if name.ExplicitCatalog {
 			// Already 3 parts: nothing to do.
@@ -113,10 +113,10 @@ func (tc *TestCatalog) qualifyTableName(name *tree.TableName) {
 	name.SchemaName = tree.PublicSchemaName
 }
 
-func (tt *TestTable) addColumn(def *tree.ColumnTableDef) {
+func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
 	typ := coltypes.CastTargetToDatumType(def.Type)
-	col := &TestColumn{Name: string(def.Name), Type: typ, Nullable: nullable}
+	col := &Column{Name: string(def.Name), Type: typ, Nullable: nullable}
 	tt.Columns = append(tt.Columns, col)
 
 	if def.PrimaryKey {
@@ -125,8 +125,8 @@ func (tt *TestTable) addColumn(def *tree.ColumnTableDef) {
 	}
 }
 
-func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
-	idx := &TestIndex{Name: tt.makeIndexName(def.Name, typ)}
+func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) {
+	idx := &Index{Name: tt.makeIndexName(def.Name, typ)}
 
 	// Add explicit columns and mark key columns as not null.
 	for _, colDef := range def.Columns {
@@ -184,7 +184,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 	tt.Indexes = append(tt.Indexes, idx)
 }
 
-func (tt *TestTable) makeIndexName(defName tree.Name, typ indexType) string {
+func (tt *Table) makeIndexName(defName tree.Name, typ indexType) string {
 	name := string(defName)
 	if name == "" {
 		if typ == primaryIndex {
@@ -196,9 +196,9 @@ func (tt *TestTable) makeIndexName(defName tree.Name, typ indexType) string {
 	return name
 }
 
-func (ti *TestIndex) addColumn(
-	tt *TestTable, name string, direction tree.Direction, makeUnique bool,
-) *TestColumn {
+func (ti *Index) addColumn(
+	tt *Table, name string, direction tree.Direction, makeUnique bool,
+) *Column {
 	ord := tt.FindOrdinal(name)
 	col := tt.Column(ord)
 	idxCol := opt.IndexColumn{
@@ -212,17 +212,17 @@ func (ti *TestIndex) addColumn(
 		// unique key.
 		ti.Unique++
 	}
-	return col.(*TestColumn)
+	return col.(*Column)
 }
 
-func (tt *TestTable) addPrimaryColumnIndex(col *TestColumn) {
+func (tt *Table) addPrimaryColumnIndex(col *Column) {
 	idxCol := opt.IndexColumn{
 		Column:  col,
 		Ordinal: tt.FindOrdinal(col.Name),
 	}
 	tt.Indexes = append(
 		tt.Indexes,
-		&TestIndex{
+		&Index{
 			Name:    "primary",
 			Columns: []opt.IndexColumn{idxCol},
 			Unique:  1,

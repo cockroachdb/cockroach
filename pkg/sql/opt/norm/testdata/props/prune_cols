@@ -170,6 +170,86 @@ project
                 ├── variable: column7 [type=int, outer=(7)]
                 └── const: 1 [type=int]
 
+# SemiJoin operator.
+opt
+SELECT a.i
+FROM a
+WHERE
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ ├── prune: (2)
+ └── semi-join
+      ├── columns: a.k:1(int!null) a.i:2(int)
+      ├── keys: (1)
+      ├── prune: (2)
+      ├── semi-join
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    ├── keys: (1)
+      │    ├── prune: (2)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    ├── keys: (1)
+      │    │    └── prune: (1,2)
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
+      │    │    ├── keys: (5)
+      │    │    └── prune: (5,6)
+      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │              ├── variable: a.k [type=int, outer=(1)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      ├── scan xy
+      │    ├── columns: xy.x:7(int!null)
+      │    ├── keys: (7)
+      │    └── prune: (7)
+      └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── variable: xy.x [type=int, outer=(7)]
+
+# AntiJoin operator.
+opt
+SELECT a.i
+FROM a
+WHERE
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ ├── prune: (2)
+ └── anti-join
+      ├── columns: a.k:1(int!null) a.i:2(int)
+      ├── keys: (1)
+      ├── prune: (2)
+      ├── anti-join
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    ├── keys: (1)
+      │    ├── prune: (2)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    ├── keys: (1)
+      │    │    └── prune: (1,2)
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
+      │    │    ├── keys: (5)
+      │    │    └── prune: (5,6)
+      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │              ├── variable: a.k [type=int, outer=(1)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      ├── scan xy
+      │    ├── columns: xy.x:7(int!null)
+      │    ├── keys: (7)
+      │    └── prune: (7)
+      └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+           └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── variable: xy.x [type=int, outer=(7)]
+
 # GroupBy operator.
 opt
 SELECT COUNT(*), SUM(i) FROM a GROUP BY s, f
