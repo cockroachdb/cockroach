@@ -1,0 +1,340 @@
+exec-ddl
+CREATE TABLE public.region
+(
+    r_regionkey int PRIMARY KEY,
+    r_name char(25),
+    r_comment varchar(152)
+);
+----
+TABLE region
+ ├── r_regionkey int not null
+ ├── r_name string
+ ├── r_comment string
+ └── INDEX primary
+      └── r_regionkey int not null
+
+exec-ddl
+CREATE TABLE public.nation
+(
+    n_nationkey int PRIMARY KEY,
+    n_name char(25),
+    n_regionkey int NOT NULL,
+    n_comment varchar(152),
+    CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) references public.region (r_regionkey)
+);
+----
+TABLE nation
+ ├── n_nationkey int not null
+ ├── n_name string
+ ├── n_regionkey int not null
+ ├── n_comment string
+ └── INDEX primary
+      └── n_nationkey int not null
+
+exec-ddl
+CREATE TABLE public.supplier
+(
+    s_suppkey int PRIMARY KEY,
+    s_name char(25),
+    s_address varchar(40),
+    s_nationkey int NOT NULL,
+    s_phone char(15),
+    s_acctbal float,
+    s_comment varchar(101),
+    CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) references public.nation (n_nationkey)
+);
+----
+TABLE supplier
+ ├── s_suppkey int not null
+ ├── s_name string
+ ├── s_address string
+ ├── s_nationkey int not null
+ ├── s_phone string
+ ├── s_acctbal float
+ ├── s_comment string
+ └── INDEX primary
+      └── s_suppkey int not null
+
+exec-ddl
+CREATE TABLE public.part
+(
+    p_partkey int PRIMARY KEY,
+    p_name varchar(55),
+    p_mfgr char(25),
+    p_brand char(10),
+    p_type varchar(25),
+    p_size int,
+    p_container char(10),
+    p_retailprice float,
+    p_comment varchar(23)
+);
+----
+TABLE part
+ ├── p_partkey int not null
+ ├── p_name string
+ ├── p_mfgr string
+ ├── p_brand string
+ ├── p_type string
+ ├── p_size int
+ ├── p_container string
+ ├── p_retailprice float
+ ├── p_comment string
+ └── INDEX primary
+      └── p_partkey int not null
+
+exec-ddl
+CREATE TABLE public.partsupp
+(
+    ps_partkey int NOT NULL,
+    ps_suppkey int NOT NULL,
+    ps_availqty int,
+    ps_supplycost float,
+    ps_comment varchar(199),
+    PRIMARY KEY (ps_partkey, ps_suppkey),
+    CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) references public.part (p_partkey),
+    CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) references public.supplier (s_suppkey)
+);
+----
+TABLE partsupp
+ ├── ps_partkey int not null
+ ├── ps_suppkey int not null
+ ├── ps_availqty int
+ ├── ps_supplycost float
+ ├── ps_comment string
+ └── INDEX primary
+      ├── ps_partkey int not null
+      └── ps_suppkey int not null
+
+exec-ddl
+CREATE TABLE public.customer
+(
+    c_custkey int PRIMARY KEY,
+    c_name varchar(25),
+    c_address varchar(40),
+    c_nationkey int NOT NULL,
+    c_phone char(15),
+    c_acctbal float,
+    c_mktsegment char(10),
+    c_comment varchar(117),
+    CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) references public.nation (n_nationkey)
+);
+----
+TABLE customer
+ ├── c_custkey int not null
+ ├── c_name string
+ ├── c_address string
+ ├── c_nationkey int not null
+ ├── c_phone string
+ ├── c_acctbal float
+ ├── c_mktsegment string
+ ├── c_comment string
+ └── INDEX primary
+      └── c_custkey int not null
+
+exec-ddl
+CREATE TABLE public.orders
+(
+    o_orderkey int PRIMARY KEY,
+    o_custkey int NOT NULL,
+    o_orderstatus char(1),
+    o_totalprice float,
+    o_orderdate date,
+    o_orderpriority char(15),
+    o_clerk char(15),
+    o_shippriority int,
+    o_comment varchar(79),
+    CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) references public.customer (c_custkey)
+);
+----
+TABLE orders
+ ├── o_orderkey int not null
+ ├── o_custkey int not null
+ ├── o_orderstatus string
+ ├── o_totalprice float
+ ├── o_orderdate date
+ ├── o_orderpriority string
+ ├── o_clerk string
+ ├── o_shippriority int
+ ├── o_comment string
+ └── INDEX primary
+      └── o_orderkey int not null
+
+exec-ddl
+CREATE TABLE public.lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float,
+    l_extendedprice float,
+    l_discount float,
+    l_tax float,
+    l_returnflag char(1),
+    l_linestatus char(1),
+    l_shipdate date,
+    l_commitdate date,
+    l_receiptdate date,
+    l_shipinstruct char(25),
+    l_shipmode char(10),
+    l_comment varchar(44),
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
+    CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey),
+    CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references public.partsupp (ps_partkey, ps_suppkey)
+);
+----
+TABLE lineitem
+ ├── l_orderkey int not null
+ ├── l_partkey int not null
+ ├── l_suppkey int not null
+ ├── l_linenumber int not null
+ ├── l_quantity float
+ ├── l_extendedprice float
+ ├── l_discount float
+ ├── l_tax float
+ ├── l_returnflag string
+ ├── l_linestatus string
+ ├── l_shipdate date
+ ├── l_commitdate date
+ ├── l_receiptdate date
+ ├── l_shipinstruct string
+ ├── l_shipmode string
+ ├── l_comment string
+ └── INDEX primary
+      ├── l_orderkey int not null
+      └── l_linenumber int not null
+
+opt
+SELECT
+	s_name,
+	s_address
+FROM
+	supplier,
+	nation
+WHERE
+	s_suppkey IN (
+		SELECT
+			ps_suppkey
+		FROM
+			partsupp
+		WHERE
+			ps_partkey IN (
+				SELECT
+					p_partkey
+				FROM
+					part
+				WHERE
+					p_name LIKE 'orange%'
+			)
+			AND ps_availqty > (
+				SELECT
+					0.5 * SUM(l_quantity)
+				FROM
+					lineitem
+				WHERE
+					l_partkey = ps_partkey
+					AND l_suppkey = ps_suppkey
+					AND l_shipdate >= DATE '1997-01-01'
+					AND l_shipdate < DATE '1997-01-01' + INTERVAL '1' YEAR
+			)
+	)
+	AND s_nationkey = n_nationkey
+	AND n_name = 'ALGERIA'
+ORDER BY
+	s_name;
+----
+sort
+ ├── columns: s_name:2(string) s_address:3(string)
+ ├── ordering: +2
+ └── project
+      ├── columns: supplier.s_name:2(string) supplier.s_address:3(string)
+      ├── semi-join
+      │    ├── columns: supplier.s_suppkey:1(int!null) supplier.s_name:2(string) supplier.s_address:3(string) supplier.s_nationkey:4(int!null) nation.n_nationkey:8(int!null) nation.n_name:9(string)
+      │    ├── inner-join
+      │    │    ├── columns: supplier.s_suppkey:1(int!null) supplier.s_name:2(string) supplier.s_address:3(string) supplier.s_nationkey:4(int!null) nation.n_nationkey:8(int!null) nation.n_name:9(string)
+      │    │    ├── scan supplier
+      │    │    │    ├── columns: supplier.s_suppkey:1(int!null) supplier.s_name:2(string) supplier.s_address:3(string) supplier.s_nationkey:4(int!null)
+      │    │    │    └── keys: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: nation.n_nationkey:8(int!null) nation.n_name:9(string)
+      │    │    │    ├── keys: (8)
+      │    │    │    ├── scan nation
+      │    │    │    │    ├── columns: nation.n_nationkey:8(int!null) nation.n_name:9(string)
+      │    │    │    │    └── keys: (8)
+      │    │    │    └── filters [type=bool, outer=(9), constraints=(/9: [/'ALGERIA' - /'ALGERIA']; tight)]
+      │    │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/'ALGERIA' - /'ALGERIA']; tight)]
+      │    │    │              ├── variable: nation.n_name [type=string, outer=(9)]
+      │    │    │              └── const: 'ALGERIA' [type=string]
+      │    │    └── filters [type=bool, outer=(4,8)]
+      │    │         └── eq [type=bool, outer=(4,8)]
+      │    │              ├── variable: supplier.s_nationkey [type=int, outer=(4)]
+      │    │              └── variable: nation.n_nationkey [type=int, outer=(8)]
+      │    ├── select
+      │    │    ├── columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null) partsupp.ps_availqty:14(int) column42:42(float)
+      │    │    ├── keys: (12,13)
+      │    │    ├── group-by
+      │    │    │    ├── columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null) partsupp.ps_availqty:14(int) column42:42(float)
+      │    │    │    ├── grouping columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null)
+      │    │    │    ├── keys: (12,13)
+      │    │    │    ├── left-join
+      │    │    │    │    ├── columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null) partsupp.ps_availqty:14(int) lineitem.l_partkey:27(int) lineitem.l_suppkey:28(int) lineitem.l_quantity:30(float) lineitem.l_shipdate:36(date)
+      │    │    │    │    ├── semi-join
+      │    │    │    │    │    ├── columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null) partsupp.ps_availqty:14(int)
+      │    │    │    │    │    ├── keys: (12,13)
+      │    │    │    │    │    ├── scan partsupp
+      │    │    │    │    │    │    ├── columns: partsupp.ps_partkey:12(int!null) partsupp.ps_suppkey:13(int!null) partsupp.ps_availqty:14(int)
+      │    │    │    │    │    │    └── keys: (12,13)
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: part.p_partkey:17(int!null) part.p_name:18(string)
+      │    │    │    │    │    │    ├── keys: (17)
+      │    │    │    │    │    │    ├── scan part
+      │    │    │    │    │    │    │    ├── columns: part.p_partkey:17(int!null) part.p_name:18(string)
+      │    │    │    │    │    │    │    └── keys: (17)
+      │    │    │    │    │    │    └── filters [type=bool, outer=(18)]
+      │    │    │    │    │    │         └── like [type=bool, outer=(18)]
+      │    │    │    │    │    │              ├── variable: part.p_name [type=string, outer=(18)]
+      │    │    │    │    │    │              └── const: 'orange%' [type=string]
+      │    │    │    │    │    └── filters [type=bool, outer=(12,17)]
+      │    │    │    │    │         └── eq [type=bool, outer=(12,17)]
+      │    │    │    │    │              ├── variable: partsupp.ps_partkey [type=int, outer=(12)]
+      │    │    │    │    │              └── variable: part.p_partkey [type=int, outer=(17)]
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: lineitem.l_partkey:27(int!null) lineitem.l_suppkey:28(int!null) lineitem.l_quantity:30(float) lineitem.l_shipdate:36(date)
+      │    │    │    │    │    ├── scan lineitem
+      │    │    │    │    │    │    └── columns: lineitem.l_partkey:27(int!null) lineitem.l_suppkey:28(int!null) lineitem.l_quantity:30(float) lineitem.l_shipdate:36(date)
+      │    │    │    │    │    └── filters [type=bool, outer=(36), constraints=(/36: [/'1997-01-01' - ])]
+      │    │    │    │    │         ├── ge [type=bool, outer=(36), constraints=(/36: [/'1997-01-01' - ]; tight)]
+      │    │    │    │    │         │    ├── variable: lineitem.l_shipdate [type=date, outer=(36)]
+      │    │    │    │    │         │    └── const: '1997-01-01' [type=date]
+      │    │    │    │    │         └── lt [type=bool, outer=(36)]
+      │    │    │    │    │              ├── variable: lineitem.l_shipdate [type=date, outer=(36)]
+      │    │    │    │    │              └── plus [type=timestamptz]
+      │    │    │    │    │                   ├── const: '1997-01-01' [type=date]
+      │    │    │    │    │                   └── const: '1y' [type=interval]
+      │    │    │    │    └── filters [type=bool, outer=(12,13,27,28)]
+      │    │    │    │         ├── eq [type=bool, outer=(12,27)]
+      │    │    │    │         │    ├── variable: lineitem.l_partkey [type=int, outer=(27)]
+      │    │    │    │         │    └── variable: partsupp.ps_partkey [type=int, outer=(12)]
+      │    │    │    │         └── eq [type=bool, outer=(13,28)]
+      │    │    │    │              ├── variable: lineitem.l_suppkey [type=int, outer=(28)]
+      │    │    │    │              └── variable: partsupp.ps_suppkey [type=int, outer=(13)]
+      │    │    │    └── aggregations [outer=(14,30)]
+      │    │    │         ├── sum [type=float, outer=(30)]
+      │    │    │         │    └── variable: lineitem.l_quantity [type=float, outer=(30)]
+      │    │    │         └── first-agg [type=int, outer=(14)]
+      │    │    │              └── variable: partsupp.ps_availqty [type=int, outer=(14)]
+      │    │    └── filters [type=bool, outer=(14,42)]
+      │    │         └── gt [type=bool, outer=(14,42)]
+      │    │              ├── variable: partsupp.ps_availqty [type=int, outer=(14)]
+      │    │              └── mult [type=float, outer=(42)]
+      │    │                   ├── variable: column42 [type=float, outer=(42)]
+      │    │                   └── const: 0.5 [type=float]
+      │    └── filters [type=bool, outer=(1,13)]
+      │         └── eq [type=bool, outer=(1,13)]
+      │              ├── variable: supplier.s_suppkey [type=int, outer=(1)]
+      │              └── variable: partsupp.ps_suppkey [type=int, outer=(13)]
+      └── projections [outer=(2,3)]
+           ├── variable: supplier.s_name [type=string, outer=(2)]
+           └── variable: supplier.s_address [type=string, outer=(3)]

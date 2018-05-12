@@ -244,3 +244,19 @@ func TestIndexColumns(t *testing.T) {
 		}
 	}
 }
+
+func TestColSetConversion(t *testing.T) {
+	testCases := [][]int{
+		{},
+		{1},
+		{5, -1, 2, 5},
+	}
+
+	for _, tc := range testCases {
+		expected := util.MakeFastIntSet(tc...)
+		actual := opt.ColListToSet(opt.ColSetToList(expected))
+		if !actual.Equals(expected) {
+			t.Errorf("expected %v, got %v", expected, actual)
+		}
+	}
+}
