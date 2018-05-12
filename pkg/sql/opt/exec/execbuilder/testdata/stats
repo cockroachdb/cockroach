@@ -11,14 +11,11 @@ project
  ├── columns: u:1(int) v:2(int)
  ├── stats: [rows=1000]
  ├── cost: 1000.00
- ├── scan a
- │    ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
- │    ├── stats: [rows=1000]
- │    ├── cost: 1000.00
- │    └── keys: (3)
- └── projections [outer=(1,2)]
-      ├── variable: a.u [type=int, outer=(1)]
-      └── variable: a.v [type=int, outer=(2)]
+ └── scan a
+      ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
+      ├── stats: [rows=1000]
+      ├── cost: 1000.00
+      └── keys: (3)
 
 # Create a new table to avoid depending on the asynchronous stat cache
 # invalidation.
@@ -39,14 +36,11 @@ project
  ├── columns: u:1(int) v:2(int)
  ├── stats: [rows=8]
  ├── cost: 8.00
- ├── scan b
- │    ├── columns: b.u:1(int) b.v:2(int) b.rowid:3(int!null)
- │    ├── stats: [rows=8]
- │    ├── cost: 8.00
- │    └── keys: (3)
- └── projections [outer=(1,2)]
-      ├── variable: b.u [type=int, outer=(1)]
-      └── variable: b.v [type=int, outer=(2)]
+ └── scan b
+      ├── columns: b.u:1(int) b.v:2(int) b.rowid:3(int!null)
+      ├── stats: [rows=8]
+      ├── cost: 8.00
+      └── keys: (3)
 
 # Verify we scan index v which has the more selective constraint.
 opt

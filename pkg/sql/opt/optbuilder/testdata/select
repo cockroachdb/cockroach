@@ -64,10 +64,7 @@ project
  ├── scan abc
  │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections
-      ├── null [type=unknown]
-      ├── variable: abc.a [type=int]
-      ├── variable: abc.b [type=int]
-      └── variable: abc.c [type=int]
+      └── null [type=unknown]
 
 
 # synonym for SELECT * FROM abc
@@ -100,33 +97,24 @@ SELECT *,* FROM abc
 ----
 project
  ├── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
- ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
- └── projections
-      ├── variable: abc.a [type=int]
-      ├── variable: abc.b [type=int]
-      └── variable: abc.c [type=int]
+ └── scan abc
+      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
 
 build
 SELECT a,a,a,a FROM abc
 ----
 project
  ├── columns: a:1(int!null) a:1(int!null) a:1(int!null) a:1(int!null)
- ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
- └── projections
-      └── variable: abc.a [type=int]
+ └── scan abc
+      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
 
 build
 SELECT a,c FROM abc
 ----
 project
  ├── columns: a:1(int!null) c:3(int)
- ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
- └── projections
-      ├── variable: abc.a [type=int]
-      └── variable: abc.c [type=int]
+ └── scan abc
+      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
 
 build
 SELECT a+b+c AS foo FROM abc
@@ -147,25 +135,22 @@ SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 project
  ├── columns: a:1(int!null) b:2(int)
- ├── select
- │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
- │    ├── scan abc
- │    │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
- │    └── case [type=bool]
- │         ├── true [type=bool]
- │         ├── when [type=bool]
- │         │    ├── ne [type=bool]
- │         │    │    ├── variable: abc.a [type=int]
- │         │    │    └── const: 0 [type=int]
- │         │    └── gt [type=bool]
- │         │         ├── div [type=decimal]
- │         │         │    ├── variable: abc.b [type=int]
- │         │         │    └── variable: abc.a [type=int]
- │         │         └── const: 1.5 [type=decimal]
- │         └── false [type=bool]
- └── projections
-      ├── variable: abc.a [type=int]
-      └── variable: abc.b [type=int]
+ └── select
+      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      ├── scan abc
+      │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      └── case [type=bool]
+           ├── true [type=bool]
+           ├── when [type=bool]
+           │    ├── ne [type=bool]
+           │    │    ├── variable: abc.a [type=int]
+           │    │    └── const: 0 [type=int]
+           │    └── gt [type=bool]
+           │         ├── div [type=decimal]
+           │         │    ├── variable: abc.b [type=int]
+           │         │    └── variable: abc.a [type=int]
+           │         └── const: 1.5 [type=decimal]
+           └── false [type=bool]
 
 # SELECT of NULL value.
 
@@ -218,10 +203,8 @@ SELECT k FROM kv
 ----
 project
  ├── columns: k:1(string!null)
- ├── scan kv
- │    └── columns: kv.k:1(string!null) kv.v:2(string)
- └── projections
-      └── variable: kv.k [type=string]
+ └── scan kv
+      └── columns: kv.k:1(string!null) kv.v:2(string)
 
 build
 SELECT kv.K,KV.v FROM kv
@@ -283,30 +266,26 @@ SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
  ├── columns: k:1(string!null)
- ├── select
- │    ├── columns: kv.k:1(string!null) kv.v:2(string)
- │    ├── scan kv
- │    │    └── columns: kv.k:1(string!null) kv.v:2(string)
- │    └── eq [type=bool]
- │         ├── variable: kv.k [type=string]
- │         └── const: 'a' [type=string]
- └── projections
-      └── variable: kv.k [type=string]
+ └── select
+      ├── columns: kv.k:1(string!null) kv.v:2(string)
+      ├── scan kv
+      │    └── columns: kv.k:1(string!null) kv.v:2(string)
+      └── eq [type=bool]
+           ├── variable: kv.k [type=string]
+           └── const: 'a' [type=string]
 
 build
 SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
  ├── columns: v:2(string)
- ├── select
- │    ├── columns: kv.k:1(string!null) kv.v:2(string)
- │    ├── scan kv
- │    │    └── columns: kv.k:1(string!null) kv.v:2(string)
- │    └── eq [type=bool]
- │         ├── variable: kv.k [type=string]
- │         └── const: 'a' [type=string]
- └── projections
-      └── variable: kv.v [type=string]
+ └── select
+      ├── columns: kv.k:1(string!null) kv.v:2(string)
+      ├── scan kv
+      │    └── columns: kv.k:1(string!null) kv.v:2(string)
+      └── eq [type=bool]
+           ├── variable: kv.k [type=string]
+           └── const: 'a' [type=string]
 
 exec-ddl
 CREATE TABLE kw ("from" INT PRIMARY KEY)
@@ -321,10 +300,8 @@ SELECT *, "from", kw."from" FROM kw
 ----
 project
  ├── columns: from:1(int!null) from:1(int!null) from:1(int!null)
- ├── scan kw
- │    └── columns: kw.from:1(int!null)
- └── projections
-      └── variable: kw.from [type=int]
+ └── scan kw
+      └── columns: kw.from:1(int!null)
 
 exec-ddl
 CREATE TABLE xyzw (
@@ -542,10 +519,8 @@ SELECT value FROM boolean_table
 ----
 project
  ├── columns: value:2(bool)
- ├── scan boolean_table
- │    └── columns: boolean_table.id:1(int!null) boolean_table.value:2(bool)
- └── projections
-      └── variable: boolean_table.value [type=bool]
+ └── scan boolean_table
+      └── columns: boolean_table.id:1(int!null) boolean_table.value:2(bool)
 
 build allow-unsupported
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
