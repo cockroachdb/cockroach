@@ -40,10 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var runCmd = &cobra.Command{
+var runCmd = setCmdDefaults(&cobra.Command{
 	Use:   `run`,
 	Short: `Run a workload's operations against a cluster`,
-}
+})
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
@@ -54,10 +54,10 @@ var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run 
 var doInit = runFlags.Bool("init", false, "Automatically run init")
 var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 
-var initCmd = &cobra.Command{
+var initCmd = setCmdDefaults(&cobra.Command{
 	Use:   `init`,
 	Short: `Set up tables for a workload`,
-}
+})
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
@@ -76,13 +76,13 @@ func init() {
 			genFlags = f.Flags().FlagSet
 		}
 
-		genInitCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
+		genInitCmd := setCmdDefaults(&cobra.Command{Use: meta.Name, Short: meta.Description})
 		genInitCmd.Flags().AddFlagSet(initFlags)
 		genInitCmd.Flags().AddFlagSet(genFlags)
 		genInitCmd.Run = cmdHelper(gen, runInit)
 		initCmd.AddCommand(genInitCmd)
 
-		genRunCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
+		genRunCmd := setCmdDefaults(&cobra.Command{Use: meta.Name, Short: meta.Description})
 		genRunCmd.Flags().AddFlagSet(runFlags)
 		genRunCmd.Flags().AddFlagSet(genFlags)
 		initFlags.VisitAll(func(initFlag *pflag.Flag) {
@@ -126,6 +126,23 @@ func cmdHelper(
 		}
 		return fn(gen, urls, dbName)
 	})
+}
+
+// setCmdDefaults ensures that the provided Cobra command will properly report
+// an error if the user specifies an invalid subcommand. It is safe to call on
+// any Cobra command.
+//
+// This is a wontfix bug in Cobra: https://github.com/spf13/cobra/pull/329
+func setCmdDefaults(cmd *cobra.Command) *cobra.Command {
+	if cmd.Run == nil && cmd.RunE == nil {
+		cmd.Run = func(cmd *cobra.Command, args []string) {
+			_ = cmd.Usage()
+		}
+	}
+	if cmd.Args == nil {
+		cmd.Args = cobra.NoArgs
+	}
+	return cmd
 }
 
 // numOps keeps a global count of successful operations.
