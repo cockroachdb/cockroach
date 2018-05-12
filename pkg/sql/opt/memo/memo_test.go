@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -35,7 +36,7 @@ func TestMemo(t *testing.T) {
 // See OptTester.Handle for supported commands.
 func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
-		catalog := testutils.NewTestCatalog()
+		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 )
 
 func TestLogicalPropsBuilder(t *testing.T) {
@@ -64,9 +65,13 @@ func TestHasCorrelatedSubquery(t *testing.T) {
 	}
 }
 
-func createLogPropsCatalog(t *testing.T) *testutils.TestCatalog {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(t, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", cat)
-	testutils.ExecuteTestDDL(t, "CREATE TABLE b (x INT PRIMARY KEY, z INT NOT NULL)", cat)
+func createLogPropsCatalog(t *testing.T) *testcat.Catalog {
+	cat := testcat.New()
+	if _, err := cat.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cat.ExecuteDDL("CREATE TABLE b (x INT PRIMARY KEY, z INT NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
 	return cat
 }

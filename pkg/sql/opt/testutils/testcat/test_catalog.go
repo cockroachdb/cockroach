@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package testcat
 
 import (
 	"context"
@@ -20,22 +20,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// TestCatalog implements the opt.Catalog interface for testing purposes.
-type TestCatalog struct {
-	tables map[string]*TestTable
+// Catalog implements the opt.Catalog interface for testing purposes.
+type Catalog struct {
+	tables map[string]*Table
 }
 
-var _ opt.Catalog = &TestCatalog{}
+var _ opt.Catalog = &Catalog{}
 
-// NewTestCatalog creates a new empty instance of the test catalog.
-func NewTestCatalog() *TestCatalog {
-	return &TestCatalog{tables: make(map[string]*TestTable)}
+// New creates a new empty instance of the test catalog.
+func New() *Catalog {
+	return &Catalog{tables: make(map[string]*Table)}
 }
 
 const (
@@ -44,7 +45,7 @@ const (
 )
 
 // FindTable is part of the opt.Catalog interface.
-func (tc *TestCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
+func (tc *Catalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
 	toFind := *name
@@ -76,9 +77,9 @@ func (tc *TestCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt
 }
 
 // findTable checks if the table `toFind` exists among the tables in this
-// TestCatalog. If it does, findTable updates `name` to match `toFind`, and
+// Catalog. If it does, findTable updates `name` to match `toFind`, and
 // returns the corresponding table. Otherwise, it returns an error.
-func (tc *TestCatalog) findTable(toFind, name *tree.TableName) (opt.Table, error) {
+func (tc *Catalog) findTable(toFind, name *tree.TableName) (opt.Table, error) {
 	if table, ok := tc.tables[toFind.FQString()]; ok {
 		*name = *toFind
 		return table, nil
@@ -87,73 +88,99 @@ func (tc *TestCatalog) findTable(toFind, name *tree.TableName) (opt.Table, error
 }
 
 // Table returns the test table that was previously added with the given name.
-func (tc *TestCatalog) Table(name string) *TestTable {
+func (tc *Catalog) Table(name string) *Table {
 	tn := tree.MakeUnqualifiedTableName(tree.Name(name))
 	tab, err := tc.FindTable(context.TODO(), &tn)
 	if err != nil {
 		panic(fmt.Errorf("table %q is not in the test catalog", tree.ErrString((*tree.Name)(&name))))
 	}
-	return tab.(*TestTable)
+	return tab.(*Table)
 }
 
 // AddTable adds the given test table to the catalog.
-func (tc *TestCatalog) AddTable(tab *TestTable) {
+func (tc *Catalog) AddTable(tab *Table) {
 	tc.tables[tab.Name.FQString()] = tab
 }
 
-// TestTable implements the opt.Table interface for testing purposes.
-type TestTable struct {
-	Name    tree.TableName
-	Columns []*TestColumn
-	Indexes []*TestIndex
-	Stats   TestTableStats
+// ExecuteDDL parses the given DDL SQL statement and creates objects in the test
+// catalog. This is used to test without spinning up a cluster.
+func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
+	stmt, err := parser.ParseOne(sql)
+	if err != nil {
+		return "", err
+	}
+
+	if stmt.StatementType() != tree.DDL {
+		return "", fmt.Errorf("statement type is not DDL: %v", stmt.StatementType())
+	}
+
+	switch stmt := stmt.(type) {
+	case *tree.CreateTable:
+		tab := tc.CreateTable(stmt)
+		return tab.String(), nil
+
+	case *tree.AlterTable:
+		tc.AlterTable(stmt)
+		return "", nil
+
+	default:
+		return "", fmt.Errorf("expected CREATE TABLE statement but found: %v", stmt)
+	}
 }
 
-var _ opt.Table = &TestTable{}
+// Table implements the opt.Table interface for testing purposes.
+type Table struct {
+	Name    tree.TableName
+	Columns []*Column
+	Indexes []*Index
+	Stats   TableStats
+}
 
-func (tt *TestTable) String() string {
+var _ opt.Table = &Table{}
+
+func (tt *Table) String() string {
 	tp := treeprinter.New()
 	opt.FormatCatalogTable(tt, tp)
 	return tp.String()
 }
 
 // TabName is part of the opt.Table interface.
-func (tt *TestTable) TabName() opt.TableName {
+func (tt *Table) TabName() opt.TableName {
 	return opt.TableName(tt.Name.TableName)
 }
 
 // ColumnCount is part of the opt.Table interface.
-func (tt *TestTable) ColumnCount() int {
+func (tt *Table) ColumnCount() int {
 	return len(tt.Columns)
 }
 
 // Column is part of the opt.Table interface.
-func (tt *TestTable) Column(i int) opt.Column {
+func (tt *Table) Column(i int) opt.Column {
 	return tt.Columns[i]
 }
 
 // IndexCount is part of the opt.Table interface.
-func (tt *TestTable) IndexCount() int {
+func (tt *Table) IndexCount() int {
 	return len(tt.Indexes)
 }
 
 // Index is part of the opt.Table interface.
-func (tt *TestTable) Index(i int) opt.Index {
+func (tt *Table) Index(i int) opt.Index {
 	return tt.Indexes[i]
 }
 
 // StatisticCount is part of the opt.Table interface.
-func (tt *TestTable) StatisticCount() int {
+func (tt *Table) StatisticCount() int {
 	return len(tt.Stats)
 }
 
 // Statistic is part of the opt.Table interface.
-func (tt *TestTable) Statistic(i int) opt.TableStatistic {
+func (tt *Table) Statistic(i int) opt.TableStatistic {
 	return tt.Stats[i]
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
-func (tt *TestTable) FindOrdinal(name string) int {
+func (tt *Table) FindOrdinal(name string) int {
 	for i, col := range tt.Columns {
 		if col.Name == name {
 			return i
@@ -166,8 +193,8 @@ func (tt *TestTable) FindOrdinal(name string) int {
 	))
 }
 
-// TestIndex implements the opt.Index interface for testing purposes.
-type TestIndex struct {
+// Index implements the opt.Index interface for testing purposes.
+type Index struct {
 	Name    string
 	Columns []opt.IndexColumn
 
@@ -181,65 +208,65 @@ type TestIndex struct {
 }
 
 // IdxName is part of the opt.Index interface.
-func (ti *TestIndex) IdxName() string {
+func (ti *Index) IdxName() string {
 	return ti.Name
 }
 
 // ColumnCount is part of the opt.Index interface.
-func (ti *TestIndex) ColumnCount() int {
+func (ti *Index) ColumnCount() int {
 	return len(ti.Columns)
 }
 
 // UniqueColumnCount is part of the opt.Index interface.
-func (ti *TestIndex) UniqueColumnCount() int {
+func (ti *Index) UniqueColumnCount() int {
 	return ti.Unique
 }
 
 // Column is part of the opt.Index interface.
-func (ti *TestIndex) Column(i int) opt.IndexColumn {
+func (ti *Index) Column(i int) opt.IndexColumn {
 	return ti.Columns[i]
 }
 
-// TestColumn implements the opt.Column interface for testing purposes.
-type TestColumn struct {
+// Column implements the opt.Column interface for testing purposes.
+type Column struct {
 	Hidden   bool
 	Nullable bool
 	Name     string
 	Type     types.T
 }
 
-var _ opt.Column = &TestColumn{}
+var _ opt.Column = &Column{}
 
 // IsNullable is part of the opt.Column interface.
-func (tc *TestColumn) IsNullable() bool {
+func (tc *Column) IsNullable() bool {
 	return tc.Nullable
 }
 
 // ColName is part of the opt.Column interface.
-func (tc *TestColumn) ColName() opt.ColumnName {
+func (tc *Column) ColName() opt.ColumnName {
 	return opt.ColumnName(tc.Name)
 }
 
 // DatumType is part of the opt.Column interface.
-func (tc *TestColumn) DatumType() types.T {
+func (tc *Column) DatumType() types.T {
 	return tc.Type
 }
 
 // IsHidden is part of the opt.Column interface.
-func (tc *TestColumn) IsHidden() bool {
+func (tc *Column) IsHidden() bool {
 	return tc.Hidden
 }
 
-// TestTableStat implements the opt.TableStatistic interface for testing purposes.
-type TestTableStat struct {
+// TableStat implements the opt.TableStatistic interface for testing purposes.
+type TableStat struct {
 	js stats.JSONStatistic
-	tt *TestTable
+	tt *Table
 }
 
-var _ opt.TableStatistic = &TestTableStat{}
+var _ opt.TableStatistic = &TableStat{}
 
 // CreatedAt is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) CreatedAt() time.Time {
+func (ts *TableStat) CreatedAt() time.Time {
 	d, err := tree.ParseDTimestamp(ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
 		panic(err)
@@ -248,43 +275,43 @@ func (ts *TestTableStat) CreatedAt() time.Time {
 }
 
 // ColumnCount is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) ColumnCount() int {
+func (ts *TableStat) ColumnCount() int {
 	return len(ts.js.Columns)
 }
 
 // ColumnOrdinal is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) ColumnOrdinal(i int) int {
+func (ts *TableStat) ColumnOrdinal(i int) int {
 	return ts.tt.FindOrdinal(ts.js.Columns[i])
 }
 
 // RowCount is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) RowCount() uint64 {
+func (ts *TableStat) RowCount() uint64 {
 	return ts.js.RowCount
 }
 
 // DistinctCount is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) DistinctCount() uint64 {
+func (ts *TableStat) DistinctCount() uint64 {
 	return ts.js.DistinctCount
 }
 
 // NullCount is part of the opt.TableStatistic interface.
-func (ts *TestTableStat) NullCount() uint64 {
+func (ts *TableStat) NullCount() uint64 {
 	return ts.js.NullCount
 }
 
-// TestTableStats is a slice of TestTableStat pointers.
-type TestTableStats []*TestTableStat
+// TableStats is a slice of TableStat pointers.
+type TableStats []*TableStat
 
 // Len is part of the Sorter interface.
-func (ts TestTableStats) Len() int { return len(ts) }
+func (ts TableStats) Len() int { return len(ts) }
 
 // Less is part of the Sorter interface.
-func (ts TestTableStats) Less(i, j int) bool {
+func (ts TableStats) Less(i, j int) bool {
 	// Sort with most recent first.
 	return ts[i].CreatedAt().Unix() > ts[j].CreatedAt().Unix()
 }
 
 // Swap is part of the Sorter interface.
-func (ts TestTableStats) Swap(i, j int) {
+func (ts TableStats) Swap(i, j int) {
 	ts[i], ts[j] = ts[j], ts[i]
 }

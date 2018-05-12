@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package testutils
+package testcat
 
 import (
 	gojson "encoding/json"
@@ -30,7 +30,7 @@ import (
 // Supported commands:
 //  - INJECT STATISTICS: imports table statistics from a JSON object.
 //
-func (tc *TestCatalog) AlterTable(stmt *tree.AlterTable) {
+func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 	tn, err := stmt.Table.Normalize()
 	if err != nil {
 		panic(err)
@@ -56,7 +56,7 @@ func (tc *TestCatalog) AlterTable(stmt *tree.AlterTable) {
 }
 
 // injectTableStats sets the table statistics as specified by a JSON object.
-func injectTableStats(tt *TestTable, statsExpr tree.Expr) {
+func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
@@ -78,9 +78,9 @@ func injectTableStats(tt *TestTable, statsExpr tree.Expr) {
 	if err := gojson.Unmarshal([]byte(jsonStr), &stats); err != nil {
 		panic(err)
 	}
-	tt.Stats = make([]*TestTableStat, len(stats))
+	tt.Stats = make([]*TableStat, len(stats))
 	for i := range stats {
-		tt.Stats[i] = &TestTableStat{js: stats[i], tt: tt}
+		tt.Stats[i] = &TableStat{js: stats[i], tt: tt}
 	}
 	// Call ColumnOrdinal on all possible columns to assert that
 	// the column names are valid.

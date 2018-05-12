@@ -484,20 +484,18 @@ SELECT * FROM a WHERE (SELECT SUM(column1) FROM (VALUES (k), (1))) = 1
 project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
- └── inner-join-apply
+ └── select
       ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) column7:7(decimal!null)
       ├── keys: (1)
-      ├── scan a
-      │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
-      │    └── keys: (1)
-      ├── select
-      │    ├── columns: column7:7(decimal!null)
-      │    ├── outer: (1)
-      │    ├── cardinality: [0 - 1]
-      │    ├── group-by
-      │    │    ├── columns: column7:7(decimal)
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [1 - 1]
+      ├── group-by
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) column7:7(decimal)
+      │    ├── grouping columns: a.k:1(int!null)
+      │    ├── keys: (1)
+      │    ├── inner-join-apply
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) column1:6(int)
+      │    │    ├── scan a
+      │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+      │    │    │    └── keys: (1)
       │    │    ├── values
       │    │    │    ├── columns: column1:6(int)
       │    │    │    ├── outer: (1)
@@ -506,14 +504,22 @@ project
       │    │    │    │    └── variable: a.k [type=int, outer=(1)]
       │    │    │    └── tuple [type=tuple{int}]
       │    │    │         └── const: 1 [type=int]
-      │    │    └── aggregations [outer=(6)]
-      │    │         └── sum [type=decimal, outer=(6)]
-      │    │              └── variable: column1 [type=int, outer=(6)]
-      │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
-      │         └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
-      │              ├── variable: column7 [type=decimal, outer=(7)]
-      │              └── const: 1 [type=decimal]
-      └── true [type=bool]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(2-6)]
+      │         ├── sum [type=decimal, outer=(6)]
+      │         │    └── variable: column1 [type=int, outer=(6)]
+      │         ├── any-not-null [type=int, outer=(2)]
+      │         │    └── variable: a.i [type=int, outer=(2)]
+      │         ├── any-not-null [type=float, outer=(3)]
+      │         │    └── variable: a.f [type=float, outer=(3)]
+      │         ├── any-not-null [type=string, outer=(4)]
+      │         │    └── variable: a.s [type=string, outer=(4)]
+      │         └── any-not-null [type=jsonb, outer=(5)]
+      │              └── variable: a.j [type=jsonb, outer=(5)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+           └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+                ├── variable: column7 [type=decimal, outer=(7)]
+                └── const: 1 [type=decimal]
 
 # Don't simplify right join
 opt

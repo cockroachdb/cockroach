@@ -128,10 +128,16 @@ func (b *rulePropsBuilder) buildJoinProps(ev memo.ExprView) {
 	rightProps := ev.Child(1).Logical().Relational
 	onProps := ev.Child(2).Logical().Scalar
 
-	// Any pruneable columns from the left or right inputs can potentially be
-	// pruned, as long as they're not used by the right input (i.e. in Apply
-	// case) or by the join filter.
-	relational.Rule.PruneCols = leftProps.Rule.PruneCols.Union(rightProps.Rule.PruneCols)
+	// Any pruneable columns from projected inputs can potentially be pruned, as
+	// long as they're not used by the right input (i.e. in Apply case) or by
+	// the join filter.
+	switch ev.Operator() {
+	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
+		relational.Rule.PruneCols = leftProps.Rule.PruneCols.Copy()
+
+	default:
+		relational.Rule.PruneCols = leftProps.Rule.PruneCols.Union(rightProps.Rule.PruneCols)
+	}
 	relational.Rule.PruneCols.DifferenceWith(rightProps.OuterCols)
 	relational.Rule.PruneCols.DifferenceWith(onProps.OuterCols)
 }
