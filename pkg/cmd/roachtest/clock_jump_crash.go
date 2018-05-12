@@ -88,7 +88,7 @@ func registerClockJump(r *registry) {
 		},
 		{
 			name:             "small_forward_enabled",
-			offset:           150 * time.Millisecond,
+			offset:           100 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
