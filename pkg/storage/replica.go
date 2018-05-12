@@ -2942,12 +2942,13 @@ func (r *Replica) evaluateProposal(
 	if pErr != nil {
 		pErr = r.maybeSetCorrupt(ctx, pErr)
 
-		// Restore the original txn's Writing bool if the error specifies
-		// a transaction.
-		if txn := pErr.GetTxn(); txn != nil {
-			if ba.Txn == nil {
-				log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
-			}
+		txn := pErr.GetTxn()
+		if txn != nil && ba.Txn == nil {
+			log.Fatalf(ctx, "error had a txn but batch is non-transactional. Err txn: %s", txn)
+		}
+		if txn != nil && !r.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
+			// Restore the original txn's Writing bool if the error specifies a
+			// transaction.
 			if txn.ID == ba.Txn.ID {
 				txn.Writing = ba.Txn.Writing
 			}
@@ -5229,12 +5230,14 @@ func (r *Replica) evaluateWriteBatch(
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
 			(retryLocally && !isEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
 			clonedTxn := ba.Txn.Clone()
-			clonedTxn.Writing = true
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
 			// timestamp. This can be different if the stripped batch was
 			// executed at the server's hlc now timestamp.
 			clonedTxn.Timestamp = br.Timestamp
+			if !r.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
+				clonedTxn.Writing = true
+			}
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
 			if !etArg.Commit {

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -48,6 +49,9 @@ func declareKeysBeginTransaction(
 ) {
 	DeclareKeysWriteTransaction(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{
+		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+	})
 }
 
 // BeginTransaction writes the initial transaction record. Fails in
@@ -130,7 +134,10 @@ func BeginTransaction(
 	// we bump the record's heartbeat timestamp right before laying it down.
 	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
+	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {
+		reply.Txn.Writing = true
+	}
+
 	// Write the txn record.
-	reply.Txn.Writing = true
 	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
 }
