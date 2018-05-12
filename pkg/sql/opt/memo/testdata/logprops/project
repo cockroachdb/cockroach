@@ -35,12 +35,10 @@ project
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
-      ├── variable: xysd.y [type=int, outer=(2)]
       ├── plus [type=int, outer=(1)]
       │    ├── variable: xysd.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      ├── const: 1 [type=int]
-      └── variable: xysd.x [type=int, outer=(1)]
+      └── const: 1 [type=int]
 
 build
 SELECT s FROM xysd
@@ -48,12 +46,10 @@ SELECT s FROM xysd
 project
  ├── columns: s:3(string)
  ├── stats: [rows=1000]
- ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
- └── projections [outer=(3)]
-      └── variable: xysd.s [type=string, outer=(3)]
+ └── scan xysd
+      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      ├── stats: [rows=1000]
+      └── keys: (1) weak(3,4)
 
 # Propagate outer columns.
 build
@@ -102,12 +98,10 @@ select
       │                                  ├── outer: (2)
       │                                  ├── cardinality: [1 - 1]
       │                                  ├── stats: [rows=1]
-      │                                  ├── values
-      │                                  │    ├── cardinality: [1 - 1]
-      │                                  │    ├── stats: [rows=1]
-      │                                  │    └── tuple [type=tuple{}]
-      │                                  └── projections [outer=(2)]
-      │                                       └── variable: xysd.y [type=int, outer=(2)]
+      │                                  └── values
+      │                                       ├── cardinality: [1 - 1]
+      │                                       ├── stats: [rows=1]
+      │                                       └── tuple [type=tuple{}]
       └── const: 5 [type=int]
 
 # Pass through cardinality.
@@ -119,19 +113,16 @@ project
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── keys: (1)
- ├── limit
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
- │    ├── cardinality: [0 - 10]
- │    ├── stats: [rows=10]
- │    ├── keys: (1) weak(3,4)
- │    ├── scan xysd
- │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (1) weak(3,4)
- │    └── const: 10 [type=int]
- └── projections [outer=(1,2)]
-      ├── variable: xysd.x [type=int, outer=(1)]
-      └── variable: xysd.y [type=int, outer=(2)]
+ └── limit
+      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=10]
+      ├── keys: (1) weak(3,4)
+      ├── scan xysd
+      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (1) weak(3,4)
+      └── const: 10 [type=int]
 
 # Constant null and not-null columns.
 build

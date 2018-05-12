@@ -102,12 +102,10 @@ project
                      │    ├── columns: xyzs.x:1(int)
                      │    ├── outer: (1)
                      │    ├── stats: [rows=1000]
-                     │    ├── scan kuv
-                     │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
-                     │    │    ├── stats: [rows=1000]
-                     │    │    └── keys: (5)
-                     │    └── projections [outer=(1)]
-                     │         └── variable: xyzs.x [type=int, outer=(1)]
+                     │    └── scan kuv
+                     │         ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+                     │         ├── stats: [rows=1000]
+                     │         └── keys: (5)
                      └── variable: xyzs.y [type=int, outer=(2)]
 
 # Reduce cardinality of input set.
@@ -135,12 +133,10 @@ offset
  │    │    │    ├── columns: xyzs.x:1(int!null)
  │    │    │    ├── stats: [rows=1000]
  │    │    │    ├── keys: (1)
- │    │    │    ├── scan xyzs
- │    │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
- │    │    │    │    ├── stats: [rows=1000]
- │    │    │    │    └── keys: (1) weak(3,4)
- │    │    │    └── projections [outer=(1)]
- │    │    │         └── variable: xyzs.x [type=int, outer=(1)]
+ │    │    │    └── scan xyzs
+ │    │    │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    │    │         ├── stats: [rows=1000]
+ │    │    │         └── keys: (1) weak(3,4)
  │    │    └── const: 10 [type=int]
  │    └── values
  │         ├── columns: column1:5(int)

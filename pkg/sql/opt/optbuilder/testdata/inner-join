@@ -33,74 +33,58 @@ SELECT * FROM a, b
 ----
 project
  ├── columns: x:1(int!null) y:2(float) x:3(int) y:4(float)
- ├── inner-join
- │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) b.rowid:5(int!null)
- │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.y:2(float)
- │    ├── scan b
- │    │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
- │    └── true [type=bool]
- └── projections
-      ├── variable: a.x [type=int]
-      ├── variable: a.y [type=float]
-      ├── variable: b.x [type=int]
-      └── variable: b.y [type=float]
+ └── inner-join
+      ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) b.rowid:5(int!null)
+      ├── scan a
+      │    └── columns: a.x:1(int!null) a.y:2(float)
+      ├── scan b
+      │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
+      └── true [type=bool]
 
 build
 SELECT a.x, b.y FROM a, b WHERE a.x = b.x
 ----
 project
  ├── columns: x:1(int!null) y:4(float)
- ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int!null) b.y:4(float) b.rowid:5(int!null)
- │    ├── inner-join
- │    │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) b.rowid:5(int!null)
- │    │    ├── scan a
- │    │    │    └── columns: a.x:1(int!null) a.y:2(float)
- │    │    ├── scan b
- │    │    │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
- │    │    └── true [type=bool]
- │    └── eq [type=bool]
- │         ├── variable: a.x [type=int]
- │         └── variable: b.x [type=int]
- └── projections
-      ├── variable: a.x [type=int]
-      └── variable: b.y [type=float]
+ └── select
+      ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int!null) b.y:4(float) b.rowid:5(int!null)
+      ├── inner-join
+      │    ├── columns: a.x:1(int!null) a.y:2(float) b.x:3(int) b.y:4(float) b.rowid:5(int!null)
+      │    ├── scan a
+      │    │    └── columns: a.x:1(int!null) a.y:2(float)
+      │    ├── scan b
+      │    │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
+      │    └── true [type=bool]
+      └── eq [type=bool]
+           ├── variable: a.x [type=int]
+           └── variable: b.x [type=int]
 
 build
 SELECT * FROM c, b, a WHERE c.x = a.x AND b.x = a.x
 ----
 project
  ├── columns: x:1(int!null) y:2(float) z:3(string) x:5(int!null) y:6(float) x:8(int!null) y:9(float)
- ├── select
- │    ├── columns: c.x:1(int!null) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int!null) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
- │    ├── inner-join
- │    │    ├── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
- │    │    ├── inner-join
- │    │    │    ├── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null)
- │    │    │    ├── scan c
- │    │    │    │    └── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null)
- │    │    │    ├── scan b
- │    │    │    │    └── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null)
- │    │    │    └── true [type=bool]
- │    │    ├── scan a
- │    │    │    └── columns: a.x:8(int!null) a.y:9(float)
- │    │    └── true [type=bool]
- │    └── and [type=bool]
- │         ├── eq [type=bool]
- │         │    ├── variable: c.x [type=int]
- │         │    └── variable: a.x [type=int]
- │         └── eq [type=bool]
- │              ├── variable: b.x [type=int]
- │              └── variable: a.x [type=int]
- └── projections
-      ├── variable: c.x [type=int]
-      ├── variable: c.y [type=float]
-      ├── variable: c.z [type=string]
-      ├── variable: b.x [type=int]
-      ├── variable: b.y [type=float]
-      ├── variable: a.x [type=int]
-      └── variable: a.y [type=float]
+ └── select
+      ├── columns: c.x:1(int!null) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int!null) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
+      ├── inner-join
+      │    ├── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null) a.x:8(int!null) a.y:9(float)
+      │    ├── inner-join
+      │    │    ├── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null) b.x:5(int) b.y:6(float) b.rowid:7(int!null)
+      │    │    ├── scan c
+      │    │    │    └── columns: c.x:1(int) c.y:2(float) c.z:3(string) c.rowid:4(int!null)
+      │    │    ├── scan b
+      │    │    │    └── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null)
+      │    │    └── true [type=bool]
+      │    ├── scan a
+      │    │    └── columns: a.x:8(int!null) a.y:9(float)
+      │    └── true [type=bool]
+      └── and [type=bool]
+           ├── eq [type=bool]
+           │    ├── variable: c.x [type=int]
+           │    └── variable: a.x [type=int]
+           └── eq [type=bool]
+                ├── variable: b.x [type=int]
+                └── variable: a.x [type=int]
 
 exec-ddl
 CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)

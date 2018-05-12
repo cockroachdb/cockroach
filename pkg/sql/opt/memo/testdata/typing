@@ -31,10 +31,8 @@ SELECT a.x FROM a
 ----
 project
  ├── columns: x:1(int!null)
- ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
- └── projections
-      └── variable: a.x [type=int]
+ └── scan a
+      └── columns: a.x:1(int!null) a.y:2(int)
 
 # Const
 build
@@ -71,10 +69,9 @@ project
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections
-      ├── tuple [type=tuple{int, decimal}]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 1.5 [type=decimal]
-      └── variable: a.y [type=int]
+      └── tuple [type=tuple{int, decimal}]
+           ├── variable: a.x [type=int]
+           └── const: 1.5 [type=decimal]
 
 # And, Or, Not
 build
@@ -453,11 +450,9 @@ group-by
  │    ├── scan b
  │    │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  │    └── projections
- │         ├── variable: b.z [type=decimal]
  │         ├── eq [type=bool]
  │         │    ├── variable: b.z [type=decimal]
  │         │    └── const: 0 [type=decimal]
- │         ├── variable: b.x [type=string]
  │         ├── cast: int [type=int]
  │         │    └── variable: b.x [type=string]
  │         ├── cast: jsonb [type=jsonb]
