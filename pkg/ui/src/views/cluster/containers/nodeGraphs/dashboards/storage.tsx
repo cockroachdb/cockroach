@@ -112,6 +112,19 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="RocksDB Compactions/Flushes"
+      sources={storeSources}
+      tooltip={
+        `The number of RocksDB compactions and memtable flushes, per second ${tooltipSelection}.`
+      }
+    >
+      <Axis label="count">
+        <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
+        <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
       tooltip={
