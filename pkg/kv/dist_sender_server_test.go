@@ -1950,31 +1950,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				return txn.InitPut(ctx, "a", "put", false) // put to advance txn ts
+				return txn.InitPut(ctx, "a", "put", false /* failOnTombstones */) // put to advance txn ts
 			},
-		},
-		{
-			name: "forwarded timestamp with get and initput value exists",
-			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "a", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				_, err := db.Get(ctx, "a") // read key to set ts cache
-				return err
-			},
-			retryable: func(ctx context.Context, txn *client.Txn) error {
-				err := txn.InitPut(ctx, "a", "init-put", false) // init-put to advance txn ts
-				// Swallow expected condition failed error.
-				if _, ok := err.(*roachpb.ConditionFailedError); !ok {
-					if err != nil {
-						return errors.New("expected condition failed error")
-					}
-					return err
-				}
-				log.Infof(ctx, "Swallowed error")
-				return nil
-			},
-			// No retries, this is a straight failure.
 		},
 		{
 			name: "forwarded timestamp with get and cput",
