@@ -325,7 +325,9 @@ func (r *registry) Run(filter []string) int {
 			r.status.Unlock()
 
 		case <-sig:
-			destroyAllClusters()
+			if !debug {
+				destroyAllClusters()
+			}
 		}
 	}
 }
