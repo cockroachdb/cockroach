@@ -124,7 +124,7 @@ func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
 		return "", nil
 
 	default:
-		return "", fmt.Errorf("expected CREATE TABLE statement but found: %v", stmt)
+		return "", fmt.Errorf("expected CREATE TABLE or ALTER TABLE statement but found: %v", stmt)
 	}
 }
 

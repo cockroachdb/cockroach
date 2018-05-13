@@ -51,6 +51,21 @@ func TestRules(t *testing.T) {
 	)
 }
 
+// TestExternal contains test cases from external customers and external
+// benchmarks (like TPCH), so that changes in their query plans can be monitored
+// over time.
+//
+// TestExternal files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
+//   ...
+func TestExternal(t *testing.T) {
+	runDataDrivenTest(
+		t,
+		"testdata/external/",
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps,
+	)
+}
+
 // runDataDrivenTest runs data-driven testcases of the form
 //   <command>
 //   <SQL statement>
