@@ -102,9 +102,17 @@ func (q *consistencyQueue) process(
 	if q.interval() <= 0 {
 		return nil
 	}
+
+	// We only need this variable in the `pErr != nil` branch below, but for
+	// better testing coverage it was moved here.
+	var shouldQuiesce bool
+	select {
+	case <-repl.store.Stopper().ShouldQuiesce():
+		shouldQuiesce = true
+	}
+
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
-		_, shouldQuiesce := <-repl.store.Stopper().ShouldQuiesce()
 		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the
 			// server is quiescing.
