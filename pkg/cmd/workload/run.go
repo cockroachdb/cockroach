@@ -25,7 +25,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"testing"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -76,13 +75,21 @@ func init() {
 			genFlags = f.Flags().FlagSet
 		}
 
-		genInitCmd := setCmdDefaults(&cobra.Command{Use: meta.Name, Short: meta.Description})
+		genInitCmd := setCmdDefaults(&cobra.Command{
+			Use:   meta.Name,
+			Short: meta.Description,
+			Args:  cobra.ArbitraryArgs,
+		})
 		genInitCmd.Flags().AddFlagSet(initFlags)
 		genInitCmd.Flags().AddFlagSet(genFlags)
 		genInitCmd.Run = cmdHelper(gen, runInit)
 		initCmd.AddCommand(genInitCmd)
 
-		genRunCmd := setCmdDefaults(&cobra.Command{Use: meta.Name, Short: meta.Description})
+		genRunCmd := setCmdDefaults(&cobra.Command{
+			Use:   meta.Name,
+			Short: meta.Description,
+			Args:  cobra.ArbitraryArgs,
+		})
 		genRunCmd.Flags().AddFlagSet(runFlags)
 		genRunCmd.Flags().AddFlagSet(genFlags)
 		initFlags.VisitAll(func(initFlag *pflag.Flag) {
@@ -372,8 +379,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
 				})
 			}
-			result := testing.BenchmarkResult{N: int(resultTick.Ops), T: startElapsed}
-			fmt.Printf("\n%s\t%s\n", benchmarkName, result)
 
 			if *histFile == "-" {
 				if err := histwriter.WriteDistribution(
