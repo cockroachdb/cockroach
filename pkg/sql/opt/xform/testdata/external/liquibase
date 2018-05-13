@@ -1,0 +1,270 @@
+exec-ddl
+CREATE TABLE pg_class (
+    oid oid PRIMARY KEY,
+    relname text NOT NULL,
+    relnamespace oid NOT NULL,
+    reltype oid NOT NULL,
+    relowner oid NOT NULL,
+    relam oid NOT NULL,
+    relfilenode oid NOT NULL,
+    reltablespace oid NOT NULL,
+    relpages bigint NOT NULL,
+    reltuples double precision NOT NULL,
+    relallvisible bigint NOT NULL,
+    reltoastrelid oid NOT NULL,
+    relhasindex boolean NOT NULL,
+    relisshared boolean NOT NULL,
+    relpersistence text NOT NULL,
+    relistemp boolean NOT NULL,
+    relkind text NOT NULL,
+    relnatts bigint NOT NULL,
+    relchecks bigint NOT NULL,
+    relhasoids boolean NOT NULL,
+    relhaspkey boolean NOT NULL,
+    relhasrules boolean NOT NULL,
+    relhastriggers boolean NOT NULL,
+    relhassubclass boolean NOT NULL,
+    relfrozenxid bigint NOT NULL,
+    relacl text[],
+    reloptions text[],
+    UNIQUE INDEX pg_class_relname_nsp_index (relname, relnamespace),
+    INDEX pg_class_tblspc_relfilenode_index (reltablespace, relfilenode)
+);
+----
+TABLE pg_class
+ ├── oid oid not null
+ ├── relname string not null
+ ├── relnamespace oid not null
+ ├── reltype oid not null
+ ├── relowner oid not null
+ ├── relam oid not null
+ ├── relfilenode oid not null
+ ├── reltablespace oid not null
+ ├── relpages int not null
+ ├── reltuples float not null
+ ├── relallvisible int not null
+ ├── reltoastrelid oid not null
+ ├── relhasindex bool not null
+ ├── relisshared bool not null
+ ├── relpersistence string not null
+ ├── relistemp bool not null
+ ├── relkind string not null
+ ├── relnatts int not null
+ ├── relchecks int not null
+ ├── relhasoids bool not null
+ ├── relhaspkey bool not null
+ ├── relhasrules bool not null
+ ├── relhastriggers bool not null
+ ├── relhassubclass bool not null
+ ├── relfrozenxid int not null
+ ├── relacl string[]
+ ├── reloptions string[]
+ ├── INDEX primary
+ │    └── oid oid not null
+ ├── INDEX pg_class_relname_nsp_index
+ │    ├── relname string not null
+ │    ├── relnamespace oid not null
+ │    └── oid oid not null (storing)
+ └── INDEX pg_class_tblspc_relfilenode_index
+      ├── reltablespace oid not null
+      ├── relfilenode oid not null
+      └── oid oid not null
+
+exec-ddl
+CREATE TABLE pg_namespace (
+    oid oid PRIMARY KEY,
+    nspname text NOT NULL,
+    nspowner oid NOT NULL,
+    nspacl text[],
+    UNIQUE INDEX pg_namespace_nspname_index (nspname)
+);
+----
+TABLE pg_namespace
+ ├── oid oid not null
+ ├── nspname string not null
+ ├── nspowner oid not null
+ ├── nspacl string[]
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_namespace_nspname_index
+      ├── nspname string not null
+      └── oid oid not null (storing)
+
+exec-ddl
+CREATE TABLE pg_tablespace (
+    oid oid PRIMARY KEY,
+    spcname text NOT NULL,
+    spcowner oid NOT NULL,
+    spclocation text NOT NULL,
+    spcacl text[],
+    spcoptions text[],
+    UNIQUE INDEX pg_tablespace_spcname_index (spcname)
+);
+----
+TABLE pg_tablespace
+ ├── oid oid not null
+ ├── spcname string not null
+ ├── spcowner oid not null
+ ├── spclocation string not null
+ ├── spcacl string[]
+ ├── spcoptions string[]
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_tablespace_spcname_index
+      ├── spcname string not null
+      └── oid oid not null (storing)
+
+exec-ddl
+CREATE TABLE pg_inherits (
+    inhrelid oid NOT NULL,
+    inhparent oid NOT NULL,
+    inhseqno bigint NOT NULL,
+    PRIMARY KEY (inhrelid, inhseqno),
+    INDEX pg_inherits_parent_index (inhparent)
+);
+----
+TABLE pg_inherits
+ ├── inhrelid oid not null
+ ├── inhparent oid not null
+ ├── inhseqno int not null
+ ├── INDEX primary
+ │    ├── inhrelid oid not null
+ │    └── inhseqno int not null
+ └── INDEX pg_inherits_parent_index
+      ├── inhparent oid not null
+      ├── inhrelid oid not null
+      └── inhseqno int not null
+
+exec-ddl
+CREATE TABLE pg_index (
+    indexrelid oid PRIMARY KEY,
+    indrelid oid NOT NULL,
+    indnatts bigint NOT NULL,
+    indisunique boolean NOT NULL,
+    indisprimary boolean NOT NULL,
+    indisexclusion boolean NOT NULL,
+    indimmediate boolean NOT NULL,
+    indisclustered boolean NOT NULL,
+    indisvalid boolean NOT NULL,
+    indcheckxmin boolean NOT NULL,
+    indisready boolean NOT NULL,
+    indislive boolean NOT NULL,
+    indisreplident boolean NOT NULL,
+    indkey bigint[] NOT NULL,
+    indcollation bigint NOT NULL,
+    indclass bigint NOT NULL,
+    indoption bigint NOT NULL,
+    indexprs text,
+    indpred text,
+    INDEX pg_index_indrelid_index (indrelid)
+)
+----
+TABLE pg_index
+ ├── indexrelid oid not null
+ ├── indrelid oid not null
+ ├── indnatts int not null
+ ├── indisunique bool not null
+ ├── indisprimary bool not null
+ ├── indisexclusion bool not null
+ ├── indimmediate bool not null
+ ├── indisclustered bool not null
+ ├── indisvalid bool not null
+ ├── indcheckxmin bool not null
+ ├── indisready bool not null
+ ├── indislive bool not null
+ ├── indisreplident bool not null
+ ├── indkey int[] not null
+ ├── indcollation int not null
+ ├── indclass int not null
+ ├── indoption int not null
+ ├── indexprs string
+ ├── indpred string
+ ├── INDEX primary
+ │    └── indexrelid oid not null
+ └── INDEX pg_index_indrelid_index
+      ├── indrelid oid not null
+      └── indexrelid oid not null
+
+exec-ddl
+CREATE TABLE pg_foreign_table (
+    ftrelid oid PRIMARY KEY,
+    ftserver oid NOT NULL,
+    ftoptions text[]
+);
+----
+TABLE pg_foreign_table
+ ├── ftrelid oid not null
+ ├── ftserver oid not null
+ ├── ftoptions string[]
+ └── INDEX primary
+      └── ftrelid oid not null
+
+exec-ddl
+CREATE TABLE pg_foreign_server (
+    oid oid PRIMARY KEY,
+    srvname text NOT NULL,
+    srvowner oid NOT NULL,
+    srvfdw oid NOT NULL,
+    srvtype text,
+    srvversion text,
+    srvacl text[],
+    srvoptions text[],
+    UNIQUE INDEX pg_foreign_server_name_index (srvname)
+);
+----
+TABLE pg_foreign_server
+ ├── oid oid not null
+ ├── srvname string not null
+ ├── srvowner oid not null
+ ├── srvfdw oid not null
+ ├── srvtype string
+ ├── srvversion string
+ ├── srvacl string[]
+ ├── srvoptions string[]
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_foreign_server_name_index
+      ├── srvname string not null
+      └── oid oid not null (storing)
+
+# TODO(andyk): Enable once subquery data source name resolution bug is fixed.
+#opt
+#SELECT c.oid,
+#       n.nspname AS schemaname,
+#       c.relname AS tablename,
+#       c.relacl,
+#       pg_get_userbyid(c.relowner) AS tableowner,
+#       obj_description(c.oid) AS description,
+#       c.relkind,
+#       ci.relname AS CLUSTER,
+#       c.relhasoids AS hasoids,
+#       c.relhasindex AS hasindexes,
+#       c.relhasrules AS hasrules,
+#       t.spcname AS TABLESPACE,
+#       c.reloptions AS param,
+#       c.relhastriggers AS hastriggers,
+#       c.relpersistence AS unlogged,
+#       ft.ftoptions,
+#       fs.srvname,
+#       c.reltuples,
+#       (
+#          (SELECT count(*)
+#           FROM pg_inherits
+#           WHERE inhparent = c.oid) > 0) AS inhtable,
+#       i2.nspname AS inhschemaname,
+#       i2.relname AS inhtablename
+#FROM pg_class AS c
+#LEFT JOIN pg_namespace AS n ON n.oid = c.relnamespace
+#LEFT JOIN pg_tablespace AS t ON t.oid = c.reltablespace
+#LEFT JOIN (pg_inherits AS i
+#           INNER JOIN pg_class AS c2 ON i.inhparent = c2.oid
+#           LEFT JOIN pg_namespace AS n2 ON n2.oid = c2.relnamespace) AS i2 ON i2.inhrelid = c.oid
+#LEFT JOIN pg_index AS ind ON (ind.indrelid = c.oid)
+#AND (ind.indisclustered = 't')
+#LEFT JOIN pg_class AS ci ON ci.oid = ind.indexrelid
+#LEFT JOIN pg_foreign_table AS ft ON ft.ftrelid = c.oid
+#LEFT JOIN pg_foreign_server AS fs ON ft.ftserver = fs.oid
+#WHERE ((c.relkind = 'r'::CHAR)
+#       OR (c.relkind = 'f'::CHAR))
+#  AND (n.nspname = 'public')
+#----
