@@ -105,7 +105,7 @@ project
       ├── stats: [rows=1000, distinct(2,3)=1000]
       ├── keys: weak(2,3)
       ├── project
-      │    ├── columns: xyzs.z:3(float!null) xyzs.y:2(int)
+      │    ├── columns: xyzs.y:2(int) xyzs.z:3(float!null)
       │    ├── stats: [rows=1000, distinct(2,3)=1000]
       │    └── scan xyzs
       │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
@@ -183,7 +183,7 @@ select
       │                   ├── stats: [rows=700, distinct(6)=700]
       │                   ├── keys: weak(6)
       │                   ├── project
-      │                   │    ├── columns: kuv.u:6(float) xyzs.x:1(int)
+      │                   │    ├── columns: xyzs.x:1(int) kuv.u:6(float)
       │                   │    ├── outer: (1,2)
       │                   │    ├── stats: [rows=1000, distinct(6)=700]
       │                   │    └── project

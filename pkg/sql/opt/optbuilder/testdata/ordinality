@@ -85,7 +85,7 @@ sort
  ├── columns: ordinality:5(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: ordinality:5(int!null) abcd.a:1(int!null)
+      ├── columns: abcd.a:1(int!null) ordinality:5(int!null)
       └── row-number
            ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
            └── scan abcd

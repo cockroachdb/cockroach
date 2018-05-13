@@ -178,6 +178,27 @@ func (ps *privateStorage) internFuncOpDef(def *FuncOpDef) PrivateID {
 	return ps.addValue(privateKey{iface: def.Overload}, def)
 }
 
+// internProjectionsOpDef adds the given value to storage and returns an id
+// that can later be used to retrieve the value by calling the lookup method. If
+// the value has been previously added to storage, then internProjectionsOpDef
+// always returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internProjectionsOpDef(def *ProjectionsOpDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeColList(def.SynthesizedCols)
+	// Add a separator between the list and the set. Note that the column IDs
+	// cannot be 0.
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writeColSet(def.PassthroughCols)
+
+	typ := (*ProjectionsOpDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
 // internScanOpDef adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internScanOpDef always

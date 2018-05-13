@@ -305,13 +305,13 @@ render               ·         ·          (a, b, c)                       ·
  │                   render 0  "t.a"      ·                               ·
  │                   render 1  "t.b"      ·                               ·
  │                   render 2  "t.c"      ·                               ·
- └── sort            ·         ·          ("t.a", "t.b", "t.c", column4)  +column4
+ └── sort            ·         ·          (column4, "t.a", "t.b", "t.c")  +column4
       │              order     +column4   ·                               ·
-      └── render     ·         ·          ("t.a", "t.b", "t.c", column4)  ·
-           │         render 0  a          ·                               ·
-           │         render 1  b          ·                               ·
-           │         render 2  c          ·                               ·
-           │         render 3  3          ·                               ·
+      └── render     ·         ·          (column4, "t.a", "t.b", "t.c")  ·
+           │         render 0  3          ·                               ·
+           │         render 1  a          ·                               ·
+           │         render 2  b          ·                               ·
+           │         render 3  c          ·                               ·
            └── scan  ·         ·          (a, b, c)                       ·
 ·                    table     t@primary  ·                               ·
 ·                    spans     ALL        ·                               ·
@@ -337,13 +337,13 @@ render               ·         ·              (a, b, c)                       
  │                   render 0  "t.a"          ·                               ·
  │                   render 1  "t.b"          ·                               ·
  │                   render 2  "t.c"          ·                               ·
- └── sort            ·         ·              ("t.a", "t.b", "t.c", column4)  +column4
+ └── sort            ·         ·              (column4, "t.a", "t.b", "t.c")  +column4
       │              order     +column4       ·                               ·
-      └── render     ·         ·              ("t.a", "t.b", "t.c", column4)  ·
-           │         render 0  a              ·                               ·
-           │         render 1  b              ·                               ·
-           │         render 2  c              ·                               ·
-           │         render 3  length('abc')  ·                               ·
+      └── render     ·         ·              (column4, "t.a", "t.b", "t.c")  ·
+           │         render 0  length('abc')  ·                               ·
+           │         render 1  a              ·                               ·
+           │         render 2  b              ·                               ·
+           │         render 3  c              ·                               ·
            └── scan  ·         ·              (a, b, c)                       ·
 ·                    table     t@primary      ·                               ·
 ·                    spans     ALL            ·                               ·

@@ -161,10 +161,10 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 	inputProps := ev.childGroup(0).logical.Relational
 	projectionProps := ev.childGroup(1).logical.Scalar
 	projections := ev.Child(1)
-	projectionColList := projections.Private().(opt.ColList)
+	projectionsDef := ev.Child(1).Private().(*ProjectionsOpDef)
 
 	// Use output columns from projection list.
-	logical.Relational.OutputCols = opt.ColListToSet(projectionColList)
+	logical.Relational.OutputCols = projectionsDef.AllCols()
 
 	// Inherit not null columns from input, but only use those that are also
 	// output columns.
@@ -177,7 +177,7 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 		child := projections.Child(i)
 		if child.IsConstValue() {
 			if ExtractConstDatum(child) != tree.DNull {
-				logical.Relational.NotNullCols.Add(int(projectionColList[i]))
+				logical.Relational.NotNullCols.Add(int(projectionsDef.SynthesizedCols[i]))
 			}
 		}
 	}
@@ -574,6 +574,11 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 			if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
 				logical.Scalar.HasCorrelatedSubquery = true
 			}
+		}
+
+		// For a ProjectionsOp, the passthrough cols are also outer cols.
+		if ev.Operator() == opt.ProjectionsOp {
+			logical.Scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
 		}
 	}
 

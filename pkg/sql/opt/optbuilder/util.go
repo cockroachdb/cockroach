@@ -120,36 +120,6 @@ func (b *Builder) synthesizeColumn(
 	return &scope.cols[len(scope.cols)-1]
 }
 
-// constructList invokes the factory to create one of the operators that contain
-// a list of groups: ProjectionsOp and AggregationsOp.
-func (b *Builder) constructList(op opt.Operator, cols []scopeColumn) memo.GroupID {
-	colList := make(opt.ColList, 0, len(cols))
-	itemList := make([]memo.GroupID, 0, len(cols))
-
-	// Deduplicate the lists. We only need to project each column once.
-	colSet := opt.ColSet{}
-	for i := range cols {
-		id := cols[i].id
-		if !colSet.Contains(int(id)) {
-			colList = append(colList, id)
-			itemList = append(itemList, cols[i].group)
-			colSet.Add(int(id))
-		}
-	}
-
-	list := b.factory.InternList(itemList)
-	private := b.factory.InternColList(colList)
-
-	switch op {
-	case opt.ProjectionsOp:
-		return b.factory.ConstructProjections(list, private)
-	case opt.AggregationsOp:
-		return b.factory.ConstructAggregations(list, private)
-	}
-
-	panic(fmt.Sprintf("unexpected operator: %s", op))
-}
-
 // colIndex takes an expression that refers to a column using an integer,
 // verifies it refers to a valid target in the SELECT list, and returns the
 // corresponding column index. For example:

@@ -202,7 +202,16 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		out = b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.FuncExpr:
-		out, _ = b.buildFunction(t, "", inScope)
+		group, col := b.buildFunction(t, "", inScope)
+		if group != 0 {
+			out = group
+		} else {
+			// Aggregate functions don't have a group - they are produced by an
+			// underlying GroupBy; construct a VariableOp. This is necessary in the
+			// case when the aggregation is part of a more complex expression, e.g.
+			//   SELECT 2*MIN(k) FROM kv
+			out = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+		}
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {

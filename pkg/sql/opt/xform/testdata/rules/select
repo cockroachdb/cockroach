@@ -99,16 +99,15 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
  │         └── cost: 333.00
- ├── G3: (projections G6)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan a,cols=(1,3))
  │         └── cost: 1000.00
- ├── G5: (filters G7)
- ├── G6: (variable a.k)
- ├── G7: (gt G8 G9)
- ├── G8: (variable a.v)
- └── G9: (const 1)
+ ├── G5: (filters G6)
+ ├── G6: (gt G7 G8)
+ ├── G7: (variable a.v)
+ └── G8: (const 1)
 
 opt
 SELECT k FROM a WHERE u = 1 AND k = 5
@@ -133,7 +132,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
  │         └── cost: 1.00
- ├── G3: (projections G10)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -184,7 +183,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.01
- ├── G3: (projections G12)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -232,29 +231,28 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.01
- ├── G3: (projections G10)
+ ├── G3: (projections a.k)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1000.00
- ├── G5: (filters G12 G11)
+ ├── G5: (filters G11 G10)
  ├── G6: (scan a@u,constrained)
  │    └── ""
  │         ├── best: (scan a@u,constrained)
  │         └── cost: 1.00
- ├── G7: (filters G11)
+ ├── G7: (filters G10)
  ├── G8: (scan a@v,constrained)
  │    └── ""
  │         ├── best: (scan a@v,constrained)
  │         └── cost: 1.00
- ├── G9: (filters G12)
- ├── G10: (variable a.k)
- ├── G11: (eq G13 G14)
- ├── G12: (eq G15 G16)
- ├── G13: (variable a.v)
- ├── G14: (const 5)
- ├── G15: (variable a.u)
- └── G16: (const 1)
+ ├── G9: (filters G11)
+ ├── G10: (eq G12 G13)
+ ├── G11: (eq G14 G15)
+ ├── G12: (variable a.v)
+ ├── G13: (const 5)
+ ├── G14: (variable a.u)
+ └── G15: (const 1)
 
 # Only not-null constraint is pushed down.
 opt

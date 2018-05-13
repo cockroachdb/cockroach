@@ -40,17 +40,31 @@ func (f FuncOpDef) String() string {
 	return f.Name
 }
 
-// LookupJoinDef defines the value of the Def private field of the LookupJoin
-// operator.
-type LookupJoinDef struct {
-	// Table identifies the table do to lookups in. The primary index is
-	// currently the only index used.
-	Table opt.TableID
+// ProjectionsOpDef defines the value of the Def private field of the
+// Projections operator. It contains information about the projected columns.
+type ProjectionsOpDef struct {
+	// SynthesizedCols is a list of columns that matches 1-to-1 with Elems in
+	// the ProjectionsOp.
+	SynthesizedCols opt.ColList
 
-	// Cols is the set of columns the index join outputs. The set of columns
-	// which must be retrieved from the primary index is thus Cols minus the set
-	// of columns provided by the input.
-	Cols opt.ColSet
+	// PassthroughCols are columns that are projected unchanged. Passthrough
+	// columns must be produced by the input (they can't be outer columns). Outer
+	// column refs must be wrapped in VariableOp, with a new ColumnID in
+	// SynthesizedCols.
+	PassthroughCols opt.ColSet
+}
+
+// AllCols returns the set of all columns in the projection (synthesized and
+// pass-through).
+func (p ProjectionsOpDef) AllCols() opt.ColSet {
+	if len(p.SynthesizedCols) == 0 {
+		return p.PassthroughCols
+	}
+	s := p.PassthroughCols.Copy()
+	for _, c := range p.SynthesizedCols {
+		s.Add(int(c))
+	}
+	return s
 }
 
 // ScanOpDef defines the value of the Def private field of the Scan operator.
@@ -107,6 +121,19 @@ func (s *ScanOpDef) CanProvideOrdering(md *opt.Metadata, required props.Ordering
 		}
 	}
 	return true
+}
+
+// LookupJoinDef defines the value of the Def private field of the LookupJoin
+// operator.
+type LookupJoinDef struct {
+	// Table identifies the table do to lookups in. The primary index is
+	// currently the only index used.
+	Table opt.TableID
+
+	// Cols is the set of columns the index join outputs. The set of columns
+	// which must be retrieved from the primary index is thus Cols minus the set
+	// of columns provided by the input.
+	Cols opt.ColSet
 }
 
 // ExplainOpDef defines the value of the Def private field of the Explain operator.

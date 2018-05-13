@@ -217,7 +217,7 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 			b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
 		}
 		b.buildOrderBy(orderBy, outScope, projectionsScope)
-		b.constructProject(outScope, projectionsScope)
+		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
 	}
 
@@ -253,7 +253,7 @@ func (b *Builder) buildSelectClause(
 	}
 
 	// Construct the projection.
-	b.constructProject(outScope, projectionsScope)
+	b.constructProjectForScope(outScope, projectionsScope)
 	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.

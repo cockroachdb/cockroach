@@ -81,23 +81,20 @@ k:int  v:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-render                         ·            ·          (column4)         ·
- │                             render 0     column4    ·                 ·
- └── render                    ·            ·          (column4, "t.v")  ·
-      │                        render 0     agg0       ·                 ·
-      │                        render 1     v          ·                 ·
-      └── limit                ·            ·          (k, v, agg0)      -v
-           │                   count        10         ·                 ·
-           └── sort            ·            ·          (k, v, agg0)      -v
-                │              order        -v         ·                 ·
-                └── group      ·            ·          (k, v, agg0)      ·
-                     │         aggregate 0  k          ·                 ·
-                     │         aggregate 1  v          ·                 ·
-                     │         aggregate 2  sum(w)     ·                 ·
-                     │         group by     @1-@2      ·                 ·
-                     └── scan  ·            ·          (k, v, w)         ·
-·                              table        t@primary  ·                 ·
-·                              spans        ALL        ·                 ·
+render                    ·            ·          (column4)     ·
+ │                        render 0     agg0       ·             ·
+ └── limit                ·            ·          (k, v, agg0)  -v
+      │                   count        10         ·             ·
+      └── sort            ·            ·          (k, v, agg0)  -v
+           │              order        -v         ·             ·
+           └── group      ·            ·          (k, v, agg0)  ·
+                │         aggregate 0  k          ·             ·
+                │         aggregate 1  v          ·             ·
+                │         aggregate 2  sum(w)     ·             ·
+                │         group by     @1-@2      ·             ·
+                └── scan  ·            ·          (k, v, w)     ·
+·                         table        t@primary  ·             ·
+·                         spans        ALL        ·             ·
 
 exec
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10

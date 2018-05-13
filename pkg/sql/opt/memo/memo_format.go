@@ -36,6 +36,16 @@ type memoFormatter struct {
 	numbering []GroupID
 }
 
+// formatMode controls the formatting depending on the context.
+type formatMode int8
+
+const (
+	// formatNormal is used when we are printing expressions.
+	formatNormal formatMode = iota
+	// formatMemo is used when we are printing the memo.
+	formatMemo
+)
+
 func (m *Memo) makeExprFormatter(buf *bytes.Buffer) exprFormatter {
 	return exprFormatter{
 		mem: m,
@@ -111,7 +121,7 @@ func (f *memoFormatter) formatExpr(e *Expr) {
 	for i := 0; i < e.ChildCount(); i++ {
 		fmt.Fprintf(f.buf, " G%d", f.numbering[e.ChildGroup(f.mem, i)])
 	}
-	f.formatPrivate(e.Private(f.mem))
+	f.formatPrivate(e.Private(f.mem), formatMemo)
 	f.buf.WriteString(")")
 }
 
@@ -178,7 +188,7 @@ func (f *memoFormatter) formatBestExpr(be *BestExpr) {
 		}
 	}
 
-	f.formatPrivate(be.Private(f.mem))
+	f.formatPrivate(be.Private(f.mem), formatMemo)
 	f.buf.WriteString(")")
 }
 
@@ -252,7 +262,7 @@ func (f *memoFormatter) computeIndegrees(id GroupID, reachable []bool, indegrees
 	})
 }
 
-func (f exprFormatter) formatPrivate(private interface{}) {
+func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
 	if private != nil {
 		switch t := private.(type) {
 		case nil:
@@ -279,6 +289,15 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 
 		case opt.ColSet, opt.ColList:
 			// Don't show anything, because it's mostly redundant.
+
+		case *ProjectionsOpDef:
+			// In normal mode, the information is mostly redundant. It is helpful to
+			// display these columns in memo mode though.
+			if mode == formatMemo {
+				t.PassthroughCols.ForEach(func(i int) {
+					fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(opt.ColumnID(i)))
+				})
+			}
 
 		default:
 			fmt.Fprintf(f.buf, " %s", private)

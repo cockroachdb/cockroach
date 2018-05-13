@@ -192,8 +192,7 @@ func (b *Builder) buildSubqueryProjection(
 		texpr := tree.NewTypedTuple(cols)
 		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups))
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
-		p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
-		out = b.factory.ConstructProject(out, p)
+		out = b.constructProject(out, []scopeColumn{*col})
 	}
 
 	return out, outScope

@@ -167,7 +167,7 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1
  └── project
-      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── columns: t.a:1(int!null) t.b:2(int)
       └── scan t
            └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
@@ -178,7 +178,7 @@ limit
  ├── columns: b:2(int)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.b:2(int) t.a:1(int!null)
+ │    ├── columns: t.a:1(int!null) t.b:2(int)
  │    ├── ordering: +1
  │    └── scan t
  │         ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
@@ -192,7 +192,7 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1,+2
  └── project
-      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── columns: t.a:1(int!null) t.b:2(int)
       └── scan t
            └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
@@ -203,7 +203,7 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1,-2
  └── project
-      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── columns: t.a:1(int!null) t.b:2(int)
       └── scan t
            └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
@@ -289,7 +289,7 @@ sort
  ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
  ├── ordering: -4,+1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int!null) ab:4(int)
+      ├── columns: ab:4(int) t.a:1(int!null) t.b:2(int!null)
       ├── select
       │    ├── columns: t.a:1(int!null) t.b:2(int!null) t.c:3(bool)
       │    ├── scan t
@@ -309,7 +309,7 @@ sort
  ├── columns: a:1(int!null)
  ├── ordering: -4,+1
  └── project
-      ├── columns: t.a:1(int!null) column4:4(int)
+      ├── columns: column4:4(int) t.a:1(int!null)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
@@ -443,7 +443,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int!null)
+      ├── columns: column4:4(int!null) t.a:1(int!null) t.b:2(int) t.c:3(bool)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
@@ -469,7 +469,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
+      ├── columns: column4:4(int) t.a:1(int!null) t.b:2(int) t.c:3(bool)
       ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections
@@ -560,7 +560,7 @@ sort
  ├── columns: d:4(string)
  ├── ordering: +5
  └── project
-      ├── columns: abc.d:4(string) column5:5(string)
+      ├── columns: column5:5(string) abc.d:4(string)
       ├── scan abc
       │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
       └── projections
@@ -689,7 +689,7 @@ sort
  ├── columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: abc.b:2(int!null) abc.c:3(int!null) abc.a:1(int!null)
+      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
       └── select
            ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
            ├── scan abc

@@ -245,7 +245,7 @@ intersect
  │         ├── stats: [rows=5000, distinct(1,2)=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.x:4(int!null) b.rowid:7(int!null)
+      ├── columns: b.x:4(int!null) b.z:5(int!null) b.rowid:7(int!null)
       ├── stats: [rows=2, distinct(4,5,7)=2]
       ├── keys: (7)
       └── select
@@ -277,7 +277,7 @@ intersect-all
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.x:4(int!null) b.rowid:7(int!null)
+      ├── columns: b.x:4(int!null) b.z:5(int!null) b.rowid:7(int!null)
       ├── stats: [rows=2]
       ├── keys: (7)
       └── select

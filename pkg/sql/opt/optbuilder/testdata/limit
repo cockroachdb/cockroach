@@ -133,7 +133,7 @@ limit
  │    ├── columns: t.v:2(int) column4:4(decimal)
  │    ├── ordering: -2
  │    └── project
- │         ├── columns: column4:4(decimal) t.v:2(int)
+ │         ├── columns: t.v:2(int) column4:4(decimal)
  │         └── group-by
  │              ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
  │              ├── grouping columns: t.k:1(int!null) t.v:2(int)

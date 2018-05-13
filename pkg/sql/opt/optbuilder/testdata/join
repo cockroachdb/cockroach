@@ -299,7 +299,7 @@ sort
  ├── columns: s:5(int) x:1(int) x:3(int)
  ├── ordering: +5
  └── project
-      ├── columns: x:5(int) onecolumn.x:1(int) othercolumn.x:3(int)
+      ├── columns: onecolumn.x:1(int) othercolumn.x:3(int) x:5(int)
       └── project
            ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
            ├── full-join
@@ -1101,7 +1101,7 @@ sort
  ├── columns: s:1(int) x:4(int) x:7(int) y:2(int) y:5(int) y:8(int)
  ├── ordering: +1
  └── project
-      ├── columns: twocolumn.x:1(int) twocolumn.x:4(int) twocolumn.x:7(int) twocolumn.y:2(int) twocolumn.y:5(int) twocolumn.y:8(int)
+      ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.x:7(int) twocolumn.y:8(int)
       └── inner-join
            ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
            ├── inner-join
@@ -1282,7 +1282,7 @@ sort
  ├── columns: k:2(int) u:1(int) w:4(int)
  ├── ordering: +1
  └── project
-      ├── columns: column2:2(int) column1:1(int) column2:4(int)
+      ├── columns: column1:1(int) column2:2(int) column2:4(int)
       └── inner-join
            ├── columns: column1:1(int) column2:2(int) column1:3(int) column2:4(int)
            ├── values
@@ -1377,7 +1377,7 @@ project
  └── select
       ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int!null) sum:6(int!null)
       ├── project
-      │    ├── columns: pairs.a:1(int) pairs.b:2(int) sum:6(int) square.n:4(int!null) square.sq:5(int)
+      │    ├── columns: sum:6(int) pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int)
       │    ├── inner-join
       │    │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
       │    │    ├── scan pairs
@@ -2051,7 +2051,7 @@ SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 project
  ├── columns: a:3(int!null) s:5(collatedstring{en_u_ks_level1})
  └── project
-      ├── columns: str2.a:3(int!null) s:5(collatedstring{en_u_ks_level1}) str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.s:4(collatedstring{en_u_ks_level1})
+      ├── columns: s:5(collatedstring{en_u_ks_level1}) str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
       ├── right-join
       │    ├── columns: str1.a:1(int) str1.s:2(collatedstring{en_u_ks_level1}) str2.a:3(int!null) str2.s:4(collatedstring{en_u_ks_level1})
       │    ├── scan str1

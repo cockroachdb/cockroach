@@ -120,7 +120,7 @@ project
       ├── stats: [rows=600, distinct(2-4)=600]
       ├── keys: weak(3,4)
       ├── project
-      │    ├── columns: a.y:2(int) a.z:3(float!null) a.s:4(string) a.x:1(int!null)
+      │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
       │    ├── stats: [rows=2000, distinct(2-4)=600]
       │    ├── keys: (1) weak(3,4)
       │    └── scan a
@@ -143,7 +143,7 @@ project
       ├── stats: [rows=2000, distinct(2,3)=2000]
       ├── keys: weak(2,3)
       ├── project
-      │    ├── columns: a.y:2(int) a.z:3(float!null) a.x:1(int!null)
+      │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
       │    ├── stats: [rows=2000, distinct(2,3)=2000]
       │    ├── keys: (1)
       │    └── scan a
@@ -170,7 +170,7 @@ project
       │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
       │    ├── keys: weak(3,4)
       │    ├── project
-      │    │    ├── columns: a.y:2(int) a.z:3(float!null) a.s:4(string) a.x:1(int!null)
+      │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null) a.s:4(string)
       │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
       │    │    ├── keys: (1) weak(3,4)
       │    │    └── scan a
@@ -204,7 +204,7 @@ project
       │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
       │    ├── keys: weak(4)
       │    ├── project
-      │    │    ├── columns: a.s:4(string) a.x:1(int!null)
+      │    │    ├── columns: a.x:1(int!null) a.s:4(string)
       │    │    ├── stats: [rows=2000, distinct(4)=10]
       │    │    ├── keys: (1)
       │    │    └── scan a
