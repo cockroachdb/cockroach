@@ -214,7 +214,7 @@ func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range s.cols {
 		col := &s.cols[i]
-		if exprStr == col.getExprStr() {
+		if expr == col || exprStr == col.getExprStr() {
 			return col
 		}
 	}
