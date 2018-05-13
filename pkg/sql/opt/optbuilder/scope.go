@@ -76,15 +76,26 @@ func (s *scope) replace() *scope {
 }
 
 // appendColumns adds newly bound variables to this scope.
+// The groups in the new columns are reset to 0.
 func (s *scope) appendColumns(src *scope) {
+	l := len(s.cols)
 	s.cols = append(s.cols, src.cols...)
+	// We want to reset the groups, as these become pass-through columns in the
+	// new scope.
+	for i := l; i < len(s.cols); i++ {
+		s.cols[i].group = 0
+	}
 }
 
 // appendColumn adds a new column to the scope with an optional new label.
-// It returns a pointer to the new column.
+// It returns a pointer to the new column.  The group in the new column is reset
+// to 0.
 func (s *scope) appendColumn(col *scopeColumn, label string) *scopeColumn {
 	s.cols = append(s.cols, *col)
 	newCol := &s.cols[len(s.cols)-1]
+	// We want to reset the group, as this becomes a pass-through column in the
+	// new scope.
+	newCol.group = 0
 	if label != "" {
 		newCol.name = tree.Name(label)
 	}

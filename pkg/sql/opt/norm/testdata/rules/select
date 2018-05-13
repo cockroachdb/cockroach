@@ -205,7 +205,7 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE div=2
 select
  ├── columns: i:2(int) div:6(decimal!null) f:3(float)
  ├── project
- │    ├── columns: a.i:2(int) div:6(decimal) a.f:3(float)
+ │    ├── columns: div:6(decimal) a.i:2(int) a.f:3(float)
  │    ├── scan a
  │    │    └── columns: a.i:2(int) a.f:3(float)
  │    └── projections [outer=(2,3)]
@@ -224,7 +224,7 @@ SELECT * FROM (SELECT i, i/2 div, f FROM a) a WHERE 10.0=f AND 2=div AND i=1
 select
  ├── columns: i:2(int!null) div:6(decimal!null) f:3(float!null)
  ├── project
- │    ├── columns: a.i:2(int!null) div:6(decimal) a.f:3(float!null)
+ │    ├── columns: div:6(decimal) a.i:2(int!null) a.f:3(float!null)
  │    ├── select
  │    │    ├── columns: a.i:2(int!null) a.f:3(float!null)
  │    │    ├── scan a

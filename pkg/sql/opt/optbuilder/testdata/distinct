@@ -294,7 +294,7 @@ group-by
  ├── columns: column4:4(float) column5:5(int) column6:6(int!null)
  ├── grouping columns: column4:4(float) column5:5(int) column6:6(int!null)
  └── project
-      ├── columns: column4:4(float) column5:5(int) column6:6(int!null)
+      ├── columns: column5:5(int) column6:6(int!null) column4:4(float)
       ├── select
       │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) column4:4(float)
       │    ├── group-by
@@ -349,7 +349,7 @@ sort
       ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
       ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
       └── project
-           ├── columns: column5:5(int!null) abcd.d:4(int!null) abcd.b:2(int!null)
+           ├── columns: column5:5(int!null) abcd.b:2(int!null) abcd.d:4(int!null)
            ├── scan abcd
            │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
            └── projections

@@ -806,7 +806,7 @@ project
  ├── inner-join-apply
  │    ├── columns: a.s:4(string) scalar:9(decimal) case:12(bool)
  │    ├── project
- │    │    ├── columns: a.s:4(string) scalar:9(decimal)
+ │    │    ├── columns: scalar:9(decimal) a.s:4(string)
  │    │    ├── scan a
  │    │    │    └── columns: a.i:2(int) a.s:4(string)
  │    │    └── projections [outer=(2,4)]

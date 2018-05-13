@@ -76,7 +76,7 @@ project
  ├── columns: column6:6(int) k:1(int!null)
  ├── keys: (1)
  ├── project
- │    ├── columns: a.k:1(int!null) l:5(int)
+ │    ├── columns: l:5(int) a.k:1(int!null)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.s:4(string)
@@ -236,7 +236,7 @@ project
  └── select
       ├── columns: a.i:2(int) f:5(float!null)
       ├── project
-      │    ├── columns: a.i:2(int) f:5(float)
+      │    ├── columns: f:5(float) a.i:2(int)
       │    ├── scan a
       │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
       │    │    ├── constraint: /1: [/5 - /5]
@@ -974,7 +974,7 @@ group-by
  ├── grouping columns: a.i:2(int) a.s:4(string)
  ├── keys: weak(2,4)
  ├── project
- │    ├── columns: a.s:4(string) a.i:2(int) column5:5(int)
+ │    ├── columns: column5:5(int) a.i:2(int) a.s:4(string)
  │    ├── scan a
  │    │    └── columns: a.i:2(int) a.s:4(string)
  │    └── projections [outer=(2,4)]

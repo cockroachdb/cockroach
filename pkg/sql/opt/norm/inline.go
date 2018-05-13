@@ -43,6 +43,17 @@ func (f *Factory) hasDuplicateRefs(target memo.GroupID) bool {
 			return false
 		}
 
+		if expr.Operator() == opt.ProjectionsOp {
+			// Process the pass-through columns, in addition to the children.
+			def := expr.Private(f.mem).(*memo.ProjectionsOpDef)
+			for i, ok := def.PassthroughCols.Next(0); ok; i, ok = def.PassthroughCols.Next(i + 1) {
+				if refs.Contains(i) {
+					return true
+				}
+				refs.Add(i)
+			}
+		}
+
 		for i := 0; i < expr.ChildCount(); i++ {
 			if countRefs(expr.ChildGroup(f.mem, i)) {
 				return true
@@ -84,7 +95,7 @@ func (f *Factory) canInline(group memo.GroupID) bool {
 func (f *Factory) inlineProjections(target, projections memo.GroupID) memo.GroupID {
 	projectionsExpr := f.mem.NormExpr(projections).AsProjections()
 	projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
-	projectionsColList := f.extractColList(projectionsExpr.Cols())
+	projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
 
 	// Recursively walk the tree looking for references to projection expressions
 	// that need to be replaced.
@@ -93,7 +104,7 @@ func (f *Factory) inlineProjections(target, projections memo.GroupID) memo.Group
 		varExpr := f.mem.NormExpr(child).AsVariable()
 		if varExpr != nil {
 			varColID := f.extractColID(varExpr.Col())
-			for i, id := range projectionsColList {
+			for i, id := range projectionsDef.SynthesizedCols {
 				if varColID == id {
 					return projectionsElems[i]
 				}

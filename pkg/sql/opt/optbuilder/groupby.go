@@ -142,6 +142,38 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
 	return false
 }
 
+func (b *Builder) constructGroupBy(
+	input memo.GroupID, groupingColSet opt.ColSet, cols []scopeColumn,
+) memo.GroupID {
+	colList := make(opt.ColList, 0, len(cols))
+	groupList := make([]memo.GroupID, 0, len(cols))
+
+	// Deduplicate the columns; we don't need to produce the same aggregation
+	// multiple times.
+	colSet := opt.ColSet{}
+	for i := range cols {
+		if id, group := cols[i].id, cols[i].group; !colSet.Contains(int(id)) {
+			if group == 0 {
+				// A "pass through" column (i.e. a VariableOp) is not legal as an
+				// aggregation.
+				panic("variable as aggregation")
+			}
+			colList = append(colList, id)
+			groupList = append(groupList, group)
+			colSet.Add(int(id))
+		}
+	}
+
+	return b.factory.ConstructGroupBy(
+		input,
+		b.factory.ConstructAggregations(
+			b.factory.InternList(groupList),
+			b.factory.InternColList(colList),
+		),
+		b.factory.InternColSet(groupingColSet),
+	)
+}
+
 // buildAggregation builds the pre-projection and the aggregation operators.
 // Returns:
 //  - the output scope for the aggregation operation.
@@ -212,7 +244,7 @@ func (b *Builder) buildAggregation(
 
 	// Construct the pre-projection, which renders the grouping columns and the
 	// aggregate arguments.
-	b.constructProject(fromScope, aggInScope)
+	b.constructProjectForScope(fromScope, aggInScope)
 
 	// Construct the aggregation operators.
 	aggCols := aggOutScope.getAggregateCols()
@@ -227,12 +259,16 @@ func (b *Builder) buildAggregation(
 		aggCols[i].group = constructAggLookup[agg.def.Name](b.factory, argList)
 	}
 
-	aggList := b.constructList(opt.AggregationsOp, aggCols)
 	var groupingColSet opt.ColSet
 	for i := range groupings {
 		groupingColSet.Add(int(aggInScope.cols[i].id))
 	}
-	aggOutScope.group = b.factory.ConstructGroupBy(aggInScope.group, aggList, b.factory.InternColSet(groupingColSet))
+
+	aggOutScope.group = b.constructGroupBy(
+		aggInScope.group,
+		groupingColSet,
+		aggCols,
+	)
 
 	// Wrap with having filter if it exists.
 	if having != 0 {
@@ -320,7 +356,8 @@ func (b *Builder) buildGrouping(
 }
 
 // buildAggregateFunction is called when we are building a function which is an
-// aggregate.
+// aggregate. Returns an aggOutScope column that contains the result of the
+// aggregation.
 func (b *Builder) buildAggregateFunction(
 	f *tree.FuncExpr, funcDef memo.FuncOpDef, label string, inScope *scope,
 ) *scopeColumn {
@@ -359,6 +396,9 @@ func (b *Builder) buildAggregateFunction(
 			pexpr.(tree.TypedExpr), "" /* label */, inScope, aggInScope,
 		)
 		info.args[i] = col.group
+		if info.args[i] == 0 {
+			info.args[i] = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+		}
 	}
 
 	inScope.endAggFunc()
@@ -383,9 +423,6 @@ func (b *Builder) buildAggregateFunction(
 			col.name = tree.Name(label)
 		}
 	}
-
-	// Replace the function call with a reference to the column.
-	col.group = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 	return col
 }
 

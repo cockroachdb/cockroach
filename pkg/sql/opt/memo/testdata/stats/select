@@ -160,7 +160,7 @@ project
       ├── stats: [rows=99, distinct(2)=99]
       ├── keys: (2)
       ├── project
-      │    ├── columns: b.z:2(int!null) b.x:1(int!null)
+      │    ├── columns: b.x:1(int!null) b.z:2(int!null)
       │    ├── stats: [rows=2000, distinct(2)=99]
       │    └── select
       │         ├── columns: b.x:1(int!null) b.z:2(int!null) b.rowid:3(int!null)

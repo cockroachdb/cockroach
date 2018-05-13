@@ -58,13 +58,14 @@ define Select {
 
 # Project modifies the set of columns returned by the input result set. Columns
 # can be removed, reordered, or renamed. In addition, new columns can be
-# synthesized. Projections is a scalar Projections list operator that contains
-# the list of expressions that describe the output columns. The Cols field of
-# the Projections operator provides the indexes of each of the output columns.
+# synthesized.
+# Projections is a scalar Projections list operator that contains information
+# about the projected columns and any expressions that describe newly
+# synthesized output columns.
 [Relational]
 define Project {
-    Input       Expr
-    Projections Expr
+    Input           Expr
+    Projections     Expr
 }
 
 # InnerJoin creates a result set that combines columns from its left and right

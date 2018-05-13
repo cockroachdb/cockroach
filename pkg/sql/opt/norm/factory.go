@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
@@ -130,6 +131,18 @@ func (f *Factory) Metadata() *opt.Metadata {
 	return f.mem.Metadata()
 }
 
+// ConstructSimpleProject is a convenience wrapper for calling
+// ConstructProject when there are no synthesized columns.
+func (f *Factory) ConstructSimpleProject(
+	input memo.GroupID, passthroughCols opt.ColSet,
+) memo.GroupID {
+	def := memo.ProjectionsOpDef{PassthroughCols: passthroughCols}
+	return f.ConstructProject(
+		input,
+		f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def)),
+	)
+}
+
 // InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.
@@ -140,6 +153,12 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
+	// RaceEnabled ensures that checks are run on every change (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	// TODO(radu): replace this with a flag that is true for all tests.
+	if util.RaceEnabled {
+		f.checkExpr(e)
+	}
 	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
 	f.props.buildProps(memo.MakeNormExprView(f.mem, group))
 	return group
@@ -370,19 +389,17 @@ func (f *Factory) outputCols(group memo.GroupID) opt.ColSet {
 		return f.lookupRelational(group).OutputCols
 	}
 
-	// Handle columns projected by Aggregations and Projections operators.
-	var colList memo.PrivateID
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.AggregationsOp:
-		colList = expr.AsAggregations().Cols()
+		return opt.ColListToSet(f.extractColList(expr.AsAggregations().Cols()))
+
 	case opt.ProjectionsOp:
-		colList = expr.AsProjections().Cols()
+		return f.mem.LookupPrivate(expr.AsProjections().Def()).(*memo.ProjectionsOpDef).AllCols()
+
 	default:
 		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.Operator()))
 	}
-
-	return opt.ColListToSet(f.extractColList(colList))
 }
 
 // outerCols returns the set of outer columns associated with the given group,
@@ -467,22 +484,15 @@ func (f *Factory) hasCorrelatedSubquery(group memo.GroupID) bool {
 // columns in the given "in" expression, and then adds the given "extra"
 // expression as an additional column.
 func (f *Factory) projectExtraCol(in, extra memo.GroupID, extraID opt.ColumnID) memo.GroupID {
-	// Start with existing columns.
-	inCols := f.outputCols(in)
-	elems := make([]memo.GroupID, 0, inCols.Len()+1)
-	outCols := make(opt.ColList, 0, len(elems))
-	inCols.ForEach(func(i int) {
-		elems = append(elems, f.ConstructVariable(f.mem.InternColumnID(opt.ColumnID(i))))
-		outCols = append(outCols, opt.ColumnID(i))
-	})
-
-	// Append the extra column.
-	elems = append(elems, extra)
-	outCols = append(outCols, extraID)
-
 	return f.ConstructProject(
 		in,
-		f.ConstructProjections(f.InternList(elems), f.InternColList(outCols)),
+		f.ConstructProjections(
+			f.InternList([]memo.GroupID{extra}),
+			f.InternProjectionsOpDef(&memo.ProjectionsOpDef{
+				PassthroughCols: f.outputCols(in),
+				SynthesizedCols: opt.ColList{extraID},
+			}),
+		),
 	)
 }
 

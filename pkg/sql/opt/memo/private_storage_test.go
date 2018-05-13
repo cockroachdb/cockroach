@@ -83,6 +83,60 @@ func TestInternColList(t *testing.T) {
 	test(opt.ColList{1, 2}, opt.ColList{1, 2, 3}, false)
 }
 
+func TestInternProjectionsOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	defs := [...]ProjectionsOpDef{
+		1: {PassthroughCols: util.MakeFastIntSet(1, 2)},
+		2: {PassthroughCols: util.MakeFastIntSet(2, 1)},
+		3: {SynthesizedCols: opt.ColList{1, 2}},
+		4: {SynthesizedCols: opt.ColList{5, 6, 7}},
+		5: {SynthesizedCols: opt.ColList{5, 7, 6}},
+		6: {
+			SynthesizedCols: opt.ColList{5, 6, 7},
+			PassthroughCols: util.MakeFastIntSet(1, 2),
+		},
+		7: {
+			SynthesizedCols: opt.ColList{5, 6, 7},
+			PassthroughCols: util.MakeFastIntSet(2, 1),
+		},
+		8: {
+			SynthesizedCols: opt.ColList{5, 7, 6},
+			PassthroughCols: util.MakeFastIntSet(1, 2),
+		},
+		9: {
+			SynthesizedCols: opt.ColList{5, 6, 7},
+			PassthroughCols: util.MakeFastIntSet(1, 3),
+		},
+		10: {
+			SynthesizedCols: opt.ColList{5, 6, 7},
+			PassthroughCols: util.MakeFastIntSet(8),
+		},
+		11: {
+			SynthesizedCols: opt.ColList{5, 6},
+			PassthroughCols: util.MakeFastIntSet(7, 8),
+		},
+	}
+
+	// These are the pairs that are equal. Any other pairs are not equal.
+	equalPairs := map[[2]int]bool{
+		{1, 2}: true,
+		{6, 7}: true,
+	}
+
+	for i := 1; i < len(defs); i++ {
+		for j := i; j < len(defs); j++ {
+			expected := (i == j) || equalPairs[[2]int{i, j}]
+			leftID := ps.internProjectionsOpDef(&defs[i])
+			rightID := ps.internProjectionsOpDef(&defs[j])
+			if (leftID == rightID) != expected {
+				t.Errorf("%v == %v, expected %v, got %v", defs[i], defs[j], expected, !expected)
+			}
+		}
+	}
+}
+
 func TestInternScanOpDef(t *testing.T) {
 	var ps privateStorage
 	ps.init()
@@ -287,6 +341,10 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		Type:     types.String,
 		Overload: &builtins.Builtins["concat"][0],
 	}
+	projectionsOpDef := &ProjectionsOpDef{
+		SynthesizedCols: colList,
+		PassthroughCols: colSet,
+	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
@@ -298,6 +356,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
+		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internSetOpColMap(setOpColMap)
@@ -321,6 +380,10 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		Type:     types.String,
 		Overload: &builtins.Builtins["concat"][0],
 	}
+	projectionsOpDef := &ProjectionsOpDef{
+		SynthesizedCols: colList,
+		PassthroughCols: colSet,
+	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
 	indexJoinDef := &LookupJoinDef{Table: 1, Cols: colSet}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
@@ -335,6 +398,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
 		ps.internFuncOpDef(funcOpDef)
+		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internLookupJoinDef(indexJoinDef)
 		ps.internSetOpColMap(setOpColMap)
