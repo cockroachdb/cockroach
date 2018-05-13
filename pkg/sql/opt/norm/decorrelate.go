@@ -276,16 +276,6 @@ func (f *Factory) hoistCorrelatedScalarGroupBy(left, input, aggs memo.GroupID) m
 		outColList = append(outColList, opt.ColumnID(i))
 	})
 
-	join := f.ConstructLeftJoinApply(
-		left,
-		input,
-		f.ConstructTrue(),
-	)
-	if f.outputCols(join).Len() == 0 {
-		fmt.Println(memo.MakeNormExprView(f.mem, join))
-		panic("here")
-	}
-
 	return f.ConstructGroupBy(
 		f.ConstructLeftJoinApply(
 			left,
