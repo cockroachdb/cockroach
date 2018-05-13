@@ -86,6 +86,16 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 	addrStr := strings.Join(c.InternalAddr(ctx, c.Range(1, roachNodeCount)), ",")
 
 	m := newMonitor(ctx, c, roachNodes)
+	{
+		// Kill one node at a time, with a minute of healthy cluster and thirty
+		// seconds of down node.
+		ch := Chaos{
+			Timer:    Periodic{Down: 30 * time.Second, Up: time.Minute},
+			Target:   roachNodes.randNode,
+			Duration: dur,
+		}
+		m.Go(ch.Runner(c, m))
+	}
 	m.Go(func(ctx context.Context) error {
 		// Sqlapp logs are very noisy - so noisy that if not directed to /dev/null
 		// they often have the effect of slowing down the test so much that it
