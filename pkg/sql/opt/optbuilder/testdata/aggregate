@@ -2698,3 +2698,52 @@ build
 SELECT SUM(abc.d) FILTER (WHERE abc.d > 0) FROM abc
 ----
 error: aggregates with FILTER are not supported yet
+
+# Check that ordering by an alias of an aggregate works.
+build
+SELECT MAX(k) AS mk FROM kv GROUP BY v ORDER BY mk
+----
+sort
+ ├── columns: mk:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: mk:5(int)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) mk:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           └── variable: mk [type=int]
+
+build
+SELECT MAX(k) AS mk FROM kv GROUP BY v ORDER BY MAX(k)
+----
+sort
+ ├── columns: mk:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: mk:5(int)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) mk:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           └── variable: mk [type=int]
