@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -77,7 +78,12 @@ func (q *consistencyQueue) shouldQueue(
 		if err != nil {
 			return false, 0
 		}
-		if shouldQ, priority = shouldQueueAgain(now, lpTS, interval); !shouldQ {
+		// Many ranges will typically become eligible for consistency checking at
+		// around the same time. To distribute these cohorts over time, use a mild
+		// amount of fuzzing to delay the consistency checks by up to 25%.
+		r := rand.New(rand.NewSource(int64(repl.RangeID)))
+		fuzzedInterval := time.Duration(float64(interval) * (1 + r.Float64()/4.0))
+		if shouldQ, priority = shouldQueueAgain(now, lpTS, fuzzedInterval); !shouldQ {
 			return false, 0
 		}
 	}
