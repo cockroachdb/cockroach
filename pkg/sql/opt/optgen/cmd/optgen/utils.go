@@ -54,6 +54,8 @@ func mapPrivateType(typ string) string {
 		return "props.Ordering"
 	case "FuncOpDef":
 		return "*memo.FuncOpDef"
+	case "ProjectionsOpDef":
+		return "*memo.ProjectionsOpDef"
 	case "ScanOpDef":
 		return "*memo.ScanOpDef"
 	case "LookupJoinDef":

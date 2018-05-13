@@ -277,7 +277,7 @@ func (f exprFormatter) formatPrivate(private interface{}) {
 				fmt.Fprintf(f.buf, " %s", propsStr)
 			}
 
-		case opt.ColSet, opt.ColList:
+		case opt.ColSet, opt.ColList, *ProjectionsOpDef:
 			// Don't show anything, because it's mostly redundant.
 
 		default:

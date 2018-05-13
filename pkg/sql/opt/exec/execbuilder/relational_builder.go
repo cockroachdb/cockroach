@@ -260,27 +260,46 @@ func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
+	var outputCols opt.ColMap
 	projections := ev.Child(1)
-	colList := projections.Private().(opt.ColList)
-	exprs := make(tree.TypedExprs, len(colList))
-	colNames := make([]string, len(exprs))
-	ctx := input.makeBuildScalarCtx()
-	for i, col := range colList {
-		exprs[i], err = b.buildScalar(&ctx, projections.Child(i))
+	def := projections.Private().(*memo.ProjectionsOpDef)
+	if len(def.SynthesizedCols) == 0 {
+		// We have only pass-through columns.
+		cols := make([]exec.ColumnOrdinal, 0, def.PassthroughCols.Len())
+		def.PassthroughCols.ForEach(func(i int) {
+			outputCols.Set(i, len(cols))
+			cols = append(cols, input.getColumnOrdinal(opt.ColumnID(i)))
+		})
+		node, err := b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
 		if err != nil {
 			return execPlan{}, err
 		}
-		colNames[i] = ev.Metadata().ColumnLabel(col)
+		return execPlan{root: node, outputCols: outputCols}, nil
 	}
+
+	exprs := make(tree.TypedExprs, 0, len(def.SynthesizedCols)+def.PassthroughCols.Len())
+	colNames := make([]string, 0, len(exprs))
+	ctx := input.makeBuildScalarCtx()
+	for i, col := range def.SynthesizedCols {
+		expr, err := b.buildScalar(&ctx, projections.Child(i))
+		if err != nil {
+			return execPlan{}, err
+		}
+		outputCols.Set(int(col), i)
+		exprs = append(exprs, expr)
+		colNames = append(colNames, ev.Metadata().ColumnLabel(col))
+	}
+	def.PassthroughCols.ForEach(func(i int) {
+		colID := opt.ColumnID(i)
+		outputCols.Set(i, len(exprs))
+		exprs = append(exprs, b.indexedVar(&ctx, ev.Metadata(), colID))
+		colNames = append(colNames, ev.Metadata().ColumnLabel(colID))
+	})
 	node, err := b.factory.ConstructRender(input.root, exprs, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
-	ep := execPlan{root: node}
-	for i, col := range colList {
-		ep.outputCols.Set(int(col), i)
-	}
-	return ep, nil
+	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
 func (b *Builder) buildJoin(ev memo.ExprView, joinType sqlbase.JoinType) (execPlan, error) {

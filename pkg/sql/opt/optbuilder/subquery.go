@@ -17,7 +17,6 @@ package optbuilder
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -192,8 +191,7 @@ func (b *Builder) buildSubqueryProjection(
 		texpr := tree.NewTypedTuple(cols)
 		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups))
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
-		p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
-		out = b.factory.ConstructProject(out, p)
+		out = b.constructProject(out, []scopeColumn{*col})
 	}
 
 	return out, outScope
@@ -280,8 +278,7 @@ func (b *Builder) buildMultiRowSubquery(
 	// Construct the inner boolean projection.
 	comp := b.buildScalar(texpr, outScope)
 	col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, comp)
-	p := b.constructList(opt.ProjectionsOp, []scopeColumn{*col})
-	out = b.factory.ConstructProject(out, p)
+	out = b.constructProject(out, []scopeColumn{*col})
 
 	// Construct the outer Any(...) operator.
 	out = b.factory.ConstructAny(out)

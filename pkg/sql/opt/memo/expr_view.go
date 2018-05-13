@@ -313,9 +313,18 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		// Special handling to improve the columns display for certain ops.
 		switch ev.Operator() {
 		case opt.ProjectOp:
-			// Get the list of columns from the ProjectionsOp, which has the
-			// natural order.
-			colList := ev.Child(1).Private().(opt.ColList)
+			// We want the synthesized column IDs to map 1-to-1 to the projections,
+			// and the pass-through columns at the end.
+
+			// Get the list of columns from the ProjectionsOp, which has the natural
+			// order.
+			def := ev.Child(1).Private().(*ProjectionsOpDef)
+			colList := append(opt.ColList(nil), def.SynthesizedCols...)
+			// Add pass-through columns.
+			def.PassthroughCols.ForEach(func(i int) {
+				colList = append(colList, opt.ColumnID(i))
+			})
+
 			logProps.FormatColList(tp, ev.Metadata(), "columns:", colList)
 
 		case opt.ValuesOp:
@@ -425,8 +434,9 @@ func (ev ExprView) formatStats(tp treeprinter.Node, s *opt.Statistics) {
 }
 
 func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
-	// Omit empty AggregationsOp.
-	if ev.Operator() == opt.AggregationsOp && ev.ChildCount() == 0 {
+	// Omit empty ProjectionsOp and AggregationsOp.
+	if (ev.Operator() == opt.ProjectionsOp || ev.Operator() == opt.AggregationsOp) &&
+		ev.ChildCount() == 0 {
 		return
 	}
 	var buf bytes.Buffer
@@ -476,24 +486,6 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 			}
 			buf.WriteString("]")
 		}
-	}
-
-	// Special case for ProjectionsOp.
-	if ev.Operator() == opt.ProjectionsOp {
-		cols := ev.Private().(opt.ColList)
-		first := true
-		for i, colID := range cols {
-			child := ev.Child(i)
-			if child.Operator() == opt.VariableOp && child.Private().(opt.ColumnID) == colID {
-				continue
-			}
-			if first {
-				tp = tp.Child(buf.String())
-				first = false
-			}
-			child.format(tp, flags)
-		}
-		return
 	}
 
 	tp = tp.Child(buf.String())

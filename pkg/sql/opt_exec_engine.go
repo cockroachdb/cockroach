@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var _ exec.TestEngineFactory = &InternalExecutor{}
@@ -182,6 +183,22 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 func (ee *execEngine) ConstructSimpleProject(
 	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
+	// If the top node is already a renderNode, just rearrange the columns.  But
+	// check for duplicates - we don't want to duplicate a rendering expressions
+	// (in case it is expensive to compute or has side-effects).
+	if r, ok := n.(*renderNode); ok && !hasDuplicates(cols) {
+		oldCols, oldRenders := r.columns, r.render
+		r.columns = make(sqlbase.ResultColumns, len(cols))
+		r.render = make([]tree.TypedExpr, len(cols))
+		for i, ord := range cols {
+			r.columns[i] = oldCols[ord]
+			if colNames != nil {
+				r.columns[i].Name = colNames[i]
+			}
+			r.render[i] = oldRenders[ord]
+		}
+		return r, nil
+	}
 	var inputCols sqlbase.ResultColumns
 	if colNames == nil {
 		// We will need the names of the input columns.
@@ -206,6 +223,17 @@ func (ee *execEngine) ConstructSimpleProject(
 		r.columns[i].Typ = v.ResolvedType()
 	}
 	return r, nil
+}
+
+func hasDuplicates(cols []exec.ColumnOrdinal) bool {
+	var set util.FastIntSet
+	for _, c := range cols {
+		if set.Contains(int(c)) {
+			return true
+		}
+		set.Add(int(c))
+	}
+	return false
 }
 
 // ConstructRender is part of the exec.Factory interface.

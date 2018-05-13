@@ -97,61 +97,37 @@ func (f *Factory) pruneCols(target memo.GroupID, neededCols opt.ColSet) memo.Gro
 
 	case opt.ValuesOp:
 		return f.pruneValuesCols(target, neededCols)
-	}
 
-	// Get the subset of the target group's output columns that should not be
-	// pruned. Don't prune if the target output column is needed by a higher-
-	// level expression, or if it's not part of the PruneCols set.
-	colSet := f.outputCols(target).Difference(f.candidatePruneCols(target).Difference(neededCols))
-	cnt := colSet.Len()
+	case opt.AggregationsOp:
+		groups, cols := filterColList(
+			f.mem.LookupList(targetExpr.AsAggregations().Aggs()),
+			f.extractColList(targetExpr.AsAggregations().Cols()),
+			neededCols,
+		)
+		return f.ConstructAggregations(f.InternList(groups), f.InternColList(cols))
 
-	// Create a new list of groups to project, along with the list of column
-	// indexes to be projected. These will become inputs to the construction of
-	// the Projections or Aggregations operator.
-	groupList := make([]memo.GroupID, 0, cnt)
-	colList := make(opt.ColList, 0, cnt)
-
-	switch targetExpr.Operator() {
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// Get groups from existing lists.
-		var existingList []memo.GroupID
-		var existingCols opt.ColList
-		if targetExpr.Operator() == opt.ProjectionsOp {
-			existingList = f.mem.LookupList(targetExpr.AsProjections().Elems())
-			existingCols = f.extractColList(targetExpr.AsProjections().Cols())
-		} else {
-			existingList = f.mem.LookupList(targetExpr.AsAggregations().Aggs())
-			existingCols = f.extractColList(targetExpr.AsAggregations().Cols())
+	case opt.ProjectionsOp:
+		def := f.mem.LookupPrivate(targetExpr.AsProjections().Def()).(*memo.ProjectionsOpDef)
+		groups, cols := filterColList(
+			f.mem.LookupList(targetExpr.AsProjections().Elems()),
+			def.SynthesizedCols,
+			neededCols,
+		)
+		newDef := memo.ProjectionsOpDef{
+			SynthesizedCols: cols,
+			PassthroughCols: def.PassthroughCols.Intersection(neededCols),
 		}
-
-		for i, group := range existingList {
-			// Only add groups that are part of the needed columns.
-			if neededCols.Contains(int(existingCols[i])) {
-				groupList = append(groupList, group)
-				colList = append(colList, existingCols[i])
-			}
-		}
+		return f.ConstructProjections(f.InternList(groups), f.InternProjectionsOpDef(&newDef))
 
 	default:
-		// Construct new variable groups for each output column that's needed.
-		colSet.ForEach(func(i int) {
-			v := f.ConstructVariable(f.InternColumnID(opt.ColumnID(i)))
-			groupList = append(groupList, v)
-			colList = append(colList, opt.ColumnID(i))
-		})
-	}
+		// In other cases, we wrap the input in a Project operator.
 
-	if targetExpr.Operator() == opt.AggregationsOp {
-		return f.ConstructAggregations(f.InternList(groupList), f.InternColList(colList))
+		// Get the subset of the target group's output columns that should not be
+		// pruned. Don't prune if the target output column is needed by a higher-
+		// level expression, or if it's not part of the PruneCols set.
+		colSet := f.outputCols(target).Difference(f.candidatePruneCols(target).Difference(neededCols))
+		return f.ConstructSimpleProject(target, colSet)
 	}
-
-	projections := f.ConstructProjections(f.InternList(groupList), f.InternColList(colList))
-	if targetExpr.Operator() == opt.ProjectionsOp {
-		return projections
-	}
-
-	// Else wrap in Project operator.
-	return f.ConstructProject(target, projections)
 }
 
 // pruneScanCols constructs a new Scan operator based on the given existing Scan
@@ -204,4 +180,24 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 	}
 
 	return f.ConstructValues(f.InternList(newRows), f.InternColList(newCols))
+}
+
+// filterColList removes columns not in colWhitelist from a list of groups and
+// associated column IDs. Returns the new groups and associated column IDs.
+func filterColList(
+	groups []memo.GroupID, cols opt.ColList, colWhitelist opt.ColSet,
+) ([]memo.GroupID, opt.ColList) {
+	var newGroups []memo.GroupID
+	var newCols opt.ColList
+	for i, col := range cols {
+		if colWhitelist.Contains(int(col)) {
+			if newGroups == nil {
+				newGroups = make([]memo.GroupID, 0, len(cols)-i)
+				newCols = make(opt.ColList, 0, len(cols)-i)
+			}
+			newGroups = append(newGroups, groups[i])
+			newCols = append(newCols, col)
+		}
+	}
+	return newGroups, newCols
 }

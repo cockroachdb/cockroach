@@ -43,12 +43,13 @@ type scopeColumn struct {
 	id     opt.ColumnID
 	hidden bool
 
-	// group is the memo.GroupID of the column, which is updated after the
-	// column is built in the memo.
+	// group is the GroupID of the scalar expression associated with this column.
+	// group is 0 for columns that are just passed through from an inner scope
+	// and for table columns.
 	group memo.GroupID
 
-	// expr is the expression that this column refers to, if any. expr is nil if
-	// the column does not refer to an expression.
+	// expr is the AST expression that this column refers to, if any.
+	// expr is nil if the column does not refer to an expression.
 	expr tree.TypedExpr
 
 	// exprStr contains a stringified representation of expr, or the original

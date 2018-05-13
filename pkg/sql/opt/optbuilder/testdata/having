@@ -59,7 +59,7 @@ project
       ├── group-by
       │    ├── columns: column5:5(int) column6:6(int)
       │    ├── project
-      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
       │    │    └── scan kv
       │    │         └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
       │    └── aggregations
@@ -81,7 +81,7 @@ project
       ├── group-by
       │    ├── columns: column5:5(int) column6:6(int) column7:7(int)
       │    ├── project
-      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
       │    │    └── scan kv
       │    │         └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
       │    └── aggregations
@@ -239,7 +239,7 @@ project
       │    ├── columns: t.public.kv.v:2(int) column5:5(int)
       │    ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
       │    └── project
-      │         ├── columns: t.public.kv.v:2(int) column5:5(int)
+      │         ├── columns: column5:5(int) t.public.kv.v:2(int)
       │         ├── scan kv
       │         │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int) t.public.kv.w:3(int) t.public.kv.s:4(string)
       │         └── projections

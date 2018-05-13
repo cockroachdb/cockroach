@@ -446,7 +446,7 @@ FROM b
 group-by
  ├── columns: column3:3(decimal[]) column4:4(decimal) column6:6(bool) column7:7(bool) column8:8(string) column9:9(int) column10:10(int) column11:11(string) column12:12(decimal) column14:14(int) column15:15(decimal) column16:16(decimal) column17:17(decimal) column18:18(decimal) column19:19(int) column21:21(jsonb) column23:23(jsonb)
  ├── project
- │    ├── columns: b.z:2(decimal!null) column5:5(bool) b.x:1(string!null) column13:13(int) column20:20(jsonb) column22:22(jsonb)
+ │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) column22:22(jsonb) b.x:1(string!null) b.z:2(decimal!null)
  │    ├── scan b
  │    │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  │    └── projections
