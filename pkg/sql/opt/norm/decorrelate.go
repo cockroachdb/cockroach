@@ -199,6 +199,28 @@ func (f *Factory) referenceSingleColumn(group memo.GroupID) memo.GroupID {
 	return f.ConstructVariable(f.InternColumnID(opt.ColumnID(colID)))
 }
 
+// constructAnyCondition builds an expression that compares the given scalar
+// expression with the first (and only) column of the input rowset, using the
+// given comparison operator.
+func (f *Factory) constructAnyCondition(
+	input, scalar memo.GroupID, cmp memo.PrivateID,
+) memo.GroupID {
+	inputVar := f.referenceSingleColumn(input)
+	return f.constructBinary(f.mem.LookupPrivate(cmp).(opt.Operator), scalar, inputVar)
+}
+
+// constructBinary builds a dynamic binary expression, given the binary
+// operator's type and its two arguments.
+func (f *Factory) constructBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	return f.DynamicConstruct(
+		op,
+		memo.DynamicOperands{
+			memo.DynamicID(left),
+			memo.DynamicID(right),
+		},
+	)
+}
+
 // subqueryHoister searches scalar expression trees looking for correlated
 // subqueries which will be pulled up and joined to a higher level relational
 // query. See the  hoistAll comment for more details on how this is done.
@@ -276,7 +298,10 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 			subquery = r.constructGroupByExists(subquery)
 
 		case opt.AnyOp:
-			subquery = r.constructGroupByAny(subquery)
+			input := ev.ChildGroup(0)
+			scalar := ev.ChildGroup(1)
+			cmp := ev.Private().(opt.Operator)
+			subquery = r.constructGroupByAny(scalar, cmp, input)
 		}
 
 		// Hoist the subquery into a single expression that can be accessed via
@@ -359,32 +384,43 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 
 // constructGroupByAny transforms a scalar Any expression like this:
 //
-//   ANY(SELECT x = y+1 FROM xy)
+//   z = ANY(SELECT x FROM xy)
 //
 // into a scalar GroupBy expression that returns a one row, one column relation
 // that is equivalent to this:
 //
 //   SELECT
-//     CASE BOOL_OR(comp IS NOT NULL)
-//       WHEN True THEN True
-//       ELSE WHEN False THEN Null
-//       ELSE False
+//     CASE
+//       WHEN BOOL_OR(notnull) AND z IS NOT Null THEN True
+//       ELSE BOOL_OR(notnull) IS NULL THEN False
+//       ELSE Null
 //     END
-//   FROM (SELECT x = y+1 FROM xy) AS q(comp)
-//   WHERE comp IS NOT False
+//   FROM
+//   (
+//     SELECT x IS NOT Null AS notnull
+//     FROM xy
+//     WHERE (z=x) IS NOT False
+//   )
 //
 // BOOL_OR returns true if any input is true, else false if any input is false,
 // else null. This is a mismatch with ANY, which returns true if any input is
-// true, else null if any input is null, else false. The mismatch is solved by
-// this procedure:
+// true, else null if any input is null, else false. In addition, the expression
+// needs to be easy to decorrelate, which means that the outer column reference
+// ("z" in the example) should not be part of a projection (since projections
+// are difficult to hoist above left joins). The following procedure solves the
+// mismatch between BOOL_OR and ANY, as well as avoids correlated projections:
 //
-//   1. Filter out false values with an initial filter. The result of ANY does
-//      not change, no matter how many false values are added or removed. This
-//      step has the effect of mapping a set containing only false values to the
-//      empty set (which is desirable).
+//   1. Filter out false comparison rows with an initial filter. The result of
+//      ANY does not change, no matter how many false rows are added or removed.
+//      This step has the effect of mapping a set containing only false
+//      comparison rows to the empty set (which is desirable).
 //
-//   2. Step #1 leaves only true and null values. Map each null value to false,
-//      so that only true and false values are left.
+//   2. Step #1 leaves only true and null comparison rows. A null comparison row
+//      occurs when either the left or right comparison operand is null (Any
+//      only allows comparison operators that propagate nulls). Map each null
+//      row to a false row, but only in the case where the right operand is null
+//      (i.e. the operand that came from the subquery). The case where the left
+//      operand is null will be handled later.
 //
 //   3. Use the BOOL_OR aggregation function on the true/false values from step
 //      #2. If there is at least one true value, then BOOL_OR returns true. If
@@ -392,65 +428,99 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 //      Because of the previous steps, this indicates that the original set
 //      contained only false values (or no values at all).
 //
-//   4. Use a CASE statement to map a false return value to null, and null to
-//      false (true is unchanged). This matches ANY behavior.
+//   4. A True result from BOOL_OR is ambiguous. It could mean that the
+//      comparison returned true for one of the rows in the group. Or, it could
+//      mean that the left operand was null. The CASE statement ensures that
+//      True is only returned if the left operand was not null.
+//
+//   5. In addition, the CASE statement maps a null return value to false, and
+//      false to null. This matches ANY behavior.
 //
 // The following is a table showing the various interesting cases:
 //
-//   comp         | ANY   | BOOL_OR | before CASE  | after CASE
-//   -------------+-------+---------+--------------+------------
-//   any true     | true  | true    | true         | true
-//   only false   | false | false   | null (empty) | false
-//   only null    | null  | null    | false        | null
-//   null + false | null  | false   | false        | null
-//   empty        | false | null    | null (empty) | false
+//         | subquery  | before        | after   | after
+//     z   | x values  | BOOL_OR       | BOOL_OR | CASE
+//   ------+-----------+---------------+---------+-------
+//     1   | (1)       | (true)        | true    | true
+//     1   | (1, null) | (true, false) | true    | true
+//     1   | (1, 2)    | (true)        | true    | true
+//     1   | (null)    | (false)       | false   | null
+//    null | (1)       | (true)        | true    | null
+//    null | (1, null) | (true, false) | true    | null
+//    null | (null)    | (false)       | false   | null
+//     2   | (1)       | (empty)       | null    | false
+//   *any* | (empty)   | (empty)       | null    | false
 //
 // It is important that the set given to BOOL_OR does not contain any null
 // values (the reason for step #2). Null is reserved for use by the
 // TryDecorrelateScalarGroupBy rule, which will push a left join into the
 // GroupBy. Null values produced by the left join will simply be ignored by
 // BOOL_OR, and so cannot be used for any other purpose.
-func (r *subqueryHoister) constructGroupByAny(subquery memo.GroupID) memo.GroupID {
-	compVar := r.f.referenceSingleColumn(subquery)
+func (r *subqueryHoister) constructGroupByAny(
+	scalar memo.GroupID, cmp opt.Operator, input memo.GroupID,
+) memo.GroupID {
+	// When the scalar value is not a simple variable or constant expression,
+	// then cache its value using a projection, since it will be referenced
+	// multiple times.
+	scalarExpr := r.mem.NormExpr(scalar)
+	if scalarExpr.Operator() != opt.VariableOp && !scalarExpr.IsConstValue() {
+		typ := r.mem.GroupProperties(scalar).Scalar.Type
+		scalarColID := r.f.Metadata().AddColumn("scalar", typ)
+		r.hoisted = r.f.projectExtraCol(r.hoisted, scalar, scalarColID)
+		scalar = r.f.ConstructVariable(r.f.InternColumnID(scalarColID))
+	}
 
-	notNullColID := r.f.Metadata().AddColumn("not_null", types.Bool)
-	notNullCols := r.f.InternColList(opt.ColList{notNullColID})
+	inputVar := r.f.referenceSingleColumn(input)
+
+	notNullColID := r.f.Metadata().AddColumn("notnull", types.Bool)
 	notNullVar := r.f.ConstructVariable(r.f.InternColumnID(notNullColID))
 
 	aggColID := r.f.Metadata().AddColumn("bool_or", types.Bool)
-	aggCols := r.f.InternColList(opt.ColList{aggColID})
+	aggVar := r.f.ConstructVariable(r.f.InternColumnID(aggColID))
 
 	caseColID := r.f.Metadata().AddColumn("case", types.Bool)
 	caseCols := r.f.InternColList(opt.ColList{caseColID})
 
-	boolNull := r.f.ConstructNull(r.f.boolType())
+	nullVal := r.f.ConstructNull(r.f.InternType(types.Unknown))
 
 	return r.f.ConstructProject(
 		r.f.ConstructGroupBy(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
-					subquery,
-					r.f.ConstructIsNot(compVar, r.f.ConstructFalse()),
+					input,
+					r.f.ConstructIsNot(
+						r.f.constructBinary(cmp, inputVar, scalar),
+						r.f.ConstructFalse(),
+					),
 				),
 				r.f.ConstructProjections(
-					r.internSingletonList(r.f.ConstructIsNot(compVar, boolNull)),
-					notNullCols,
+					r.internSingletonList(r.f.ConstructIsNot(inputVar, nullVal)),
+					r.f.InternColList(opt.ColList{notNullColID}),
 				),
 			),
 			r.f.ConstructAggregations(
 				r.internSingletonList(r.f.ConstructBoolOr(notNullVar)),
-				aggCols,
+				r.f.InternColList(opt.ColList{aggColID}),
 			),
 			r.f.InternColSet(opt.ColSet{}),
 		),
 		r.f.ConstructProjections(
 			r.internSingletonList(
 				r.f.ConstructCase(
-					r.f.ConstructVariable(r.f.InternColumnID(aggColID)),
+					r.f.ConstructTrue(),
 					r.f.InternList([]memo.GroupID{
-						r.f.ConstructWhen(r.f.ConstructTrue(), r.f.ConstructTrue()),
-						r.f.ConstructWhen(r.f.ConstructFalse(), boolNull),
-						r.f.ConstructFalse(),
+						r.f.ConstructWhen(
+							r.f.ConstructAnd(r.f.InternList([]memo.GroupID{
+								aggVar,
+								r.f.ConstructIsNot(scalar, nullVal),
+							})),
+							r.f.ConstructTrue(),
+						),
+						r.f.ConstructWhen(
+							r.f.ConstructIs(aggVar, nullVal),
+							r.f.ConstructFalse(),
+						),
+						nullVal,
 					}),
 				),
 			),

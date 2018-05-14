@@ -39,13 +39,13 @@ build
 SELECT x FROM (SELECT 1 AS x), onecolumn AS a, onecolumn AS b
 ----
 project
- ├── columns: x:1(int)
+ ├── columns: x:1(int!null)
  ├── inner-join
- │    ├── columns: x:1(int) onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
+ │    ├── columns: x:1(int!null) onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
  │    ├── inner-join
- │    │    ├── columns: x:1(int) onecolumn.x:2(int) onecolumn.rowid:3(int!null)
+ │    │    ├── columns: x:1(int!null) onecolumn.x:2(int) onecolumn.rowid:3(int!null)
  │    │    ├── project
- │    │    │    ├── columns: x:1(int)
+ │    │    │    ├── columns: x:1(int!null)
  │    │    │    ├── values
  │    │    │    │    └── tuple [type=tuple{}]
  │    │    │    └── projections
@@ -1185,24 +1185,19 @@ project
  │         ├── eq [type=bool]
  │         │    ├── variable: twocolumn.x [type=int]
  │         │    └── variable: onecolumn.x [type=int]
- │         └── any [type=bool]
- │              └── project
- │                   ├── columns: column9:9(bool)
- │                   ├── project
- │                   │    ├── columns: twocolumn.x:6(int)
- │                   │    ├── select
- │                   │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
- │                   │    │    ├── scan twocolumn
- │                   │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
- │                   │    │    └── ge [type=bool]
- │                   │    │         ├── variable: twocolumn.y [type=int]
- │                   │    │         └── const: 52 [type=int]
- │                   │    └── projections
- │                   │         └── variable: twocolumn.x [type=int]
- │                   └── projections
- │                        └── eq [type=bool]
- │                             ├── variable: onecolumn.x [type=int]
- │                             └── variable: twocolumn.x [type=int]
+ │         └── any: eq [type=bool]
+ │              ├── project
+ │              │    ├── columns: twocolumn.x:6(int)
+ │              │    ├── select
+ │              │    │    ├── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │              │    │    ├── scan twocolumn
+ │              │    │    │    └── columns: twocolumn.x:6(int) twocolumn.y:7(int) twocolumn.rowid:8(int!null)
+ │              │    │    └── ge [type=bool]
+ │              │    │         ├── variable: twocolumn.y [type=int]
+ │              │    │         └── const: 52 [type=int]
+ │              │    └── projections
+ │              │         └── variable: twocolumn.x [type=int]
+ │              └── variable: onecolumn.x [type=int]
  └── projections
       ├── variable: onecolumn.x [type=int]
       ├── variable: twocolumn.x [type=int]
@@ -3444,13 +3439,13 @@ build
 SELECT k FROM kv, (SELECT 1 AS k)
 ----
 project
- ├── columns: k:5(int)
+ ├── columns: k:5(int!null)
  ├── inner-join
- │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) k:5(int)
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) k:5(int!null)
  │    ├── scan kv
  │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    ├── project
- │    │    ├── columns: k:5(int)
+ │    │    ├── columns: k:5(int!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
@@ -3463,35 +3458,30 @@ build
 select * from (select 1 as k), (select 2 as k) where 1 in (select k from kv)
 ----
 select
- ├── columns: k:1(int) k:2(int)
+ ├── columns: k:1(int!null) k:2(int!null)
  ├── inner-join
- │    ├── columns: k:1(int) k:2(int)
+ │    ├── columns: k:1(int!null) k:2(int!null)
  │    ├── project
- │    │    ├── columns: k:1(int)
+ │    │    ├── columns: k:1(int!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
  │    │         └── const: 1 [type=int]
  │    ├── project
- │    │    ├── columns: k:2(int)
+ │    │    ├── columns: k:2(int!null)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
  │    │         └── const: 2 [type=int]
  │    └── true [type=bool]
- └── any [type=bool]
-      └── project
-           ├── columns: column7:7(bool)
-           ├── project
-           │    ├── columns: kv.k:3(int!null)
-           │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
-           │    └── projections
-           │         └── variable: kv.k [type=int]
-           └── projections
-                └── eq [type=bool]
-                     ├── const: 1 [type=int]
-                     └── variable: kv.k [type=int]
+ └── any: eq [type=bool]
+      ├── project
+      │    ├── columns: kv.k:3(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
+      │    └── projections
+      │         └── variable: kv.k [type=int]
+      └── const: 1 [type=int]
 
 # Test natural outer join when the left side has unknown type
 build

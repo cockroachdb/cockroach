@@ -35,7 +35,7 @@ opt
 SELECT 1 FROM (SELECT i+1, k FROM a) a
 ----
 project
- ├── columns: column6:6(int)
+ ├── columns: column6:6(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -142,7 +142,7 @@ opt
 SELECT 1 FROM a
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -192,7 +192,7 @@ opt
 SELECT 1 FROM a WHERE now()<'2000-01-01T02:00:00'::timestamp
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── select
  │    ├── scan a
  │    └── filters [type=bool]
@@ -940,7 +940,7 @@ opt
 SELECT 1 FROM a,xy
 ----
 project
- ├── columns: column7:7(int)
+ ├── columns: column7:7(int!null)
  ├── inner-join
  │    ├── scan a
  │    ├── scan xy
@@ -1008,7 +1008,7 @@ opt
 SELECT 1 FROM (SELECT s FROM a GROUP BY s) a
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── group-by
  │    ├── columns: a.s:4(string)
  │    ├── grouping columns: a.s:4(string)
@@ -1162,7 +1162,7 @@ opt
 SELECT 1 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 project
- ├── columns: column4:4(int)
+ ├── columns: column4:4(int!null)
  ├── cardinality: [2 - 2]
  ├── values
  │    ├── cardinality: [2 - 2]

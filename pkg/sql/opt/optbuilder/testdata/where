@@ -56,19 +56,14 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── any [type=bool]
-      └── project
-           ├── columns: column5:5(bool)
-           ├── project
-           │    ├── columns: kv.k:3(int!null)
-           │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
-           │    └── projections
-           │         └── variable: kv.k [type=int]
-           └── projections
-                └── eq [type=bool]
-                     ├── variable: kv.k [type=int]
-                     └── variable: kv.k [type=int]
+ └── any: eq [type=bool]
+      ├── project
+      │    ├── columns: kv.k:3(int!null)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
+      │    └── projections
+      │         └── variable: kv.k [type=int]
+      └── variable: kv.k [type=int]
 
 build
 SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
@@ -77,23 +72,18 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── any [type=bool]
-      └── project
-           ├── columns: column6:6(bool)
-           ├── project
-           │    ├── columns: column5:5(tuple{int, int})
-           │    ├── scan kv
-           │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
-           │    └── projections
-           │         └── tuple [type=tuple{int, int}]
-           │              ├── variable: kv.k [type=int]
-           │              └── variable: kv.v [type=int]
-           └── projections
-                └── eq [type=bool]
-                     ├── tuple [type=tuple{int, int}]
-                     │    ├── variable: kv.k [type=int]
-                     │    └── variable: kv.v [type=int]
-                     └── variable: column5 [type=tuple{int, int}]
+ └── any: eq [type=bool]
+      ├── project
+      │    ├── columns: column5:5(tuple{int, int})
+      │    ├── scan kv
+      │    │    └── columns: kv.k:3(int!null) kv.v:4(int)
+      │    └── projections
+      │         └── tuple [type=tuple{int, int}]
+      │              ├── variable: kv.k [type=int]
+      │              └── variable: kv.v [type=int]
+      └── tuple [type=tuple{int, int}]
+           ├── variable: kv.k [type=int]
+           └── variable: kv.v [type=int]
 
 build
 SELECT * FROM kv WHERE nonexistent = 1

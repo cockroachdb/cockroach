@@ -102,18 +102,29 @@ func (q *consistencyQueue) process(
 	if q.interval() <= 0 {
 		return nil
 	}
+
+	// Call setQueueLastProcessed because the consistency checker targets a much
+	// longer cycle time than other queues. That it ignores errors is likely a
+	// historical accident that should be revisited.
+	if err := repl.setQueueLastProcessed(ctx, q.name, repl.store.Clock().Now()); err != nil {
+		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
+	}
+
 	req := roachpb.CheckConsistencyRequest{}
 	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
-		_, shouldQuiesce := <-repl.store.Stopper().ShouldQuiesce()
+		var shouldQuiesce bool
+		select {
+		case <-repl.store.Stopper().ShouldQuiesce():
+			shouldQuiesce = true
+		default:
+		}
+
 		if !shouldQuiesce || !grpcutil.IsClosedConnection(pErr.GoError()) {
 			// Suppress noisy errors about closed GRPC connections when the
 			// server is quiescing.
 			log.Error(ctx, pErr.GoError())
+			return pErr.GoError()
 		}
-	}
-	// Update the last processed time for this queue.
-	if err := repl.setQueueLastProcessed(ctx, q.name, repl.store.Clock().Now()); err != nil {
-		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 	return nil
 }

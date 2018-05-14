@@ -21,7 +21,7 @@ build
 SELECT 3 FROM kv HAVING TRUE
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: column5:5(int!null)
  ├── select
  │    ├── group-by
  │    │    ├── project

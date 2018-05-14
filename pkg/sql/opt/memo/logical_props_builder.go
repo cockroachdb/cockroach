@@ -152,14 +152,27 @@ func (b *logicalPropsBuilder) buildProjectProps(ev ExprView) props.Logical {
 
 	inputProps := ev.childGroup(0).logical.Relational
 	projectionProps := ev.childGroup(1).logical.Scalar
+	projections := ev.Child(1)
+	projectionColList := projections.Private().(opt.ColList)
 
 	// Use output columns from projection list.
-	logical.Relational.OutputCols = opt.ColListToSet(ev.Child(1).Private().(opt.ColList))
+	logical.Relational.OutputCols = opt.ColListToSet(projectionColList)
 
 	// Inherit not null columns from input, but only use those that are also
 	// output columns.
-	logical.Relational.NotNullCols = inputProps.NotNullCols
-	filterNullCols(logical.Relational)
+	logical.Relational.NotNullCols = inputProps.NotNullCols.Copy()
+	logical.Relational.NotNullCols.IntersectionWith(logical.Relational.OutputCols)
+
+	// Also add any column that projects a constant value, since the optimizer
+	// sometimes constructs these in order to guarantee a not-null column.
+	for i := 0; i < projections.ChildCount(); i++ {
+		child := projections.Child(i)
+		if child.IsConstValue() {
+			if ExtractConstDatum(child) != tree.DNull {
+				logical.Relational.NotNullCols.Add(int(projectionColList[i]))
+			}
+		}
+	}
 
 	// Any outer columns from the projection list that are not bound by the input
 	// columns are outer columns from the Project expression, in addition to any
@@ -532,6 +545,13 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
 		// Inherit outer columns from input query.
 		logical.Scalar.OuterCols = ev.childGroup(0).logical.Relational.OuterCols
+
+		// Any has additional scalar value that can contain outer references.
+		if ev.Operator() == opt.AnyOp {
+			cols := ev.childGroup(1).logical.Scalar.OuterCols
+			logical.Scalar.OuterCols = logical.Scalar.OuterCols.Union(cols)
+		}
+
 		if !logical.Scalar.OuterCols.Empty() {
 			logical.Scalar.HasCorrelatedSubquery = true
 		}
@@ -554,15 +574,6 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		logical.Scalar.Constraints, logical.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}
 	return logical
-}
-
-// filterNullCols ensures that the set of null columns is a subset of the output
-// columns. It respects immutability by making a copy of the null columns if
-// they need to be updated.
-func filterNullCols(relational *props.Relational) {
-	if !relational.NotNullCols.SubsetOf(relational.OutputCols) {
-		relational.NotNullCols = relational.NotNullCols.Intersection(relational.OutputCols)
-	}
 }
 
 // filterWeakKeys ensures that each weak key is a subset of the output columns.
