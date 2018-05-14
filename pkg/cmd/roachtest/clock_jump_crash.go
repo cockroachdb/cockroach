@@ -23,11 +23,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func runClockJump(t *test, c *cluster, tc clockJumpTestCase) {
-	ctx := context.Background()
-
-	c.l.printf("Running %s\n", tc.name)
-
+func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
 	if c.nodes != 1 {
@@ -38,8 +34,10 @@ func runClockJump(t *test, c *cluster, tc clockJumpTestCase) {
 	offsetInjector := newOffsetInjector(c)
 	offsetInjector.deploy(ctx)
 
-	t.Status("starting cockroach")
-	c.Put(ctx, cockroach, "./cockroach", c.All())
+	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
+		c.Put(ctx, cockroach, "./cockroach", c.All())
+	}
+	c.Wipe(ctx)
 	c.Start(ctx)
 
 	db := c.Conn(ctx, c.nodes)
@@ -76,9 +74,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJump(r *registry) {
-	const numNodes = 1
-
+func makeClockJumpTests() testSpec {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -87,8 +83,11 @@ func registerClockJump(r *registry) {
 			aliveAfterOffset: false,
 		},
 		{
-			name:             "small_forward_enabled",
-			offset:           150 * time.Millisecond,
+			name: "small_forward_enabled",
+			// NB: The offset here needs to be small enough such that this jump plus
+			// the forward jump check interval (125ms) is less than the tolerated
+			// forward clock jump (250ms).
+			offset:           100 * time.Millisecond,
 			jumpCheckEnabled: true,
 			aliveAfterOffset: true,
 		},
@@ -112,15 +111,33 @@ func registerClockJump(r *registry) {
 		},
 	}
 
+	spec := testSpec{
+		Name:   "jump",
+		Stable: true, // DO NOT COPY to new tests
+	}
+
 	for i := range testCases {
 		tc := testCases[i]
-		r.Add(testSpec{
-			Name:   fmt.Sprintf("clockjump/tc=%s", tc.name),
-			Nodes:  nodes(numNodes),
+		spec.SubTests = append(spec.SubTests, testSpec{
+			Name:   tc.name,
 			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runClockJump(t, c, tc)
+				runClockJump(ctx, t, c, tc)
 			},
 		})
 	}
+
+	return spec
+}
+
+func registerClock(r *registry) {
+	r.Add(testSpec{
+		Name:   "clock",
+		Nodes:  nodes(1),
+		Stable: true, // DO NOT COPY to new tests
+		SubTests: []testSpec{
+			makeClockJumpTests(),
+			makeClockMonotonicTests(),
+		},
+	})
 }
