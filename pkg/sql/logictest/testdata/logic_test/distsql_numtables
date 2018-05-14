@@ -53,7 +53,7 @@ NULL       /2000    {1}       1
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkDFrwzAQhff-CnNrNESmXTR59ZIWN1vRoFpHMNg6c3eGluD_XiwNbQMuzSDQvaf33UNXSBTxFCYUcG9gwRuYmXoUId6k8qCNH-COBoY0L7rJ3kBPjOCuoIOOCA7O4X3EDkNEBgMRNQxjhs48TIE_m7RMSqKb22GKyK56cs61p7Op6nI5NNZU-dTgVwO06PdC0XBBcHY1_y_1Sqy3fZrHwy68vgfeocyUBH_h98jH1RvAeMHyq0IL9_jC1Oc1ZXzOuSxEFC2uLUObirUV_Bm2f4brm7BfH74CAAD__ydlozk=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkLFq9DAQhPv_Kcy0JzjL_GlUuXVzCc51wYViLYfB1prVGhIOv3uwVSQXuJAUAu2s5ptBV0QOdPITJbgXWHQGs3BPKbFsUn7QhDe40mCI86Kb3Bn0LAR3hQ46EhzO_nWklnwgOZYwCKR-GHfsLMPk5b2Oy6ScVGDQUgwkrnhwzjWnsymqfDnU1hT7qdCtBrzoZ2RSfyE4u5rf13pmUZKjvW1U_z_cxVd_wbeUZo6JbvD3yOXaGVC4UP7ZxIv09CTc7zF5fNx9uxAoad7aPDQxr7aCX832R3P1zdyt_z4CAAD___V0o_g=
 
 query IIIT
 SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
@@ -74,7 +74,7 @@ SELECT 5, 2+y, * FROM NumToStr WHERE y <= 10 ORDER BY str
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlMFqwzAMhu97iiAYbNSD2Em7zjDIadBLN7reRg5ZLEogjYLtwEbpu4_Eg66ldQrZJYdAbOnX9yMZ7aAihctsiwbkB3BgIIBBBAxiYDCFlEGtKUdjSLcpTrBQXyBDBkVVN7a9ThnkpBHkDmxhSwQJ6-yzxBVmCjUwUGizouwgtS62mf5OqmZrydg2-lKUFrUM7hIe3AY8DEMp5WK5vg-eg99fYLDCSrVZU3fDAuF-JglnQfcJSPcMqLEHW8ZmGwTJ9-x66--k7anrJJ5cLC4uFj_UJK1QozpX9IyDJT1QfZR7iR0dsfl4Z9JjfdhMxHj70mN9WF-i8falx_qwvsTj7UuP9f_bbWeKr9DUVBm8anOF7eJDtUG3KA01Osc3TXmHccfXTtddKDTWRbk7LCoXag3-FXOvWByJ-alY-Mk96Mirjv3ieIjvqVc885NnQ8iPXvHcT54PIT_5ZxX2PBP_Iztlp_ubnwAAAP__UGjpww==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlE-rozAUxffzKeTCwAzNUBO1fwIDrga66Qyd7h4ufOZSBGskifAepd_9oRH6LG2U9i1cCObPuefwu-GeoJQCt-kRNfAXoECAAYEACIRAIIKEQKVkhlpL1Vyxgo14A-4TyMuqNs12QiCTCoGfwOSmQOCwT18L3GEqUM19ICDQpHnR2lQqP6bqPS7ro5HaKCDwJy8MKu79iKn33aO-73PON9v9T--31_0CgR2WorkV2R3iMfsziynx2o9BciYga3MJpk16QOD0TMaH_y-VQTWP-rnjcHa3PLtb_lJVKoEKxa2iNzJs5S9ZzWmf3T37oGdPx7eGTq41A-G71iwebQ0bz4ZNjs1A-I7N8lE2wXg2weTYDITv2KweZROOZxNOjs1A-I7N-ivG3Y3yO9SVLDWOmmR-MwtRHNDOTi1rleE_JbPWxi7_trp2Q6A29pTaxaa0R03Az2LqFLOemF6Lmdt5wDpwqkO3OHwmd-QUL9zOi2ecl07xyu28esZ57e6VP_BM3I_s2js5f_sIAAD__2K37jY=
 
 query IIIT
 SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
@@ -94,7 +94,7 @@ SELECT 5, 2 + y, * FROM NumToStr WHERE y % 1000 = 0 ORDER BY str
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y < 10 AND str LIKE '%e%' ORDER BY y]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqwzAYhPc-hTkIWTTEHTVlaYtpSYqbrXhQrSMIbMlIv6Al6N2LraF0KHS8-6S7-2_wwfJkZibod7QYFJYYRqYU4mrVB539hD4oOL9kWe1BYQyR0DeIk4nQuJiPiT2NZYSCpRg3baFLdLOJX0efZwlJVvroJmHUzfG-eemeH5r9jru91vrt0nenJyics6wUQ1EIWX5ak5grodui_r-sZ1qCT_w166_kQxkUaK-s16eQ48jXGMatpsrz9m8zLJNU2lbR-YrKUO6-AwAA__873XJx
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAUhPf-CnMQsghqd9SUpS2mJSlutqJBtR5BYEvm6Qlagv57sTWUDoWMd590d--KEB0d7UwJ-gMdjMLCcaSUIq9WfdC7L-hWwYcly2obhTEyQV8hXiaCxtl-TjSQdcT3LRQcifXTFruwny1_H0KeJSZhKDz5SYh1c3hoXvuXx2a_o91ea_1-HvrjMxROWVYKUxRilt_eJPZC0F1Rt28bKC0xJPoz67_kthgFcheq96eYeaQ3juNWU-Vp-7cZjpJU2lXRh4qKKXc_AQAA___YHXLQ
 
 
 query T
@@ -111,7 +111,7 @@ nine
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlEtr4zAUhffzK8SBkITRgKUksxAMeKAPTItT0uyKF651CQbHMpIMLcH_vdiGpi5NH2Tlne_j45xjuDqgNJridE8O6gECHBIcC3AswbFCwlFZk5FzxrYrPRDpJ6iAIy-r2rfthCMzlqAO8LkvCArb9LGgDaWaLDg0-TQvOpHK5vvUPodlvffG-XZ6lReerGKzWSjYhIkgCJRSUbyds3_s9fN_fMFmoWS30c0lm07yyVQpdb_dRPH1HBzr2isWSh4KJA2Hqf3RnPPpjqBEw08EOPo2VpMlPfQcyt9Img9SxuaPqQa7p7TlQFuM_efJsQdYjD3AcuwBvnhANuQqUzr61nUF7XGS3lF_zM7UNqM7a7JOpi_XHdc1NDnfT0VfRGU36gy-hcWn8N8BHLyH5TnKi3Pg5Tnw6kdw0vx6CQAA___v9_DI
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlE2rm0AYhff9FcOBkIROiTOaLgYKFvqBtJiSZldcWOclCMaRmRFagv-9RKG5Xm7u9ZKNO-fj4Zxn4PWM2mhK8xM5qF8Q4JDgCMERgWOLjKOxpiDnjL1cGYBE_4EKOMq6af1lO-MojCWoM3zpK4LCIf9d0Z5yTXYTgEOTz8uqj2lsecrt37huT944b8Hxpaw8WcVWq1iwBRNBECilkvSwZh_Y_8-P6Se2iiX7nnz7zJaLcrFUSv087JP06xocu9YrFkseC2Qdh2n9tZ7z-ZGgRMdvKFybG6vJkh53juVbZN0Tnql5Z5rNdnT7VrocpYvpDyhm-oByuoKcqUI4XSGcqUI0XSGaqcILP5M9ucbUjiZNWXAZU9JHGsbamdYW9MOaoo8Zlrue6zc0OT-cimGR1P1RX_AhLJ6F34_g4DEs70kO74Gje-Dtq-Cse_MvAAD__yjQ8xE=
 
 query T
 SELECT str FROM NumToStr WHERE y % 1000 = 0 AND str LIKE '%i%' ORDER BY y
@@ -129,7 +129,7 @@ nine-zero-zero-zero
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlc-K2zAQh-99imVOu6BCJDtNYyj42O1htyy9FR-00TQxJJYrydBlybsXx4XUTjqzQj0kR__5RjPfDzSv0FiDD3qHHorvIEGAAgEZCMhBwBwqAa2zK_Teuv6XAbg3v6CYCaibtgv960rAyjqE4hVCHbYIBXzTz1t8Qm3QgQCDQdfbwyGtq3favZRNtwvW_-y0Q6j2AmwX_lQ7Fnl-udlovxkXKBVU-0qAD3qNUMi9-O9dBRfZkhy1pP7Z0rFO11hn0KEZVap6kvvlzFyftd98sXUzHWuLP8Jtqe4-uXq9CbelvAMBj10obkopynwy5XGCLGGCM-092Pe2nQ569uB8dLC8vDTl1aepLk-qunqp2eVJza5ean55UvOrl8psyCf0rW08vum2nvXto1njoMPbzq3wq7OrwzHD4-OBO1ycBn0Yvqrh4b4ZPvUNvh2ep8CLFHiZAktJ0zLCmIqD5ynwIgVepsATYye0mtKzv-mM1p2RsBz7nk3pPCUsGmbComEmLBpmwqJhLqx5SlgfUnTTMKObhhndNMzopmFO9yJF98cU3TTM6KZhRjcNM7ppmNO9TNEtY5bl6R0asy1jae7yj9mXsTTnXJ5sD1J6tX_3OwAA___3Q6o9
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lc9q20AQh-99ijCnBLZYs5LiWFDQsekhKaG3ooNiTW2BrVV3V9AQ_O5FVsGV7M5KXayj_nw7M98PZt-hUgU95XsykHwHBAESBIQgIAIBMWQCaq3WZIzS7S8d8Fj8giQQUFZ1Y9vXmYC10gTJO9jS7ggS-Ja_7uiF8oL0IgABBdm83B3L1Lrc5_otrZq9VeZnk2uC7CBANfbPeadjXt9utrnZ9g9IJWSHTICx-YYgwYP4v76Q68vqiU1hryn5z6ZO5zSV0gVpKnonZS3p-uXCZJ9zs_2iyor04r7f2o5-2NtU3n3S5WZrb1O8AwHPjU1uUhRpNJjzNEPoMcOFBp_UR1UvEIfTXqwd9Wrj-FDlbKHivKEurxGqHC82nE2snFfswzXEhuPFRrOJDecVu7qG2Gi82Hg2sdG8YjG49oK_UP-FTK0qQ6PWd9BOQMWGOiNGNXpNX7VaH8t0j89H7rhHCzK2-yq7h8eq-9Q2OB6OfeClD7zygRF5GicYk9Pg2Ade-sArH3hg7IyWQzr4mw553SELY993MKQjn7B42BEWDzvC4mFHWDzsCiv2CeveRzcPO3TzsEM3Dzt087BL99JH94OPbh526OZhh24edujmYZfulY9unHJZnu_QKbflVNq1_Kfcl1Npl3M8uz1Y6dnhw-8AAAD__3ZSr0E=
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-str
@@ -162,7 +162,7 @@ render          ·               ·                          (x, str)           
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzclVFr2zAQx9_3KczBoKUaWLazLIKCnwYZLB2lb8MPbnxLDI7lSTKslHz3YWsji5OdYtSX-C2O9fPd_f6ge4VaFrjKd6hBfAcODCJgEAODBBjMIGPQKLlGraXqjlhgWfwCETIo66Y13d8Zg7VUCOIVTGkqBAFP-XOFj5gXqIBBgSYvq75Io8pdrl7Sut0ZqX-2uUJg8LmsDCoR3KQ8eB9EQojl6uk2uA9C-xMYPLRGBCmHbM9AtuZP6UPF55dgm-vtcbX-fMZAm3yDIPievfkIRl3Sv0_X0X-7PnynraUqUGFx9KWsI_8eOXcAUn5naw2n_4pqg19kWQ-nr_CHuUn53e29Kjdb-_MQD0vjwayHOWKPOc50uJIfZDMc92zh5Kgwv8rY-URij67SfjQR-_FV2o8nYj-5SvvJROw71v0j6kbWGi_aKGE3ARYbtFK0bNUavym57svYx4ee62_uArWxbyP7sKztq67By-GZDzz3gRc-MOc0zUcYi8bBMx947gMvfOCBsRM6GtLhv3RM645JmB_7Dod04hMWDTvComFHWDTsCIuGXWHNfML66KObhh26adihm4YdumnYpXvuo_uTj24aduimYYduGnbopmGX7oWPbj5mWZ7eoWO25VjadfmP2ZdjaZdzfrI9SOnZ_t3vAAAA__8YBOLQ
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlV9r2zwUh-_fT2EOvNBSjVj-0zSCgq8GGSwdpXfDF258lhgcy5NkWCn57sPWRmYnk-yJhNzFsR6fc34P6LxDxXNcZTuUwL4CBQIBEAiBQAQEYkgJ1IKvUUou2iMaWOY_gPkEiqpuVPt3SmDNBQJ7B1WoEoHBS_Za4jNmOYqZDwRyVFlRdmVqUewy8ZZUzU5x-b3JBAKBj0WpUDDvJqHe_17AGFuuXm69R8_XP4HAU6OYl1BI9wR4o34VP9R8ffO2mdz2q3XnUwJSZRsERvfk34agpiGUGDOBS9_BX_s-fKepuMhRYN77UtqSv4-cOgAJvdO1hvN_RrHBT7yoUMzu-0yJ39RNQu9uH0Wx2eqfB0UkCQfTHiYJHSY50eOKf-D1jNLhzCdrR73adLz94Jrs08vbn5_HfjDeQHhNBoLLG3g4j4FwvIHomgyElzewOI-BaLyB-JoMRJc3QP3zL6ETLTyjrHklcdSK8dshMN-gzkXyRqzxi-Drrox-fOq47iLPUSr9NtAPy0q_ahscD8cu8NwFXrjAlJppOiGxYBocu8BzF3jhAg8SO6KDIe3_SYfmuEMjTPt5-0M6cpFlhi2yzLBFlhm2yDLDNlmxi6x7l7jNsCVuM2yJ2wxb4jbDtrjnLnE_uMRthi1xm2FL3GbYErcZtsW9cImbTlmWx3folG05lbZd_lP25VTaljk92h7G0NP9fz8DAAD___Wz59Q=
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-2-str
@@ -182,7 +182,7 @@ SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(y) FROM NumToStr]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLFOwzAQhneeAv0TSB7qJC0lUxk7QFGBCWUw8SmK1MaR7UigKu-OEg-lUWsjNVJG-_Ldd-fYd0ClJL2IPRmkn-BgiMAQgyEBwxwZQ61VTsYo3X3igLX8RjpjKKu6sd12xpArTUgPsKXdEVK8i68dbUlI0mCQZEW56yW1LvdC_6yqZm-VsV1009j0dsWRtQyqscekxoqCkPKW_V_8VBSaCmHVwPv28Xy34vcXJdFFyTF3UyktSZM8SZ21I5YRn5TBpzrkgHicQ46m6i4gHqe7eKruAuJxukum6i4gHv_5n5FsydSqMjQYA-czz7rxQLIgN0uManROr1rlvcYtNz3Xb0gy1kW5W6wrF-oK_AtzLxydwHwIR35zQB176cQPJ9fUPffCC795cY35wQsv_eblNeZH_7-aBa6J_5IN3Vl78xsAAP___russg==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE1vozAQhu_7K1bvaVeyFAzki1P2mMM2VdqeKg4uHiGkBCPbSK0i_nsFHAJRYqjgaJt3nnmMNRfkStKTOJNB9A4OBh8MARhCMCwRMxRaJWSM0vUnbWAvPxF5DFlelLbejhkSpQnRBTazJ0KEV_FxoiMJSXrhgUGSFdmpwRQ6Owv9tcvLs1XGajAcShv93nHEFYMq7bWssSIlRLxi49H_0lRTKqzSi2Wf_PL2_8-O_32I8R9irtXLXGlJmmSvdFy5G-HezzoJep3w8XfNZ77rAXRHcTXlrv3xhv7MhgPojuF6imEw3jCY2XAA3THcTDEMxxuGMxsOoDuG27kmwh3MkUyhckM3k-F-Za-eGCRTaseLUaVO6FmrpMG0y0OTazYkGdue8naxz9ujusFumDvDfi_Mb8O-mzyADpzp0B0Op_S9dIZXbvJqCnntDG_c5M0U8tb9r7yBZ-J-ZLfsuPr1HQAA__8CqbEl
 
 query R
 SELECT SUM(y) FROM NumToStr
@@ -193,7 +193,7 @@ SELECT SUM(y) FROM NumToStr
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElD9r8zAQh_f3U7zclIKGyHbS1FNKpwy1S_7QoZigWocxJDojydAS_N2L7SGNSeSWpHiU5Oee-8niDqBIYiT2aCB8Aw4MPGDgA4MAGEwgYVBoStEY0vUnLbCQHxCOGeSqKG29nTBISSOEB7C53SGEsBbvO1yikKiBgUQr8l0jKXS-F_pzrsq9JWPr07i04f-IFEJSMaDSHssaKzKEkFfs5-rHLNOYCUsd81O8idbbZfy6Gt1dNHkXTUdBqUhL1ChP6ifVL3pZbZ63i2g9mvPLrfgnrfDh7rtHfcP79oYL2aO-YUh_uJA96huGDIYL2aP-o_FwxrREU5Ay2BkT5yuP6_GBMsN21hgqdYovmtJG0y7jhms2JBrbnvJ2sVDtUd3gd5g7Ye8E5l3Yc5t71L6TDtxwcE3fEyc8dZun15jvnfDMbZ5dY35w_6txzzNxP7KuO6n-fQUAAP__1iC8mA==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE2LszAQx-_Pp3iYUxcCNWrfPHXZUw-rS1_YwyLFNYMIbSJJhF2K331RD1Vpo6DHJP7zm98Y5gZcMPSjKyrwvoACARsIOEDABQILCAlkUsSolJDlJ3Vgx37AswikPMt1uR0SiIVE8G6gU31B8OAYfV9wjxFDObeAAEMdpZcKk8n0GsnfLc-vWigtgUCQa--_LzhCWBAQub5frHSUIHi0IMPhr0kiMYm0kPNFm_0WnPzjeR98HmYvT1n2U9YdkXMhGUpkrfvDwlwN7bTicHo_7_zjbEufV-O0qqHD204nb3sPvCG6HN12e7ioPbloD7whuhot6gwXdSYX7YE3RNejRd3hou7koj3whuhm0onxgLVHlQmusDM5Ht9slRMFWYL1-FEilzF-SBFXmHoZVLlqg6HS9SmtFzteH5UFNsPUGLZbYdoN22ZyD9oxpl1z2B1T98IYXprJyzHklTG8NpPXY8gb87-yep6J-ZF12WHx7y8AAP__2avBCw==
 
 query I
 SELECT COUNT(*) FROM NumToStr
@@ -204,7 +204,7 @@ SELECT COUNT(*) FROM NumToStr
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%']
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlM-Lm0AUx-_9K-RBSApziD-SpnNKKW2RtlqMoYdFguu8FcE4MjMuuwT_90U9ZCPJuEuy4NF5fufz4b3hHaDgDL14jxLoHZhAwAICNhBwgMACIgKl4AlKyUXzSxdw2RPQOYGsKCvVHEcEEi4Q6AFUpnIECmF8n2OAMUMBBBiqOMtbSCmyfSye10W1V1yqpvozyxUKaqwt44_7-4cxnTxkjziZUko3YeB6v4CAXylqeLxAiGoCvFJHtFRxikDNmrxd71uaCkxjxXt23_2tF-4C__9m9vkiybpIOgKqgguGAtnJ_VH9DpfN9u_O9cLZ2rysYp-omOOeyYDeDWdijbsRA3o3bIQ97kYM6N2wEc64GzGg90Hr6gwpQFnyQmJvbZ2_ed6sM2QpdrtP8kok-E_wpMV0n36baw8YStVVze7DLbpSI_g6bGrD1knY7IctPXkAbWvTjj7sXOO90IaXevLyGvIXbXilJ6-uIX_Vz2o-8Ez0j6zPjupPLwEAAP__-mDtng==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElF2LnDAUhu_7K4YDy24hsBN1ZmdzNaW0RdpqcVx6UWSx5lQEx0gSS8vify_qxarMRMGCl368eV6eE84LFIKjF59RAfsBFAhYQMAGAg4Q2EFEoJQiQaWEbH7pAi7_A2xLICvKSjevIwKJkAjsBXSmcwQGYfwzxwBjjvJ-CwQ46jjLW0wps3Ms_x6L6qyF0hIIfMxyjZJtjtbmi_v5w-b25lf2G29uGWOnMHC9T0DArzTbeKJAiGoCotKvcKXjFIHRmswv-C5NJaaxFvJ-N-z33n_ywufA_366e3uVZV1lvSKqQkiOEvng_Kg2t6EjXaenr8-uF94d6fU29qANnT8auspoJgr2ZOwXj8aaL8NaRcZEwZ6Mh8Uy7Pky7FVkTBTsyTgsluHMl-GsImOiYE_G43_dYBdYAapSFApHm-zyydtmwyFPsVuHSlQywW9SJC2me_TbXPuCo9LdV9o9uEX3qSnYD1Nj2BqE6ThsmckTaNuYdsxhZ0nvnTG8N5P3S8gPxvDBTD4sIT-aZ7WduCbmSzZmR_WbfwEAAP__sAnyEQ==
 
 # Result calculated here: https://play.golang.org/p/e-YsJRDsXF
 query I
@@ -220,18 +220,18 @@ SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrAzEMhff-ivBmD7mhi6esgdKU0K14cM8iGO6sQ5KhJfi_l7OH0qGQ8b0nfU-6o3Ci17iSwn9gQnDYhGdSZdmtMXBOX_BHh1y2arsdHGYWgr_Dsi0Ej_f4udCVYiKBQyKLeenQTfIa5ftU6mqstqeXav5wmuDwktdsh2eE5sDVfvFq8UbwU3OPn3Al3bgo_en_j3xswYHSjcabylVmehOee82Ql77XjURqI52GOJcRtdCefgIAAP__lz9sqw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFLBEEMhXt_xfHqgLuFzVTXHognh51sMe6EY2B3siQZUI7573I7hVgIlu-95H3JDUUSv8SVDeEdIybCpjKzmejd6gOn9IkwEHLZqt_tiTCLMsINnn1hBLzFj4UvHBPr4wBCYo952Ws3zWvUr2Opq4u5gnCuHg7HEYTnvGY_PGFqBKn-AzCPV0YYG_3_iAvbJsX4F_-v5qFNBE5X7o-aVJ35VWXeMV2e973dSGze07GLU-lRm9rDdwAAAP__KwVtCg==
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrAzEMhff-ivBmD7mhi6esgdKU0K14cM8iGO6sQ5KhJfi_l7OH0qGQ8b0nfU-6o3Ci17iSwn9gQnDYhGdSZdmtMXBOX_BHh1y2arsdHGYWgr_Dsi0Ej_f4udCVYiKBQyKLeenQTfIa5ftU6mqstqeXav5wmuDwktdsh2eE5sDVfvFq8UbwU3OPn3Al3bgo_en_j3xswYHSjcabylVmehOee82Ql77XjURqI52GOJcRtdCefgIAAP__lz9sqw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFLBEEMhXt_xfHqgLuFzVTXHognh51sMe6EY2B3siQZUI7573I7hVgIlu-95H3JDUUSv8SVDeEdIybCpjKzmejd6gOn9IkwEHLZqt_tiTCLMsINnn1hBLzFj4UvHBPr4wBCYo952Ws3zWvUr2Opq4u5gnCuHg7HEYTnvGY_PGFqBKn-AzCPV0YYG_3_iAvbJsX4F_-v5qFNBE5X7o-aVJ35VWXeMV2e973dSGze07GLU-lRm9rDdwAAAP__KwVtCg==
 
 # Test that the correct node is chosen in a reverse scan with multiple spans.
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr WHERE y < 1000 OR y > 9000 ORDER BY y DESC LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkLFqMzEQhPv_KczU-uHO4EaVW0Owg0kXrlBOixHcaYV2BQnm3j3oVMQOxEm5O_uNZnRFZE9HN5PAvqKHwQ6DQco8kgjnum5HB_8O2xmEmIrW9WAwcibYKzToRLA48n9OMPCkLkzr0WLARb8QUXch2O1ibmz7x7Yv7m2iMzlP-c4cKYfZ5Y99LLOyaFVPRe1mX4s8hTnoZoefIvR3EX5pdiZJHIX-VK5bBgPyF2q_J1zySM-Zx_WZNp5Wbl14Em3qtg2H2KQa8BbuH8LdN3hY_n0GAAD__0cMnlY=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkDFrwzAQhff-ivBmldiBLJqyBkpSQrfiQbWOILB9QneCluD_XmQNTQpNM967-57e0wUTezq4kQT2HS0MtugMYuKeRDgVuR7t_SdsYxCmmLXInUHPiWAv0KADweLAzxzXxcWTujAsZ7MBZ_2BRN2ZYDezuTJu7xu_uY-BTuQ8pXVzY4-YwujS127Ko7JogsExq13tSoyXMAZdbfFXiPYmxD_tTiSRJ6GH6jVzZ0D-TPUHhXPq6TVxvzxTx-PCLYIn0brd1GE_1VUJeA23d-HmF9zNT98BAAD___cAnxU=
 
 query I
 SELECT y FROM NumToStr ORDER BY y LIMIT 5
@@ -306,13 +306,13 @@ render          ·         ·                          (x)                      
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqAzEQRPt8RZhaha9V5dZNHEy6cIVyGszBnfayu4IEo38PPhUhRcDlzEjvsTcUyXxJKw3xHQPGgE1lopnoveoPTvkL8RAwl636vR4DJlEi3uCzL0TEW_pYeGHKVARkepqXHbrpvCb9Ppa6uthnTUoEnKvH5-OAsQVI9V-ueboScWjhcfeFtkkx_hH_Rz60MYD5yn6fSdWJryrTrunxvP_bi0zzvg49nEqf2tiefgIAAP__QLRrHw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqxDAQRPt8RZhaELtVde01uXCkCyoUazgMtuTsriDh0L8HW0VIEUg5M9J77B25JD7HlQr_hhHBYZMyUbXIXvUH5_QJPzjMeau218FhKkL4O2y2hfB4je8Lr4yJ8jTAIdHivBzYTeY1ytcp19WKftQohMOlmn88jQjNoVT7IavFG-HH5v5vv1K3kpW_xH-RhxYcmG7sF2qpMvFFynRoerwc_44iUa2vYw_n3KcW2sN3AAAA___R0mt-
 
 # Regression test for #20481.
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFKxDAQhu8-xTInxRw23VtOK54WpJXuigcpEpuhBNpMTSagLH13aYOohRb3OP_k-7_AnMGRwVx3GEC9gIRKQO-pxhDIj1F6cDAfoLYCrOsjj3EloCaPoM7AllsEBSf91mKJ2qAHAQZZ23Yq7b3ttP_cu9gxhfeoPYKAIrLa7DOoBgEU-ac3sG4QlBzE_91H8jzX7uXttyYnNyofbGd5I7eLzuwS513TeGw008x7Xzzlp9eyeD5e3yyadpeYSgw9uYB_PEvN26ESgKbBdL1A0df46KmeNGksJm4KDAZOW5mGg0ur8YO_YbkKZ-twtgrvZnA1XH0FAAD__6aQ20k=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkcFKAzEQhu8-RZmTYqCb7S2niqeCdKWteJBF4mZYAt3MOpmAUvbdZTeIVmixx_kn3_8F5gCBHK5thxHMC2ioFfRMDcZIPEb5wcp9gCkU-NAnGeNaQUOMYA4gXvYIBnb2bY8btA55XoACh2L9fqrt2XeWP5chdULxPVlGUFAlMbNlCfWggJL8NEexLYLRg_q_fUssyHN9LF7q22_RmsIoffCdl5kuTlrLS6x3bcvYWiGel8fm--ppvXvdVM_b65uTrsUlrg3GnkLEI8-p5mKoFaBrMd8wUuIGH5maSZPHauKmwGGUvNV5WIW8Gj_4G9Zn4fI8XJ6FF3_gerj6CgAA__9GENxp
 
 query I
 SELECT COUNT(*) FROM (SELECT 1 AS one FROM NumToSquare WHERE x > 10 ORDER BY xsquared LIMIT 10)
