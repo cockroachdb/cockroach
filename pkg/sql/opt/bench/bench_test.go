@@ -247,7 +247,7 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 		}
 
 		// execute the node tree.
-		_, err = eng.Execute(node)
+		_, err = eng.Execute(node, false /* useDistSQL */)
 		if err != nil {
 			b.Fatalf("%v", err)
 		}

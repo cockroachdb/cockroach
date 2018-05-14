@@ -87,39 +87,42 @@ func TestExecBuild(t *testing.T) {
 		}
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
-			defer eng.Close()
 
-			tester := testutils.NewOptTester(eng.Catalog(), d.Input)
-			tester.Flags.ExprFormat = memo.ExprFmtHideRuleProps
+			et := execTester{
+				d:                 d,
+				tester:            testutils.NewOptTester(nil /* catalog */, d.Input),
+				evalCtx:           &evalCtx,
+				testEngineFactory: s.InternalExecutor().(exec.TestEngineFactory),
+			}
+			et.tester.Flags.ExprFormat = memo.ExprFmtHideRuleProps
 
-			var rowSort bool
-			var partialSortColumns []int
-			var hideColNames bool
-
+			var noDistSQL bool
 			for _, arg := range d.CmdArgs {
 				switch arg.Key {
 				case "rowsort":
 					// We will sort the resulting rows before comparing with the
 					// expected result.
-					rowSort = true
+					et.rowSort = true
 
 				case "partialsort":
 					// See partialSort().
-					partialSortColumns = make([]int, len(arg.Vals))
+					et.partialSortColumns = make([]int, len(arg.Vals))
 					for i, colStr := range arg.Vals {
 						val, err := strconv.Atoi(colStr)
 						if err != nil {
 							t.Fatalf("error parsing partialSort argument: %s", err)
 						}
-						partialSortColumns[i] = val - 1
+						et.partialSortColumns[i] = val - 1
 					}
 
 				case "hide-colnames":
-					hideColNames = true
+					et.hideColNames = true
+
+				case "nodist":
+					noDistSQL = true
 
 				default:
-					if err := tester.Flags.Set(arg); err != nil {
+					if err := et.tester.Flags.Set(arg); err != nil {
 						d.Fatalf(t, "%s", err)
 					}
 				}
@@ -134,63 +137,23 @@ func TestExecBuild(t *testing.T) {
 				return ""
 
 			case "exec":
-				eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
-				defer eng.Close()
-
-				columns, results, err := tester.Exec(eng)
-				if err != nil {
-					d.Fatalf(t, "%v", err)
+				// Execute with the local engine.
+				localResult := et.exec(t, false /* useDistSQL */)
+				if noDistSQL {
+					return localResult
 				}
-
-				if rowSort {
-					sortRows(results, &evalCtx)
-				} else if partialSortColumns != nil {
-					partialSort(results, partialSortColumns, &evalCtx)
+				distResult := et.exec(t, true /* useDistSQL */)
+				if distResult != localResult {
+					d.Fatalf(
+						t, "inconsistency between local and distributed result:\n%s--- vs ---\n%s",
+						localResult, distResult,
+					)
 				}
-
-				// Format the results.
-				var buf bytes.Buffer
-				tw := tabwriter.NewWriter(
-					&buf,
-					2,   /* minwidth */
-					1,   /* tabwidth */
-					2,   /* padding */
-					' ', /* padchar */
-					0,   /* flags */
-				)
-				if columns != nil && !hideColNames {
-					for i := range columns {
-						if i > 0 {
-							fmt.Fprintf(tw, "\t")
-						}
-						fmt.Fprintf(tw, "%s:%s", columns[i].Name, columns[i].Typ)
-					}
-					fmt.Fprintf(tw, "\n")
-				}
-				for _, r := range results {
-					for j, val := range r {
-						if j > 0 {
-							fmt.Fprintf(tw, "\t")
-						}
-						if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
-							str := string(*d)
-							if str == "" {
-								str = "·"
-							}
-							// Avoid the quotes on strings.
-							fmt.Fprintf(tw, "%s", str)
-						} else {
-							fmt.Fprintf(tw, "%s", val)
-						}
-					}
-					fmt.Fprintf(tw, "\n")
-				}
-				_ = tw.Flush()
-				return buf.String()
+				return localResult
 
 			case "catalog":
 				// Create the engine in order to get access to its catalog.
-				eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
+				eng := et.testEngineFactory.NewTestEngine("test")
 				defer eng.Close()
 
 				parts := strings.Split(d.Input, ".")
@@ -205,10 +168,85 @@ func TestExecBuild(t *testing.T) {
 				return tp.String()
 
 			default:
-				return tester.RunCommand(t, d)
+				// Create the engine in order to get access to its catalog.
+				eng := et.testEngineFactory.NewTestEngine("test")
+				defer eng.Close()
+				et.tester.SetCatalog(eng.Catalog())
+				return et.tester.RunCommand(t, d)
 			}
 		})
 	})
+}
+
+type execTester struct {
+	d                 *datadriven.TestData
+	tester            *testutils.OptTester
+	evalCtx           *tree.EvalContext
+	testEngineFactory exec.TestEngineFactory
+
+	// Post-processing options (see comment above for a description of these
+	// options).
+	rowSort            bool
+	partialSortColumns []int
+	hideColNames       bool
+}
+
+func (et *execTester) exec(t *testing.T, useDistSQL bool) string {
+	eng := et.testEngineFactory.NewTestEngine("test")
+	defer eng.Close()
+
+	et.tester.SetCatalog(eng.Catalog())
+
+	columns, results, err := et.tester.Exec(eng, useDistSQL)
+	if err != nil {
+		et.d.Fatalf(t, "%v", err)
+	}
+
+	if et.rowSort {
+		sortRows(results, et.evalCtx)
+	} else if et.partialSortColumns != nil {
+		partialSort(results, et.partialSortColumns, et.evalCtx)
+	}
+
+	// Format the results.
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(
+		&buf,
+		2,   /* minwidth */
+		1,   /* tabwidth */
+		2,   /* padding */
+		' ', /* padchar */
+		0,   /* flags */
+	)
+	if columns != nil && !et.hideColNames {
+		for i := range columns {
+			if i > 0 {
+				fmt.Fprintf(tw, "\t")
+			}
+			fmt.Fprintf(tw, "%s:%s", columns[i].Name, columns[i].Typ)
+		}
+		fmt.Fprintf(tw, "\n")
+	}
+	for _, r := range results {
+		for j, val := range r {
+			if j > 0 {
+				fmt.Fprintf(tw, "\t")
+			}
+			if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
+				str := string(*d)
+				if str == "" {
+					str = "·"
+				}
+				// Avoid the quotes on strings.
+				fmt.Fprintf(tw, "%s", str)
+			} else {
+				fmt.Fprintf(tw, "%s", val)
+			}
+		}
+		fmt.Fprintf(tw, "\n")
+	}
+	_ = tw.Flush()
+	return buf.String()
 }
 
 func sortRows(rows []tree.Datums, evalCtx *tree.EvalContext) {

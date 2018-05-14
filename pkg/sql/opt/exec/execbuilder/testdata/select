@@ -3,7 +3,7 @@ CREATE TABLE a (x INT PRIMARY KEY, y INT);
 INSERT INTO a VALUES (1, 10), (2, 20), (3, 30)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1
 ----
 scan  ·      ·          (x, y)  ·
@@ -17,7 +17,7 @@ x:int  y:int
 2      20
 3      30
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE y > 10
 ----
 filter     ·       ·          (x, y)  ·
@@ -33,7 +33,7 @@ x:int  y:int
 2      20
 3      30
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND x < 3
 ----
 scan  ·      ·          (x, y)  ·
@@ -46,7 +46,7 @@ SELECT * FROM a WHERE x > 1 AND x < 3
 x:int  y:int
 2      20
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
 ----
 filter     ·       ·          (x, y)  ·
@@ -66,7 +66,7 @@ CREATE TABLE b (x INT, y INT);
 INSERT INTO b VALUES (1, 10), (2, 20), (3, 30)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT x, y, rowid FROM b WHERE rowid > 0
 ----
 scan  ·      ·          (x, y, rowid[hidden])  ·
@@ -78,7 +78,7 @@ CREATE TABLE c (n INT PRIMARY KEY, str STRING, INDEX str(str DESC));
 INSERT INTO c SELECT i, to_english(i) FROM GENERATE_SERIES(1, 10) AS g(i)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM c WHERE str >= 'moo'
 ----
 scan  ·      ·                  (n, str)  ·

@@ -12,7 +12,7 @@ scan a
  ├── cost: 1000.00
  └── keys: (1)
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a
 ----
 scan  ·      ·          (x, y, s)  ·
@@ -37,7 +37,7 @@ scan a
  ├── cost: 1000.00
  └── keys: (1)
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT s, x FROM a
 ----
 render     ·         ·          (s, x)  ·
@@ -77,7 +77,7 @@ apple     1
 banana    2
 cherry    3
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT s, x FROM b
 ----
 render     ·         ·          (s, x)  ·

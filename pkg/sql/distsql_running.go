@@ -287,6 +287,8 @@ type errWrap struct {
 // rowResultWriter is a subset of CommandResult to be used with the
 // distSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
+	// AddRow writes a result row.
+	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
 	IncrementRowsAffected(n int)
 	SetError(error)

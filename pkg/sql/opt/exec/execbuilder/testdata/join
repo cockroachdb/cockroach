@@ -5,7 +5,7 @@ INSERT INTO a VALUES (1, 10), (2, 20), (3, 30);
 INSERT INTO b VALUES (2, 200), (3, 300), (4, 400)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a, b
 ----
 join       ·      ·          (x, y, x, z)  ·
@@ -31,7 +31,7 @@ x:int  y:int  x:int  z:int
 3      30     3      300
 3      30     4      400
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE a.x = b.x
 ----
 join       ·         ·          (x, y, x, z)  ·
@@ -51,7 +51,7 @@ x:int  y:int  x:int  z:int
 2      20     2      200
 3      30     3      300
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
 join       ·         ·          (x, y, x, z)  ·
@@ -71,7 +71,7 @@ x:int  y:int  x:int  z:int
 2      20     2      200
 3      30     3      300
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL JOIN b
 ----
 render          ·         ·          (x, y, z)     ·
@@ -95,7 +95,7 @@ x:int  y:int  z:int
 2      20     200
 3      30     300
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
 join       ·         ·           (x, y, x, z)  ·
@@ -116,7 +116,7 @@ x:int  y:int  x:int  z:int
 2      20     2      200
 3      30     3      300
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
 render          ·         ·            (x, y, z)     ·
@@ -141,7 +141,7 @@ x:int  y:int  z:int
 3      30     300
 4      NULL   400
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
 render          ·         ·               (x, y, z)     ·
@@ -168,7 +168,7 @@ x:int  y:int  z:int
 4      NULL   400
 
 # Select filters are pushed through join, down to scans.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
 join            ·       ·          (x, y, x, z)  ·
@@ -194,7 +194,7 @@ x:int  y:int  x:int  z:int
 3      30     3      300
 
 # Join filter is pushed through join, down to scan.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
 join            ·         ·           (x, y, x, z)  ·
@@ -225,7 +225,7 @@ CREATE TABLE c (u INT PRIMARY KEY, v INT);
 INSERT INTO c VALUES (2, 200), (3, 300), (4, 400)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
 ----
 join       ·         ·          (x, y)  ·
@@ -245,7 +245,7 @@ x:int  y:int
 2      20
 3      30
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
 join       ·      ·            (x, y)  ·
@@ -264,7 +264,7 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x-1 = u)
 x:int  y:int
 3      30
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
 ----
 join       ·         ·          (x, y)  ·
@@ -283,7 +283,7 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x = u)
 x:int  y:int
 1      10
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
 join       ·      ·            (x, y)  ·

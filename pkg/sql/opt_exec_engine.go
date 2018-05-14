@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 var _ exec.TestEngineFactory = &InternalExecutor{}
@@ -73,15 +74,24 @@ func (ee *execEngine) Columns(p exec.Plan) sqlbase.ResultColumns {
 }
 
 // Execute is part of the exec.TestEngine interface.
-func (ee *execEngine) Execute(p exec.Plan) ([]tree.Datums, error) {
+func (ee *execEngine) Execute(p exec.Plan, useDistSQL bool) ([]tree.Datums, error) {
+	top := p.(*planTop)
+	if useDistSQL {
+		return ee.execDist(top)
+	}
+	return ee.execLocal(top)
+}
+
+func (ee *execEngine) execLocal(top *planTop) ([]tree.Datums, error) {
 	// We have to use planner.curPlan because that is used to evaluate
 	// subqueries (via EvalSubquery upcall).
-	ee.planner.curPlan = *p.(*planTop)
+	ee.planner.curPlan = *top
 	params := runParams{
 		ctx:             context.TODO(),
 		extendedEvalCtx: &ee.planner.extendedEvalCtx,
 		p:               ee.planner,
 	}
+	defer ee.planner.curPlan.close(context.TODO())
 	if err := ee.planner.curPlan.start(params); err != nil {
 		return nil, err
 	}
@@ -97,8 +107,40 @@ func (ee *execEngine) Execute(p exec.Plan) ([]tree.Datums, error) {
 		}
 		res = append(res, append(tree.Datums(nil), plan.Values()...))
 	}
-	ee.planner.curPlan.close(context.TODO())
 	return res, nil
+}
+
+func (ee *execEngine) execDist(top *planTop) ([]tree.Datums, error) {
+	if len(top.subqueryPlans) > 0 {
+		return nil, errors.Errorf("distsql does not support subqueries")
+	}
+	execCfg := ee.planner.ExecCfg()
+	if _, err := execCfg.DistSQLPlanner.CheckSupport(top.plan); err != nil {
+		return nil, err
+	}
+	res := &execEngineRowWriter{}
+	recv := makeDistSQLReceiver(
+		context.TODO(),
+		res,
+		tree.Rows,
+		execCfg.RangeDescriptorCache,
+		execCfg.LeaseHolderCache,
+		ee.planner.txn,
+		func(ts hlc.Timestamp) {
+			_ = execCfg.Clock.Update(ts)
+		},
+	)
+	execCfg.DistSQLPlanner.PlanAndRun(
+		context.TODO(),
+		ee.planner.txn,
+		top.plan,
+		recv,
+		ee.planner.ExtendedEvalContext(),
+	)
+	if err := res.Err(); err != nil {
+		return nil, err
+	}
+	return res.rows, nil
 }
 
 // Close is part of the exec.TestEngine interface.
@@ -115,8 +157,9 @@ func (ee *execEngine) ConstructValues(
 	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
 	return &valuesNode{
-		columns: cols,
-		tuples:  rows,
+		columns:          cols,
+		tuples:           rows,
+		specifiedInQuery: true,
 	}, nil
 }
 
@@ -450,4 +493,34 @@ func (ee *execEngine) ConstructExplain(
 		p.plan,
 		p.subqueryPlans,
 	)
+}
+
+// execEngineRowWriter is used when executing via DistSQL as a container for the
+// results.
+type execEngineRowWriter struct {
+	rows []tree.Datums
+	err  error
+}
+
+var _ rowResultWriter = &execEngineRowWriter{}
+
+// AddRow is part of the rowResultWriter interface.
+func (rw *execEngineRowWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	rowCopy := append(tree.Datums(nil), row...)
+	rw.rows = append(rw.rows, rowCopy)
+	return nil
+}
+
+// IncrementRowsAffected is part of the rowResultWriter interface.
+func (rw *execEngineRowWriter) IncrementRowsAffected(n int) {
+}
+
+// SetError is part of the rowResultWriter interface.
+func (rw *execEngineRowWriter) SetError(err error) {
+	rw.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (rw *execEngineRowWriter) Err() error {
+	return rw.err
 }

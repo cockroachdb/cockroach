@@ -267,13 +267,15 @@ func joinOutColumns(
 		joinCol++
 	}
 
-	for i := 0; i < n.pred.numRightCols; i++ {
-		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(leftCols + rightPlanToStreamColMap[i]),
-			)
+	if n.pred.joinType != sqlbase.LeftSemiJoin && n.pred.joinType != sqlbase.LeftAntiJoin {
+		for i := 0; i < n.pred.numRightCols; i++ {
+			if !n.columns[joinCol].Omitted {
+				joinToStreamColMap[joinCol] = addOutCol(
+					uint32(leftCols + rightPlanToStreamColMap[i]),
+				)
+			}
+			joinCol++
 		}
-		joinCol++
 	}
 
 	return post, joinToStreamColMap
@@ -289,7 +291,7 @@ func remapOnExpr(
 		return distsqlrun.Expression{}
 	}
 
-	joinColMap := make([]int, len(n.columns))
+	joinColMap := make([]int, n.pred.numLeftCols+n.pred.numRightCols)
 	idx := 0
 	leftCols := 0
 	for i := 0; i < n.pred.numLeftCols; i++ {
