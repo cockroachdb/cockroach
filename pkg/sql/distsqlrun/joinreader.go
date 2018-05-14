@@ -43,12 +43,15 @@ const joinReaderBatchSize = 100
 // from a primary index.
 //
 // For a lookup join, the input is another table and the columns which match the
-// index are specified in the `lookupCols` field.
+// index are specified in the `lookupCols` field. If the index is a secondary
+// index which does not cover the needed output columns, a second lookup will be
+// performed to retrieve those columns from the primary index.
 type joinReader struct {
 	joinerBase
 
-	desc  sqlbase.TableDescriptor
-	index *sqlbase.IndexDescriptor
+	desc      sqlbase.TableDescriptor
+	index     *sqlbase.IndexDescriptor
+	colIdxMap map[sqlbase.ColumnID]int
 
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
@@ -58,6 +61,12 @@ type joinReader struct {
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
+
+	// These fields are set only for lookup joins on secondary indexes which
+	// require an additional primary index lookup.
+	primaryFetcher     *sqlbase.RowFetcher
+	primaryColumnTypes []sqlbase.ColumnType
+	primaryKeyPrefix   []byte
 
 	renderedRow sqlbase.EncDatumRow
 }
@@ -74,11 +83,6 @@ func newJoinReader(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
-	if spec.IndexIdx != 0 {
-		// TODO(radu): for now we only support joining with the primary index
-		return nil, errors.Errorf("join with index not implemented")
-	}
-
 	jr := &joinReader{
 		desc:       spec.Table,
 		input:      input,
@@ -91,11 +95,12 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	indexCols := make([]uint32, len(jr.index.ColumnIDs))
-	for i := 0; i < len(jr.index.ColumnIDs); i++ {
-		indexCols[i] = uint32(jr.index.ColumnIDs[i])
-	}
+	jr.colIdxMap = jr.desc.ColumnIdxMap()
 	if jr.isLookupJoin() {
+		indexCols := make([]uint32, len(jr.index.ColumnIDs))
+		for i, columnID := range jr.index.ColumnIDs {
+			indexCols[i] = uint32(columnID)
+		}
 		if err := jr.joinerBase.init(
 			flowCtx,
 			processorID,
@@ -121,9 +126,36 @@ func newJoinReader(
 		}
 	}
 
+	// neededIndexColumns is the set of columns we need to fetch from jr.index.
+	var neededIndexColumns util.FastIntSet
+
+	if jr.index == &jr.desc.PrimaryIndex ||
+		indexIsCovering(jr.index, jr.colIdxMap, jr.out.neededColumns(), len(jr.inputTypes)) {
+		// jr.index includes all the needed output columns, so only need one lookup.
+		neededIndexColumns = jr.neededRightCols()
+	} else {
+		// jr.index is a secondary index which does not contain all the needed
+		// output columns. First we'll retrieve the primary index columns from the
+		// secondary index, then do a second lookup on the primary index to get the
+		// needed output columns.
+		neededIndexColumns = getIndexColSet(&jr.desc.PrimaryIndex, jr.colIdxMap)
+		jr.primaryFetcher = &sqlbase.RowFetcher{}
+		_, _, err = initRowFetcher(
+			jr.primaryFetcher, &jr.desc, 0 /* indexIdx */, jr.colIdxMap, false, /* reverse */
+			jr.neededRightCols(), false /* isCheck */, &jr.alloc,
+		)
+		if err != nil {
+			return nil, err
+		}
+		jr.primaryColumnTypes, err = getPrimaryColumnTypes(&jr.desc)
+		if err != nil {
+			return nil, err
+		}
+		jr.primaryKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.desc.PrimaryIndex.ID)
+	}
 	_, _, err = initRowFetcher(
-		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false, /* reverse */
-		jr.rowFetcherColumns(), false /* isCheck */, &jr.alloc,
+		&jr.fetcher, &jr.desc, int(spec.IndexIdx), jr.colIdxMap, false, /* reverse */
+		neededIndexColumns, false /* isCheck */, &jr.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -132,13 +164,58 @@ func newJoinReader(
 	jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(jr.out.outputCols))
 
 	// TODO(radu): verify the input types match the index key types
-
 	return jr, nil
 }
 
-// The rows that will be non-empty when fetched from the row fetcher. Used so
-// extra information doesn't need to be sent over the wire.
-func (jr *joinReader) rowFetcherColumns() util.FastIntSet {
+// indexIsCovering returns true if all needed columns are included in either the
+// input or the specified index.
+func indexIsCovering(
+	index *sqlbase.IndexDescriptor,
+	colIdxMap map[sqlbase.ColumnID]int,
+	neededColumns util.FastIntSet,
+	numInputCols int,
+) bool {
+	coveredCols := getIndexColSet(index, colIdxMap)
+	for _, colIdx := range neededColumns.Ordered() {
+		if colIdx >= numInputCols && !coveredCols.Contains(colIdx-numInputCols) {
+			return false
+		}
+	}
+	return true
+}
+
+// getIndexColSet returns a set of all column indices for the given index.
+func getIndexColSet(
+	index *sqlbase.IndexDescriptor, colIdxMap map[sqlbase.ColumnID]int,
+) util.FastIntSet {
+	cols := util.MakeFastIntSet()
+	err := index.RunOverAllColumns(func(id sqlbase.ColumnID) error {
+		cols.Add(colIdxMap[id])
+		return nil
+	})
+	if err != nil {
+		// This path should never be hit since the column function never returns an
+		// error.
+		panic(err)
+	}
+	return cols
+}
+
+func getPrimaryColumnTypes(table *sqlbase.TableDescriptor) ([]sqlbase.ColumnType, error) {
+	columnTypes := make([]sqlbase.ColumnType, len(table.PrimaryIndex.ColumnIDs))
+	for i, columnID := range table.PrimaryIndex.ColumnIDs {
+		column, err := table.FindColumnByID(columnID)
+		if err != nil {
+			return nil, err
+		}
+		columnTypes[i] = column.Type
+	}
+	return columnTypes, nil
+}
+
+// neededRightCols returns the set of column indices which need to be fetched
+// from the right side of the join (jr.desc).
+func (jr *joinReader) neededRightCols() util.FastIntSet {
 	neededCols := jr.out.neededColumns()
 	if !jr.isLookupJoin() {
 		return neededCols
@@ -146,27 +223,27 @@ func (jr *joinReader) rowFetcherColumns() util.FastIntSet {
 
 	// Get the columns from the right side of the join and shift them over by
 	// the size of the left side so the right side starts at 0.
-	rowFetcherColumns := util.MakeFastIntSet()
+	neededRightCols := util.MakeFastIntSet()
 	for i, ok := neededCols.Next(len(jr.inputTypes)); ok; i, ok = neededCols.Next(i + 1) {
-		rowFetcherColumns.Add(i - len(jr.inputTypes))
+		neededRightCols.Add(i - len(jr.inputTypes))
 	}
 
 	// Add columns needed by OnExpr.
 	for _, v := range jr.onCond.vars.GetIndexedVars() {
 		rightIdx := v.Idx - len(jr.inputTypes)
 		if rightIdx >= 0 {
-			rowFetcherColumns.Add(rightIdx)
+			neededRightCols.Add(rightIdx)
 		}
 	}
 
-	return rowFetcherColumns
+	return neededRightCols
 }
 
 // Generate a key to create a span for a given row.
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
 func (jr *joinReader) generateKey(
-	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, primaryKeyPrefix []byte, lookupCols columns,
+	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, keyPrefix []byte, lookupCols columns,
 ) (roachpb.Key, error) {
 	index := jr.index
 	numKeyCols := len(index.ColumnIDs)
@@ -193,7 +270,7 @@ func (jr *joinReader) generateKey(
 		types = jr.inputTypes[:numKeyCols]
 	}
 
-	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, primaryKeyPrefix, alloc)
+	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, keyPrefix, alloc)
 }
 
 func (jr *joinReader) pushTrailingMeta(ctx context.Context) {
@@ -337,6 +414,13 @@ func (jr *joinReader) indexLookup(
 				return true, nil
 			}
 		} else {
+			if jr.primaryFetcher != nil {
+				// TODO(solon): Batch these primary index scans.
+				indexRow, err = jr.primaryLookup(ctx, txn, indexRow)
+				if err != nil {
+					return false, err
+				}
+			}
 			for _, row := range rows {
 				jr.renderedRow = jr.renderedRow[:0]
 				if jr.renderedRow, err = jr.render(row, indexRow); err != nil {
@@ -358,6 +442,46 @@ func (jr *joinReader) indexLookup(
 	}
 
 	return false, nil
+}
+
+// primaryLookup looks up the corresponding primary index row, given a secondary
+// index row.
+func (jr *joinReader) primaryLookup(
+	ctx context.Context, txn *client.Txn, secondaryIndexRow sqlbase.EncDatumRow,
+) (sqlbase.EncDatumRow, error) {
+	index := jr.desc.PrimaryIndex
+	keyValues := make(sqlbase.EncDatumRow, len(index.ColumnIDs))
+	for i, columnID := range index.ColumnIDs {
+		keyValues[i] = secondaryIndexRow[jr.colIdxMap[columnID]]
+	}
+	key, err := sqlbase.MakeKeyFromEncDatums(
+		jr.primaryColumnTypes, keyValues, &jr.desc, &index, jr.primaryKeyPrefix, &jr.alloc)
+	if err != nil {
+		return nil, err
+	}
+	spans := []roachpb.Span{{Key: key, EndKey: key.PrefixEnd()}}
+	err = jr.primaryFetcher.StartScan(
+		ctx, txn, spans, false /* limitBatches */, 0 /* limitHint */, false /* traceKV */)
+	if err != nil {
+		log.Errorf(ctx, "scan error: %s", err)
+		return nil, err
+	}
+	row, _, _, err := jr.primaryFetcher.NextRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Assert that the fetcher returns exactly one row.
+	if row == nil {
+		return nil, errors.New("expected exactly one row but found none")
+	}
+	nextRow, _, _, err := jr.primaryFetcher.NextRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if nextRow != nil {
+		return nil, errors.New("expected exactly one row but found multiple")
+	}
+	return row, nil
 }
 
 // Run is part of the processor interface.

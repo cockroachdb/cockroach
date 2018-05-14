@@ -112,24 +112,18 @@ func newScrubTableReader(
 			tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
 		}
 	} else {
-		colIDToIdx := make(map[sqlbase.ColumnID]int, len(spec.Table.Columns))
-		for i := range spec.Table.Columns {
-			colIDToIdx[spec.Table.Columns[i].ID] = i
-
-		}
-		for _, id := range spec.Table.Indexes[spec.IndexIdx-1].ColumnIDs {
-			neededColumns.Add(colIDToIdx[id])
-		}
-		for _, id := range spec.Table.Indexes[spec.IndexIdx-1].ExtraColumnIDs {
-			neededColumns.Add(colIDToIdx[id])
-		}
-		for _, id := range spec.Table.Indexes[spec.IndexIdx-1].StoreColumnIDs {
-			neededColumns.Add(colIDToIdx[id])
+		colIdxMap := spec.Table.ColumnIdxMap()
+		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id sqlbase.ColumnID) error {
+			neededColumns.Add(colIdxMap[id])
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
+		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
 	); err != nil {
 		return nil, err

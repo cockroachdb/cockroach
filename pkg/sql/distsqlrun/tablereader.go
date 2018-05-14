@@ -98,7 +98,7 @@ func newTableReader(
 	neededColumns := tr.out.neededColumns()
 
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
+		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, spec.IsCheck, &tr.alloc,
 	); err != nil {
 		return nil, err
@@ -145,6 +145,7 @@ func initRowFetcher(
 	fetcher *sqlbase.RowFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
+	colIdxMap map[sqlbase.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
@@ -153,11 +154,6 @@ func initRowFetcher(
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
-	}
-
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(desc.Columns))
-	for i, c := range desc.Columns {
-		colIdxMap[c.ID] = i
 	}
 
 	tableArgs := sqlbase.RowFetcherTableArgs{
