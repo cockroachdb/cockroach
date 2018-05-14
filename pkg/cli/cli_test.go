@@ -35,6 +35,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -67,6 +68,7 @@ type cliTestParams struct {
 	insecure   bool
 	noServer   bool
 	storeSpecs []base.StoreSpec
+	locality   roachpb.Locality
 }
 
 func (c *cliTest) fail(err interface{}) {
@@ -125,6 +127,7 @@ func newCLITest(params cliTestParams) cliTest {
 			Insecure:    params.insecure,
 			SSLCertsDir: c.certsDir,
 			StoreSpecs:  params.storeSpecs,
+			Locality:    params.locality,
 		})
 		if err != nil {
 			c.fail(err)
@@ -425,7 +428,17 @@ func Example_logging() {
 }
 
 func Example_zone() {
-	c := newCLITest(cliTestParams{})
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{"ssd"}}
+	c := newCLITest(cliTestParams{
+		storeSpecs: []base.StoreSpec{storeSpec},
+		locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east-1"},
+				{Key: "zone", Value: "us-east-1a"},
+			},
+		},
+	})
 	defer c.cleanup()
 
 	c.Run("zone ls")
@@ -485,7 +498,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
@@ -517,7 +530,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
@@ -530,7 +543,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone get system
 	// system
 	// range_min_bytes: 1048576
@@ -538,7 +551,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [+us-east-1a, +ssd]
+	// constraints: [+zone=us-east-1a, +ssd]
 	// zone rm system
 	// CONFIGURE ZONE 1
 	// zone ls
@@ -652,8 +665,8 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: {'+us-east-1a,+ssd': 1, +us-east-1b: 1}
-	// experimental_lease_preferences: [[+us-east1b], [+us-east-1a]]
+	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
+	// experimental_lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
 	// sql -e create database t; create table t.f (x int, y int)
 	// CREATE TABLE
 	// zone set t --file=./testdata/zone_range_max_bytes.yaml
