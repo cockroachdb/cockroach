@@ -62,7 +62,7 @@ func registerSchemaChange(r *registry) {
 						t.Fatal(err)
 					}
 					defer l.close()
-					_ = execCmd(ctx, c.l, "roachprod", "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, c.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
