@@ -51,6 +51,7 @@ var (
 	artifacts   string
 	cockroach   string
 	workload    string
+	roachprod   string
 	clusterName string
 	clusterID   string
 	clusterWipe bool
@@ -139,6 +140,12 @@ func initBinaries() {
 	}
 
 	workload, err = findBinary(workload, "workload")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+
+	roachprod, err = findBinary(roachprod, "roachprod")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
@@ -448,7 +455,7 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	registerCluster(c)
 
 	if c.name != clusterName {
-		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(c.nodes)}
+		sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
 		sargs = append(sargs, nodes[0].args()...)
 		if !local && zones != "" {
 			sargs = append(sargs, "--gce-zones="+zones)
@@ -523,7 +530,7 @@ func (c *cluster) Destroy(ctx context.Context) {
 	defer cancel()
 
 	c.status("retrieving logs")
-	_ = execCmd(execCtx, c.l, "roachprod", "get", c.name, "logs",
+	_ = execCmd(execCtx, c.l, roachprod, "get", c.name, "logs",
 		filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "logs"))
 
 	// Only destroy the cluster if it exists in the cluster registry. The cluster
@@ -545,12 +552,12 @@ func (c *cluster) destroy(ctx context.Context) {
 
 	if c.name != clusterName {
 		c.status("destroying cluster")
-		if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
+		if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
 			c.l.errorf("%s", err)
 		}
 	} else if clusterWipe {
 		c.status("wiping cluster")
-		if err := execCmd(ctx, c.l, "roachprod", "wipe", c.name); err != nil {
+		if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
 			c.l.errorf("%s", err)
 		}
 	} else {
@@ -578,7 +585,7 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("uploading binary")
-	err := execCmd(ctx, c.l, "roachprod", "put", c.makeNodes(opts...), src, dest)
+	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -637,7 +644,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	c.status("starting cluster")
 	defer c.status()
 	args := []string{
-		"roachprod",
+		roachprod,
 		"start",
 	}
 	args = append(args, roachprodArgs(opts)...)
@@ -659,7 +666,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	}
 	c.status("stopping cluster")
 	defer c.status()
-	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts...))
+	err := execCmd(ctx, c.l, roachprod, "stop", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -677,7 +684,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 	c.status("wiping cluster")
 	defer c.status()
-	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts...))
+	err := execCmd(ctx, c.l, roachprod, "wipe", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -694,7 +701,7 @@ func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) 
 // Install a package in a node
 func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
 	err := execCmd(ctx, c.l,
-		append([]string{"roachprod", "install", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -711,7 +718,7 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args
 		return err
 	}
 	return execCmd(ctx, l,
-		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
 // preRunChecks runs checks to see if it makes sense to run a command.
@@ -736,7 +743,7 @@ func (c *cluster) RunWithBuffer(
 		return nil, err
 	}
 	return execCmdWithBuffer(ctx, l,
-		append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)...)
+		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
@@ -750,7 +757,7 @@ func (c *cluster) pgURL(ctx context.Context, node nodeListOption, external bool)
 		args = append(args, `--external`)
 	}
 	args = append(args, c.makeNodes(node))
-	cmd := exec.CommandContext(ctx, `roachprod`, args...)
+	cmd := exec.CommandContext(ctx, roachprod, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(strings.Join(cmd.Args, ` `))
@@ -900,7 +907,7 @@ func (m *monitor) Wait() {
 		return
 	}
 
-	err := m.wait("roachprod", "monitor", m.nodes)
+	err := m.wait(roachprod, "monitor", m.nodes)
 	if err != nil {
 		m.t.Fatal(err)
 	}
