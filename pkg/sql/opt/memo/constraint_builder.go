@@ -44,6 +44,8 @@ type constraintsBuilder struct {
 	evalCtx *tree.EvalContext
 }
 
+// buildSingleColumnConstraint creates a constraint set implied by
+// a binary boolean operator.
 func (cb *constraintsBuilder) buildSingleColumnConstraint(
 	col opt.ColumnID, op opt.Operator, val ExprView,
 ) (_ *constraint.Set, tight bool) {
@@ -76,7 +78,15 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 		return cb.buildSingleColumnConstraintConst(col, op, ExtractConstDatum(val))
 	}
 
-	// TODO(radu): try to deduce a not-NULL constraint.
+	// Try to at least deduce a not-null constraint.
+	if opt.BoolOperatorRequiresNotNullArgs(op) {
+		res := cb.notNullSpan(col)
+		// Check if the right-hand side is a variable too (e.g. a > b).
+		if val.Operator() == opt.VariableOp {
+			res = res.Intersect(cb.evalCtx, cb.notNullSpan(val.Private().(opt.ColumnID)))
+		}
+		return res, false
+	}
 
 	return unconstrained, false
 }
@@ -99,9 +109,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 			return cb.eqSpan(col, tree.DNull), true
 
 		case opt.IsNotOp:
-			return cb.singleSpan(
-				col, constraint.MakeKey(tree.DNull), excludeBoundary, emptyKey, includeBoundary,
-			), true
+			return cb.notNullSpan(col), true
 		}
 		return unconstrained, false
 	}
@@ -317,6 +325,11 @@ func (cb *constraintsBuilder) singleSpan(
 	keyCtx.Columns.InitSingle(opt.MakeOrderingColumn(col, false /* descending */))
 	span.PreferInclusive(&keyCtx)
 	return constraint.SingleSpanConstraint(&keyCtx, &span)
+}
+
+func (cb *constraintsBuilder) notNullSpan(col opt.ColumnID) *constraint.Set {
+	key := constraint.MakeKey(tree.DNull)
+	return cb.singleSpan(col, key, excludeBoundary, emptyKey, includeBoundary)
 }
 
 // eqSpan constrains a column to a single value (which can be DNull).

@@ -36,7 +36,7 @@ build
 SELECT * FROM a WHERE k=1 AND f=1.0
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string)
  ├── keys: (1)
  ├── prune: (2,4)
  ├── scan a
@@ -98,7 +98,7 @@ inner-join
  │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    ├── keys: (5)
  │    └── prune: (5,6)
- └── eq [type=bool, outer=(1,5)]
+ └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       ├── variable: a.k [type=int, outer=(1)]
       └── variable: xy.x [type=int, outer=(5)]
 
@@ -130,7 +130,7 @@ project
  ├── keys: (1)
  ├── prune: (1-4)
  ├── select
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) column7:7(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) column7:7(int!null)
  │    ├── keys: (1)
  │    ├── prune: (2-4)
  │    ├── left-join-apply
@@ -158,8 +158,8 @@ project
  │    │    │         │    │    ├── columns: xy.x:5(int!null)
  │    │    │         │    │    ├── keys: (5)
  │    │    │         │    │    └── prune: (5)
- │    │    │         │    └── filters [type=bool, outer=(1,5)]
- │    │    │         │         └── eq [type=bool, outer=(1,5)]
+ │    │    │         │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │    │         │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │    │         │              ├── variable: xy.x [type=int, outer=(5)]
  │    │    │         │              └── variable: a.k [type=int, outer=(1)]
  │    │    │         └── projections [outer=(1)]
@@ -236,7 +236,7 @@ UNION ALL
 SELECT x, y, x FROM xy WHERE y=2
 ----
 union-all
- ├── columns: k:7(int!null) k:8(int) i:9(int)
+ ├── columns: k:7(int!null) k:8(int!null) i:9(int)
  ├── left columns: a.k:1(int) a.k:1(int) a.i:2(int)
  ├── right columns: xy.x:5(int) xy.y:6(int) xy.x:5(int)
  ├── scan a
@@ -245,7 +245,7 @@ union-all
  │    ├── keys: (1)
  │    └── prune: (2)
  └── select
-      ├── columns: xy.x:5(int!null) xy.y:6(int)
+      ├── columns: xy.x:5(int!null) xy.y:6(int!null)
       ├── keys: (5)
       ├── prune: (5)
       ├── scan xy

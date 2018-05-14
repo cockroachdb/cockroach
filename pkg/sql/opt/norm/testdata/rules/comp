@@ -20,28 +20,28 @@ opt
 SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(1,2)]
-      ├── gt [type=bool, outer=(1,2)]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      ├── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── plus [type=int, outer=(2)]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── const: 1 [type=int]
-      ├── ge [type=bool, outer=(1,2)]
+      ├── ge [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int, outer=(1)]
       │         ├── variable: a.k [type=int, outer=(1)]
       │         └── const: 1 [type=int]
-      ├── lt [type=bool, outer=(1,2)]
+      ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── mult [type=int, outer=(2)]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── variable: a.i [type=int, outer=(2)]
-      └── le [type=bool, outer=(1,2)]
+      └── le [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
            ├── variable: a.i [type=int, outer=(2)]
            └── div [type=decimal, outer=(1)]
                 ├── variable: a.k [type=int, outer=(1)]
@@ -54,7 +54,7 @@ opt
 SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
@@ -95,13 +95,13 @@ WHERE
     '1:00:00'::time + i::interval >= '2:00:00'::time
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2,3)]
-      ├── eq [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
+      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
       │         ├── const: 2 [type=int]
@@ -113,13 +113,13 @@ select
       │    └── minus [type=float]
       │         ├── const: 5.0 [type=float]
       │         └── const: 2.0 [type=float]
-      ├── le [type=bool, outer=(2)]
+      ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=decimal]
       │         ├── function: length [type=int]
       │         │    └── const: 'foo' [type=string]
       │         └── const: 1 [type=decimal]
-      ├── gt [type=bool, outer=(2)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
       │         ├── minus [type=int]
@@ -165,13 +165,13 @@ WHERE
     f+i::float-10.0 >= 100.0
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2,3)]
-      ├── eq [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
+      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── plus [type=int]
       │         ├── const: 2 [type=int]
@@ -183,13 +183,13 @@ select
       │    └── plus [type=float]
       │         ├── const: 5.0 [type=float]
       │         └── const: 2.0 [type=float]
-      ├── le [type=bool, outer=(2)]
+      ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── plus [type=decimal]
       │         ├── function: length [type=int]
       │         │    └── const: 'foo' [type=string]
       │         └── const: 1 [type=decimal]
-      ├── gt [type=bool, outer=(2)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── plus [type=int]
       │         ├── plus [type=int]
@@ -237,13 +237,13 @@ WHERE
     10.0-(f+i::float) >= 100.0
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(2,3)]
-      ├── eq [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
+      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
       │         ├── const: 1 [type=int]
@@ -255,13 +255,13 @@ select
       │    └── minus [type=float]
       │         ├── const: 2.0 [type=float]
       │         └── const: 5.0 [type=float]
-      ├── ge [type=bool, outer=(2)]
+      ├── ge [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=decimal]
       │         ├── const: 1 [type=decimal]
       │         └── function: length [type=int]
       │              └── const: 'foo' [type=string]
-      ├── gt [type=bool, outer=(2)]
+      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
       │         ├── const: 2 [type=int]
@@ -301,7 +301,7 @@ opt
 SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string!null) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
@@ -326,7 +326,7 @@ opt
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)

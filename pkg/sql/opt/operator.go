@@ -152,6 +152,19 @@ var NegateOpMap = map[Operator]Operator{
 	IsNotOp:        IsOp,
 }
 
+// BoolOperatorRequiresNotNullArgs returns true if the operator can never
+// evaluate to true if one of its children is NULL.
+func BoolOperatorRequiresNotNullArgs(op Operator) bool {
+	switch op {
+	case
+		EqOp, LtOp, LeOp, GtOp, GeOp, NeOp,
+		LikeOp, NotLikeOp, ILikeOp, NotILikeOp, SimilarToOp, NotSimilarToOp,
+		RegMatchOp, NotRegMatchOp, RegIMatchOp, NotRegIMatchOp:
+		return true
+	}
+	return false
+}
+
 func init() {
 	for optOp, treeOp := range ComparisonOpReverseMap {
 		ComparisonOpMap[treeOp] = optOp

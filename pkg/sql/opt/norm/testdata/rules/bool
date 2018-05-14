@@ -567,10 +567,10 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── lt [type=bool, outer=(1,2)]
+           ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── variable: a.i [type=int, outer=(2)]
-           └── ge [type=bool, outer=(2,3)]
+           └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
                 ├── variable: a.i [type=int, outer=(2)]
                 └── variable: a.f [type=float, outer=(3)]
 
@@ -585,10 +585,10 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── lt [type=bool, outer=(1,2)]
+           ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── variable: a.i [type=int, outer=(2)]
-           ├── ge [type=bool, outer=(2,3)]
+           ├── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── variable: a.f [type=float, outer=(3)]
            ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - /5]; tight)]
@@ -609,19 +609,19 @@ opt
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
- └── filters [type=bool, outer=(1-3)]
-      ├── lt [type=bool, outer=(1,2)]
+ └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
+      ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── ge [type=bool, outer=(2,3)]
+      ├── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── variable: a.f [type=float, outer=(3)]
-      └── le [type=bool, outer=(1-3)]
+      └── le [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
            ├── variable: a.f [type=float, outer=(3)]
            └── plus [type=int, outer=(1,2)]
                 ├── variable: a.k [type=int, outer=(1)]
@@ -637,10 +637,10 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3), constraints=(contradiction; tight)]
-      ├── lt [type=bool, outer=(1,2)]
+      ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── ge [type=bool, outer=(2,3)]
+      ├── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── variable: a.f [type=float, outer=(3)]
       ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - /5]; tight)]
@@ -667,11 +667,11 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── and [type=bool, outer=(1-3)]
-           │    ├── lt [type=bool, outer=(1,2)]
+           ├── and [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
+           │    ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
            │    │    ├── variable: a.k [type=int, outer=(1)]
            │    │    └── variable: a.i [type=int, outer=(2)]
-           │    └── ge [type=bool, outer=(2,3)]
+           │    └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
            │         ├── variable: a.i [type=int, outer=(2)]
            │         └── variable: a.f [type=float, outer=(3)]
            └── and [type=bool, outer=(2,3), constraints=(/2: (/NULL - /5]; /3: (/NULL - /1.0]; tight)]
@@ -693,10 +693,10 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       ├── or [type=bool, outer=(1-3)]
-      │    ├── lt [type=bool, outer=(1,2)]
+      │    ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       │    │    ├── variable: a.k [type=int, outer=(1)]
       │    │    └── variable: a.i [type=int, outer=(2)]
-      │    └── ge [type=bool, outer=(2,3)]
+      │    └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── variable: a.f [type=float, outer=(3)]
       └── or [type=bool, outer=(2,3)]

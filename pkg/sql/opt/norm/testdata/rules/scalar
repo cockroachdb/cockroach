@@ -37,12 +37,12 @@ project
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
-      ├── eq [type=bool, outer=(1,2)]
+      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── plus [type=int, outer=(2)]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── const: 1 [type=int]
-      ├── ne [type=bool, outer=(1,2)]
+      ├── ne [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int, outer=(1)]
       │         ├── const: 2 [type=int]

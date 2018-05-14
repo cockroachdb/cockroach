@@ -736,7 +736,7 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── select
-           │    ├── columns: column1:1(int)
+           │    ├── columns: column1:1(int!null)
            │    ├── values
            │    │    ├── columns: column1:1(int)
            │    │    └── tuple [type=tuple{int}]
@@ -759,7 +759,7 @@ project
            ├── project
            │    ├── columns: column3:3(tuple{int, int})
            │    ├── select
-           │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    ├── columns: column1:1(int!null) column2:2(int)
            │    │    ├── values
            │    │    │    ├── columns: column1:1(int) column2:2(int)
            │    │    │    └── tuple [type=tuple{int, int}]
@@ -788,7 +788,7 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── select
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
@@ -812,7 +812,113 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── gt [type=bool]
+                │    │         ├── variable: column1 [type=int]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: int [type=int]
+                          └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+project
+ ├── columns: column2:2(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── gt [type=bool]
+                │         ├── variable: column1 [type=int]
+                │         └── const: 1 [type=int]
+                └── cast: int [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+project
+ ├── columns: column4:4(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
+                │    │    ├── values
+                │    │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    │    └── tuple [type=tuple{int, int}]
+                │    │    │         ├── const: 1 [type=int]
+                │    │    │         └── const: 1 [type=int]
+                │    │    └── gt [type=bool]
+                │    │         ├── variable: column1 [type=int]
+                │    │         └── const: 1 [type=int]
+                │    └── projections
+                │         └── tuple [type=tuple{int, int}]
+                │              ├── variable: column1 [type=int]
+                │              └── variable: column2 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── cast: int [type=int]
+                          └── null [type=unknown]
+
+build
+SELECT NULL::int NOT IN (SELECT * FROM (VALUES (1)) AS t(a) WHERE a > 1)
+----
+project
+ ├── columns: column2:2(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── select
+                │    ├── columns: column1:1(int!null)
+                │    ├── values
+                │    │    ├── columns: column1:1(int)
+                │    │    └── tuple [type=tuple{int}]
+                │    │         └── const: 1 [type=int]
+                │    └── gt [type=bool]
+                │         ├── variable: column1 [type=int]
+                │         └── const: 1 [type=int]
+                └── cast: int [type=int]
+                     └── null [type=unknown]
+
+build
+SELECT (1, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
+----
+project
+ ├── columns: column4:4(bool)
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── not [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: column3:3(tuple{int, int})
+                │    ├── select
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
                 │    │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    │    └── tuple [type=tuple{int, int}]

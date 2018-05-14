@@ -37,7 +37,7 @@ build
 SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
 ----
 select
- ├── columns: s:4(string) column5:5(int)
+ ├── columns: s:4(string) column5:5(int!null)
  ├── group-by
  │    ├── columns: kv.s:4(string) column5:5(int)
  │    ├── grouping columns: kv.s:4(string)
@@ -57,9 +57,9 @@ build
 SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
 ----
 project
- ├── columns: column6:6(int) column5:5(int)
+ ├── columns: column6:6(int) column5:5(int!null)
  ├── select
- │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── columns: column5:5(int!null) column6:6(int)
  │    ├── group-by
  │    │    ├── columns: column5:5(int) column6:6(int)
  │    │    ├── project
@@ -87,7 +87,7 @@ SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 project
  ├── columns: column6:6(int) column7:7(int)
  ├── select
- │    ├── columns: column5:5(int) column6:6(int) column7:7(int)
+ │    ├── columns: column5:5(int!null) column6:6(int) column7:7(int)
  │    ├── group-by
  │    │    ├── columns: column5:5(int) column6:6(int) column7:7(int)
  │    │    ├── project
@@ -180,7 +180,7 @@ SELECT MAX(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
 project
  ├── columns: column5:5(int)
  ├── select
- │    ├── columns: kv.v:2(int) column5:5(int)
+ │    ├── columns: kv.v:2(int!null) column5:5(int)
  │    ├── group-by
  │    │    ├── columns: kv.v:2(int) column5:5(int)
  │    │    ├── grouping columns: kv.v:2(int)
@@ -231,9 +231,9 @@ build
 SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING SUM(w) IN (4, 5, 6)
 ----
 project
- ├── columns: column6:6(decimal)
+ ├── columns: column6:6(decimal!null)
  ├── select
- │    ├── columns: column5:5(string) column6:6(decimal)
+ │    ├── columns: column5:5(string) column6:6(decimal!null)
  │    ├── group-by
  │    │    ├── columns: column5:5(string) column6:6(decimal)
  │    │    ├── grouping columns: column5:5(string)
@@ -294,7 +294,7 @@ build fully-qualify-names
 SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
 ----
 select
- ├── columns: column5:5(string) column6:6(int) column7:7(int)
+ ├── columns: column5:5(string) column6:6(int!null) column7:7(int)
  ├── group-by
  │    ├── columns: column5:5(string) column6:6(int) column7:7(int)
  │    ├── grouping columns: column5:5(string)
@@ -320,12 +320,12 @@ build
 SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING SUM(k)=10 ORDER BY mk
 ----
 sort
- ├── columns: mk:5(decimal)
+ ├── columns: mk:5(decimal!null)
  ├── ordering: +5
  └── project
-      ├── columns: column5:5(decimal)
+      ├── columns: column5:5(decimal!null)
       ├── select
-      │    ├── columns: kv.v:2(int) column5:5(decimal)
+      │    ├── columns: kv.v:2(int) column5:5(decimal!null)
       │    ├── group-by
       │    │    ├── columns: kv.v:2(int) column5:5(decimal)
       │    │    ├── grouping columns: kv.v:2(int)
@@ -354,7 +354,7 @@ sort
  └── project
       ├── columns: mk:6(decimal)
       ├── select
-      │    ├── columns: kv.v:2(int) column5:5(int) mk:6(decimal)
+      │    ├── columns: kv.v:2(int) column5:5(int!null) mk:6(decimal)
       │    ├── group-by
       │    │    ├── columns: kv.v:2(int) column5:5(int) mk:6(decimal)
       │    │    ├── grouping columns: kv.v:2(int)
@@ -385,7 +385,7 @@ sort
  └── project
       ├── columns: mk:5(decimal)
       ├── select
-      │    ├── columns: kv.v:2(int) mk:5(decimal)
+      │    ├── columns: kv.v:2(int!null) mk:5(decimal)
       │    ├── group-by
       │    │    ├── columns: kv.v:2(int) mk:5(decimal)
       │    │    ├── grouping columns: kv.v:2(int)
@@ -409,12 +409,12 @@ build
 SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk1
 ----
 sort
- ├── columns: mk1:5(int) mk2:5(int)
+ ├── columns: mk1:5(int!null) mk2:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: column5:5(int)
+      ├── columns: column5:5(int!null)
       ├── select
-      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── columns: kv.v:2(int) column5:5(int!null)
       │    ├── group-by
       │    │    ├── columns: kv.v:2(int) column5:5(int)
       │    │    ├── grouping columns: kv.v:2(int)
@@ -438,12 +438,12 @@ build
 SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk2
 ----
 sort
- ├── columns: mk1:5(int) mk2:5(int)
+ ├── columns: mk1:5(int!null) mk2:5(int!null)
  ├── ordering: +5
  └── project
-      ├── columns: column5:5(int)
+      ├── columns: column5:5(int!null)
       ├── select
-      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── columns: kv.v:2(int) column5:5(int!null)
       │    ├── group-by
       │    │    ├── columns: kv.v:2(int) column5:5(int)
       │    │    ├── grouping columns: kv.v:2(int)

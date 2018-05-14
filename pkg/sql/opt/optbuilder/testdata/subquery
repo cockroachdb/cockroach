@@ -1100,7 +1100,7 @@ build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
 ----
 select
- ├── columns: foo1:1(int) moo2:2(int) moo3:3(int)
+ ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── values
  │    ├── columns: column1:1(int) column2:2(int) column3:3(int)
  │    ├── tuple [type=tuple{int, int, int}]
@@ -1343,9 +1343,9 @@ project
  │         └── and [type=bool]
  │              ├── any: eq [type=bool]
  │              │    ├── project
- │              │    │    ├── columns: tab4.col1:7(float)
+ │              │    │    ├── columns: tab4.col1:7(float!null)
  │              │    │    ├── select
- │              │    │    │    ├── columns: tab4.col0:6(int) tab4.col1:7(float) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
+ │              │    │    │    ├── columns: tab4.col0:6(int) tab4.col1:7(float!null) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
  │              │    │    │    ├── scan tab4
  │              │    │    │    │    └── columns: tab4.col0:6(int) tab4.col1:7(float) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
  │              │    │    │    └── gt [type=bool]

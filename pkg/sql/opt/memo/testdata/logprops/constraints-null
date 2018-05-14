@@ -43,7 +43,7 @@ opt
 SELECT * FROM t WHERE a IS NOT NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── stats: [rows=333]
  ├── scan t
  │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
@@ -74,7 +74,7 @@ opt
 SELECT * FROM t WHERE b IS NOT NULL AND c IS NOT NULL
 ----
 select
- ├── columns: a:1(int) b:2(bool) c:3(string)
+ ├── columns: a:1(int) b:2(bool!null) c:3(string!null)
  ├── stats: [rows=111]
  ├── scan t
  │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
@@ -86,3 +86,78 @@ select
       └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
            ├── variable: t.c [type=string, outer=(3)]
            └── null [type=unknown]
+
+exec-ddl
+CREATE TABLE xy (
+  x INT,
+  y INT
+)
+----
+TABLE xy
+ ├── x int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Test that we get a not-NULL constraint on x.
+opt
+SELECT * FROM xy WHERE x > abs(y)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=333]
+ ├── scan xy
+ │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+           ├── variable: xy.x [type=int, outer=(1)]
+           └── function: abs [type=int, outer=(2)]
+                └── variable: xy.y [type=int, outer=(2)]
+
+# Test that we get a not-NULL constraint on x.
+opt
+SELECT * FROM xy WHERE now()::int < x
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── stats: [rows=333]
+ ├── scan xy
+ │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+      └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+           ├── variable: xy.x [type=int, outer=(1)]
+           └── cast: int [type=int]
+                └── function: now [type=timestamptz]
+
+# Test that we get a not-NULL constraint on x and y.
+opt
+SELECT * FROM xy WHERE x > y
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=111]
+ ├── scan xy
+ │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── variable: xy.x [type=int, outer=(1)]
+           └── variable: xy.y [type=int, outer=(2)]
+
+# Test that we get a not-NULL constraint on x and y.
+opt
+SELECT * FROM xy WHERE x = y
+----
+select
+ ├── columns: x:1(int!null) y:2(int!null)
+ ├── stats: [rows=111]
+ ├── scan xy
+ │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    └── stats: [rows=1000]
+ └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── variable: xy.x [type=int, outer=(1)]
+           └── variable: xy.y [type=int, outer=(2)]

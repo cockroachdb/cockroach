@@ -19,7 +19,7 @@ project
  └── projections
       └── exists [type=bool]
            └── select
-                ├── columns: t.k:1(int!null) t.u:2(int) t.v:3(int)
+                ├── columns: t.k:1(int!null) t.u:2(int!null) t.v:3(int)
                 ├── stats: [rows=333]
                 ├── cost: 1010.00
                 ├── keys: (1)
@@ -28,8 +28,8 @@ project
                 │    ├── stats: [rows=1000]
                 │    ├── cost: 1000.00
                 │    └── keys: (1)
-                └── filters [type=bool, outer=(1,2)]
-                     └── eq [type=bool, outer=(1,2)]
+                └── filters [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+                     └── eq [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
                           ├── variable: t.u [type=int, outer=(2)]
                           └── mult [type=int, outer=(1)]
                                ├── variable: t.k [type=int, outer=(1)]
