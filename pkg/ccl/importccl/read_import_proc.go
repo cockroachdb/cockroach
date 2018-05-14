@@ -337,6 +337,12 @@ func newReadImportDataProcessor(
 	return cp, nil
 }
 
+type inputConverter interface {
+	start(ctx context.Context, group *errgroup.Group)
+	readFile(context.Context, io.Reader, int32, string, func(finished bool) error) error
+	inputFinished()
+}
+
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	sampleSize  int32
@@ -369,14 +375,20 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	kvCh := make(chan kvBatch)
 	sampleCh := make(chan sqlbase.EncDatumRow)
 
-	c := newCSVInputReader(cp.inputFromat.Csv, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
-	c.start(gCtx, group, kvCh)
+	var conv inputConverter
+	switch cp.inputFromat.Format {
+	case roachpb.IOFileFormat_CSV:
+		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
+	case roachpb.IOFileFormat_MysqlOutfile:
+		conv = newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, len(cp.tableDesc.VisibleColumns()))
+	}
+	conv.start(gCtx, group)
 
 	// Read input files into kvs
 	group.Go(func() error {
 		sCtx, span := tracing.ChildSpan(gCtx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		defer c.inputFinished()
+		defer conv.inputFinished()
 
 		job, err := cp.registry.LoadJob(sCtx, cp.progress.JobID)
 		if err != nil {
@@ -396,7 +408,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			})
 		}
 
-		return readInputFiles(sCtx, cp.uri, c.readFile, progFn, cp.settings)
+		return readInputFiles(sCtx, cp.uri, conv.readFile, progFn, cp.settings)
 	})
 
 	// Sample KVs

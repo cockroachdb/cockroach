@@ -23,10 +23,12 @@ message IOFileFormat {
   enum FileFormat {
     Unknown = 0;
     CSV = 1;
+    MysqlOutfile = 2;
   }
 
   optional FileFormat format = 1 [(gogoproto.nullable) = false];
   optional CSVOptions csv = 2 [(gogoproto.nullable) = false];
+  optional MySQLOutfileOptions mysql_out = 3 [(gogoproto.nullable) = false];
 }
 
 // CSVOptions describe the format of csv data (delimiter, comment, etc).
@@ -39,4 +41,27 @@ message CSVOptions {
   optional string null_encoding = 3 [(gogoproto.nullable) = true];
   // skip the first N lines of the input (e.g. to ignore column headers) when reading.
   optional uint32 skip = 4 [(gogoproto.nullable) = false];
+}
+
+// MySQLOutfileOptions describe the format of mysql's outfile.
+message MySQLOutfileOptions {
+  enum Enclose {
+    Never = 0;
+    Always = 1;
+    Optional = 2;
+  }
+
+  // row_separator is the delimitor between rows (mysql's --rows-terminated-by)
+  optional int32 row_separator = 1 [(gogoproto.nullable) = false];
+  // field_separator is the delimitor between fields (mysql's --fields-terminated-by)
+  optional int32 field_separator = 2 [(gogoproto.nullable) = false];
+  // enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
+  optional Enclose enclose = 3 [(gogoproto.nullable) = false];
+  // encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+  optional int32 encloser = 4 [(gogoproto.nullable) = false];
+  // has_escape indicates that an escape character is set (mysql's default is not).
+  optional bool has_escape = 5 [(gogoproto.nullable) = false];
+  // escape is the character used to prefix the other delimitors (--fields-escaped-by)
+  optional int32 escape = 6 [(gogoproto.nullable) = false];
+
 }
