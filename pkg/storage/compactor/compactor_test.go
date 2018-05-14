@@ -672,25 +672,29 @@ func TestCompactorDisabled(t *testing.T) {
 	thresholdBytesUsedFraction.Override(&compactor.st.SV, 0.0)               // disable
 	defer cleanup()
 
-	suggest := func() {
-		// Add a suggested compaction that won't get processed because it's
-		// not over any of the thresholds.
-		compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
-			StartKey: key("a"), EndKey: key("b"),
-			Compaction: storagebase.Compaction{
-				// Suggest so little that two suggestions stay below the threshold.
-				// Otherwise this test gets racy and difficult to fix without remodeling
-				// the compactor.
-				Bytes:            threshold / 3,
-				SuggestedAtNanos: timeutil.Now().UnixNano(),
-			},
-		})
-	}
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+		StartKey: key("a"), EndKey: key("b"),
+		Compaction: storagebase.Compaction{
+			// Suggest so little that this suggestion plus the one below stays below
+			// the threshold. Otherwise this test gets racy and difficult to fix
+			// without remodeling the compactor.
+			Bytes:            threshold / 3,
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
 
-	suggest()
 	enabled.Override(&compactor.st.SV, false)
-	suggest()
-	// suggest()
+
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+		// Note that we don't reuse the same interval above or we hit another race,
+		// in which the compactor discards the first suggestion and wipes out the
+		// second one with it, without incrementing the discarded metric.
+		StartKey: key("b"), EndKey: key("c"),
+		Compaction: storagebase.Compaction{
+			Bytes:            threshold / 3,
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
 
 	// Verify that the record is deleted without a compaction and that the
 	// bytes are recorded as having been skipped.

@@ -330,10 +330,10 @@ func (c *Compactor) processCompaction(
 			continue
 		}
 		if tooOld {
-			log.Warning(ctx, "skipping", aggr.Bytes)
-			c.Metrics.BytesSkipped.Inc(aggr.Bytes)
+			log.Warning(ctx, "skipping", sc.Bytes)
+			c.Metrics.BytesSkipped.Inc(sc.Bytes)
 		}
-		log.Warning(ctx, "clear", aggr.Bytes)
+		log.Warning(ctx, "clear", sc.Bytes)
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 		if err := delBatch.Clear(engine.MVCCKey{Key: key}); err != nil {
 			log.Fatal(ctx, err) // should never happen on a batch
