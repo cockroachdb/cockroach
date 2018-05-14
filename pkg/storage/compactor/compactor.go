@@ -295,13 +295,20 @@ func (c *Compactor) processCompaction(
 	capacity roachpb.StoreCapacity,
 	delBatch engine.Batch,
 ) (int64, error) {
-	shouldProcess := c.enabled() && (aggr.Bytes >= c.thresholdBytes() ||
-		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.thresholdBytesUsedFraction()) ||
-		aggr.Bytes >= int64(float64(capacity.Available)*c.thresholdBytesAvailableFraction()))
+	var (
+		aboveSizeThresh      = aggr.Bytes >= c.thresholdBytes()
+		aboveUsedFracThresh  = aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.thresholdBytesUsedFraction())
+		aboveAvailFracThresh = aggr.Bytes >= int64(float64(capacity.Available)*c.thresholdBytesAvailableFraction())
+	)
 
+	shouldProcess := c.enabled() && (aboveSizeThresh || aboveUsedFracThresh || aboveAvailFracThresh)
 	if shouldProcess {
 		startTime := timeutil.Now()
-		log.Infof(ctx, "processing compaction %s", aggr)
+		log.Infof(ctx,
+			"processing compaction %s (reasons: size=%t used=%t avail=%t)",
+			aggr, aboveSizeThresh, aboveUsedFracThresh, aboveAvailFracThresh,
+		)
+
 		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
 			c.Metrics.CompactionFailures.Inc(1)
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
