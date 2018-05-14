@@ -1,0 +1,235 @@
+exec-ddl
+CREATE TABLE con_session (
+    session_id STRING(100) NOT NULL,
+    affliate STRING(50) NOT NULL,
+    channel STRING(50) NOT NULL,
+    language STRING(20) NOT NULL,
+    date_creation TIMESTAMP NOT NULL,
+    date_updated TIMESTAMP NOT NULL,
+    status STRING(20) NOT NULL,
+    platform STRING(50) NULL,
+    query_id STRING(100) NULL,
+    CONSTRAINT "primary" PRIMARY KEY (session_id ASC),
+    FAMILY "primary" (session_id, affliate, channel, language, date_creation, date_updated, status, platform, query_id)
+    ) PARTITION BY RANGE (session_id ) (
+      PARTITION east VALUES FROM ('E-') TO ('F-')
+     ,PARTITION west VALUES FROM ('W-') TO ('X-')
+);
+----
+TABLE con_session
+ ├── session_id string not null
+ ├── affliate string not null
+ ├── channel string not null
+ ├── language string not null
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ ├── status string not null
+ ├── platform string
+ ├── query_id string
+ └── INDEX primary
+      └── session_id string not null
+
+exec-ddl
+CREATE TABLE con_customer_identifier (
+    session_id STRING(100) NOT NULL,
+    customer_key STRING(50) NOT NULL,
+    customer_value STRING(50) NOT NULL,
+    date_creation TIMESTAMP NOT NULL,
+    date_updated TIMESTAMP NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (session_id ASC, customer_key ASC),
+    CONSTRAINT fk_session_id_ref_con_session FOREIGN KEY (session_id) REFERENCES con_session (session_id),
+    FAMILY "primary" (session_id, customer_key, customer_value, date_creation, date_updated)
+) interleave in parent con_session (session_id);
+----
+TABLE con_customer_identifier
+ ├── session_id string not null
+ ├── customer_key string not null
+ ├── customer_value string not null
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ └── INDEX primary
+      ├── session_id string not null
+      └── customer_key string not null
+
+exec-ddl
+CREATE TABLE CON_DEVICE_IDENTIFIER (
+  ID varchar(100) NOT NULL,
+  SESSION_ID varchar(100) NOT NULL,
+	DEVICE_ID varchar(50)  NULL,
+	DEVICE_NAME varchar(50)  NULL,
+	DEVICE_MAKE varchar(50)  NULL,
+	DEVICE_MACAddress varchar(50)  NULL,
+	DEVICE_MODEL varchar(50)  NULL,
+	DEVICE_SERIALNO varchar(50)  NULL,
+	DATE_CREATION TIMESTAMP NOT NULL,
+	DATE_UPDATED TIMESTAMP NOT NULL,
+	PRIMARY KEY (SESSION_ID,ID),
+	FOREIGN KEY (SESSION_ID)
+    REFERENCES CON_SESSION(SESSION_ID)
+    ON DELETE CASCADE
+) interleave in parent con_session (session_id);
+----
+TABLE con_device_identifier
+ ├── id string not null
+ ├── session_id string not null
+ ├── device_id string
+ ├── device_name string
+ ├── device_make string
+ ├── device_macaddress string
+ ├── device_model string
+ ├── device_serialno string
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ └── INDEX primary
+      ├── session_id string not null
+      └── id string not null
+
+exec-ddl
+CREATE TABLE CON_PARAMETERS (
+    SESSION_ID varchar(100) NOT NULL,
+	PARAMETER_KEY varchar(50) NOT NULL,
+	PARAMETER_VALUE varchar(50) NOT NULL,
+	DATE_CREATION TIMESTAMP NOT NULL,
+	DATE_UPDATED TIMESTAMP NOT NULL,
+	PRIMARY KEY (SESSION_ID,PARAMETER_KEY),
+    FOREIGN KEY (SESSION_ID)
+        REFERENCES CON_SESSION(SESSION_ID)
+        ON DELETE CASCADE
+) interleave in parent con_session (session_id);
+----
+TABLE con_parameters
+ ├── session_id string not null
+ ├── parameter_key string not null
+ ├── parameter_value string not null
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ └── INDEX primary
+      ├── session_id string not null
+      └── parameter_key string not null
+
+exec-ddl
+CREATE TABLE CON_MULTI_VARIANTS (
+    SESSION_ID varchar(100) NOT NULL,
+	VARIANT_KEY varchar(50) NOT NULL,
+	VARIANT_VALUE varchar(50) NOT NULL,
+	DATE_CREATION TIMESTAMP NOT NULL,
+	DATE_UPDATED TIMESTAMP NOT NULL,
+	PRIMARY KEY (SESSION_ID,VARIANT_KEY),
+    FOREIGN KEY (SESSION_ID)
+        REFERENCES CON_SESSION(SESSION_ID)
+        ON DELETE CASCADE
+) interleave in parent con_session (session_id);
+----
+TABLE con_multi_variants
+ ├── session_id string not null
+ ├── variant_key string not null
+ ├── variant_value string not null
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ └── INDEX primary
+      ├── session_id string not null
+      └── variant_key string not null
+
+exec-ddl
+CREATE TABLE con_query_identifier
+(
+   ID varchar(100) NOT NULL,
+   SESSION_ID varchar(100) NOT NULL,
+   QUERY_ID varchar(100),
+   DATE_CREATION timestamp NOT NULL,
+   DATE_UPDATED timestamp NOT NULL,
+   PRIMARY KEY (SESSION_ID,ID),
+   FOREIGN KEY (SESSION_ID)
+       REFERENCES CON_SESSION(SESSION_ID)
+       ON DELETE CASCADE
+) interleave in parent con_session (session_id);
+----
+TABLE con_query_identifier
+ ├── id string not null
+ ├── session_id string not null
+ ├── query_id string
+ ├── date_creation timestamp not null
+ ├── date_updated timestamp not null
+ └── INDEX primary
+      ├── session_id string not null
+      └── id string not null
+
+opt
+SELECT convoysess0_.session_id AS session_2_3_0_,
+    convoysess0_.parameter_key AS paramete1_3_0_,
+    convoysess0_.parameter_key AS paramete1_3_1_,
+    convoysess0_.session_id AS session_2_3_1_,
+    convoysess0_.date_creation AS date_cre3_3_1_,
+    convoysess0_.parameter_value AS paramete4_3_1_,
+    convoysess0_.date_updated AS date_upd5_3_1_
+FROM con_parameters AS convoysess0_
+WHERE convoysess0_.session_id = '$1';
+----
+scan con_parameters
+ ├── columns: session_2_3_0_:1(string!null) paramete1_3_0_:2(string!null) paramete1_3_1_:2(string!null) session_2_3_1_:1(string!null) date_cre3_3_1_:4(timestamp!null) paramete4_3_1_:3(string!null) date_upd5_3_1_:5(timestamp!null)
+ ├── constraint: /1/2: [/'$1' - /'$1']
+ └── keys: (1,2)
+
+opt
+SELECT convoysess0_.customer_key AS customer1_0_0_,
+    convoysess0_.session_id AS session_2_0_0_,
+    convoysess0_.date_creation AS date_cre3_0_0_,
+    convoysess0_.customer_value AS customer4_0_0_,
+    convoysess0_.date_updated AS date_upd5_0_0_
+FROM con_customer_identifier AS convoysess0_
+WHERE (convoysess0_.customer_key = '$1') AND (convoysess0_.session_id = '$2');
+----
+scan con_customer_identifier
+ ├── columns: customer1_0_0_:2(string!null) session_2_0_0_:1(string!null) date_cre3_0_0_:4(timestamp!null) customer4_0_0_:3(string!null) date_upd5_0_0_:5(timestamp!null)
+ ├── constraint: /1/2: [/'$2'/'$1' - /'$2'/'$1']
+ └── keys: (1,2)
+
+opt
+SELECT convoysess0_.session_id AS session_2_0_0_,
+    convoysess0_.customer_key AS customer1_0_0_,
+    convoysess0_.customer_key AS customer1_0_1_,
+    convoysess0_.session_id AS session_2_0_1_,
+    convoysess0_.date_creation AS date_cre3_0_1_,
+    convoysess0_.customer_value AS customer4_0_1_,
+    convoysess0_.date_updated AS date_upd5_0_1_
+FROM con_customer_identifier AS convoysess0_
+WHERE convoysess0_.session_id = '$1';
+----
+scan con_customer_identifier
+ ├── columns: session_2_0_0_:1(string!null) customer1_0_0_:2(string!null) customer1_0_1_:2(string!null) session_2_0_1_:1(string!null) date_cre3_0_1_:4(timestamp!null) customer4_0_1_:3(string!null) date_upd5_0_1_:5(timestamp!null)
+ ├── constraint: /1/2: [/'$1' - /'$1']
+ └── keys: (1,2)
+
+opt
+SELECT convoysess0_.session_id AS session_1_5_,
+    convoysess0_.affliate AS affliate2_5_,
+    convoysess0_.channel AS channel3_5_,
+    convoysess0_.date_creation AS date_cre4_5_,
+    convoysess0_.language AS language5_5_,
+    convoysess0_.platform AS platform6_5_,
+    convoysess0_.query_id AS query_id7_5_,
+    convoysess0_.status AS status8_5_,
+    convoysess0_.date_updated AS date_upd9_5_
+FROM con_session AS convoysess0_
+WHERE convoysess0_.session_id = '$1';
+----
+scan con_session
+ ├── columns: session_1_5_:1(string!null) affliate2_5_:2(string!null) channel3_5_:3(string!null) date_cre4_5_:5(timestamp!null) language5_5_:4(string!null) platform6_5_:8(string) query_id7_5_:9(string) status8_5_:7(string!null) date_upd9_5_:6(timestamp!null)
+ ├── constraint: /1: [/'$1' - /'$1']
+ └── keys: (1)
+
+opt
+SELECT convoysess0_.session_id AS session_1_2_0_,
+    convoysess0_.variant_key AS variant_2_2_0_,
+    convoysess0_.session_id AS session_1_2_1_,
+    convoysess0_.variant_key AS variant_2_2_1_,
+    convoysess0_.date_creation AS date_cre3_2_1_,
+    convoysess0_.date_updated AS date_upd4_2_1_,
+    convoysess0_.variant_value AS variant_5_2_1_
+FROM con_multi_variants AS convoysess0_
+WHERE convoysess0_.session_id = '$1';
+----
+scan con_multi_variants
+ ├── columns: session_1_2_0_:1(string!null) variant_2_2_0_:2(string!null) session_1_2_1_:1(string!null) variant_2_2_1_:2(string!null) date_cre3_2_1_:4(timestamp!null) date_upd4_2_1_:5(timestamp!null) variant_5_2_1_:3(string!null)
+ ├── constraint: /1/2: [/'$1' - /'$1']
+ └── keys: (1,2)
