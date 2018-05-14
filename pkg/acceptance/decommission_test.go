@@ -227,7 +227,8 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			// Note that the process may return before the node is known as draining.
+			{strconv.Itoa(int(target)), "true", "0", "true", "false|true"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -284,7 +285,8 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			// Note that the process may return before the node is known as draining.
+			{strconv.Itoa(int(target)), "true", "0", "true", "false|true"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -331,7 +333,8 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			// Note that the process may return before the node is known as draining.
+			{strconv.Itoa(int(target)), "true", "0", "true", "false|true"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
