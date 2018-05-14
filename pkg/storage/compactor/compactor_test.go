@@ -657,10 +657,12 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 func TestCompactorDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	threshold := int64(10)
+
 	capacityFn := func() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{
-			LogicalBytes: 100 * thresholdBytes.Default(),
-			Available:    100 * thresholdBytes.Default(),
+			LogicalBytes: 100 * threshold,
+			Available:    100 * threshold,
 		}, nil
 	}
 	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
@@ -676,7 +678,7 @@ func TestCompactorDisabled(t *testing.T) {
 		compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 			StartKey: key("a"), EndKey: key("b"),
 			Compaction: storagebase.Compaction{
-				Bytes:            thresholdBytes.Default() - 1,
+				Bytes:            threshold - 1,
 				SuggestedAtNanos: timeutil.Now().UnixNano(),
 			},
 		})
@@ -685,7 +687,7 @@ func TestCompactorDisabled(t *testing.T) {
 	suggest()
 	enabled.Override(&compactor.st.SV, false)
 	suggest()
-	suggest()
+	// suggest()
 
 	// Verify that the record is deleted without a compaction and that the
 	// bytes are recorded as having been skipped.
@@ -698,7 +700,7 @@ func TestCompactorDisabled(t *testing.T) {
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), 3*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(threshold-1); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 
