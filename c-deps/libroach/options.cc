@@ -264,6 +264,12 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.target_file_size_base = 4 << 20;  // 4 MB
   options.target_file_size_multiplier = 2;
 
+  // Because we open a long running rocksdb instance, we do not want the
+  // manifest file to grow unbounded. Assuming each manifest entry is about 1
+  // KB, this allows for 128 K entries. This could account for several hours to
+  // few months of runtime without rolling based on the workload.
+  options.max_manifest_file_size = 128 << 20;  // 128 MB
+
   rocksdb::BlockBasedTableOptions table_options;
   if (db_opts.cache != nullptr) {
     table_options.block_cache = db_opts.cache->rep;
