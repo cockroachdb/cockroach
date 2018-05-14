@@ -116,7 +116,7 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	}
 	c.Run(ctx, controller, "sh", "-c", `"test -f .ssh/id_rsa || ssh-keygen -f .ssh/id_rsa -t rsa -N ''"`)
 	pubSSHKey := filepath.Join(tempDir, "id_rsa.pub")
-	cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
+	cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller), ".ssh/id_rsa.pub", pubSSHKey)
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
@@ -154,14 +154,14 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 			c.Run(ctx, node, args...)
 			return
 		}
-		args = append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)
+		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		c.l.printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
-		args = append([]string{"roachprod", "run", c.makeNodes(node), "--"}, args...)
+		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
 		c.l.printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
@@ -221,7 +221,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	if testErr != nil {
 		logf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
-		cmd := exec.CommandContext(ctx, "roachprod", "run", c.makeNodes(controller),
+		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
 			"tar -chj --ignore-failed-read -f- /mnt/data1/jepsen/cockroachdb/store/latest /mnt/data1/jepsen/cockroachdb/invoke.log /var/log/")
@@ -239,7 +239,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		anyFailed := false
 		for _, file := range collectFiles {
-			cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/store/latest/"+file,
 				filepath.Join(outputDir, file))
 			cmd.Stdout = c.l.stdout
@@ -250,7 +250,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		}
 		if anyFailed {
 			// Try to figure out why this is so common.
-			cmd := c.LoggedCommand(ctx, "roachprod", "get", c.makeNodes(controller),
+			cmd := c.LoggedCommand(ctx, roachprod, "get", c.makeNodes(controller),
 				"/mnt/data1/jepsen/cockroachdb/invoke.log",
 				filepath.Join(outputDir, "invoke.log"))
 			cmd.Stdout = c.l.stdout

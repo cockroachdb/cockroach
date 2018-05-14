@@ -92,6 +92,8 @@ Use 'roachtest run -n' to see a list of all tests.
 		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 	runCmd.Flags().BoolVar(
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
+	runCmd.Flags().StringVar(
+		&roachprod, "roachprod", "", "path to roachprod binary to use")
 
 	var storeGenCmd = &cobra.Command{
 		Use:   "store-gen [workload]",
