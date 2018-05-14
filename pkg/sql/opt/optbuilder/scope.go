@@ -415,28 +415,35 @@ func (s *scope) FindSourceMatchingName(
 	srcMeta tree.ColumnSourceMeta,
 	err error,
 ) {
-	sources := make(map[tree.TableName]struct{})
-	for _, col := range s.cols {
-		sources[col.table] = exists
-	}
-
-	found := false
+	// If multiple sources match tn in the same scope, we return an error
+	// due to ambiguity. If no sources match in the current scope, we
+	// search the parent scope. If the source is not found in any of the
+	// ancestor scopes, we return an error.
 	var source tree.TableName
-	for src := range sources {
-		if !sourceNameMatches(src, tn) {
-			continue
+	for ; s != nil; s = s.parent {
+		sources := make(map[tree.TableName]struct{})
+		for _, col := range s.cols {
+			sources[col.table] = exists
 		}
+
+		found := false
+		for src := range sources {
+			if !sourceNameMatches(src, tn) {
+				continue
+			}
+			if found {
+				return tree.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
+			}
+			found = true
+			source = src
+		}
+
 		if found {
-			return tree.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
+			return tree.ExactlyOne, &source, s, nil
 		}
-		found = true
-		source = src
 	}
 
-	if !found {
-		return tree.NoResults, nil, s, nil
-	}
-	return tree.ExactlyOne, &source, s, nil
+	return tree.NoResults, nil, s, nil
 }
 
 // sourceNameMatches checks whether a request for table name toFind
@@ -478,8 +485,8 @@ func (s *scope) Resolve(
 	// Otherwise, a table is known but not the column yet.
 	inScope := srcMeta.(*scope)
 	for i := range inScope.cols {
-		col := &s.cols[i]
-		if col.name == colName && sourceNameMatches(col.table, *prefix) {
+		col := &inScope.cols[i]
+		if col.name == colName && sourceNameMatches(*prefix, col.table) {
 			return col, nil
 		}
 	}
