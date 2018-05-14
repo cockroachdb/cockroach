@@ -449,11 +449,8 @@ type updateRun struct {
 const maxUpdateBatchSize = 10000
 
 func (u *updateNode) startExec(params runParams) error {
-	if sqlbase.IsSystemConfigID(u.run.tu.tableDesc().GetID()) {
-		// Mark transaction as operating on the system DB.
-		if err := params.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+	if err := params.p.maybeSetSystemConfig(u.run.tu.tableDesc().GetID()); err != nil {
+		return err
 	}
 
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
