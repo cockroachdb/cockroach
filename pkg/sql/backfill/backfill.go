@@ -115,15 +115,10 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(desc.Columns)-1)
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(desc.Columns))
-	for i, c := range desc.Columns {
-		colIdxMap[c.ID] = i
-	}
-
 	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:            &desc,
 		Index:           &desc.PrimaryIndex,
-		ColIdxMap:       colIdxMap,
+		ColIdxMap:       desc.ColumnIdxMap(),
 		Cols:            desc.Columns,
 		ValNeededForCol: valNeededForCol,
 	}

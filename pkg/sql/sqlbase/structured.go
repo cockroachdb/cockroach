@@ -1809,6 +1809,16 @@ func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor,
 	return ColumnDescriptor{}, false, NewUndefinedColumnError(string(name))
 }
 
+// ColumnIdxMap returns a map from Column ID to the ordinal position of that
+// column.
+func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {
+	colIdxMap := make(map[ColumnID]int, len(desc.Columns))
+	for i, c := range desc.Columns {
+		colIdxMap[c.ID] = i
+	}
+	return colIdxMap
+}
+
 // UpdateColumnDescriptor updates an existing column descriptor.
 func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
 	for i := range desc.Columns {
