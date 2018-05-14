@@ -312,10 +312,10 @@ build
 SELECT DISTINCT 3 FROM xyz
 ----
 group-by
- ├── columns: column4:4(int)
- ├── grouping columns: column4:4(int)
+ ├── columns: column4:4(int!null)
+ ├── grouping columns: column4:4(int!null)
  ├── project
- │    ├── columns: column4:4(int)
+ │    ├── columns: column4:4(int!null)
  │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections
@@ -326,10 +326,10 @@ build
 SELECT DISTINCT 3
 ----
 group-by
- ├── columns: column1:1(int)
- ├── grouping columns: column1:1(int)
+ ├── columns: column1:1(int!null)
+ ├── grouping columns: column1:1(int!null)
  ├── project
- │    ├── columns: column1:1(int)
+ │    ├── columns: column1:1(int!null)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -340,10 +340,10 @@ build
 SELECT DISTINCT MAX(z), x+y, 3 FROM xyz GROUP BY x, y HAVING y > 4
 ----
 group-by
- ├── columns: column4:4(float) column5:5(int) column6:6(int)
- ├── grouping columns: column4:4(float) column5:5(int) column6:6(int)
+ ├── columns: column4:4(float) column5:5(int) column6:6(int!null)
+ ├── grouping columns: column4:4(float) column5:5(int) column6:6(int!null)
  ├── project
- │    ├── columns: column4:4(float) column5:5(int) column6:6(int)
+ │    ├── columns: column4:4(float) column5:5(int) column6:6(int!null)
  │    ├── select
  │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) column4:4(float)
  │    │    ├── group-by
@@ -394,13 +394,13 @@ build
 SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
 ----
 sort
- ├── columns: column5:5(int) d:4(int!null) b:2(int!null)
+ ├── columns: column5:5(int!null) d:4(int!null) b:2(int!null)
  ├── ordering: +4,+2
  └── group-by
-      ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
-      ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
+      ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
+      ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
       ├── project
-      │    ├── columns: column5:5(int) abcd.d:4(int!null) abcd.b:2(int!null)
+      │    ├── columns: column5:5(int!null) abcd.d:4(int!null) abcd.b:2(int!null)
       │    ├── scan abcd
       │    │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
       │    └── projections

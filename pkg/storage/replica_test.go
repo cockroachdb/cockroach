@@ -9267,6 +9267,36 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	}
 }
 
+// TestConsistencyQueueErrorFromCheckConsistency exercises the case in which
+// the queue receives an error from CheckConsistency.
+func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs = StoreTestingKnobs{
+		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
+			if _, ok := ba.GetArg(roachpb.ComputeChecksum); ok {
+				return roachpb.NewErrorf("boom")
+			}
+			return nil
+		},
+	}
+	tc := testContext{}
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
+	for i := 0; i < 2; i++ {
+		// Do this twice because it used to deadlock. See #25456.
+		sysCfg, _ := tc.store.Gossip().GetSystemConfig()
+		if err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg); !testutils.IsError(err, "boom") {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestReplicaLocalRetries verifies local retry logic for transactional
 // and non transactional batches. Verifies the timestamp cache is updated
 // to reflect the timestamp at which retried batches are executed.

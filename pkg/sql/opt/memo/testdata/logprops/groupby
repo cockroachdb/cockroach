@@ -27,7 +27,7 @@ build
 SELECT y, SUM(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
- ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool)
+ ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool!null)
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── group-by

@@ -182,20 +182,48 @@
 # addition, the Exists can be transformed into a semi-join.
 [NormalizeAnyFilter, Normalize]
 (Filters
-    $list:[
-        ...
-        $any:
-        (Any
-            (Project $input:* (Projections [ $condition:* ]))
-        )
-        ...
-    ]
+    $list:[ ... $any:(Any $input:* $scalar:* $cmp:*) ... ]
 )
 =>
 (Filters
     (ReplaceListItem
         $list
         $any
-        (Exists (Select $input (Filters [ $condition ])))
+        (Exists
+            (Select
+                $input
+                (Filters [ (ConstructAnyCondition $input $scalar $cmp) ])
+            )
+        )
+    )
+)
+
+# NormalizeNotAnyFilter rewrites Not Any into Not Exists when it's a top-level
+# conjunct in a Select or Join filter. Not Any can be rewritten as Not Exists in
+# this context because a NULL return value is treated as False by the filter.
+#
+# Exists is more efficient than Any, since its null handling is much simpler. In
+# addition, the Not Exists can be transformed into an anti-join.
+#
+# Citations: [5] (section 3.5)
+[NormalizeNotAnyFilter, Normalize]
+(Filters
+    $list:[ ... $notany:(Not (Any $input:* $scalar:* $cmp:*)) ... ]
+)
+=>
+(Filters
+    (ReplaceListItem
+        $list
+        $notany
+        (Not
+            (Exists
+                (Select
+                    $input
+                    (Filters
+                        [ (IsNot (ConstructAnyCondition $input $scalar $cmp) (False)) ]
+                    )
+                )
+            )
+        )
     )
 )
