@@ -161,6 +161,7 @@
 		RaftSnapshotData
 		IOFileFormat
 		CSVOptions
+		MySQLOutfileOptions
 		Attributes
 		ReplicationTarget
 		ReplicaDescriptor
