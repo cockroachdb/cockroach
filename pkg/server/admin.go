@@ -1081,18 +1081,8 @@ func (s *adminServer) Health(
 func (s *adminServer) Liveness(
 	context.Context, *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
-	now := s.server.clock.PhysicalTime()
 	livenesses := s.server.nodeLiveness.GetLivenesses()
-
-	// Generate map from NodeID to LivenessStatus.
-	threshold := storage.TimeUntilStoreDead.Get(&s.server.st.SV)
-	maxOffset := s.server.clock.MaxOffset()
-	statusMap := make(map[roachpb.NodeID]storage.NodeLivenessStatus, len(livenesses))
-	for _, liveness := range livenesses {
-		statusMap[liveness.NodeID] = liveness.LivenessStatus(
-			now, threshold, maxOffset,
-		)
-	}
+	statusMap := s.server.nodeLiveness.GetLivenessStatusMap()
 
 	return &serverpb.LivenessResponse{
 		Livenesses: livenesses,

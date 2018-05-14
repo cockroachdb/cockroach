@@ -23,7 +23,7 @@ import (
 // of type "string" is updated.
 type StringSetting struct {
 	defaultValue string
-	validateFn   func(string) error
+	validateFn   func(*Values, string) error
 	common
 }
 
@@ -48,9 +48,9 @@ func (s *StringSetting) Get(sv *Values) string {
 }
 
 // Validate that a value conforms with the validation function.
-func (s *StringSetting) Validate(v string) error {
+func (s *StringSetting) Validate(sv *Values, v string) error {
 	if s.validateFn != nil {
-		if err := s.validateFn(v); err != nil {
+		if err := s.validateFn(sv, v); err != nil {
 			return err
 		}
 	}
@@ -58,7 +58,7 @@ func (s *StringSetting) Validate(v string) error {
 }
 
 func (s *StringSetting) set(sv *Values, v string) error {
-	if err := s.Validate(v); err != nil {
+	if err := s.Validate(sv, v); err != nil {
 		return err
 	}
 	if s.Get(sv) != v {
@@ -81,10 +81,10 @@ func RegisterStringSetting(key, desc string, defaultValue string) *StringSetting
 // RegisterValidatedStringSetting defines a new setting with type string with a
 // validation function.
 func RegisterValidatedStringSetting(
-	key, desc string, defaultValue string, validateFn func(string) error,
+	key, desc string, defaultValue string, validateFn func(*Values, string) error,
 ) *StringSetting {
 	if validateFn != nil {
-		if err := validateFn(defaultValue); err != nil {
+		if err := validateFn(nil, defaultValue); err != nil {
 			panic(errors.Wrap(err, "invalid default"))
 		}
 	}
