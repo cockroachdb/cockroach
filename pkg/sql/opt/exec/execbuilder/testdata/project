@@ -17,7 +17,7 @@ scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE x > 1
 ----
 x:int  y:int
@@ -33,7 +33,7 @@ filter     ·       ·          (x, y)  ·
 ·          table   a@primary  ·       ·
 ·          spans   ALL        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE y > 1
 ----
 x:int  y:int
@@ -63,7 +63,7 @@ render     ·         ·          (column3)  ·
 ·          table     a@primary  ·          ·
 ·          spans     ALL        ·          ·
 
-exec
+exec rowsort
 SELECT x + 1 FROM a
 ----
 column3:int
@@ -84,7 +84,7 @@ render     ·         ·          (x, column3, y, column4, column5)  ·
 ·          table     a@primary  ·                                  ·
 ·          spans     ALL        ·                                  ·
 
-exec
+exec rowsort
 SELECT x, x + 1, y, y + 1, x + y FROM a
 ----
 x:int  column3:int  y:int  column4:int  column5:int
@@ -104,7 +104,7 @@ render          ·         ·                              (column5)           �
 ·               table     a@primary                      ·                   ·
 ·               spans     ALL                            ·                   ·
 
-exec
+exec rowsort
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
 column5:int
@@ -124,7 +124,7 @@ render     ·         ·          (x, x, y, x)  ·
 ·          table     a@primary  ·             ·
 ·          spans     ALL        ·             ·
 
-exec
+exec rowsort
 SELECT x, x, y, x FROM a
 ----
 x:int  x:int  y:int  x:int
@@ -144,7 +144,7 @@ render          ·         ·             (column3, column4)  ·
 ·               table     a@primary     ·                   ·
 ·               spans     ALL           ·                   ·
 
-exec
+exec rowsort
 SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
 column3:int  column4:int
@@ -164,7 +164,7 @@ scan  ·      ·          (x, y)  ·
 ·     table  b@primary  ·       ·
 ·     spans  ALL        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM b
 ----
 x:int  y:int
@@ -181,7 +181,7 @@ render     ·         ·          (x)                 ·
 ·          table     b@primary  ·                   ·
 ·          spans     /1-        ·                   ·
 
-exec
+exec rowsort
 SELECT x FROM b WHERE rowid > 0
 ----
 x:int

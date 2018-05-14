@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -78,8 +79,18 @@ func TestExecBuild(t *testing.T) {
 		ctx := context.Background()
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
+		cluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer cluster.Stopper().Stop(ctx)
+
+		// the index of the node (within the cluster) against which we run the test
+		// statements.
+		nodeIdx := 0
+		s := cluster.Server(nodeIdx)
+		fakeResolver := distsqlutils.FakeResolverForTestCluster(cluster)
+		s.SetDistSQLSpanResolver(fakeResolver)
+		sqlDB := cluster.ServerConn(nodeIdx)
 
 		_, err := sqlDB.Exec("CREATE DATABASE test; SET DATABASE = test;")
 		if err != nil {
