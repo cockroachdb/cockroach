@@ -2747,3 +2747,78 @@ sort
       │              └── variable: kv.k [type=int]
       └── projections
            └── variable: mk [type=int]
+
+build
+SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v ORDER BY mk1
+----
+sort
+ ├── columns: mk1:5(int) mk2:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: mk1:5(int)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) mk1:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           └── variable: mk1 [type=int]
+
+build
+SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v ORDER BY mk2
+----
+sort
+ ├── columns: mk1:5(int) mk2:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: mk1:5(int)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) mk1:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           └── variable: mk1 [type=int]
+
+build
+SELECT MAX(k) AS mk1, MAX(k)/5 AS mk2 FROM kv GROUP BY v ORDER BY mk2
+----
+sort
+ ├── columns: mk1:5(int) mk2:6(decimal)
+ ├── ordering: +6
+ └── project
+      ├── columns: mk1:5(int) mk2:6(decimal)
+      ├── group-by
+      │    ├── columns: kv.v:2(int) mk1:5(int)
+      │    ├── grouping columns: kv.v:2(int)
+      │    ├── project
+      │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    ├── scan kv
+      │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    └── projections
+      │    │         ├── variable: kv.v [type=int]
+      │    │         └── variable: kv.k [type=int]
+      │    └── aggregations
+      │         └── max [type=int]
+      │              └── variable: kv.k [type=int]
+      └── projections
+           ├── variable: mk1 [type=int]
+           └── div [type=decimal]
+                ├── variable: mk1 [type=int]
+                └── const: 5 [type=int]

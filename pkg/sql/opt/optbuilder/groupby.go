@@ -377,6 +377,11 @@ func (b *Builder) buildAggregateFunction(
 		// Undo the adding of the args.
 		// TODO(radu): is there a cleaner way to do this?
 		aggInScope.cols = aggInScope.cols[:aggInScopeColsBefore]
+
+		// Update the column name if a label is provided.
+		if label != "" {
+			col.name = tree.Name(label)
+		}
 	}
 
 	// Replace the function call with a reference to the column.
