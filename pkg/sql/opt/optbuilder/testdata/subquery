@@ -1561,3 +1561,22 @@ project
                      │    └── tuple [type=tuple{}]
                      └── projections
                           └── const: 1 [type=int]
+
+# Test that the source name is found correctly in the subquery.
+build
+SELECT (SELECT akv.k) FROM kv akv
+----
+project
+ ├── columns: column3:3(int)
+ ├── scan kv
+ │    └── columns: kv.k:1(int!null) kv.v:2(string)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: kv.k:1(int)
+                └── project
+                     ├── columns: kv.k:1(int)
+                     ├── values
+                     │    └── tuple [type=tuple{}]
+                     └── projections
+                          └── variable: kv.k [type=int]
