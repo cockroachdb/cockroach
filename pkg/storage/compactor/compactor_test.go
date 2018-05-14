@@ -657,47 +657,60 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 func TestCompactorDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	threshold := int64(10)
+
 	capacityFn := func() (roachpb.StoreCapacity, error) {
 		return roachpb.StoreCapacity{
-			LogicalBytes: 100 * thresholdBytes.Default(),
-			Available:    100 * thresholdBytes.Default(),
+			LogicalBytes: 100 * threshold,
+			Available:    100 * threshold,
 		}, nil
 	}
 	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 	minInterval.Override(&compactor.st.SV, time.Millisecond)
 	maxSuggestedCompactionRecordAge.Override(&compactor.st.SV, 24*time.Hour) // large
+	thresholdBytesAvailableFraction.Override(&compactor.st.SV, 0.0)          // disable
+	thresholdBytesUsedFraction.Override(&compactor.st.SV, 0.0)               // disable
 	defer cleanup()
 
-	suggest := func() {
-		// Add a suggested compaction that won't get processed because it's
-		// not over any of the thresholds.
-		compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
-			StartKey: key("a"), EndKey: key("b"),
-			Compaction: storagebase.Compaction{
-				Bytes:            thresholdBytes.Default() - 1,
-				SuggestedAtNanos: timeutil.Now().UnixNano(),
-			},
-		})
-	}
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+		StartKey: key("a"), EndKey: key("b"),
+		Compaction: storagebase.Compaction{
+			// Suggest so little that this suggestion plus the one below stays below
+			// the threshold. Otherwise this test gets racy and difficult to fix
+			// without remodeling the compactor.
+			Bytes:            threshold / 3,
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
 
-	suggest()
-	suggest()
 	enabled.Override(&compactor.st.SV, false)
-	suggest()
+
+	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+		// Note that we don't reuse the same interval above or we hit another race,
+		// in which the compactor discards the first suggestion and wipes out the
+		// second one with it, without incrementing the discarded metric.
+		StartKey: key("b"), EndKey: key("c"),
+		Compaction: storagebase.Compaction{
+			Bytes:            threshold / 3,
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
 
 	// Verify that the record is deleted without a compaction and that the
 	// bytes are recorded as having been skipped.
 	testutils.SucceedsSoon(t, func() error {
+		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
+			t.Fatalf("expected compactions processed %d; got %d", e, a)
+		}
+
 		comps := we.GetCompactions()
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), 3*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(threshold/3); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
-		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
-			return fmt.Errorf("expected compactions processed %d; got %d", e, a)
-		}
+
 		// Verify compaction queue is empty.
 		if bytesQueued, err := compactor.examineQueue(context.Background()); err != nil || bytesQueued > 0 {
 			return fmt.Errorf("compaction queue not empty (%d bytes) or err %v", bytesQueued, err)
