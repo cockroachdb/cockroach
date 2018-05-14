@@ -17,7 +17,6 @@ package compactor
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -78,21 +77,11 @@ func (c *Compactor) thresholdBytes() int64 {
 }
 
 func (c *Compactor) thresholdBytesUsedFraction() float64 {
-	v := thresholdBytesUsedFraction.Get(&c.st.SV)
-	if v == 0 {
-		// Practically disable this feature.
-		v = math.MaxFloat64
-	}
-	return v
+	return thresholdBytesUsedFraction.Get(&c.st.SV)
 }
 
 func (c *Compactor) thresholdBytesAvailableFraction() float64 {
-	v := thresholdBytesAvailableFraction.Get(&c.st.SV)
-	if v == 0 {
-		// Practically disable this feature.
-		v = math.MaxFloat64
-	}
-	return v
+	return thresholdBytesAvailableFraction.Get(&c.st.SV)
 }
 
 func (c *Compactor) maxAge() time.Duration {
@@ -295,11 +284,15 @@ func (c *Compactor) processCompaction(
 	capacity roachpb.StoreCapacity,
 	delBatch engine.Batch,
 ) (int64, error) {
-	var (
-		aboveSizeThresh      = aggr.Bytes >= c.thresholdBytes()
-		aboveUsedFracThresh  = aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.thresholdBytesUsedFraction())
-		aboveAvailFracThresh = aggr.Bytes >= int64(float64(capacity.Available)*c.thresholdBytesAvailableFraction())
-	)
+	aboveSizeThresh := aggr.Bytes >= c.thresholdBytes()
+	aboveUsedFracThresh := func() bool {
+		thresh := c.thresholdBytesUsedFraction()
+		return thresh > 0 && aggr.Bytes >= int64(float64(capacity.LogicalBytes)*thresh)
+	}()
+	aboveAvailFracThresh := func() bool {
+		thresh := c.thresholdBytesAvailableFraction()
+		return thresh > 0 && aggr.Bytes >= int64(float64(capacity.Available)*thresh)
+	}()
 
 	shouldProcess := c.enabled() && (aboveSizeThresh || aboveUsedFracThresh || aboveAvailFracThresh)
 	if shouldProcess {
