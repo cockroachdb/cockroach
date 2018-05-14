@@ -294,6 +294,8 @@ func (c *Compactor) processCompaction(
 		return thresh > 0 && aggr.Bytes >= int64(float64(capacity.Available)*thresh)
 	}()
 
+	log.Warningf(ctx, "compaction %+v", aggr)
+
 	shouldProcess := c.enabled() && (aboveSizeThresh || aboveUsedFracThresh || aboveAvailFracThresh)
 	if shouldProcess {
 		startTime := timeutil.Now()
@@ -324,12 +326,14 @@ func (c *Compactor) processCompaction(
 		tooOld := age >= c.maxAge() || !c.enabled()
 		// Delete unless we didn't process and the record isn't too old.
 		if !shouldProcess && !tooOld {
+			log.Warning(ctx, "cont")
 			continue
 		}
 		if tooOld {
 			log.Warning(ctx, "skipping", aggr.Bytes)
 			c.Metrics.BytesSkipped.Inc(aggr.Bytes)
 		}
+		log.Warning(ctx, "clear", aggr.Bytes)
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
 		if err := delBatch.Clear(engine.MVCCKey{Key: key}); err != nil {
 			log.Fatal(ctx, err) // should never happen on a batch
