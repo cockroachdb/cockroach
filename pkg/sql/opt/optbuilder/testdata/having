@@ -314,3 +314,151 @@ select
  └── gt [type=bool]
       ├── variable: column6 [type=int]
       └── const: 1 [type=int]
+
+# Check that ordering by an alias of an aggregate works when HAVING is present.
+build
+SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING SUM(k)=10 ORDER BY mk
+----
+sort
+ ├── columns: mk:5(decimal)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5(decimal)
+      ├── select
+      │    ├── columns: kv.v:2(int) column5:5(decimal)
+      │    ├── group-by
+      │    │    ├── columns: kv.v:2(int) column5:5(decimal)
+      │    │    ├── grouping columns: kv.v:2(int)
+      │    │    ├── project
+      │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    │    └── projections
+      │    │    │         ├── variable: kv.v [type=int]
+      │    │    │         └── variable: kv.k [type=int]
+      │    │    └── aggregations
+      │    │         └── sum [type=decimal]
+      │    │              └── variable: kv.k [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: column5 [type=decimal]
+      │         └── const: 10 [type=decimal]
+      └── projections
+           └── variable: column5 [type=decimal]
+
+build
+SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk
+----
+sort
+ ├── columns: mk:6(decimal)
+ ├── ordering: +6
+ └── project
+      ├── columns: mk:6(decimal)
+      ├── select
+      │    ├── columns: kv.v:2(int) column5:5(int) mk:6(decimal)
+      │    ├── group-by
+      │    │    ├── columns: kv.v:2(int) column5:5(int) mk:6(decimal)
+      │    │    ├── grouping columns: kv.v:2(int)
+      │    │    ├── project
+      │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    │    └── projections
+      │    │    │         ├── variable: kv.v [type=int]
+      │    │    │         └── variable: kv.k [type=int]
+      │    │    └── aggregations
+      │    │         ├── max [type=int]
+      │    │         │    └── variable: kv.k [type=int]
+      │    │         └── sum [type=decimal]
+      │    │              └── variable: kv.k [type=int]
+      │    └── gt [type=bool]
+      │         ├── variable: column5 [type=int]
+      │         └── const: 10 [type=int]
+      └── projections
+           └── variable: mk [type=decimal]
+
+build
+SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
+----
+sort
+ ├── columns: mk:5(decimal)
+ ├── ordering: +5
+ └── project
+      ├── columns: mk:5(decimal)
+      ├── select
+      │    ├── columns: kv.v:2(int) mk:5(decimal)
+      │    ├── group-by
+      │    │    ├── columns: kv.v:2(int) mk:5(decimal)
+      │    │    ├── grouping columns: kv.v:2(int)
+      │    │    ├── project
+      │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    │    └── projections
+      │    │    │         ├── variable: kv.v [type=int]
+      │    │    │         └── variable: kv.k [type=int]
+      │    │    └── aggregations
+      │    │         └── sum [type=decimal]
+      │    │              └── variable: kv.k [type=int]
+      │    └── gt [type=bool]
+      │         ├── variable: kv.v [type=int]
+      │         └── const: 10 [type=int]
+      └── projections
+           └── variable: mk [type=decimal]
+
+build
+SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk1
+----
+sort
+ ├── columns: mk1:5(int) mk2:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5(int)
+      ├── select
+      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── group-by
+      │    │    ├── columns: kv.v:2(int) column5:5(int)
+      │    │    ├── grouping columns: kv.v:2(int)
+      │    │    ├── project
+      │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    │    └── projections
+      │    │    │         ├── variable: kv.v [type=int]
+      │    │    │         └── variable: kv.k [type=int]
+      │    │    └── aggregations
+      │    │         └── max [type=int]
+      │    │              └── variable: kv.k [type=int]
+      │    └── gt [type=bool]
+      │         ├── variable: column5 [type=int]
+      │         └── const: 10 [type=int]
+      └── projections
+           └── variable: column5 [type=int]
+
+build
+SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk2
+----
+sort
+ ├── columns: mk1:5(int) mk2:5(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5(int)
+      ├── select
+      │    ├── columns: kv.v:2(int) column5:5(int)
+      │    ├── group-by
+      │    │    ├── columns: kv.v:2(int) column5:5(int)
+      │    │    ├── grouping columns: kv.v:2(int)
+      │    │    ├── project
+      │    │    │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    │    │    └── projections
+      │    │    │         ├── variable: kv.v [type=int]
+      │    │    │         └── variable: kv.k [type=int]
+      │    │    └── aggregations
+      │    │         └── max [type=int]
+      │    │              └── variable: kv.k [type=int]
+      │    └── gt [type=bool]
+      │         ├── variable: column5 [type=int]
+      │         └── const: 10 [type=int]
+      └── projections
+           └── variable: column5 [type=int]
