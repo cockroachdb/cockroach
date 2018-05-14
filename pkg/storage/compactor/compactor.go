@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -34,67 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-const (
-	// defaultCompactionMinInterval indicates the minimum period of
-	// time to wait before any compaction activity is considered, after
-	// suggestions are made. The intent is to allow sufficient time for
-	// all ranges to be cleared when a big table is dropped, so the
-	// compactor can determine contiguous stretches and efficient delete
-	// sstable files.
-	defaultCompactionMinInterval = 2 * time.Minute
-
-	// defaultThresholdBytes is the threshold in bytes of suggested
-	// reclamation, after which the compactor will begin processing
-	// (taking compactor min interval into account). Note that we want
-	// to target roughly the target size of an L6 SSTable (128MB) but
-	// these are logical bytes (as in, from MVCCStats) which can't be
-	// translated into SSTable-bytes. As a result, we conservatively set
-	// a higher threshold.
-	defaultThresholdBytes = 256 << 20 // more than 256MiB will trigger
-
-	// defaultThresholdBytesFraction is the fraction of total logical
-	// bytes used which are up for suggested reclamation, after which
-	// the compactor will begin processing (taking compactor min
-	// interval into account). Note that this threshold handles the case
-	// where a table is dropped which is a significant fraction of the
-	// total space in the database, but does not exceed the absolute
-	// defaultThresholdBytes threshold.
-	defaultThresholdBytesFraction = 0.10 // more than 10% of space will trigger
-
-	// defaultThresholdBytesAvailableFraction is the fraction of remaining
-	// available space on a disk, which, if exceeded by the size of a suggested
-	// compaction, should trigger the processing of said compaction. This
-	// threshold is meant to make compaction more aggressive when a store is
-	// nearly full, since reclaiming space is much more important in such
-	// scenarios.
-	defaultThresholdBytesAvailableFraction = 0.10
-
-	// defaultMaxSuggestedCompactionRecordAge is the maximum age of a
-	// suggested compaction record. If not processed within this time
-	// interval since the compaction was suggested, it will be deleted.
-	defaultMaxSuggestedCompactionRecordAge = 24 * time.Hour
-)
-
-// compactorOptions specify knobs to tune for compactor behavior.
-// These are intended for testing.
-type compactorOptions struct {
-	CompactionMinInterval           time.Duration
-	ThresholdBytes                  int64
-	ThresholdBytesFraction          float64
-	ThresholdBytesAvailableFraction float64
-	MaxSuggestedCompactionRecordAge time.Duration
-}
-
-func defaultCompactorOptions() compactorOptions {
-	return compactorOptions{
-		CompactionMinInterval:           defaultCompactionMinInterval,
-		ThresholdBytes:                  defaultThresholdBytes,
-		ThresholdBytesFraction:          defaultThresholdBytesFraction,
-		ThresholdBytesAvailableFraction: defaultThresholdBytesAvailableFraction,
-		MaxSuggestedCompactionRecordAge: defaultMaxSuggestedCompactionRecordAge,
-	}
-}
-
 type storeCapacityFunc func() (roachpb.StoreCapacity, error)
 
 type doneCompactingFunc func(ctx context.Context)
@@ -102,26 +42,50 @@ type doneCompactingFunc func(ctx context.Context)
 // A Compactor records suggested compactions and periodically
 // makes requests to the engine to reclaim storage space.
 type Compactor struct {
+	st      *cluster.Settings
 	eng     engine.WithSSTables
 	capFn   storeCapacityFunc
 	doneFn  doneCompactingFunc
 	ch      chan struct{}
-	opts    compactorOptions
 	Metrics Metrics
 }
 
 // NewCompactor returns a compactor for the specified storage engine.
 func NewCompactor(
-	eng engine.WithSSTables, capFn storeCapacityFunc, doneFn doneCompactingFunc,
+	st *cluster.Settings, eng engine.WithSSTables, capFn storeCapacityFunc, doneFn doneCompactingFunc,
 ) *Compactor {
 	return &Compactor{
+		st:      st,
 		eng:     eng,
 		capFn:   capFn,
 		doneFn:  doneFn,
 		ch:      make(chan struct{}, 1),
-		opts:    defaultCompactorOptions(),
 		Metrics: makeMetrics(),
 	}
+}
+
+func (c *Compactor) enabled() bool {
+	return enabled.Get(&c.st.SV)
+}
+
+func (c *Compactor) minInterval() time.Duration {
+	return minInterval.Get(&c.st.SV)
+}
+
+func (c *Compactor) thresholdBytes() int64 {
+	return thresholdBytes.Get(&c.st.SV)
+}
+
+func (c *Compactor) thresholdBytesUsedFraction() float64 {
+	return thresholdBytesUsedFraction.Get(&c.st.SV)
+}
+
+func (c *Compactor) thresholdBytesAvailableFraction() float64 {
+	return thresholdBytesAvailableFraction.Get(&c.st.SV)
+}
+
+func (c *Compactor) maxAge() time.Duration {
+	return maxSuggestedCompactionRecordAge.Get(&c.st.SV)
 }
 
 // Start launches a compaction processing goroutine and exits when the
@@ -151,14 +115,14 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 				if bytesQueued, err := c.examineQueue(ctx); err != nil {
 					log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
 				} else if bytesQueued > 0 {
-					log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.opts.CompactionMinInterval)
+					log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.minInterval())
 				} else {
 					// Queue is empty, don't set the timer. This can happen only at startup.
 					break
 				}
 				// Set the wait timer if not already set.
 				if !timerSet {
-					timer.Reset(c.opts.CompactionMinInterval)
+					timer.Reset(c.minInterval())
 					timerSet = true
 				}
 
@@ -178,7 +142,7 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 				}
 				// Reset the timer to re-attempt processing after the minimum
 				// compaction interval.
-				timer.Reset(c.opts.CompactionMinInterval)
+				timer.Reset(c.minInterval())
 				timerSet = true
 			}
 		}
@@ -308,21 +272,21 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// processCompaction sends CompactRange requests to the storage engine
-// if the aggregated suggestion exceeds size threshold(s). Otherwise,
-// it either skips the compaction or skips the compaction *and* deletes
-// the suggested compaction records if they're too old. Returns the
-// number of bytes processed (either compacted or skipped and deleted
-// due to age).
+// processCompaction sends CompactRange requests to the storage engine if the
+// aggregated suggestion exceeds size threshold(s). Otherwise, it either skips
+// the compaction or skips the compaction *and* deletes the suggested compaction
+// records if they're too old (and in particular, if the compactor is disabled,
+// deletes any suggestions handed to it). Returns the number of bytes processed
+// (either compacted or skipped and deleted due to age).
 func (c *Compactor) processCompaction(
 	ctx context.Context,
 	aggr aggregatedCompaction,
 	capacity roachpb.StoreCapacity,
 	delBatch engine.Batch,
 ) (int64, error) {
-	shouldProcess := aggr.Bytes >= c.opts.ThresholdBytes ||
-		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.opts.ThresholdBytesFraction) ||
-		aggr.Bytes >= int64(float64(capacity.Available)*c.opts.ThresholdBytesAvailableFraction)
+	shouldProcess := c.enabled() && (aggr.Bytes >= c.thresholdBytes() ||
+		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.thresholdBytesUsedFraction()) ||
+		aggr.Bytes >= int64(float64(capacity.Available)*c.thresholdBytesAvailableFraction()))
 
 	if shouldProcess {
 		startTime := timeutil.Now()
@@ -346,7 +310,7 @@ func (c *Compactor) processCompaction(
 	// Delete suggested compaction records if appropriate.
 	for _, sc := range aggr.suggestions {
 		age := timeutil.Since(timeutil.Unix(0, sc.SuggestedAtNanos))
-		tooOld := age >= c.opts.MaxSuggestedCompactionRecordAge
+		tooOld := age >= c.maxAge() || !c.enabled()
 		// Delete unless we didn't process and the record isn't too old.
 		if !shouldProcess && !tooOld {
 			continue

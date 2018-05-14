@@ -73,6 +73,11 @@ func (i *IntSetting) setToDefault(sv *Values) {
 	}
 }
 
+// Default returns the default value.
+func (i *IntSetting) Default() int64 {
+	return i.defaultValue
+}
+
 // RegisterIntSetting defines a new setting with type int.
 func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
