@@ -238,11 +238,8 @@ type upsertRun struct {
 }
 
 func (n *upsertNode) startExec(params runParams) error {
-	if sqlbase.IsSystemConfigID(n.run.tw.tableDesc().GetID()) {
-		// Mark transaction as operating on the system DB.
-		if err := params.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+	if err := params.p.maybeSetSystemConfig(n.run.tw.tableDesc().GetID()); err != nil {
+		return err
 	}
 
 	// cache traceKV during execution, to avoid re-evaluating it for every row.

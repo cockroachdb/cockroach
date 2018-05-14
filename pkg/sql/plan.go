@@ -901,3 +901,13 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return nil, nil
 	}
 }
+
+// Mark transaction as operating on the system DB if the descriptor id
+// is within the SystemConfig range.
+func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
+	if !sqlbase.IsSystemConfigID(id) {
+		return nil
+	}
+	// Mark transaction as operating on the system DB.
+	return p.txn.SetSystemConfigTrigger()
+}
