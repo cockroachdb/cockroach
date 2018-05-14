@@ -32,4 +32,5 @@ type TestingKnobs struct {
 	DistSQL             ModuleTestingKnobs
 	SQLEvalContext      ModuleTestingKnobs
 	RegistryLiveness    ModuleTestingKnobs
+	Upgrade             ModuleTestingKnobs
 }
