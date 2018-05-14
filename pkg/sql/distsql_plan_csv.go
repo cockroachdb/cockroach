@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -112,11 +114,8 @@ var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 // and stores them in enterprise backup format at to.
 func (l *DistLoader) LoadCSV(
 	ctx context.Context,
+	phs PlanHookState,
 	job *jobs.Job,
-	db *client.DB,
-	evalCtx *extendedEvalContext,
-	thisNode roachpb.NodeID,
-	nodes []roachpb.NodeDescriptor,
 	resultRows *RowResultWriter,
 	tableDesc *sqlbase.TableDescriptor,
 	from []string,
@@ -127,6 +126,33 @@ func (l *DistLoader) LoadCSV(
 	splitSize int64,
 ) error {
 	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+
+	dsp := l.distSQLPlanner
+	evalCtx := phs.ExtendedEvalContext()
+	planCtx := dsp.newPlanningCtx(ctx, evalCtx, nil /* txn */)
+
+	resp, err := phs.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return err
+	}
+	// Because we're not going through the normal pathways, we have to set up
+	// the nodeID -> nodeAddress map ourselves.
+	for _, node := range resp.Nodes {
+		if err := dsp.checkNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
+			continue
+		}
+	}
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
+	for nodeID := range planCtx.nodeAddresses {
+		nodes = append(nodes, nodeID)
+	}
+	// Shuffle node order so that multiple IMPORTs done in parallel will not
+	// identically schedule CSV reading. For example, if there are 3 nodes and 4
+	// files, the first node will get 2 files while the other nodes will each get 1
+	// file. Shuffling will make that first node random instead of always the same.
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
 
 	// Setup common to both stages.
 
@@ -168,12 +194,8 @@ func (l *DistLoader) LoadCSV(
 		}
 	}
 
-	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, evalCtx, nil /* txn */)
-	// Because we're not going through the normal pathways, we have to set up
-	// the nodeID -> nodeAddress map ourselves.
-	for _, node := range nodes {
-		planCtx.nodeAddresses[node.NodeID] = node.Address.String()
-	}
+	db := phs.ExecCfg().DB
+	thisNode := phs.ExecCfg().NodeID.Get()
 
 	// Determine if we need to run the sampling plan or not.
 
@@ -239,9 +261,8 @@ func (l *DistLoader) LoadCSV(
 	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
 	for i, rcs := range csvSpecs {
 		rcs.SampleSize = 0
-		node := nodes[i]
 		proc := distsqlplan.Processor{
-			Node: node.NodeID,
+			Node: nodes[i],
 			Spec: distsqlrun.ProcessorSpec{
 				Core: distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
 				Output: []distsqlrun.OutputRouterSpec{{
@@ -280,7 +301,7 @@ func (l *DistLoader) LoadCSV(
 			Contribution: float32(len(swSpec.Spans)) / float32(len(spans)),
 		}
 		proc := distsqlplan.Processor{
-			Node: node.NodeID,
+			Node: node,
 			Spec: distsqlrun.ProcessorSpec{
 				Input: []distsqlrun.InputSyncSpec{{
 					ColumnTypes: firstStageTypes,
@@ -343,7 +364,7 @@ func (l *DistLoader) loadCSVSamplingPlan(
 	db *client.DB,
 	evalCtx *extendedEvalContext,
 	thisNode roachpb.NodeID,
-	nodes []roachpb.NodeDescriptor,
+	nodes []roachpb.NodeID,
 	from []string,
 	splitSize int64,
 	planCtx *planningCtx,
@@ -377,9 +398,8 @@ func (l *DistLoader) loadCSVSamplingPlan(
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(csvSpecs))
 	for i, rcs := range csvSpecs {
-		node := nodes[i]
 		proc := distsqlplan.Processor{
-			Node: node.NodeID,
+			Node: nodes[i],
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{ReadCSV: rcs},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
