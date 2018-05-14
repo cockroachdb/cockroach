@@ -189,7 +189,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	return false
 }
 
-// makeSpansForSingleColumn creates spans for a single index column from a
+// makeSpansForSingleColumnDatum creates spans for a single index column from a
 // simple comparison expression with a constant value on the right-hand side.
 func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 	offset int, op opt.Operator, datum tree.Datum, out *constraint.Constraint,
@@ -642,7 +642,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		}
 		// We couldn't get any constraints for the column; see if we can at least
 		// deduce a not-NULL constraint.
-		if c.isNullable(offset) && opRequiresNotNullArgs(ev.Operator()) {
+		if c.isNullable(offset) && opt.BoolOperatorRequiresNotNullArgs(ev.Operator()) {
 			c.makeNotNullSpan(offset, out)
 			return false
 		}
@@ -662,25 +662,12 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 	// Last resort: for conditions like a > b, our column can appear on the right
 	// side. We can deduce a not-null constraint from such conditions.
 	if c.isNullable(offset) && c.isIndexColumn(child1, offset) &&
-		opRequiresNotNullArgs(ev.Operator()) {
+		opt.BoolOperatorRequiresNotNullArgs(ev.Operator()) {
 		c.makeNotNullSpan(offset, out)
 		return false
 	}
 
 	c.unconstrained(offset, out)
-	return false
-}
-
-// opRequiresNotNullArgs returns true if the operator can never evaluate
-// to true if one of the children is NULL.
-func opRequiresNotNullArgs(op opt.Operator) bool {
-	switch op {
-	case
-		opt.EqOp, opt.LtOp, opt.LeOp, opt.GtOp, opt.GeOp, opt.NeOp,
-		opt.LikeOp, opt.NotLikeOp, opt.ILikeOp, opt.NotILikeOp, opt.SimilarToOp, opt.NotSimilarToOp,
-		opt.RegMatchOp, opt.NotRegMatchOp, opt.RegIMatchOp, opt.NotRegIMatchOp:
-		return true
-	}
 	return false
 }
 

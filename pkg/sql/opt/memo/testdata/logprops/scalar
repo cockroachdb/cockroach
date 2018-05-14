@@ -76,19 +76,19 @@ select
  │    └── keys: (1)
  └── exists [type=bool, outer=(1)]
       └── project
-           ├── columns: uv.u:3(int) uv.v:4(int!null)
+           ├── columns: uv.u:3(int!null) uv.v:4(int!null)
            ├── outer: (1)
-           ├── stats: [rows=333]
+           ├── stats: [rows=111]
            ├── select
-           │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+           │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
            │    ├── outer: (1)
-           │    ├── stats: [rows=333]
+           │    ├── stats: [rows=111]
            │    ├── keys: (5)
            │    ├── scan uv
            │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
            │    │    ├── stats: [rows=1000]
            │    │    └── keys: (5)
-           │    └── eq [type=bool, outer=(1,3)]
+           │    └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
            │         ├── variable: uv.u [type=int, outer=(3)]
            │         └── variable: xy.x [type=int, outer=(1)]
            └── projections [outer=(3,4)]
@@ -110,17 +110,17 @@ select
       ├── project
       │    ├── columns: uv.v:4(int!null)
       │    ├── outer: (1)
-      │    ├── stats: [rows=333]
+      │    ├── stats: [rows=111]
       │    ├── select
-      │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
+      │    │    ├── columns: uv.u:3(int!null) uv.v:4(int!null) uv.rowid:5(int!null)
       │    │    ├── outer: (1)
-      │    │    ├── stats: [rows=333]
+      │    │    ├── stats: [rows=111]
       │    │    ├── keys: (5)
       │    │    ├── scan uv
       │    │    │    ├── columns: uv.u:3(int) uv.v:4(int!null) uv.rowid:5(int!null)
       │    │    │    ├── stats: [rows=1000]
       │    │    │    └── keys: (5)
-      │    │    └── eq [type=bool, outer=(1,3)]
+      │    │    └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
       │    │         ├── variable: uv.u [type=int, outer=(3)]
       │    │         └── variable: xy.x [type=int, outer=(1)]
       │    └── projections [outer=(4)]

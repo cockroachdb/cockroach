@@ -80,8 +80,8 @@ project
  │    ├── scan b
  │    │    ├── columns: b.x:5(int!null)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │              ├── variable: a.x [type=int, outer=(1)]
  │              └── variable: b.x [type=int, outer=(5)]
  └── projections [outer=(2)]

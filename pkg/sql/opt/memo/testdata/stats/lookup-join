@@ -52,12 +52,12 @@ project
  ├── columns: column5:5(int)
  ├── stats: [rows=65]
  ├── group-by
- │    ├── columns: a.y:2(int) a.s:3(string) column5:5(int)
- │    ├── grouping columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: a.y:2(int) a.s:3(string!null) column5:5(int)
+ │    ├── grouping columns: a.y:2(int) a.s:3(string!null)
  │    ├── stats: [rows=65, distinct(2,3)=65]
  │    ├── keys: weak(2,3)
  │    ├── select
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string!null)
  │    │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
  │    │    ├── keys: (1)
  │    │    ├── lookup-join

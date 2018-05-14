@@ -159,7 +159,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  ├── select
- │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int!null)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -176,7 +176,7 @@ opt
 SELECT k, i FROM a WHERE k=1 AND i<5
 ----
 select
- ├── columns: k:1(int!null) i:2(int)
+ ├── columns: k:1(int!null) i:2(int!null)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -214,8 +214,8 @@ project
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
  │    │    └── keys: (1)
- │    └── filters [type=bool, outer=(1,4)]
- │         ├── lt [type=bool, outer=(1)]
+ │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ])]
+ │         ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
  │         │    ├── variable: a.k [type=int, outer=(1)]
  │         │    └── minus [type=int]
  │         │         ├── const: 5 [type=int]
@@ -240,7 +240,7 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 project
  ├── columns: i:2(int)
  ├── select
- │    ├── columns: a.i:2(int) f:5(float)
+ │    ├── columns: a.i:2(int) f:5(float!null)
  │    ├── project
  │    │    ├── columns: a.i:2(int) f:5(float)
  │    │    ├── scan a
@@ -252,8 +252,8 @@ project
  │    │         └── div [type=float, outer=(3)]
  │    │              ├── variable: a.f [type=float, outer=(3)]
  │    │              └── const: 2.0 [type=float]
- │    └── filters [type=bool, outer=(2,5)]
- │         └── eq [type=bool, outer=(2,5)]
+ │    └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
  │              ├── variable: f [type=float, outer=(5)]
  │              └── cast: float [type=float, outer=(2)]
  │                   └── variable: a.i [type=int, outer=(2)]
@@ -267,7 +267,7 @@ SELECT f, f+1.1 FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
 project
  ├── columns: f:3(float) column6:6(float)
  ├── select
- │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal)
+ │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal!null)
  │    ├── keys: (1)
  │    ├── group-by
  │    │    ├── columns: a.k:1(int!null) a.f:3(float) column5:5(decimal)
@@ -589,8 +589,8 @@ project
  │    ├── scan xy
  │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │              ├── variable: a.k [type=int, outer=(1)]
  │              └── variable: xy.x [type=int, outer=(5)]
  └── projections [outer=(2,5,6)]
@@ -610,8 +610,8 @@ left-join
  ├── scan xy
  │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    └── keys: (5)
- └── filters [type=bool, outer=(1,2,5), constraints=(/2: (/NULL - /4])]
-      ├── eq [type=bool, outer=(1,5)]
+ └── filters [type=bool, outer=(1,2,5), constraints=(/1: (/NULL - ]; /2: (/NULL - /4]; /5: (/NULL - ])]
+      ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: xy.x [type=int, outer=(5)]
       └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
@@ -632,8 +632,8 @@ project
  │    ├── scan xy
  │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │              ├── variable: a.k [type=int, outer=(1)]
  │              └── variable: xy.x [type=int, outer=(5)]
  └── projections [outer=(5,6)]
@@ -697,8 +697,8 @@ project
  │    ├── scan xy
  │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/5: (/NULL - ])]
  │              ├── variable: xy.x [type=int, outer=(5)]
  │              └── mult [type=int, outer=(1)]
  │                   ├── variable: a.k [type=int, outer=(1)]
@@ -735,15 +735,15 @@ project
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:5(int!null)
  │    │    │    └── keys: (5)
- │    │    └── filters [type=bool, outer=(1,5)]
- │    │         └── eq [type=bool, outer=(1,5)]
+ │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │              ├── variable: a.k [type=int, outer=(1)]
  │    │              └── variable: xy.x [type=int, outer=(5)]
  │    ├── scan xy
  │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
  │    │    └── keys: (7)
- │    └── filters [type=bool, outer=(2,8)]
- │         └── lt [type=bool, outer=(2,8)]
+ │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │         └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── variable: xy.y [type=int, outer=(8)]
  └── projections [outer=(1,7,8)]
@@ -769,8 +769,8 @@ project
  │    ├── scan a
  │    │    ├── columns: a.k:3(int!null) a.i:4(int)
  │    │    └── keys: (3)
- │    └── filters [type=bool, outer=(1,3)]
- │         └── eq [type=bool, outer=(1,3)]
+ │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  │              ├── variable: xy.x [type=int, outer=(1)]
  │              └── variable: a.k [type=int, outer=(3)]
  └── projections [outer=(1,2,4)]
@@ -790,11 +790,11 @@ left-join
  ├── scan a
  │    ├── columns: a.k:3(int!null) a.i:4(int)
  │    └── keys: (3)
- └── filters [type=bool, outer=(1,3,4)]
-      ├── eq [type=bool, outer=(1,3)]
+ └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ])]
+      ├── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
       │    ├── variable: xy.x [type=int, outer=(1)]
       │    └── variable: a.k [type=int, outer=(3)]
-      └── lt [type=bool, outer=(1,4)]
+      └── lt [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
            ├── variable: a.i [type=int, outer=(4)]
            └── variable: xy.x [type=int, outer=(1)]
 
@@ -812,8 +812,8 @@ project
  │    ├── scan a
  │    │    ├── columns: a.k:3(int!null)
  │    │    └── keys: (3)
- │    └── filters [type=bool, outer=(1,3)]
- │         └── eq [type=bool, outer=(1,3)]
+ │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
  │              ├── variable: xy.x [type=int, outer=(1)]
  │              └── variable: a.k [type=int, outer=(3)]
  └── projections [outer=(1,2)]
@@ -877,8 +877,8 @@ project
  │    │              │    ├── variable: a.s [type=string, outer=(6)]
  │    │              │    └── const: 'o' [type=string]
  │    │              └── const: 'foo' [type=string]
- │    └── filters [type=bool, outer=(1,3)]
- │         └── eq [type=bool, outer=(1,3)]
+ │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ])]
  │              ├── variable: xy.x [type=int, outer=(1)]
  │              └── mult [type=int, outer=(3)]
  │                   ├── variable: a.k [type=int, outer=(3)]
@@ -918,12 +918,12 @@ project
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
  │    │    │    └── keys: (7)
- │    │    └── filters [type=bool, outer=(3,7)]
- │    │         └── eq [type=bool, outer=(3,7)]
+ │    │    └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+ │    │         └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
  │    │              ├── variable: a.k [type=int, outer=(3)]
  │    │              └── variable: xy.x [type=int, outer=(7)]
- │    └── filters [type=bool, outer=(2,8)]
- │         └── lt [type=bool, outer=(2,8)]
+ │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+ │         └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
  │              ├── variable: xy.y [type=int, outer=(8)]
  │              └── variable: xy.y [type=int, outer=(2)]
  └── projections [outer=(1-3)]
@@ -962,8 +962,8 @@ project
  │    ├── scan xy
  │    │    ├── columns: xy.x:5(int!null)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │              ├── variable: a.k [type=int, outer=(1)]
  │              └── variable: xy.x [type=int, outer=(5)]
  └── projections [outer=(1,5)]
@@ -1181,9 +1181,9 @@ SELECT a.k, xy.y FROM a INNER JOIN xy ON a.k=xy.x WHERE a.i < 5
 project
  ├── columns: k:1(int!null) y:6(int)
  ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.y:6(int)
+ │    ├── columns: a.k:1(int!null) a.i:2(int!null) xy.x:5(int!null) xy.y:6(int)
  │    ├── select
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    │    ├── columns: a.k:1(int!null) a.i:2(int!null)
  │    │    ├── keys: (1)
  │    │    ├── scan a
  │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
@@ -1195,8 +1195,8 @@ project
  │    ├── scan xy
  │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
  │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5)]
- │         └── eq [type=bool, outer=(1,5)]
+ │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │              ├── variable: a.k [type=int, outer=(1)]
  │              └── variable: xy.x [type=int, outer=(5)]
  └── projections [outer=(1,6)]
@@ -1210,7 +1210,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  ├── select
- │    ├── columns: a.k:1(int!null) column5:5(decimal)
+ │    ├── columns: a.k:1(int!null) column5:5(decimal!null)
  │    ├── keys: (1)
  │    ├── group-by
  │    │    ├── columns: a.k:1(int!null) column5:5(decimal)

@@ -13,7 +13,7 @@ opt
 SELECT k, s FROM a WHERE s >= 'foo'
 ----
 select
- ├── columns: k:1(int!null) s:3(string)
+ ├── columns: k:1(int!null) s:3(string!null)
  ├── stats: [rows=333]
  ├── cost: 1010.00
  ├── keys: (1)

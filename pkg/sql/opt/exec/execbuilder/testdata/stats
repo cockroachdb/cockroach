@@ -53,7 +53,7 @@ opt
 SELECT * FROM b WHERE u = 1 AND v = 1
 ----
 select
- ├── columns: u:1(int) v:2(int)
+ ├── columns: u:1(int!null) v:2(int!null)
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── cost: 1.01
  ├── scan b@b_v_idx
