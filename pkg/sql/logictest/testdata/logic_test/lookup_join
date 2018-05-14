@@ -270,3 +270,95 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM foo JOIN bar USING(a)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyskUFr8zAMhu_fr_jQaQMP6iS7GAY5rju0o-w2cnBjNTWkVpAd2Cj57yPxoU1Y0g12syU9el9JZ3BkcKNP6EG9gwQBj1AIaJhK9J64D8eitfkAtRJgXdOGPlwIKIkR1BmCDTWCgg09UAMCDAZt66GoE0BtuCA-6ApBZZ24aiuX277pfY071AZ51BwatifNn_mBCARs26D-51LkCczJyj-V3WueVUpmlS4CrSM2yGimK7td8o3dZ-2PL2Td1G2Nh3CXy_snttVxeI12JfJsdoh0NMSN4-_QN-Q8_uj-q34CNBXGjXhqucRXpnKQid_twA0Bgz7EbBY_axdTvcFrWC7C6QiWUzj5BZxM4XQRXk1sF92_rwAAAP__990m5g==
+
+
+####################################
+#  LOOKUP JOIN ON SECONDARY INDEX  #
+####################################
+statement ok
+SET experimental_force_lookup_join = true
+
+# Create a table with a secondary index which stores another column.
+statement ok
+CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE multiples SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE multiples TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate 10 rows.
+statement ok
+INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
+  GENERATE_SERIES(1, 10) AS A(x)
+
+# Lookup join on covering secondary index
+query TTT colnames
+EXPLAIN SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+Tree            Field           Description
+render          ·               ·
+ └── join       ·               ·
+      │         type            inner
+      │         equality        (a) = (b)
+      │         mergeJoinOrder  +"(a=b)"
+      ├── scan  ·               ·
+      │         table           multiples@primary
+      │         spans           ALL
+      └── scan  ·               ·
+·               table           multiples@bc
+·               spans           ALL
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElE1rwkAQhu_9FTLnLbhJtDYnr5aiRXorOcTsINvGnWU_oEXy30sSqI3EjSCY4348eV7eLHMERQLX-QEtpB_AgUEEDGJgkACDGWQMtKECrSVTX2mBlfiGdMpAKu1dvZ0xKMggpEdw0pUIKbznuxK3mAs0wECgy2XZSLSRh9z8LA--dFKXaIHBxrt0suSQVQzIu9NXrcv3CCmv2PXmF5KqT7wrOs5Xoi-vJ58k1YRUo_8LwpbJxSzRxSynCF6REWhQdBJkVU_aNT2SPrvWL447Yj5a_QPmu9YfjdbCgPmuLcSjtTBgvmsLyWgtDJhHG0g9WbZoNSmLV02caT2wUOyxnW6WvCnwzVDRaNrlpuGaDYHWtae8XaxUe1QH_A_zIBx1YH4OR2HzgDoO0kkYTm7JPQvC87B5fov5KQgvwubFLebn8L-aDjyT8CM7d2fVw28AAAD__2dd6UY=
+
+query II rowsort
+SELECT t1.a, t2.c FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+2   3
+4   6
+6   9
+8   12
+10  15
+
+# Lookup join on non-covering secondary index
+# The index join should be subsumed by joinreader, which takes care of the
+# primary index lookups.
+query TTT colnames
+EXPLAIN SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+Tree                  Field           Description
+render                ·               ·
+ └── join             ·               ·
+      │               type            inner
+      │               equality        (a) = (b)
+      │               mergeJoinOrder  +"(a=b)"
+      ├── scan        ·               ·
+      │               table           multiples@primary
+      │               spans           ALL
+      └── index-join  ·               ·
+           ├── scan   ·               ·
+           │          table           multiples@bc
+           │          spans           ALL
+           └── scan   ·               ·
+·                     table           multiples@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElE1rwkAQhu_9FTLnLbhJtDYnr5aiRXorOcTsINvGnWU_oEXy30sSqI3EjSCY4348eV7eLHMERQLX-QEtpB_AgUEEDGJgkACDGWQMtKECrSVTX2mBlfiGdMpAKu1dvZ0xKMggpEdw0pUIKbznuxK3mAs0wECgy2XZSLSRh9z8LA--dFKXaIHBxrt0suSQVQzIu9NXrcv3CCmv2PXmF5KqT7wrOs5Xoi-vJ58k1YRUo_8Lwpazi1mii1lOEbwiI9Cg6CTIqp60a3okfXatXxx3xHy0-gfMd60_Gq2FAfNdW4hHa2HAfNcWktFaGDCPNpB6smzRalIWr5o403pgodhjO90seVPgm6Gi0bTLTcM1GwKta095u1ip9qgO-B_mQTjqwPwcjsLmAXUcpJMwnNySexaE52Hz_BbzUxBehM2LW8zP4X81HXgm4Ud27s6qh98AAAD__4HL6Us=
+
+query II rowsort
+SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
+----
+2   4
+4   8
+6   12
+8   16
+10  20

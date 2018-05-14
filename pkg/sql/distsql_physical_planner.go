@@ -772,6 +772,19 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 	return distsqlrun.FlowVerIsCompatible(dsp.planVersion, v.MinAcceptedVersion, v.Version)
 }
 
+func getIndexIdx(n *scanNode) (uint32, error) {
+	if n.index == &n.desc.PrimaryIndex {
+		return 0, nil
+	}
+	for i := range n.desc.Indexes {
+		if n.index == &n.desc.Indexes[i] {
+			// IndexIdx is 1 based (0 means primary index).
+			return uint32(i + 1), nil
+		}
+	}
+	return 0, errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
+}
+
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
@@ -782,19 +795,11 @@ func initTableReaderSpec(
 		Reverse: n.reverse,
 		IsCheck: n.run.isCheck,
 	}
-	if n.index != &n.desc.PrimaryIndex {
-		for i := range n.desc.Indexes {
-			if n.index == &n.desc.Indexes[i] {
-				// IndexIdx is 1 based (0 means primary index).
-				s.IndexIdx = uint32(i + 1)
-				break
-			}
-		}
-		if s.IndexIdx == 0 {
-			err := errors.Errorf("invalid scanNode index %v (table %s)", n.index, n.desc.Name)
-			return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
-		}
+	indexIdx, err := getIndexIdx(n)
+	if err != nil {
+		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
 	}
+	s.IndexIdx = indexIdx
 
 	// When a TableReader is running scrub checks, do not allow a
 	// post-processor. This is because the outgoing stream is a fixed
@@ -1820,9 +1825,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.planToStreamColMap)
 	}
 
-	// Can use a lookupJoiner if there is a scan node on the right that uses the
-	// table's primary index.
-	// TODO(pbardea): Loosen restriction when joinReader takes secondary indexes.
+	// A lookup join can be performed if the right node is a scan or index join,
+	// and the right equality columns are a prefix of that node's index. In the
+	// index join case, joinReader will first perform the secondary index lookup
+	// and then do a primary index lookup on the resulting rows.
 	lookupJoinEnabled := planCtx.EvalContext().SessionData.LookupJoinEnabled
 	isLookupJoin, lookupJoinScan, lookupFailReason := verifyLookupJoin(leftEqCols, rightEqCols, n, joinType)
 
@@ -1926,9 +1932,13 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			return physicalPlan{}, err
 		}
 
+		indexIdx, err := getIndexIdx(lookupJoinScan)
+		if err != nil {
+			return physicalPlan{}, err
+		}
 		core.JoinReader = &distsqlrun.JoinReaderSpec{
 			Table:         *(lookupJoinScan.desc),
-			IndexIdx:      0,
+			IndexIdx:      indexIdx,
 			LookupColumns: lookupCols,
 			OnExpr:        onExpr,
 		}
@@ -1974,13 +1984,14 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 func verifyLookupJoin(
 	leftEqCols, rightEqCols []uint32, n *joinNode, joinType sqlbase.JoinType,
 ) (bool, *scanNode, string) {
-	lookupJoinScan, ok := n.right.plan.(*scanNode)
-	if !ok {
-		return false, nil, "lookup join's right side must be a scan"
-	}
-
-	if lookupJoinScan.index != &lookupJoinScan.desc.PrimaryIndex {
-		return false, nil, "lookup joins can only perform lookups through the primary index"
+	var lookupJoinScan *scanNode
+	switch p := n.right.plan.(type) {
+	case *scanNode:
+		lookupJoinScan = p
+	case *indexJoinNode:
+		lookupJoinScan = p.index
+	default:
+		return false, nil, "lookup join's right side must be a scan or index join"
 	}
 
 	if joinType != sqlbase.InnerJoin {
