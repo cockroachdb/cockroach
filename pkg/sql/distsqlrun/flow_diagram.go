@@ -431,6 +431,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 		for _, p := range flows[n].Processors {
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
+			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
