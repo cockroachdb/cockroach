@@ -42,4 +42,5 @@ func registerTests(r *registry) {
 	registerSchemaChange(r)
 	registerTPCC(r)
 	registerVersion(r)
+	registerWebUI(r)
 }

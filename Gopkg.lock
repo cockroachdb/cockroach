@@ -1008,6 +1008,12 @@
   version = "v1.4.5"
 
 [[projects]]
+  name = "github.com/tebeka/selenium"
+  packages = ["."]
+  revision = "2ccea6e0c0e7425dd3bb6ab291215e2048fd8743"
+  version = "v0.9.3"
+
+[[projects]]
   branch = "master"
   name = "github.com/tylertreat/hdrhistogram-writer"
   packages = ["."]
@@ -1255,6 +1261,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "220d8cdbc95b1ec79fcaf9552bc450418c8766fa108989fa02e6a15271bd9591"
+  inputs-digest = "84f954ee85e00a7fd6b73b38132091d2235a54925acc6705c05dc33ff322a213"
   solver-name = "gps-cdcl"
   solver-version = 1

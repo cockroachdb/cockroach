@@ -609,7 +609,7 @@ fi
 		branch))
 }
 
-// startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
+// startArgs specifies extra arguments that are passed to roachprod during `c.Start`.
 func startArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
 }
@@ -744,6 +744,22 @@ func (c *cluster) RunWithBuffer(
 	}
 	return execCmdWithBuffer(ctx, l,
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+}
+
+// WebURL returns the Web UI endpoint for the specified node.
+func (c *cluster) WebURL(ctx context.Context, node nodeListOption) []string {
+	cmd := exec.CommandContext(ctx, roachprod, "adminurl", c.makeNodes(node))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(strings.Join(cmd.Args, ` `))
+		c.t.Fatal(err)
+	}
+	urls := strings.Split(strings.TrimSpace(string(output)), " ")
+	for i := range urls {
+		urls[i] = strings.Trim(urls[i], "'")
+	}
+	fmt.Println(strings.Join(urls, " "))
+	return urls
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
