@@ -681,7 +681,6 @@ func TestCompactorDisabled(t *testing.T) {
 	}
 
 	suggest()
-	suggest()
 	enabled.Override(&compactor.st.SV, false)
 	suggest()
 
@@ -692,7 +691,7 @@ func TestCompactorDisabled(t *testing.T) {
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), 3*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
