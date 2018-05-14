@@ -202,11 +202,8 @@ type deleteRun struct {
 const maxDeleteBatchSize = 10000
 
 func (d *deleteNode) startExec(params runParams) error {
-	if sqlbase.IsSystemConfigID(d.run.td.tableDesc().GetID()) {
-		// Mark transaction as operating on the system DB.
-		if err := params.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+	if err := params.p.maybeSetSystemConfig(d.run.td.tableDesc().GetID()); err != nil {
+		return err
 	}
 
 	// cache traceKV during execution, to avoid re-evaluating it for every row.

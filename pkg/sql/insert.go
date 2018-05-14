@@ -344,11 +344,8 @@ type insertRun struct {
 const maxInsertBatchSize = 10000
 
 func (n *insertNode) startExec(params runParams) error {
-	if sqlbase.IsSystemConfigID(n.run.ti.tableDesc().GetID()) {
-		// Mark transaction as operating on the system DB.
-		if err := params.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+	if err := params.p.maybeSetSystemConfig(n.run.ti.tableDesc().GetID()); err != nil {
+		return err
 	}
 
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
