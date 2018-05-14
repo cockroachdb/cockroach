@@ -1,6 +1,8 @@
 # tests adapted from logictest -- ordinality
 
-exec
+# TODO(radu): distsql doesn't support WITH ORDINALITY.
+
+exec nodist
 SELECT ordinality FROM (VALUES ('a'), ('b')) WITH ORDINALITY
 ----
 ordinality:int
@@ -11,20 +13,20 @@ exec-raw
 CREATE TABLE foo (x CHAR PRIMARY KEY); INSERT INTO foo(x) VALUES ('a'), ('b')
 ----
 
-exec
+exec nodist
 SELECT * FROM foo WITH ORDINALITY
 ----
 x:string  ordinality:int
 a         1
 b         2
 
-exec
+exec nodist
 SELECT * FROM foo WITH ORDINALITY LIMIT 1
 ----
 x:string  ordinality:int
 a         1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(ordinality) FROM foo WITH ORDINALITY
 ----
 group            ·            ·                (column3)       ·
@@ -34,7 +36,7 @@ group            ·            ·                (column3)       ·
 ·                table        foo@primary      ·               ·
 ·                spans        ALL              ·               ·
 
-exec hide-colnames
+exec hide-colnames nodist
 SELECT * FROM foo WITH ORDINALITY AS a, foo WITH ORDINALITY AS b
 ----
 a  1  a  1
@@ -42,7 +44,7 @@ a  1  b  2
 b  2  a  1
 b  2  b  2
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
 ----
 filter           ·       ·                 (x, "ordinality")  ·
@@ -52,7 +54,7 @@ filter           ·       ·                 (x, "ordinality")  ·
 ·                table   foo@primary       ·                  ·
 ·                spans   ALL               ·                  ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality DESC
 ----
 sort                  ·       ·                 (x, "ordinality")  -"ordinality"

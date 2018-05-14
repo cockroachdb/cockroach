@@ -138,14 +138,14 @@ column1:unknown
 NULL
 NULL
 
-exec
+exec rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
 x:int  column7:string
 1      unknown
 2      int
 
-exec
+exec rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
 x:int  column7:string
@@ -235,7 +235,7 @@ v:int
 3
 2
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
 ----
 union      ·      ·                  (v)  ·
@@ -246,7 +246,7 @@ union      ·      ·                  (v)  ·
 ·          table  uniontest@primary  ·    ·
 ·          spans  ALL                ·    ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
 ----
 append     ·      ·                  (v)  ·

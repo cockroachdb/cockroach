@@ -20,7 +20,7 @@ NULL
 false
 true
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT c FROM t ORDER BY c
 ----
 sort       ·      ·          (c)  +c
@@ -45,7 +45,7 @@ a:int  b:int
 2      8
 1      9
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b
 ----
 sort       ·      ·          (a, b)  +b
@@ -62,7 +62,7 @@ a:int  b:int
 2      8
 3      7
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b DESC
 ----
 sort       ·      ·          (a, b)  -b
@@ -80,7 +80,7 @@ a:int
 2
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit           ·      ·          (a, b)  +b
@@ -99,7 +99,7 @@ a:int  b:int
 2      8
 
 # TODO(radu): this does not work. Unclear if we want to support it or not.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) #SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
 #----
 #limit                     0  limit     ·         ·                (c)                 weak-key(c)
@@ -129,7 +129,7 @@ b:int
 8
 9
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC
 ----
 render          ·         ·          (b)     ·
@@ -140,7 +140,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a LIMIT 1
 ----
 render     ·         ·          (b)     ·
@@ -150,7 +150,7 @@ render     ·         ·          (b)     ·
 ·          spans     ALL        ·       ·
 ·          limit     1          ·       ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 render          ·         ·          (b)     ·
@@ -161,7 +161,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 render          ·         ·          (b)     ·
@@ -172,7 +172,7 @@ render          ·         ·          (b)     ·
 ·               table     t@primary  ·       ·
 ·               spans     ALL        ·       ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, t.*)
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -181,7 +181,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, a), c
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -190,7 +190,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY b, (a, c)
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -199,7 +199,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  t@primary  ·          ·
 ·          spans  ALL        ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY (b, (a, c))
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -298,7 +298,7 @@ a:int
 
 # Check that sort is skipped if the ORDER BY clause is constant.
 # TODO(radu): we don't optimize constant columns yet.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY 1+2
 ----
 render               ·         ·          (a, b, c)                       ·
@@ -316,7 +316,7 @@ render               ·         ·          (a, b, c)                       ·
 ·                    table     t@primary  ·                               ·
 ·                    spans     ALL        ·                               ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1, * FROM t ORDER BY 1
 ----
 sort            ·         ·          (column4, a, b, c)  +column4
@@ -330,7 +330,7 @@ sort            ·         ·          (column4, a, b, c)  +column4
 ·               table     t@primary  ·                   ·
 ·               spans     ALL        ·                   ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM t ORDER BY length('abc')
 ----
 render               ·         ·              (a, b, c)                       ·
@@ -349,7 +349,7 @@ render               ·         ·              (a, b, c)                       
 ·                    spans     ALL            ·                               ·
 
 # Check that the sort key reuses the existing render.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b+2 FROM t ORDER BY b+2
 ----
 sort            ·         ·          (column4)  +column4
@@ -361,7 +361,7 @@ sort            ·         ·          (column4)  +column4
 ·               spans     ALL        ·          ·
 
 # Check that the sort picks up a renamed render properly.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY y
 ----
 sort            ·         ·          (y)  +y
@@ -373,7 +373,7 @@ sort            ·         ·          (y)  +y
 ·               spans     ALL        ·    ·
 
 # Check that the sort reuses a render behind a rename properly.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT b+2 AS y FROM t ORDER BY b+2
 ----
 sort            ·         ·          (y)  +y
@@ -420,7 +420,7 @@ six
 three
 two
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a
 ----
 scan  ·      ·            (a, b, c, d)  +a
@@ -441,7 +441,7 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM abc ORDER BY a, c
 ----
 sort       ·      ·            (a, b, c, d)  +a,+c
@@ -464,7 +464,7 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, a
 ----
 scan  ·      ·       (a, b)  +b,+a
@@ -487,7 +487,7 @@ a:int  b:int
 
 # The non-unique index ba includes column c (required to make the keys unique)
 # so the results will already be sorted.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 scan  ·      ·       (a, b, c)  +b,+a,+c
@@ -509,7 +509,7 @@ a:int  b:int  c:int
 3      9      1
 
 # We use the WHERE condition to force the use of index ba.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
 ----
 render               ·         ·            (a, b, c)     ·
@@ -536,7 +536,7 @@ a:int  b:int  c:int
 
 # We cannot have rows with identical values for a,b,c so we don't need to
 # sort for d.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
 sort            ·       ·            (a, b, c, d)  +b,+a,+c,+d
@@ -557,7 +557,7 @@ a:int  b:int  c:int  d:string
 3      8      1      eight
 3      9      1      nine
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c
 ----
 render     ·         ·       (a, b)     ·
@@ -581,7 +581,7 @@ a:int  b:int
 3      8
 3      9
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY c, b
 ----
 render          ·         ·            (a, b)     ·
@@ -607,7 +607,7 @@ a:int  b:int
 1      2
 1      3
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a
 ----
 render     ·         ·       (a, b)     ·
@@ -631,7 +631,7 @@ a:int  b:int
 3      8
 3      9
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 render          ·         ·            (a, b)     ·
@@ -657,7 +657,7 @@ a:int  b:int
 3      8
 3      9
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a FROM abc ORDER BY a DESC
 ----
 sort       ·      ·            (a)  -a
@@ -699,7 +699,7 @@ a:int
 1
 1
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 sort            ·         ·       (c)     +c
@@ -710,7 +710,7 @@ sort            ·         ·       (c)     +c
 ·               table     abc@bc  ·       ·
 ·               spans     /2-/3   ·       ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 sort            ·         ·       (c)     -c
@@ -722,7 +722,7 @@ sort            ·         ·       (c)     -c
 ·               spans     /2-/3   ·       ·
 
 # Verify that the ordering of the primary index is still used for the outer sort.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
 render          ·         ·            (b, c)     ·
@@ -747,7 +747,7 @@ exec-raw
 INSERT INTO bar VALUES (0, NULL, 10), (1, NULL, 5)
 ----
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM bar ORDER BY baz, extra
 ----
 sort       ·      ·            (id, baz, extra)  +baz,+extra
@@ -803,7 +803,7 @@ column5:int
 7
 
 # The following tests verify we recognize that sorting is not necessary
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
 sort       ·      ·          (a, b, c)  +c
@@ -812,7 +812,7 @@ sort       ·      ·          (a, b, c)  +c
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 sort       ·      ·          (a, b, c)  +c,+b,+a
@@ -821,7 +821,7 @@ sort       ·      ·          (a, b, c)  +c,+b,+a
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 sort       ·      ·          (a, b, c)  +b,+a,+c
@@ -830,7 +830,7 @@ sort       ·      ·          (a, b, c)  +b,+a,+c
 ·          table  abcd@abc   ·          ·
 ·          spans  /1/4-/1/5  ·          ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 sort       ·      ·          (a, b, c)  +b,+c,+a
@@ -856,7 +856,7 @@ NaN
 -1.0
 1.0
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort         ·              ·                 (x)  +x
@@ -867,7 +867,7 @@ sort         ·              ·                 (x)  +x
 ·            row 1, expr 0  'b'               ·    ·
 ·            row 2, expr 0  'c'               ·    ·
 
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
 values  ·              ·                 (x)  ·
@@ -877,14 +877,14 @@ values  ·              ·                 (x)  ·
 ·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): ordinality not supported
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) #SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 #----
 #ordinality   ·     ·
 # └── values  ·     ·
 #·            size  1 column, 3 rows
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 #----
 #sort              ·      ·
@@ -894,7 +894,7 @@ values  ·              ·                 (x)  ·
 #·                 size   1 column, 3 rows
 #
 # Once ordinality is supported these test cases should have a sort node.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
@@ -903,7 +903,7 @@ values  ·              ·                 (x)  ·
 #·       0  ·       row 1, expr 0  'b'               ·    ·
 #·       0  ·       row 2, expr 0  'c'               ·    ·
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
 #----
 #values  0  values  ·              ·                 (x)  ·
@@ -914,7 +914,7 @@ values  ·              ·                 (x)  ·
 
 # TODO(radu): DML statements not supported yet.
 ## Check that the ordering of the source does not propagate blindly to RETURNING.
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) #INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 #----
 #insert              0  insert    ·     ·        (b)     ·
@@ -922,7 +922,7 @@ values  ·              ·                 (x)  ·
 # └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
 #      └── emptyrow  2  emptyrow  ·     ·        ()      ·
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) DELETE FROM t WHERE a = 3 RETURNING b
 #----
 #delete     0  delete  ·      ·          (b)        ·
@@ -931,7 +931,7 @@ values  ·              ·                 (x)  ·
 #·          1  ·       table  t@primary  ·          ·
 #·          1  ·       spans  /3-/3/#    ·          ·
 #
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
 #----
 #update          0  update  ·      ·          (b)                ·
@@ -957,7 +957,7 @@ CREATE TABLE uvwxyz (
 
 # Verify that the outer ordering is propagated to index selection and we choose
 # the index that avoids any sorting.
-exec hide-colnames
+exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
 ----
 render          ·         ·            (y, w, x)  ·
@@ -983,7 +983,7 @@ CREATE TABLE blocks (
 # TODO(radu): LIMIT not supported yet.
 ## Test that ordering goes "through" a renderNode that has a duplicate render of
 ## an order-by column (#13696).
-#exec hide-colnames
+#exec hide-colnames nodist
 #EXPLAIN (VERBOSE) #SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
 #----
 #render          0  render  ·         ·                   (block_id, writer_id, block_num, block_id)                                      ·
