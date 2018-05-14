@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -331,7 +332,7 @@ func (sc *SchemaChanger) getMutationToBackfill(
 	ctx context.Context,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
-	filter distsqlrun.MutationFilter,
+	filter backfill.MutationFilter,
 ) (*sqlbase.DescriptorMutation, int, error) {
 	var mutation *sqlbase.DescriptorMutation
 	var mutationIdx int
@@ -441,7 +442,7 @@ func (sc *SchemaChanger) distBackfill(
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
-	filter distsqlrun.MutationFilter,
+	filter backfill.MutationFilter,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -597,7 +598,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	return sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
-		distsqlrun.IndexMutationFilter)
+		backfill.IndexMutationFilter)
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
@@ -609,5 +610,5 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return sc.distBackfill(
 		ctx, evalCtx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		distsqlrun.ColumnMutationFilter)
+		backfill.ColumnMutationFilter)
 }
