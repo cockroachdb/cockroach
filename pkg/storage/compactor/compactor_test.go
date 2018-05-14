@@ -678,7 +678,10 @@ func TestCompactorDisabled(t *testing.T) {
 		compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
 			StartKey: key("a"), EndKey: key("b"),
 			Compaction: storagebase.Compaction{
-				Bytes:            threshold - 1,
+				// Suggest so little that two suggestions stay below the threshold.
+				// Otherwise this test gets racy and difficult to fix without remodeling
+				// the compactor.
+				Bytes:            threshold / 3,
 				SuggestedAtNanos: timeutil.Now().UnixNano(),
 			},
 		})
