@@ -655,3 +655,247 @@ func TestAggregation(t *testing.T) {
 		})
 	}
 }
+
+func verifySpanIteratorPosition(t *testing.T, actual, expected timeSeriesSpanIterator) {
+	t.Helper()
+	if a, e := actual.total, expected.total; a != e {
+		t.Errorf("iterator had total index of %d, wanted %d", a, e)
+	}
+	if a, e := actual.inner, expected.inner; a != e {
+		t.Errorf("iterator had inner index of %d, wanted %d", a, e)
+	}
+	if a, e := actual.outer, expected.outer; a != e {
+		t.Errorf("iterator had outer index of %d, wanted %d", a, e)
+	}
+	if a, e := actual.timestamp, expected.timestamp; a != e {
+		t.Errorf("iterator had timestamp of %d, wanted %d", a, e)
+	}
+	if a, e := actual.length, expected.length; a != e {
+		t.Errorf("iterator had length of %d, wanted %d", a, e)
+	}
+}
+
+func TestTimeSeriesSpanIteratorMovement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
+		makeInternalData(0, 10, []dataSample{
+			{10, 1},
+			{20, 2},
+		}),
+		makeInternalData(30, 10, []dataSample{
+			{30, 3},
+		}),
+		makeInternalData(50, 10, []dataSample{
+			{50, 5},
+			{70, 7},
+			{90, 9},
+		}),
+	})
+
+	// initialize explicit iterator results for the entire span - this makes the
+	// movement tests easier to read, as we are often asserting that the same
+	// position.
+	explicitPositions := []timeSeriesSpanIterator{
+		{
+			timestamp: 10,
+			length:    6,
+		},
+		{
+			total:     1,
+			outer:     0,
+			inner:     1,
+			timestamp: 20,
+			length:    6,
+		},
+		{
+			total:     2,
+			outer:     1,
+			inner:     0,
+			timestamp: 30,
+			length:    6,
+		},
+		{
+			total:     3,
+			outer:     2,
+			inner:     0,
+			timestamp: 50,
+			length:    6,
+		},
+		{
+			total:     4,
+			outer:     2,
+			inner:     1,
+			timestamp: 70,
+			length:    6,
+		},
+		{
+			total:     5,
+			outer:     2,
+			inner:     2,
+			timestamp: 90,
+			length:    6,
+		},
+		{
+			total:     6,
+			outer:     3,
+			inner:     0,
+			timestamp: 0,
+			length:    6,
+		},
+	}
+
+	// Initial position.
+	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+
+	// Forwarding.
+	iter.forward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[1])
+	iter.forward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[2])
+
+	iter.forward()
+	iter.forward()
+	iter.forward()
+	iter.forward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+	iter.forward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+
+	// Backwards.
+	iter.backward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[5])
+	iter.backward()
+	iter.backward()
+	iter.backward()
+	iter.backward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[1])
+	iter.backward()
+	iter.backward()
+	iter.backward()
+	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+
+	// Seek index.
+	iter.seekIndex(2)
+	verifySpanIteratorPosition(t, iter, explicitPositions[2])
+	iter.seekIndex(4)
+	verifySpanIteratorPosition(t, iter, explicitPositions[4])
+	iter.seekIndex(0)
+	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+	iter.seekIndex(1000)
+	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+	iter.seekIndex(-1)
+	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+
+	// Seek timestamp.
+	iter.seekTimestamp(0)
+	verifySpanIteratorPosition(t, iter, explicitPositions[0])
+	iter.seekTimestamp(15)
+	verifySpanIteratorPosition(t, iter, explicitPositions[1])
+	iter.seekTimestamp(50)
+	verifySpanIteratorPosition(t, iter, explicitPositions[3])
+	iter.seekTimestamp(80)
+	verifySpanIteratorPosition(t, iter, explicitPositions[5])
+	iter.seekTimestamp(10000)
+	verifySpanIteratorPosition(t, iter, explicitPositions[6])
+}
+
+func TestTimeSeriesSpanIteratorValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	iter := makeTimeSeriesSpanIterator(timeSeriesSpan{
+		makeInternalData(0, 10, []dataSample{
+			{10, 1},
+			{20, 2},
+			{20, 4},
+		}),
+		makeInternalData(30, 10, []dataSample{
+			{30, 3},
+			{30, 6},
+			{30, 9},
+		}),
+		makeInternalData(50, 10, []dataSample{
+			{50, 12},
+			{70, 700},
+			{90, 9},
+		}),
+	})
+
+	iter.seekTimestamp(30)
+	for _, tc := range []struct {
+		agg           tspb.TimeSeriesQueryAggregator
+		expected      float64
+		expectedDeriv float64
+	}{
+		{
+			agg:           tspb.TimeSeriesQueryAggregator_AVG,
+			expected:      6,
+			expectedDeriv: 3,
+		},
+		{
+			agg:           tspb.TimeSeriesQueryAggregator_SUM,
+			expected:      18,
+			expectedDeriv: 12,
+		},
+		{
+			agg:           tspb.TimeSeriesQueryAggregator_MIN,
+			expected:      3,
+			expectedDeriv: 1,
+		},
+		{
+			agg:           tspb.TimeSeriesQueryAggregator_MAX,
+			expected:      9,
+			expectedDeriv: 5,
+		},
+	} {
+		t.Run("value", func(t *testing.T) {
+			if a, e := iter.value(tc.agg), tc.expected; a != e {
+				t.Errorf("value for %s of iter got %f, wanted %f", tc.agg.String(), a, e)
+			}
+			deriv, valid := iter.derivative(tc.agg)
+			if !valid {
+				t.Errorf("expected derivative to be valid, was invalid")
+			}
+			if a, e := deriv, tc.expectedDeriv; a != e {
+				t.Errorf("derivative for %s of iter got %f, wanted %f", tc.agg.String(), a, e)
+			}
+		})
+	}
+
+	// Test value interpolation.
+	iter.seekTimestamp(50)
+	for _, tc := range []struct {
+		timestamp          int64
+		interpolationLimit int64
+		expectedValid      bool
+		expectedValue      float64
+	}{
+		{50, 100, true, 12},
+		{50, 1, true, 12},
+		// Must interpolate in between points.
+		{30, 100, false, 0},
+		{60, 100, false, 0},
+		// Interpolation limit is respected
+		{40, 100, true, 9},
+		{40, 20, true, 9},
+		{40, 19, false, 0},
+		// Interpolation limit 0 is still a special case.
+		{40, 0, true, 9},
+	} {
+		interpValue, valid := iter.valueAtTimestamp(tc.timestamp, tc.interpolationLimit, tspb.TimeSeriesQueryAggregator_AVG)
+		if valid != tc.expectedValid {
+			t.Errorf("valueAtTimestamp valid was %t, wanted %t", valid, tc.expectedValid)
+			continue
+		}
+		if a, e := interpValue, tc.expectedValue; a != e {
+			t.Errorf("valueAtTimestamp %d got %f, wanted %f", tc.timestamp, a, e)
+		}
+	}
+
+	// Special case: no derivative available at index 0.
+	iter.seekIndex(0)
+	if _, valid := iter.valueAtTimestamp(20, 1000, tspb.TimeSeriesQueryAggregator_AVG); valid {
+		t.Errorf("expected valueAtTimestamp to be invalid at index 0, was valid")
+	}
+	if _, valid := iter.derivative(tspb.TimeSeriesQueryAggregator_AVG); valid {
+		t.Errorf("expected deriv to be invalid at index 0, was valid")
+	}
+}

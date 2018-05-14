@@ -88,3 +88,11 @@ func (r Resolution) SlabDuration() int64 {
 	}
 	return duration
 }
+
+func normalizeToPeriod(timestampNanos int64, period int64) int64 {
+	return timestampNanos - timestampNanos%period
+}
+
+func (r Resolution) normalizeToSlab(timestampNanos int64) int64 {
+	return normalizeToPeriod(timestampNanos, r.SlabDuration())
+}
