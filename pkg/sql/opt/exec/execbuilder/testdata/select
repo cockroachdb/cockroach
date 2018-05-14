@@ -10,7 +10,7 @@ scan  ·      ·          (x, y)  ·
 ·     table  a@primary  ·       ·
 ·     spans  /2-        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE x > 1
 ----
 x:int  y:int
@@ -26,7 +26,7 @@ filter     ·       ·          (x, y)  ·
 ·          table   a@primary  ·       ·
 ·          spans   ALL        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE y > 10
 ----
 x:int  y:int

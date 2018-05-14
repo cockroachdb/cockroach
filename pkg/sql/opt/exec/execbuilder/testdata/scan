@@ -19,7 +19,7 @@ scan  ·      ·          (x, y, s)  ·
 ·     table  a@primary  ·          ·
 ·     spans  ALL        ·          ·
 
-exec
+exec rowsort
 SELECT * FROM a
 ----
 x:int  y:float  s:string
@@ -47,7 +47,7 @@ render     ·         ·          (s, x)  ·
 ·          table     a@primary  ·       ·
 ·          spans     ALL        ·       ·
 
-exec
+exec rowsort
 SELECT s, x FROM a
 ----
 s:string  x:int
@@ -69,7 +69,7 @@ scan b
  ├── stats: [rows=1000]
  └── cost: 1000.00
 
-exec
+exec rowsort
 SELECT s, x FROM b
 ----
 s:string  x:int

@@ -17,7 +17,7 @@ join       ·      ·          (x, y, x, z)  ·
 ·          table  b@primary  ·             ·
 ·          spans  ALL        ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a, b
 ----
 x:int  y:int  x:int  z:int
@@ -44,7 +44,7 @@ join       ·         ·          (x, y, x, z)  ·
 ·          table     b@primary  ·             ·
 ·          spans     ALL        ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a, b WHERE a.x = b.x
 ----
 x:int  y:int  x:int  z:int
@@ -64,7 +64,7 @@ join       ·         ·          (x, y, x, z)  ·
 ·          table     b@primary  ·             ·
 ·          spans     ALL        ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a INNER JOIN b ON a.x = b.x
 ----
 x:int  y:int  x:int  z:int
@@ -88,7 +88,7 @@ render          ·         ·          (x, y, z)     ·
 ·               table     b@primary  ·             ·
 ·               spans     ALL        ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a NATURAL JOIN b
 ----
 x:int  y:int  z:int
@@ -108,7 +108,7 @@ join       ·         ·           (x, y, x, z)  ·
 ·          table     b@primary   ·             ·
 ·          spans     ALL         ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a LEFT OUTER JOIN b ON a.x = b.x
 ----
 x:int  y:int  x:int  z:int
@@ -133,7 +133,7 @@ render          ·         ·            (x, y, z)     ·
 ·               table     b@primary    ·             ·
 ·               spans     ALL          ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a NATURAL RIGHT OUTER JOIN b
 ----
 x:int  y:int  z:int
@@ -158,7 +158,7 @@ render          ·         ·               (x, y, z)     ·
 ·               table     b@primary       ·             ·
 ·               spans     ALL             ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a FULL OUTER JOIN b USING(x)
 ----
 x:int  y:int  z:int
@@ -184,7 +184,7 @@ join            ·       ·          (x, y, x, z)  ·
 ·               table   b@primary  ·             ·
 ·               spans   ALL        ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a, b WHERE y > 10 AND z < 400
 ----
 x:int  y:int  x:int  z:int
@@ -209,7 +209,7 @@ join            ·         ·           (x, y, x, z)  ·
 ·               table     b@primary   ·             ·
 ·               spans     ALL         ·             ·
 
-exec
+exec rowsort
 SELECT * FROM a LEFT JOIN b ON a.x=b.x AND z < 300
 ----
 x:int  y:int  x:int  z:int
@@ -238,7 +238,7 @@ join       ·         ·          (x, y)  ·
 ·          table     c@primary  ·       ·
 ·          spans     ALL        ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE EXISTS(SELECT * FROM c WHERE x = u)
 ----
 x:int  y:int
@@ -296,7 +296,7 @@ join       ·      ·            (x, y)  ·
 ·          table  c@primary    ·       ·
 ·          spans  ALL          ·       ·
 
-exec
+exec rowsort
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 ----
 x:int  y:int
