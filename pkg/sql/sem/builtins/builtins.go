@@ -1025,6 +1025,19 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"random_int64": {
+		tree.Builtin{
+			Types:                   tree.ArgTypes{},
+			ReturnType:              tree.FixedReturnType(types.Int),
+			Impure:                  true,
+			NeedsRepeatedEvaluation: true,
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(int64(rand.Uint64()))), nil
+			},
+			Info: "Returns a random 64-bit integer.",
+		},
+	},
+
 	"unique_rowid": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
