@@ -876,6 +876,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
 	s.compactor = compactor.NewCompactor(
+		s.cfg.Settings,
 		s.engine.(engine.WithSSTables),
 		s.Capacity,
 		func(ctx context.Context) { s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction") },

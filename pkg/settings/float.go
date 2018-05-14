@@ -69,6 +69,11 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 	}
 }
 
+// Default returns the default value.
+func (f *FloatSetting) Default() float64 {
+	return f.defaultValue
+}
+
 // RegisterFloatSetting defines a new setting with type float.
 func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
 	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
