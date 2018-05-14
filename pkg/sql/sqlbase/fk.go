@@ -649,7 +649,7 @@ func makeBaseFKHelper(
 	tableArgs := RowFetcherTableArgs{
 		Desc:             b.searchTable,
 		Index:            b.searchIdx,
-		ColIdxMap:        ColIDtoRowIndexFromCols(b.searchTable.Columns),
+		ColIdxMap:        b.searchTable.ColumnIdxMap(),
 		IsSecondaryIndex: b.searchIdx.ID != b.searchTable.PrimaryIndex.ID,
 		Cols:             b.searchTable.Columns,
 	}
