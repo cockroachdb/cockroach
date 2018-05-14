@@ -79,7 +79,7 @@ func existingUserIsRole(
 		`SELECT "isRole" FROM system.users WHERE username=$1`,
 		username)
 	if err != nil {
-		return false, errors.Errorf("error looking up user %s", username)
+		return false, errors.Wrapf(err, "error looking up user %s", username)
 	}
 	if len(values) == 0 {
 		return false, errors.Errorf("no user or role named %s", username)
