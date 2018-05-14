@@ -23,11 +23,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -44,9 +44,6 @@ type chunkBackfiller interface {
 	) (roachpb.Key, error)
 }
 
-// MutationFilter is the type of a simple predicate on a mutation.
-type MutationFilter func(sqlbase.DescriptorMutation) bool
-
 // backfiller is a processor that implements a distributed backfill of
 // an entity, like indexes or columns, during a schema change.
 type backfiller struct {
@@ -55,13 +52,11 @@ type backfiller struct {
 	name string
 	// mutationFilter returns true if the mutation should be processed by the
 	// chunkBackfiller.
-	filter MutationFilter
+	filter backfill.MutationFilter
 
 	spec    BackfillerSpec
 	output  RowReceiver
 	flowCtx *FlowCtx
-	fetcher sqlbase.RowFetcher
-	alloc   sqlbase.DatumAlloc
 }
 
 // OutputTypes is part of the processor interface.
@@ -292,25 +287,4 @@ func WriteResumeSpan(
 			"span %+v not found among %+v", origSpan, resumeSpans,
 		)
 	})
-}
-
-// ConvertBackfillError returns a cleaner SQL error for a failed Batch.
-func ConvertBackfillError(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, b *client.Batch,
-) error {
-	// A backfill on a new schema element has failed and the batch contains
-	// information useful in printing a sensible error. However
-	// ConvertBatchError() will only work correctly if the schema elements
-	// are "live" in the tableDesc.
-	desc := protoutil.Clone(tableDesc).(*sqlbase.TableDescriptor)
-	mutationID := desc.Mutations[0].MutationID
-	for _, mutation := range desc.Mutations {
-		if mutation.MutationID != mutationID {
-			// Mutations are applied in a FIFO order. Only apply the first set
-			// of mutations if they have the mutation ID we're looking for.
-			break
-		}
-		desc.MakeMutationComplete(mutation)
-	}
-	return sqlbase.ConvertBatchError(ctx, desc, b)
 }
