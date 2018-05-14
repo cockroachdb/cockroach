@@ -78,7 +78,7 @@ func SplitTable(
 
 	rightRangeStartKey := rightRange.StartKey.AsRawKey()
 	rightRange, err = tc.AddReplicas(rightRangeStartKey, tc.Target(targetNodeIdx))
-	if err != nil {
+	if err != nil && !testutils.IsError(err, "is already present") {
 		t.Fatal(err)
 	}
 
