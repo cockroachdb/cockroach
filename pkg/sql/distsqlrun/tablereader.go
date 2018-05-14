@@ -149,15 +149,10 @@ func initRowFetcher(
 		return nil, false, err
 	}
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(desc.Columns))
-	for i, c := range desc.Columns {
-		colIdxMap[c.ID] = i
-	}
-
 	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
-		ColIdxMap:        colIdxMap,
+		ColIdxMap:        desc.ColumnIdxMap(),
 		IsSecondaryIndex: isSecondaryIndex,
 		Cols:             desc.Columns,
 		ValNeededForCol:  valNeededForCol,

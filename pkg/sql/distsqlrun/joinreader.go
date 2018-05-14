@@ -43,7 +43,9 @@ const joinReaderBatchSize = 100
 // from a primary index.
 //
 // For a lookup join, the input is another table and the columns which match the
-// index are specified in the `lookupCols` field.
+// index are specified in the `lookupCols` field. If the index is a secondary
+// index which does not cover the needed output columns, a second lookup will be
+// performed to retrieve those columns from the primary index.
 type joinReader struct {
 	joinerBase
 
@@ -59,6 +61,10 @@ type joinReader struct {
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
 
+	primaryFetcher     *sqlbase.RowFetcher
+	primaryColumnTypes []sqlbase.ColumnType
+	primaryKeyPrefix   []byte
+
 	renderedRow sqlbase.EncDatumRow
 }
 
@@ -73,11 +79,6 @@ func newJoinReader(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (*joinReader, error) {
-	if spec.IndexIdx != 0 {
-		// TODO(radu): for now we only support joining with the primary index
-		return nil, errors.Errorf("join with index not implemented")
-	}
-
 	jr := &joinReader{
 		desc:       spec.Table,
 		input:      input,
@@ -119,9 +120,34 @@ func newJoinReader(
 		}
 	}
 
+	var neededCols util.FastIntSet
+	if jr.index == &jr.desc.PrimaryIndex ||
+		indexIsCovering(jr.index, jr.desc.ColumnIdxMap(), jr.out.neededColumns(), len(jr.inputTypes)) {
+		// jr.index includes all the needed output columns, so only need one lookup.
+		neededCols = jr.rowFetcherColumns()
+	} else {
+		// jr.index is a secondary index which does not contain all the needed
+		// output columns. First we'll retrieve the primary index columns from the
+		// secondary index, then do a second lookup on the primary index to get the
+		// output columns.
+		neededCols = getColumnIndices(jr.desc.PrimaryIndex, jr.desc.ColumnIdxMap())
+		jr.primaryFetcher = &sqlbase.RowFetcher{}
+		_, _, err = initRowFetcher(
+			jr.primaryFetcher, &jr.desc, 0 /* indexIdx */, false, /* reverse */
+			jr.rowFetcherColumns(), false /* isCheck */, &jr.alloc,
+		)
+		if err != nil {
+			return nil, err
+		}
+		jr.primaryColumnTypes, err = getPrimaryColumnTypes(&jr.desc)
+		if err != nil {
+			return nil, err
+		}
+		jr.primaryKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.desc.PrimaryIndex.ID)
+	}
 	_, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false, /* reverse */
-		jr.rowFetcherColumns(), false /* isCheck */, &jr.alloc,
+		neededCols, false /* isCheck */, &jr.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -132,6 +158,49 @@ func newJoinReader(
 	// TODO(radu): verify the input types match the index key types
 
 	return jr, nil
+}
+
+// indexIsCovering returns true if all needed columns are included in either the
+// input or the specified index.
+func indexIsCovering(
+	index *sqlbase.IndexDescriptor,
+	colIdxMap map[sqlbase.ColumnID]int,
+	neededColumns util.FastIntSet,
+	numInputCols int,
+) bool {
+	coveredCols := util.MakeFastIntSet()
+	for i := 0; i < numInputCols; i++ {
+		coveredCols.Add(i)
+	}
+	for _, columnID := range index.ColumnIDs {
+		coveredCols.Add(numInputCols + colIdxMap[columnID])
+	}
+	for _, columnID := range index.ExtraColumnIDs {
+		coveredCols.Add(numInputCols + colIdxMap[columnID])
+	}
+	return neededColumns.SubsetOf(coveredCols)
+}
+
+func getColumnIndices(
+	index sqlbase.IndexDescriptor, colIdxMap map[sqlbase.ColumnID]int,
+) util.FastIntSet {
+	cols := util.MakeFastIntSet()
+	for _, columnID := range index.ColumnIDs {
+		cols.Add(colIdxMap[columnID])
+	}
+	return cols
+}
+
+func getPrimaryColumnTypes(table *sqlbase.TableDescriptor) ([]sqlbase.ColumnType, error) {
+	columnTypes := make([]sqlbase.ColumnType, len(table.PrimaryIndex.ColumnIDs))
+	for i, columnID := range table.PrimaryIndex.ColumnIDs {
+		column, err := table.FindColumnByID(columnID)
+		if err != nil {
+			return nil, err
+		}
+		columnTypes[i] = column.Type
+	}
+	return columnTypes, nil
 }
 
 // The rows that will be non-empty when fetched from the row fetcher. Used so
@@ -164,7 +233,7 @@ func (jr *joinReader) rowFetcherColumns() util.FastIntSet {
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
 func (jr *joinReader) generateKey(
-	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, primaryKeyPrefix []byte, lookupCols columns,
+	row sqlbase.EncDatumRow, alloc *sqlbase.DatumAlloc, keyPrefix []byte, lookupCols columns,
 ) (roachpb.Key, error) {
 	index := jr.index
 	numKeyCols := len(index.ColumnIDs)
@@ -191,7 +260,7 @@ func (jr *joinReader) generateKey(
 		types = jr.inputTypes[:numKeyCols]
 	}
 
-	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, primaryKeyPrefix, alloc)
+	return sqlbase.MakeKeyFromEncDatums(types, keyRow, &jr.desc, index, keyPrefix, alloc)
 }
 
 func (jr *joinReader) pushTrailingMeta(ctx context.Context) {
@@ -335,6 +404,13 @@ func (jr *joinReader) indexLookup(
 				return true, nil
 			}
 		} else {
+			if jr.primaryFetcher != nil {
+				// TODO(solon): Batch these primary index scans.
+				indexRow, err = jr.primaryLookup(ctx, txn, indexRow)
+				if err != nil {
+					return false, err
+				}
+			}
 			for _, row := range rows {
 				jr.renderedRow = jr.renderedRow[:0]
 				if jr.renderedRow, err = jr.render(row, indexRow); err != nil {
@@ -356,6 +432,45 @@ func (jr *joinReader) indexLookup(
 	}
 
 	return false, nil
+}
+
+// primaryLookup looks up the corresponding primary index row, given a secondary
+// index row.
+func (jr *joinReader) primaryLookup(
+	ctx context.Context, txn *client.Txn, secondaryIndexRow sqlbase.EncDatumRow,
+) (sqlbase.EncDatumRow, error) {
+	index := jr.desc.PrimaryIndex
+	keyValues := make(sqlbase.EncDatumRow, len(index.ColumnIDs))
+	for i, columnID := range index.ColumnIDs {
+		keyValues[i] = secondaryIndexRow[columnID-1]
+	}
+	key, err := sqlbase.MakeKeyFromEncDatums(
+		jr.primaryColumnTypes, keyValues, &jr.desc, &index, jr.primaryKeyPrefix, &jr.alloc)
+	if err != nil {
+		return nil, err
+	}
+	spans := []roachpb.Span{{Key: key, EndKey: key.PrefixEnd()}}
+	err = jr.primaryFetcher.StartScan(ctx, txn, spans, false, 0, false)
+	if err != nil {
+		log.Errorf(ctx, "scan error: %s", err)
+		return nil, err
+	}
+	row, _, _, err := jr.primaryFetcher.NextRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Assert that the fetcher returns exactly one row.
+	if row == nil {
+		return nil, errors.New("expected exactly one row but found none")
+	}
+	nextRow, _, _, err := jr.primaryFetcher.NextRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if nextRow != nil {
+		return nil, errors.New("expected exactly one row but found multiple")
+	}
+	return row, nil
 }
 
 // Run is part of the processor interface.
