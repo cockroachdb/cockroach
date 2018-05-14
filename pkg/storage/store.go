@@ -871,6 +871,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
 	s.compactor = compactor.NewCompactor(
+		s.cfg.Settings,
 		s.engine.(engine.WithSSTables),
 		s.Capacity,
 		func(ctx context.Context) { s.asyncGossipStore(ctx, "compactor-initiated rocksdb compaction") },
@@ -1029,13 +1030,15 @@ func (s *Store) SetDraining(drain bool) {
 						break
 					}
 
-					ownsValidLease := drainingLease.OwnedBy(s.StoreID()) && r.IsLeaseValid(drainingLease, s.Clock().Now())
+					needsLeaseTransfer := len(r.Desc().Replicas) > 1 &&
+						drainingLease.OwnedBy(s.StoreID()) &&
+						r.IsLeaseValid(drainingLease, s.Clock().Now())
 
-					if ownsValidLease || needsRaftTransfer {
+					if needsLeaseTransfer || needsRaftTransfer {
 						atomic.AddInt32(&numTransfersAttempted, 1)
 					}
 
-					if ownsValidLease {
+					if needsLeaseTransfer {
 						desc := r.Desc()
 						zone := config.DefaultZoneConfig()
 						if sysCfgSet {
@@ -1101,9 +1104,14 @@ func (s *Store) SetDraining(drain bool) {
 		Multiplier:     2,
 	}
 	// Avoid retry.ForDuration because of https://github.com/cockroachdb/cockroach/issues/25091.
+	everySecond := log.Every(time.Second)
 	if err := retry.WithMaxAttempts(ctx, opts, 10000, func() error {
 		if numRemaining := transferAllAway(); numRemaining > 0 {
-			return errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
+			err := errors.Errorf("waiting for %d replicas to transfer their lease away", numRemaining)
+			if everySecond.ShouldLog() {
+				log.Info(ctx, err)
+			}
+			return err
 		}
 		return nil
 	}); err != nil {
