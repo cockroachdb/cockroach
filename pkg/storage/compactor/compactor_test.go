@@ -690,6 +690,10 @@ func TestCompactorDisabled(t *testing.T) {
 	// Verify that the record is deleted without a compaction and that the
 	// bytes are recorded as having been skipped.
 	testutils.SucceedsSoon(t, func() error {
+		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
+			t.Fatalf("expected compactions processed %d; got %d", e, a)
+		}
+
 		comps := we.GetCompactions()
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
@@ -697,9 +701,7 @@ func TestCompactorDisabled(t *testing.T) {
 		if a, e := compactor.Metrics.BytesSkipped.Count(), 3*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
-		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
-			return fmt.Errorf("expected compactions processed %d; got %d", e, a)
-		}
+
 		// Verify compaction queue is empty.
 		if bytesQueued, err := compactor.examineQueue(context.Background()); err != nil || bytesQueued > 0 {
 			return fmt.Errorf("compaction queue not empty (%d bytes) or err %v", bytesQueued, err)
