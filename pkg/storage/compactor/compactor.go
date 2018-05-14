@@ -17,6 +17,7 @@ package compactor
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -77,11 +78,21 @@ func (c *Compactor) thresholdBytes() int64 {
 }
 
 func (c *Compactor) thresholdBytesUsedFraction() float64 {
-	return thresholdBytesUsedFraction.Get(&c.st.SV)
+	v := thresholdBytesUsedFraction.Get(&c.st.SV)
+	if v == 0 {
+		// Practically disable this feature.
+		v = math.MaxFloat64
+	}
+	return v
 }
 
 func (c *Compactor) thresholdBytesAvailableFraction() float64 {
-	return thresholdBytesAvailableFraction.Get(&c.st.SV)
+	v := thresholdBytesAvailableFraction.Get(&c.st.SV)
+	if v == 0 {
+		// Practically disable this feature.
+		v = math.MaxFloat64
+	}
+	return v
 }
 
 func (c *Compactor) maxAge() time.Duration {
@@ -316,6 +327,7 @@ func (c *Compactor) processCompaction(
 			continue
 		}
 		if tooOld {
+			log.Warning(ctx, "skipping", aggr.Bytes)
 			c.Metrics.BytesSkipped.Inc(aggr.Bytes)
 		}
 		key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)

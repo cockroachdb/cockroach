@@ -666,6 +666,8 @@ func TestCompactorDisabled(t *testing.T) {
 	compactor, we, compactionCount, cleanup := testSetup(capacityFn)
 	minInterval.Override(&compactor.st.SV, time.Millisecond)
 	maxSuggestedCompactionRecordAge.Override(&compactor.st.SV, 24*time.Hour) // large
+	thresholdBytesAvailableFraction.Override(&compactor.st.SV, 0.0)          // disable
+	thresholdBytesUsedFraction.Override(&compactor.st.SV, 0.0)               // disable
 	defer cleanup()
 
 	suggest := func() {
@@ -683,6 +685,7 @@ func TestCompactorDisabled(t *testing.T) {
 	suggest()
 	enabled.Override(&compactor.st.SV, false)
 	suggest()
+	suggest()
 
 	// Verify that the record is deleted without a compaction and that the
 	// bytes are recorded as having been skipped.
@@ -691,7 +694,7 @@ func TestCompactorDisabled(t *testing.T) {
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), 3*(thresholdBytes.Get(&compactor.st.SV)-1); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 		if a, e := atomic.LoadInt32(compactionCount), int32(0); a != e {
