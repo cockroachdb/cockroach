@@ -116,11 +116,18 @@ func CleanupTempDirs(recordPath string) error {
 		if err != nil {
 			return errors.Wrapf(err, "could not lock temporary directory %s, may still be in use", path)
 		}
-		defer func() {
-			if err := unlockFile(flock); err != nil {
-				log.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
-			}
-		}()
+		// On Windows, file locks are mandatory, so we must remove our lock on the
+		// lock file before we can remove the temporary directory. This yields a
+		// race condition: another process could start using the now-unlocked
+		// directory before we can remove it. Luckily, this doesn't matter, because
+		// these temporary directories are never reused. Any other process trying to
+		// lock this temporary directory is just trying to clean it up, too. Only
+		// the original process wants the data in this directory, and we know that
+		// process is dead because we were able to acquire the lock in the first
+		// place.
+		if err := unlockFile(flock); err != nil {
+			log.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
+		}
 
 		// If path/directory does not exist, error is nil.
 		if err := os.RemoveAll(path); err != nil {
