@@ -703,7 +703,7 @@ func TestCompactorDisabled(t *testing.T) {
 		if !reflect.DeepEqual([]roachpb.Span(nil), comps) {
 			return fmt.Errorf("expected nil compactions; got %+v", comps)
 		}
-		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(threshold-1); a != e {
+		if a, e := compactor.Metrics.BytesSkipped.Count(), 2*(threshold/3); a != e {
 			return fmt.Errorf("expected skipped bytes %d; got %d", e, a)
 		}
 
