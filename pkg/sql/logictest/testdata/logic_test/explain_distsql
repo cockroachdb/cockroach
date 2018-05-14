@@ -13,7 +13,7 @@ query BT colnames
 EXPLAIN (DISTSQL) VALUES (1)
 ----
 Automatic  URL
-true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFjTYHTV289KWDFmCBiEdjomjMzoJAkb_PVgaQoZAxvee9H3chsCefu2VBPqEAUZhjexIhONetQejv0H3CnNYc9pro-A4EvSGNKeFoHG0SyaBgqdk56Xyvruf7nPo3DmHi3zBFAXO6cGQZCeC7ot633MgWTkIPZlek40C-YnaLcI5OvqP7Kqmxb_6rxaeJLV1aGEMbSqmfNwDAAD__7pEYro=
+true       https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrwzAQhff-CvOmFgS1O2rs5qUtHbIEDUI6HBNHZ3QSBIz-e7A0hAyBjO896fu4DYE9_dgLCfQRA4zCGtmRCMe9ag9Gf4XuFeaw5rTXRsFxJOgNaU4LQeNgl0zy2UPBU7LzUolf3Xf3PnTulMNZPmCKAud0p0iyE0H3Rb1u-idZOQg9mJ6TjQL5ido1wjk6-ovsqqbF3_qvFp4ktXVoYQxtKqa83QIAAP__QkpjGQ==
 
 # Check the JSON column is still there, albeit hidden.
 query T colnames
