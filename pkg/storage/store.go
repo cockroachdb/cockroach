@@ -401,6 +401,10 @@ type Store struct {
 	// data destruction.
 	snapshotApplySem chan struct{}
 
+	// Channel of newly-acquired expiration-based leases that we want to
+	// proactively renew.
+	expirationBasedLeaseChan chan *Replica
+
 	// draining holds a bool which indicates whether this store is draining. See
 	// SetDraining() for a more detailed explanation of behavior changes.
 	//
@@ -879,6 +883,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+
+	// The channel size here is arbitrary. We don't want it to fill up, but it
+	// isn't a disaster if it does and it shouldn't unless a huge number of meta2
+	// range leases are acquired at once.
+	s.expirationBasedLeaseChan = make(chan *Replica, 64)
 
 	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
@@ -1433,6 +1442,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		log.Event(ctx, "computed initial metrics")
 	}
 
+	s.startLeaseRenewer(ctx)
+
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
 		s.compactor.Start(s.AnnotateCtx(context.Background()), s.Tracer(), s.stopper)
@@ -1540,6 +1551,69 @@ func (s *Store) startGossip() {
 			}
 		})
 	}
+}
+
+// startLeaseRenewer runs an infinite loop in a goroutine which regularly
+// checks whether the store has any expiration-based leases that should be
+// proactively renewed and attempts to continue renewing them.
+//
+// This reduces user-visible latency when range lookups are needed to serve a
+// request and reduces ping-ponging of r1's lease to different replicas as
+// maybeGossipFirstRange is called on each (e.g.  #24753).
+func (s *Store) startLeaseRenewer(ctx context.Context) {
+	// Start a goroutine that watches and proactively renews certain
+	// expiration-based leases.
+	s.stopper.RunWorker(ctx, func(context.Context) {
+		repls := make(map[*Replica]struct{})
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+
+		// Determine how frequently to attempt to ensure that we have each lease.
+		// The divisor used here is somewhat arbitrary, but needs to be large
+		// enough to ensure we'll attempt to renew the lease reasonably early
+		// within the RangeLeaseRenewalDuration time window. This means we'll wake
+		// up more often that strictly necessary, but it's more maintainable than
+		// attempting to accurately determine exactly when each iteration of a
+		// lease expires and when we should attempt to renew it as a result.
+		renewalDuration := s.cfg.RangeLeaseActiveDuration() / 5
+		for {
+			for repl := range repls {
+				annotatedCtx := repl.AnnotateCtx(ctx)
+				_, pErr := repl.redirectOnOrAcquireLease(annotatedCtx)
+				if pErr != nil {
+					if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+						log.Warningf(annotatedCtx, "failed to proactively renew lease: %s", pErr)
+					}
+					delete(repls, repl)
+					continue
+				}
+			}
+
+			if len(repls) > 0 {
+				timer.Reset(renewalDuration)
+			}
+			select {
+			case repl := <-s.expirationBasedLeaseChan:
+				repls[repl] = struct{}{}
+				// If we got one entry off the channel, there may be more (e.g. a node
+				// holding a bunch of meta2 ranges just failed), so keep pulling until
+				// we can't get any more.
+			continuepulling:
+				for {
+					select {
+					case repl := <-s.expirationBasedLeaseChan:
+						repls[repl] = struct{}{}
+					default:
+						break continuepulling
+					}
+				}
+			case <-timer.C:
+				timer.Read = true
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
 }
 
 // systemGossipUpdate is a callback for gossip updates to

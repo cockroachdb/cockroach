@@ -258,13 +258,28 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	// by the previous lease holder.
 	r.mu.Lock()
 	r.mu.state.Lease = &newLease
+	expirationBasedLease := r.requiresExpiringLeaseRLocked()
 	r.mu.Unlock()
 
-	// Gossip the first range whenever its lease is acquired. We check to
-	// make sure the lease is active so that a trailing replica won't process
-	// an old lease request and attempt to gossip the first range.
+	// Gossip the first range whenever its lease is acquired. We check to make
+	// sure the lease is active so that a trailing replica won't process an old
+	// lease request and attempt to gossip the first range.
 	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
 		r.gossipFirstRange(ctx)
+	}
+
+	// Whenever we first acquire an expiration-based lease, notify the lease
+	// renewer worker that we want it to keep proactively renewing the lease
+	// before it expires.
+	if leaseChangingHands && iAmTheLeaseHolder && expirationBasedLease && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
+		// It's not worth blocking on a full channel here since the worst that can
+		// happen is the lease times out and has to be reacquired when needed, but
+		// log an error since it's pretty unexpected.
+		select {
+		case r.store.expirationBasedLeaseChan <- r:
+		default:
+			log.Warningf(ctx, "unable to kick off proactive lease renewal; channel full")
+		}
 	}
 
 	if leaseChangingHands && !iAmTheLeaseHolder {
