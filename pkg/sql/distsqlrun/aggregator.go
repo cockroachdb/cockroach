@@ -39,13 +39,14 @@ func GetAggregateInfo(
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
-	if fn == AggregatorSpec_IDENT {
+	if fn == AggregatorSpec_ANY_NOT_NULL {
+		// The ANY_NOT_NULL builtin does not have a fixed return type;
+		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("ident aggregate needs 1 input")
+			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
-		return builtins.NewIdentAggregate, inputTypes[0], nil
+		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
 	}
-
 	datumTypes := make([]types.T, len(inputTypes))
 	for i := range inputTypes {
 		datumTypes[i] = inputTypes[i].ToDatumType()

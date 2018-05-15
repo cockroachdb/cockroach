@@ -353,10 +353,10 @@ func (ee *execEngine) ConstructGroupBy(
 	for _, idx := range groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := n.newAggregateFuncHolder(
-			"", /* funcName */
+			builtins.AnyNotNull,
 			inputCols[idx].Typ,
 			int(idx),
-			builtins.NewIdentAggregate,
+			builtins.NewAnyNotNullAggregate,
 			ee.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 		n.funcs = append(n.funcs, f)

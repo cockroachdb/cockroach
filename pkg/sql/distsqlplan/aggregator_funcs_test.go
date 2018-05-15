@@ -395,9 +395,9 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	for fn, info := range DistAggregationTable {
-		if fn == distsqlrun.AggregatorSpec_IDENT {
-			// IDENT only works as expected if all rows have the same value on the
-			// relevant column; skip testing this trivial case.
+		if fn == distsqlrun.AggregatorSpec_ANY_NOT_NULL {
+			// ANY_NOT_NULL only has a definite result if all rows have the same value
+			// on the relevant column; skip testing this trivial case.
 			continue
 		}
 		if fn == distsqlrun.AggregatorSpec_COUNT_ROWS {
