@@ -127,6 +127,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	params.p.Tables().addCreatedTable(id)
+
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	privs := n.dbDesc.GetPrivileges()

@@ -2980,3 +2980,106 @@ func TestAddComputedColumn(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN b INT AS (a + 5) STORED`)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM t.test ORDER BY a`, [][]string{{"2", "7"}, {"10", "15"}})
 }
+
+func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// A large enough value that the backfills run as part of the
+	// schema change run in many chunks.
+	var maxValue = 4001
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v));`); err != nil {
+		t.Fatal(err)
+	}
+
+	inserts := make([]string, maxValue+1)
+	for i := 0; i < maxValue+1; i++ {
+		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO t.testing VALUES ` + strings.Join(inserts, ",")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`ALTER TABLE t.testing RENAME TO t.test`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run schema changes that are execute Column and Index backfills.
+	if _, err := tx.Exec(`
+ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`DROP INDEX t.test@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the index bar over is consistent, and that columns c, d
+	// have been backfilled properly.
+	rows, err := sqlDB.Query(`SELECT c, d from t.test@bar`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for ; rows.Next(); count++ {
+		var c int
+		var d int
+		if err := rows.Scan(&c, &d); err != nil {
+			t.Errorf("row %d scan failed: %s", count, err)
+			continue
+		}
+		if count+4 != c {
+			t.Errorf("e = %d, v = %d", count, c)
+		}
+		if 23 != d {
+			t.Errorf("e = %d, v = %d", 23, d)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	eCount := maxValue + 1
+	if eCount != count {
+		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+
+	// The descriptor version hasn't changed.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if tableDesc.Version != 1 {
+		t.Fatalf("invalid version = %d", tableDesc.Version)
+	}
+}
