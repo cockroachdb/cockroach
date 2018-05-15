@@ -51,6 +51,7 @@ const (
 	VersionImportSkipRecords
 	VersionProposedTSLeaseRequest
 	VersionRangeAppliedStateKey
+	VersionImportFormats
 
 	// Add new versions here (step one of two).
 
@@ -205,6 +206,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionRangeAppliedStateKey is https://github.com/cockroachdb/cockroach/pull/22317.
 		Key:     VersionRangeAppliedStateKey,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 3},
+	},
+	{
+		// VersionImportFormats is https://github.com/cockroachdb/cockroach/pull/25615.
+		Key:     VersionImportFormats,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 4},
 	},
 
 	// Add new versions here (step two of two).

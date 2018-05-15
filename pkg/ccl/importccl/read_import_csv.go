@@ -64,7 +64,9 @@ func (c *csvInputReader) inputFinished() {
 	close(c.recordCh)
 }
 
-func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn func(finished bool) error) error {
+func (c *csvInputReader) flushBatch(
+	ctx context.Context, finished bool, progFn func(finished bool) error,
+) error {
 	// if the batch isn't empty, we need to flush it.
 	if len(c.batch.r) > 0 {
 		select {

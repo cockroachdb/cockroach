@@ -25,12 +25,12 @@ func GetSingleRune(s string) (rune, error) {
 	if s == "" {
 		return 0, nil
 	}
-	r, sz := utf8.DecodeRuneInString(s)
+	r, _ := utf8.DecodeRuneInString(s)
 	if r == utf8.RuneError {
 		return 0, errors.Errorf("invalid character: %s", s)
 	}
-	if sz != len(s) {
-		return r, errors.New("must be only one character")
+	if l := len(s); 1 != l {
+		return r, errors.Errorf("must be only one character, got %d in %q", l, s)
 	}
 	return r, nil
 }

@@ -208,7 +208,7 @@ func TestMysqlOutfileReader(t *testing.T) {
 	ctx := context.TODO()
 	for _, config := range configs {
 		t.Run(config.name, func(t *testing.T) {
-			converter := newMysqloutfileReader(ctx, nil, config.opts, nil, 3)
+			converter := newMysqloutfileReader(nil, config.opts, nil, 3)
 			// unblock batch chan sends
 			converter.csvInputReader.recordCh = make(chan csvRecord, 4)
 			converter.csvInputReader.batchSize = 10
