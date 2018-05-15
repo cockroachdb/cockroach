@@ -433,110 +433,110 @@ func newNameFromStr(s string) *tree.Name {
 // file to work around a bug in goyacc. See #16369 for more details.
 
 // Non-keyword token types.
-%token <str>   IDENT SCONST BCONST
+%token <str> IDENT SCONST BCONST
 %token <*tree.NumVal> ICONST FCONST
-%token <str>   PLACEHOLDER
-%token <str>   TYPECAST TYPEANNOTATE DOT_DOT
-%token <str>   LESS_EQUALS GREATER_EQUALS NOT_EQUALS
-%token <str>   NOT_REGMATCH REGIMATCH NOT_REGIMATCH
-%token <str>   ERROR
+%token <str> PLACEHOLDER
+%token <str> TYPECAST TYPEANNOTATE DOT_DOT
+%token <str> LESS_EQUALS GREATER_EQUALS NOT_EQUALS
+%token <str> NOT_REGMATCH REGIMATCH NOT_REGIMATCH
+%token <str> ERROR
 
 // If you want to make any keyword changes, add the new keyword here as well as
 // to the appropriate one of the reserved-or-not-so-reserved keyword lists,
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str>   ABORT ACTION ADD ADMIN
-%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str>   ASYMMETRIC AT
+%token <str> ABORT ACTION ADD ADMIN
+%token <str> ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str> ASYMMETRIC AT
 
-%token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
-%token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
+%token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
+%token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str>   CACHE CANCEL CASCADE CASE CAST CHAR
-%token <str>   CHARACTER CHARACTERISTICS CHECK
-%token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
-%token <str>   COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
-%token <str>   CONFLICT CONSTRAINT CONSTRAINTS CONTAINS COPY COVERING CREATE
-%token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
-%token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
-%token <str>   CURRENT_USER CYCLE
+%token <str> CACHE CANCEL CASCADE CASE CAST CHAR
+%token <str> CHARACTER CHARACTERISTICS CHECK
+%token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMIT
+%token <str> COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str> CONFLICT CONSTRAINT CONSTRAINTS CONTAINS COPY COVERING CREATE
+%token <str> CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
+%token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
+%token <str> CURRENT_USER CYCLE
 
-%token <str>   DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str>   DEALLOCATE DEFERRABLE DELETE DESC
-%token <str>   DISCARD DISTINCT DO DOUBLE DROP
+%token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
+%token <str> DEALLOCATE DEFERRABLE DELETE DESC
+%token <str> DISCARD DISTINCT DO DOUBLE DROP
 
-%token <str>   ELSE EMIT ENCODING END ESCAPE EXCEPT
-%token <str>   EXISTS EXPERIMENTAL_CHANGEFEED EXECUTE EXPERIMENTAL
-%token <str>   EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
-%token <str>   EXPERIMENTAL_AUDIT
-%token <str>   EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
+%token <str> ELSE EMIT ENCODING END ESCAPE EXCEPT
+%token <str> EXISTS EXPERIMENTAL_CHANGEFEED EXECUTE EXPERIMENTAL
+%token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
+%token <str> EXPERIMENTAL_AUDIT
+%token <str> EXPLAIN EXPORT EXTRACT EXTRACT_DURATION
 
-%token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
-%token <str>   FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
+%token <str> FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
-%token <str>   GIN GRANT GRANTS GREATEST GROUP GROUPING
+%token <str> GIN GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HIGH HISTOGRAM HOUR
+%token <str> HAVING HIGH HISTOGRAM HOUR
 
 
-%token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
-%token <str>   INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
-%token <str>   INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
-%token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
-%token <str>   INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
+%token <str> IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
+%token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
+%token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
+%token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
+%token <str> INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
 
-%token <str>   JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
+%token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
-%token <str>   KEY KEYS KV
+%token <str> KEY KEYS KV
 
-%token <str>   LATERAL LC_CTYPE LC_COLLATE
-%token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
-%token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
+%token <str> LATERAL LC_CTYPE LC_COLLATE
+%token <str> LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
+%token <str> LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str>   MATCH MINVALUE MAXVALUE MINUTE MONTH
+%token <str> MATCH MINVALUE MAXVALUE MINUTE MONTH
 
-%token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str>   NOT NOTHING NOTNULL NULL NULLIF
-%token <str>   NULLS NUMERIC
+%token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
+%token <str> NOT NOTHING NOTNULL NULL NULLIF
+%token <str> NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
-%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
+%token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
+%token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
-%token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+%token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str> PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
-%token <str>   QUERIES QUERY
+%token <str> QUERIES QUERY
 
-%token <str>   RANGE READ REAL RECURSIVE REF REFERENCES
-%token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
-%token <str>   REMOVE_PATH RENAME REPEATABLE
-%token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
-%token <str>   ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
+%token <str> RANGE READ REAL RECURSIVE REF REFERENCES
+%token <str> REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
+%token <str> REMOVE_PATH RENAME REPEATABLE
+%token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
+%token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
-%token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
-%token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str> SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SERIAL SERIAL2 SERIAL4 SERIAL8
+%token <str> SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
+%token <str> SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
-%token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
-%token <str>   SYMMETRIC SYNTAX SYSTEM
+%token <str> START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
+%token <str> SYMMETRIC SYNTAX SYSTEM
 
-%token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THAN THEN
-%token <str>   TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
-%token <str>   TRUNCATE TYPE
-%token <str>   TRACING
+%token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THAN THEN
+%token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
+%token <str> TRUNCATE TYPE
+%token <str> TRACING
 
-%token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
-%token <str>   UPDATE UPSERT USE USER USERS USING UUID
+%token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
+%token <str> UPDATE UPSERT USE USER USERS USING UUID
 
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
+%token <str> VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
+%token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
-%token <str>   YEAR
+%token <str> YEAR
 
-%token <str>   ZONE
+%token <str> ZONE
 
 // The grammar thinks these are keywords, but they are not in any category
 // and so can never be entered directly. The filter in scan.go creates these
@@ -546,13 +546,13 @@ func newNameFromStr(s string) *tree.Name {
 // precedence as LIKE; otherwise they'd effectively have the same precedence as
 // NOT, at least with respect to their left-hand subexpression. WITH_LA is
 // needed to make the grammar LALR(1).
-%token     NOT_LA WITH_LA AS_LA
+%token NOT_LA WITH_LA AS_LA
 
 %union {
-  id             int
-  pos            int
-  str            string
-  union          sqlSymUnion
+  id    int
+  pos   int
+  str   string
+  union sqlSymUnion
 }
 
 %type <[]tree.Statement> stmt_block
@@ -742,7 +742,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> opt_password
 
 %type <tree.IsolationLevel> transaction_iso_level
-%type <tree.UserPriority>  transaction_user_priority
+%type <tree.UserPriority> transaction_user_priority
 %type <tree.ReadWriteMode> transaction_read_mode
 
 %type <str> name opt_name opt_name_parens opt_to_savepoint
@@ -822,38 +822,38 @@ func newNameFromStr(s string) *tree.Name {
 %type <bool> opt_set_data
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
-%type <tree.Expr>  select_limit_value
+%type <tree.Expr> select_limit_value
 %type <tree.Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
 %type <empty> first_or_next
 
-%type <tree.Statement>  insert_rest
+%type <tree.Statement> insert_rest
 %type <tree.NameList> opt_conf_expr
 %type <*tree.OnConflict> on_conflict
 
-%type <tree.Statement>  begin_transaction
+%type <tree.Statement> begin_transaction
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
 
 %type <tree.NameList> opt_storing
 %type <*tree.ColumnTableDef> column_def
 %type <tree.TableDef> table_elem
-%type <tree.Expr>  where_clause
+%type <tree.Expr> where_clause
 %type <*tree.ArraySubscript> array_subscript
 %type <tree.Expr> opt_slice_bound
 %type <*tree.IndexHints> opt_index_hints
 %type <*tree.IndexHints> index_hints_param
 %type <*tree.IndexHints> index_hints_param_list
-%type <tree.Expr>  a_expr b_expr c_expr a_expr_const d_expr
-%type <tree.Expr>  substr_from substr_for
-%type <tree.Expr>  in_expr
-%type <tree.Expr>  having_clause
-%type <tree.Expr>  array_expr
-%type <tree.Expr>  interval
+%type <tree.Expr> a_expr b_expr c_expr a_expr_const d_expr
+%type <tree.Expr> substr_from substr_for
+%type <tree.Expr> in_expr
+%type <tree.Expr> having_clause
+%type <tree.Expr> array_expr
+%type <tree.Expr> interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
-%type <tree.Expr>  row
-%type <tree.Expr>  case_expr case_arg case_default
-%type <*tree.When>  when_clause
+%type <tree.Expr> row
+%type <tree.Expr> case_expr case_arg case_default
+%type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
 %type <tree.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
@@ -884,21 +884,21 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> extract_arg
 %type <empty> opt_varying
 
-%type <*tree.NumVal>  signed_iconst
+%type <*tree.NumVal> signed_iconst
 %type <int64> signed_iconst64
 %type <int64> iconst64
-%type <tree.Expr>  var_value
+%type <tree.Expr> var_value
 %type <tree.Exprs> var_list
 %type <tree.NameList> var_name
-%type <str>   unrestricted_name type_function_name
-%type <str>   non_reserved_word
-%type <str>   non_reserved_word_or_sconst
-%type <tree.Expr>  zone_value
+%type <str> unrestricted_name type_function_name
+%type <str> non_reserved_word
+%type <str> non_reserved_word_or_sconst
+%type <tree.Expr> zone_value
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
 
-%type <str>   unreserved_keyword type_func_name_keyword
-%type <str>   col_name_keyword reserved_keyword
+%type <str> unreserved_keyword type_func_name_keyword
+%type <str> col_name_keyword reserved_keyword
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem
 %type <tree.TableDef> index_def
@@ -910,8 +910,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ReferenceActions> reference_actions
 %type <tree.ReferenceAction> reference_action reference_on_delete reference_on_update
 
-%type <tree.Expr>  func_application func_expr_common_subexpr special_function
-%type <tree.Expr>  func_expr func_expr_windowless
+%type <tree.Expr> func_application func_expr_common_subexpr special_function
+%type <tree.Expr> func_expr func_expr_windowless
 %type <empty> opt_with
 %type <*tree.With> with_clause opt_with_clause
 %type <[]*tree.CTE> cte_list
@@ -927,9 +927,9 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
-%type <tree.TargetList>    targets targets_roles
-%type <*tree.TargetList>   opt_on_targets_roles
-%type <tree.NameList>       for_grantee_clause
+%type <tree.TargetList> targets targets_roles
+%type <*tree.TargetList> opt_on_targets_roles
+%type <tree.NameList> for_grantee_clause
 %type <privilege.List> privileges
 %type <tree.AuditMode> audit_mode
 
@@ -2112,7 +2112,7 @@ explain_stmt:
     $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
 // This second error rule is necessary, because otherwise
-// explainable_stmt also provides "selectclause := '(' error ..."  and
+// explainable_stmt also provides "selectclause := '(' error ..." and
 // cause a help text for the select clause, which will be confusing in
 // the context of EXPLAIN.
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
@@ -3374,7 +3374,7 @@ targets:
     //   including when the keyword was ROLE.
     //
     // - if ROLE was specified, it remembers this fact in the ForRoles
-    //   field.  This distinguishes `ON ROLE` (where "role" is
+    //   field. This distinguishes `ON ROLE` (where "role" is
     //   specified as keyword), which triggers the special case in
     //   SHOW GRANTS, from `ON "role"` (where "role" is specified as
     //   identifier), which is always handled as a table name.
@@ -7622,39 +7622,39 @@ interval:
 
 // Note: newlines between non-terminals matter to the doc generator.
 
-collation_name:   unrestricted_name
+collation_name:      unrestricted_name
 
-partition_name:   unrestricted_name
+partition_name:      unrestricted_name
 
-index_name:       unrestricted_name
+index_name:          unrestricted_name
 
-opt_index_name:   opt_name
+opt_index_name:      opt_name
 
-zone_name:        unrestricted_name
+zone_name:           unrestricted_name
 
-target_name:      unrestricted_name
+target_name:         unrestricted_name
 
-constraint_name:  name
+constraint_name:     name
 
-database_name:    name
+database_name:       name
 
-column_name:      name
+column_name:         name
 
-family_name:      name
+family_name:         name
 
-opt_family_name:  opt_name
+opt_family_name:     opt_name
 
-table_alias_name: name
+table_alias_name:    name
 
-statistics_name:  name
+statistics_name:     name
 
-window_name:      name
+window_name:         name
 
-view_name:        table_name
+view_name:           table_name
 
-sequence_name:    db_object_name
+sequence_name:       db_object_name
 
-table_name:       db_object_name
+table_name:          db_object_name
 
 explain_option_name: non_reserved_word
 
