@@ -31,7 +31,8 @@
 # =============================================================================
 
 
-# PruneProjectCols discards nested project columns that are never used.
+# PruneProjectCols discards columns from a nested project which are not used by
+# the outer project.
 [PruneProjectCols, Normalize]
 (Project
     (Project

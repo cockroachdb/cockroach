@@ -94,12 +94,17 @@ func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedEx
 }
 
 func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
-	colID := ev.Private().(opt.ColumnID)
+	return b.indexedVar(ctx, ev.Metadata(), ev.Private().(opt.ColumnID)), nil
+}
+
+func (b *Builder) indexedVar(
+	ctx *buildScalarCtx, md *opt.Metadata, colID opt.ColumnID,
+) tree.TypedExpr {
 	idx, ok := ctx.ivarMap.Get(int(colID))
 	if !ok {
 		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colID))
 	}
-	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colID)), nil
+	return ctx.ivh.IndexedVarWithType(idx, md.ColumnType(colID))
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {

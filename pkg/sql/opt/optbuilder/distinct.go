@@ -52,9 +52,6 @@ func (b *Builder) buildDistinct(distinct bool, inScope *scope) (outScope *scope)
 		}
 	}
 
-	aggList := b.constructList(opt.AggregationsOp, nil)
-	outScope.group = b.factory.ConstructGroupBy(
-		inScope.group, aggList, b.factory.InternColSet(groupCols),
-	)
+	outScope.group = b.constructGroupBy(inScope.group, groupCols, nil /* cols */)
 	return outScope
 }

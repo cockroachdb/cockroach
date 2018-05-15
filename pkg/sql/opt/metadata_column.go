@@ -83,15 +83,6 @@ func ColListToSet(colList ColList) ColSet {
 	return r
 }
 
-// ColSetToList converts a column id set to a column id list.
-func ColSetToList(colSet ColSet) ColList {
-	colList := make(ColList, 0, colSet.Len())
-	colSet.ForEach(func(i int) {
-		colList = append(colList, ColumnID(i))
-	})
-	return colList
-}
-
 // WeakKeys are combinations of columns that form a weak key. No two non-null
 // rows are equal if they contain columns from a weak key. For more details, see
 // LogicalProps.WeakKeys.

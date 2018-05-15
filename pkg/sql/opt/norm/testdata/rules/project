@@ -57,10 +57,6 @@ project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float) a.s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1-4)]
-      ├── variable: a.x [type=int, outer=(1)]
-      ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: a.f [type=float, outer=(3)]
-      ├── variable: a.s [type=string, outer=(4)]
       └── const: 1 [type=int]
 
 # --------------------------------------------------

@@ -24,27 +24,21 @@ SELECT a, ordinality FROM abcd WITH ORDINALITY
 ----
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
- ├── row-number
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
- │    └── scan abcd
- │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- └── projections
-      ├── variable: abcd.a [type=int]
-      └── variable: ordinality [type=int]
+ └── row-number
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+      └── scan abcd
+           └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
 
 build
 SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY
 ----
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
- ├── row-number
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
- │    └── scan abcd
- │         ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │         └── ordering: +1
- └── projections
-      ├── variable: abcd.a [type=int]
-      └── variable: ordinality [type=int]
+ └── row-number
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+      └── scan abcd
+           ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+           └── ordering: +1
 
 build
 SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER BY ordinality
@@ -52,15 +46,12 @@ SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER 
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
  ├── ordering: +5
- ├── row-number
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
- │    ├── ordering: +5
- │    └── scan abcd
- │         ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │         └── ordering: +1
- └── projections
-      ├── variable: abcd.a [type=int]
-      └── variable: ordinality [type=int]
+ └── row-number
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+      ├── ordering: +5
+      └── scan abcd
+           ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+           └── ordering: +1
 
 build
 SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER BY ordinality
@@ -68,15 +59,12 @@ SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER 
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
  ├── ordering: +5
- ├── row-number
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
- │    ├── ordering: +5
- │    └── scan abcd
- │         ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │         └── ordering: +1
- └── projections
-      ├── variable: abcd.a [type=int]
-      └── variable: ordinality [type=int]
+ └── row-number
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+      ├── ordering: +5
+      └── scan abcd
+           ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+           └── ordering: +1
 
 build
 SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
@@ -84,14 +72,11 @@ SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
 project
  ├── columns: a:1(int!null)
  ├── ordering: +5
- ├── row-number
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
- │    ├── ordering: +5
- │    └── scan abcd
- │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- └── projections
-      ├── variable: abcd.a [type=int]
-      └── variable: ordinality [type=int]
+ └── row-number
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+      ├── ordering: +5
+      └── scan abcd
+           └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
 
 build
 SELECT ordinality FROM abcd WITH ORDINALITY ORDER BY a
@@ -100,11 +85,8 @@ sort
  ├── columns: ordinality:5(int!null)
  ├── ordering: +1
  └── project
-      ├── columns: ordinality:5(int!null) abcd.a:1(int!null)
-      ├── row-number
-      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
-      │    └── scan abcd
-      │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
-      └── projections
-           ├── variable: ordinality [type=int]
-           └── variable: abcd.a [type=int]
+      ├── columns: abcd.a:1(int!null) ordinality:5(int!null)
+      └── row-number
+           ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int) ordinality:5(int!null)
+           └── scan abcd
+                └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)

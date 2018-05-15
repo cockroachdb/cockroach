@@ -57,25 +57,23 @@ SELECT y FROM a WHERE s = 'foo' AND x + y = 10
 project
  ├── columns: y:2(int)
  ├── stats: [rows=1]
- ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string!null)
- │    ├── stats: [rows=1, distinct(3)=1]
- │    ├── keys: (1) weak(2,3)
- │    ├── lookup-join
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
- │    │    ├── table: a
- │    │    ├── stats: [rows=1]
- │    │    ├── keys: (1) weak(2,3)
- │    │    └── scan a@secondary
- │    │         ├── columns: a.x:1(int!null) a.s:3(string)
- │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
- │    │         ├── stats: [rows=1, distinct(3)=1]
- │    │         └── keys: (1)
- │    └── filters [type=bool, outer=(1,2)]
- │         └── eq [type=bool, outer=(1,2)]
- │              ├── plus [type=int, outer=(1,2)]
- │              │    ├── variable: a.x [type=int, outer=(1)]
- │              │    └── variable: a.y [type=int, outer=(2)]
- │              └── const: 10 [type=int]
- └── projections [outer=(2)]
-      └── variable: a.y [type=int, outer=(2)]
+ └── select
+      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string!null)
+      ├── stats: [rows=1, distinct(3)=1]
+      ├── keys: (1) weak(2,3)
+      ├── lookup-join
+      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+      │    ├── table: a
+      │    ├── stats: [rows=1]
+      │    ├── keys: (1) weak(2,3)
+      │    └── scan a@secondary
+      │         ├── columns: a.x:1(int!null) a.s:3(string)
+      │         ├── constraint: /-3/4: [/'foo' - /'foo']
+      │         ├── stats: [rows=1, distinct(3)=1]
+      │         └── keys: (1)
+      └── filters [type=bool, outer=(1,2)]
+           └── eq [type=bool, outer=(1,2)]
+                ├── plus [type=int, outer=(1,2)]
+                │    ├── variable: a.x [type=int, outer=(1)]
+                │    └── variable: a.y [type=int, outer=(2)]
+                └── const: 10 [type=int]

@@ -33,7 +33,7 @@ limit
  │    ├── stats: [rows=476]
  │    ├── ordering: +2
  │    └── project
- │         ├── columns: a.y:2(int!null) b.x:3(string!null) column5:5(int)
+ │         ├── columns: column5:5(int) a.y:2(int!null) b.x:3(string!null)
  │         ├── stats: [rows=476]
  │         ├── select
  │         │    ├── columns: a.x:1(int!null) a.y:2(int!null) b.x:3(string!null) b.z:4(decimal!null)
@@ -59,8 +59,6 @@ limit
  │         │              │    └── variable: a.x [type=int, outer=(1)]
  │         │              └── variable: b.x [type=string, outer=(3)]
  │         └── projections [outer=(2,3)]
- │              ├── variable: a.y [type=int, outer=(2)]
- │              ├── variable: b.x [type=string, outer=(3)]
  │              └── plus [type=int, outer=(2)]
  │                   ├── variable: a.y [type=int, outer=(2)]
  │                   └── const: 1 [type=int]
@@ -113,8 +111,6 @@ project
  │    │                        └── variable: a.x [type=int, outer=(1)]
  │    └── const: 10 [type=int]
  └── projections [outer=(2,3)]
-      ├── variable: a.y [type=int, outer=(2)]
-      ├── variable: b.x [type=string, outer=(3)]
       └── plus [type=int, outer=(2)]
            ├── variable: a.y [type=int, outer=(2)]
            └── const: 1 [type=int]
@@ -141,7 +137,7 @@ memo (optimized)
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 +2)
  │         └── cost: 2026.65
- ├── G3: (projections G16 G14 G6)
+ ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G7 G8 G9)
  │    ├── ""
  │    │    ├── best: (inner-join G7 G8 G9)
@@ -219,7 +215,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.01
- ├── G3: (projections G12)
+ ├── G3: (projections a.x)
  ├── G4: (scan a)
  │    └── ""
  │         ├── best: (scan a)
@@ -258,7 +254,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G15 G14)
  │         └── cost: 1.01
- ├── G11: (projections G2)
+ ├── G11: (projections a.x)
  ├── G12: (project G10 G11)
  │    └── "[presentation: x:1]"
  │         ├── best: (project G10 G11)
