@@ -51,29 +51,53 @@ func registerWebUI(r *registry) {
 				var page webui.Page = webui.MakeOverviewPage(wd)
 
 				if page.Heading() != "CLUSTER OVERVIEW" {
-					t.Fatalf("Expected title to be `CLUSTER OVERVIEW`, saw `%s`!", page.Heading())
+					t.Fatalf(`Expected heading to be "CLUSTER OVERVIEW", saw "%s"!`, page.Heading())
+				}
+
+				if page.Title() != "Cluster Overview | Cockroach Console" {
+					t.Fatalf(`Expected title to be "Cluster Overview | Cockroach Console", saw "%s"`, page.Title())
 				}
 
 				if !page.NavBar().OverviewLink().IsActive() {
 					t.Fatal("Overview link should be active!")
 				}
 
+				if page.NavBar().MetricsLink().IsActive() {
+					t.Fatal("Metrics link should not be active!")
+				}
+
 				if page.NavBar().DatabasesLink().IsActive() {
 					t.Fatal("Databases link should not be active!")
+				}
+
+				if page.NavBar().JobsLink().IsActive() {
+					t.Fatal("Jobs link should not be active!")
 				}
 
 				page = page.NavBar().DatabasesLink().Click()
 
 				if page.Heading() != "DATABASES" {
-					t.Fatalf("Expected title to be `DATABASES`, saw `%s`!", page.Heading())
+					t.Fatalf(`Expected title to be "DATABASES", saw "%s"!`, page.Heading())
+				}
+
+				if page.Title() != "Tables | Databases | Cockroach Console" {
+					t.Fatalf(`Expected title to be "Tables | Databases | Cockroach Console", saw "%s"`, page.Title())
 				}
 
 				if page.NavBar().OverviewLink().IsActive() {
 					t.Fatal("Overview link should not be active!")
 				}
 
+				if page.NavBar().MetricsLink().IsActive() {
+					t.Fatal("Metrics link should not be active!")
+				}
+
 				if !page.NavBar().DatabasesLink().IsActive() {
 					t.Fatal("Databases link should be active!")
+				}
+
+				if page.NavBar().JobsLink().IsActive() {
+					t.Fatal("Jobs link should not be active!")
 				}
 			},
 		},
