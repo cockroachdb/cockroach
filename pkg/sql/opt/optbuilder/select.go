@@ -309,7 +309,7 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 
 	if where != nil {
 		// All "from" columns are visible to the filter expression.
-		texpr := outScope.resolveType(where.Expr, types.Bool)
+		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool, "WHERE")
 
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
