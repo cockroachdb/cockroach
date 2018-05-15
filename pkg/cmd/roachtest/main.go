@@ -31,7 +31,12 @@ func main() {
 		Long: `roachtest is a tool for testing cockroach clusters.
 `,
 
-		PersistentPreRunE: func(*cobra.Command, []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			// Don't bother checking flags for help commands.
+			if cmd.Use == "help [command]" {
+				return nil
+			}
+
 			if clusterName != "" && local {
 				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
 			}
