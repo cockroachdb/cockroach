@@ -103,7 +103,7 @@ error: aggregate functions are not allowed in the argument of max()
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING k
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: argument of HAVING must be type bool, not type int
 
 # Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
 build

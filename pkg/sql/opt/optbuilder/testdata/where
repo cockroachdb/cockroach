@@ -258,3 +258,9 @@ project
                 └── tuple [type=tuple{unknown, int}]
                      ├── null [type=unknown]
                      └── const: 50 [type=int]
+
+# Where clause must be type bool.
+build
+SELECT * FROM ab WHERE a
+----
+error: argument of WHERE must be type bool, not type int

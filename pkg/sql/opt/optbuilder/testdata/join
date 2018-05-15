@@ -3024,3 +3024,9 @@ project
       └── plus [type=int]
            ├── variable: column1 [type=int]
            └── const: 1 [type=int]
+
+# ON clause must be type bool.
+build
+SELECT * FROM foo JOIN bar ON foo.c
+----
+error: argument of ON must be type bool, not type float

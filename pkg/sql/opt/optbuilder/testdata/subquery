@@ -1411,3 +1411,130 @@ project
                      │    └── tuple [type=tuple{}]
                      └── projections
                           └── const: 1 [type=int]
+
+# Test that the source name is found correctly in the subquery.
+build
+SELECT (SELECT akv.k) FROM kv akv
+----
+project
+ ├── columns: column3:3(int)
+ ├── scan kv
+ │    └── columns: kv.k:1(int!null) kv.v:2(string)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: kv.k:1(int)
+                └── project
+                     ├── columns: kv.k:1(int)
+                     └── values
+                          └── tuple [type=tuple{}]
+
+exec-ddl
+CREATE TABLE db1.kv (k INT PRIMARY KEY, v INT)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+build fully-qualify-names
+SELECT (SELECT t.kv.k) FROM db1.kv, kv
+----
+project
+ ├── columns: column5:5(int)
+ ├── inner-join
+ │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
+ │    ├── scan kv
+ │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
+ │    ├── scan kv
+ │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
+ │    └── true [type=bool]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: t.public.kv.k:3(int)
+                └── project
+                     ├── columns: t.public.kv.k:3(int)
+                     └── values
+                          └── tuple [type=tuple{}]
+
+# Ambiguity in parent scope.
+build fully-qualify-names
+SELECT (SELECT kv.k) FROM db1.kv, kv
+----
+error: ambiguous source name: "kv"
+
+# Name not found after searching multiple scopes.
+build fully-qualify-names
+SELECT (SELECT kv1.k) FROM db1.kv, kv
+----
+error: no data source matches prefix: kv1
+
+build fully-qualify-names
+SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv
+----
+project
+ ├── columns: column5:5(int)
+ ├── inner-join
+ │    ├── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int) t.public.kv.k:3(int!null) t.public.kv.v:4(string)
+ │    ├── scan kv
+ │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
+ │    ├── scan kv
+ │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
+ │    └── true [type=bool]
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: db1.public.kv.k:1(int)
+                └── project
+                     ├── columns: db1.public.kv.k:1(int)
+                     └── values
+                          └── tuple [type=tuple{}]
+
+# Check that the inner kv is chosen when there are matching names in both
+# scopes.
+build fully-qualify-names
+SELECT (SELECT kv.k FROM db1.kv) FROM kv
+----
+project
+ ├── columns: column5:5(int)
+ ├── scan kv
+ │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(string)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: db1.public.kv.k:3(int!null)
+                └── project
+                     ├── columns: db1.public.kv.k:3(int!null)
+                     └── scan kv
+                          └── columns: db1.public.kv.k:3(int!null) db1.public.kv.v:4(int)
+
+# 2 nested scopes, mixed scope references.
+build fully-qualify-names
+SELECT (SELECT (SELECT t.kv.k + k) FROM db1.kv) FROM kv
+----
+project
+ ├── columns: column7:7(int)
+ ├── scan kv
+ │    └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(string)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: column6:6(int)
+                └── project
+                     ├── columns: column6:6(int)
+                     ├── scan kv
+                     │    └── columns: db1.public.kv.k:3(int!null) db1.public.kv.v:4(int)
+                     └── projections
+                          └── subquery [type=int]
+                               └── max1-row
+                                    ├── columns: column5:5(int)
+                                    └── project
+                                         ├── columns: column5:5(int)
+                                         ├── values
+                                         │    └── tuple [type=tuple{}]
+                                         └── projections
+                                              └── plus [type=int]
+                                                   ├── variable: t.public.kv.k [type=int]
+                                                   └── variable: db1.public.kv.k [type=int]

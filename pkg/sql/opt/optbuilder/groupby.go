@@ -284,7 +284,7 @@ func (b *Builder) buildAggregation(
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
 func (b *Builder) buildHaving(having tree.Expr, inScope *scope) memo.GroupID {
-	out := b.buildScalar(inScope.resolveType(having, types.Bool), inScope)
+	out := b.buildScalar(inScope.resolveAndRequireType(having, types.Bool, "HAVING"), inScope)
 	if len(inScope.groupby.varsUsed) > 0 {
 		i := inScope.groupby.varsUsed[0]
 		col := b.colMap[i]
