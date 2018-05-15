@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -597,8 +598,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	useDistSQL := false
-	// TODO(radu): for now, we restrict the optimizer to local execution.
-	if !useOptimizer {
+	// If we use the optimizer and we are in "local" mode, don't try to
+	// distribute.
+	if !(useOptimizer && ex.sessionData.OptimizerMode == sessiondata.OptimizerLocal) {
 		useDistSQL, err = shouldUseDistSQL(
 			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner)
 		if err != nil {
