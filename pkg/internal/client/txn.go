@@ -124,6 +124,10 @@ const (
 	// that. Note that the server accepts a BeginTxn with a higher epoch if a
 	// transaction record already exists.
 	txnWriteInOldEpoch
+	// txnError means that the txn had performed some writes and then a batch got
+	// a non-retriable error. Further batches except EndTransaction(commit=false)
+	// will be rejected.
+	txnError
 )
 
 // NewTxn returns a new txn. The typ parameter specifies whether this
@@ -927,6 +931,14 @@ func (txn *Txn) Send(
 		txn.mu.Lock()
 		defer txn.mu.Unlock()
 
+		if txn.mu.state == txnError {
+			singleAbort := ba.IsSingleEndTransactionRequest() &&
+				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
+			if !singleAbort {
+				return roachpb.NewErrorf("txn already encountered an error; cannot be used anymore")
+			}
+		}
+
 		sender = txn.mu.sender
 		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
 			return roachpb.NewErrorf(
@@ -1046,8 +1058,10 @@ func (txn *Txn) Send(
 		if log.V(1) {
 			log.Infof(ctx, "failed batch: %s", pErr)
 		}
+		var retriable bool
 		switch t := pErr.GetDetail().(type) {
 		case *roachpb.HandledRetryableTxnError:
+			retriable = true
 			retryErr := t
 			if requestTxnID != retryErr.TxnID {
 				// KV should not return errors for transactions other than the one that sent
@@ -1065,11 +1079,19 @@ func (txn *Txn) Send(
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to
 		// the root transactions, at the receiver.
-		if txn.typ == RootTxn && pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
-			log.Fatalf(ctx,
-				"unexpected retryable error at the client.Txn level: (%T) %s",
-				pErr.GetDetail(), pErr)
+		if pErr.TransactionRestart != roachpb.TransactionRestart_NONE {
+			retriable = true
+			if txn.typ == RootTxn {
+				log.Fatalf(ctx,
+					"unexpected retryable error at the client.Txn level: (%T) %s",
+					pErr.GetDetail(), pErr)
+			}
 		}
+
+		if !retriable && txn.mu.state == txnWriting {
+			txn.mu.state = txnError
+		}
+
 		return nil, pErr
 	}
 
