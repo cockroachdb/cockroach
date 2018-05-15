@@ -346,6 +346,13 @@ message TxnPrevAttemptError {
   option (gogoproto.equal) = true;
 }
 
+// TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
+// transaction that already received an error from a previous request. Once that
+// happens, client.Txn rejects future requests.
+message TxnAlreadyEncounteredErrorError{
+  option (gogoproto.equal) = true;
+}
+
 // An IntegerOverflowError indicates that an operation was aborted because
 // it would have caused an integeter overflow.
 message IntegerOverflowError {
@@ -413,6 +420,7 @@ message ErrorDetail {
   optional UnsupportedRequestError unsupported_request = 32;
   optional MixedSuccessError mixed_success = 33;
   optional BatchTimestampBeforeGCError timestamp_before = 34;
+  optional TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
 }
 
 // TransactionRestart indicates how an error should be handled in a

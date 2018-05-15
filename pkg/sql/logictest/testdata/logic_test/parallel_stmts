@@ -359,17 +359,6 @@ SHOW TIME ZONE
 ----
 UTC
 
-query TT
-SHOW CREATE TABLE kv
-----
-kv  CREATE TABLE kv (
-            k INT NOT NULL,
-            v INT NULL,
-            CONSTRAINT "primary" PRIMARY KEY (k ASC),
-            FAMILY "primary" (k, v),
-            CONSTRAINT check_v CHECK (v < 100)
-    )
-
 query T
 SHOW TRANSACTION STATUS
 ----
