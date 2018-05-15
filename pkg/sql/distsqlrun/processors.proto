@@ -21,9 +21,9 @@ package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
 import "roachpb/api.proto";
-import "roachpb/csv.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
+import "roachpb/io-formats.proto";
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/encoded_datum.proto";
 import "sql/sqlbase/join_type.proto";
@@ -120,7 +120,7 @@ message ProcessorCoreUnion {
   optional HashJoinerSpec hashJoiner = 9;
   optional ValuesCoreSpec values = 10;
   optional BackfillerSpec backfiller = 11;
-  optional ReadCSVSpec readCSV = 13;
+  optional ReadImportDataSpec readImport = 13;
   optional SSTWriterSpec SSTWriter = 14;
   optional CSVWriterSpec CSVWriter = 20;
   optional SamplerSpec Sampler = 15;
@@ -543,15 +543,9 @@ message JobProgress {
   optional int32 slot = 3 [(gogoproto.nullable) = false];
 }
 
-// ReadCSVSpec is the specification for a processor that reads a CSV
-// file at uri with descriptor table_desc, specified delimiter (comma),
-// optional comment rune, and optional nullif string (which is nullable to
-// differentiate between not set (nil) and the empty string (which could be
-// used as the null marker). It outputs rows that are a sampling of the file
-// at a rate of (row size) / sample_size.
-// See ccs/sqlccl/csv.go for implementation.
-message ReadCSVSpec {
-  optional roachpb.CSVOptions options = 1 [(gogoproto.nullable) = false];
+message ReadImportDataSpec {
+  optional roachpb.CSVOptions legacy_csv_options = 1 [(gogoproto.nullable) = false];
+  optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
   // table_desc is the table descriptor of the CSV file.

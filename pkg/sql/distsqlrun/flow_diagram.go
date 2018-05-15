@@ -370,12 +370,12 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 }
 
 // summary implements the diagramCellType interface.
-func (c *ReadCSVSpec) summary() (string, []string) {
+func (c *ReadImportDataSpec) summary() (string, []string) {
 	ss := make([]string, 0, len(c.Uri))
 	for _, s := range c.Uri {
 		ss = append(ss, s)
 	}
-	return "ReadCSV", ss
+	return "ReadImportData", ss
 }
 
 // summary implements the diagramCellType interface.
