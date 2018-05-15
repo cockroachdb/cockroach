@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -307,9 +308,10 @@ func newAuthenticationMuxDisallowAnonymous(
 type loggedInUserKey struct{}
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, httpCode, err := am.getSession(w, req)
-	if !am.allowAnonymous && err != nil {
-		http.Error(w, err.Error(), httpCode)
+	username, err := am.getSession(w, req)
+	if err != nil && !am.allowAnonymous {
+		log.Infof(req.Context(), "Web session error: %s", err)
+		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
 
@@ -339,30 +341,30 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 // HTTP error code.
 func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
-) (string, int, error) {
+) (string, error) {
 	// Validate the returned cookie.
 	rawCookie, err := req.Cookie(sessionCookieName)
 	if err != nil {
-		return "", http.StatusUnauthorized, err
+		return "", err
 	}
 
 	cookie, err := decodeSessionCookie(rawCookie)
 	if err != nil {
 		err = errors.Wrap(err, "a valid authentication cookie is required")
-		return "", http.StatusUnauthorized, err
+		return "", err
 	}
 
 	valid, username, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
 		err := apiInternalError(req.Context(), err)
-		return "", http.StatusInternalServerError, err
+		return "", err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		return "", http.StatusUnauthorized, err
+		return "", err
 	}
 
-	return username, 0, nil
+	return username, nil
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
