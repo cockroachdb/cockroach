@@ -45,6 +45,14 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
+// Override changes the setting, panicking when validation fails.
+// For testing usage only.
+func (f *FloatSetting) Override(sv *Values, v float64) {
+	if err := f.set(sv, v); err != nil {
+		panic(err)
+	}
+}
+
 // Validate that a value conforms with the validation function.
 func (f *FloatSetting) Validate(v float64) error {
 	if f.validateFn != nil {
@@ -67,6 +75,11 @@ func (f *FloatSetting) setToDefault(sv *Values) {
 	if err := f.set(sv, f.defaultValue); err != nil {
 		panic(err)
 	}
+}
+
+// Default returns the default value.
+func (f *FloatSetting) Default() float64 {
+	return f.defaultValue
 }
 
 // RegisterFloatSetting defines a new setting with type float.
