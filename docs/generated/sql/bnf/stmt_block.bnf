@@ -327,6 +327,7 @@ explain_option_list ::=
 
 import_data_format ::=
 	'CSV'
+	| 'MYSQLOUTFILE'
 
 privileges ::=
 	'ALL'
@@ -719,6 +720,7 @@ unreserved_keyword ::=
 	| 'MATCH'
 	| 'MINUTE'
 	| 'MONTH'
+	| 'MYSQLOUTFILE'
 	| 'NAMES'
 	| 'NAN'
 	| 'NAME'
