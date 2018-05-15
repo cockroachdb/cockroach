@@ -134,6 +134,10 @@ type HiddenFromShowQueries interface {
 // IndependentFromParallelizedPriors is a pseudo-interface to be implemented
 // by statements which do not force parallel statement execution synchronization
 // when they run.
+// NB: Only statements that don't send any requests using the current
+// transaction can implement this. Otherwise, the statement will fail if any of
+// the parallel statements has encoutered a KV error (which toasts the txn).
+// TODO(andrei): audit all the implementers.
 type IndependentFromParallelizedPriors interface {
 	independentFromParallelizedPriors()
 }
@@ -648,8 +652,7 @@ func (*ShowCreateTable) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCreateTable) StatementTag() string { return "SHOW CREATE TABLE" }
 
-func (*ShowCreateTable) hiddenFromStats()                   {}
-func (*ShowCreateTable) independentFromParallelizedPriors() {}
+func (*ShowCreateTable) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*ShowCreateView) StatementType() StatementType { return Rows }
