@@ -44,10 +44,10 @@ func (node *Import) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.FileFormat)
 	ctx.WriteString(" DATA (")
 	ctx.FormatNode(&node.Files)
-	ctx.WriteString(") ")
+	ctx.WriteString(")")
 
 	if node.Options != nil {
-		ctx.WriteString("WITH ")
+		ctx.WriteString(" WITH ")
 		ctx.FormatNode(&node.Options)
 	}
 }

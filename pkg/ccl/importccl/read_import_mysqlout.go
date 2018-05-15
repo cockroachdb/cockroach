@@ -33,8 +33,13 @@ func newMysqloutfileReader(
 	tableDesc *sqlbase.TableDescriptor,
 	expectedCols int,
 ) *mysqloutfileReader {
+	null := "NULL"
+	if opts.HasEscape {
+		null = `\N`
+	}
+	csvOpts := roachpb.CSVOptions{NullEncoding: &null}
 	return &mysqloutfileReader{
-		csvInputReader: *newCSVInputReader(kvCh, roachpb.CSVOptions{}, tableDesc, expectedCols),
+		csvInputReader: *newCSVInputReader(kvCh, csvOpts, tableDesc, expectedCols),
 		opts:           opts,
 	}
 }
