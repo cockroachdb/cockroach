@@ -115,7 +115,7 @@ func TestAggregator(t *testing.T) {
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{1},
 					},
 					{
@@ -145,7 +145,7 @@ func TestAggregator(t *testing.T) {
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{1},
 					},
 					{
@@ -175,7 +175,7 @@ func TestAggregator(t *testing.T) {
 				OrderedGroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{1},
 					},
 					{
@@ -204,7 +204,7 @@ func TestAggregator(t *testing.T) {
 				GroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{1},
 					},
 					{
@@ -222,7 +222,7 @@ func TestAggregator(t *testing.T) {
 				{v[8], v[4]},
 			},
 			outputTypes: []sqlbase.ColumnType{
-				intType, // IDENT
+				intType, // ANY_NOT_NULL
 				decType, // SUM
 			},
 			expected: sqlbase.EncDatumRows{
@@ -237,7 +237,7 @@ func TestAggregator(t *testing.T) {
 				OrderedGroupCols: []uint32{1},
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{1},
 					},
 					{
@@ -255,7 +255,7 @@ func TestAggregator(t *testing.T) {
 				{v[3], v[4]},
 			},
 			outputTypes: []sqlbase.ColumnType{
-				intType, // IDENT
+				intType, // ANY_NOT_NULL
 				decType, // SUM
 			},
 			expected: sqlbase.EncDatumRows{
@@ -322,7 +322,7 @@ func TestAggregator(t *testing.T) {
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
 					{
-						Func:   AggregatorSpec_IDENT,
+						Func:   AggregatorSpec_ANY_NOT_NULL,
 						ColIdx: []uint32{0},
 					},
 				},
@@ -461,7 +461,7 @@ func BenchmarkAggregation(b *testing.B) {
 	const numRows = 1000
 
 	aggFuncs := []AggregatorSpec_Func{
-		AggregatorSpec_IDENT,
+		AggregatorSpec_ANY_NOT_NULL,
 		AggregatorSpec_AVG,
 		AggregatorSpec_COUNT,
 		AggregatorSpec_MAX,
@@ -552,7 +552,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	var allOrderedGroupCols = [2]uint32{0, 1}
 
 	aggFuncs := []AggregatorSpec_Func{
-		AggregatorSpec_IDENT,
+		AggregatorSpec_ANY_NOT_NULL,
 		AggregatorSpec_AVG,
 		AggregatorSpec_COUNT,
 		AggregatorSpec_MAX,

@@ -255,9 +255,9 @@ func doExpandPlan(
 
 		// Project the props of the GROUP BY columns, as they're retained as-is.
 		groupColProjMap := make([]int, len(n.funcs))
-		for i, f := range n.funcs {
-			if f.isIdentAggregate() {
-				groupColProjMap[i] = f.argRenderIdx
+		for i := range n.funcs {
+			if groupingCol, ok := n.aggIsGroupingColumn(i); ok {
+				groupColProjMap[i] = groupingCol
 			} else {
 				groupColProjMap[i] = -1
 			}
@@ -627,15 +627,16 @@ func translateGroupOrdering(
 	var desiredUp sqlbase.ColumnOrdering
 
 	for _, colOrder := range desiredDown {
-		f := g.funcs[colOrder.ColIdx]
-		if !f.isIdentAggregate() {
+		groupingCol, ok := g.aggIsGroupingColumn(colOrder.ColIdx)
+		if !ok {
 			// We cannot maintain the rest of the ordering since it uses a
 			// non-identity aggregate function.
 			break
 		}
 		// For identity (i.e., GROUP BY) columns, we can propagate the ordering.
 		desiredUp = append(desiredUp, sqlbase.ColumnOrderInfo{
-			ColIdx: f.argRenderIdx, Direction: colOrder.Direction})
+			ColIdx: groupingCol, Direction: colOrder.Direction,
+		})
 	}
 
 	return desiredUp
