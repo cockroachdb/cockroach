@@ -1043,7 +1043,7 @@ func TestHealthAPI(t *testing.T) {
 
 	// Health API is not accessible if the node is not accessible, because it
 	// cannot verify the authentication session.
-	expected := "500 Internal Server Error"
+	expected := "401 Unauthorized"
 	var resp serverpb.HealthResponse
 	for {
 		if err := getAdminJSONProto(s, "health", &resp); !testutils.IsError(err, expected) {
