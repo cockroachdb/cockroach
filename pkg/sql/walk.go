@@ -292,8 +292,8 @@ func (v *planVisitor) visit(plan planNode) {
 			inputCols := planColumns(n.plan)
 			for i, agg := range n.funcs {
 				var buf bytes.Buffer
-				if agg.isIdentAggregate() {
-					buf.WriteString(inputCols[agg.argRenderIdx].Name)
+				if groupingCol, ok := n.aggIsGroupingColumn(i); ok {
+					buf.WriteString(inputCols[groupingCol].Name)
 				} else {
 					fmt.Fprintf(&buf, "%s(", agg.funcName)
 					if agg.argRenderIdx != noRenderIdx {
