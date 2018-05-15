@@ -295,9 +295,7 @@ func newAuthenticationMuxAllowAnonymous(
 	}
 }
 
-func newAuthenticationMuxDisallowAnonymous(
-	s *authenticationServer, inner http.Handler,
-) *authenticationMux {
+func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenticationMux {
 	return &authenticationMux{
 		server:         s,
 		inner:          inner,

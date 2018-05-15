@@ -1207,7 +1207,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	var authHandler http.Handler = gwMux
 	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMuxDisallowAnonymous(s.authentication, authHandler)
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
 	}
 
 	// Setup HTTP<->gRPC handlers.
