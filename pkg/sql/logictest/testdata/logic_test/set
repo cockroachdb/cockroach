@@ -194,6 +194,9 @@ statement ok
 SET EXPERIMENTAL_OPT = ON
 
 statement ok
+SET EXPERIMENTAL_OPT = LOCAL
+
+statement ok
 SET EXPERIMENTAL_OPT = OFF
 
 statement error not supported
