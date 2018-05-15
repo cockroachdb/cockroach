@@ -17,10 +17,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	//"io/ioutil"
-	//"os/exec"
-	//"time"
 
 	"github.com/tebeka/selenium"
 
@@ -55,7 +51,7 @@ func registerWebUI(r *registry) {
 				var page webui.Page = webui.MakeOverviewPage(wd)
 
 				if page.Heading() != "CLUSTER OVERVIEW" {
-					t.Fatal(fmt.Sprintf("Expected title to be `CLUSTER OVERVIEW`, saw `%s`!", page.Heading()))
+					t.Fatalf("Expected title to be `CLUSTER OVERVIEW`, saw `%s`!", page.Heading())
 				}
 
 				if !page.NavBar().OverviewLink().IsActive() {
@@ -69,7 +65,7 @@ func registerWebUI(r *registry) {
 				page = page.NavBar().DatabasesLink().Click()
 
 				if page.Heading() != "DATABASES" {
-					t.Fatal(fmt.Sprintf("Expected title to be `DATABASES`, saw `%s`!", page.Heading()))
+					t.Fatalf("Expected title to be `DATABASES`, saw `%s`!", page.Heading())
 				}
 
 				if page.NavBar().OverviewLink().IsActive() {
