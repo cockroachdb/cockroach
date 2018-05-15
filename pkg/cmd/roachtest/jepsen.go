@@ -61,6 +61,20 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 		t.Fatal("local execution not supported")
 	}
 
+	if c.isLocal() {
+		// We can't perform any of the remaining setup locally and while we can't
+		// run jepsen locally we let the test run to indicate which commands it
+		// would have run remotely.
+		return
+	}
+
+	controller := c.Node(c.nodes)
+	workers := c.Range(1, c.nodes-1)
+
+	// Install jepsen. This part is fast if the repo is already there,
+	// so do it before the initialization check for ease of iteration.
+	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
+
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
 		c.l.printf("cluster already initialized\n")
@@ -71,16 +85,6 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	defer func() {
 		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 	}()
-
-	if c.isLocal() {
-		// We can't perform any of the remaining setup locally and while we can't
-		// run jepsen locally we let the test run to indicate which commands it
-		// would have run remotely.
-		return
-	}
-
-	controller := c.Node(c.nodes)
-	workers := c.Range(1, c.nodes-1)
 
 	// TODO(bdarnell): Does this blanket apt update matter? I just
 	// copied it from the old jepsen scripts. It's slow, so we should
@@ -104,10 +108,9 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// (which is not how our official builds are laid out).
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
 
-	// Install Jepsen and its prereqs on the controller.
+	// Install Jepsen's prereqs on the controller.
 	c.Run(ctx, controller, "sh", "-c", `"sudo apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`)
 	c.Run(ctx, controller, "test -x lein || (curl -o lein https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein)")
-	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
 
 	// SSH setup: create a key on the controller.
 	tempDir, err := ioutil.TempDir("", "jepsen")
@@ -169,6 +172,12 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	// Reset the "latest" alias for the next run.
 	t.Status("running")
 	run(c, ctx, controller, "rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
+
+	// Install the jepsen package (into ~/.m2) before running tests in
+	// the cockroach package. Clojure doesn't really understand
+	// monorepos so steps like this are necessary for one package to
+	// depend on an unreleased package in the same repo.
+	run(c, ctx, controller, "bash", "-e", "-c", `"cd /mnt/data1/jepsen/jepsen && ~/lein install"`)
 
 	errCh := make(chan error, 1)
 	go func() {
