@@ -82,12 +82,10 @@ SELECT k FROM a WHERE v > 1
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── scan a@v
- │    ├── columns: a.k:1(int!null) a.v:3(int!null)
- │    ├── constraint: /3: [/2 - ]
- │    └── keys: (1) (3)
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── scan a@v
+      ├── columns: a.k:1(int!null) a.v:3(int!null)
+      ├── constraint: /3: [/2 - ]
+      └── keys: (1) (3)
 
 memo
 SELECT k FROM a WHERE v > 1
@@ -101,16 +99,15 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@v,cols=(1,3),constrained)
  │         └── cost: 333.00
- ├── G3: (projections G6)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  │    └── ""
  │         ├── best: (scan a,cols=(1,3))
  │         └── cost: 1000.00
- ├── G5: (filters G7)
- ├── G6: (variable a.k)
- ├── G7: (gt G8 G9)
- ├── G8: (variable a.v)
- └── G9: (const 1)
+ ├── G5: (filters G6)
+ ├── G6: (gt G7 G8)
+ ├── G7: (variable a.v)
+ └── G8: (const 1)
 
 opt
 SELECT k FROM a WHERE u = 1 AND k = 5
@@ -118,12 +115,10 @@ SELECT k FROM a WHERE u = 1 AND k = 5
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── scan a@u
- │    ├── columns: a.k:1(int!null) a.u:2(int!null)
- │    ├── constraint: /2/1: [/1/5 - /1/5]
- │    └── keys: (1)
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── scan a@u
+      ├── columns: a.k:1(int!null) a.u:2(int!null)
+      ├── constraint: /2/1: [/1/5 - /1/5]
+      └── keys: (1)
 
 memo
 SELECT k FROM a WHERE u = 1 AND k = 5
@@ -137,7 +132,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@u,cols=(1,2),constrained)
  │         └── cost: 1.00
- ├── G3: (projections G10)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -162,21 +157,19 @@ SELECT k FROM a WHERE u = 1 AND k+u = 1
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── select
- │    ├── columns: a.k:1(int!null) a.u:2(int!null)
- │    ├── keys: (1)
- │    ├── scan a@u
- │    │    ├── columns: a.k:1(int!null) a.u:2(int)
- │    │    ├── constraint: /2/1: [/1 - /1]
- │    │    └── keys: (1)
- │    └── filters [type=bool, outer=(1,2)]
- │         └── eq [type=bool, outer=(1,2)]
- │              ├── plus [type=int, outer=(1,2)]
- │              │    ├── variable: a.k [type=int, outer=(1)]
- │              │    └── variable: a.u [type=int, outer=(2)]
- │              └── const: 1 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── select
+      ├── columns: a.k:1(int!null) a.u:2(int!null)
+      ├── keys: (1)
+      ├── scan a@u
+      │    ├── columns: a.k:1(int!null) a.u:2(int)
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    └── keys: (1)
+      └── filters [type=bool, outer=(1,2)]
+           └── eq [type=bool, outer=(1,2)]
+                ├── plus [type=int, outer=(1,2)]
+                │    ├── variable: a.k [type=int, outer=(1)]
+                │    └── variable: a.u [type=int, outer=(2)]
+                └── const: 1 [type=int]
 
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
@@ -190,7 +183,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.01
- ├── G3: (projections G12)
+ ├── G3: (projections a.k)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2))
@@ -214,19 +207,17 @@ SELECT k FROM a WHERE u = 1 AND v = 5
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── select
- │    ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
- │    ├── keys: (1) (3)
- │    ├── scan a@u
- │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
- │    │    ├── constraint: /2/1: [/1 - /1]
- │    │    └── keys: (1) weak(3)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
- │         └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
- │              ├── variable: a.v [type=int, outer=(3)]
- │              └── const: 5 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── select
+      ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
+      ├── keys: (1) (3)
+      ├── scan a@u
+      │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+      │    ├── constraint: /2/1: [/1 - /1]
+      │    └── keys: (1) weak(3)
+      └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+           └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+                ├── variable: a.v [type=int, outer=(3)]
+                └── const: 5 [type=int]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -240,29 +231,28 @@ memo (optimized)
  │    └── ""
  │         ├── best: (select G6 G7)
  │         └── cost: 1.01
- ├── G3: (projections G10)
+ ├── G3: (projections a.k)
  ├── G4: (scan a) (scan a@u) (scan a@v)
  │    └── ""
  │         ├── best: (scan a)
  │         └── cost: 1000.00
- ├── G5: (filters G12 G11)
+ ├── G5: (filters G11 G10)
  ├── G6: (scan a@u,constrained)
  │    └── ""
  │         ├── best: (scan a@u,constrained)
  │         └── cost: 1.00
- ├── G7: (filters G11)
+ ├── G7: (filters G10)
  ├── G8: (scan a@v,constrained)
  │    └── ""
  │         ├── best: (scan a@v,constrained)
  │         └── cost: 1.00
- ├── G9: (filters G12)
- ├── G10: (variable a.k)
- ├── G11: (eq G13 G14)
- ├── G12: (eq G15 G16)
- ├── G13: (variable a.v)
- ├── G14: (const 5)
- ├── G15: (variable a.u)
- └── G16: (const 1)
+ ├── G9: (filters G11)
+ ├── G10: (eq G12 G13)
+ ├── G11: (eq G14 G15)
+ ├── G12: (variable a.v)
+ ├── G13: (const 5)
+ ├── G14: (variable a.u)
+ └── G15: (const 1)
 
 # Only not-null constraint is pushed down.
 opt
@@ -271,19 +261,17 @@ SELECT k FROM a WHERE u=v
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── select
- │    ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
- │    ├── keys: (1) (3)
- │    ├── scan a@u
- │    │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
- │    │    ├── constraint: /2/1: (/NULL - ]
- │    │    └── keys: (1) weak(3)
- │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
- │         └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
- │              ├── variable: a.u [type=int, outer=(2)]
- │              └── variable: a.v [type=int, outer=(3)]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── select
+      ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
+      ├── keys: (1) (3)
+      ├── scan a@u
+      │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+      │    ├── constraint: /2/1: (/NULL - ]
+      │    └── keys: (1) weak(3)
+      └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+                ├── variable: a.u [type=int, outer=(2)]
+                └── variable: a.v [type=int, outer=(3)]
 
 # Don't push constraint into already limited scan.
 opt

@@ -101,7 +101,6 @@ project
  │    ├── limit: 5
  │    └── keys: (1)
  └── projections [outer=(1,3)]
-      ├── variable: a.k [type=int, outer=(1)]
       └── mult [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 2.0 [type=float]
@@ -127,12 +126,10 @@ project
  │    │         ├── columns: a.i:2(int) a.f:3(float)
  │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
  │    │         ├── keys: weak(2,3)
- │    │         ├── scan a
- │    │         │    └── columns: a.i:2(int) a.f:3(float)
- │    │         └── aggregations
+ │    │         └── scan a
+ │    │              └── columns: a.i:2(int) a.f:3(float)
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
@@ -180,7 +177,6 @@ project
  │    │    └── keys: (1)
  │    └── const: 5 [type=int]
  └── projections [outer=(1,3)]
-      ├── variable: a.k [type=int, outer=(1)]
       └── mult [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 2.0 [type=float]
@@ -204,12 +200,10 @@ project
  │    │         ├── columns: a.i:2(int) a.f:3(float)
  │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
  │    │         ├── keys: weak(2,3)
- │    │         ├── scan a
- │    │         │    └── columns: a.i:2(int) a.f:3(float)
- │    │         └── aggregations
+ │    │         └── scan a
+ │    │              └── columns: a.i:2(int) a.f:3(float)
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
@@ -237,7 +231,6 @@ project
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(1,3)]
-      ├── variable: a.k [type=int, outer=(1)]
       └── mult [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 2.0 [type=float]
@@ -266,13 +259,11 @@ project
  │    │    │         ├── columns: a.i:2(int) a.f:3(float)
  │    │    │         ├── grouping columns: a.i:2(int) a.f:3(float)
  │    │    │         ├── keys: weak(2,3)
- │    │    │         ├── scan a
- │    │    │         │    └── columns: a.i:2(int) a.f:3(float)
- │    │    │         └── aggregations
+ │    │    │         └── scan a
+ │    │    │              └── columns: a.i:2(int) a.f:3(float)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]

@@ -102,11 +102,10 @@ select
  │    ├── stats: [rows=1, distinct(3)=1]
  │    ├── project
  │    │    ├── stats: [rows=1000]
- │    │    ├── scan xy
- │    │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    └── keys: (1)
- │    │    └── projections
+ │    │    └── scan xy
+ │    │         ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    │         ├── stats: [rows=1000]
+ │    │         └── keys: (1)
  │    └── aggregations
  │         └── count-rows [type=int]
  └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
@@ -144,20 +143,15 @@ SELECT * FROM abcd WHERE true
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
  ├── stats: [rows=333]
- ├── select
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    ├── stats: [rows=333]
- │    ├── keys: (5)
- │    ├── scan abcd
- │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (5)
- │    └── true [type=bool]
- └── projections [outer=(1-4)]
-      ├── variable: abcd.a [type=int, outer=(1)]
-      ├── variable: abcd.b [type=int, outer=(2)]
-      ├── variable: abcd.c [type=int, outer=(3)]
-      └── variable: abcd.d [type=int, outer=(4)]
+ └── select
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── stats: [rows=333]
+      ├── keys: (5)
+      ├── scan abcd
+      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
+      └── true [type=bool]
 
 build
 SELECT * FROM abcd WHERE c IS NOT NULL
@@ -165,22 +159,17 @@ SELECT * FROM abcd WHERE c IS NOT NULL
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── stats: [rows=333]
- ├── select
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
- │    ├── stats: [rows=333]
- │    ├── keys: (5)
- │    ├── scan abcd
- │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (5)
- │    └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
- │         ├── variable: abcd.c [type=int, outer=(3)]
- │         └── null [type=unknown]
- └── projections [outer=(1-4)]
-      ├── variable: abcd.a [type=int, outer=(1)]
-      ├── variable: abcd.b [type=int, outer=(2)]
-      ├── variable: abcd.c [type=int, outer=(3)]
-      └── variable: abcd.d [type=int, outer=(4)]
+ └── select
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── stats: [rows=333]
+      ├── keys: (5)
+      ├── scan abcd
+      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
+      └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+           ├── variable: abcd.c [type=int, outer=(3)]
+           └── null [type=unknown]
 
 build
 SELECT * FROM abcd WHERE c = d
@@ -188,22 +177,17 @@ SELECT * FROM abcd WHERE c = d
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── stats: [rows=111]
- ├── select
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null) abcd.rowid:5(int!null)
- │    ├── stats: [rows=111]
- │    ├── keys: (5)
- │    ├── scan abcd
- │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (5)
- │    └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
- │         ├── variable: abcd.c [type=int, outer=(3)]
- │         └── variable: abcd.d [type=int, outer=(4)]
- └── projections [outer=(1-4)]
-      ├── variable: abcd.a [type=int, outer=(1)]
-      ├── variable: abcd.b [type=int, outer=(2)]
-      ├── variable: abcd.c [type=int, outer=(3)]
-      └── variable: abcd.d [type=int, outer=(4)]
+ └── select
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null) abcd.rowid:5(int!null)
+      ├── stats: [rows=111]
+      ├── keys: (5)
+      ├── scan abcd
+      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
+      └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+           ├── variable: abcd.c [type=int, outer=(3)]
+           └── variable: abcd.d [type=int, outer=(4)]
 
 build
 SELECT * FROM abcd WHERE a > c
@@ -211,22 +195,17 @@ SELECT * FROM abcd WHERE a > c
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── stats: [rows=111]
- ├── select
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
- │    ├── stats: [rows=111]
- │    ├── keys: (5)
- │    ├── scan abcd
- │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (5)
- │    └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │         ├── variable: abcd.a [type=int, outer=(1)]
- │         └── variable: abcd.c [type=int, outer=(3)]
- └── projections [outer=(1-4)]
-      ├── variable: abcd.a [type=int, outer=(1)]
-      ├── variable: abcd.b [type=int, outer=(2)]
-      ├── variable: abcd.c [type=int, outer=(3)]
-      └── variable: abcd.d [type=int, outer=(4)]
+ └── select
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── stats: [rows=111]
+      ├── keys: (5)
+      ├── scan abcd
+      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── stats: [rows=1000]
+      │    └── keys: (5)
+      └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           ├── variable: abcd.a [type=int, outer=(1)]
+           └── variable: abcd.c [type=int, outer=(3)]
 
 build
 SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
@@ -237,22 +216,17 @@ select
  ├── project
  │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int)
  │    ├── stats: [rows=111]
- │    ├── select
- │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    ├── stats: [rows=111]
- │    │    ├── keys: (5)
- │    │    ├── scan abcd
- │    │    │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
- │    │    │    ├── stats: [rows=1000]
- │    │    │    └── keys: (5)
- │    │    └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │    │         ├── variable: abcd.a [type=int, outer=(1)]
- │    │         └── variable: abcd.c [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── variable: abcd.a [type=int, outer=(1)]
- │         ├── variable: abcd.b [type=int, outer=(2)]
- │         ├── variable: abcd.c [type=int, outer=(3)]
- │         └── variable: abcd.d [type=int, outer=(4)]
+ │    └── select
+ │         ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+ │         ├── stats: [rows=111]
+ │         ├── keys: (5)
+ │         ├── scan abcd
+ │         │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+ │         │    ├── stats: [rows=1000]
+ │         │    └── keys: (5)
+ │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │              ├── variable: abcd.a [type=int, outer=(1)]
+ │              └── variable: abcd.c [type=int, outer=(3)]
  └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
       ├── variable: abcd.b [type=int, outer=(2)]
       └── variable: abcd.d [type=int, outer=(4)]

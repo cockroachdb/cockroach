@@ -142,7 +142,7 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan abc,cols=(4))
  │         └── cost: 1000.00
- ├── G3: (projections G7 G6)
+ ├── G3: (projections G6 abc.d)
  ├── G4: (scan abc@bc,cols=(1-3))
  │    └── ""
  │         ├── best: (scan abc@bc,cols=(1-3))
@@ -244,14 +244,12 @@ memo (optimized)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
  │         └── cost: 333.00
- ├── G3: (projections G6 G7)
+ ├── G3: (projections a.k a.i)
  ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
  │    └── ""
  │         ├── best: (scan a,cols=(1,2,4))
  │         └── cost: 1000.00
- ├── G5: (filters G8)
- ├── G6: (variable a.i)
- ├── G7: (variable a.k)
- ├── G8: (ge G9 G10)
- ├── G9: (variable a.s)
- └── G10: (const 'foo')
+ ├── G5: (filters G6)
+ ├── G6: (ge G7 G8)
+ ├── G7: (variable a.s)
+ └── G8: (const 'foo')

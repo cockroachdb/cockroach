@@ -46,10 +46,9 @@ project
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.y [type=int]
-      │    └── const: 1 [type=int]
-      └── variable: a.x [type=int]
+      └── plus [type=int]
+           ├── variable: a.y [type=int]
+           └── const: 1 [type=int]
 
 # Join operator.
 opt

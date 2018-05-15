@@ -148,14 +148,10 @@ func (b *Builder) buildUsingJoin(
 		for i, col := range outScope.cols {
 			if mergedCol, ok := mergedCols[col.id]; ok {
 				outScope.cols[i].group = mergedCol
-			} else {
-				v := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
-				outScope.cols[i].group = v
 			}
 		}
 
-		p := b.constructList(opt.ProjectionsOp, outScope.cols)
-		outScope.group = b.factory.ConstructProject(outScope.group, p)
+		outScope.group = b.constructProject(outScope.group, outScope.cols)
 	}
 
 	return outScope

@@ -21,17 +21,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// constructProject constructs a projection if it will result in a different
+// constructProjectForScope constructs a projection if it will result in a different
 // set of columns than its input. Either way, it updates projectionsScope.group
 // with the output memo group ID.
-func (b *Builder) constructProject(inScope, projectionsScope *scope) {
-	// Don't add an unnecessary "pass through" project expression.
+func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
+	// Don't add an unnecessary "pass through" project.
 	if projectionsScope.hasSameColumns(inScope) {
 		projectionsScope.group = inScope.group
 	} else {
-		p := b.constructList(opt.ProjectionsOp, projectionsScope.cols)
-		projectionsScope.group = b.factory.ConstructProject(inScope.group, p)
+		projectionsScope.group = b.constructProject(inScope.group, projectionsScope.cols)
 	}
+}
+
+func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.GroupID {
+	def := memo.ProjectionsOpDef{
+		SynthesizedCols: make(opt.ColList, 0, len(cols)),
+	}
+
+	groupList := make([]memo.GroupID, 0, len(cols))
+
+	// Deduplicate the columns; we only need to project each column once.
+	colSet := opt.ColSet{}
+	for i := range cols {
+		id, group := cols[i].id, cols[i].group
+		if !colSet.Contains(int(id)) {
+			if group == 0 {
+				def.PassthroughCols.Add(int(id))
+			} else {
+				def.SynthesizedCols = append(def.SynthesizedCols, id)
+				groupList = append(groupList, group)
+			}
+			colSet.Add(int(id))
+		}
+	}
+
+	return b.factory.ConstructProject(
+		input,
+		b.factory.ConstructProjections(
+			b.factory.InternList(groupList),
+			b.factory.InternProjectionsOpDef(&def),
+		),
+	)
 }
 
 // buildProjectionList builds a set of memo groups that represent the given
@@ -85,7 +115,7 @@ func (b *Builder) buildScalarProjection(
 	// NB: The case statements are sorted lexicographically.
 	switch t := texpr.(type) {
 	case *scopeColumn:
-		b.buildVariableProjection(t, label, inScope, outScope)
+		b.passthroughColumn(t, label, inScope, outScope)
 
 	case *tree.FuncExpr:
 		out, col := b.buildFunction(t, label, inScope)
@@ -108,14 +138,11 @@ func (b *Builder) buildScalarProjection(
 	return &outScope.cols[len(outScope.cols)-1]
 }
 
-// buildVariableProjection builds a memo group that represents the given
-// column. label contains an optional alias for the column (e.g., if specified
-// with the AS keyword).
+// passthroughColumn adds (to the output scope) a column that is available in
+// the input scope. The group is 0 for passthrough columns.
 //
 // See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) buildVariableProjection(
-	col *scopeColumn, label string, inScope, outScope *scope,
-) {
+func (b *Builder) passthroughColumn(col *scopeColumn, label string, inScope, outScope *scope) {
 	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.id) {
 		panic(groupingError(col.String()))
 	}
@@ -124,8 +151,6 @@ func (b *Builder) buildVariableProjection(
 	// Mark the column as a visible member of an anonymous table.
 	col.table.TableName = ""
 	col.hidden = false
-
-	col.group = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
 }
 
 // buildDefaultScalarProjection builds a set of memo groups that represent
@@ -136,8 +161,7 @@ func (b *Builder) buildVariableProjection(
 //           handled separately in buildVariableProjection and
 //           buildFunction).
 // group     The memo group that has already been built for the given
-//           expression. It may be replaced by a variable reference if the
-//           expression already exists (e.g., as a GROUP BY column).
+//           expression.
 // label     If a new column is synthesized, it will be labeled with this
 //           string.
 //
@@ -160,10 +184,7 @@ func (b *Builder) buildDefaultScalarProjection(
 
 		if col := inScope.findGrouping(group); col != nil {
 			// The column already exists, so use that instead.
-			col = outScope.appendColumn(col, label)
-
-			// Replace the expression with a reference to the column.
-			col.group = b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+			outScope.appendColumn(col, label)
 			return
 		}
 	}

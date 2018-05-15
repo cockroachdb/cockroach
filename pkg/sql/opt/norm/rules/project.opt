@@ -4,11 +4,11 @@
 
 
 # EliminateProject discards a Project operator which is not adding or removing
-# columns, but instead is just reordering existing columns.
+# columns.
 [EliminateProject, Normalize]
 (Project
     $input:*
-    $projections:* & (HasSameCols $input $projections)
+    $projections:(Projections []) & (HasSameCols $input $projections)
 )
 =>
 $input
@@ -18,7 +18,7 @@ $input
 # something the outer Project operator can do on its own.
 [EliminateProjectProject, Normalize]
 (Project
-    $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
+    $input:(Project $innerInput:* (Projections []))
     $projections:*
 )
 =>

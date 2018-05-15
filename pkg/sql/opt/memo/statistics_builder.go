@@ -639,8 +639,7 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *opt.ColumnStatis
 	// may be synthesized by the projection operation.
 	inputCols := sb.ev.Child(0).Logical().Relational.OutputCols
 	reqInputCols := colSet.Intersection(inputCols)
-	reqOtherCols := colSet.Difference(inputCols)
-	if reqOtherCols.Len() > 0 {
+	if reqSynthCols := colSet.Difference(inputCols); !reqSynthCols.Empty() {
 		// Some of the columns in colSet were synthesized or from a higher scope
 		// (in the case of a correlated subquery). We assume that the statistics of
 		// the synthesized columns are the same as the statistics of their input
@@ -648,9 +647,9 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet) *opt.ColumnStatis
 		// distinct count of x.
 		// TODO(rytaft): This assumption breaks down for certain types of
 		// expressions, such as (x < y).
-		outputCols := sb.ev.Child(1).Private().(opt.ColList)
-		for i, col := range outputCols {
-			if reqOtherCols.Contains(int(col)) {
+		def := sb.ev.Child(1).Private().(*ProjectionsOpDef)
+		for i, col := range def.SynthesizedCols {
+			if reqSynthCols.Contains(int(col)) {
 				reqInputCols.UnionWith(sb.ev.Child(1).Child(i).Logical().Scalar.OuterCols)
 			}
 		}

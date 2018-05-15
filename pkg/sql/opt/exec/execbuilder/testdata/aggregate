@@ -84,11 +84,11 @@ render               ·            ·                   (column5, column6, colum
       │              aggregate 7  variance(kv.v)      ·                                                                                                           ·
       │              aggregate 8  bool_and(column14)  ·                                                                                                           ·
       │              aggregate 9  xor_agg(column16)   ·                                                                                                           ·
-      └── render     ·            ·                   ("kv.v", column8, column14, column16)                                                                       ·
-           │         render 0     v                   ·                                                                                                           ·
-           │         render 1     1                   ·                                                                                                           ·
-           │         render 2     v = 1               ·                                                                                                           ·
-           │         render 3     s::BYTES            ·                                                                                                           ·
+      └── render     ·            ·                   (column8, column14, column16, "kv.v")                                                                       ·
+           │         render 0     1                   ·                                                                                                           ·
+           │         render 1     v = 1               ·                                                                                                           ·
+           │         render 2     s::BYTES            ·                                                                                                           ·
+           │         render 3     v                   ·                                                                                                           ·
            └── scan  ·            ·                   (v, s)                                                                                                      ·
 ·                    table        kv@primary          ·                                                                                                           ·
 ·                    spans        ALL                 ·                                                                                                           ·

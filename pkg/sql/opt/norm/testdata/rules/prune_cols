@@ -65,9 +65,8 @@ project
  │    ├── columns: a.k:1(int!null) a.s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1,4)]
-      ├── function: length [type=int, outer=(4)]
-      │    └── variable: a.s [type=string, outer=(4)]
-      └── variable: a.k [type=int, outer=(1)]
+      └── function: length [type=int, outer=(4)]
+           └── variable: a.s [type=string, outer=(4)]
 
 # Compute column based on another computed column.
 opt
@@ -77,20 +76,18 @@ project
  ├── columns: column6:6(int) k:1(int!null)
  ├── keys: (1)
  ├── project
- │    ├── columns: a.k:1(int!null) l:5(int)
+ │    ├── columns: l:5(int) a.k:1(int!null)
  │    ├── keys: (1)
  │    ├── scan a
  │    │    ├── columns: a.k:1(int!null) a.s:4(string)
  │    │    └── keys: (1)
  │    └── projections [outer=(1,4)]
- │         ├── variable: a.k [type=int, outer=(1)]
  │         └── function: length [type=int, outer=(4)]
  │              └── variable: a.s [type=string, outer=(4)]
  └── projections [outer=(1,5)]
-      ├── mult [type=int, outer=(5)]
-      │    ├── variable: l [type=int, outer=(5)]
-      │    └── variable: l [type=int, outer=(5)]
-      └── variable: a.k [type=int, outer=(1)]
+      └── mult [type=int, outer=(5)]
+           ├── variable: l [type=int, outer=(5)]
+           └── variable: l [type=int, outer=(5)]
 
 # --------------------------------------------------
 # PruneScanCols
@@ -115,7 +112,6 @@ project
  │    ├── columns: a.k:1(int!null) a.i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
-      ├── variable: a.k [type=int, outer=(1)]
       ├── plus [type=int, outer=(1)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
@@ -158,18 +154,16 @@ SELECT k FROM a WHERE i<5
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── select
- │    ├── columns: a.k:1(int!null) a.i:2(int!null)
- │    ├── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    └── keys: (1)
- │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
- │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
- │              ├── variable: a.i [type=int, outer=(2)]
- │              └── const: 5 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── select
+      ├── columns: a.k:1(int!null) a.i:2(int!null)
+      ├── keys: (1)
+      ├── scan a
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    └── keys: (1)
+      └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── const: 5 [type=int]
 
 # Columns used by both projection and filter.
 opt
@@ -239,26 +233,23 @@ SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 ----
 project
  ├── columns: i:2(int)
- ├── select
- │    ├── columns: a.i:2(int) f:5(float!null)
- │    ├── project
- │    │    ├── columns: a.i:2(int) f:5(float)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
- │    │    │    ├── constraint: /1: [/5 - /5]
- │    │    │    └── keys: (1)
- │    │    └── projections [outer=(2,3)]
- │    │         ├── variable: a.i [type=int, outer=(2)]
- │    │         └── div [type=float, outer=(3)]
- │    │              ├── variable: a.f [type=float, outer=(3)]
- │    │              └── const: 2.0 [type=float]
- │    └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
- │         └── eq [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
- │              ├── variable: f [type=float, outer=(5)]
- │              └── cast: float [type=float, outer=(2)]
- │                   └── variable: a.i [type=int, outer=(2)]
- └── projections [outer=(2)]
-      └── variable: a.i [type=int, outer=(2)]
+ └── select
+      ├── columns: a.i:2(int) f:5(float!null)
+      ├── project
+      │    ├── columns: f:5(float) a.i:2(int)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
+      │    │    ├── constraint: /1: [/5 - /5]
+      │    │    └── keys: (1)
+      │    └── projections [outer=(2,3)]
+      │         └── div [type=float, outer=(3)]
+      │              ├── variable: a.f [type=float, outer=(3)]
+      │              └── const: 2.0 [type=float]
+      └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
+           └── eq [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
+                ├── variable: f [type=float, outer=(5)]
+                └── cast: float [type=float, outer=(2)]
+                     └── variable: a.i [type=int, outer=(2)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 opt
@@ -284,7 +275,6 @@ project
  │              ├── variable: column5 [type=decimal, outer=(5)]
  │              └── const: 100 [type=decimal]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── plus [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 1.1 [type=float]
@@ -301,20 +291,18 @@ project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
- ├── limit
- │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    ├── cardinality: [0 - 10]
- │    ├── keys: (1)
- │    ├── sort
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    ├── keys: (1)
- │    │    ├── ordering: +2
- │    │    └── scan a
- │    │         ├── columns: a.k:1(int!null) a.i:2(int)
- │    │         └── keys: (1)
- │    └── const: 10 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── limit
+      ├── columns: a.k:1(int!null) a.i:2(int)
+      ├── cardinality: [0 - 10]
+      ├── keys: (1)
+      ├── sort
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    ├── keys: (1)
+      │    ├── ordering: +2
+      │    └── scan a
+      │         ├── columns: a.k:1(int!null) a.i:2(int)
+      │         └── keys: (1)
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
@@ -323,12 +311,10 @@ SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── limit: 10
- │    └── keys: (1)
- └── projections [outer=(4)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── scan a
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── limit: 10
+      └── keys: (1)
 
 # We should scan k, i, s.
 opt
@@ -338,13 +324,10 @@ project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
- ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── limit: 10
- │    └── keys: (1)
- └── projections [outer=(1,4)]
-      ├── variable: a.k [type=int, outer=(1)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── scan a
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── limit: 10
+      └── keys: (1)
 
 # Project uses subset of Limit columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down to Scan.
@@ -362,12 +345,10 @@ project
  │    │    ├── columns: a.f:3(float) a.s:4(string)
  │    │    ├── grouping columns: a.f:3(float) a.s:4(string)
  │    │    ├── keys: weak(3,4)
- │    │    ├── scan a
- │    │    │    └── columns: a.f:3(float) a.s:4(string)
- │    │    └── aggregations
+ │    │    └── scan a
+ │    │         └── columns: a.f:3(float) a.s:4(string)
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── mult [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 2.0 [type=float]
@@ -382,19 +363,17 @@ SELECT k FROM (SELECT k, i, f FROM a ORDER BY i OFFSET 10)
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── offset
- │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    ├── keys: (1)
- │    ├── sort
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    ├── keys: (1)
- │    │    ├── ordering: +2
- │    │    └── scan a
- │    │         ├── columns: a.k:1(int!null) a.i:2(int)
- │    │         └── keys: (1)
- │    └── const: 10 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── offset
+      ├── columns: a.k:1(int!null) a.i:2(int)
+      ├── keys: (1)
+      ├── sort
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    ├── keys: (1)
+      │    ├── ordering: +2
+      │    └── scan a
+      │         ├── columns: a.k:1(int!null) a.i:2(int)
+      │         └── keys: (1)
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
@@ -402,16 +381,14 @@ SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
- ├── offset
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    ├── keys: (1)
- │    │    └── ordering: +1,+2
- │    └── const: 10 [type=int]
- └── projections [outer=(4)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── offset
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── keys: (1)
+      ├── scan a
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    ├── keys: (1)
+      │    └── ordering: +1,+2
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
@@ -420,17 +397,14 @@ SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
 project
  ├── columns: k:1(int!null) s:4(string)
  ├── keys: (1)
- ├── offset
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    ├── keys: (1)
- │    │    └── ordering: +1,+2
- │    └── const: 10 [type=int]
- └── projections [outer=(1,4)]
-      ├── variable: a.k [type=int, outer=(1)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── offset
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── keys: (1)
+      ├── scan a
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    ├── keys: (1)
+      │    └── ordering: +1,+2
+      └── const: 10 [type=int]
 
 # Project uses subset of Offset columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down past Explain.
@@ -446,20 +420,17 @@ FROM
 ----
 project
  ├── columns: Tree:5(string) Columns:10(string)
- ├── offset
- │    ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
- │    ├── sort
- │    │    ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
- │    │    ├── ordering: +5
- │    │    └── explain
- │    │         ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
- │    │         └── scan a
- │    │              ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    │              └── keys: (1)
- │    └── const: 1 [type=int]
- └── projections [outer=(5,10)]
-      ├── variable: Tree [type=string, outer=(5)]
-      └── variable: Columns [type=string, outer=(10)]
+ └── offset
+      ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      ├── sort
+      │    ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │    ├── ordering: +5
+      │    └── explain
+      │         ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │         └── scan a
+      │              ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
+      │              └── keys: (1)
+      └── const: 1 [type=int]
 
 # --------------------------------------------------
 # PruneLimitCols + PruneOffsetCols
@@ -472,25 +443,23 @@ project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
- ├── limit
- │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    ├── cardinality: [0 - 10]
- │    ├── keys: (1)
- │    ├── offset
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    ├── keys: (1)
- │    │    ├── ordering: +2
- │    │    ├── sort
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    │    ├── keys: (1)
- │    │    │    ├── ordering: +2
- │    │    │    └── scan a
- │    │    │         ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    │         └── keys: (1)
- │    │    └── const: 10 [type=int]
- │    └── const: 10 [type=int]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── limit
+      ├── columns: a.k:1(int!null) a.i:2(int)
+      ├── cardinality: [0 - 10]
+      ├── keys: (1)
+      ├── offset
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    ├── keys: (1)
+      │    ├── ordering: +2
+      │    ├── sort
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    ├── keys: (1)
+      │    │    ├── ordering: +2
+      │    │    └── scan a
+      │    │         ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │         └── keys: (1)
+      │    └── const: 10 [type=int]
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
@@ -499,22 +468,20 @@ SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- ├── limit
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── cardinality: [0 - 10]
- │    ├── keys: (1)
- │    ├── offset
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    ├── keys: (1)
- │    │    ├── ordering: +1,+2
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    │    ├── keys: (1)
- │    │    │    └── ordering: +1,+2
- │    │    └── const: 10 [type=int]
- │    └── const: 10 [type=int]
- └── projections [outer=(4)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── limit
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── cardinality: [0 - 10]
+      ├── keys: (1)
+      ├── offset
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    ├── keys: (1)
+      │    ├── ordering: +1,+2
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    │    ├── keys: (1)
+      │    │    └── ordering: +1,+2
+      │    └── const: 10 [type=int]
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
 opt
@@ -524,23 +491,20 @@ project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
- ├── limit
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    ├── cardinality: [0 - 10]
- │    ├── keys: (1)
- │    ├── offset
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    ├── keys: (1)
- │    │    ├── ordering: +1,+2
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
- │    │    │    ├── keys: (1)
- │    │    │    └── ordering: +1,+2
- │    │    └── const: 10 [type=int]
- │    └── const: 10 [type=int]
- └── projections [outer=(1,4)]
-      ├── variable: a.k [type=int, outer=(1)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── limit
+      ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      ├── cardinality: [0 - 10]
+      ├── keys: (1)
+      ├── offset
+      │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    ├── keys: (1)
+      │    ├── ordering: +1,+2
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int) a.s:4(string)
+      │    │    ├── keys: (1)
+      │    │    └── ordering: +1,+2
+      │    └── const: 10 [type=int]
+      └── const: 10 [type=int]
 
 # Project filter offset/limit columns, but can't push all the way down to scan.
 opt
@@ -560,13 +524,11 @@ project
  │    │    │    ├── columns: a.f:3(float) a.s:4(string)
  │    │    │    ├── grouping columns: a.f:3(float) a.s:4(string)
  │    │    │    ├── keys: weak(3,4)
- │    │    │    ├── scan a
- │    │    │    │    └── columns: a.f:3(float) a.s:4(string)
- │    │    │    └── aggregations
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.f:3(float) a.s:4(string)
  │    │    └── const: 5 [type=int]
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      ├── variable: a.f [type=float, outer=(3)]
       └── mult [type=float, outer=(3)]
            ├── variable: a.f [type=float, outer=(3)]
            └── const: 2.0 [type=float]
@@ -581,22 +543,18 @@ SELECT a.i, xy.* FROM a INNER JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: i:2(int) x:5(int!null) y:6(int)
- ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.y:6(int)
- │    ├── scan a
- │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    └── keys: (1)
- │    ├── scan xy
- │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
- │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: xy.x [type=int, outer=(5)]
- └── projections [outer=(2,5,6)]
-      ├── variable: a.i [type=int, outer=(2)]
-      ├── variable: xy.x [type=int, outer=(5)]
-      └── variable: xy.y [type=int, outer=(6)]
+ └── inner-join
+      ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.y:6(int)
+      ├── scan a
+      │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    └── keys: (1)
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null) xy.y:6(int)
+      │    └── keys: (5)
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── variable: xy.x [type=int, outer=(5)]
 
 # Columns used by both projection and on condition, left join.
 opt
@@ -624,21 +582,18 @@ SELECT xy.* FROM a RIGHT JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: x:5(int!null) y:6(int)
- ├── right-join
- │    ├── columns: a.k:1(int) xy.x:5(int!null) xy.y:6(int)
- │    ├── scan a
- │    │    ├── columns: a.k:1(int!null)
- │    │    └── keys: (1)
- │    ├── scan xy
- │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
- │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: xy.x [type=int, outer=(5)]
- └── projections [outer=(5,6)]
-      ├── variable: xy.x [type=int, outer=(5)]
-      └── variable: xy.y [type=int, outer=(6)]
+ └── right-join
+      ├── columns: a.k:1(int) xy.x:5(int!null) xy.y:6(int)
+      ├── scan a
+      │    ├── columns: a.k:1(int!null)
+      │    └── keys: (1)
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null) xy.y:6(int)
+      │    └── keys: (5)
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── variable: xy.x [type=int, outer=(5)]
 
 # Columns needed only by projection, full join.
 opt
@@ -656,11 +611,9 @@ project
  │    │    └── keys: (5)
  │    └── true [type=bool]
  └── projections [outer=(1,5,6)]
-      ├── plus [type=int, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
-      ├── variable: xy.x [type=int, outer=(5)]
-      └── variable: xy.y [type=int, outer=(6)]
+      └── plus [type=int, outer=(1)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── const: 1 [type=int]
 
 # No columns needed from left side of join.
 opt
@@ -707,11 +660,9 @@ project
       ├── plus [type=int, outer=(1)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      ├── div [type=decimal, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 2 [type=int]
-      ├── variable: xy.x [type=int, outer=(5)]
-      └── variable: xy.y [type=int, outer=(6)]
+      └── div [type=decimal, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
+           └── const: 2 [type=int]
 
 # Join that is nested in another join.
 opt
@@ -725,31 +676,27 @@ ON a.i < xy.y
 ----
 project
  ├── columns: k:1(int!null) x:7(int!null) y:8(int)
- ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.x:7(int!null) xy.y:8(int)
- │    ├── inner-join
- │    │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    │    └── keys: (1)
- │    │    ├── scan xy
- │    │    │    ├── columns: xy.x:5(int!null)
- │    │    │    └── keys: (5)
- │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │    │              ├── variable: a.k [type=int, outer=(1)]
- │    │              └── variable: xy.x [type=int, outer=(5)]
- │    ├── scan xy
- │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
- │    │    └── keys: (7)
- │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
- │         └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
- │              ├── variable: a.i [type=int, outer=(2)]
- │              └── variable: xy.y [type=int, outer=(8)]
- └── projections [outer=(1,7,8)]
-      ├── variable: a.k [type=int, outer=(1)]
-      ├── variable: xy.x [type=int, outer=(7)]
-      └── variable: xy.y [type=int, outer=(8)]
+ └── inner-join
+      ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null) xy.x:7(int!null) xy.y:8(int)
+      ├── inner-join
+      │    ├── columns: a.k:1(int!null) a.i:2(int) xy.x:5(int!null)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    └── keys: (1)
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:5(int!null)
+      │    │    └── keys: (5)
+      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │              ├── variable: a.k [type=int, outer=(1)]
+      │              └── variable: xy.x [type=int, outer=(5)]
+      ├── scan xy
+      │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    └── keys: (7)
+      └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+           └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── variable: xy.y [type=int, outer=(8)]
 
 # --------------------------------------------------
 # PruneJoinRightCols
@@ -761,22 +708,18 @@ SELECT xy.*, a.i FROM xy INNER JOIN a ON xy.x=a.k
 ----
 project
  ├── columns: x:1(int!null) y:2(int) i:4(int)
- ├── inner-join
- │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int!null) a.i:4(int)
- │    ├── scan xy
- │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    │    └── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.k:3(int!null) a.i:4(int)
- │    │    └── keys: (3)
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │              ├── variable: xy.x [type=int, outer=(1)]
- │              └── variable: a.k [type=int, outer=(3)]
- └── projections [outer=(1,2,4)]
-      ├── variable: xy.x [type=int, outer=(1)]
-      ├── variable: xy.y [type=int, outer=(2)]
-      └── variable: a.i [type=int, outer=(4)]
+ └── inner-join
+      ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int!null) a.i:4(int)
+      ├── scan xy
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+      │    └── keys: (1)
+      ├── scan a
+      │    ├── columns: a.k:3(int!null) a.i:4(int)
+      │    └── keys: (3)
+      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+                ├── variable: xy.x [type=int, outer=(1)]
+                └── variable: a.k [type=int, outer=(3)]
 
 # Columns used by both projection and on condition, left join.
 opt
@@ -804,21 +747,18 @@ SELECT xy.* FROM xy RIGHT JOIN a ON xy.x=a.k
 ----
 project
  ├── columns: x:1(int) y:2(int)
- ├── right-join
- │    ├── columns: xy.x:1(int) xy.y:2(int) a.k:3(int!null)
- │    ├── scan xy
- │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    │    └── keys: (1)
- │    ├── scan a
- │    │    ├── columns: a.k:3(int!null)
- │    │    └── keys: (3)
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │              ├── variable: xy.x [type=int, outer=(1)]
- │              └── variable: a.k [type=int, outer=(3)]
- └── projections [outer=(1,2)]
-      ├── variable: xy.x [type=int, outer=(1)]
-      └── variable: xy.y [type=int, outer=(2)]
+ └── right-join
+      ├── columns: xy.x:1(int) xy.y:2(int) a.k:3(int!null)
+      ├── scan xy
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+      │    └── keys: (1)
+      ├── scan a
+      │    ├── columns: a.k:3(int!null)
+      │    └── keys: (3)
+      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+                ├── variable: xy.x [type=int, outer=(1)]
+                └── variable: a.k [type=int, outer=(3)]
 
 # Columns needed only by projection, full join.
 opt
@@ -836,8 +776,6 @@ project
  │    │    └── keys: (3)
  │    └── true [type=bool]
  └── projections [outer=(1-3)]
-      ├── variable: xy.x [type=int, outer=(1)]
-      ├── variable: xy.y [type=int, outer=(2)]
       └── plus [type=int, outer=(3)]
            ├── variable: a.k [type=int, outer=(3)]
            └── const: 1 [type=int]
@@ -884,8 +822,6 @@ project
  │                   ├── variable: a.k [type=int, outer=(3)]
  │                   └── variable: a.k [type=int, outer=(3)]
  └── projections [outer=(1-4)]
-      ├── variable: xy.x [type=int, outer=(1)]
-      ├── variable: xy.y [type=int, outer=(2)]
       ├── plus [type=int, outer=(3)]
       │    ├── variable: a.k [type=int, outer=(3)]
       │    └── const: 1 [type=int]
@@ -905,31 +841,27 @@ ON a.y < xy.y
 ----
 project
  ├── columns: k:3(int!null) x:1(int!null) y:2(int)
- ├── inner-join
- │    ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int!null) xy.x:7(int!null) xy.y:8(int)
- │    ├── scan xy
- │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
- │    │    └── keys: (1)
- │    ├── inner-join
- │    │    ├── columns: a.k:3(int!null) xy.x:7(int!null) xy.y:8(int)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:3(int!null)
- │    │    │    └── keys: (3)
- │    │    ├── scan xy
- │    │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
- │    │    │    └── keys: (7)
- │    │    └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
- │    │         └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
- │    │              ├── variable: a.k [type=int, outer=(3)]
- │    │              └── variable: xy.x [type=int, outer=(7)]
- │    └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
- │         └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
- │              ├── variable: xy.y [type=int, outer=(8)]
- │              └── variable: xy.y [type=int, outer=(2)]
- └── projections [outer=(1-3)]
-      ├── variable: a.k [type=int, outer=(3)]
-      ├── variable: xy.x [type=int, outer=(1)]
-      └── variable: xy.y [type=int, outer=(2)]
+ └── inner-join
+      ├── columns: xy.x:1(int!null) xy.y:2(int) a.k:3(int!null) xy.x:7(int!null) xy.y:8(int)
+      ├── scan xy
+      │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+      │    └── keys: (1)
+      ├── inner-join
+      │    ├── columns: a.k:3(int!null) xy.x:7(int!null) xy.y:8(int)
+      │    ├── scan a
+      │    │    ├── columns: a.k:3(int!null)
+      │    │    └── keys: (3)
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    └── keys: (7)
+      │    └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+      │         └── eq [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+      │              ├── variable: a.k [type=int, outer=(3)]
+      │              └── variable: xy.x [type=int, outer=(7)]
+      └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+           └── lt [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+                ├── variable: xy.y [type=int, outer=(8)]
+                └── variable: xy.y [type=int, outer=(2)]
 
 # --------------------------------------------------
 # PruneJoinLeftCols + PruneJoinRightCols
@@ -967,8 +899,6 @@ project
  │              ├── variable: a.k [type=int, outer=(1)]
  │              └── variable: xy.x [type=int, outer=(5)]
  └── projections [outer=(1,5)]
-      ├── variable: a.k [type=int, outer=(1)]
-      ├── variable: xy.x [type=int, outer=(5)]
       └── plus [type=int, outer=(1,5)]
            ├── variable: a.k [type=int, outer=(1)]
            └── variable: xy.x [type=int, outer=(5)]
@@ -985,9 +915,8 @@ group-by
  ├── columns: s:4(string)
  ├── grouping columns: a.s:4(string)
  ├── keys: weak(4)
- ├── scan a
- │    └── columns: a.s:4(string)
- └── aggregations
+ └── scan a
+      └── columns: a.s:4(string)
 
 # Discard subset of aggregates.
 opt
@@ -1013,9 +942,8 @@ project
  │    ├── columns: a.s:4(string)
  │    ├── grouping columns: a.s:4(string)
  │    ├── keys: weak(4)
- │    ├── scan a
- │    │    └── columns: a.s:4(string)
- │    └── aggregations
+ │    └── scan a
+ │         └── columns: a.s:4(string)
  └── projections
       └── const: 1 [type=int]
 
@@ -1046,12 +974,10 @@ group-by
  ├── grouping columns: a.i:2(int) a.s:4(string)
  ├── keys: weak(2,4)
  ├── project
- │    ├── columns: a.s:4(string) a.i:2(int) column5:5(int)
+ │    ├── columns: column5:5(int) a.i:2(int) a.s:4(string)
  │    ├── scan a
  │    │    └── columns: a.i:2(int) a.s:4(string)
  │    └── projections [outer=(2,4)]
- │         ├── variable: a.s [type=string, outer=(4)]
- │         ├── variable: a.i [type=int, outer=(2)]
  │         └── plus [type=int, outer=(2,4)]
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── cast: int [type=int, outer=(4)]
@@ -1086,11 +1012,9 @@ project
  │    ├── columns: a.i:2(int) a.s:4(string)
  │    ├── grouping columns: a.i:2(int) a.s:4(string)
  │    ├── keys: weak(2,4)
- │    ├── scan a
- │    │    └── columns: a.i:2(int) a.s:4(string)
- │    └── aggregations
+ │    └── scan a
+ │         └── columns: a.i:2(int) a.s:4(string)
  └── projections [outer=(2,4)]
-      ├── variable: a.s [type=string, outer=(4)]
       └── plus [type=int, outer=(2)]
            ├── variable: a.i [type=int, outer=(2)]
            └── const: 1 [type=int]
@@ -1180,28 +1104,25 @@ SELECT a.k, xy.y FROM a INNER JOIN xy ON a.k=xy.x WHERE a.i < 5
 ----
 project
  ├── columns: k:1(int!null) y:6(int)
- ├── inner-join
- │    ├── columns: a.k:1(int!null) a.i:2(int!null) xy.x:5(int!null) xy.y:6(int)
- │    ├── select
- │    │    ├── columns: a.k:1(int!null) a.i:2(int!null)
- │    │    ├── keys: (1)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    │    └── keys: (1)
- │    │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
- │    │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
- │    │              ├── variable: a.i [type=int, outer=(2)]
- │    │              └── const: 5 [type=int]
- │    ├── scan xy
- │    │    ├── columns: xy.x:5(int!null) xy.y:6(int)
- │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              ├── variable: a.k [type=int, outer=(1)]
- │              └── variable: xy.x [type=int, outer=(5)]
- └── projections [outer=(1,6)]
-      ├── variable: a.k [type=int, outer=(1)]
-      └── variable: xy.y [type=int, outer=(6)]
+ └── inner-join
+      ├── columns: a.k:1(int!null) a.i:2(int!null) xy.x:5(int!null) xy.y:6(int)
+      ├── select
+      │    ├── columns: a.k:1(int!null) a.i:2(int!null)
+      │    ├── keys: (1)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    └── keys: (1)
+      │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      │         └── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      │              ├── variable: a.i [type=int, outer=(2)]
+      │              └── const: 5 [type=int]
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null) xy.y:6(int)
+      │    └── keys: (5)
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── variable: xy.x [type=int, outer=(5)]
 
 opt
 SELECT k FROM (SELECT k, MIN(s) FROM a GROUP BY k HAVING SUM(i) > 5)
@@ -1209,25 +1130,23 @@ SELECT k FROM (SELECT k, MIN(s) FROM a GROUP BY k HAVING SUM(i) > 5)
 project
  ├── columns: k:1(int!null)
  ├── keys: (1)
- ├── select
- │    ├── columns: a.k:1(int!null) column5:5(decimal!null)
- │    ├── keys: (1)
- │    ├── group-by
- │    │    ├── columns: a.k:1(int!null) column5:5(decimal)
- │    │    ├── grouping columns: a.k:1(int!null)
- │    │    ├── keys: (1)
- │    │    ├── scan a
- │    │    │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    │    │    └── keys: (1)
- │    │    └── aggregations [outer=(2)]
- │    │         └── sum [type=decimal, outer=(2)]
- │    │              └── variable: a.i [type=int, outer=(2)]
- │    └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
- │         └── gt [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
- │              ├── variable: column5 [type=decimal, outer=(5)]
- │              └── const: 5 [type=decimal]
- └── projections [outer=(1)]
-      └── variable: a.k [type=int, outer=(1)]
+ └── select
+      ├── columns: a.k:1(int!null) column5:5(decimal!null)
+      ├── keys: (1)
+      ├── group-by
+      │    ├── columns: a.k:1(int!null) column5:5(decimal)
+      │    ├── grouping columns: a.k:1(int!null)
+      │    ├── keys: (1)
+      │    ├── scan a
+      │    │    ├── columns: a.k:1(int!null) a.i:2(int)
+      │    │    └── keys: (1)
+      │    └── aggregations [outer=(2)]
+      │         └── sum [type=decimal, outer=(2)]
+      │              └── variable: a.i [type=int, outer=(2)]
+      └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+           └── gt [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+                ├── variable: column5 [type=decimal, outer=(5)]
+                └── const: 5 [type=decimal]
 
 # --------------------------------------------------
 # PruneRowNumberCols
@@ -1237,14 +1156,11 @@ SELECT i, s FROM a WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
- ├── row-number
- │    ├── columns: a.i:2(int) a.s:4(string) ordinality:5(int!null)
- │    ├── keys: (5)
- │    └── scan a
- │         └── columns: a.i:2(int) a.s:4(string)
- └── projections [outer=(2,4)]
-      ├── variable: a.i [type=int, outer=(2)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── row-number
+      ├── columns: a.i:2(int) a.s:4(string) ordinality:5(int!null)
+      ├── keys: (5)
+      └── scan a
+           └── columns: a.i:2(int) a.s:4(string)
 
 # With order by.
 opt
@@ -1252,14 +1168,11 @@ SELECT i, s FROM (SELECT * FROM a ORDER BY f) WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
- ├── row-number
- │    ├── columns: a.i:2(int) a.f:3(float) a.s:4(string) ordinality:5(int!null)
- │    ├── keys: (5)
- │    └── sort
- │         ├── columns: a.i:2(int) a.f:3(float) a.s:4(string)
- │         ├── ordering: +3
- │         └── scan a
- │              └── columns: a.i:2(int) a.f:3(float) a.s:4(string)
- └── projections [outer=(2,4)]
-      ├── variable: a.i [type=int, outer=(2)]
-      └── variable: a.s [type=string, outer=(4)]
+ └── row-number
+      ├── columns: a.i:2(int) a.f:3(float) a.s:4(string) ordinality:5(int!null)
+      ├── keys: (5)
+      └── sort
+           ├── columns: a.i:2(int) a.f:3(float) a.s:4(string)
+           ├── ordering: +3
+           └── scan a
+                └── columns: a.i:2(int) a.f:3(float) a.s:4(string)

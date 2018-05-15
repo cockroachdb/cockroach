@@ -43,10 +43,8 @@ select
       │         └── project
       │              ├── columns: kuv.v:7(string)
       │              ├── stats: [rows=1000]
-      │              ├── scan kuv
-      │              │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
-      │              │    ├── stats: [rows=1000]
-      │              │    └── keys: (5)
-      │              └── projections [outer=(7)]
-      │                   └── variable: kuv.v [type=string, outer=(7)]
+      │              └── scan kuv
+      │                   ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │                   ├── stats: [rows=1000]
+      │                   └── keys: (5)
       └── const: 'foo' [type=string]

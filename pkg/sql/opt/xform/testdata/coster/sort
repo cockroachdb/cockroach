@@ -43,11 +43,9 @@ sort
       ├── columns: a.f:2(float!null)
       ├── stats: [rows=0]
       ├── cost: 0.00
-      ├── scan a
-      │    ├── columns: a.k:1(int!null) a.f:2(float!null)
-      │    ├── constraint: /1/-2: contradiction
-      │    ├── stats: [rows=0]
-      │    ├── cost: 0.00
-      │    └── keys: (1,2)
-      └── projections [outer=(2)]
-           └── variable: a.f [type=float, outer=(2)]
+      └── scan a
+           ├── columns: a.k:1(int!null) a.f:2(float!null)
+           ├── constraint: /1/-2: contradiction
+           ├── stats: [rows=0]
+           ├── cost: 0.00
+           └── keys: (1,2)

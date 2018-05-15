@@ -37,13 +37,10 @@ SELECT * FROM b
 project
  ├── columns: x:1(int) z:2(int!null)
  ├── stats: [rows=1000]
- ├── scan b
- │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
- │    ├── stats: [rows=1000]
- │    └── keys: (3)
- └── projections [outer=(1,2)]
-      ├── variable: b.x [type=int, outer=(1)]
-      └── variable: b.z [type=int, outer=(2)]
+ └── scan b
+      ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+      ├── stats: [rows=1000]
+      └── keys: (3)
 
 # Select subset of columns.
 opt
