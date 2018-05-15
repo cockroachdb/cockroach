@@ -27,68 +27,87 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/webui"
 )
 
-func (c *cluster) webdriver(ctx context.Context, node int) (selenium.WebDriver, error) {
+func (c *cluster) getWebdriver(ctx context.Context, node int) (selenium.WebDriver, error) {
 	caps := selenium.Capabilities{"browserName": "chrome"}
 	wd, err := selenium.NewRemote(caps, "")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	urls := c.WebURL(ctx, c.Node(node))
-
 	err = wd.Get(urls[0])
 
 	return wd, err
 }
 
-func Test(wd selenium.WebDriver) error {
-	page := webui.MakeOverviewPage(wd)
-
-	link := page.NavBar().OverviewLink()
-
-	if !link.IsActive() {
-		return fmt.Errorf("Overview link should be active!")
-	}
-
-	next := page.NavBar().DatabasesLink().Click()
-
-	output := next.Heading()
-	fmt.Printf("Got: %s\n", output)
-
-	if output != "DATABASES2" {
-		return fmt.Errorf("Expected title to be `DATABASES`, saw `%s`!", output)
-	}
-
-	return nil
+type webuiTest struct {
+	Name  string
+	Nodes int
+	Run   func(context.Context, *test, *cluster, selenium.WebDriver)
 }
 
 func registerWebUI(r *registry) {
-	r.Add(testSpec{
-		Name:  "webui",
-		Nodes: nodes(3),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.nodes - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Start(ctx, c.Range(1, nodes))
+	tests := []webuiTest{
+		webuiTest{
+			Name:  "webui/smoke",
+			Nodes: 3,
+			Run: func(ctx context.Context, t *test, c *cluster, wd selenium.WebDriver) {
+				var page webui.Page = webui.MakeOverviewPage(wd)
 
-			m := newMonitor(ctx, c, c.Range(1, nodes))
-			m.Go(func(ctx context.Context) error {
-
-				wd, err := c.webdriver(ctx, 1)
-				if err != nil {
-					t.Fatal("Error loading page: ", err)
+				if page.Heading() != "CLUSTER OVERVIEW" {
+					t.Fatal(fmt.Sprintf("Expected title to be `CLUSTER OVERVIEW`, saw `%s`!", page.Heading()))
 				}
 
-				defer wd.Quit()
-
-				err = Test(wd)
-				if err != nil {
-					t.Fatal("Error running test: ", err)
+				if !page.NavBar().OverviewLink().IsActive() {
+					t.Fatal("Overview link should be active!")
 				}
 
-				return nil
-			})
-			m.Wait()
+				if page.NavBar().DatabasesLink().IsActive() {
+					t.Fatal("Databases link should not be active!")
+				}
+
+				page = page.NavBar().DatabasesLink().Click()
+
+				if page.Heading() != "DATABASES" {
+					t.Fatal(fmt.Sprintf("Expected title to be `DATABASES`, saw `%s`!", page.Heading()))
+				}
+
+				if page.NavBar().OverviewLink().IsActive() {
+					t.Fatal("Overview link should not be active!")
+				}
+
+				if !page.NavBar().DatabasesLink().IsActive() {
+					t.Fatal("Databases link should be active!")
+				}
+			},
 		},
-	})
+	}
+
+	for _, testCase := range tests {
+		r.Add(testSpec{
+			Name:  testCase.Name,
+			Nodes: nodes(testCase.Nodes),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				nodes := c.nodes - 1
+				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+				c.Start(ctx, c.Range(1, nodes))
+
+				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m.Go(func(ctx context.Context) error {
+
+					wd, err := c.getWebdriver(ctx, 1)
+					if err != nil {
+						t.Fatal("Error connecting to page: ", err)
+					}
+
+					defer wd.Quit()
+
+					testCase.Run(ctx, t, c, wd)
+
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
