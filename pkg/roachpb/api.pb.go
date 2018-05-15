@@ -149,6 +149,7 @@
 		UnhandledRetryableError
 		HandledRetryableTxnError
 		TxnPrevAttemptError
+		TxnAlreadyEncounteredErrorError
 		IntegerOverflowError
 		MixedSuccessError
 		BatchTimestampBeforeGCError
