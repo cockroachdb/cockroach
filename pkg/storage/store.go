@@ -893,7 +893,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.expirationBasedLeaseChan = make(chan *Replica, 1)
+
+	// The channel size here is arbitrary. We don't want it to fill up, but it
+	// isn't a disaster if it does and it shouldn't unless a huge number of meta2
+	// range leases are acquired at once.
+	s.expirationBasedLeaseChan = make(chan *Replica, 64)
 
 	s.bulkIOWriteLimiter = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
@@ -1496,10 +1500,6 @@ func (s *Store) startGossip() {
 // This reduces user-visible latency when range lookups are needed to serve a
 // request and reduces ping-ponging of r1's lease to different replicas as
 // maybeGossipFirstRange is called on each (e.g.  #24753).
-//
-// NOTE: Currently the only lease that we proactively renew is r1, but this
-// could easily be expanded to renew all the meta2 ranges as well. If we do so,
-// the length of expirationBasedLeaseChan should be increased.
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
@@ -1535,6 +1535,18 @@ func (s *Store) startLeaseRenewer(ctx context.Context) {
 			select {
 			case repl := <-s.expirationBasedLeaseChan:
 				repls[repl] = struct{}{}
+				// If we got one entry off the channel, there may be more (e.g. a node
+				// holding a bunch of meta2 ranges just failed), so keep pulling until
+				// we can't get any more.
+			continuepulling:
+				for {
+					select {
+					case repl := <-s.expirationBasedLeaseChan:
+						repls[repl] = struct{}{}
+					default:
+						break continuepulling
+					}
+				}
 			case <-timer.C:
 				timer.Read = true
 			case <-s.stopper.ShouldStop():
