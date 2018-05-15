@@ -1,6 +1,8 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>any_not_null(arg1: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns an arbitrary not-NULL value.</p>
+</span></td></tr>
 <tr><td><code>array_agg(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><code>array_agg(arg1: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
@@ -49,9 +51,9 @@
 </span></td></tr>
 <tr><td><code>count_rows() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of rows.</p>
 </span></td></tr>
-<tr><td><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>
+<tr><td><code>json_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB array.</p>
 </span></td></tr>
-<tr><td><code>jsonb_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>aggregates values as a JSON or JSONB array</p>
+<tr><td><code>jsonb_agg(arg1: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Aggregates values as a JSON or JSONB array.</p>
 </span></td></tr>
 <tr><td><code>max(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>

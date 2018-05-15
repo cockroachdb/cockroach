@@ -233,12 +233,22 @@ var Aggregates = map[string][]tree.Builtin{
 
 	"json_agg": {
 		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
-			"aggregates values as a JSON or JSONB array"),
+			"Aggregates values as a JSON or JSONB array."),
 	},
 
 	"jsonb_agg": {
 		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
-			"aggregates values as a JSON or JSONB array"),
+			"Aggregates values as a JSON or JSONB array."),
+	},
+
+	"any_not_null": {
+		makeAggBuiltinWithReturnType(
+			[]types.T{types.Any},
+			tree.IdentityReturnType(0),
+			newAnyNotNullAggregate,
+			"Returns an arbitrary not-NULL value.",
+			false, /* nullable args */
+		),
 	},
 }
 
@@ -310,54 +320,54 @@ var _ tree.AggregateFunc = &floatVarianceAggregate{}
 var _ tree.AggregateFunc = &decimalVarianceAggregate{}
 var _ tree.AggregateFunc = &floatStdDevAggregate{}
 var _ tree.AggregateFunc = &decimalStdDevAggregate{}
-var _ tree.AggregateFunc = &identAggregate{}
+var _ tree.AggregateFunc = &anyNotNullAggregate{}
 var _ tree.AggregateFunc = &concatAggregate{}
 var _ tree.AggregateFunc = &bytesXorAggregate{}
 var _ tree.AggregateFunc = &intXorAggregate{}
 
-// In order to render the unaggregated (i.e. grouped) fields, during aggregation,
-// the values for those fields have to be stored for each bucket.
-// The `identAggregate` provides an "aggregate" function that actually
-// just returns the last value passed to `add`, unchanged. For accumulating
-// and rendering though it behaves like the other aggregate functions,
-// allowing both those steps to avoid special-casing grouped vs aggregated fields.
-type identAggregate struct {
+// See NewAnyNotNullAggregate.
+type anyNotNullAggregate struct {
 	val tree.Datum
 }
 
-// NewIdentAggregate returns an identAggregate (see comment on struct).
-func NewIdentAggregate(*tree.EvalContext) tree.AggregateFunc {
-	return &identAggregate{}
+// NewAnyNotNullAggregate returns an aggregate function that returns an
+// arbitrary not-NULL value passed to Add (or NULL if no such value). This is
+// particularly useful for "passing through" values for columns which we know
+// are constant within any aggregation group (for example, the grouping columns
+// themselves).
+//
+// The NULL behavior is important in a few different contexts:
+//
+//  - in distributed multi-stage aggregations, we can have a local stage with
+//    multiple (parallel) instances feeding into a final stage. If some of the
+//    instances see no rows, they emit a NULL into the final stage which needs
+//    to be ignored.
+//
+//  - for query optimization, when moving aggregations across left joins (which
+//    add NULL values).
+func NewAnyNotNullAggregate(*tree.EvalContext) tree.AggregateFunc {
+	return &anyNotNullAggregate{val: tree.DNull}
+}
+
+func newAnyNotNullAggregate(_ []types.T, _ *tree.EvalContext) tree.AggregateFunc {
+	return &anyNotNullAggregate{val: tree.DNull}
 }
 
 // Add sets the value to the passed datum.
-func (a *identAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
-	// If we see at least one non-NULL value, ignore any NULLs.
-	// This is used in distributed multi-stage aggregations, where a local stage
-	// with multiple (parallel) instances feeds into a final stage. If some of the
-	// instances see no rows, they emit a NULL; the final IDENT aggregator needs
-	// to ignore these.
-	// TODO(radu): this - along with other hacks like special-handling of the nil
-	// result in (*aggregateGroupHolder).Eval - illustrates why IDENT as an
-	// aggregator is not a sound. We should remove this concept and handle GROUP
-	// BY columns separately in the groupNode and the aggregator processor
-	// (#12525).
-	if a.val == nil || datum != tree.DNull {
+func (a *anyNotNullAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if a.val == tree.DNull && datum != tree.DNull {
 		a.val = datum
 	}
 	return nil
 }
 
 // Result returns the value most recently passed to Add.
-func (a *identAggregate) Result() (tree.Datum, error) {
-	// It is significant that identAggregate returns nil, and not tree.DNull,
-	// if no result was known via Add(). See
-	// sql.(*aggregateFuncHolder).Eval() for details.
+func (a *anyNotNullAggregate) Result() (tree.Datum, error) {
 	return a.val, nil
 }
 
 // Close is no-op in aggregates using constant space.
-func (a *identAggregate) Close(context.Context) {}
+func (a *anyNotNullAggregate) Close(context.Context) {}
 
 type arrayAggregate struct {
 	arr *tree.DArray

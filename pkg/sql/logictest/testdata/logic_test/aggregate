@@ -30,6 +30,11 @@ SELECT JSONB_AGG(1) FROM kv
 ----
 NULL
 
+query T
+SELECT ANY_NOT_NULL(1) FROM kv
+----
+NULL
+
 query IIIIRRRRBBT
 SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
@@ -1728,3 +1733,18 @@ join                       ·               ·                        (x, max, z
 # Regression test for #23798 until #10495 is fixed.
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv
+
+query I
+SELECT ANY_NOT_NULL(x) FROM (VALUES (1)) AS t(x)
+----
+1
+
+query I
+SELECT ANY_NOT_NULL(x) FROM (VALUES (NULL), (1), (NULL)) AS t(x)
+----
+1
+
+query I
+SELECT ANY_NOT_NULL(x) FROM (SELECT * FROM (VALUES (NULL), (1), (NULL)) AS t(x) WHERE x <> 1)
+----
+NULL
