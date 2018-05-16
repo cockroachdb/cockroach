@@ -352,28 +352,15 @@ func (mq *modelQuery) setDerivative(deriv tspb.TimeSeriesQueryDerivative) {
 	mq.Derivative = deriv.Enum()
 }
 
-// queryDB queries the real DB using the parameters of the query, returning
-// the results.
+// queryDB queries the actual database using the configured parameters of the
+// model query.
 func (mq *modelQuery) queryDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
 	// Query the actual server.
 	memContext := MakeQueryMemoryContext(
 		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
 	)
 	defer memContext.Close(context.TODO())
-	return mq.modelRunner.DB.QueryMemoryConstrained(
-		context.TODO(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
-	)
-}
-
-// queryNewDB queries the real DB using the new query implementation, returning
-// the results.
-func (mq *modelQuery) queryNewDB() ([]tspb.TimeSeriesDatapoint, []string, error) {
-	// Query the actual server.
-	memContext := MakeQueryMemoryContext(
-		mq.workerMemMonitor, mq.resultMemMonitor, mq.QueryMemoryOptions,
-	)
-	defer memContext.Close(context.TODO())
-	return mq.modelRunner.DB.QueryWithSlices(
+	return mq.modelRunner.DB.Query(
 		context.TODO(), mq.Query, mq.diskResolution, mq.QueryTimespan, memContext,
 	)
 }
@@ -388,7 +375,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 	mq.modelRunner.t.Helper()
 
 	// Query the real DB.
-	actualDatapoints, actualSources, err := mq.queryNewDB()
+	actualDatapoints, actualSources, err := mq.queryDB()
 	if err != nil {
 		mq.modelRunner.t.Fatal(err)
 	}
@@ -426,7 +413,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 // string.
 func (mq *modelQuery) assertError(errString string) {
 	mq.modelRunner.t.Helper()
-	_, _, err := mq.queryNewDB()
+	_, _, err := mq.queryDB()
 	if err == nil {
 		mq.modelRunner.t.Fatalf(
 			"query got no error, wanted error with message matching  \"%s\"", errString,
