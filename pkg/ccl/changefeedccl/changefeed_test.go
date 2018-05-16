@@ -71,6 +71,45 @@ func TestChangefeedBasics(t *testing.T) {
 	// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
 }
 
+func TestChangefeedEnvelope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	const testPollingInterval = 10 * time.Millisecond
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = testPollingInterval
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+
+	testHost := t.Name()
+	t.Run(`envelope=none`, func(t *testing.T) {
+		k := newTestKafkaProducer()
+		testProducersHook[testHost+`_none`] = k
+		sqlDB.Exec(t,
+			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='none'`,
+			`kafka://`+testHost+`_none`)
+		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->{"a": 1, "b": "a"}`})
+	})
+	t.Run(`envelope=key_only`, func(t *testing.T) {
+		k := newTestKafkaProducer()
+		testProducersHook[testHost+`_key_only`] = k
+		sqlDB.Exec(t,
+			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='key_only'`,
+			`kafka://`+testHost+`_key_only`)
+		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->`})
+	})
+}
+
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
