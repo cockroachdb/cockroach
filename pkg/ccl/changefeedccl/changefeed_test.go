@@ -57,14 +57,14 @@ func TestChangefeedBasics(t *testing.T) {
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
 	})
 
 	sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 2, "b": "c"}`,
-		`{"a": 3, "b": "d"}`,
+		`[2]->{"a": 2, "b": "c"}`,
+		`[3]->{"a": 3, "b": "d"}`,
 	})
 
 	// TODO(dan): Doesn't work yet
@@ -99,8 +99,8 @@ func TestChangefeedMultiTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1`, `kafka://`+t.Name())
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
 	})
 }
 
@@ -136,7 +136,7 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 	)
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 2, "b": "after"}`,
+		`[2]->{"a": 2, "b": "after"}`,
 	})
 }
 
@@ -170,11 +170,11 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	<-k.flushCh
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
-		`{"a": 4, "b": "c"}`,
-		`{"a": 7, "b": "d"}`,
-		`{"a": 8, "b": "e"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
+		`[4]->{"a": 4, "b": "c"}`,
+		`[7]->{"a": 7, "b": "d"}`,
+		`[8]->{"a": 8, "b": "e"}`,
 	})
 
 	// PAUSE JOB is asynchronous, so wait out a few polling intervals for it to
@@ -189,7 +189,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 16, "b": "f"}`,
+		`[16]->{"a": 16, "b": "f"}`,
 	})
 }
 
@@ -277,11 +277,15 @@ func assertPayloads(t testing.TB, messages []*sarama.ProducerMessage, expected [
 	t.Helper()
 	var actual []string
 	for _, m := range messages {
+		key, err := m.Key.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
 		value, err := m.Value.Encode()
 		if err != nil {
 			t.Fatal(err)
 		}
-		actual = append(actual, string(value))
+		actual = append(actual, string(key)+`->`+string(value))
 	}
 	sort.Strings(actual)
 	sort.Strings(expected)

@@ -303,25 +303,38 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		if row == nil {
 			break
 		}
-		jsonEntries := make(map[string]interface{}, len(row))
+
+		keyColumns := tableDesc.PrimaryIndex.ColumnNames
+		jsonKeyRaw := make([]interface{}, len(keyColumns))
+		jsonValueRaw := make(map[string]interface{}, len(row))
 		for i := range row {
-			jsonEntries[tableDesc.Columns[i].Name], err = builtins.AsJSON(row[i])
+			jsonValueRaw[tableDesc.Columns[i].Name], err = builtins.AsJSON(row[i])
 			if err != nil {
 				return err
 			}
 		}
-		j, err := json.MakeJSON(jsonEntries)
+		for i, columnName := range keyColumns {
+			jsonKeyRaw[i] = jsonValueRaw[columnName]
+		}
+
+		jsonKey, err := json.MakeJSON(jsonKeyRaw)
 		if err != nil {
 			return err
 		}
-		json := j.String()
+		key := jsonKey.String()
+		jsonValue, err := json.MakeJSON(jsonValueRaw)
+		if err != nil {
+			return err
+		}
+		value := jsonValue.String()
 		if log.V(3) {
-			log.Infof(ctx, `row %s`, json)
+			log.Infof(ctx, `row %s -> %s`, key, value)
 		}
 
 		message := &sarama.ProducerMessage{
 			Topic: cf.kafkaTopicPrefix + tableDesc.Name,
-			Value: sarama.ByteEncoder(json),
+			Key:   sarama.ByteEncoder(key),
+			Value: sarama.ByteEncoder(value),
 		}
 		if _, _, err := cf.kafka.SendMessage(message); err != nil {
 			return errors.Wrapf(err, `sending message to kafka topic %s`, message.Topic)
