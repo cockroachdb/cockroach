@@ -70,6 +70,11 @@ type Factory struct {
 	// results that are accumulated before passing them to InternList.
 	scratchItems []memo.GroupID
 
+	// scratchColList is a ColList that is reused by projectionsBuilder to store
+	// temporary results that are accumulated before constructing a new
+	// Projections operator.
+	scratchColList opt.ColList
+
 	// ruleCycles is used to detect cyclical rule invocations. Each rule with
 	// the "DetectCycles" tag adds its expression fingerprint into this map
 	// before constructing its replacement. If the replacement pattern recursively
@@ -185,6 +190,10 @@ func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
 
 func (f *Factory) extractOrdering(private memo.PrivateID) props.Ordering {
 	return f.mem.LookupPrivate(private).(props.Ordering)
+}
+
+func (f *Factory) extractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
+	return f.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
 }
 
 // ----------------------------------------------------------------------
@@ -411,7 +420,7 @@ func (f *Factory) outputCols(group memo.GroupID) opt.ColSet {
 		return opt.ColListToSet(f.extractColList(expr.AsAggregations().Cols()))
 
 	case opt.ProjectionsOp:
-		return f.mem.LookupPrivate(expr.AsProjections().Def()).(*memo.ProjectionsOpDef).AllCols()
+		return f.extractProjectionsOpDef(expr.AsProjections().Def()).AllCols()
 
 	default:
 		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.Operator()))
@@ -536,94 +545,34 @@ func (f *Factory) ensureKey(in memo.GroupID) (out memo.GroupID, key opt.ColSet) 
 //
 // ----------------------------------------------------------------------
 
-// projectColsFrom returns a Projections operator that projects the output
-// columns from the given group as passthrough columns. If the group is already
-// a Projections operator, then projectColsFrom is a no-op.
-func (f *Factory) projectColsFrom(group memo.GroupID) memo.GroupID {
-	// If group is already a ProjectionsOp, then no more to do.
-	if f.mem.NormExpr(group).Operator() == opt.ProjectionsOp {
-		return group
-	}
-
-	def := memo.ProjectionsOpDef{PassthroughCols: f.lookupLogical(group).Relational.OutputCols}
-	return f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def))
-}
-
 // projectColsFromBoth returns a Projections operator that combines distinct
 // columns from both the provided left and right groups. If the group is a
 // Projections operator, then the projected expressions will be directly added
 // to the new Projections operator. Otherwise, the group's output columns will
 // be added as passthrough columns to the new Projections operator.
 func (f *Factory) projectColsFromBoth(left, right memo.GroupID) memo.GroupID {
-	leftCols := f.outputCols(left)
-	rightCols := f.outputCols(right)
-	if leftCols.SubsetOf(rightCols) {
-		return f.projectColsFrom(right)
-	}
-	if rightCols.SubsetOf(leftCols) {
-		return f.projectColsFrom(left)
-	}
-
-	synthLen := 0
+	pb := projectionsBuilder{f: f}
 	if f.operator(left) == opt.ProjectionsOp {
-		synthLen += leftCols.Len()
+		pb.addProjections(left)
+	} else {
+		pb.addPassthroughCols(f.outputCols(left))
 	}
 	if f.operator(right) == opt.ProjectionsOp {
-		synthLen += rightCols.Len()
+		pb.addProjections(right)
+	} else {
+		pb.addPassthroughCols(f.outputCols(right))
 	}
-
-	remaining := leftCols.Union(rightCols)
-	elems := make([]memo.GroupID, 0, synthLen)
-	def := memo.ProjectionsOpDef{SynthesizedCols: make(opt.ColList, 0, synthLen)}
-
-	// Define function that can append either existing Projections columns or
-	// synthesize new columns from other operators' output columns.
-	appendCols := func(group memo.GroupID, groupCols opt.ColSet) {
-		projectionsExpr := f.mem.NormExpr(group).AsProjections()
-		if projectionsExpr != nil {
-			// Projections case.
-			projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
-			projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
-
-			// Add synthesized columns.
-			for i := 0; i < len(projectionsDef.SynthesizedCols); i++ {
-				colID := projectionsDef.SynthesizedCols[i]
-				if remaining.Contains(int(colID)) {
-					elems = append(elems, projectionsElems[i])
-					def.SynthesizedCols = append(def.SynthesizedCols, colID)
-				}
-			}
-
-			// Add pass-through columns.
-			def.PassthroughCols.UnionWith(projectionsDef.PassthroughCols)
-		} else {
-			// Non-projections case.
-			def.PassthroughCols.UnionWith(groupCols)
-		}
-
-		// Remove all appended columns from the remaining column set.
-		remaining.DifferenceWith(groupCols)
-	}
-
-	appendCols(left, leftCols)
-	appendCols(right, rightCols)
-	return f.ConstructProjections(f.mem.InternList(elems), f.mem.InternProjectionsOpDef(&def))
+	return pb.buildProjections()
 }
 
 // projectExtraCol constructs a new Project operator that passes through all
 // columns in the given "in" expression, and then adds the given "extra"
 // expression as an additional column.
 func (f *Factory) projectExtraCol(in, extra memo.GroupID, extraID opt.ColumnID) memo.GroupID {
-	return f.ConstructProject(
-		in,
-		f.ConstructProjections(
-			f.InternList([]memo.GroupID{extra}),
-			f.InternProjectionsOpDef(&memo.ProjectionsOpDef{
-				PassthroughCols: f.outputCols(in),
-				SynthesizedCols: opt.ColList{extraID},
-			}),
-		),
-	)
+	pb := projectionsBuilder{f: f}
+	pb.addPassthroughCols(f.outputCols(in))
+	pb.addSynthesized(extra, extraID)
+	return f.ConstructProject(in, pb.buildProjections())
 }
 
 // ----------------------------------------------------------------------

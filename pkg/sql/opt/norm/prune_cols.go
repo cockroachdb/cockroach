@@ -107,7 +107,7 @@ func (f *Factory) pruneCols(target memo.GroupID, neededCols opt.ColSet) memo.Gro
 		return f.ConstructAggregations(f.InternList(groups), f.InternColList(cols))
 
 	case opt.ProjectionsOp:
-		def := f.mem.LookupPrivate(targetExpr.AsProjections().Def()).(*memo.ProjectionsOpDef)
+		def := f.extractProjectionsOpDef(targetExpr.AsProjections().Def())
 		groups, cols := filterColList(
 			f.mem.LookupList(targetExpr.AsProjections().Elems()),
 			def.SynthesizedCols,
