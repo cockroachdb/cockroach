@@ -53,7 +53,7 @@ sort
  ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: -2
  └── scan a
-      └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
+      └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
 
 # Order by suffix, don't project prefix (scan shouldn't be able to provide).
 opt
@@ -63,7 +63,7 @@ sort
  ├── columns: y:2(float!null)
  ├── ordering: -2
  └── scan a
-      └── columns: a.y:2(float!null)
+      └── columns: y:2(float!null)
 
 # --------------------------------------------------
 # Select operator (pass through).
@@ -77,7 +77,7 @@ select
  ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: +1,-2
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
+ │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  │    └── ordering: +1,-2
  └── filters [type=bool]
       └── gt [type=bool]
@@ -92,9 +92,9 @@ sort
  ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: -3
  └── select
-      ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
+      ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── scan a
-      │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
+      │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       └── filters [type=bool]
            └── gt [type=bool]
                 ├── variable: a.x [type=int]
@@ -112,7 +112,7 @@ project
  ├── columns: column5:5(int) y:2(float!null)
  ├── ordering: +1,-2
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(float!null)
+ │    ├── columns: x:1(int!null) y:2(float!null)
  │    └── ordering: +1,-2
  └── projections
       └── plus [type=int]
@@ -127,9 +127,9 @@ sort
  ├── columns: y:2(float!null) x:1(int!null) column5:5(decimal)
  ├── ordering: +1,+2
  └── project
-      ├── columns: column5:5(decimal) a.x:1(int!null) a.y:2(float!null)
+      ├── columns: column5:5(decimal) x:1(int!null) y:2(float!null)
       ├── scan a
-      │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
+      │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
       └── projections
            └── plus [type=decimal]
                 ├── variable: a.z [type=decimal]
@@ -143,9 +143,9 @@ sort
  ├── columns: x:1(int!null) one:5(int!null) y:2(float!null)
  ├── ordering: +1,+5
  └── project
-      ├── columns: one:5(int!null) a.x:1(int!null) a.y:2(float!null)
+      ├── columns: one:5(int!null) x:1(int!null) y:2(float!null)
       ├── scan a
-      │    └── columns: a.x:1(int!null) a.y:2(float!null)
+      │    └── columns: x:1(int!null) y:2(float!null)
       └── projections
            └── const: 1 [type=int]
 
@@ -161,10 +161,10 @@ project
  ├── columns: y:2(float!null) column5:5(int)
  ├── ordering: +1,-2
  ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(float!null)
+ │    ├── columns: x:1(int!null) y:2(float!null)
  │    ├── ordering: +1,-2
  │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(float!null)
+ │    │    ├── columns: x:1(int!null) y:2(float!null)
  │    │    └── ordering: +1,-2
  │    └── filters [type=bool]
  │         └── gt [type=bool]
@@ -216,11 +216,11 @@ sort
  ├── columns: y:2(float!null) z:3(decimal)
  ├── ordering: +2
  └── project
-      ├── columns: a.y:2(float!null) a.z:3(decimal)
+      ├── columns: y:2(float!null) z:3(decimal)
       └── select
-           ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
+           ├── columns: x:1(int!null) y:2(float!null) z:3(decimal)
            ├── scan a
-           │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
+           │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
            └── filters [type=bool]
                 └── gt [type=bool]
                      ├── variable: a.x [type=int]
@@ -269,7 +269,7 @@ explain
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── ordering: +2
       └── scan a
-           └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
+           └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
 
 memo
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y

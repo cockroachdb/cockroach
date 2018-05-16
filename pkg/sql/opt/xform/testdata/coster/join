@@ -27,16 +27,16 @@ project
  ├── stats: [rows=100]
  ├── cost: 2020.01
  └── inner-join
-      ├── columns: a.k:1(int!null) a.d:4(decimal!null) b.x:5(int)
+      ├── columns: k:1(int!null) d:4(decimal!null) x:5(int)
       ├── stats: [rows=100]
       ├── cost: 2020.01
       ├── select
-      │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
+      │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    ├── stats: [rows=1, distinct(4)=1]
       │    ├── cost: 1010.00
       │    ├── keys: (1)
       │    ├── scan a
-      │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
+      │    │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    │    ├── stats: [rows=1000, distinct(4)=700]
       │    │    ├── cost: 1000.00
       │    │    └── keys: (1)
@@ -45,7 +45,7 @@ project
       │              ├── variable: a.d [type=decimal, outer=(4)]
       │              └── const: 1.0 [type=decimal]
       ├── scan b
-      │    ├── columns: b.x:5(int)
+      │    ├── columns: x:5(int)
       │    ├── stats: [rows=1000]
       │    └── cost: 1000.00
       └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -88,7 +88,7 @@ lookup-join
  ├── cost: 5.01
  ├── keys: (1)
  └── scan abc@c_idx
-      ├── columns: abc.a:1(int!null) abc.c:3(int)
+      ├── columns: a:1(int!null) c:3(int)
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=1, distinct(3)=1]
       ├── cost: 1.00

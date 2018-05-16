@@ -49,7 +49,7 @@ explain
       ├── columns: x:1(int!null) y:2(int)
       ├── ordering: +2
       └── scan xy
-           └── columns: xy.x:1(int!null) xy.y:2(int)
+           └── columns: x:1(int!null) y:2(int)
 
 build
 EXPLAIN (VERBOSE) SELECT * FROM xy INNER JOIN (VALUES (1, 2), (3, 4)) AS t(u,v) ON x=u
@@ -59,7 +59,7 @@ explain
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
       ├── scan xy
-      │    └── columns: xy.x:1(int!null) xy.y:2(int)
+      │    └── columns: x:1(int!null) y:2(int)
       ├── values
       │    ├── columns: column1:3(int) column2:4(int)
       │    ├── tuple [type=tuple{int, int}]
@@ -93,6 +93,6 @@ project
            ├── columns: x:1(int!null) x:1(int!null) y:2(int)
            ├── ordering: +2
            └── project
-                ├── columns: xy.x:1(int!null) xy.y:2(int)
+                ├── columns: x:1(int!null) y:2(int)
                 └── scan xy
-                     └── columns: xy.x:1(int!null) xy.y:2(int)
+                     └── columns: x:1(int!null) y:2(int)
