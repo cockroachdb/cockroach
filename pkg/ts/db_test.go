@@ -312,7 +312,6 @@ func (tm *testModelRunner) makeQuery(
 	}
 
 	return modelQuery{
-
 		Query: tspb.Query{
 			Name: name,
 		},
@@ -320,6 +319,7 @@ func (tm *testModelRunner) makeQuery(
 			StartNanos:          startNanos,
 			EndNanos:            endNanos,
 			SampleDurationNanos: diskResolution.SampleDuration(),
+			NowNanos:            math.MaxInt64,
 		},
 		QueryMemoryOptions: QueryMemoryOptions{
 			// Large budget, but not maximum to avoid overflows.
@@ -388,7 +388,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 	mq.modelRunner.t.Helper()
 
 	// Query the real DB.
-	actualDatapoints, actualSources, err := mq.queryDB()
+	actualDatapoints, actualSources, err := mq.queryNewDB()
 	if err != nil {
 		mq.modelRunner.t.Fatal(err)
 	}
@@ -412,24 +412,12 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 		mq.StartNanos,
 		mq.EndNanos,
 		mq.InterpolationLimitNanos,
+		mq.NowNanos,
 	)
 	if a, e := testmodel.DataSeries(actualDatapoints), modelDatapoints; !testmodel.DataSeriesEquivalent(a, e) {
 		for _, diff := range pretty.Diff(a, e) {
 			mq.modelRunner.t.Error(diff)
 		}
-	}
-
-	// Query the new DB.
-	actualDatapoints, actualSources, err = mq.queryNewDB()
-	if err != nil {
-		mq.modelRunner.t.Fatal(err)
-	}
-	if a, e := len(actualDatapoints), expectedDatapointCount; a != e {
-		mq.modelRunner.t.Logf("actual datapoints: %v", actualDatapoints)
-		mq.modelRunner.t.Fatal(errors.Errorf("query got %d datapoints, wanted %d", a, e))
-	}
-	if a, e := len(actualSources), expectedSourceCount; a != e {
-		mq.modelRunner.t.Fatal(errors.Errorf("query got %d sources, wanted %d", a, e))
 	}
 }
 
@@ -438,19 +426,7 @@ func (mq *modelQuery) assertSuccess(expectedDatapointCount, expectedSourceCount 
 // string.
 func (mq *modelQuery) assertError(errString string) {
 	mq.modelRunner.t.Helper()
-	_, _, err := mq.queryDB()
-	if err == nil {
-		mq.modelRunner.t.Fatalf(
-			"query got no error, wanted error with message matching  \"%s\"", errString,
-		)
-	}
-	if !testutils.IsError(err, errString) {
-		mq.modelRunner.t.Fatalf(
-			"query got error \"%s\", wanted error with message matching \"%s\"", err.Error(), errString,
-		)
-	}
-	// Do the same for the new query implementation.
-	_, _, err = mq.queryNewDB()
+	_, _, err := mq.queryNewDB()
 	if err == nil {
 		mq.modelRunner.t.Fatalf(
 			"query got no error, wanted error with message matching  \"%s\"", errString,
