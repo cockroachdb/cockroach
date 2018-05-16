@@ -15,6 +15,8 @@
 package norm
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
@@ -22,7 +24,7 @@ import (
 // projectionsBuilder is a helper class that conveniently and efficiently builds
 // Projections operators. It:
 //
-//  1. Allows the Projections operator to be built incrementally
+//  1. Allows the Projections operator to be built incrementally.
 //  2. Offers several convenient helper methods to add passthrough vs.
 //     synthesized columns.
 //  3. Automatically unions duplicate columns.
@@ -43,8 +45,8 @@ import (
 type projectionsBuilder struct {
 	f *Factory
 
-	// passthrough is the set of columns that are passed through unchanged from
-	// the Project operator's input.
+	// passthroughCols is the set of columns that are passed through unchanged
+	// from the Project operator's input.
 	passthroughCols opt.ColSet
 
 	// copyPassthrough is a "copy-on-write" flag. If true, then the passthrough
@@ -63,14 +65,14 @@ type projectionsBuilder struct {
 // addPassthroughCol adds a single passthrough column to the set of columns that
 // are passed through unchanged from the Project operator's input.
 func (b *projectionsBuilder) addPassthroughCol(colID opt.ColumnID) {
-	b.ensurePassthrough()
+	b.ensureMutablePassthrough()
 	b.passthroughCols.Add(int(colID))
 }
 
 // addPassthroughCols adds a set of passthrough columns to the set of columns
 // that are passed through unchanged from the Project operator's input.
 func (b *projectionsBuilder) addPassthroughCols(cols opt.ColSet) {
-	b.ensurePassthrough()
+	b.ensureMutablePassthrough()
 	if b.passthroughCols.Empty() {
 		b.passthroughCols = cols
 		b.copyPassthrough = true
@@ -85,8 +87,11 @@ func (b *projectionsBuilder) addSynthesized(elem memo.GroupID, colID opt.ColumnI
 	b.ensureSlices()
 
 	// Check for duplicate column ID.
-	for _, synthID := range b.synthesizedCols {
+	for i, synthID := range b.synthesizedCols {
 		if synthID == colID {
+			if b.synthesized[i] != elem {
+				panic(fmt.Sprintf("two different expressions cannot have same column id %d", colID))
+			}
 			return
 		}
 	}
@@ -148,7 +153,7 @@ func (b *projectionsBuilder) buildProjections() memo.GroupID {
 	return projections
 }
 
-func (b *projectionsBuilder) ensurePassthrough() {
+func (b *projectionsBuilder) ensureMutablePassthrough() {
 	if b.copyPassthrough {
 		b.passthroughCols = b.passthroughCols.Copy()
 		b.copyPassthrough = false

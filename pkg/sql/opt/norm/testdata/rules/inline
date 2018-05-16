@@ -168,14 +168,17 @@ semi-join
 # InlineProjectInProject
 # --------------------------------------------------
 opt
-SELECT expr FROM (SELECT k=1 AS expr FROM a)
+SELECT expr, i+1 FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool)
+ ├── columns: expr:6(bool) column7:7(int)
  ├── scan a
- │    ├── columns: k:1(int!null)
+ │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
- └── projections [outer=(1)]
+ └── projections [outer=(1,2)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
@@ -220,3 +223,63 @@ project
       └── mult [type=int, outer=(6)]
            ├── variable: expr [type=int, outer=(6)]
            └── const: 2 [type=int]
+
+# Uncorrelated subquery should not block inlining.
+opt
+SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 FROM (SELECT k+1 AS expr FROM a)
+----
+project
+ ├── columns: column9:9(bool) column10:10(int)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── keys: (1)
+ └── projections [outer=(1)]
+      ├── exists [type=bool]
+      │    └── scan xy
+      │         ├── columns: x:7(int!null) y:8(int)
+      │         ├── constraint: /7: [/1 - /2]
+      │         └── keys: (7)
+      └── mult [type=int, outer=(1)]
+           ├── plus [type=int, outer=(1)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           └── const: 2 [type=int]
+
+# Correlated subquery should be hoisted as usual.
+opt
+SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
+----
+project
+ ├── columns: column9:9(bool)
+ ├── group-by
+ │    ├── columns: exists_agg:11(bool) rownum:12(int!null)
+ │    ├── grouping columns: rownum:12(int!null)
+ │    ├── keys: (12)
+ │    ├── left-join
+ │    │    ├── columns: expr:6(int) true:10(bool) rownum:12(int!null)
+ │    │    ├── row-number
+ │    │    │    ├── columns: expr:6(int) rownum:12(int!null)
+ │    │    │    ├── keys: (12)
+ │    │    │    └── project
+ │    │    │         ├── columns: expr:6(int)
+ │    │    │         ├── scan a
+ │    │    │         │    ├── columns: k:1(int!null)
+ │    │    │         │    └── keys: (1)
+ │    │    │         └── projections [outer=(1)]
+ │    │    │              └── plus [type=int, outer=(1)]
+ │    │    │                   ├── variable: a.k [type=int, outer=(1)]
+ │    │    │                   └── const: 1 [type=int]
+ │    │    ├── project
+ │    │    │    ├── columns: true:10(bool!null)
+ │    │    │    ├── scan xy
+ │    │    │    └── projections
+ │    │    │         └── true [type=bool]
+ │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
+ │    │         └── lt [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
+ │    │              ├── variable: expr [type=int, outer=(6)]
+ │    │              └── const: 0 [type=int]
+ │    └── aggregations [outer=(10)]
+ │         └── exists-agg [type=bool, outer=(10)]
+ │              └── variable: true [type=bool, outer=(10), constraints=(/10: [/true - /true]; tight)]
+ └── projections [outer=(11)]
+      └── variable: exists_agg [type=bool, outer=(11), constraints=(/11: [/true - /true]; tight)]

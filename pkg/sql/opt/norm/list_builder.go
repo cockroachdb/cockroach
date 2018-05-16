@@ -58,7 +58,7 @@ func (b *listBuilder) setLength(len int) {
 func (b *listBuilder) buildList() memo.ListID {
 	listID := b.f.InternList(b.items)
 
-	// Restore the factory scratch list.
+	// Save the list in the factory for possible future reuse.
 	b.f.scratchItems = b.items
 	b.items = nil
 
