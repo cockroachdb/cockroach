@@ -17,6 +17,7 @@ package props
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -240,6 +241,25 @@ func (p *Logical) FormatColList(
 func (p *Logical) FormatCol(buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID) {
 	if label == "" {
 		label = md.ColumnLabel(id)
+		// If the label is qualified, try to shorten it.
+		if idx := strings.LastIndex(label, "."); idx != -1 {
+			short := label[idx+1:]
+			// Check if shortening the label could cause ambiguity: is there another
+			// column that would be shortened to the same name?
+			ambiguous := false
+			suffix := fmt.Sprintf(".%s", short)
+			for col := opt.ColumnID(1); int(col) <= md.NumColumns(); col++ {
+				if col != id {
+					if l := md.ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
+						ambiguous = true
+						break
+					}
+				}
+			}
+			if !ambiguous {
+				label = short
+			}
+		}
 	}
 	typ := md.ColumnType(id)
 	buf.WriteByte(' ')
