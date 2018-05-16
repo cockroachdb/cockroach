@@ -232,11 +232,11 @@ SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
 project
  ├── columns: x:1(int) w:3(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn_w.w:3(int) onecolumn_w.rowid:4(int!null)
+      ├── columns: x:1(int) onecolumn.rowid:2(int!null) w:3(int) onecolumn_w.rowid:4(int!null)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) onecolumn.rowid:2(int!null)
       ├── scan onecolumn_w
-      │    └── columns: onecolumn_w.w:3(int) onecolumn_w.rowid:4(int!null)
+      │    └── columns: w:3(int) onecolumn_w.rowid:4(int!null)
       └── true [type=bool]
 
 exec-ddl
@@ -348,13 +348,13 @@ SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42
 limit
  ├── columns: x:1(int)
  ├── project
- │    ├── columns: onecolumn.x:1(int)
+ │    ├── columns: x:1(int)
  │    └── inner-join
- │         ├── columns: onecolumn.x:1(int) column1:3(int)
+ │         ├── columns: x:1(int) column1:3(int)
  │         ├── project
- │         │    ├── columns: onecolumn.x:1(int)
+ │         │    ├── columns: x:1(int)
  │         │    └── scan onecolumn
- │         │         └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │         └── columns: x:1(int) rowid:2(int!null)
  │         ├── values
  │         │    ├── columns: column1:3(int)
  │         │    └── tuple [type=tuple{int}]
@@ -656,11 +656,11 @@ SELECT * FROM onecolumn NATURAL JOIN twocolumn
 project
  ├── columns: x:1(int) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: onecolumn.x [type=int]
            └── variable: twocolumn.x [type=int]
@@ -671,11 +671,11 @@ SELECT * FROM onecolumn JOIN twocolumn USING(x)
 project
  ├── columns: x:1(int) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: onecolumn.x [type=int]
            └── variable: twocolumn.x [type=int]
@@ -716,11 +716,11 @@ SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 project
  ├── columns: x:1(int) x:3(int) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: onecolumn.x [type=int]
            └── variable: twocolumn.y [type=int]
@@ -731,11 +731,11 @@ SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 project
  ├── columns: x:1(int) x:3(int) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: onecolumn.x [type=int]
            └── variable: twocolumn.y [type=int]
@@ -762,11 +762,11 @@ SELECT o.x, t.y FROM onecolumn o INNER JOIN twocolumn t ON (o.x=t.x AND t.y=53)
 project
  ├── columns: x:1(int) y:4(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: onecolumn.x [type=int]
@@ -782,11 +782,11 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.y
 project
  ├── columns: x:1(int) y:4(int)
  └── left-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: onecolumn.x [type=int]
@@ -801,11 +801,11 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND o.x
 project
  ├── columns: x:1(int) y:4(int)
  └── left-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: onecolumn.x [type=int]
@@ -820,11 +820,11 @@ SELECT o.x, t.y FROM onecolumn o LEFT OUTER JOIN twocolumn t ON (o.x=t.x AND t.x
 project
  ├── columns: x:1(int) y:4(int)
  └── left-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int)
+      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int)
       ├── scan onecolumn
       │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
       ├── scan twocolumn
-      │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+      │    └── columns: twocolumn.x:3(int) y:4(int) twocolumn.rowid:5(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: onecolumn.x [type=int]
@@ -871,11 +871,11 @@ SELECT * FROM a INNER JOIN b ON a.i = b.i
 project
  ├── columns: i:1(int) i:3(int) b:4(bool)
  └── inner-join
-      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b:4(bool) b.rowid:5(int!null)
       ├── scan a
       │    └── columns: a.i:1(int) a.rowid:2(int!null)
       ├── scan b
-      │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+      │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: a.i [type=int]
            └── variable: b.i [type=int]
@@ -886,11 +886,11 @@ SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
 project
  ├── columns: i:1(int) i:3(int) b:4(bool)
  └── left-join
-      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b.b:4(bool) b.rowid:5(int)
+      ├── columns: a.i:1(int) a.rowid:2(int!null) b.i:3(int) b:4(bool) b.rowid:5(int)
       ├── scan a
       │    └── columns: a.i:1(int) a.rowid:2(int!null)
       ├── scan b
-      │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+      │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
       └── eq [type=bool]
            ├── variable: a.i [type=int]
            └── variable: b.i [type=int]
@@ -902,13 +902,13 @@ sort
  ├── columns: i:1(int) i:3(int) b:4(bool)
  ├── ordering: +3,+4
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b.b:4(bool)
+      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
       └── right-join
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int!null)
            ├── scan a
            │    └── columns: a.i:1(int) a.rowid:2(int!null)
            ├── scan b
-           │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
            └── eq [type=bool]
                 ├── variable: a.i [type=int]
                 └── variable: b.i [type=int]
@@ -920,13 +920,13 @@ sort
  ├── columns: i:1(int) i:3(int) b:4(bool)
  ├── ordering: +3,+4
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b.b:4(bool)
+      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
       └── full-join
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
+           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int)
            ├── scan a
            │    └── columns: a.i:1(int) a.rowid:2(int!null)
            ├── scan b
-           │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
            └── eq [type=bool]
                 ├── variable: a.i [type=int]
                 └── variable: b.i [type=int]
@@ -939,13 +939,13 @@ sort
  ├── columns: i:1(int) i:3(int) b:4(bool)
  ├── ordering: +1,+3
  └── project
-      ├── columns: a.i:1(int) b.i:3(int) b.b:4(bool)
+      ├── columns: a.i:1(int) b.i:3(int) b:4(bool)
       └── full-join
-           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
+           ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b:4(bool) b.rowid:5(int)
            ├── scan a
            │    └── columns: a.i:1(int) a.rowid:2(int!null)
            ├── scan b
-           │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+           │    └── columns: b.i:3(int) b:4(bool) b.rowid:5(int!null)
            └── and [type=bool]
                 ├── eq [type=bool]
                 │    ├── variable: a.i [type=int]
@@ -1028,9 +1028,9 @@ SELECT * FROM onecolumn JOIN (VALUES (41),(42),(43)) AS a(x) USING(x)
 project
  ├── columns: x:1(int)
  └── inner-join
-      ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) column1:3(int)
+      ├── columns: x:1(int) rowid:2(int!null) column1:3(int)
       ├── scan onecolumn
-      │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+      │    └── columns: x:1(int) rowid:2(int!null)
       ├── values
       │    ├── columns: column1:3(int)
       │    ├── tuple [type=tuple{int}]
@@ -1333,13 +1333,13 @@ SELECT * FROM pairs, square WHERE pairs.b = square.n
 project
  ├── columns: a:1(int) b:2(int!null) n:4(int!null) sq:5(int)
  └── select
-      ├── columns: pairs.a:1(int) pairs.b:2(int!null) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+      ├── columns: a:1(int) b:2(int!null) rowid:3(int!null) n:4(int!null) sq:5(int)
       ├── inner-join
-      │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+      │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
       │    ├── scan pairs
-      │    │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       │    ├── scan square
-      │    │    └── columns: square.n:4(int!null) square.sq:5(int)
+      │    │    └── columns: n:4(int!null) sq:5(int)
       │    └── true [type=bool]
       └── eq [type=bool]
            ├── variable: pairs.b [type=int]
@@ -1352,13 +1352,13 @@ SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 project
  ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
  └── select
-      ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+      ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
       ├── inner-join
-      │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+      │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
       │    ├── scan pairs
-      │    │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       │    ├── scan square
-      │    │    └── columns: square.n:4(int!null) square.sq:5(int)
+      │    │    └── columns: n:4(int!null) sq:5(int)
       │    └── true [type=bool]
       └── eq [type=bool]
            ├── plus [type=int]
@@ -1375,15 +1375,15 @@ SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WH
 project
  ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int!null)
  └── select
-      ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int!null) sum:6(int!null)
+      ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int!null) sum:6(int!null)
       ├── project
-      │    ├── columns: sum:6(int) pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int)
+      │    ├── columns: sum:6(int) a:1(int) b:2(int) n:4(int!null) sq:5(int)
       │    ├── inner-join
-      │    │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+      │    │    ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
       │    │    ├── scan pairs
-      │    │    │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+      │    │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       │    │    ├── scan square
-      │    │    │    └── columns: square.n:4(int!null) square.sq:5(int)
+      │    │    │    └── columns: n:4(int!null) sq:5(int)
       │    │    └── true [type=bool]
       │    └── projections
       │         └── plus [type=int]
@@ -1400,11 +1400,11 @@ SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 project
  ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
  └── full-join
-      ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int) square.n:4(int) square.sq:5(int)
+      ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
       ├── scan pairs
-      │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       ├── scan square
-      │    └── columns: square.n:4(int!null) square.sq:5(int)
+      │    └── columns: n:4(int!null) sq:5(int)
       └── eq [type=bool]
            ├── plus [type=int]
            │    ├── variable: pairs.a [type=int]
@@ -1417,13 +1417,13 @@ SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHER
 project
  ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
  └── select
-      ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int) square.n:4(int) square.sq:5(int)
+      ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
       ├── full-join
-      │    ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int) square.n:4(int) square.sq:5(int)
+      │    ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int) sq:5(int)
       │    ├── scan pairs
-      │    │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+      │    │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       │    ├── scan square
-      │    │    └── columns: square.n:4(int!null) square.sq:5(int)
+      │    │    └── columns: n:4(int!null) sq:5(int)
       │    └── eq [type=bool]
       │         ├── plus [type=int]
       │         │    ├── variable: pairs.a [type=int]
@@ -1447,13 +1447,13 @@ SELECT *
 select
  ├── columns: a:1(int) b:2(int!null) n:4(int) sq:5(int)
  ├── project
- │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int) square.sq:5(int)
+ │    ├── columns: a:1(int) b:2(int) n:4(int) sq:5(int)
  │    └── left-join
- │         ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int) square.sq:5(int)
+ │         ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int) sq:5(int)
  │         ├── scan pairs
- │         │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+ │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
  │         ├── scan square
- │         │    └── columns: square.n:4(int!null) square.sq:5(int)
+ │         │    └── columns: n:4(int!null) sq:5(int)
  │         └── and [type=bool]
  │              ├── and [type=bool]
  │              │    ├── eq [type=bool]
@@ -1493,13 +1493,13 @@ SELECT *
 select
  ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
  ├── project
- │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int)
+ │    ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
  │    └── right-join
- │         ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int) square.n:4(int!null) square.sq:5(int)
+ │         ├── columns: a:1(int) b:2(int) rowid:3(int) n:4(int!null) sq:5(int)
  │         ├── scan pairs
- │         │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+ │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
  │         ├── scan square
- │         │    └── columns: square.n:4(int!null) square.sq:5(int)
+ │         │    └── columns: n:4(int!null) sq:5(int)
  │         └── and [type=bool]
  │              ├── and [type=bool]
  │              │    ├── eq [type=bool]
@@ -1540,13 +1540,13 @@ SELECT *
 select
  ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
  ├── project
- │    ├── columns: pairs.a:1(int) pairs.b:2(int) square.n:4(int!null) square.sq:5(int)
+ │    ├── columns: a:1(int) b:2(int) n:4(int!null) sq:5(int)
  │    └── inner-join
- │         ├── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null) square.n:4(int!null) square.sq:5(int)
+ │         ├── columns: a:1(int) b:2(int) rowid:3(int!null) n:4(int!null) sq:5(int)
  │         ├── scan pairs
- │         │    └── columns: pairs.a:1(int) pairs.b:2(int) pairs.rowid:3(int!null)
+ │         │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
  │         ├── scan square
- │         │    └── columns: square.n:4(int!null) square.sq:5(int)
+ │         │    └── columns: n:4(int!null) sq:5(int)
  │         └── and [type=bool]
  │              ├── and [type=bool]
  │              │    ├── eq [type=bool]
@@ -1609,11 +1609,11 @@ SELECT * FROM t1 JOIN t2 USING(x)
 project
  ├── columns: x:2(int) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── eq [type=bool]
            ├── variable: t1.x [type=int]
            └── variable: t2.x [type=int]
@@ -1624,11 +1624,11 @@ SELECT * FROM t1 NATURAL JOIN t2
 project
  ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: t1.x [type=int]
@@ -1643,11 +1643,11 @@ SELECT x, t1.x, t2.x FROM t1 NATURAL JOIN t2
 project
  ├── columns: x:2(int) x:2(int) x:8(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: t1.x [type=int]
@@ -1662,11 +1662,11 @@ SELECT t1.*, t2.* FROM t1 NATURAL JOIN t2
 project
  ├── columns: x:2(int) y:4(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: t1.x [type=int]
@@ -1681,11 +1681,11 @@ SELECT * FROM t1 JOIN t2 ON t2.x=t1.x
 project
  ├── columns: col1:1(int) x:2(int) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int) col4:9(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── eq [type=bool]
            ├── variable: t2.x [type=int]
            └── variable: t1.x [type=int]
@@ -1696,13 +1696,13 @@ SELECT * FROM t1 FULL OUTER JOIN t2 USING(x)
 project
  ├── columns: x:11(int) col1:1(int) col2:3(int) y:4(int) col3:6(int) y:7(int) col4:9(int)
  └── project
-      ├── columns: x:11(int) t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       ├── full-join
-      │    ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       │    ├── scan t1
-      │    │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       │    ├── scan t2
-      │    │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       │    └── eq [type=bool]
       │         ├── variable: t1.x [type=int]
       │         └── variable: t2.x [type=int]
@@ -1717,13 +1717,13 @@ SELECT * FROM t1 NATURAL FULL OUTER JOIN t2
 project
  ├── columns: x:11(int) y:12(int) col1:1(int) col2:3(int) col3:6(int) col4:9(int)
  └── project
-      ├── columns: x:11(int) y:12(int) t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11(int) y:12(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       ├── full-join
-      │    ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       │    ├── scan t1
-      │    │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       │    ├── scan t2
-      │    │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: t1.x [type=int]
@@ -1745,11 +1745,11 @@ SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x=t2.x
 project
  ├── columns: col1:1(int) x:2(int) col2:3(int) y:4(int) col3:6(int) y:7(int) x:8(int) col4:9(int)
  └── full-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── eq [type=bool]
            ├── variable: t1.x [type=int]
            └── variable: t2.x [type=int]
@@ -1760,11 +1760,11 @@ SELECT t2.x, t1.x, x FROM t1 JOIN t2 USING(x)
 project
  ├── columns: x:8(int) x:2(int) x:2(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── scan t2
-      │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── eq [type=bool]
            ├── variable: t1.x [type=int]
            └── variable: t2.x [type=int]
@@ -1775,13 +1775,13 @@ SELECT t2.x, t1.x, x FROM t1 FULL OUTER JOIN t2 USING(x)
 project
  ├── columns: x:8(int) x:2(int) x:11(int)
  └── project
-      ├── columns: x:11(int) t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      ├── columns: x:11(int) col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       ├── full-join
-      │    ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int)
+      │    ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int)
       │    ├── scan t1
-      │    │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       │    ├── scan t2
-      │    │    └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │    │    └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       │    └── eq [type=bool]
       │         ├── variable: t1.x [type=int]
       │         └── variable: t2.x [type=int]
@@ -1797,13 +1797,13 @@ SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 project
  ├── columns: x:2(int)
  └── inner-join
-      ├── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null) t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int)
+      ├── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null) col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int)
       ├── scan t1
-      │    └── columns: t1.col1:1(int) t1.x:2(int) t1.col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
       ├── project
-      │    ├── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int)
+      │    ├── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int)
       │    └── scan t2
-      │         └── columns: t2.col3:6(int) t2.y:7(int) t2.x:8(int) t2.col4:9(int) t2.rowid:10(int!null)
+      │         └── columns: col3:6(int) t2.y:7(int) t2.x:8(int) col4:9(int) t2.rowid:10(int!null)
       └── and [type=bool]
            ├── eq [type=bool]
            │    ├── variable: t1.x [type=int]
@@ -2101,13 +2101,13 @@ SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 project
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int!null)
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       ├── inner-join
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2125,13 +2125,13 @@ SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 project
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int)
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
       ├── left-join
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2149,13 +2149,13 @@ SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 project
  ├── columns: x:4(int!null) y:5(int!null) u:3(int) v:6(int!null)
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       ├── right-join
-      │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2173,15 +2173,15 @@ SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 project
  ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int!null) y:8(int)
+      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int) x:7(int!null) y:8(int)
       ├── project
-      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    ├── full-join
-      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    │    ├── scan xyu
-      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    │    ├── scan xyv
-      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    │    └── and [type=bool]
       │    │         ├── eq [type=bool]
       │    │         │    ├── variable: xyu.x [type=int]
@@ -2207,11 +2207,11 @@ SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x 
 select
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
  ├── inner-join
- │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  │    ├── scan xyu
- │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  │    ├── scan xyv
- │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  │    └── and [type=bool]
  │         ├── eq [type=bool]
  │         │    ├── variable: xyu.x [type=int]
@@ -2233,9 +2233,9 @@ SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 
 inner-join
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int!null) y:5(int!null) v:6(int!null)
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2258,9 +2258,9 @@ SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu
 left-join
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int) y:5(int) v:6(int)
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2283,9 +2283,9 @@ SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xy
 right-join
  ├── columns: x:1(int) y:2(int) u:3(int) x:4(int!null) y:5(int!null) v:6(int!null)
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2311,13 +2311,13 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT *
 project
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int)
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
       ├── left-join
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2335,13 +2335,13 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT 
 project
  ├── columns: x:4(int!null) y:5(int!null) u:3(int) v:6(int!null)
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       ├── right-join
-      │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2359,15 +2359,15 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT *
 project
  ├── columns: x:7(int!null) y:8(int) u:3(int) v:6(int)
  └── select
-      ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int) x:7(int!null) y:8(int)
+      ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int) x:7(int!null) y:8(int)
       ├── project
-      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    ├── columns: x:7(int) y:8(int) xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    ├── full-join
-      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) xyu.u:3(int) xyv.x:4(int) xyv.y:5(int) xyv.v:6(int)
+      │    │    ├── columns: xyu.x:1(int) xyu.y:2(int) u:3(int) xyv.x:4(int) xyv.y:5(int) v:6(int)
       │    │    ├── scan xyu
-      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    │    ├── scan xyv
-      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    │    └── and [type=bool]
       │    │         ├── eq [type=bool]
       │    │         │    ├── variable: xyu.x [type=int]
@@ -2392,9 +2392,9 @@ SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT *
 left-join
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int) y:5(int) v:6(int)
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2417,9 +2417,9 @@ SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON x
 right-join
  ├── columns: x:1(int) y:2(int) u:3(int) x:4(int!null) y:5(int!null) v:6(int!null)
  ├── scan xyu
- │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+ │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
  ├── scan xyv
- │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+ │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2443,13 +2443,13 @@ SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 project
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int!null)
  └── select
-      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       ├── inner-join
-      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    ├── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null) xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    ├── scan xyu
-      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) xyu.u:3(int!null)
+      │    │    └── columns: xyu.x:1(int!null) xyu.y:2(int!null) u:3(int!null)
       │    ├── scan xyv
-      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) xyv.v:6(int!null)
+      │    │    └── columns: xyv.x:4(int!null) xyv.y:5(int!null) v:6(int!null)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: xyu.x [type=int]
@@ -2609,13 +2609,13 @@ SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR 
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) g:9(int)
  └── select
-      ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) abcdef.c:3(int!null) abcdef.d:4(int!null) abcdef.e:5(int) abcdef.f:6(int) abg.a:7(int!null) abg.b:8(int!null) abg.g:9(int)
+      ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) abg.a:7(int!null) abg.b:8(int!null) g:9(int)
       ├── inner-join
-      │    ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) abcdef.c:3(int!null) abcdef.d:4(int!null) abcdef.e:5(int) abcdef.f:6(int) abg.a:7(int!null) abg.b:8(int!null) abg.g:9(int)
+      │    ├── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int) abg.a:7(int!null) abg.b:8(int!null) g:9(int)
       │    ├── scan abcdef
-      │    │    └── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) abcdef.c:3(int!null) abcdef.d:4(int!null) abcdef.e:5(int) abcdef.f:6(int)
+      │    │    └── columns: abcdef.a:1(int!null) abcdef.b:2(int!null) c:3(int!null) d:4(int!null) e:5(int) f:6(int)
       │    ├── scan abg
-      │    │    └── columns: abg.a:7(int!null) abg.b:8(int!null) abg.g:9(int)
+      │    │    └── columns: abg.a:7(int!null) abg.b:8(int!null) g:9(int)
       │    └── and [type=bool]
       │         ├── eq [type=bool]
       │         │    ├── variable: abcdef.a [type=int]
@@ -2905,9 +2905,9 @@ SELECT k FROM kv, (SELECT 1 AS k)
 project
  ├── columns: k:5(int!null)
  └── inner-join
-      ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) k:5(int!null)
+      ├── columns: kv.k:1(int!null) v:2(int) w:3(int) s:4(string) k:5(int!null)
       ├── scan kv
-      │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── columns: kv.k:1(int!null) v:2(int) w:3(int) s:4(string)
       ├── project
       │    ├── columns: k:5(int!null)
       │    ├── values
@@ -2940,7 +2940,7 @@ select
       ├── project
       │    ├── columns: kv.k:3(int!null)
       │    └── scan kv
-      │         └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
+      │         └── columns: kv.k:3(int!null) v:4(int) w:5(int) s:6(string)
       └── const: 1 [type=int]
 
 # Test natural outer join when the left side has unknown type

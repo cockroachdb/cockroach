@@ -101,11 +101,11 @@ SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
 group-by
  ├── columns: column5:5(int) y:2(int) x:1(int!null)
- ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ ├── grouping columns: x:1(int!null) y:2(int)
  ├── stats: [rows=148, distinct(1,2)=148]
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
  │    ├── stats: [rows=150, distinct(1)=100, distinct(1,2)=148]
  │    └── keys: (1)
@@ -118,9 +118,9 @@ SELECT y, s FROM a GROUP BY y, s
 ----
 group-by
  ├── columns: y:2(int) s:3(string)
- ├── grouping columns: a.y:2(int) a.s:3(string)
+ ├── grouping columns: y:2(int) s:3(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
  ├── keys: weak(2,3)
  └── scan a
-      ├── columns: a.y:2(int) a.s:3(string)
+      ├── columns: y:2(int) s:3(string)
       └── stats: [rows=3000, distinct(2,3)=1000]

@@ -31,7 +31,7 @@ project
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
@@ -47,7 +47,7 @@ project
  ├── columns: s:3(string)
  ├── stats: [rows=1000]
  └── scan xysd
-      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       ├── stats: [rows=1000]
       └── keys: (1) weak(3,4)
 
@@ -60,7 +60,7 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── gt [type=bool, outer=(1,2)]
@@ -75,12 +75,12 @@ select
       │              ├── outer: (1,2)
       │              ├── stats: [rows=111]
       │              ├── select
-      │              │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
       │              │    ├── outer: (1)
       │              │    ├── stats: [rows=111]
       │              │    ├── keys: (5)
       │              │    ├── scan kuv
-      │              │    │    ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
       │              │    │    ├── stats: [rows=1000]
       │              │    │    └── keys: (5)
       │              │    └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -89,12 +89,12 @@ select
       │              └── projections [outer=(2)]
       │                   └── subquery [type=int, outer=(2)]
       │                        └── max1-row
-      │                             ├── columns: xysd.y:2(int)
+      │                             ├── columns: y:2(int)
       │                             ├── outer: (2)
       │                             ├── cardinality: [1 - 1]
       │                             ├── stats: [rows=1]
       │                             └── project
-      │                                  ├── columns: xysd.y:2(int)
+      │                                  ├── columns: y:2(int)
       │                                  ├── outer: (2)
       │                                  ├── cardinality: [1 - 1]
       │                                  ├── stats: [rows=1]
@@ -114,12 +114,12 @@ project
  ├── stats: [rows=10]
  ├── keys: (1)
  └── limit
-      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
       ├── keys: (1) weak(3,4)
       ├── scan xysd
-      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (1) weak(3,4)
       └── const: 10 [type=int]
@@ -132,7 +132,7 @@ project
  ├── columns: column5:5(int!null) column6:6(string!null) column7:7(unknown) column7:7(unknown) column8:8(string)
  ├── stats: [rows=1000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections

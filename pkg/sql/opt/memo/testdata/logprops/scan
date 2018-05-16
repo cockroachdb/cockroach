@@ -38,7 +38,7 @@ project
  ├── columns: x:1(int) z:2(int!null)
  ├── stats: [rows=1000]
  └── scan b
-      ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+      ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
       ├── stats: [rows=1000]
       └── keys: (3)
 

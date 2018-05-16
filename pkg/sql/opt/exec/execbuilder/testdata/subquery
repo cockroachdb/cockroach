@@ -19,12 +19,12 @@ project
  └── projections
       └── exists [type=bool]
            └── select
-                ├── columns: t.k:1(int!null) t.u:2(int!null) t.v:3(int)
+                ├── columns: k:1(int!null) u:2(int!null) v:3(int)
                 ├── stats: [rows=333]
                 ├── cost: 1010.00
                 ├── keys: (1)
                 ├── scan t
-                │    ├── columns: t.k:1(int!null) t.u:2(int) t.v:3(int)
+                │    ├── columns: k:1(int!null) u:2(int) v:3(int)
                 │    ├── stats: [rows=1000]
                 │    ├── cost: 1000.00
                 │    └── keys: (1)

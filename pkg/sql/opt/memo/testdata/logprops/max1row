@@ -31,20 +31,20 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── eq [type=bool]
       ├── subquery [type=string]
       │    └── max1-row
-      │         ├── columns: kuv.v:7(string)
+      │         ├── columns: v:7(string)
       │         ├── cardinality: [0 - 1]
       │         ├── stats: [rows=1]
       │         └── project
-      │              ├── columns: kuv.v:7(string)
+      │              ├── columns: v:7(string)
       │              ├── stats: [rows=1000]
       │              └── scan kuv
-      │                   ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
       │                   ├── stats: [rows=1000]
       │                   └── keys: (5)
       └── const: 'foo' [type=string]

@@ -57,7 +57,7 @@ limit
  ├── columns: s:4(string!null)
  ├── cardinality: [0 - 1]
  ├── scan a@s_idx
- │    ├── columns: a.s:4(string!null)
+ │    ├── columns: s:4(string!null)
  │    └── constraint: /4/1: [/'foo' - /'foo']
  └── const: 1 [type=int]
 
@@ -70,11 +70,11 @@ limit
  ├── cardinality: [0 - 1]
  ├── ordering: +4,+2
  ├── sort
- │    ├── columns: a.i:2(int) a.s:4(string)
+ │    ├── columns: i:2(int) s:4(string)
  │    ├── cardinality: [0 - 10]
  │    ├── ordering: +4,+2
  │    └── scan a@s_idx
- │         ├── columns: a.i:2(int) a.s:4(string)
+ │         ├── columns: i:2(int) s:4(string)
  │         └── limit: 10
  └── const: 1 [type=int]
 
@@ -87,10 +87,10 @@ limit
  ├── cardinality: [0 - 1]
  ├── ordering: +3
  ├── sort
- │    ├── columns: a.f:3(float) a.s:4(string)
+ │    ├── columns: f:3(float) s:4(string)
  │    ├── ordering: +3
  │    └── scan a
- │         └── columns: a.f:3(float) a.s:4(string)
+ │         └── columns: f:3(float) s:4(string)
  └── const: 1 [type=int]
 
 # Don't push when limit is not a constant.

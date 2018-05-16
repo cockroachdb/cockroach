@@ -69,10 +69,10 @@ SELECT DISTINCT i FROM a
 ----
 group-by
  ├── columns: i:2(int!null)
- ├── grouping columns: a.i:2(int!null)
+ ├── grouping columns: i:2(int!null)
  ├── keys: (2)
  └── scan a
-      └── columns: a.i:2(int!null)
+      └── columns: i:2(int!null)
 
 # Distinct not eliminated because one column is nullable.
 opt
@@ -80,10 +80,10 @@ SELECT DISTINCT f, i FROM a
 ----
 group-by
  ├── columns: f:3(float) i:2(int!null)
- ├── grouping columns: a.i:2(int!null) a.f:3(float)
+ ├── grouping columns: i:2(int!null) f:3(float)
  ├── keys: weak(2,3)
  └── scan a
-      ├── columns: a.i:2(int!null) a.f:3(float)
+      ├── columns: i:2(int!null) f:3(float)
       └── keys: weak(2,3)
 
 # Group by not eliminated because it has aggregation.
@@ -92,10 +92,10 @@ SELECT s, i, SUM(i) FROM a GROUP BY s, i
 ----
 group-by
  ├── columns: s:4(string!null) i:2(int!null) column6:6(decimal)
- ├── grouping columns: a.i:2(int!null) a.s:4(string!null)
+ ├── grouping columns: i:2(int!null) s:4(string!null)
  ├── keys: (2,4)
  ├── scan a
- │    ├── columns: a.i:2(int!null) a.s:4(string!null)
+ │    ├── columns: i:2(int!null) s:4(string!null)
  │    └── keys: (2,4)
  └── aggregations [outer=(2)]
       └── sum [type=decimal, outer=(2)]
@@ -138,9 +138,9 @@ project
       ├── grouping columns: i2:6(int)
       ├── keys: weak(6)
       ├── project
-      │    ├── columns: i2:6(int) a.s:4(string!null)
+      │    ├── columns: i2:6(int) s:4(string!null)
       │    ├── scan a
-      │    │    ├── columns: a.i:2(int!null) a.s:4(string!null)
+      │    │    ├── columns: i:2(int!null) s:4(string!null)
       │    │    └── keys: (2,4)
       │    └── projections [outer=(2,4)]
       │         └── plus [type=int, outer=(2)]

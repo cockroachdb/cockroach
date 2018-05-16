@@ -31,7 +31,7 @@ SELECT a.y, a.x, a.y y2 FROM a WHERE y=1
 select
  ├── columns: y:2(int!null) x:1(int!null) y2:2(int!null)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
       └── eq [type=bool]
            ├── variable: a.y [type=int]
@@ -44,7 +44,7 @@ SELECT 1+a.y AS plus, a.x FROM a
 project
  ├── columns: plus:3(int) x:1(int!null)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── projections
       └── plus [type=int]
            ├── variable: a.y [type=int]
@@ -59,7 +59,7 @@ inner-join
  ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan b
- │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
+ │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
  └── true [type=bool]
 
 # Groupby operator.
@@ -68,9 +68,9 @@ SELECT MAX(y), y, y, x FROM a GROUP BY a.x, a.y
 ----
 group-by
  ├── columns: column3:3(int) y:2(int) y:2(int) x:1(int!null)
- ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ ├── grouping columns: x:1(int!null) y:2(int)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── columns: x:1(int!null) y:2(int)
  └── aggregations
       └── max [type=int]
            └── variable: a.y [type=int]

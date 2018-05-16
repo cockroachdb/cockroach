@@ -54,7 +54,7 @@ project
  ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) column5:5(int!null)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float) a.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1-4)]
       └── const: 1 [type=int]
@@ -69,9 +69,9 @@ SELECT y+1 FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 project
  ├── columns: column7:7(int)
  ├── inner-join
- │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
  │    ├── scan a
- │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── columns: a.x:1(int!null) y:2(int)
  │    │    └── keys: (1)
  │    ├── scan b
  │    │    ├── columns: b.x:5(int!null)

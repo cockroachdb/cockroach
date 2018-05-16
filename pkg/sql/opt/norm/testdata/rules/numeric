@@ -25,7 +25,7 @@ FROM a
 project
  ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
  ├── scan a
- │    └── columns: a.i:2(int) a.f:3(float) a.d:4(decimal)
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -61,7 +61,7 @@ FROM a
 project
  ├── columns: column6:6(int) column7:7(float) column8:8(decimal)
  ├── scan a
- │    └── columns: a.i:2(int) a.f:3(float) a.d:4(decimal)
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -88,7 +88,7 @@ FROM a
 project
  ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
  ├── scan a
- │    └── columns: a.i:2(int) a.f:3(float) a.d:4(decimal)
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -123,7 +123,7 @@ FROM a
 project
  ├── columns: column6:6(decimal) column7:7(float) column8:8(decimal)
  ├── scan a
- │    └── columns: a.i:2(int) a.f:3(float) a.d:4(decimal)
+ │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
       ├── variable: a.i [type=int, outer=(2)]
       ├── variable: a.f [type=float, outer=(3)]
@@ -142,7 +142,7 @@ FROM a
 project
  ├── columns: column6:6(float) column7:7(decimal) column8:8(interval)
  ├── scan a
- │    └── columns: a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
+ │    └── columns: i:2(int) f:3(float) d:4(decimal) t:5(time)
  └── projections [outer=(2-5)]
       ├── minus [type=float, outer=(3)]
       │    ├── variable: a.f [type=float, outer=(3)]
@@ -163,6 +163,6 @@ SELECT -(-a.i::int) FROM a
 project
  ├── columns: column6:6(int)
  ├── scan a
- │    └── columns: a.i:2(int)
+ │    └── columns: i:2(int)
  └── projections [outer=(2)]
       └── variable: a.i [type=int, outer=(2)]
