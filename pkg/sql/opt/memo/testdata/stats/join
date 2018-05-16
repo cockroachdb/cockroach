@@ -70,11 +70,11 @@ inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null) rowid:7(int!null)
  ├── stats: [rows=4000000]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=4000]
  │    └── keys: (1) weak(3,4)
  ├── scan b
- │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+ │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -88,11 +88,11 @@ left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int) rowid:7(int)
  ├── stats: [rows=4000000]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=4000]
  │    └── keys: (1) weak(3,4)
  ├── scan b
- │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+ │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -106,11 +106,11 @@ right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) z:6(int!null) rowid:7(int!null)
  ├── stats: [rows=4000000]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=4000]
  │    └── keys: (1) weak(3,4)
  ├── scan b
- │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+ │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -124,11 +124,11 @@ full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) z:6(int) rowid:7(int)
  ├── stats: [rows=4000000]
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=4000]
  │    └── keys: (1) weak(3,4)
  ├── scan b
- │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+ │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -142,14 +142,14 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
  ├── stats: [rows=40000000]
  └── inner-join
-      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)
       ├── stats: [rows=40000000]
       ├── scan a
-      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=4000]
       │    └── keys: (1) weak(3,4)
       ├── scan b
-      │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=10000]
       │    └── keys: (7)
       └── true [type=bool]
@@ -177,17 +177,17 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
  ├── stats: [rows=400000]
  └── select
-      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)
       ├── stats: [rows=400000, distinct(6)=1]
       ├── inner-join
-      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=40000000, distinct(6)=100]
       │    ├── scan a
-      │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │    │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    ├── stats: [rows=4000]
       │    │    └── keys: (1) weak(3,4)
       │    ├── scan b
-      │    │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │    │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
       │    │    ├── stats: [rows=10000, distinct(6)=100]
       │    │    └── keys: (7)
       │    └── true [type=bool]
@@ -205,22 +205,22 @@ project
  ├── stats: [rows=500000]
  ├── keys: (1,6)
  └── group-by
-      ├── columns: a.x:1(int!null) b.z:6(int!null) column8:8(decimal)
-      ├── grouping columns: a.x:1(int!null) b.z:6(int!null)
+      ├── columns: a.x:1(int!null) z:6(int!null) column8:8(decimal)
+      ├── grouping columns: a.x:1(int!null) z:6(int!null)
       ├── stats: [rows=500000, distinct(1,6)=500000]
       ├── keys: (1,6)
       ├── project
-      │    ├── columns: a.x:1(int!null) b.z:6(int!null)
+      │    ├── columns: a.x:1(int!null) z:6(int!null)
       │    ├── stats: [rows=40000000, distinct(1,6)=500000]
       │    └── inner-join
-      │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null) b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │         ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b.x:5(int) z:6(int!null) rowid:7(int!null)
       │         ├── stats: [rows=40000000, distinct(1,6)=500000]
       │         ├── scan a
-      │         │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+      │         │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │         │    ├── stats: [rows=4000, distinct(1)=5000]
       │         │    └── keys: (1) weak(3,4)
       │         ├── scan b
-      │         │    ├── columns: b.x:5(int) b.z:6(int!null) b.rowid:7(int!null)
+      │         │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
       │         │    ├── stats: [rows=10000, distinct(6)=100]
       │         │    └── keys: (7)
       │         └── true [type=bool]

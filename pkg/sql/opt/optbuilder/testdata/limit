@@ -20,10 +20,10 @@ limit
  ├── columns: k:1(int!null) v:2(int)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── columns: k:1(int!null) v:2(int)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
  │         └── ordering: +1
  └── const: 5 [type=int]
 
@@ -34,12 +34,12 @@ limit
  ├── columns: k:1(int!null) v:2(int)
  ├── ordering: +2
  ├── sort
- │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── columns: k:1(int!null) v:2(int)
  │    ├── ordering: +2
  │    └── project
- │         ├── columns: t.k:1(int!null) t.v:2(int)
+ │         ├── columns: k:1(int!null) v:2(int)
  │         └── scan t
- │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │              └── columns: k:1(int!null) v:2(int) w:3(int)
  └── const: 5 [type=int]
 
 build
@@ -48,9 +48,9 @@ SELECT k, v FROM t LIMIT (1+2)
 limit
  ├── columns: k:1(int!null) v:2(int)
  ├── project
- │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── columns: k:1(int!null) v:2(int)
  │    └── scan t
- │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── columns: k:1(int!null) v:2(int) w:3(int)
  └── const: 3 [type=int]
 
 build
@@ -60,10 +60,10 @@ limit
  ├── columns: k:1(int!null)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
  │         └── ordering: +1
  └── const: 1 [type=int]
 
@@ -74,13 +74,13 @@ limit
  ├── columns: k:1(int!null)
  ├── ordering: +1
  ├── offset
- │    ├── columns: t.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
  │    ├── project
- │    │    ├── columns: t.k:1(int!null)
+ │    │    ├── columns: k:1(int!null)
  │    │    ├── ordering: +1
  │    │    └── scan t
- │    │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │         ├── columns: k:1(int!null) v:2(int) w:3(int)
  │    │         └── ordering: +1
  │    └── const: 3 [type=int]
  └── const: 1 [type=int]
@@ -92,10 +92,10 @@ offset
  ├── columns: k:1(int!null) v:2(int)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── columns: k:1(int!null) v:2(int)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
  │         └── ordering: +1
  └── const: 5 [type=int]
 
@@ -106,10 +106,10 @@ limit
  ├── columns: k:1(int!null)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         ├── columns: k:1(int!null) v:2(int) w:3(int)
  │         └── ordering: +1
  └── const: 2 [type=int]
 
@@ -130,15 +130,15 @@ limit
  ├── columns: column4:4(decimal)
  ├── ordering: -2
  ├── sort
- │    ├── columns: t.v:2(int) column4:4(decimal)
+ │    ├── columns: v:2(int) column4:4(decimal)
  │    ├── ordering: -2
  │    └── project
- │         ├── columns: t.v:2(int) column4:4(decimal)
+ │         ├── columns: v:2(int) column4:4(decimal)
  │         └── group-by
- │              ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
- │              ├── grouping columns: t.k:1(int!null) t.v:2(int)
+ │              ├── columns: k:1(int!null) v:2(int) column4:4(decimal)
+ │              ├── grouping columns: k:1(int!null) v:2(int)
  │              ├── scan t
- │              │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │              │    └── columns: k:1(int!null) v:2(int) w:3(int)
  │              └── aggregations
  │                   └── sum [type=decimal]
  │                        └── variable: t.w [type=int]
@@ -151,15 +151,15 @@ limit
  ├── columns: v:2(int)
  ├── ordering: +2
  ├── sort
- │    ├── columns: t.v:2(int)
+ │    ├── columns: v:2(int)
  │    ├── ordering: +2
  │    └── group-by
- │         ├── columns: t.v:2(int)
- │         ├── grouping columns: t.v:2(int)
+ │         ├── columns: v:2(int)
+ │         ├── grouping columns: v:2(int)
  │         └── project
- │              ├── columns: t.v:2(int)
+ │              ├── columns: v:2(int)
  │              └── scan t
- │                   └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │                   └── columns: k:1(int!null) v:2(int) w:3(int)
  └── const: 10 [type=int]
 
 build
@@ -258,14 +258,14 @@ SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 10)
 project
  ├── columns: k:1(int!null)
  └── limit
-      ├── columns: t.k:1(int!null) t.v:2(int)
+      ├── columns: k:1(int!null) v:2(int)
       ├── sort
-      │    ├── columns: t.k:1(int!null) t.v:2(int)
+      │    ├── columns: k:1(int!null) v:2(int)
       │    ├── ordering: +2
       │    └── project
-      │         ├── columns: t.k:1(int!null) t.v:2(int)
+      │         ├── columns: k:1(int!null) v:2(int)
       │         └── scan t
-      │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+      │              └── columns: k:1(int!null) v:2(int) w:3(int)
       └── const: 10 [type=int]
 
 # This kind of query can be used to work around memory usage limits. We need to
@@ -278,19 +278,19 @@ limit
  ├── columns: w:3(int)
  ├── ordering: +3
  ├── sort
- │    ├── columns: t.w:3(int)
+ │    ├── columns: w:3(int)
  │    ├── ordering: +3
  │    └── group-by
- │         ├── columns: t.w:3(int)
- │         ├── grouping columns: t.w:3(int)
+ │         ├── columns: w:3(int)
+ │         ├── grouping columns: w:3(int)
  │         └── limit
- │              ├── columns: t.w:3(int)
+ │              ├── columns: w:3(int)
  │              ├── sort
- │              │    ├── columns: t.w:3(int)
+ │              │    ├── columns: w:3(int)
  │              │    ├── ordering: +3
  │              │    └── project
- │              │         ├── columns: t.w:3(int)
+ │              │         ├── columns: w:3(int)
  │              │         └── scan t
- │              │              └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │              │              └── columns: k:1(int!null) v:2(int) w:3(int)
  │              └── const: 100 [type=int]
  └── const: 25 [type=int]

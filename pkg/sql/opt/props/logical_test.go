@@ -53,10 +53,11 @@ func TestLogicalProps(t *testing.T) {
 		Scalar: &props.Scalar{OuterCols: outerCols},
 	}
 
-	relational.FormatColSet(nd, md, "output:", relational.Relational.OutputCols)
-	relational.FormatColSet(nd, md, "outer relational:", relational.OuterCols())
-	relational.FormatColList(nd, md, "list:", colList)
-	relational.FormatColSet(nd, md, "outer scalar:", scalar.OuterCols())
+	f := opt.MakeExprFmtCtx(md, 0 /* flags */)
+	relational.FormatColSet(&f, nd, "output:", relational.Relational.OutputCols)
+	relational.FormatColSet(&f, nd, "outer relational:", relational.OuterCols())
+	relational.FormatColList(&f, nd, "list:", colList)
+	relational.FormatColSet(&f, nd, "outer scalar:", scalar.OuterCols())
 
 	expected := "props\n" +
 		" ├── output: i:1(int!null)\n" +

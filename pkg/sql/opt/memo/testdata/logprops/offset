@@ -31,7 +31,7 @@ offset
  ├── stats: [rows=999]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── const: 1 [type=int]
@@ -44,7 +44,7 @@ offset
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── subquery [type=int]
@@ -71,7 +71,7 @@ offset
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── const: 0 [type=int]
@@ -84,26 +84,26 @@ project
  ├── columns: column8:8(int)
  ├── stats: [rows=1000]
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── projections [outer=(1,2)]
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
-                ├── columns: xyzs.x:1(int)
+                ├── columns: x:1(int)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
                 ├── stats: [rows=1]
                 └── offset
-                     ├── columns: xyzs.x:1(int)
+                     ├── columns: x:1(int)
                      ├── outer: (1,2)
                      ├── stats: [rows=1000]
                      ├── project
-                     │    ├── columns: xyzs.x:1(int)
+                     │    ├── columns: x:1(int)
                      │    ├── outer: (1)
                      │    ├── stats: [rows=1000]
                      │    └── scan kuv
-                     │         ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+                     │         ├── columns: k:5(int!null) u:6(float) v:7(string)
                      │         ├── stats: [rows=1000]
                      │         └── keys: (5)
                      └── variable: xyzs.y [type=int, outer=(2)]
@@ -134,7 +134,7 @@ offset
  │    │    │    ├── stats: [rows=1000]
  │    │    │    ├── keys: (1)
  │    │    │    └── scan xyzs
- │    │    │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    │    │         ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    │    │         ├── stats: [rows=1000]
  │    │    │         └── keys: (1) weak(3,4)
  │    │    └── const: 10 [type=int]
@@ -160,12 +160,12 @@ offset
  ├── stats: [rows=0]
  ├── keys: (1)
  ├── select
- │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) s:4(string)
  │    ├── cardinality: [0 - 100]
  │    ├── stats: [rows=1, distinct(1)=1]
  │    ├── keys: (1)
  │    ├── scan xyzs
- │    │    ├── columns: xyzs.x:1(int!null) xyzs.s:4(string)
+ │    │    ├── columns: x:1(int!null) s:4(string)
  │    │    ├── limit: 100
  │    │    ├── stats: [rows=100, distinct(1)=100]
  │    │    └── keys: (1)

@@ -31,11 +31,11 @@ inner-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=100000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+ │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -50,11 +50,11 @@ project
  ├── columns: column7:7(int)
  ├── stats: [rows=1000]
  ├── inner-join-apply
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) column1:5(int)
+ │    ├── columns: x:1(int!null) y:2(int) column1:5(int)
  │    ├── stats: [rows=1000]
  │    ├── keys: (1)
  │    ├── scan xysd
- │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int)
+ │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1)
  │    ├── max1-row
@@ -83,11 +83,11 @@ left-join
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=100000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+ │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -103,28 +103,28 @@ project
  ├── stats: [rows=1000]
  ├── keys: (1) weak(3,4)
  └── select
-      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null) uv.u:5(int!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int!null)
       ├── stats: [rows=1000, distinct(5)=1]
       ├── keys: (1) weak(3,4)
       ├── left-join-apply
-      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null) uv.u:5(int)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int)
       │    ├── stats: [rows=1000, distinct(5)=1]
       │    ├── keys: (1) weak(3,4)
       │    ├── scan xysd
-      │    │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    │    ├── stats: [rows=1000]
       │    │    └── keys: (1) weak(3,4)
       │    ├── max1-row
-      │    │    ├── columns: uv.u:5(int!null)
+      │    │    ├── columns: u:5(int!null)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── stats: [rows=1, distinct(5)=1]
       │    │    └── select
-      │    │         ├── columns: uv.u:5(int!null)
+      │    │         ├── columns: u:5(int!null)
       │    │         ├── outer: (1)
       │    │         ├── stats: [rows=111]
       │    │         ├── scan uv
-      │    │         │    ├── columns: uv.u:5(int)
+      │    │         │    ├── columns: u:5(int)
       │    │         │    └── stats: [rows=1000]
       │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       │    │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -144,11 +144,11 @@ right-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null) rowid:7(int!null)
  ├── stats: [rows=100000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+ │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -163,10 +163,10 @@ project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int!null)
  ├── stats: [rows=100000]
  └── right-join-apply
-      ├── columns: xysd.x:1(int) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal) uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int!null) uv.u:8(int)
       ├── stats: [rows=100000]
       ├── scan xysd
-      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (1) weak(3,4)
       ├── left-join
@@ -211,11 +211,11 @@ full-join
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int) rowid:7(int)
  ├── stats: [rows=100000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+ │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (7)
  └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -230,10 +230,10 @@ project
  ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) u:5(int) v:6(int)
  ├── stats: [rows=100000]
  └── full-join-apply
-      ├── columns: xysd.x:1(int) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
+      ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) uv.u:5(int) uv.v:6(int) uv.u:8(int)
       ├── stats: [rows=100000]
       ├── scan xysd
-      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (1) weak(3,4)
       ├── left-join
@@ -279,11 +279,11 @@ semi-join
  ├── stats: [rows=100000]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -299,19 +299,19 @@ semi-join-apply
  ├── stats: [rows=110000]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── offset
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110]
  │    ├── select
- │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
@@ -329,11 +329,11 @@ anti-join
  ├── stats: [rows=100000]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── scan uv
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -349,19 +349,19 @@ anti-join-apply
  ├── stats: [rows=110000]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── offset
- │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    ├── columns: u:5(int) v:6(int!null)
  │    ├── outer: (1)
  │    ├── stats: [rows=110]
  │    ├── select
- │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    │         └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
@@ -378,14 +378,14 @@ project
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null)
  ├── stats: [rows=1000000]
  └── inner-join
-      ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null) uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) u:5(int) v:6(int!null) rowid:7(int!null)
       ├── stats: [rows=1000000]
       ├── scan xysd
-      │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (1) weak(3,4)
       ├── scan uv
-      │    ├── columns: uv.u:5(int) uv.v:6(int!null) uv.rowid:7(int!null)
+      │    ├── columns: u:5(int) v:6(int!null) rowid:7(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (7)
       └── true [type=bool]
@@ -416,17 +416,17 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── exists [type=bool, outer=(1-3)]
       └── inner-join
-           ├── columns: xysd.x:1(int) xysd.y:2(int)
+           ├── columns: x:1(int) y:2(int)
            ├── outer: (1-3)
            ├── cardinality: [0 - 1]
            ├── stats: [rows=0]
            ├── project
-           │    ├── columns: xysd.x:1(int)
+           │    ├── columns: x:1(int)
            │    ├── outer: (1)
            │    ├── cardinality: [1 - 1]
            │    ├── stats: [rows=1]
@@ -435,7 +435,7 @@ select
            │         ├── stats: [rows=1]
            │         └── tuple [type=tuple{}]
            ├── project
-           │    ├── columns: xysd.y:2(int)
+           │    ├── columns: y:2(int)
            │    ├── outer: (2)
            │    ├── cardinality: [1 - 1]
            │    ├── stats: [rows=1]
@@ -473,7 +473,7 @@ semi-join
  │              ├── variable: cnt [type=int, outer=(5)]
  │              └── const: 1 [type=int]
  ├── scan uv
- │    ├── columns: uv.u:6(int) uv.v:7(int!null)
+ │    ├── columns: u:6(int) v:7(int!null)
  │    └── stats: [rows=1000, distinct(5)=700]
  └── true [type=bool]
 
@@ -487,21 +487,21 @@ semi-join-apply
  ├── stats: [rows=50]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
  │    └── keys: (1) weak(3,4)
  ├── limit
- │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
+ │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── select
- │    │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
+ │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -525,7 +525,7 @@ anti-join
  │    └── tuple [type=tuple{int}]
  │         └── const: 1 [type=int]
  ├── scan uv
- │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    ├── columns: u:2(int) v:3(int!null)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
@@ -542,21 +542,21 @@ anti-join-apply
  ├── stats: [rows=50]
  ├── keys: (1) weak(3,4)
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── limit: 10
  │    ├── stats: [rows=10]
  │    └── keys: (1) weak(3,4)
  ├── limit
- │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
+ │    ├── columns: u:5(int!null) v:6(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 5]
  │    ├── stats: [rows=5]
  │    ├── select
- │    │    ├── columns: uv.u:5(int!null) uv.v:6(int!null)
+ │    │    ├── columns: u:5(int!null) v:6(int!null)
  │    │    ├── outer: (1)
  │    │    ├── stats: [rows=111]
  │    │    ├── scan uv
- │    │    │    ├── columns: uv.u:5(int) uv.v:6(int!null)
+ │    │    │    ├── columns: u:5(int) v:6(int!null)
  │    │    │    └── stats: [rows=1000]
  │    │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │    │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -582,14 +582,14 @@ inner-join
  │    └── tuple [type=tuple{int}]
  │         └── const: 2 [type=int]
  ├── limit
- │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    ├── columns: u:2(int) v:3(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
  │    ├── project
- │    │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    │    ├── columns: u:2(int) v:3(int!null)
  │    │    ├── stats: [rows=1000]
  │    │    └── scan uv
- │    │         ├── columns: uv.u:2(int) uv.v:3(int!null) uv.rowid:4(int!null)
+ │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         └── keys: (4)
  │    └── const: 2 [type=int]
@@ -614,14 +614,14 @@ left-join
  │    └── tuple [type=tuple{int}]
  │         └── const: 3 [type=int]
  ├── limit
- │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    ├── columns: u:2(int) v:3(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
  │    ├── project
- │    │    ├── columns: uv.u:2(int) uv.v:3(int!null)
+ │    │    ├── columns: u:2(int) v:3(int!null)
  │    │    ├── stats: [rows=1000]
  │    │    └── scan uv
- │    │         ├── columns: uv.u:2(int) uv.v:3(int!null) uv.rowid:4(int!null)
+ │    │         ├── columns: u:2(int) v:3(int!null) rowid:4(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         └── keys: (4)
  │    └── const: 2 [type=int]
@@ -636,14 +636,14 @@ right-join
  ├── cardinality: [3 - 6]
  ├── stats: [rows=6]
  ├── limit
- │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    ├── columns: u:1(int) v:2(int!null)
  │    ├── cardinality: [0 - 2]
  │    ├── stats: [rows=2]
  │    ├── project
- │    │    ├── columns: uv.u:1(int) uv.v:2(int!null)
+ │    │    ├── columns: u:1(int) v:2(int!null)
  │    │    ├── stats: [rows=1000]
  │    │    └── scan uv
- │    │         ├── columns: uv.u:1(int) uv.v:2(int!null) uv.rowid:3(int!null)
+ │    │         ├── columns: u:1(int) v:2(int!null) rowid:3(int!null)
  │    │         ├── stats: [rows=1000]
  │    │         └── keys: (3)
  │    └── const: 2 [type=int]
@@ -720,7 +720,7 @@ full-join
  ├── cardinality: [2 - ]
  ├── stats: [rows=2000]
  ├── scan xysd
- │    ├── columns: xysd.x:1(int!null) xysd.y:2(int) xysd.s:3(string) xysd.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  ├── values

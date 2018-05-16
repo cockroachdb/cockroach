@@ -53,7 +53,7 @@ SELECT (i=5 OR False) AND (s<'foo' AND True) FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    └── columns: a.i:2(int) a.s:4(string)
+ │    └── columns: i:2(int) s:4(string)
  └── projections [outer=(2,4)]
       └── and [type=bool, outer=(2,4), constraints=(/2: [/5 - /5]; /4: (/NULL - /'foo'); tight)]
            ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
@@ -93,7 +93,7 @@ SELECT true AND k=1 FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -106,7 +106,7 @@ SELECT k=1 AND i=2 AND true FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
       └── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight)]
@@ -132,7 +132,7 @@ SELECT (k>1 AND k<5) AND (f=3.5 AND s='foo') FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.f:3(float) a.s:4(string)
+ │    ├── columns: k:1(int!null) f:3(float) s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1,3,4)]
       └── and [type=bool, outer=(1,3,4), constraints=(/1: [/2 - /4]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight)]
@@ -179,7 +179,7 @@ SELECT false OR k=1 FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -193,7 +193,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1,2)]
       └── or [type=bool, outer=(1,2)]
@@ -221,7 +221,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-4)]
       └── or [type=bool, outer=(1-4)]
@@ -247,7 +247,7 @@ SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
       └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
@@ -265,7 +265,7 @@ SELECT (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar') FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1-4)]
       └── and [type=bool, outer=(1-4), constraints=(/4: [/'foo' - /'foo'])]
@@ -303,10 +303,10 @@ SELECT * FROM a INNER JOIN b ON NULL
 inner-join
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) z:7(int)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  ├── scan b
- │    ├── columns: b.x:6(int!null) b.z:7(int)
+ │    ├── columns: x:6(int!null) z:7(int)
  │    └── keys: (6)
  └── false [type=bool]
 
@@ -355,7 +355,7 @@ SELECT null or (null and k=1) FROM a
 project
  ├── columns: column6:6(bool)
  ├── scan a
- │    ├── columns: a.k:1(int!null)
+ │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
       └── or [type=bool, outer=(1)]
@@ -378,7 +378,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
@@ -410,7 +410,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2), constraints=(contradiction; tight)]
       ├── not-in [type=bool, outer=(2)]
@@ -440,7 +440,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(4)]
       ├── not-like [type=bool, outer=(4)]
@@ -464,7 +464,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(4)]
       ├── not-similar-to [type=bool, outer=(4)]
@@ -482,7 +482,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(4)]
       ├── not-reg-match [type=bool, outer=(4)]
@@ -510,7 +510,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(5)]
       ├── not [type=bool, outer=(5)]
@@ -546,7 +546,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(5)]
       └── contains [type=bool, outer=(5)]
@@ -563,7 +563,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
@@ -581,7 +581,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
@@ -612,7 +612,7 @@ select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float!null) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
       ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
@@ -634,7 +634,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3), constraints=(contradiction; tight)]
       ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
@@ -663,7 +663,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
@@ -689,7 +689,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       ├── or [type=bool, outer=(1-3)]

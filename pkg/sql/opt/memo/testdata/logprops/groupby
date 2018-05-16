@@ -31,16 +31,16 @@ project
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── group-by
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) column5:5(float)
- │    ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int) column5:5(float)
+ │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── keys: (1)
  │    ├── project
- │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
  │    │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    │    ├── keys: (1)
  │    │    └── scan xyzs
- │    │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    │         ├── stats: [rows=1000, distinct(1,2)=1000]
  │    │         └── keys: (1) weak(3,4)
  │    └── aggregations [outer=(3)]
@@ -58,11 +58,11 @@ group-by
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── project
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000]
  │    ├── keys: (1)
  │    └── scan xyzs
- │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │         ├── stats: [rows=1000]
  │         └── keys: (1) weak(3,4)
  └── aggregations [outer=(1,2)]
@@ -79,16 +79,16 @@ project
  ├── columns: s:4(string)
  ├── stats: [rows=1000]
  └── group-by
-      ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
-      ├── grouping columns: xyzs.z:3(float!null) xyzs.s:4(string)
+      ├── columns: z:3(float!null) s:4(string)
+      ├── grouping columns: z:3(float!null) s:4(string)
       ├── stats: [rows=1000, distinct(3,4)=1000]
       ├── keys: weak(3,4)
       └── project
-           ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
+           ├── columns: z:3(float!null) s:4(string)
            ├── stats: [rows=1000, distinct(3,4)=1000]
            ├── keys: weak(3,4)
            └── scan xyzs
-                ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
                 ├── stats: [rows=1000, distinct(3,4)=1000]
                 └── keys: (1) weak(3,4)
 
@@ -100,15 +100,15 @@ project
  ├── columns: y:2(int) column5:5(float)
  ├── stats: [rows=1000]
  └── group-by
-      ├── columns: xyzs.y:2(int) xyzs.z:3(float!null) column5:5(float)
-      ├── grouping columns: xyzs.y:2(int) xyzs.z:3(float!null)
+      ├── columns: y:2(int) z:3(float!null) column5:5(float)
+      ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=1000, distinct(2,3)=1000]
       ├── keys: weak(2,3)
       ├── project
-      │    ├── columns: xyzs.y:2(int) xyzs.z:3(float!null)
+      │    ├── columns: y:2(int) z:3(float!null)
       │    ├── stats: [rows=1000, distinct(2,3)=1000]
       │    └── scan xyzs
-      │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │         ├── stats: [rows=1000, distinct(2,3)=1000]
       │         └── keys: (1) weak(3,4)
       └── aggregations [outer=(3)]
@@ -121,15 +121,15 @@ SELECT z, MAX(s) FROM xyzs GROUP BY z
 ----
 group-by
  ├── columns: z:3(float!null) column5:5(string)
- ├── grouping columns: xyzs.z:3(float!null)
+ ├── grouping columns: z:3(float!null)
  ├── stats: [rows=700, distinct(3)=700]
  ├── keys: (3)
  ├── project
- │    ├── columns: xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000, distinct(3)=700]
  │    ├── keys: weak(3,4)
  │    └── scan xyzs
- │         ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │         ├── stats: [rows=1000, distinct(3)=700]
  │         └── keys: (1) weak(3,4)
  └── aggregations [outer=(4)]
@@ -144,12 +144,12 @@ project
  ├── columns: s:4(string)
  ├── stats: [rows=1000]
  └── group-by
-      ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
-      ├── grouping columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+      ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      ├── grouping columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=1000, distinct(1-4)=1000]
       ├── keys: (1) weak(3,4)
       └── scan xyzs
-           ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+           ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
            ├── stats: [rows=1000, distinct(1-4)=1000]
            └── keys: (1) weak(3,4)
 
@@ -162,7 +162,7 @@ select
  ├── stats: [rows=333]
  ├── keys: (1) weak(3,4)
  ├── scan xyzs
- │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) xyzs.z:3(float!null) xyzs.s:4(string)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
  └── gt [type=bool, outer=(1,2)]
@@ -177,21 +177,21 @@ select
       │              ├── outer: (1,2)
       │              ├── stats: [rows=700]
       │              └── group-by
-      │                   ├── columns: kuv.u:6(float) column8:8(decimal)
-      │                   ├── grouping columns: kuv.u:6(float)
+      │                   ├── columns: u:6(float) column8:8(decimal)
+      │                   ├── grouping columns: u:6(float)
       │                   ├── outer: (1,2)
       │                   ├── stats: [rows=700, distinct(6)=700]
       │                   ├── keys: weak(6)
       │                   ├── project
-      │                   │    ├── columns: xyzs.x:1(int) kuv.u:6(float)
+      │                   │    ├── columns: x:1(int) u:6(float)
       │                   │    ├── outer: (1,2)
       │                   │    ├── stats: [rows=1000, distinct(6)=700]
       │                   │    └── project
-      │                   │         ├── columns: xyzs.y:2(int) kuv.u:6(float)
+      │                   │         ├── columns: y:2(int) u:6(float)
       │                   │         ├── outer: (2)
       │                   │         ├── stats: [rows=1000, distinct(6)=700]
       │                   │         └── scan kuv
-      │                   │              ├── columns: kuv.k:5(int!null) kuv.u:6(float) kuv.v:7(string)
+      │                   │              ├── columns: k:5(int!null) u:6(float) v:7(string)
       │                   │              ├── stats: [rows=1000, distinct(6)=700]
       │                   │              └── keys: (5)
       │                   └── aggregations [outer=(1)]

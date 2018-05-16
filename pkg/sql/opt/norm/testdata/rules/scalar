@@ -34,7 +34,7 @@ FROM a
 project
  ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(int) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int)
+ │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
       ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
@@ -103,7 +103,7 @@ FROM a
 project
  ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(float) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float)
  │    └── keys: (1)
  └── projections [outer=(1-3)]
       ├── eq [type=bool, outer=(1,2)]
@@ -174,7 +174,7 @@ SELECT COALESCE(i) FROM a
 project
  ├── columns: column7:7(int)
  ├── scan a
- │    └── columns: a.i:2(int)
+ │    └── columns: i:2(int)
  └── projections [outer=(2)]
       └── variable: a.i [type=int, outer=(2)]
 
@@ -205,7 +205,7 @@ SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
 project
  ├── columns: column7:7(string)
  ├── scan a
- │    └── columns: a.s:4(string)
+ │    └── columns: s:4(string)
  └── projections [outer=(4)]
       └── coalesce [type=string, outer=(4)]
            ├── variable: a.s [type=string, outer=(4)]
@@ -220,7 +220,7 @@ SELECT COALESCE(i, NULL, NULL) FROM a
 project
  ├── columns: column7:7(int)
  ├── scan a
- │    └── columns: a.i:2(int)
+ │    └── columns: i:2(int)
  └── projections [outer=(2)]
       └── coalesce [type=int, outer=(2)]
            ├── variable: a.i [type=int, outer=(2)]
@@ -236,7 +236,7 @@ SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
 project
  ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb!null) column10:10(int)
  ├── scan a
- │    └── columns: a.i:2(int) a.arr:6(int[])
+ │    └── columns: i:2(int) arr:6(int[])
  └── projections [outer=(2,6)]
       ├── variable: a.i [type=int, outer=(2)]
       ├── variable: a.arr [type=int[], outer=(6)]
@@ -250,7 +250,7 @@ SELECT i::float, arr::decimal[], s::json::json FROM a
 project
  ├── columns: column7:7(float) column8:8(decimal[]) column9:9(jsonb)
  ├── scan a
- │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
+ │    └── columns: i:2(int) s:4(string) arr:6(int[])
  └── projections [outer=(2,4,6)]
       ├── cast: float [type=float, outer=(2)]
       │    └── variable: a.i [type=int, outer=(2)]
@@ -310,7 +310,7 @@ FROM a
 project
  ├── columns: column7:7(int) column8:8(int) column9:9(decimal) column10:10(decimal) column11:11(float) column12:12(float) column13:13(int) column14:14(int) column15:15(decimal[]) column16:16(string[]) column17:17(decimal[]) column18:18(float[])
  ├── scan a
- │    └── columns: a.i:2(int) a.arr:6(int[])
+ │    └── columns: i:2(int) arr:6(int[])
  └── projections [outer=(2,6)]
       ├── null [type=int]
       ├── null [type=int]
@@ -396,7 +396,7 @@ SELECT i IN (2, 1, 1, null, 3, null, 2, 3.0) FROM a
 project
  ├── columns: column7:7(bool)
  ├── scan a
- │    └── columns: a.i:2(int)
+ │    └── columns: i:2(int)
  └── projections [outer=(2)]
       └── in [type=bool, outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
            ├── variable: a.i [type=int, outer=(2)]
@@ -412,7 +412,7 @@ SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) FROM a
 project
  ├── columns: column7:7(bool)
  ├── scan a
- │    └── columns: a.s:4(string)
+ │    └── columns: s:4(string)
  └── projections [outer=(4)]
       └── not-in [type=bool, outer=(4)]
            ├── variable: a.s [type=string, outer=(4)]

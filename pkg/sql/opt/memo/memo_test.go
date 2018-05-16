@@ -17,14 +17,15 @@ package memo_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
 func TestMemo(t *testing.T) {
-	runDataDrivenTest(t, "testdata/memo", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
+	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+	runDataDrivenTest(t, "testdata/memo", flags)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
@@ -34,7 +35,7 @@ func TestMemo(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags opt.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

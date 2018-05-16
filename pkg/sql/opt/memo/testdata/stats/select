@@ -65,11 +65,11 @@ project
  ├── columns: x:1(int!null) z:2(int!null)
  ├── stats: [rows=1]
  └── select
-      ├── columns: b.x:1(int!null) b.z:2(int!null) b.rowid:3(int!null)
+      ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
       ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
       ├── keys: (3)
       ├── scan b
-      │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+      │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
       │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100, distinct(3)=10000]
       │    └── keys: (3)
       └── and [type=bool, outer=(1-3), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; /3: [/5 - /8]; tight)]
@@ -97,7 +97,7 @@ select
  ├── stats: [rows=1333]
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=4000]
  │    └── keys: (1)
  └── lt [type=bool, outer=(1,2)]
@@ -115,7 +115,7 @@ select
  ├── stats: [rows=3, distinct(2)=1]
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=4000, distinct(2)=400]
  │    └── keys: (1)
  └── and [type=bool, outer=(1,2), constraints=(/2: [/5 - /5])]
@@ -137,7 +137,7 @@ select
  ├── stats: [rows=0]
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=4000]
  │    └── keys: (1)
  └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
@@ -155,19 +155,19 @@ project
  ├── columns: column4:4(decimal)
  ├── stats: [rows=99]
  └── group-by
-      ├── columns: b.z:2(int!null) column4:4(decimal)
-      ├── grouping columns: b.z:2(int!null)
+      ├── columns: z:2(int!null) column4:4(decimal)
+      ├── grouping columns: z:2(int!null)
       ├── stats: [rows=99, distinct(2)=99]
       ├── keys: (2)
       ├── project
-      │    ├── columns: b.x:1(int!null) b.z:2(int!null)
+      │    ├── columns: x:1(int!null) z:2(int!null)
       │    ├── stats: [rows=2000, distinct(2)=99]
       │    └── select
-      │         ├── columns: b.x:1(int!null) b.z:2(int!null) b.rowid:3(int!null)
+      │         ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
       │         ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=99]
       │         ├── keys: (3)
       │         ├── scan b
-      │         │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+      │         │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
       │         │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
       │         │    └── keys: (3)
       │         └── and [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]

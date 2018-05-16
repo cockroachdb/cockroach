@@ -655,9 +655,9 @@ project
            ├── project
            │    ├── columns: column4:4(tuple{int, int})
            │    ├── project
-           │    │    ├── columns: abc.a:1(int!null) abc.b:2(int)
+           │    │    ├── columns: a:1(int!null) b:2(int)
            │    │    └── scan abc
-           │    │         └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+           │    │         └── columns: a:1(int!null) b:2(int) c:3(int)
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
            │              ├── variable: abc.a [type=int]
@@ -678,11 +678,11 @@ project
            ├── project
            │    ├── columns: column4:4(tuple{int, int})
            │    ├── project
-           │    │    ├── columns: abc.a:1(int!null) abc.b:2(int)
+           │    │    ├── columns: a:1(int!null) b:2(int)
            │    │    └── select
-           │    │         ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+           │    │         ├── columns: a:1(int!null) b:2(int) c:3(int)
            │    │         ├── scan abc
-           │    │         │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+           │    │         │    └── columns: a:1(int!null) b:2(int) c:3(int)
            │    │         └── false [type=bool]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
@@ -707,11 +707,11 @@ project
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: abc.a:1(int!null)
+                ├── columns: a:1(int!null)
                 └── project
-                     ├── columns: abc.a:1(int!null)
+                     ├── columns: a:1(int!null)
                      └── scan abc
-                          └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+                          └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT EXISTS (SELECT a FROM abc)
@@ -723,9 +723,9 @@ project
  └── projections
       └── exists [type=bool]
            └── project
-                ├── columns: abc.a:1(int!null)
+                ├── columns: a:1(int!null)
                 └── scan abc
-                     └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+                     └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT (SELECT a FROM abc WHERE false)
@@ -737,13 +737,13 @@ project
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: abc.a:1(int!null)
+                ├── columns: a:1(int!null)
                 └── project
-                     ├── columns: abc.a:1(int!null)
+                     ├── columns: a:1(int!null)
                      └── select
-                          ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+                          ├── columns: a:1(int!null) b:2(int) c:3(int)
                           ├── scan abc
-                          │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+                          │    └── columns: a:1(int!null) b:2(int) c:3(int)
                           └── false [type=bool]
 
 exec-ddl
@@ -783,7 +783,7 @@ SELECT * FROM abc WHERE a = 7
 select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── eq [type=bool]
       ├── variable: abc.a [type=int]
       └── const: 7 [type=int]
@@ -814,9 +814,9 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── project
-           │    ├── columns: xyz.x:1(int!null)
+           │    ├── columns: x:1(int!null)
            │    └── scan xyz
-           │         └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+           │         └── columns: x:1(int!null) y:2(int) z:3(int)
            └── const: 1 [type=int]
 
 build
@@ -910,9 +910,9 @@ project
            └── project
                 ├── columns: column3:3(int!null)
                 ├── select
-                │    ├── columns: kv.k:1(int!null) kv.v:2(string)
+                │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
-                │    │    └── columns: kv.k:1(int!null) kv.v:2(string)
+                │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── eq [type=bool]
                 │         ├── variable: kv.k [type=int]
                 │         └── const: 1 [type=int]
@@ -931,9 +931,9 @@ project
            └── project
                 ├── columns: column3:3(int!null)
                 ├── select
-                │    ├── columns: kv.k:1(int!null) kv.v:2(string)
+                │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
-                │    │    └── columns: kv.k:1(int!null) kv.v:2(string)
+                │    │    └── columns: k:1(int!null) v:2(string)
                 │    └── eq [type=bool]
                 │         ├── variable: kv.k [type=int]
                 │         └── const: 2 [type=int]
@@ -1024,7 +1024,7 @@ SELECT * FROM (SELECT * FROM xyz) AS foo WHERE x < 7
 select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
- │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── lt [type=bool]
       ├── variable: xyz.x [type=int]
       └── const: 7 [type=int]
@@ -1035,7 +1035,7 @@ SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
 select
  ├── columns: foo1:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
- │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── lt [type=bool]
       ├── variable: xyz.x [type=int]
       └── const: 7 [type=int]
@@ -1046,7 +1046,7 @@ SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE 
 select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
- │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── lt [type=bool]
       ├── variable: xyz.x [type=int]
       └── const: 7 [type=int]
@@ -1057,7 +1057,7 @@ SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo
 select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
- │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int)
  └── lt [type=bool]
       ├── variable: xyz.x [type=int]
       └── const: 7 [type=int]
@@ -1069,9 +1069,9 @@ sort
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── ordering: -2
  └── select
-      ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+      ├── columns: x:1(int!null) y:2(int) z:3(int)
       ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
+      │    └── columns: x:1(int!null) y:2(int) z:3(int)
       └── lt [type=bool]
            ├── variable: xyz.x [type=int]
            └── const: 7 [type=int]
@@ -1419,13 +1419,13 @@ SELECT (SELECT akv.k) FROM kv akv
 project
  ├── columns: column3:3(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(string)
+ │    └── columns: k:1(int!null) v:2(string)
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: kv.k:1(int)
+                ├── columns: k:1(int)
                 └── project
-                     ├── columns: kv.k:1(int)
+                     ├── columns: k:1(int)
                      └── values
                           └── tuple [type=tuple{}]
 
