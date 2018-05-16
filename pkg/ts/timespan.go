@@ -32,15 +32,6 @@ func (qt *QueryTimespan) width() int64 {
 	return qt.EndNanos - qt.StartNanos
 }
 
-// slideForward modifies the timespan so that it has the same width, but
-// startNanos is moved to endNanos - in effect, sliding the timespan forward to
-// the next "window" with the same width.
-func (qt *QueryTimespan) slideForward() {
-	w := qt.width()
-	qt.StartNanos += w
-	qt.EndNanos += w
-}
-
 // moveForward modifies the timespan so that it has the same width, but
 // both StartNanos and EndNanos is moved forward by the specified number of
 // nanoseconds.
