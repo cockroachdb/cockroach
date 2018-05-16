@@ -755,12 +755,12 @@ build
 union
  ├── columns: x:8(string) x:9(string!null) y:10(string!null)
  ├── left columns: xy.x:1(string) xy.x:1(string) xy.y:2(string)
- ├── right columns: abc.a:4(string) abc.b:5(string) abc.c:6(string)
+ ├── right columns: a:4(string) b:5(string) c:6(string)
  ├── project
  │    ├── columns: xy.x:1(string!null) xy.y:2(string!null)
  │    └── scan xy
  │         └── columns: xy.x:1(string!null) xy.y:2(string!null) xy.rowid:3(int!null)
  └── project
-      ├── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null)
+      ├── columns: a:4(string) b:5(string!null) c:6(string!null)
       └── scan abc
-           └── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null) abc.rowid:7(int!null)
+           └── columns: a:4(string) b:5(string!null) c:6(string!null) abc.rowid:7(int!null)

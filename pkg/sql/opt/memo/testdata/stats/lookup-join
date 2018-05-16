@@ -52,21 +52,21 @@ project
  ├── columns: column5:5(int)
  ├── stats: [rows=65]
  └── group-by
-      ├── columns: a.y:2(int) a.s:3(string!null) column5:5(int)
-      ├── grouping columns: a.y:2(int) a.s:3(string!null)
+      ├── columns: y:2(int) s:3(string!null) column5:5(int)
+      ├── grouping columns: y:2(int) s:3(string!null)
       ├── stats: [rows=65, distinct(2,3)=65]
       ├── keys: weak(2,3)
       ├── select
-      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string!null)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
       │    ├── stats: [rows=66, distinct(3)=1, distinct(2,3)=65]
       │    ├── keys: (1)
       │    ├── lookup-join
-      │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+      │    │    ├── columns: x:1(int!null) y:2(int) s:3(string)
       │    │    ├── table: a
       │    │    ├── stats: [rows=200]
       │    │    ├── keys: (1)
       │    │    └── scan a@secondary
-      │    │         ├── columns: a.x:1(int!null) a.s:3(string)
+      │    │         ├── columns: x:1(int!null) s:3(string)
       │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
       │    │         ├── stats: [rows=200, distinct(3)=1]
       │    │         └── keys: (1)
