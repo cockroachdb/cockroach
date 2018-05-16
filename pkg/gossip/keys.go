@@ -116,11 +116,11 @@ func IsNodeIDKey(key string) bool {
 	return strings.HasPrefix(key, KeyNodeIDPrefix+separator)
 }
 
-// NodeIDFromKey attempts to extract a NodeID from the provided key. The key
-// should have been constructed by MakeNodeIDKey or MakeNodeHealthAlertKey.
-// Returns an error if the key is not of the correct type or is not parsable.
-func NodeIDFromKey(key string) (roachpb.NodeID, error) {
-	trimmedKey, err := removePrefixFromKey(key, KeyNodeIDPrefix)
+// NodeIDFromKey attempts to extract a NodeID from the provided key after
+// stripping the provided prefix. Returns an error if the key is not of the
+// correct type or is not parsable.
+func NodeIDFromKey(key string, prefix string) (roachpb.NodeID, error) {
+	trimmedKey, err := removePrefixFromKey(key, prefix)
 	if err != nil {
 		return 0, err
 	}

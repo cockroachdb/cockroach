@@ -1841,7 +1841,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
-			nodeID, err := gossip.NodeIDFromKey(key)
+			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyNodeHealthAlertPrefix)
 			if err != nil {
 				return errors.Wrapf(err, "failed to parse node ID from key %q", key)
 			}
