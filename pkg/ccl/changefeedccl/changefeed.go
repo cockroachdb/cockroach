@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"time"
@@ -48,12 +49,21 @@ func init() {
 	jobs.AddResumeHook(changefeedResumeHook)
 }
 
+type envelopeType string
+
 const (
+	optEnvelope = `envelope`
+
+	optEnvelopeKeyOnly envelopeType = `key_only`
+	optEnvelopeRow     envelopeType = `row`
+
 	sinkSchemeKafka      = `kafka`
 	sinkParamTopicPrefix = `topic_prefix`
 )
 
-var changefeedOptionExpectValues = map[string]bool{}
+var changefeedOptionExpectValues = map[string]bool{
+	optEnvelope: true,
+}
 
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
@@ -119,6 +129,18 @@ func changefeedPlanHook(
 			}
 		}
 
+		// This makes a new changefeed so we get an error if any of the options
+		// are wrong, otherwise it would only show up as a failed job.
+		// TODO(dan): Do this validation without actually constructing a
+		// changefeed.
+		cf, err := newChangefeed(-1 /* jobID */, p.ExecCfg().DB, sinkURI, opts, tableDescs)
+		if err != nil {
+			return err
+		}
+		if err := cf.Close(); err != nil {
+			return err
+		}
+
 		job, _, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: changefeedJobDescription(changefeedStmt),
 			Username:    p.User(),
@@ -158,6 +180,7 @@ type changefeed struct {
 
 	db               *client.DB
 	kafka            sarama.SyncProducer
+	envelope         envelopeType
 	kafkaTopicPrefix string
 
 	a sqlbase.DatumAlloc
@@ -167,12 +190,22 @@ func newChangefeed(
 	jobID int64,
 	db *client.DB,
 	sinkURI string,
+	opts map[string]string,
 	tableDescs []sqlbase.TableDescriptor,
 ) (*changefeed, error) {
 	cf := &changefeed{
 		jobID:   jobID,
 		db:      db,
 		sinkURI: sinkURI,
+	}
+
+	switch envelopeType(opts[optEnvelope]) {
+	case ``, optEnvelopeRow:
+		cf.envelope = optEnvelopeRow
+	case optEnvelopeKeyOnly:
+		cf.envelope = optEnvelopeKeyOnly
+	default:
+		return nil, errors.Errorf(`unknown %s: %s`, optEnvelope, opts[optEnvelope])
 	}
 
 	var rfTables []sqlbase.RowFetcherTableArgs
@@ -185,16 +218,22 @@ func newChangefeed(
 		}
 		span := tableDesc.PrimaryIndexSpan()
 		cf.spans = append(cf.spans, span)
+
+		var colIDs []sqlbase.ColumnID
+		if cf.envelope == optEnvelopeKeyOnly {
+			colIDs = tableDesc.PrimaryIndex.ColumnIDs
+		} else {
+			for _, col := range tableDesc.Columns {
+				colIDs = append(colIDs, col.ID)
+			}
+		}
 		colIdxMap := make(map[sqlbase.ColumnID]int)
 		var valNeededForCol util.FastIntSet
-		// TODO(dan): Consider adding an option to only return primary key
-		// columns. For some applications, this would be sufficient and (once we
-		// support tables with more than one column family) would let us skip a
-		// second round of requests .
-		for colIdx, col := range tableDesc.Columns {
-			colIdxMap[col.ID] = colIdx
+		for colIdx, colID := range colIDs {
+			colIdxMap[colID] = colIdx
 			valNeededForCol.Add(colIdx)
 		}
+
 		rfTables = append(rfTables, sqlbase.RowFetcherTableArgs{
 			Spans:            roachpb.Spans{span},
 			Desc:             &tableDesc,
@@ -321,20 +360,24 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		if err != nil {
 			return err
 		}
-		key := jsonKey.String()
-		jsonValue, err := json.MakeJSON(jsonValueRaw)
-		if err != nil {
-			return err
+		var key bytes.Buffer
+		jsonKey.Format(&key)
+		var value bytes.Buffer
+		if cf.envelope == optEnvelopeRow {
+			jsonValue, err := json.MakeJSON(jsonValueRaw)
+			if err != nil {
+				return err
+			}
+			jsonValue.Format(&value)
 		}
-		value := jsonValue.String()
 		if log.V(3) {
-			log.Infof(ctx, `row %s -> %s`, key, value)
+			log.Infof(ctx, `row %s -> %s`, key.String(), value.String())
 		}
 
 		message := &sarama.ProducerMessage{
 			Topic: cf.kafkaTopicPrefix + tableDesc.Name,
-			Key:   sarama.ByteEncoder(key),
-			Value: sarama.ByteEncoder(value),
+			Key:   sarama.ByteEncoder(key.Bytes()),
+			Value: sarama.ByteEncoder(value.Bytes()),
 		}
 		if _, _, err := cf.kafka.SendMessage(message); err != nil {
 			return errors.Wrapf(err, `sending message to kafka topic %s`, message.Topic)
@@ -354,7 +397,8 @@ func (b *changefeedResumer) Resume(
 	details := job.Record.Details.(jobs.ChangefeedDetails)
 	p := planHookState.(sql.PlanHookState)
 
-	cf, err := newChangefeed(*job.ID(), p.ExecCfg().DB, details.SinkURI, details.TableDescs)
+	cf, err := newChangefeed(
+		*job.ID(), p.ExecCfg().DB, details.SinkURI, details.Opts, details.TableDescs)
 	if err != nil {
 		return err
 	}
