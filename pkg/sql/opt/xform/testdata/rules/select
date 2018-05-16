@@ -83,7 +83,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  └── scan a@v
-      ├── columns: a.k:1(int!null) a.v:3(int!null)
+      ├── columns: k:1(int!null) v:3(int!null)
       ├── constraint: /3: [/2 - ]
       └── keys: (1) (3)
 
@@ -116,7 +116,7 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  └── scan a@u
-      ├── columns: a.k:1(int!null) a.u:2(int!null)
+      ├── columns: k:1(int!null) u:2(int!null)
       ├── constraint: /2/1: [/1/5 - /1/5]
       └── keys: (1)
 
@@ -158,10 +158,10 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  └── select
-      ├── columns: a.k:1(int!null) a.u:2(int!null)
+      ├── columns: k:1(int!null) u:2(int!null)
       ├── keys: (1)
       ├── scan a@u
-      │    ├── columns: a.k:1(int!null) a.u:2(int)
+      │    ├── columns: k:1(int!null) u:2(int)
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1)
       └── filters [type=bool, outer=(1,2)]
@@ -208,10 +208,10 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  └── select
-      ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
+      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@u
-      │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
@@ -262,10 +262,10 @@ project
  ├── columns: k:1(int!null)
  ├── keys: (1)
  └── select
-      ├── columns: a.k:1(int!null) a.u:2(int!null) a.v:3(int!null)
+      ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
       ├── keys: (1) (3)
       ├── scan a@u
-      │    ├── columns: a.k:1(int!null) a.u:2(int) a.v:3(int)
+      │    ├── columns: k:1(int!null) u:2(int) v:3(int)
       │    ├── constraint: /2/1: (/NULL - ]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -282,7 +282,7 @@ select
  ├── cardinality: [0 - 1]
  ├── keys: (1)
  ├── scan a@u
- │    ├── columns: a.k:1(int!null) a.u:2(int)
+ │    ├── columns: k:1(int!null) u:2(int)
  │    ├── limit: 1
  │    └── keys: (1)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -302,7 +302,7 @@ lookup-join
  ├── table: b
  ├── keys: (1) (3)
  └── scan b@v
-      ├── columns: b.k:1(int!null) b.v:3(int)
+      ├── columns: k:1(int!null) v:3(int)
       ├── constraint: /3: [/1 - /1]
       └── keys: (1) weak(3)
 
@@ -343,7 +343,7 @@ select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── keys: (1) (3)
  ├── scan b
- │    ├── columns: b.k:1(int!null) b.u:2(int) b.v:3(int)
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    └── keys: (1) weak(3)
  └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
       └── gt [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
@@ -358,11 +358,11 @@ select
  ├── columns: k:1(int!null) u:2(int) v:3(int!null)
  ├── keys: (1) (3)
  ├── lookup-join
- │    ├── columns: b.k:1(int!null) b.u:2(int) b.v:3(int)
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    ├── table: b
  │    ├── keys: (1) weak(3)
  │    └── scan b@v
- │         ├── columns: b.k:1(int!null) b.v:3(int)
+ │         ├── columns: k:1(int!null) v:3(int)
  │         ├── constraint: /3: [/1 - /1]
  │         └── keys: (1) weak(3)
  └── filters [type=bool, outer=(1,2)]

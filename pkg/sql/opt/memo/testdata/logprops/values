@@ -32,7 +32,7 @@ project
  ├── columns: column4:4(int)
  ├── stats: [rows=1000]
  ├── scan xy
- │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000]
  │    └── keys: (1)
  └── projections [outer=(1,2)]

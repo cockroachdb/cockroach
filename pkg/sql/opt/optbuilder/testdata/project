@@ -33,7 +33,7 @@ SELECT a.x FROM a
 project
  ├── columns: x:1(int!null)
  └── scan a
-      └── columns: a.x:1(int!null) a.y:2(float)
+      └── columns: x:1(int!null) y:2(float)
 
 build
 SELECT a.x, a.y FROM a
@@ -47,7 +47,7 @@ SELECT a.y, a.x FROM a
 project
  ├── columns: y:2(float) x:1(int!null)
  └── scan a
-      └── columns: a.x:1(int!null) a.y:2(float)
+      └── columns: x:1(int!null) y:2(float)
 
 build
 SELECT * FROM a
@@ -63,7 +63,7 @@ SELECT * FROM b
 project
  ├── columns: x:1(int) y:2(float)
  └── scan b
-      └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM a
@@ -71,7 +71,7 @@ SELECT (a.x + 3) AS "X", false AS "Y" FROM a
 project
  ├── columns: X:3(int) Y:4(bool!null)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── projections
       ├── plus [type=int]
       │    ├── variable: a.x [type=int]
@@ -84,7 +84,7 @@ SELECT *, ((x < y) OR x > 1000) FROM a
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── projections
       └── or [type=bool]
            ├── lt [type=bool]
@@ -100,7 +100,7 @@ SELECT a.*, true FROM a
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool!null)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── projections
       └── true [type=bool]
 
@@ -112,7 +112,7 @@ project
  ├── project
  │    ├── columns: column3:3(int) column4:4(float)
  │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    │    └── columns: x:1(int!null) y:2(float)
  │    └── projections
  │         ├── plus [type=int]
  │         │    ├── variable: a.x [type=int]
@@ -134,7 +134,7 @@ SELECT rowid FROM b;
 project
  ├── columns: rowid:3(int!null)
  └── scan b
-      └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 build
 SELECT rowid FROM (SELECT * FROM b)
@@ -147,7 +147,7 @@ SELECT rowid FROM (SELECT rowid FROM b)
 project
  ├── columns: rowid:3(int!null)
  └── scan b
-      └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 build
 SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
@@ -155,7 +155,7 @@ SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
 project
  ├── columns: r:3(int!null)
  └── scan b
-      └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 build
 SELECT r FROM (SELECT rowid FROM b) AS q(r)
@@ -163,7 +163,7 @@ SELECT r FROM (SELECT rowid FROM b) AS q(r)
 project
  ├── columns: r:3(int!null)
  └── scan b
-      └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
@@ -186,7 +186,7 @@ SELECT x, y, rowid FROM c WHERE rowid > 0
 select
  ├── columns: x:1(int) y:2(float) rowid:3(int!null)
  ├── scan c
- │    └── columns: c.x:1(int) c.y:2(float) c.rowid:3(int!null)
+ │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
  └── gt [type=bool]
       ├── variable: c.rowid [type=int]
       └── const: 0 [type=int]
@@ -197,7 +197,7 @@ SELECT r FROM (SELECT x, y, rowid AS r FROM c)
 project
  ├── columns: r:3(int!null)
  └── scan c
-      └── columns: c.x:1(int) c.y:2(float) c.rowid:3(int!null)
+      └── columns: x:1(int) y:2(float) rowid:3(int!null)
 
 build
 SELECT rowid::string FROM b
@@ -205,7 +205,7 @@ SELECT rowid::string FROM b
 project
  ├── columns: column4:4(string)
  ├── scan b
- │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
+ │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
  └── projections
       └── cast: string [type=string]
            └── variable: b.rowid [type=int]

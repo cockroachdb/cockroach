@@ -32,18 +32,18 @@ SELECT y, z FROM xyz
 project
  ├── columns: y:2(int) z:3(float)
  └── scan xyz
-      └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT y, z FROM xyz
 ----
 group-by
  ├── columns: y:2(int) z:3(float)
- ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+ ├── grouping columns: y:2(int) z:3(float)
  └── project
-      ├── columns: xyz.y:2(int) xyz.z:3(float)
+      ├── columns: y:2(int) z:3(float)
       └── scan xyz
-           └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
@@ -51,12 +51,12 @@ SELECT y FROM (SELECT DISTINCT y, z FROM xyz)
 project
  ├── columns: y:2(int)
  └── group-by
-      ├── columns: xyz.y:2(int) xyz.z:3(float)
-      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── columns: y:2(int) z:3(float)
+      ├── grouping columns: y:2(int) z:3(float)
       └── project
-           ├── columns: xyz.y:2(int) xyz.z:3(float)
+           ├── columns: y:2(int) z:3(float)
            └── scan xyz
-                └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+                └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY z
@@ -65,12 +65,12 @@ sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +3
  └── group-by
-      ├── columns: xyz.y:2(int) xyz.z:3(float)
-      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── columns: y:2(int) z:3(float)
+      ├── grouping columns: y:2(int) z:3(float)
       └── project
-           ├── columns: xyz.y:2(int) xyz.z:3(float)
+           ├── columns: y:2(int) z:3(float)
            └── scan xyz
-                └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+                └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y
@@ -79,12 +79,12 @@ sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +2
  └── group-by
-      ├── columns: xyz.y:2(int) xyz.z:3(float)
-      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── columns: y:2(int) z:3(float)
+      ├── grouping columns: y:2(int) z:3(float)
       └── project
-           ├── columns: xyz.y:2(int) xyz.z:3(float)
+           ├── columns: y:2(int) z:3(float)
            └── scan xyz
-                └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+                └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT y, z FROM xyz ORDER BY y, z
@@ -93,12 +93,12 @@ sort
  ├── columns: y:2(int) z:3(float)
  ├── ordering: +2,+3
  └── group-by
-      ├── columns: xyz.y:2(int) xyz.z:3(float)
-      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── columns: y:2(int) z:3(float)
+      ├── grouping columns: y:2(int) z:3(float)
       └── project
-           ├── columns: xyz.y:2(int) xyz.z:3(float)
+           ├── columns: y:2(int) z:3(float)
            └── scan xyz
-                └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+                └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT y + x FROM xyz ORDER by (y + x)
@@ -112,7 +112,7 @@ sort
       └── project
            ├── columns: column4:4(int)
            ├── scan xyz
-           │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
                 └── plus [type=int]
                      ├── variable: xyz.y [type=int]
@@ -130,7 +130,7 @@ sort
       └── project
            ├── columns: column4:4(int)
            ├── scan xyz
-           │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
                 └── plus [type=int]
                      ├── variable: xyz.y [type=int]
@@ -157,12 +157,12 @@ sort
  ├── columns: w:2(int)
  ├── ordering: +2
  └── group-by
-      ├── columns: xyz.y:2(int)
-      ├── grouping columns: xyz.y:2(int)
+      ├── columns: y:2(int)
+      ├── grouping columns: y:2(int)
       └── project
-           ├── columns: xyz.y:2(int)
+           ├── columns: y:2(int)
            └── scan xyz
-                └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+                └── columns: x:1(int!null) y:2(int) z:3(float)
 
 build
 SELECT DISTINCT (y,z) FROM xyz
@@ -173,7 +173,7 @@ group-by
  └── project
       ├── columns: column4:4(tuple{int, float})
       ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
            └── tuple [type=tuple{int, float}]
                 ├── variable: xyz.y [type=int]
@@ -186,12 +186,12 @@ group-by
  ├── columns: column4:4(int)
  ├── project
  │    └── group-by
- │         ├── columns: xyz.y:2(int)
- │         ├── grouping columns: xyz.y:2(int)
+ │         ├── columns: y:2(int)
+ │         ├── grouping columns: y:2(int)
  │         └── project
- │              ├── columns: xyz.y:2(int)
+ │              ├── columns: y:2(int)
  │              └── scan xyz
- │                   └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+ │                   └── columns: x:1(int!null) y:2(int) z:3(float)
  └── aggregations
       └── count-rows [type=int]
 
@@ -200,13 +200,13 @@ SELECT DISTINCT x FROM xyz WHERE x > 0
 ----
 group-by
  ├── columns: x:1(int!null)
- ├── grouping columns: xyz.x:1(int!null)
+ ├── grouping columns: x:1(int!null)
  └── project
-      ├── columns: xyz.x:1(int!null)
+      ├── columns: x:1(int!null)
       └── select
-           ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
-           │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── gt [type=bool]
                 ├── variable: xyz.x [type=int]
                 └── const: 0 [type=int]
@@ -216,13 +216,13 @@ SELECT DISTINCT z FROM xyz WHERE x > 0
 ----
 group-by
  ├── columns: z:3(float)
- ├── grouping columns: xyz.z:3(float)
+ ├── grouping columns: z:3(float)
  └── project
-      ├── columns: xyz.z:3(float)
+      ├── columns: z:3(float)
       └── select
-           ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
-           │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── gt [type=bool]
                 ├── variable: xyz.x [type=int]
                 └── const: 0 [type=int]
@@ -236,12 +236,12 @@ group-by
  └── project
       ├── columns: column4:4(int)
       └── group-by
-           ├── columns: xyz.x:1(int!null) column4:4(int)
-           ├── grouping columns: xyz.x:1(int!null)
+           ├── columns: x:1(int!null) column4:4(int)
+           ├── grouping columns: x:1(int!null)
            ├── project
-           │    ├── columns: xyz.x:1(int!null)
+           │    ├── columns: x:1(int!null)
            │    └── scan xyz
-           │         └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+           │         └── columns: x:1(int!null) y:2(int) z:3(float)
            └── aggregations
                 └── max [type=int]
                      └── variable: xyz.x [type=int]
@@ -255,7 +255,7 @@ group-by
  └── project
       ├── columns: column4:4(int)
       ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
            └── plus [type=int]
                 ├── variable: xyz.x [type=int]
@@ -270,7 +270,7 @@ group-by
  └── project
       ├── columns: column4:4(int!null)
       ├── scan xyz
-      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
            └── const: 3 [type=int]
 
@@ -296,12 +296,12 @@ group-by
  └── project
       ├── columns: column5:5(int) column6:6(int!null) column4:4(float)
       ├── select
-      │    ├── columns: xyz.x:1(int!null) xyz.y:2(int!null) column4:4(float)
+      │    ├── columns: x:1(int!null) y:2(int!null) column4:4(float)
       │    ├── group-by
-      │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) column4:4(float)
-      │    │    ├── grouping columns: xyz.x:1(int!null) xyz.y:2(int)
+      │    │    ├── columns: x:1(int!null) y:2(int) column4:4(float)
+      │    │    ├── grouping columns: x:1(int!null) y:2(int)
       │    │    ├── scan xyz
-      │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
       │    │    └── aggregations
       │    │         └── max [type=float]
       │    │              └── variable: xyz.z [type=float]
@@ -346,11 +346,11 @@ sort
  ├── columns: column5:5(int!null) d:4(int!null) b:2(int!null)
  ├── ordering: +4,+2
  └── group-by
-      ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
-      ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int!null)
+      ├── columns: b:2(int!null) d:4(int!null) column5:5(int!null)
+      ├── grouping columns: b:2(int!null) d:4(int!null) column5:5(int!null)
       └── project
-           ├── columns: column5:5(int!null) abcd.b:2(int!null) abcd.d:4(int!null)
+           ├── columns: column5:5(int!null) b:2(int!null) d:4(int!null)
            ├── scan abcd
-           │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
            └── projections
                 └── const: 1 [type=int]
