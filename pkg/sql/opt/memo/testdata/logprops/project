@@ -73,17 +73,17 @@ select
       │         └── project
       │              ├── columns: column8:8(int)
       │              ├── outer: (1,2)
-      │              ├── stats: [rows=111]
+      │              ├── stats: [rows=333]
       │              ├── select
       │              │    ├── columns: k:5(int!null) u:6(float) v:7(string)
       │              │    ├── outer: (1)
-      │              │    ├── stats: [rows=111]
+      │              │    ├── stats: [rows=333]
       │              │    ├── keys: (5)
       │              │    ├── scan kuv
       │              │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
       │              │    │    ├── stats: [rows=1000]
       │              │    │    └── keys: (5)
-      │              │    └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │              │    └── eq [type=bool, outer=(1,5)]
       │              │         ├── variable: kuv.k [type=int, outer=(5)]
       │              │         └── variable: xysd.x [type=int, outer=(1)]
       │              └── projections [outer=(2)]

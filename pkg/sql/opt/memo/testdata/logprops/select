@@ -22,13 +22,13 @@ SELECT * FROM xy WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1, distinct(1)=1]
+ ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000, distinct(1)=1000]
+ │    ├── stats: [rows=1000]
  │    └── keys: (1)
- └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ └── eq [type=bool, outer=(1)]
       ├── variable: xy.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
@@ -37,7 +37,7 @@ SELECT * FROM xy,kuv WHERE xy.x=kuv.k
 ----
 select
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
- ├── stats: [rows=111111]
+ ├── stats: [rows=333333]
  ├── inner-join
  │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
  │    ├── stats: [rows=1000000]
@@ -50,7 +50,7 @@ select
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (3)
  │    └── true [type=bool]
- └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ └── eq [type=bool, outer=(1,3)]
       ├── variable: xy.x [type=int, outer=(1)]
       └── variable: kuv.k [type=int, outer=(3)]
 
@@ -70,21 +70,21 @@ select
       └── select
            ├── columns: k:3(int!null) u:4(float) v:5(string)
            ├── outer: (1,2)
-           ├── stats: [rows=12]
+           ├── stats: [rows=111]
            ├── keys: (3)
            ├── select
            │    ├── columns: k:3(int!null) u:4(float) v:5(string)
            │    ├── outer: (2)
-           │    ├── stats: [rows=111]
+           │    ├── stats: [rows=333]
            │    ├── keys: (3)
            │    ├── scan kuv
            │    │    ├── columns: k:3(int!null) u:4(float) v:5(string)
            │    │    ├── stats: [rows=1000]
            │    │    └── keys: (3)
-           │    └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           │    └── eq [type=bool, outer=(2,3)]
            │         ├── variable: kuv.k [type=int, outer=(3)]
            │         └── variable: xy.y [type=int, outer=(2)]
-           └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+           └── eq [type=bool, outer=(1,3)]
                 ├── variable: kuv.k [type=int, outer=(3)]
                 └── variable: xy.x [type=int, outer=(1)]
 
@@ -93,13 +93,13 @@ build
 SELECT COUNT(*) FROM xy HAVING COUNT(*) = 5
 ----
 select
- ├── columns: column3:3(int!null)
+ ├── columns: column3:3(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(3)=1]
+ ├── stats: [rows=1]
  ├── group-by
  │    ├── columns: column3:3(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(3)=1]
+ │    ├── stats: [rows=1]
  │    ├── project
  │    │    ├── stats: [rows=1000]
  │    │    └── scan xy
@@ -108,7 +108,7 @@ select
  │    │         └── keys: (1)
  │    └── aggregations
  │         └── count-rows [type=int]
- └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+ └── eq [type=bool, outer=(3)]
       ├── variable: column3 [type=int, outer=(3)]
       └── const: 5 [type=int]
 
@@ -157,17 +157,17 @@ build
 SELECT * FROM abcd WHERE c IS NOT NULL
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
  ├── stats: [rows=333]
  └── select
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       ├── stats: [rows=333]
       ├── keys: (5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
-      └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── is-not [type=bool, outer=(3)]
            ├── variable: abcd.c [type=int, outer=(3)]
            └── null [type=unknown]
 
@@ -175,17 +175,17 @@ build
 SELECT * FROM abcd WHERE c = d
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=111]
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ ├── stats: [rows=333]
  └── select
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=111]
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
+      ├── stats: [rows=333]
       ├── keys: (5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
-      └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+      └── eq [type=bool, outer=(3,4)]
            ├── variable: abcd.c [type=int, outer=(3)]
            └── variable: abcd.d [type=int, outer=(4)]
 
@@ -193,17 +193,17 @@ build
 SELECT * FROM abcd WHERE a > c
 ----
 project
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- ├── stats: [rows=111]
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ ├── stats: [rows=333]
  └── select
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── stats: [rows=111]
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
+      ├── stats: [rows=333]
       ├── keys: (5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
-      └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      └── gt [type=bool, outer=(1,3)]
            ├── variable: abcd.a [type=int, outer=(1)]
            └── variable: abcd.c [type=int, outer=(3)]
 
@@ -211,22 +211,22 @@ build
 SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
 ----
 select
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=12]
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ ├── stats: [rows=111]
  ├── project
- │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- │    ├── stats: [rows=111]
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
+ │    ├── stats: [rows=333]
  │    └── select
- │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
- │         ├── stats: [rows=111]
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
+ │         ├── stats: [rows=333]
  │         ├── keys: (5)
  │         ├── scan abcd
  │         │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
  │         │    ├── stats: [rows=1000]
  │         │    └── keys: (5)
- │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │         └── eq [type=bool, outer=(1,3)]
  │              ├── variable: abcd.a [type=int, outer=(1)]
  │              └── variable: abcd.c [type=int, outer=(3)]
- └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+ └── lt [type=bool, outer=(2,4)]
       ├── variable: abcd.b [type=int, outer=(2)]
       └── variable: abcd.d [type=int, outer=(4)]

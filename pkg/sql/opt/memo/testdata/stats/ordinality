@@ -29,21 +29,21 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinal
 ----
 select
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- ├── stats: [rows=10, distinct(3)=10]
+ ├── stats: [rows=444]
  ├── keys: (1) (3)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000, distinct(3)=4000]
+ │    ├── stats: [rows=4000]
  │    ├── keys: (1) (3)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
  │         ├── stats: [rows=4000]
  │         └── keys: (1)
- └── and [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-      ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+ └── and [type=bool, outer=(3)]
+      ├── gt [type=bool, outer=(3)]
       │    ├── variable: ordinality [type=int, outer=(3)]
       │    └── const: 0 [type=int]
-      └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+      └── le [type=bool, outer=(3)]
            ├── variable: ordinality [type=int, outer=(3)]
            └── const: 10 [type=int]
 
@@ -51,22 +51,22 @@ build
 SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
 ----
 select
- ├── columns: x:1(int!null) y:2(int!null) ordinality:3(int!null)
- ├── stats: [rows=100, distinct(2)=10]
+ ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
+ ├── stats: [rows=444]
  ├── keys: (1) (3)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000, distinct(2)=400]
+ │    ├── stats: [rows=4000]
  │    ├── keys: (1) (3)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000, distinct(2)=400]
+ │         ├── stats: [rows=4000]
  │         └── keys: (1)
- └── and [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
-      ├── gt [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+ └── and [type=bool, outer=(2)]
+      ├── gt [type=bool, outer=(2)]
       │    ├── variable: a.y [type=int, outer=(2)]
       │    └── const: 0 [type=int]
-      └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
+      └── le [type=bool, outer=(2)]
            ├── variable: a.y [type=int, outer=(2)]
            └── const: 10 [type=int]
 
@@ -92,25 +92,25 @@ SELECT x FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinal
 ----
 project
  ├── columns: x:1(int!null)
- ├── stats: [rows=10]
+ ├── stats: [rows=444]
  ├── keys: (1)
  └── select
       ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
-      ├── stats: [rows=10, distinct(3)=10]
+      ├── stats: [rows=444]
       ├── keys: (1) (3)
       ├── row-number
       │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
-      │    ├── stats: [rows=4000, distinct(3)=4000]
+      │    ├── stats: [rows=4000]
       │    ├── keys: (1) (3)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int)
       │         ├── stats: [rows=4000]
       │         └── keys: (1)
-      └── and [type=bool, outer=(3), constraints=(/3: [/1 - /10]; tight)]
-           ├── gt [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
+      └── and [type=bool, outer=(3)]
+           ├── gt [type=bool, outer=(3)]
            │    ├── variable: ordinality [type=int, outer=(3)]
            │    └── const: 0 [type=int]
-           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+           └── le [type=bool, outer=(3)]
                 ├── variable: ordinality [type=int, outer=(3)]
                 └── const: 10 [type=int]
 
@@ -120,17 +120,17 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality = 2
 ----
 select
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- ├── stats: [rows=1, distinct(3)=1]
+ ├── stats: [rows=1333]
  ├── keys: (1) (3)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000, distinct(3)=4000]
+ │    ├── stats: [rows=4000]
  │    ├── keys: (1) (3)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
  │         ├── stats: [rows=4000]
  │         └── keys: (1)
- └── eq [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight)]
+ └── eq [type=bool, outer=(3)]
       ├── variable: ordinality [type=int, outer=(3)]
       └── const: 2 [type=int]
 

@@ -296,7 +296,7 @@ group-by
  └── project
       ├── columns: column5:5(int) column6:6(int!null) column4:4(float)
       ├── select
-      │    ├── columns: x:1(int!null) y:2(int!null) column4:4(float)
+      │    ├── columns: x:1(int!null) y:2(int) column4:4(float)
       │    ├── group-by
       │    │    ├── columns: x:1(int!null) y:2(int) column4:4(float)
       │    │    ├── grouping columns: x:1(int!null) y:2(int)

@@ -243,12 +243,10 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 // getConstraints retrieves the constraints already calculated for an
 // expression.
 func (cb *constraintsBuilder) getConstraints(ev ExprView) (_ *constraint.Set, tight bool) {
-	if ev.Operator() == opt.NullOp {
-		// Special case: a NullOp might be used as a boolean expression, but we
-		// don't generate constraints for this op.
-		return contradiction, true
-	}
 	s := ev.Logical().Scalar
+	if s.Constraints == nil {
+		s.Constraints, s.TightConstraints = cb.buildConstraints(ev)
+	}
 	return s.Constraints, s.TightConstraints
 }
 
