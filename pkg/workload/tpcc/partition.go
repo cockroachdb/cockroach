@@ -337,3 +337,16 @@ func partitionTables(db *gosql.DB, warehouses, partitions int) {
 	partitionHistory(db, wIDs, partitions)
 	partitionItem(db, partitions)
 }
+
+func isTableAlreadyPartitioned(db *gosql.DB) (bool, error) {
+	var count int
+	if err := db.QueryRow(
+		// Check for the existence of a partition named p0, which indicates that the
+		// table has been paritioned already.
+		`SELECT count(*) FROM crdb_internal.partitions where name = 'p0'`,
+	).Scan(&count); err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}

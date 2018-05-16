@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	_ "github.com/lib/pq"
+	"os"
 )
 
 func registerDrop(r *registry) {
@@ -138,7 +139,8 @@ gc:
 			if !allNodesSpaceCleared {
 				sizeReport += fmt.Sprintf("disk space usage has not dropped below %s on all nodes.",
 					humanizeutil.IBytes(int64(maxSizeBytes)))
-				t.Fatalf(sizeReport)
+				c.l.printf(sizeReport)
+				os.Exit(1)
 			}
 
 			return nil
