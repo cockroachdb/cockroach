@@ -935,3 +935,100 @@ func TestPersistHLCUpperBound(t *testing.T) {
 		})
 	}
 }
+
+func TestServeIndexHTML(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const htmlTemplate = `<!DOCTYPE html>
+<html>
+	<head>
+		<title>Cockroach Console</title>
+		<meta charset="UTF-8">
+		<link href="favicon.ico" rel="shortcut icon">
+	</head>
+	<body>
+		<div id="react-layout"></div>
+
+		<script>
+			window.dataFromServer = %s;
+		</script>
+
+		<script src="protos.dll.js" type="text/javascript"></script>
+		<script src="vendor.dll.js" type="text/javascript"></script>
+		<script src="bundle.js" type="text/javascript"></script>
+	</body>
+</html>
+`
+
+	t.Run("Insecure mode", func(t *testing.T) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Insecure: true,
+		})
+		defer s.Stopper().Stop(context.TODO())
+		tsrv := s.(*TestServer)
+
+		client, err := tsrv.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		resp, err := client.Get(s.AdminURL())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != 200 {
+			t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+		}
+		respBytes, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		respString := string(respBytes)
+		expected := fmt.Sprintf(htmlTemplate, `{"LoginEnabled":false,"LoggedInUser":null}`)
+		if respString != expected {
+			t.Fatalf("expected %s; got %s", expected, respString)
+		}
+	})
+
+	t.Run("Secure mode", func(t *testing.T) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(context.TODO())
+		tsrv := s.(*TestServer)
+
+		loggedInClient, err := tsrv.GetAuthenticatedHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+		loggedOutClient, err := tsrv.GetHTTPClient()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cases := []struct {
+			client http.Client
+			json   string
+		}{
+			{loggedInClient, `{"LoginEnabled":true,"LoggedInUser":"authentic_user"}`},
+			{loggedOutClient, `{"LoginEnabled":true,"LoggedInUser":null}`},
+		}
+
+		for _, testCase := range cases {
+			resp, err := testCase.client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(htmlTemplate, testCase.json)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		}
+	})
+}

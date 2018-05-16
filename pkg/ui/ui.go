@@ -22,6 +22,7 @@ package ui
 
 import (
 	"fmt"
+	"html/template"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -67,3 +68,41 @@ var AssetDir = func(name string) ([]string, error) {
 // AssetInfo loads and returns metadata for the asset with the given name. It
 // returns an error if the asset could not be found or could not be loaded.
 var AssetInfo func(name string) (os.FileInfo, error)
+
+// IndexHTMLTemplate takes arguments about the current session and returns HTML which
+// includes the UI JavaScript bundles, plus a script tag which sets the currently logged in user
+// so that the UI JavaScript can decide whether to show a login page.
+var IndexHTMLTemplate *template.Template
+
+// IndexHTMLArgs are the arguments to IndexHTMLTemplate.
+type IndexHTMLArgs struct {
+	LoginEnabled bool
+	LoggedInUser *string
+}
+
+func init() {
+	t, err := template.New("index").Parse(`<!DOCTYPE html>
+<html>
+	<head>
+		<title>Cockroach Console</title>
+		<meta charset="UTF-8">
+		<link href="favicon.ico" rel="shortcut icon">
+	</head>
+	<body>
+		<div id="react-layout"></div>
+
+		<script>
+			window.dataFromServer = {{ .DataFromServer }};
+		</script>
+
+		<script src="protos.dll.js" type="text/javascript"></script>
+		<script src="vendor.dll.js" type="text/javascript"></script>
+		<script src="bundle.js" type="text/javascript"></script>
+	</body>
+</html>
+`)
+	if err != nil {
+		panic(fmt.Sprintf("can't parse template: %s", err))
+	}
+	IndexHTMLTemplate = t
+}

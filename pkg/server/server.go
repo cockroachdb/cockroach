@@ -18,7 +18,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"math"
@@ -32,11 +34,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 
 	"github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
@@ -62,6 +59,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1172,14 +1173,18 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	// Also throw the landing page in there. It won't work well, but it's better than a 404.
-	// The remaining endpoints will be opened late, when we're sure that the subsystems they
-	// talk to are functional.
-	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
+	fileServer := http.FileServer(&assetfs.AssetFS{
 		Asset:     ui.Asset,
 		AssetDir:  ui.AssetDir,
 		AssetInfo: ui.AssetInfo,
-	}))
+	})
+
+	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
+	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
+	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
+		s.authentication, serveUIAssets(fileServer, s.cfg),
+	)
+	s.mux.Handle("/", maybeAuthMux)
 
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
@@ -1904,4 +1909,38 @@ func officialAddr(
 	}
 
 	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, port)), nil
+}
+
+func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/" {
+			fileServer.ServeHTTP(writer, request)
+			return
+		}
+
+		// Construct arguments for template.
+		tmplArgs := ui.IndexHTMLArgs{
+			LoginEnabled: cfg.RequireWebSession(),
+		}
+		loggedInUser, ok := request.Context().Value(loggedInUserKey{}).(string)
+		if ok && loggedInUser != "" {
+			tmplArgs.LoggedInUser = &loggedInUser
+		}
+
+		argsJSON, err := json.Marshal(tmplArgs)
+		if err != nil {
+			http.Error(writer, err.Error(), 500)
+		}
+
+		// Execute the template.
+		writer.Header().Add("Content-Type", "text/html")
+		if err := ui.IndexHTMLTemplate.Execute(writer, map[string]template.JS{
+			"DataFromServer": template.JS(string(argsJSON)),
+		}); err != nil {
+			wrappedErr := errors.Wrap(err, "templating index.html")
+			http.Error(writer, wrappedErr.Error(), 500)
+			log.Error(request.Context(), wrappedErr)
+			return
+		}
+	})
 }
