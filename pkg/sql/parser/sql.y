@@ -1891,7 +1891,7 @@ create_stats_stmt:
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 create_changefeed_stmt:
-  CREATE EXPERIMENTAL_CHANGEFEED EMIT targets TO IDENT opt_as_of_clause opt_with_options
+  CREATE EXPERIMENTAL_CHANGEFEED EMIT targets TO string_or_placeholder opt_as_of_clause opt_with_options
   {
     /* SKIP DOC */
     // TODO(dan): This reuses the `AS OF SYSTEM TIME` syntax for convenience,
@@ -1899,7 +1899,7 @@ create_changefeed_stmt:
     // other hand, RESTORE already stretches the definition a bit. Revisit.
     $$.val = &tree.CreateChangefeed{
       Targets: $4.targetList(),
-      SinkType: $6,
+      SinkURI: $6.expr(),
       AsOf: $7.asOfClause(),
       Options: $8.kvOptions(),
     }
