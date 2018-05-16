@@ -58,7 +58,9 @@ type tpcc struct {
 	split   bool
 	scatter bool
 
-	partitions int
+	partitions        int
+	affinityPartition int
+	prepartitioned    bool
 
 	usePostgres  bool
 	serializable bool
@@ -94,16 +96,17 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:               {RuntimeOnly: true},
-			`fks`:              {RuntimeOnly: true},
-			`mix`:              {RuntimeOnly: true},
-			`partitions`:       {RuntimeOnly: true},
-			`scatter`:          {RuntimeOnly: true},
-			`serializable`:     {RuntimeOnly: true},
-			`split`:            {RuntimeOnly: true},
-			`wait`:             {RuntimeOnly: true},
-			`workers`:          {RuntimeOnly: true},
-			`expensive-checks`: {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`db`:                 {RuntimeOnly: true},
+			`fks`:                {RuntimeOnly: true},
+			`mix`:                {RuntimeOnly: true},
+			`partitions`:         {RuntimeOnly: true},
+			`partition-affinity`: {RuntimeOnly: true},
+			`scatter`:            {RuntimeOnly: true},
+			`serializable`:       {RuntimeOnly: true},
+			`split`:              {RuntimeOnly: true},
+			`wait`:               {RuntimeOnly: true},
+			`workers`:            {RuntimeOnly: true},
+			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -122,7 +125,9 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.prepartitioned, `prepartitioned`, false, `Table is already partitioned, don't partition'`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -152,6 +157,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			if w.partitions != 0 && !w.split {
 				return errors.Errorf(`--partitions requires --split`)
+			}
+
+			if w.affinityPartition != -1 && w.partitions == 0 {
+				return errors.Errorf(`--affinityPartition requires --partitions`)
+			}
+
+			if w.affinityPartition < -1 {
+				return errors.Errorf(`--affinityPartition should be greater than 0`)
 			}
 
 			if w.serializable {
@@ -346,11 +359,13 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		dbs[i].SetMaxIdleConns(nConns)
 	}
 
-	if w.split {
-		splitTables(dbs[0], w.warehouses)
+	if !w.prepartitioned {
+		if w.split {
+			splitTables(dbs[0], w.warehouses)
 
-		if w.partitions > 0 {
-			partitionTables(dbs[0], w.warehouses, w.partitions)
+			if w.partitions > 0 {
+				partitionTables(dbs[0], w.warehouses, w.partitions)
+			}
 		}
 	}
 
@@ -384,6 +399,9 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
 		p := (warehouse * w.partitions) / w.warehouses
+		if w.affinityPartition != -1 && p != w.affinityPartition {
+			continue
+		}
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
