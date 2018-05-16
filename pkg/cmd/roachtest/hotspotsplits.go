@@ -35,12 +35,15 @@ func registerHotSpotSplits(r *registry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
-	runHotSpot := func(ctx context.Context, t *test, c *cluster, nodes int, duration time.Duration, concurrency int) {
-		c.Put(ctx, workload, "./workload", c.Node(nodes))
-		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, c.All())
+	runHotSpot := func(ctx context.Context, t *test, c *cluster, duration time.Duration, concurrency int) {
+		roachNodes := c.Range(1, c.nodes-1)
+		appNode := c.Node(c.nodes)
 
-		c.Run(ctx, c.Node(nodes), `./workload init kv --drop`)
+		c.Put(ctx, cockroach, "./cockroach", roachNodes)
+		c.Start(ctx, roachNodes)
+
+		c.Put(ctx, workload, "./workload", appNode)
+		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
 
 		var m *errgroup.Group // see comment in version.go
 		m, ctx = errgroup.WithContext(ctx)
@@ -52,9 +55,10 @@ func registerHotSpotSplits(r *registry) {
 			if err != nil {
 				return err
 			}
-			const blockSize = 1 << 20 // 1 MB
-			return c.RunL(ctx, quietL, c.Node(nodes), fmt.Sprintf(
-				"./workload run kv --read-percent=0 --splits=0 --concurrency=%d --min-block-bytes=%d --max-block-bytes=%d --duration %s {pgurl:1-3}",
+			const blockSize = 1 << 19 // 512 KB
+			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
+				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+
+					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
 				concurrency, blockSize, blockSize+1, duration.String()))
 		})
 
@@ -64,16 +68,6 @@ func registerHotSpotSplits(r *registry) {
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
-
-			run := func(stmt string) {
-				t.Status(stmt)
-				_, err := db.ExecContext(ctx, stmt)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			run(`SET CLUSTER SETTING trace.debug.enable = true`)
 
 			var size = float64(0)
 			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= duration; {
@@ -92,7 +86,7 @@ func registerHotSpotSplits(r *registry) {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(time.Second):
+				case <-time.After(5 * time.Second):
 				}
 			}
 
@@ -105,19 +99,18 @@ func registerHotSpotSplits(r *registry) {
 
 	minutes := 10 * time.Minute
 	numNodes := 4
-	concurrency := 100
+	concurrency := 128
 
 	r.Add(testSpec{
-		SkippedBecause: "https://github.com/cockroachdb/cockroach/issues/25036",
-		Name:           fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
-		Nodes:          nodes(numNodes),
-		Stable:         true, // DO NOT COPY to new tests
+		Name:   fmt.Sprintf("hotspotsplits/nodes=%d", numNodes),
+		Nodes:  nodes(numNodes),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
-				concurrency = 50
+				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
-			runHotSpot(ctx, t, c, numNodes, minutes, concurrency)
+			runHotSpot(ctx, t, c, minutes, concurrency)
 		},
 	})
 }
