@@ -139,7 +139,7 @@ func TestReportUsage(t *testing.T) {
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING server.time_until_store_dead = '20s'`); err != nil {
+	if _, err := db.Exec(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
@@ -417,7 +417,7 @@ func TestReportUsage(t *testing.T) {
 		"cluster.organization":                     "<redacted>",
 		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
-		"server.time_until_store_dead":             "20s",
+		"server.time_until_store_dead":             "1m30s",
 		"trace.debug.enable":                       "false",
 		"version":                                  "2.0-3",
 		"cluster.secret":                           "<redacted>",
