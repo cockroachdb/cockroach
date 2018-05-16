@@ -12,7 +12,7 @@ project
  ├── stats: [rows=1000]
  ├── cost: 1000.00
  └── scan a
-      ├── columns: a.u:1(int) a.v:2(int) a.rowid:3(int!null)
+      ├── columns: u:1(int) v:2(int) rowid:3(int!null)
       ├── stats: [rows=1000]
       ├── cost: 1000.00
       └── keys: (3)
@@ -37,7 +37,7 @@ project
  ├── stats: [rows=8]
  ├── cost: 8.00
  └── scan b
-      ├── columns: b.u:1(int) b.v:2(int) b.rowid:3(int!null)
+      ├── columns: u:1(int) v:2(int) rowid:3(int!null)
       ├── stats: [rows=8]
       ├── cost: 8.00
       └── keys: (3)
@@ -51,7 +51,7 @@ select
  ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── cost: 1.01
  ├── scan b@b_v_idx
- │    ├── columns: b.u:1(int) b.v:2(int)
+ │    ├── columns: u:1(int) v:2(int)
  │    ├── constraint: /2/3: [/1 - /1]
  │    ├── stats: [rows=1, distinct(2)=1]
  │    └── cost: 1.00
