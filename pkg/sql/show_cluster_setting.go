@@ -133,7 +133,7 @@ func (p *planner) ShowClusterSetting(
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			d := tree.DNull
+			var d tree.Datum
 			switch s := val.(type) {
 			case *settings.IntSetting:
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
@@ -155,6 +155,8 @@ func (p *planner) ShowClusterSetting(
 				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.ByteSizeSetting:
 				d = tree.NewDString(s.String(&st.SV))
+			default:
+				return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 			}
 
 			v := p.newContainerValuesNode(columns, 0)
