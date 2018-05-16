@@ -483,7 +483,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> HAVING HIGH HISTOGRAM HOUR
 
 
-%token <str> IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
+%token <str> IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -6871,6 +6871,22 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.IfExpr{Cond: $3.expr(), True: $5.expr(), Else: $7.expr()}
   }
+| IFERROR '(' a_expr ',' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.IfErrExpr{Cond: $3.expr(), Else: $5.expr(), ErrCode: $7.expr()}
+  }
+| IFERROR '(' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.IfErrExpr{Cond: $3.expr(), Else: $5.expr()}
+  }
+| ISERROR '(' a_expr ')'
+  {
+    $$.val = &tree.IfErrExpr{Cond: $3.expr()}
+  }
+| ISERROR '(' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.IfErrExpr{Cond: $3.expr(), ErrCode: $5.expr()}
+  }
 | NULLIF '(' a_expr ',' a_expr ')'
   {
     $$.val = &tree.NullIfExpr{Expr1: $3.expr(), Expr2: $5.expr()}
@@ -8076,10 +8092,12 @@ col_name_keyword:
 | GREATEST
 | GROUPING
 | IF
+| IFERROR
 | IFNULL
 | INT
 | INTEGER
 | INTERVAL
+| ISERROR
 | LEAST
 | NULLIF
 | NUMERIC
