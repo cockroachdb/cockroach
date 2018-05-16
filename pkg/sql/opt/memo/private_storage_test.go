@@ -174,8 +174,8 @@ func TestInternFuncOpDef(t *testing.T) {
 		}
 	}
 
-	ttuple1 := types.TTuple{types.Int}
-	ttuple2 := types.TTuple{types.Decimal}
+	ttuple1 := types.TTuple{Types: []types.T{types.Int}}
+	ttuple2 := types.TTuple{Types: []types.T{types.Decimal}}
 	funcDef1 := &FuncOpDef{Name: "foo", Type: ttuple1, Overload: &builtins.Builtins["now"][0]}
 	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple2, Overload: &builtins.Builtins["now"][0]}
 	test(funcDef1, funcDef2, true)
@@ -296,14 +296,18 @@ func TestInternType(t *testing.T) {
 	test(types.TArray{Typ: types.Int}, types.TArray{Typ: types.Int}, true)
 	test(types.TArray{Typ: types.Int}, types.TArray{Typ: types.Decimal}, false)
 
-	tarr1 := types.TArray{Typ: types.TTuple{types.Int, types.String}}
-	tarr2 := types.TArray{Typ: types.TTuple{types.Int, types.String}}
+	tarr1 := types.TArray{Typ: types.TTuple{Types: []types.T{types.Int, types.String}}}
+	tarr2 := types.TArray{Typ: types.TTuple{Types: []types.T{types.Int, types.String}}}
 	test(tarr1, tarr2, true)
 
-	test(types.TTuple{types.Int, types.Decimal}, types.TTuple{types.Decimal, types.Int}, false)
+	test(
+		types.TTuple{Types: []types.T{types.Int, types.Decimal}},
+		types.TTuple{Types: []types.T{types.Decimal, types.Int}},
+		false,
+	)
 
 	// TTable type ignores labels as part of key.
-	ttuple := types.TTuple{types.Bytes, types.JSON}
+	ttuple := types.TTuple{Types: []types.T{types.Bytes, types.JSON}}
 	test(types.TTable{Cols: ttuple, Labels: []string{"a"}}, types.TTable{Cols: ttuple}, true)
 }
 

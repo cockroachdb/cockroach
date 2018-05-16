@@ -791,18 +791,33 @@ func (expr *StrVal) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, err
 
 // TypeCheck implements the Expr interface.
 func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	expr.types = make(types.TTuple, len(expr.Exprs))
+	// If there are labels, make sure there are the correct number.
+	if len(expr.Labels) > 0 && len(expr.Labels) != len(expr.Exprs) {
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"the number of expressions in a labeled tuple (%d) must match the number of labels (%d)",
+			len(expr.Exprs), len(expr.Labels),
+		)
+	}
+
+	expr.types = types.TTuple{Types: make([]types.T, len(expr.Exprs))}
 	for i, subExpr := range expr.Exprs {
 		desiredElem := types.Any
-		if t, ok := desired.(types.TTuple); ok && len(t) > i {
-			desiredElem = t[i]
+		if t, ok := desired.(types.TTuple); ok && len(t.Types) > i {
+			desiredElem = t.Types[i]
 		}
 		typedExpr, err := subExpr.TypeCheck(ctx, desiredElem)
 		if err != nil {
 			return nil, err
 		}
 		expr.Exprs[i] = typedExpr
-		expr.types[i] = typedExpr.ResolvedType()
+		expr.types.Types[i] = typedExpr.ResolvedType()
+	}
+	// Copy the labels if there are any.
+	if len(expr.Labels) > 0 {
+		expr.types.Labels = make([]string, len(expr.Labels))
+		for i, label := range expr.Labels {
+			expr.types.Labels[i] = label.Normalize()
+		}
 	}
 	return expr, nil
 }
@@ -990,7 +1005,7 @@ func typeCheckAndRequireTupleElems(
 	ctx *SemaContext, expr Expr, required types.T,
 ) (TypedExpr, error) {
 	tuple := expr.(*Tuple)
-	tuple.types = make(types.TTuple, len(tuple.Exprs))
+	tuple.types = types.TTuple{Types: make([]types.T, len(tuple.Exprs))}
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is equivalent (or may be inferred) to the required type.
 		typedExpr, err := typeCheckAndRequire(ctx, subExpr, required, "tuple element")
@@ -998,7 +1013,7 @@ func typeCheckAndRequireTupleElems(
 			return nil, err
 		}
 		tuple.Exprs[i] = typedExpr
-		tuple.types[i] = typedExpr.ResolvedType()
+		tuple.types.Types[i] = typedExpr.ResolvedType()
 	}
 	return tuple, nil
 }
@@ -1118,7 +1133,7 @@ func typeCheckComparisonOpWithSubOperator(
 		case types.TArray:
 			cmpTypeRight = rightUnwrapped.Typ
 		case types.TTuple:
-			if len(rightUnwrapped) == 0 {
+			if len(rightUnwrapped.Types) == 0 {
 				// Literal tuple contains no elements (subquery tuples always contain
 				// one and only one element since subqueries are asserted to return
 				// one column of results in analyzeExpr in analyze.go).
@@ -1127,7 +1142,7 @@ func typeCheckComparisonOpWithSubOperator(
 			// Literal tuples were type checked such that all elements have equivalent types.
 			// Subqueries only contain one element from analyzeExpr in analyze.go.
 			// Therefore, we can take the first element's type as the right type.
-			cmpTypeRight = rightUnwrapped[0]
+			cmpTypeRight = rightUnwrapped.Types[0]
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
@@ -1152,11 +1167,11 @@ func typeCheckSubqueryWithIn(left, right types.T) error {
 	if rTuple, ok := right.(types.TTuple); ok {
 		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
 		// accepted.
-		if len(rTuple) != 1 {
+		if len(rTuple.Types) != 1 {
 			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
-		if !left.Equivalent(rTuple[0]) {
+		if !left.Equivalent(rTuple.Types[0]) {
 			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
@@ -1195,10 +1210,10 @@ func typeCheckComparisonOp(
 		typedLeft := typedSubExprs[0]
 		typedSubExprs = typedSubExprs[1:]
 
-		rightTuple.types = make(types.TTuple, len(typedSubExprs))
+		rightTuple.types = types.TTuple{Types: make([]types.T, len(typedSubExprs))}
 		for i, typedExpr := range typedSubExprs {
 			rightTuple.Exprs[i] = typedExpr
-			rightTuple.types[i] = retType
+			rightTuple.types.Types[i] = retType
 		}
 		if switched {
 			return rightTuple, typedLeft, fn, false, nil
@@ -1508,8 +1523,8 @@ func typeCheckTupleComparison(
 	if err := checkTupleHasLength(right, tupLen); err != nil {
 		return nil, nil, err
 	}
-	left.types = make(types.TTuple, tupLen)
-	right.types = make(types.TTuple, tupLen)
+	left.types = types.TTuple{Types: make([]types.T, tupLen)}
+	right.types = types.TTuple{Types: make([]types.T, tupLen)}
 	for elemIdx := range left.Exprs {
 		leftSubExpr := left.Exprs[elemIdx]
 		rightSubExpr := right.Exprs[elemIdx]
@@ -1520,9 +1535,9 @@ func typeCheckTupleComparison(
 				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
-		left.types[elemIdx] = leftSubExprTyped.ResolvedType()
+		left.types.Types[elemIdx] = leftSubExprTyped.ResolvedType()
 		right.Exprs[elemIdx] = rightSubExprTyped
-		right.types[elemIdx] = rightSubExprTyped.ResolvedType()
+		right.types.Types[elemIdx] = rightSubExprTyped.ResolvedType()
 	}
 	return left, right, nil
 }
@@ -1559,15 +1574,15 @@ func typeCheckSameTypedTupleExprs(
 	}
 
 	// All expressions at the same indexes must be the same type.
-	resTypes := make(types.TTuple, firstLen)
+	resTypes := types.TTuple{Types: make([]types.T, firstLen)}
 	sameTypeExprs := make([]Expr, len(exprs))
 	for elemIdx := range first.Exprs {
 		for tupleIdx, expr := range exprs {
 			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
 		}
 		desiredElem := types.Any
-		if len(desiredTuple) > elemIdx {
-			desiredElem = desiredTuple[elemIdx]
+		if len(desiredTuple.Types) > elemIdx {
+			desiredElem = desiredTuple.Types[elemIdx]
 		}
 		typedSubExprs, resType, err := TypeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
@@ -1576,7 +1591,7 @@ func typeCheckSameTypedTupleExprs(
 		for j, typedExpr := range typedSubExprs {
 			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
 		}
-		resTypes[elemIdx] = resType
+		resTypes.Types[elemIdx] = resType
 	}
 	for tupleIdx, expr := range exprs {
 		expr.(*Tuple).types = resTypes
