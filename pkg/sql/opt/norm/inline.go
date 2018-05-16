@@ -19,49 +19,61 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// hasDuplicateRefs returns true if the target expression references any
-// variable more than one time. For example:
+// hasDuplicateRefs returns true if the target scalar expression references any
+// outer column more than one time, or if it has correlated subqueries. For
+// example:
 //
-//   SELECT * FROM a WHERE x=1 OR x=2 OR y=0
+//   SELECT x+1, x+2, y FROM a
 //
-// hasDuplicateRefs would be true for the filter expression, since the x column
-// is referenced twice.
+// hasDuplicateRefs would be true for the Projections expression, since the x
+// column is referenced twice.
+//
+// Correlated subqueries are disallowed since it introduces additional
+// complexity for a case that's not important for inlining (correlated
+// subqueries are hoisted to a higher context anyway).
 func (f *Factory) hasDuplicateRefs(target memo.GroupID) bool {
 	var refs opt.ColSet
 
 	// When a column reference is found, add it to the refs set. If the set
 	// already contains a reference to that column, then there is a duplicate.
-	var countRefs func(group memo.GroupID) bool
-	countRefs = func(group memo.GroupID) bool {
+	// findDupRefs returns true if the subtree contains at least one duplicate.
+	var findDupRefs func(group memo.GroupID) bool
+	findDupRefs = func(group memo.GroupID) bool {
 		expr := f.mem.NormExpr(group)
-		if expr.Operator() == opt.VariableOp {
+		if !expr.IsScalar() {
+			// Don't try to count references within correlated subqueries.
+			// Uncorrelated subqueries never have references.
+			return !f.outerCols(group).Empty()
+		}
+
+		switch expr.Operator() {
+		case opt.VariableOp:
+			// Count Variable references.
 			colID := f.extractColID(expr.AsVariable().Col())
 			if refs.Contains(int(colID)) {
 				return true
 			}
 			refs.Add(int(colID))
 			return false
-		}
 
-		if expr.Operator() == opt.ProjectionsOp {
+		case opt.ProjectionsOp:
 			// Process the pass-through columns, in addition to the children.
-			def := expr.Private(f.mem).(*memo.ProjectionsOpDef)
-			for i, ok := def.PassthroughCols.Next(0); ok; i, ok = def.PassthroughCols.Next(i + 1) {
-				if refs.Contains(i) {
-					return true
-				}
-				refs.Add(i)
+			def := f.extractProjectionsOpDef(expr.AsProjections().Def())
+			if def.PassthroughCols.Intersects(refs) {
+				return true
 			}
+			refs.UnionWith(def.PassthroughCols)
 		}
 
 		for i := 0; i < expr.ChildCount(); i++ {
-			if countRefs(expr.ChildGroup(f.mem, i)) {
+			if findDupRefs(expr.ChildGroup(f.mem, i)) {
 				return true
 			}
 		}
 		return false
 	}
-	return countRefs(target)
+
+	return findDupRefs(target)
 }
 
 // canInline returns true if the given expression consists only of "simple"
@@ -89,31 +101,69 @@ func (f *Factory) canInline(group memo.GroupID) bool {
 	return false
 }
 
-// inlineProjections searches the target expression for any references to
+// inlineProjections searches the target scalar expression for any references to
 // columns in the projections expression. Target variable references are
 // replaced by the inlined projection expression.
 func (f *Factory) inlineProjections(target, projections memo.GroupID) memo.GroupID {
 	projectionsExpr := f.mem.NormExpr(projections).AsProjections()
 	projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
-	projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
+	projectionsDef := f.extractProjectionsOpDef(projectionsExpr.Def())
 
 	// Recursively walk the tree looking for references to projection expressions
 	// that need to be replaced.
 	var replace memo.ReplaceChildFunc
 	replace = func(child memo.GroupID) memo.GroupID {
-		varExpr := f.mem.NormExpr(child).AsVariable()
-		if varExpr != nil {
-			varColID := f.extractColID(varExpr.Col())
+		expr := f.mem.NormExpr(child)
+		if !expr.IsScalar() {
+			if !f.outerCols(child).Empty() {
+				// Should have prevented this in hasDuplicateRefs/canInline.
+				panic("cannot inline references within correlated subqueries")
+			}
+			return child
+		}
+
+		switch expr.Operator() {
+		case opt.VariableOp:
+			varColID := f.extractColID(expr.AsVariable().Col())
 			for i, id := range projectionsDef.SynthesizedCols {
 				if varColID == id {
 					return projectionsElems[i]
 				}
 			}
+			return child
+
+		case opt.ProjectionsOp:
+			pb := projectionsBuilder{f: f}
+			targetProjections := expr.AsProjections()
+			targetDef := f.extractProjectionsOpDef(targetProjections.Def())
+			targetPassthroughCols := targetDef.PassthroughCols
+			targetSynthesizedCols := targetDef.SynthesizedCols
+			targetElems := f.mem.LookupList(targetProjections.Elems())
+
+			// Start by inlining any references within synthesized columns.
+			for i, elem := range targetElems {
+				pb.addSynthesized(replace(elem), targetSynthesizedCols[i])
+			}
+
+			// Now inline any references within passthrough columns. Do this by
+			// iterating over the underlying projection's synthesized columns,
+			// looking for any that are passed through.
+			for i, id := range projectionsDef.SynthesizedCols {
+				if targetPassthroughCols.Contains(int(id)) {
+					pb.addSynthesized(projectionsElems[i], id)
+				}
+			}
+
+			// Finally, add any passthrough columns that are also passthrough
+			// columns in the underlying projection.
+			pb.addPassthroughCols(targetPassthroughCols.Intersection(projectionsDef.PassthroughCols))
+
+			return pb.buildProjections()
 		}
+
 		ev := memo.MakeNormExprView(f.mem, child)
 		return ev.Replace(f.evalCtx, replace).Group()
 	}
 
-	ev := memo.MakeNormExprView(f.mem, target)
-	return ev.Replace(f.evalCtx, replace).Group()
+	return replace(target)
 }
