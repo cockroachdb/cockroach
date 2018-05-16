@@ -481,7 +481,9 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 // unaffected.
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
 	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
-	trueCols := memo.ProjectionsOpDef{SynthesizedCols: opt.ColList{trueColID}}
+	pb := projectionsBuilder{f: r.f}
+	pb.addSynthesized(r.f.ConstructTrue(), trueColID)
+	trueProjection := pb.buildProjections()
 
 	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
 
@@ -489,10 +491,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	return r.f.ConstructGroupBy(
 		r.f.ConstructProject(
 			subquery,
-			r.f.ConstructProjections(
-				r.f.internSingletonList(r.f.ConstructTrue()),
-				r.f.InternProjectionsOpDef(&trueCols),
-			),
+			trueProjection,
 		),
 		r.f.ConstructAggregations(
 			r.f.internSingletonList(
