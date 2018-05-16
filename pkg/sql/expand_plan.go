@@ -139,9 +139,6 @@ func doExpandPlan(
 		explainParams := noParamsBase
 		explainParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
 
 	case *showTraceNode:
 		// SHOW TRACE only shows the execution trace of the plan, and wants to do
@@ -152,12 +149,21 @@ func doExpandPlan(
 		if err != nil {
 			return plan, err
 		}
+		// Check if we can use distSQL for the wrapped plan and this is not a kv
+		// trace. distSQL does not handle kv tracing because this option is not
+		// plumbed down to the tableReader level.
+		// TODO(asubiotto): Handle kv tracing in distSQL.
+		ok, err := p.prepareForDistSQLSupportCheck(ctx)
+		if ok && err == nil {
+			if useDistSQL, err := shouldUseDistSQL(
+				ctx, p.SessionData().DistSQLMode, p.ExecCfg().DistSQLPlanner, n.plan,
+			); useDistSQL && err == nil && !n.kvTracingEnabled {
+				n.plan = p.newDistSQLWrapper(n.plan, n.stmtType)
+			}
+		}
 
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
 
 	case *explainPlanNode:
 		// EXPLAIN only shows the structure of the plan, and wants to do
@@ -255,9 +261,9 @@ func doExpandPlan(
 
 		// Project the props of the GROUP BY columns, as they're retained as-is.
 		groupColProjMap := make([]int, len(n.funcs))
-		for i, f := range n.funcs {
-			if f.isIdentAggregate() {
-				groupColProjMap[i] = f.argRenderIdx
+		for i := range n.funcs {
+			if groupingCol, ok := n.aggIsGroupingColumn(i); ok {
+				groupColProjMap[i] = groupingCol
 			} else {
 				groupColProjMap[i] = -1
 			}
@@ -627,15 +633,16 @@ func translateGroupOrdering(
 	var desiredUp sqlbase.ColumnOrdering
 
 	for _, colOrder := range desiredDown {
-		f := g.funcs[colOrder.ColIdx]
-		if !f.isIdentAggregate() {
+		groupingCol, ok := g.aggIsGroupingColumn(colOrder.ColIdx)
+		if !ok {
 			// We cannot maintain the rest of the ordering since it uses a
 			// non-identity aggregate function.
 			break
 		}
 		// For identity (i.e., GROUP BY) columns, we can propagate the ordering.
 		desiredUp = append(desiredUp, sqlbase.ColumnOrderInfo{
-			ColIdx: f.argRenderIdx, Direction: colOrder.Direction})
+			ColIdx: groupingCol, Direction: colOrder.Direction,
+		})
 	}
 
 	return desiredUp
@@ -677,6 +684,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *serializeNode:
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
+
+	case *distSQLWrapper:
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)

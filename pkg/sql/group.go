@@ -249,7 +249,7 @@ func (p *planner) groupBy(
 	// r as needed.
 	//
 	// "Grouping expressions" - expressions that also show up under GROUP BY - are
-	// also treated as aggregate expressions ("ident" aggregation).
+	// also treated as aggregate expressions (any_not_null aggregation).
 	if typedHaving != nil {
 		havingNode = &filterNode{
 			source: planDataSource{plan: plan, info: &sqlbase.DataSourceInfo{}},
@@ -572,6 +572,20 @@ func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.
 	return nil
 }
 
+// aggIsGroupingColumn returns true if the given output aggregation is an
+// any_not_null aggregation for a grouping column. The grouping column
+// index is also returned.
+func (n *groupNode) aggIsGroupingColumn(aggIdx int) (colIdx int, ok bool) {
+	if holder := n.funcs[aggIdx]; holder.funcName == builtins.AnyNotNull {
+		for _, c := range n.groupCols {
+			if c == holder.argRenderIdx {
+				return c, true
+			}
+		}
+	}
+	return -1, false
+}
+
 // extractAggregatesVisitor extracts arguments to aggregate functions and adds
 // them to the preRender renderNode. It returns new expression where arguments
 // to aggregate functions (as well as expressions that also appear in a GROUP
@@ -630,12 +644,12 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 	if groupIdx, ok := v.groupStrs[symbolicExprStr(expr)]; ok {
 		// This expression is in the GROUP BY; it is already being rendered by the
-		// renderNode. Set up an "ident" aggregation.
+		// renderNode. Set up an any_not_null aggregation.
 		f := v.groupNode.newAggregateFuncHolder(
-			"", /* funcName */
+			builtins.AnyNotNull,
 			v.preRender.render[groupIdx].ResolvedType(),
 			groupIdx,
-			builtins.NewIdentAggregate,
+			builtins.NewAnyNotNullAggregate,
 			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 
@@ -802,10 +816,6 @@ func (n *groupNode) newAggregateFuncHolder(
 		},
 	}
 	return res
-}
-
-func (a *aggregateFuncHolder) isIdentAggregate() bool {
-	return a.funcName == ""
 }
 
 func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {

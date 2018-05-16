@@ -31,6 +31,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 			setNeededColumns(n.sourcePlan, allColumns(n.sourcePlan))
 		}
 
+	case *distSQLWrapper:
+		setNeededColumns(n.plan, allColumns(n.plan))
+
 	case *explainDistSQLNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 

@@ -300,6 +300,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *distSQLWrapper:
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *explainDistSQLNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -450,9 +455,8 @@ func (p *planner) addGroupFilter(
 		// aggregations"), and renumber the indexed vars accordingly.
 		convFunc := func(v tree.VariableExpr) (bool, tree.Expr) {
 			if iv, ok := v.(*tree.IndexedVar); ok {
-				f := g.funcs[iv.Idx]
-				if f.isIdentAggregate() {
-					return true, &tree.IndexedVar{Idx: f.argRenderIdx}
+				if groupingCol, ok := g.aggIsGroupingColumn(iv.Idx); ok {
+					return true, &tree.IndexedVar{Idx: groupingCol}
 				}
 			}
 			return false, v
