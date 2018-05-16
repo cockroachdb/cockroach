@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -549,6 +548,7 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 	case opt.VariableOp:
 		// Variable introduces outer column.
 		logical.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
+		return logical
 
 	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
 		// Inherit outer columns from input query.
@@ -563,26 +563,27 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		if !logical.Scalar.OuterCols.Empty() {
 			logical.Scalar.HasCorrelatedSubquery = true
 		}
+		return logical
+	}
 
-	default:
-		// By default, union outer cols from all children, both relational and scalar.
-		for i := 0; i < ev.ChildCount(); i++ {
-			childLogical := &ev.childGroup(i).logical
-			logical.Scalar.OuterCols.UnionWith(childLogical.OuterCols())
+	// By default, union outer cols from all children, both relational and scalar.
+	for i := 0; i < ev.ChildCount(); i++ {
+		childLogical := &ev.childGroup(i).logical
+		logical.Scalar.OuterCols.UnionWith(childLogical.OuterCols())
 
-			// Propagate HasCorrelatedSubquery up the scalar expression tree.
-			if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
-				logical.Scalar.HasCorrelatedSubquery = true
-			}
-		}
-
-		// For a ProjectionsOp, the passthrough cols are also outer cols.
-		if ev.Operator() == opt.ProjectionsOp {
-			logical.Scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
+		// Propagate HasCorrelatedSubquery up the scalar expression tree.
+		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
+			logical.Scalar.HasCorrelatedSubquery = true
 		}
 	}
 
-	if logical.Scalar.Type == types.Bool {
+	switch ev.Operator() {
+	case opt.ProjectionsOp:
+		// For a ProjectionsOp, the passthrough cols are also outer cols.
+		logical.Scalar.OuterCols.UnionWith(ev.Private().(*ProjectionsOpDef).PassthroughCols)
+
+	case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
+		// Calculate constraints for any expressions that could be filters.
 		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: b.evalCtx}
 		logical.Scalar.Constraints, logical.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}

@@ -175,12 +175,14 @@ type Scalar struct {
 
 	// Constraints is the set of constraints deduced from a boolean expression.
 	// For the expression to be true, all constraints in the set must be
-	// satisfied. Unset for non-boolean scalars.
+	// satisfied.
+	// This field is populated lazily, as necessary.
 	Constraints *constraint.Set
 
 	// TightConstraints is true if the expression is exactly equivalent to the
 	// constraints. If it is false, the constraints are weaker than the
 	// expression.
+	// This field is populated lazily, as necessary.
 	TightConstraints bool
 
 	// HasCorrelatedSubquery is true if the scalar expression tree contains a

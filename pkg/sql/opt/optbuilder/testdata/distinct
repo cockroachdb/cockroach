@@ -207,9 +207,10 @@ group-by
            ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
-           └── gt [type=bool]
-                ├── variable: xyz.x [type=int]
-                └── const: 0 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: xyz.x [type=int]
+                     └── const: 0 [type=int]
 
 build
 SELECT DISTINCT z FROM xyz WHERE x > 0
@@ -223,9 +224,10 @@ group-by
            ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
-           └── gt [type=bool]
-                ├── variable: xyz.x [type=int]
-                └── const: 0 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: xyz.x [type=int]
+                     └── const: 0 [type=int]
 
 build
 SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
@@ -305,9 +307,10 @@ group-by
       │    │    └── aggregations
       │    │         └── max [type=float]
       │    │              └── variable: xyz.z [type=float]
-      │    └── gt [type=bool]
-      │         ├── variable: xyz.y [type=int]
-      │         └── const: 4 [type=int]
+      │    └── filters [type=bool]
+      │         └── gt [type=bool]
+      │              ├── variable: xyz.y [type=int]
+      │              └── const: 4 [type=int]
       └── projections
            ├── plus [type=int]
            │    ├── variable: xyz.x [type=int]

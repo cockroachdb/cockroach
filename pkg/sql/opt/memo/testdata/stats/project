@@ -106,9 +106,10 @@ select
  │              ├── variable: a.s [type=string, outer=(3)]
  │              └── cast: string [type=string, outer=(2)]
  │                   └── variable: a.y [type=int, outer=(2)]
- └── eq [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
-      ├── variable: concat [type=string, outer=(5)]
-      └── const: 'foo' [type=string]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
+      └── eq [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
+           ├── variable: concat [type=string, outer=(5)]
+           └── const: 'foo' [type=string]
 
 # Test that stats for synthesized and non-synthesized columns are combined.
 build
@@ -151,13 +152,14 @@ select
  │         └── plus [type=int, outer=(2)]
  │              ├── variable: a.y [type=int, outer=(2)]
  │              └── const: 3 [type=int]
- └── and [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
-      ├── ge [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
-      │    ├── variable: y + 3 [type=int, outer=(5)]
-      │    └── const: 1 [type=int]
-      └── le [type=bool, outer=(5), constraints=(/5: (/NULL - /100]; tight)]
-           ├── variable: y + 3 [type=int, outer=(5)]
-           └── const: 100 [type=int]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
+      └── and [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
+           ├── ge [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
+           │    ├── variable: y + 3 [type=int, outer=(5)]
+           │    └── const: 1 [type=int]
+           └── le [type=bool, outer=(5), constraints=(/5: (/NULL - /100]; tight)]
+                ├── variable: y + 3 [type=int, outer=(5)]
+                └── const: 100 [type=int]
 
 exec-ddl
 CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING)
@@ -198,22 +200,23 @@ select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── stats: [rows=2000]
  │    └── keys: (1) weak(3,4)
- └── exists [type=bool, outer=(3)]
-      └── group-by
-           ├── columns: column8:8(bool)
-           ├── grouping columns: column8:8(bool)
-           ├── outer: (3)
-           ├── stats: [rows=10, distinct(8)=10]
-           ├── keys: weak(8)
-           └── project
+ └── filters [type=bool, outer=(3)]
+      └── exists [type=bool, outer=(3)]
+           └── group-by
                 ├── columns: column8:8(bool)
+                ├── grouping columns: column8:8(bool)
                 ├── outer: (3)
-                ├── stats: [rows=2000, distinct(8)=10]
-                ├── scan kuv
-                │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                │    ├── stats: [rows=2000, distinct(7)=10]
-                │    └── keys: (5)
-                └── projections [outer=(3,7)]
-                     └── lt [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
-                          ├── variable: a.s [type=string, outer=(3)]
-                          └── variable: kuv.v [type=string, outer=(7)]
+                ├── stats: [rows=10, distinct(8)=10]
+                ├── keys: weak(8)
+                └── project
+                     ├── columns: column8:8(bool)
+                     ├── outer: (3)
+                     ├── stats: [rows=2000, distinct(8)=10]
+                     ├── scan kuv
+                     │    ├── columns: k:5(int!null) u:6(float) v:7(string)
+                     │    ├── stats: [rows=2000, distinct(7)=10]
+                     │    └── keys: (5)
+                     └── projections [outer=(3,7)]
+                          └── lt [type=bool, outer=(3,7)]
+                               ├── variable: a.s [type=string, outer=(3)]
+                               └── variable: kuv.v [type=string, outer=(7)]
