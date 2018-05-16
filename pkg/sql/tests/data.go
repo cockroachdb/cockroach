@@ -36,22 +36,24 @@ func CheckKeyCount(t *testing.T, kvDB *client.DB, span roachpb.Span, numKeys int
 	}
 }
 
-// CreateKVTable creates a basic table named t.kv that stores key/value pairs
-// with numRows of arbitrary data.
-func CreateKVTable(sqlDB *gosql.DB, numRows int) error {
+// CreateKVTable creates a basic table named t.<name> that stores key/value
+// pairs with numRows of arbitrary data.
+func CreateKVTable(sqlDB *gosql.DB, name string, numRows int) error {
 	// Fix the column families so the key counts don't change if the family
 	// heuristics are updated.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE IF NOT EXISTS t;
-CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
-CREATE INDEX foo on t.kv (v);
-`); err != nil {
+	schema := fmt.Sprintf(`
+		CREATE DATABASE IF NOT EXISTS t;
+		CREATE TABLE t.%s (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
+		CREATE INDEX foo on t.%s (v);`, name, name)
+
+	if _, err := sqlDB.Exec(schema); err != nil {
 		return err
 	}
 
 	// Bulk insert.
 	var insert bytes.Buffer
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
+	if _, err := insert.WriteString(
+		fmt.Sprintf(`INSERT INTO t.%s VALUES (%d, %d)`, name, 0, numRows-1)); err != nil {
 		return err
 	}
 	for i := 1; i < numRows; i++ {

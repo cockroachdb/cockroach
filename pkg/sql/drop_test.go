@@ -17,6 +17,8 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/lib/pq"
@@ -354,7 +356,7 @@ func TestDropIndex(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*chunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -392,7 +394,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	// Create a test table with a secondary index.
-	if err := tests.CreateKVTable(sqlDB.DB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB.DB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
@@ -494,7 +496,7 @@ func TestDropTable(t *testing.T) {
 	ctx := context.TODO()
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -546,7 +548,7 @@ func TestDropTable(t *testing.T) {
 	}
 
 	// Can create a table with the same name.
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -576,54 +578,94 @@ func TestDropTableDeleteData(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	numRows := 2*sql.TableTruncateChunkSize + 1
-	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
-		t.Fatal(err)
-	}
-
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, "kv")
-	gr, err := kvDB.Get(ctx, nameKey)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !gr.Exists() {
-		t.Fatalf("Name entry %q does not exist", nameKey)
-	}
-
-	tableSpan := tableDesc.TableSpan()
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Data still exists.
-	if err := descExists(sqlDB, true, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-
-	// Push a new zone config for the table with TTL=0 so the data
-	// is deleted immediately.
-	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0
-	buf, err := protoutil.Marshal(&cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
-		t.Fatal(err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		if err := descExists(sqlDB, false, tableDesc.ID); err != nil {
-			return err
+	const numRows = 2*sql.TableTruncateChunkSize + 1
+	const numKeys = 3 * numRows
+	const numTables = 5
+	var descs []*sqlbase.TableDescriptor
+	for i := 0; i < numTables; i++ {
+		tableName := fmt.Sprintf("test%d", i)
+		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
+			t.Fatal(err)
 		}
 
-		return zoneExists(sqlDB, nil, tableDesc.ID)
-	})
+		descs = append(descs, sqlbase.GetTableDescriptor(kvDB, "t", tableName))
 
-	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
+		nameKey := sqlbase.MakeNameMetadataKey(keys.MaxReservedDescID+1, tableName)
+		gr, err := kvDB.Get(ctx, nameKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !gr.Exists() {
+			t.Fatalf("Name entry %q does not exist", nameKey)
+		}
+
+		tableSpan := descs[i].TableSpan()
+		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+
+		if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Data hasn't been GC-ed.
+	for i := 0; i < numTables; i++ {
+		if err := descExists(sqlDB, true, descs[i].ID); err != nil {
+			t.Fatal(err)
+		}
+		tableSpan := descs[i].TableSpan()
+		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+	}
+
+	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
+	pushZoneCfg := func(i int) {
+		cfg := config.DefaultZoneConfig()
+		cfg.GC.TTLSeconds = 0
+		buf, err := protoutil.Marshal(&cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, descs[i].ID, buf); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	checkTableGCed := func(i int) {
+		testutils.SucceedsSoon(t, func() error {
+			if err := descExists(sqlDB, false, descs[i].ID); err != nil {
+				return err
+			}
+
+			return zoneExists(sqlDB, nil, descs[i].ID)
+		})
+		tableSpan := descs[i].TableSpan()
+		tests.CheckKeyCount(t, kvDB, tableSpan, 0)
+	}
+
+	// Push a new zone config for a few tables with TTL=0 so the data
+	// is deleted immediately.
+	barrier := rand.Intn(numTables)
+	for i := 0; i < barrier; i++ {
+		pushZoneCfg(i)
+	}
+
+	// Check GC worked!
+	for i := 0; i < numTables; i++ {
+		if i < barrier {
+			checkTableGCed(i)
+		} else {
+			// Data still present for tables past barrier.
+			tableSpan := descs[i].TableSpan()
+			tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
+		}
+	}
+
+	// Push the rest of the zone configs and check all the data gets GC-ed.
+	for i := barrier; i < numTables; i++ {
+		pushZoneCfg(i)
+	}
+	for i := barrier; i < numTables; i++ {
+		checkTableGCed(i)
+	}
 }
 
 func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *sqlbase.TableDescriptor) error {
