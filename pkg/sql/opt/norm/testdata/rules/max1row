@@ -35,7 +35,7 @@ project
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── scan a
-           │         ├── columns: a.i:2(int)
+           │         ├── columns: i:2(int)
            │         └── limit: 1
            └── const: 5 [type=int]
 
@@ -72,10 +72,10 @@ project
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── limit
-           │         ├── columns: a.i:2(int)
+           │         ├── columns: i:2(int)
            │         ├── cardinality: [0 - 0]
            │         ├── scan a
-           │         │    └── columns: a.i:2(int)
+           │         │    └── columns: i:2(int)
            │         └── const: 0 [type=int]
            └── const: 5 [type=int]
 
@@ -93,8 +93,8 @@ project
       └── gt [type=bool]
            ├── subquery [type=int]
            │    └── max1-row
-           │         ├── columns: a.i:2(int)
+           │         ├── columns: i:2(int)
            │         ├── cardinality: [0 - 1]
            │         └── scan a
-           │              └── columns: a.i:2(int)
+           │              └── columns: i:2(int)
            └── const: 5 [type=int]
