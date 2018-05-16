@@ -126,13 +126,15 @@ func init() {
 		opt.ArrayOp:           typeAsPrivate,
 
 		// Override default typeAsAggregate behavior for aggregate functions with
-		// a large number of possible overloads.
-		opt.ArrayAggOp: typeArrayAgg,
-		opt.MaxOp:      typeAsFirstArg,
-		opt.MinOp:      typeAsFirstArg,
+		// a large number of possible overloads or where ReturnType depends on
+		// argument types.
+		opt.ArrayAggOp:   typeArrayAgg,
+		opt.MaxOp:        typeAsFirstArg,
+		opt.MinOp:        typeAsFirstArg,
+		opt.AnyNotNullOp: typeAsFirstArg,
 
-		// ExistsAggOp is not part of SQL, and so is not part of the Builtins
-		// table that typeAsAggregate relies upon.
+		// These aggregate functions are not part of SQL, and so are not part of
+		// the Builtins table that typeAsAggregate relies upon.
 		opt.ExistsAggOp: typeAsBool,
 	}
 

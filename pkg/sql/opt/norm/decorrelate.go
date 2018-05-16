@@ -39,8 +39,8 @@ func (f *Factory) hoistSelectSubquery(input, filter memo.GroupID) memo.GroupID {
 	var hoister subqueryHoister
 	hoister.init(f.evalCtx, f, input)
 	replaced := hoister.hoistAll(filter)
-	out := f.ConstructSelect(hoister.input(), replaced)
-	return f.ConstructSimpleProject(out, f.outputCols(input))
+	sel := f.ConstructSelect(hoister.input(), replaced)
+	return f.ConstructSimpleProject(sel, f.outputCols(input))
 }
 
 // hoistProjectSubquery searches the Project operator's projections for
@@ -85,8 +85,8 @@ func (f *Factory) hoistJoinSubquery(op opt.Operator, left, right, on memo.GroupI
 	var hoister subqueryHoister
 	hoister.init(f.evalCtx, f, right)
 	replaced := hoister.hoistAll(on)
-	out := f.constructApplyJoin(op, left, hoister.input(), replaced)
-	return f.ConstructSimpleProject(out, f.outputCols(left).Union(f.outputCols(right)))
+	join := f.constructApplyJoin(op, left, hoister.input(), replaced)
+	return f.ConstructSimpleProject(join, f.outputCols(left).Union(f.outputCols(right)))
 }
 
 // hoistValuesSubquery searches the Values operator's projections for correlated
@@ -112,37 +112,37 @@ func (f *Factory) hoistJoinSubquery(op opt.Operator, left, right, on memo.GroupI
 // it's not worth the extra code complication.
 func (f *Factory) hoistValuesSubquery(rows memo.ListID, cols memo.PrivateID) memo.GroupID {
 	var hoister subqueryHoister
-	hoister.init(f.evalCtx, f, f.constructEmptyRow())
+	hoister.init(f.evalCtx, f, f.constructNoColsRow())
 
 	replaced := make([]memo.GroupID, rows.Length)
 	for i, item := range f.mem.LookupList(rows) {
 		replaced[i] = hoister.hoistAll(item)
 	}
 
-	out := f.ConstructValues(f.mem.InternList(replaced), cols)
-	projCols := f.mem.GroupProperties(out).Relational.OutputCols
-	out = f.ConstructInnerJoinApply(hoister.input(), out, f.ConstructTrue())
-	return f.ConstructSimpleProject(out, projCols)
+	values := f.ConstructValues(f.mem.InternList(replaced), cols)
+	projCols := f.mem.GroupProperties(values).Relational.OutputCols
+	join := f.ConstructInnerJoinApply(hoister.input(), values, f.ConstructTrue())
+	return f.ConstructSimpleProject(join, projCols)
 }
 
 // constructNonApplyJoin constructs the non-apply join operator that corresponds
 // to the given join operator type.
 func (f *Factory) constructNonApplyJoin(
-	joinOp opt.Operator, left, right, filter memo.GroupID,
+	joinOp opt.Operator, left, right, on memo.GroupID,
 ) memo.GroupID {
 	switch joinOp {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		return f.ConstructInnerJoin(left, right, filter)
+		return f.ConstructInnerJoin(left, right, on)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return f.ConstructLeftJoin(left, right, filter)
+		return f.ConstructLeftJoin(left, right, on)
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return f.ConstructRightJoin(left, right, filter)
+		return f.ConstructRightJoin(left, right, on)
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return f.ConstructFullJoin(left, right, filter)
+		return f.ConstructFullJoin(left, right, on)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		return f.ConstructSemiJoin(left, right, filter)
+		return f.ConstructSemiJoin(left, right, on)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		return f.ConstructAntiJoin(left, right, filter)
+		return f.ConstructAntiJoin(left, right, on)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
@@ -150,28 +150,162 @@ func (f *Factory) constructNonApplyJoin(
 // constructApplyJoin constructs the apply join operator that corresponds
 // to the given join operator type.
 func (f *Factory) constructApplyJoin(
-	joinOp opt.Operator, left, right, filter memo.GroupID,
+	joinOp opt.Operator, left, right, on memo.GroupID,
 ) memo.GroupID {
 	switch joinOp {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		return f.ConstructInnerJoinApply(left, right, filter)
+		return f.ConstructInnerJoinApply(left, right, on)
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		return f.ConstructLeftJoinApply(left, right, filter)
+		return f.ConstructLeftJoinApply(left, right, on)
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
-		return f.ConstructRightJoinApply(left, right, filter)
+		return f.ConstructRightJoinApply(left, right, on)
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		return f.ConstructFullJoinApply(left, right, filter)
+		return f.ConstructFullJoinApply(left, right, on)
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp:
-		return f.ConstructSemiJoinApply(left, right, filter)
+		return f.ConstructSemiJoinApply(left, right, on)
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		return f.ConstructAntiJoinApply(left, right, filter)
+		return f.ConstructAntiJoinApply(left, right, on)
 	}
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
 
-// constructEmptyRow returns a Values operator having a single row with zero
+// canAggsIgnoreNulls returns true if all the aggregate functions in the given
+// Aggregations operator are able to ignore null values. In other words, any
+// number of null values can be added to the grouping set and all the aggregate
+// functions will return the same result.
+//
+// Note that the CountRows function (used for COUNT(*)) does not ignore null
+// values on its own (they're included in the count). But it can be mapped to a
+// Count function over a non-null column, so it's treated as a null-ignoring
+// aggregate function here.
+func (f *Factory) canAggsIgnoreNulls(aggs memo.GroupID) bool {
+	aggsExpr := f.mem.NormExpr(aggs).AsAggregations()
+	for _, elem := range f.mem.LookupList(aggsExpr.Aggs()) {
+		switch f.mem.NormExpr(elem).Operator() {
+		case opt.AvgOp, opt.BoolAndOp, opt.BoolOrOp, opt.CountOp, opt.CountRowsOp,
+			opt.MaxOp, opt.MinOp, opt.SumIntOp, opt.SumOp, opt.SqrDiffOp,
+			opt.VarianceOp, opt.StdDevOp, opt.XorAggOp, opt.ExistsAggOp, opt.AnyNotNullOp:
+
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// hoistCorrelatedScalarGroupBy maps an (InnerJoinApply (GroupBy)) expression
+// to instead be a (GroupBy (LeftJoinApply)) expression as part of
+// decorrelation. It is used by the TryDecorrelateScalarGroupBy rule to push
+// Apply joins down into the tree in an attempt to remove correlation. This
+// relational identity has several requirements:
+//
+//   1. The left input must have a strong key. If not already present, a key can
+//      be synthesized by using the RowNumber operator to uniquely number the
+//      rows.
+//   2. All aggregate functions must ignore null values, so that they will
+//      ignore the null values generated by the left join. The CountRows
+//      aggregate is mapped into a Count aggregate that operates over a not-null
+//      column (one is synthesized if necessary).
+//
+// Example:
+//
+//   SELECT left.x, left.y, input.*
+//   FROM left
+//   INNER JOIN LATERAL
+//   (
+//     SELECT COUNT(*), SUM(c) FROM input WHERE input.x = left.x
+//   )
+//   ON left.y = 10
+//   =>
+//   SELECT ANY_NOT_NULL(left.x), ANY_NOT_NULL(left.y), COUNT(input.t), SUM(input.c)
+//   FROM left WITH ORDINALITY
+//   LEFT JOIN LATERAL
+//   (
+//     SELECT c, True t FROM input WHERE input.x = left.x
+//   ) AS input
+//   ON True
+//   GROUP BY left.ordinality
+//   HAVING left.y = 10
+//
+// An ordinality column only needs to be synthesized if "left" does not already
+// have a key. The "true" column only needs to be added if "input" does not
+// already have a not-null column (and COUNT(*) is used).
+//
+// ANY_NOT_NULL is an internal aggregation function that returns the first non-
+// null value in the grouping set (or null if there are no non-null values).
+// Since the grouping column(s) will always be a strong key of the left input,
+// any additional column selected from the left input will always have the same
+// value for all rows in the grouping set (whether it be null or non-null).
+func (f *Factory) hoistCorrelatedScalarGroupBy(left, input, aggs memo.GroupID) memo.GroupID {
+	// If the left join input didn't have a strong key, wrap it with a RowNumber
+	// operator to ensure that a key is available.
+	var shortestKey opt.ColSet
+	left, shortestKey = f.ensureKey(left)
+
+	// Construct the output list of aggregate functions.
+	extraColSet := f.outputCols(left).Difference(shortestKey)
+
+	aggsExpr := f.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := f.mem.LookupList(aggsExpr.Aggs())
+	aggsColList := f.extractColList(aggsExpr.Cols())
+
+	outElems := make([]memo.GroupID, len(aggsColList), len(aggsColList)+extraColSet.Len())
+	outColList := make(opt.ColList, len(outElems), cap(outElems))
+
+	for i, elem := range aggsElems {
+		// Translate CountRows() to Count(notNullCol).
+		if f.mem.NormExpr(elem).Operator() == opt.CountRowsOp {
+			var notNullColID opt.ColumnID
+			input, notNullColID = f.ensureNotNullCol(input)
+			outElems[i] = f.ConstructCount(f.ConstructVariable(f.InternColumnID(notNullColID)))
+		} else {
+			outElems[i] = elem
+		}
+	}
+	copy(outColList, aggsColList)
+
+	// Add each non-key column from the left input as a AnyNotNull aggregate
+	// function.
+	extraColSet.ForEach(func(i int) {
+		outAgg := f.ConstructAnyNotNull(
+			f.ConstructVariable(
+				f.mem.InternColumnID(opt.ColumnID(i)),
+			),
+		)
+		outElems = append(outElems, outAgg)
+		outColList = append(outColList, opt.ColumnID(i))
+	})
+
+	return f.ConstructGroupBy(
+		f.ConstructLeftJoinApply(
+			left,
+			input,
+			f.ConstructTrue(),
+		),
+		f.ConstructAggregations(f.InternList(outElems), f.InternColList(outColList)),
+		f.InternColSet(shortestKey),
+	)
+}
+
+// ensureNotNullCol searches for a not-null output column in the given group. If
+// such a column does not exist, it synthesizes a new True constant column that
+// is not-null. ensureNotNullCol returns an output group, which is the input
+// group possibly wrapped in a new Project, and the id of the not-null column
+// that it located or synthesized.
+func (f *Factory) ensureNotNullCol(in memo.GroupID) (out memo.GroupID, colID opt.ColumnID) {
+	id, ok := f.lookupLogical(in).Relational.NotNullCols.Next(0)
+	if ok {
+		return in, opt.ColumnID(id)
+	}
+
+	colID = f.Metadata().AddColumn("notnull", types.Bool)
+	out = f.projectExtraCol(in, f.ConstructTrue(), colID)
+	return out, colID
+}
+
+// constructNoColsRow returns a Values operator having a single row with zero
 // columns.
-func (f *Factory) constructEmptyRow() memo.GroupID {
+func (f *Factory) constructNoColsRow() memo.GroupID {
 	rows := []memo.GroupID{f.ConstructTuple(f.InternList(nil))}
 	return f.ConstructValues(f.InternList(rows), f.InternColList(opt.ColList{}))
 }
@@ -217,7 +351,6 @@ type subqueryHoister struct {
 	f       *Factory
 	mem     *memo.Memo
 	hoisted memo.GroupID
-	items   []memo.GroupID
 }
 
 func (r *subqueryHoister) init(evalCtx *tree.EvalContext, f *Factory, input memo.GroupID) {
@@ -346,24 +479,24 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 // EXISTS_AGG. It's defined to ignore those nulls so that its result will be
 // unaffected.
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
-	constColID := r.f.Metadata().AddColumn("true", types.Bool)
-	projDef := memo.ProjectionsOpDef{
-		SynthesizedCols: opt.ColList{constColID},
-	}
+	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
+	trueCols := memo.ProjectionsOpDef{SynthesizedCols: opt.ColList{trueColID}}
+
 	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
+
 	aggCols := r.f.InternColList(opt.ColList{aggColID})
 	return r.f.ConstructGroupBy(
 		r.f.ConstructProject(
 			subquery,
 			r.f.ConstructProjections(
-				r.internSingletonList(r.f.ConstructConst(r.f.InternDatum(tree.DBoolTrue))),
-				r.f.InternProjectionsOpDef(&projDef),
+				r.f.internSingletonList(r.f.ConstructTrue()),
+				r.f.InternProjectionsOpDef(&trueCols),
 			),
 		),
 		r.f.ConstructAggregations(
-			r.internSingletonList(
+			r.f.internSingletonList(
 				r.f.ConstructExistsAgg(
-					r.f.ConstructVariable(r.f.InternColumnID(constColID)),
+					r.f.ConstructVariable(r.f.InternColumnID(trueColID)),
 				),
 			),
 			aggCols,
@@ -485,18 +618,18 @@ func (r *subqueryHoister) constructGroupByAny(
 					),
 				),
 				r.f.ConstructProjections(
-					r.internSingletonList(r.f.ConstructIsNot(inputVar, nullVal)),
+					r.f.internSingletonList(r.f.ConstructIsNot(inputVar, nullVal)),
 					r.f.InternProjectionsOpDef(&notNullCols),
 				),
 			),
 			r.f.ConstructAggregations(
-				r.internSingletonList(r.f.ConstructBoolOr(notNullVar)),
+				r.f.internSingletonList(r.f.ConstructBoolOr(notNullVar)),
 				r.f.InternColList(opt.ColList{aggColID}),
 			),
 			r.f.InternColSet(opt.ColSet{}),
 		),
 		r.f.ConstructProjections(
-			r.internSingletonList(
+			r.f.internSingletonList(
 				r.f.ConstructCase(
 					r.f.ConstructTrue(),
 					r.f.InternList([]memo.GroupID{
@@ -518,9 +651,4 @@ func (r *subqueryHoister) constructGroupByAny(
 			r.f.InternProjectionsOpDef(&caseCols),
 		),
 	)
-}
-
-func (r *subqueryHoister) internSingletonList(item memo.GroupID) memo.ListID {
-	r.items = append(r.items[:0], item)
-	return r.f.InternList(r.items)
 }
