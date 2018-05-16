@@ -27,8 +27,6 @@ import (
 
 // Compute the size of various structures to use when tracking memory usage.
 var (
-	sizeOfDataSpan       = int64(unsafe.Sizeof(dataSpan{}))
-	sizeOfCalibratedData = int64(unsafe.Sizeof(calibratedData{}))
 	sizeOfTimeSeriesData = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
 	sizeOfSample         = int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{}))
 	sizeOfDataPoint      = int64(unsafe.Sizeof(tspb.TimeSeriesDatapoint{}))

@@ -447,8 +447,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 
 			// Expected maximum usage may slightly exceed the budget due to the size of
 			// dataSpan structures which are not accounted for in getMaxTimespan.
-			expectedMaxUsage := limit + 3*(int64(len("source1"))+sizeOfDataSpan)
-			if a, e := adjustedMon.MaximumBytes(), expectedMaxUsage; a > e {
+			if a, e := adjustedMon.MaximumBytes(), limit; a > e {
 				t.Fatalf("memory usage for query was %d, exceeded set maximum limit %d", a, e)
 			}
 
