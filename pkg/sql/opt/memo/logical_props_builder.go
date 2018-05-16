@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -582,7 +581,8 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		}
 	}
 
-	if logical.Scalar.Type == types.Bool {
+	// Calculate constraints for any expressions that could be filters.
+	if ev.Operator() == opt.FiltersOp || ev.Operator() == opt.TrueOp || ev.Operator() == opt.FalseOp {
 		cb := constraintsBuilder{md: ev.Metadata(), evalCtx: b.evalCtx}
 		logical.Scalar.Constraints, logical.Scalar.TightConstraints = cb.buildConstraints(ev)
 	}

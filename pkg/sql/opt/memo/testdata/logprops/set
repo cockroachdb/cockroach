@@ -44,7 +44,7 @@ intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── right columns: v:4(int) u:3(int) rowid:5(int)
- ├── stats: [rows=1, distinct(1,2)=1]
+ ├── stats: [rows=333, distinct(1,2)=333]
  ├── project
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
@@ -54,18 +54,18 @@ intersect
  │         ├── stats: [rows=1000, distinct(1,2)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=1, distinct(3-5)=1]
+      ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+      ├── stats: [rows=333, distinct(3-5)=333]
       ├── keys: (5)
       └── select
-           ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-           ├── stats: [rows=1, distinct(3)=1, distinct(3-5)=1]
+           ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+           ├── stats: [rows=333, distinct(3-5)=333]
            ├── keys: (5)
            ├── scan uv
            │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-           │    ├── stats: [rows=1000, distinct(3)=700, distinct(3-5)=1000]
+           │    ├── stats: [rows=1000, distinct(3-5)=1000]
            │    └── keys: (5)
-           └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+           └── eq [type=bool, outer=(3)]
                 ├── variable: uv.u [type=int, outer=(3)]
                 └── const: 1 [type=int]
 
@@ -86,20 +86,20 @@ except
  │         ├── stats: [rows=1000, distinct(1,2)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: u:3(int!null) v:4(int!null)
-      ├── stats: [rows=1, distinct(3,4)=1]
+      ├── columns: u:3(int) v:4(int!null)
+      ├── stats: [rows=333, distinct(3,4)=333]
       └── project
-           ├── columns: u:3(int!null) v:4(int!null)
-           ├── stats: [rows=1, distinct(3,4)=1]
+           ├── columns: u:3(int) v:4(int!null)
+           ├── stats: [rows=333, distinct(3,4)=333]
            └── select
-                ├── columns: u:3(int!null) v:4(int!null) rowid:5(int!null)
-                ├── stats: [rows=1, distinct(3)=1, distinct(3,4)=1]
+                ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+                ├── stats: [rows=333, distinct(3,4)=333]
                 ├── keys: (5)
                 ├── scan uv
                 │    ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
-                │    ├── stats: [rows=1000, distinct(3)=700, distinct(3,4)=1000]
+                │    ├── stats: [rows=1000, distinct(3,4)=1000]
                 │    └── keys: (5)
-                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+                └── eq [type=bool, outer=(3)]
                      ├── variable: uv.u [type=int, outer=(3)]
                      └── const: 1 [type=int]
 

@@ -259,12 +259,12 @@ build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null)
+ ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,+1
  └── project
-      ├── columns: a:1(int!null) b:2(int!null)
+      ├── columns: a:1(int!null) b:2(int)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+           ├── columns: a:1(int!null) b:2(int) c:3(bool)
            ├── scan t
            │    └── columns: a:1(int!null) b:2(int) c:3(bool)
            └── eq [type=bool]
@@ -286,12 +286,12 @@ build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
+ ├── columns: a:1(int!null) b:2(int) ab:4(int)
  ├── ordering: -4,+1
  └── project
-      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
+      ├── columns: ab:4(int) a:1(int!null) b:2(int)
       ├── select
-      │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+      │    ├── columns: a:1(int!null) b:2(int) c:3(bool)
       │    ├── scan t
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       │    └── eq [type=bool]

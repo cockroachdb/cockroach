@@ -1392,10 +1392,10 @@ group-by
  │    │              └── variable: "order".o_id [type=int, outer=(1)]
  │    └── filters [type=bool, outer=(1,9)]
  │         └── or [type=bool, outer=(1,9)]
- │              ├── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight)]
+ │              ├── is [type=bool, outer=(9)]
  │              │    ├── variable: order_line.ol_o_id [type=int, outer=(9)]
  │              │    └── null [type=unknown]
- │              └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
+ │              └── is [type=bool, outer=(1)]
  │                   ├── variable: "order".o_id [type=int, outer=(1)]
  │                   └── null [type=unknown]
  └── aggregations
