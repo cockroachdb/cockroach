@@ -58,7 +58,8 @@ type tpcc struct {
 	split   bool
 	scatter bool
 
-	partitions int
+	partitions        int
+	affinityPartition int
 
 	usePostgres  bool
 	serializable bool
@@ -94,16 +95,17 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:               {RuntimeOnly: true},
-			`fks`:              {RuntimeOnly: true},
-			`mix`:              {RuntimeOnly: true},
-			`partitions`:       {RuntimeOnly: true},
-			`scatter`:          {RuntimeOnly: true},
-			`serializable`:     {RuntimeOnly: true},
-			`split`:            {RuntimeOnly: true},
-			`wait`:             {RuntimeOnly: true},
-			`workers`:          {RuntimeOnly: true},
-			`expensive-checks`: {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`db`:                 {RuntimeOnly: true},
+			`fks`:                {RuntimeOnly: true},
+			`mix`:                {RuntimeOnly: true},
+			`partitions`:         {RuntimeOnly: true},
+			`partition-affinity`: {RuntimeOnly: true},
+			`scatter`:            {RuntimeOnly: true},
+			`serializable`:       {RuntimeOnly: true},
+			`split`:              {RuntimeOnly: true},
+			`wait`:               {RuntimeOnly: true},
+			`workers`:            {RuntimeOnly: true},
+			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -123,6 +125,7 @@ var tpccMeta = workload.Meta{
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -152,6 +155,18 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			if w.partitions != 0 && !w.split {
 				return errors.Errorf(`--partitions requires --split`)
+			}
+
+			if w.affinityPartition != -1 && w.partitions == 0 {
+				return errors.Errorf(`--affinityPartition requires --partitions`)
+			}
+
+			if w.affinityPartition < -1 {
+				return errors.Errorf(`--affinityPartition should be greater than or equal to 0`)
+			}
+
+			if w.affinityPartition > w.partitions-1 {
+				return errors.Errorf(`--affinityPartition should be less than the total number of partitions.`)
 			}
 
 			if w.serializable {
@@ -346,12 +361,24 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		dbs[i].SetMaxIdleConns(nConns)
 	}
 
-	if w.split {
-		splitTables(dbs[0], w.warehouses)
+	// We're adding this check here because repartitioning a table can take
+	// upwards of 10 minutes so if a cluster is already set up correctly we won't
+	// do this operation again.
+	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 
-		if w.partitions > 0 {
-			partitionTables(dbs[0], w.warehouses, w.partitions)
+	if !alreadyPartitioned {
+		if w.split {
+			splitTables(dbs[0], w.warehouses)
+
+			if w.partitions > 0 {
+				partitionTables(dbs[0], w.warehouses, w.partitions)
+			}
 		}
+	} else {
+		fmt.Println("Tables are not being parititioned because they've been previously partitioned.")
 	}
 
 	if w.scatter {
@@ -366,9 +393,11 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
 	// a machine that holds partition "i % *partitions".
 	partitionDBs := make([][]*gosql.DB, w.partitions)
-	for i, db := range dbs {
-		p := i % w.partitions
-		partitionDBs[p] = append(partitionDBs[p], db)
+	if w.affinityPartition == -1 {
+		for i, db := range dbs {
+			p := i % w.partitions
+			partitionDBs[p] = append(partitionDBs[p], db)
+		}
 	}
 	for i := range partitionDBs {
 		if partitionDBs[i] == nil {
@@ -384,6 +413,11 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
 		p := (warehouse * w.partitions) / w.warehouses
+		// Here we're making sure that if we have a warehouse affinity, that we only create
+		// workers for the correct warehouses.
+		if w.affinityPartition != -1 && p != w.affinityPartition {
+			continue
+		}
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
