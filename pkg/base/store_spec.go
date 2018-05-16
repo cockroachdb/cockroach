@@ -78,6 +78,14 @@ type StoreSpec struct {
 	ExtraOptions []byte
 }
 
+// IsEmpty returns if StoreSpec is empty.
+func (ss StoreSpec) IsEmpty() bool {
+	return ss.String() == "" &&
+		ss.RocksDBOptions == "" &&
+		!ss.UseFileRegistry &&
+		ss.ExtraOptions == nil
+}
+
 // String returns a fully parsable version of the store spec.
 func (ss StoreSpec) String() string {
 	var buffer bytes.Buffer

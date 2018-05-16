@@ -438,6 +438,16 @@ type TempStorageConfig struct {
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
+	// Store contains the parameters that temp storage will use.
+	Store StoreSpec
+}
+
+// IsEmpty returns if TempStorageConfig is empty.
+func (cfg TempStorageConfig) IsEmpty() bool {
+	return !cfg.InMemory &&
+		cfg.Path == "" &&
+		cfg.Mon == nil &&
+		cfg.Store.IsEmpty()
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
@@ -479,6 +489,7 @@ func TempStorageConfigFromEnv(
 	return TempStorageConfig{
 		InMemory: inMem,
 		Mon:      &monitor,
+		Store:    firstStore,
 	}
 }
 

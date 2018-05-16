@@ -193,7 +193,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		// TestServer).
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
-	if params.TempStorageConfig != (base.TempStorageConfig{}) {
+	if !params.TempStorageConfig.IsEmpty() {
 		cfg.TempStorageConfig = params.TempStorageConfig
 	}
 

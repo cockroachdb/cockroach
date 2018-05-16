@@ -33,8 +33,10 @@ func NewTempEngine(tempStorage base.TempStorageConfig) (Engine, error) {
 		Dir:   tempStorage.Path,
 		// MaxSizeBytes doesn't matter for temp storage - it's not
 		// enforced in any way.
-		MaxSizeBytes: 0,
-		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
+		MaxSizeBytes:    0,
+		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
+		UseFileRegistry: tempStorage.Store.UseFileRegistry,
+		ExtraOptions:    tempStorage.Store.ExtraOptions,
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)

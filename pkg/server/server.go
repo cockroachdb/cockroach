@@ -349,7 +349,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[0]
+		firstStore := s.cfg.TempStorageConfig.Store
 		var err error
 		if firstStore.InMemory {
 			// First store is in-memory so we remove the temp

@@ -436,7 +436,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[0]); err != nil {
+	var useStore base.StoreSpec
+	for i := range serverCfg.Stores.Specs {
+		if serverCfg.Stores.Specs[i].ExtraOptions != nil {
+			useStore = serverCfg.Stores.Specs[i]
+		}
+	}
+	if useStore.IsEmpty() {
+		useStore = serverCfg.Stores.Specs[0]
+	}
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore); err != nil {
 		return err
 	}
 
