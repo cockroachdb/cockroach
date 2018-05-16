@@ -27,7 +27,7 @@ import (
 
 func configureZone(db *gosql.DB, table, partition string, constraint int) {
 	sql := fmt.Sprintf(
-		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [+rack=%d]'`,
+		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [+rack%d]'`,
 		partition, table, constraint)
 	if _, err := db.Exec(sql); err != nil {
 		panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
@@ -320,12 +320,18 @@ func partitionItem(db *gosql.DB, partitions int) {
 	}
 }
 
-func partitionTables(db *gosql.DB, warehouses, partitions int) {
+func getWIDs(warehouses, partitions int) []int {
 	wIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
 		wIDs[i] = i * (warehouses / partitions)
 	}
 	wIDs[partitions] = warehouses
+
+	return wIDs
+}
+
+func partitionTables(db *gosql.DB, warehouses, partitions int) {
+	wIDs := getWIDs(warehouses, partitions)
 
 	partitionWarehouse(db, wIDs, partitions)
 	partitionDistrict(db, wIDs, partitions)

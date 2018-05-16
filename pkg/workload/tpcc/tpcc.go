@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"math"
 )
 
 type tpcc struct {
@@ -58,7 +59,8 @@ type tpcc struct {
 	split   bool
 	scatter bool
 
-	partitions int
+	partitions        int
+	affinityPartition int
 
 	usePostgres  bool
 	serializable bool
@@ -94,16 +96,17 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:               {RuntimeOnly: true},
-			`fks`:              {RuntimeOnly: true},
-			`mix`:              {RuntimeOnly: true},
-			`partitions`:       {RuntimeOnly: true},
-			`scatter`:          {RuntimeOnly: true},
-			`serializable`:     {RuntimeOnly: true},
-			`split`:            {RuntimeOnly: true},
-			`wait`:             {RuntimeOnly: true},
-			`workers`:          {RuntimeOnly: true},
-			`expensive-checks`: {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`db`:                 {RuntimeOnly: true},
+			`fks`:                {RuntimeOnly: true},
+			`mix`:                {RuntimeOnly: true},
+			`partitions`:         {RuntimeOnly: true},
+			`partition-affinity`: {RuntimeOnly: true},
+			`scatter`:            {RuntimeOnly: true},
+			`serializable`:       {RuntimeOnly: true},
+			`split`:              {RuntimeOnly: true},
+			`wait`:               {RuntimeOnly: true},
+			`workers`:            {RuntimeOnly: true},
+			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -123,6 +126,7 @@ var tpccMeta = workload.Meta{
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition.`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -378,8 +382,18 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.reg = reg
 
+	startWorker := 0
+	endWorker := w.workers
+
+	if w.affinityPartition != -1 {
+		wIds := getWIDs(w.warehouses, w.partitions)
+		startWorker = wIds[w.affinityPartition] * numWorkersPerWarehouse
+		endWorker = wIds[w.affinityPartition+1] * numWorkersPerWarehouse
+		endWorker = int(math.Min(float64(endWorker), float64(w.workers)))
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
+	for workerIdx := startWorker; workerIdx < endWorker; workerIdx++ {
 		warehouse := workerIdx % w.warehouses
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
