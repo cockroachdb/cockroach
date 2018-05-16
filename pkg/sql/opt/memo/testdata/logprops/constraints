@@ -494,7 +494,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+           ├── variable: abc.b [type=bool, outer=(2)]
            └── true [type=bool]
 
 opt
@@ -508,7 +508,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+           ├── variable: abc.b [type=bool, outer=(2)]
            └── false [type=bool]
 
 opt
@@ -522,7 +522,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+           ├── variable: abc.b [type=bool, outer=(2)]
            └── true [type=bool]
 
 opt
@@ -536,7 +536,7 @@ select
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+           ├── variable: abc.b [type=bool, outer=(2)]
            └── false [type=bool]
 
 opt
@@ -562,7 +562,7 @@ select
  │    └── stats: [rows=1000, distinct(2)=700]
  └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
-           └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+           └── variable: abc.b [type=bool, outer=(2)]
 
 opt
 SELECT * FROM abc WHERE a > 5 AND b

@@ -55,9 +55,10 @@ project
       │    ├── scan b
       │    │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
       │    └── true [type=bool]
-      └── eq [type=bool]
-           ├── variable: a.x [type=int]
-           └── variable: b.x [type=int]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: a.x [type=int]
+                └── variable: b.x [type=int]
 
 build
 SELECT * FROM c, b, a WHERE c.x = a.x AND b.x = a.x
@@ -78,13 +79,14 @@ project
       │    ├── scan a
       │    │    └── columns: a.x:8(int!null) a.y:9(float)
       │    └── true [type=bool]
-      └── and [type=bool]
-           ├── eq [type=bool]
-           │    ├── variable: c.x [type=int]
-           │    └── variable: a.x [type=int]
-           └── eq [type=bool]
-                ├── variable: b.x [type=int]
-                └── variable: a.x [type=int]
+      └── filters [type=bool]
+           └── and [type=bool]
+                ├── eq [type=bool]
+                │    ├── variable: c.x [type=int]
+                │    └── variable: a.x [type=int]
+                └── eq [type=bool]
+                     ├── variable: b.x [type=int]
+                     └── variable: a.x [type=int]
 
 exec-ddl
 CREATE TABLE db1.a (x INT PRIMARY KEY, y FLOAT, z STRING)

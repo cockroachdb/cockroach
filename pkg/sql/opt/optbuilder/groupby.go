@@ -272,6 +272,8 @@ func (b *Builder) buildAggregation(
 
 	// Wrap with having filter if it exists.
 	if having != 0 {
+		// Wrap the filter in a FiltersOp.
+		having = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{having}))
 		aggOutScope.group = b.factory.ConstructSelect(aggOutScope.group, having)
 	}
 	return aggOutScope, projectionsScope
