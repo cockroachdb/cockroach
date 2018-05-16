@@ -10,7 +10,7 @@ package changefeedccl
 
 import (
 	"context"
-	"strings"
+	"net/url"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -36,11 +36,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-var kafkaBootstrapServers = settings.RegisterStringSetting(
-	"external.kafka.bootstrap_servers",
-	"comma-separated list of host:port addresses of Kafka brokers to bootstrap the connection",
-	"",
-)
 var changefeedPollInterval = settings.RegisterDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the prototype changefeed implementation",
@@ -54,12 +49,11 @@ func init() {
 }
 
 const (
-	changefeedOptTopicPrefix = "topic_prefix"
+	sinkSchemeKafka      = `kafka`
+	sinkParamTopicPrefix = `topic_prefix`
 )
 
-var changefeedOptionExpectValues = map[string]bool{
-	changefeedOptTopicPrefix: true,
-}
+var changefeedOptionExpectValues = map[string]bool{}
 
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
@@ -70,10 +64,9 @@ func changefeedPlanHook(
 		return nil, nil, nil, nil
 	}
 
-	switch strings.ToLower(changefeedStmt.SinkType) {
-	case `kafka`:
-	default:
-		return nil, nil, nil, errors.Errorf(`unknown CHANGEFEED sink: %s`, changefeedStmt.SinkType)
+	sinkURIFn, err := p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedOptionExpectValues)
@@ -87,6 +80,11 @@ func changefeedPlanHook(
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		sinkURI, err := sinkURIFn()
+		if err != nil {
+			return err
+		}
 
 		opts, err := optsFn()
 		if err != nil {
@@ -131,10 +129,10 @@ func changefeedPlanHook(
 				return sqlDescIDs
 			}(),
 			Details: jobs.ChangefeedDetails{
-				Highwater:             highwater,
-				TableDescs:            tableDescs,
-				KafkaTopicPrefix:      opts[changefeedOptTopicPrefix],
-				KafkaBootstrapServers: kafkaBootstrapServers.Get(&p.ExecCfg().Settings.SV),
+				Highwater:  highwater,
+				TableDescs: tableDescs,
+				Opts:       opts,
+				SinkURI:    sinkURI,
 			},
 		})
 		if err != nil {
@@ -153,13 +151,14 @@ func changefeedJobDescription(changefeed *tree.CreateChangefeed) string {
 }
 
 type changefeed struct {
-	jobID            int64
-	kafkaTopicPrefix string
-	spans            []roachpb.Span
-	rf               sqlbase.RowFetcher
+	jobID   int64
+	sinkURI string
+	spans   []roachpb.Span
+	rf      sqlbase.RowFetcher
 
-	db    *client.DB
-	kafka sarama.SyncProducer
+	db               *client.DB
+	kafka            sarama.SyncProducer
+	kafkaTopicPrefix string
 
 	a sqlbase.DatumAlloc
 }
@@ -167,15 +166,13 @@ type changefeed struct {
 func newChangefeed(
 	jobID int64,
 	db *client.DB,
-	kafkaTopicPrefix string,
-	kafka sarama.SyncProducer,
+	sinkURI string,
 	tableDescs []sqlbase.TableDescriptor,
 ) (*changefeed, error) {
 	cf := &changefeed{
-		jobID:            jobID,
-		db:               db,
-		kafkaTopicPrefix: kafkaTopicPrefix,
-		kafka:            kafka,
+		jobID:   jobID,
+		db:      db,
+		sinkURI: sinkURI,
 	}
 
 	var rfTables []sqlbase.RowFetcherTableArgs
@@ -216,6 +213,21 @@ func newChangefeed(
 
 	// TODO(dan): Collapse any overlapping cf.spans (which only happens for
 	// interleaved tables).
+
+	uri, err := url.Parse(sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	switch uri.Scheme {
+	case sinkSchemeKafka:
+		cf.kafkaTopicPrefix = uri.Query().Get(sinkParamTopicPrefix)
+		cf.kafka, err = getKafkaProducer(uri.Host)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.Errorf(`unsupported sink: %s`, uri.Scheme)
+	}
 
 	return cf, nil
 }
@@ -329,13 +341,7 @@ func (b *changefeedResumer) Resume(
 	details := job.Record.Details.(jobs.ChangefeedDetails)
 	p := planHookState.(sql.PlanHookState)
 
-	producer, err := getKafkaProducer(details.KafkaBootstrapServers)
-	if err != nil {
-		return err
-	}
-
-	cf, err := newChangefeed(
-		*job.ID(), p.ExecCfg().DB, details.KafkaTopicPrefix, producer, details.TableDescs)
+	cf, err := newChangefeed(*job.ID(), p.ExecCfg().DB, details.SinkURI, details.TableDescs)
 	if err != nil {
 		return err
 	}
@@ -356,7 +362,7 @@ func (b *changefeedResumer) Resume(
 		// TODO(dan): HACK for testing. We call SendMessages with nil to
 		// indicate to the test that a full poll finished. Figure out something
 		// better.
-		if err := producer.SendMessages(nil); err != nil {
+		if err := cf.kafka.SendMessages(nil); err != nil {
 			return err
 		}
 

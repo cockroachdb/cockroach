@@ -12,7 +12,6 @@
 <tr><td><code>diagnostics.reporting.enabled</code></td><td>boolean</td><td><code>true</code></td><td>enable reporting diagnostic metrics to cockroach labs</td></tr>
 <tr><td><code>diagnostics.reporting.interval</code></td><td>duration</td><td><code>1h0m0s</code></td><td>interval at which diagnostics data should be reported (should be shorter than diagnostics.forced_stat_reset.interval)</td></tr>
 <tr><td><code>diagnostics.reporting.send_crash_reports</code></td><td>boolean</td><td><code>true</code></td><td>send crash and panic reports</td></tr>
-<tr><td><code>external.kafka.bootstrap_servers</code></td><td>string</td><td><code></code></td><td>comma-separated list of host:port addresses of Kafka brokers to bootstrap the connection</td></tr>
 <tr><td><code>jobs.registry.leniency</code></td><td>duration</td><td><code>1m0s</code></td><td>the amount of time to defer any attempts to reschedule a job</td></tr>
 <tr><td><code>kv.allocator.lease_rebalancing_aggressiveness</code></td><td>float</td><td><code>1E+00</code></td><td>set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases</td></tr>
 <tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
