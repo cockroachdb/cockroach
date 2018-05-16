@@ -5170,6 +5170,7 @@ func TestAbortSpanError(t *testing.T) {
 		expected := txn.Clone()
 		expected.Timestamp = txn.Timestamp
 		expected.Priority = priority
+		expected.Status = roachpb.ABORTED
 		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
 			t.Errorf("txn does not match: %s vs. %s", pErr.GetTxn(), expected)
 		}

@@ -5198,6 +5198,7 @@ func checkIfTxnAborted(
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority
 		}
+		newTxn.Status = roachpb.ABORTED
 		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
 	}
 	return nil
