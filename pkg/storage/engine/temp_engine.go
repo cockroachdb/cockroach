@@ -21,7 +21,7 @@ import (
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
 // working set is larger than can be stored in memory.
-func NewTempEngine(tempStorage base.TempStorageConfig) (Engine, error) {
+func NewTempEngine(tempStorage base.TempStorageConfig, storeSpec base.StoreSpec) (Engine, error) {
 	if tempStorage.InMemory {
 		// TODO(arjun): Limit the size of the store once #16750 is addressed.
 		// Technically we do not pass any attributes to temporary store.
@@ -33,8 +33,10 @@ func NewTempEngine(tempStorage base.TempStorageConfig) (Engine, error) {
 		Dir:   tempStorage.Path,
 		// MaxSizeBytes doesn't matter for temp storage - it's not
 		// enforced in any way.
-		MaxSizeBytes: 0,
-		MaxOpenFiles: 128, // TODO(arjun): Revisit this.
+		MaxSizeBytes:    0,
+		MaxOpenFiles:    128, // TODO(arjun): Revisit this.
+		UseFileRegistry: storeSpec.UseFileRegistry,
+		ExtraOptions:    storeSpec.ExtraOptions,
 	}
 	rocksDBCache := NewRocksDBCache(0)
 	rocksdb, err := NewRocksDB(rocksDBCfg, rocksDBCache)
