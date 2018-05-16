@@ -15,6 +15,7 @@
 package testmodel
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -54,6 +55,7 @@ func TestModelDBQuery(t *testing.T) {
 		start              int64
 		end                int64
 		interpolationLimit int64
+		nowNanos           int64
 		expected           DataSeries
 	}{
 		// Basic Query
@@ -68,6 +70,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 200.0),
@@ -88,6 +91,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 250.0),
@@ -108,6 +112,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 100.0),
@@ -128,6 +133,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 100.0),
@@ -148,6 +154,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              200,
 			end:                300,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(200, 600.0),
 				dp(300, 900.0),
@@ -165,6 +172,7 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 1,
+			nowNanos:           math.MaxInt64,
 			expected: DataSeries{
 				dp(0, 0.0),
 				dp(100, 200.0),
@@ -185,7 +193,44 @@ func TestModelDBQuery(t *testing.T) {
 			start:              0,
 			end:                10000,
 			interpolationLimit: 10000,
+			nowNanos:           math.MaxInt64,
 			expected:           nil,
+		},
+		// NowNanos cutoff.
+		{
+			seriesName:         "testmetric",
+			sources:            nil,
+			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
+			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
+			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
+			sampleDuration:     100,
+			start:              0,
+			end:                10000,
+			interpolationLimit: 10000,
+			nowNanos:           300,
+			expected: DataSeries{
+				dp(0, 0.0),
+				dp(100, 200.0),
+				dp(200, 600.0),
+			},
+		},
+		// NowNanos cutoff with downsampling.
+		{
+			seriesName:         "testmetric",
+			sources:            nil,
+			downsampler:        tspb.TimeSeriesQueryAggregator_AVG,
+			aggregator:         tspb.TimeSeriesQueryAggregator_SUM,
+			derivative:         tspb.TimeSeriesQueryDerivative_NONE,
+			slabDuration:       1000,
+			sampleDuration:     250,
+			start:              0,
+			end:                10000,
+			interpolationLimit: 10000,
+			nowNanos:           300,
+			expected: DataSeries{
+				dp(0, 250.0),
+			},
 		},
 	} {
 		t.Run("", func(t *testing.T) {
@@ -200,6 +245,7 @@ func TestModelDBQuery(t *testing.T) {
 				tc.start,
 				tc.end,
 				tc.interpolationLimit,
+				tc.nowNanos,
 			)
 			if a, e := result, tc.expected; !reflect.DeepEqual(a, e) {
 				t.Errorf("query got result %v, wanted %v", a, e)

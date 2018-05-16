@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -897,5 +898,200 @@ func TestTimeSeriesSpanIteratorValues(t *testing.T) {
 	}
 	if _, valid := iter.derivative(tspb.TimeSeriesQueryAggregator_AVG); valid {
 		t.Errorf("expected deriv to be invalid at index 0, was valid")
+	}
+}
+
+func TestDownsampleSpans(t *testing.T) {
+
+	for _, tc := range []struct {
+		span           timeSeriesSpan
+		samplePeriod   int64
+		expectedResult timeSeriesSpan
+	}{
+		// Same sample period as disk has no result.
+		{
+			span: timeSeriesSpan{
+				makeInternalData(0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}),
+				makeInternalData(50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}),
+			},
+			samplePeriod: 10,
+			expectedResult: timeSeriesSpan{
+				{
+					StartTimestampNanos: 0,
+					SampleDurationNanos: 10,
+					Samples: []roachpb.InternalTimeSeriesSample{
+						{
+							Offset: 1,
+							Sum:    1,
+							Count:  1,
+							Max:    proto.Float64(1),
+							Min:    proto.Float64(1),
+						},
+						{
+							Offset: 2,
+							Sum:    6,
+							Count:  2,
+							Max:    proto.Float64(4),
+							Min:    proto.Float64(2),
+						},
+						{
+							Offset: 3,
+							Sum:    5,
+							Count:  1,
+							Max:    proto.Float64(5),
+							Min:    proto.Float64(5),
+						},
+					},
+				},
+				{
+					StartTimestampNanos: 50,
+					// Downsample does not adjust SampleDurationNanos.
+					SampleDurationNanos: 10,
+					Samples: []roachpb.InternalTimeSeriesSample{
+						{
+							Offset: 0,
+							Sum:    5,
+							Count:  1,
+							Max:    proto.Float64(5),
+							Min:    proto.Float64(5),
+						},
+						{
+							Offset: 1,
+							Sum:    6,
+							Count:  1,
+							Max:    proto.Float64(6),
+							Min:    proto.Float64(6),
+						},
+					},
+				},
+			},
+		},
+		// Basic downsampling.
+		{
+			span: timeSeriesSpan{
+				makeInternalData(0, 10, []dataSample{
+					{10, 1},
+					{20, 2},
+					{20, 4},
+					{30, 5},
+				}),
+				makeInternalData(50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}),
+				makeInternalData(70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}),
+			},
+			samplePeriod: 50,
+			expectedResult: timeSeriesSpan{
+				{
+					StartTimestampNanos: 0,
+					// Downsample does not adjust SampleDurationNanos.
+					SampleDurationNanos: 10,
+					Samples: []roachpb.InternalTimeSeriesSample{
+						{
+							Offset: 0,
+							Sum:    12,
+							Count:  4,
+							Max:    proto.Float64(5.0),
+							Min:    proto.Float64(1.0),
+						},
+						{
+							Offset: 5,
+							Sum:    27,
+							Count:  4,
+							Max:    proto.Float64(9.0),
+							Min:    proto.Float64(5.0),
+						},
+						{
+							Offset: 10,
+							Sum:    8,
+							Count:  1,
+							Max:    proto.Float64(8.0),
+							Min:    proto.Float64(8.0),
+						},
+					},
+				},
+			},
+		},
+		// Downsampling while re-using multiple InternalTimeSeriesData structures.
+		{
+			span: timeSeriesSpan{
+				makeInternalData(0, 10, []dataSample{
+					{10, 1},
+				}),
+				makeInternalData(50, 10, []dataSample{
+					{50, 5},
+					{60, 6},
+				}),
+				makeInternalData(70, 10, []dataSample{
+					{70, 7},
+					{90, 9},
+					{110, 8},
+				}),
+			},
+			samplePeriod: 50,
+			expectedResult: timeSeriesSpan{
+				{
+					StartTimestampNanos: 0,
+					// Downsample does not adjust SampleDurationNanos.
+					SampleDurationNanos: 10,
+					Samples: []roachpb.InternalTimeSeriesSample{
+						{
+							Offset: 0,
+							Sum:    1,
+							Count:  1,
+							Max:    proto.Float64(1.0),
+							Min:    proto.Float64(1.0),
+						},
+					},
+				},
+				{
+					// Downsample does not adjust SampleDurationNanos or
+					// StartTimestampNanos.
+					StartTimestampNanos: 50,
+					SampleDurationNanos: 10,
+					Samples: []roachpb.InternalTimeSeriesSample{
+						{
+							Offset: 0,
+							Sum:    27,
+							Count:  4,
+							Max:    proto.Float64(9.0),
+							Min:    proto.Float64(5.0),
+						},
+						{
+							Offset: 5,
+							Sum:    8,
+							Count:  1,
+							Max:    proto.Float64(8.0),
+							Min:    proto.Float64(8.0),
+						},
+					},
+				},
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			spans := map[string]timeSeriesSpan{
+				"test": tc.span,
+			}
+			downsampleSpans(spans, tc.samplePeriod)
+			if a, e := spans["test"], tc.expectedResult; !reflect.DeepEqual(a, e) {
+				for _, diff := range pretty.Diff(a, e) {
+					t.Error(diff)
+				}
+			}
+		})
 	}
 }

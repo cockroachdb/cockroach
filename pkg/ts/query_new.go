@@ -281,6 +281,11 @@ func (db *DB) QueryWithSlices(
 		return nil, nil, err
 	}
 
+	// Adjust timespan based on the current time.
+	if err := timespan.adjustForCurrentTime(diskResolution); err != nil {
+		return nil, nil, err
+	}
+
 	// Reserve space for result.
 	result := make([]tspb.TimeSeriesDatapoint, 0, timespan.width()/timespan.SampleDurationNanos)
 	if err := mem.resultAccount.Grow(ctx, int64(len(result))*sizeOfDataPoint); err != nil {
@@ -410,11 +415,19 @@ func downsampleSpans(spans map[string]timeSeriesSpan, duration int64) {
 				sum             float64
 			)
 			for end.isValid() && normalizeToPeriod(end.timestamp, duration) == sampleTimestamp {
-				count++
 				data := end.data()
+				count += data.Count
 				sum += data.Sum
-				max = math.Max(max, data.Sum)
-				min = math.Min(min, data.Sum)
+				if data.Max != nil {
+					max = math.Max(max, *data.Max)
+				} else {
+					max = math.Max(max, data.Sum)
+				}
+				if data.Min != nil {
+					min = math.Min(min, *data.Min)
+				} else {
+					min = math.Min(min, data.Sum)
+				}
 				end.forward()
 			}
 			nextInsert.dataSlice()[0] = roachpb.InternalTimeSeriesSample{
@@ -443,8 +456,7 @@ func downsampleSpans(spans map[string]timeSeriesSpan, duration int64) {
 		}
 
 		if nextInsert.inner != 0 {
-			lastSlab := spans[k][len(spans[k])-1]
-			lastSlab.Samples = lastSlab.Samples[:nextInsert.inner]
+			spans[k][len(spans[k])-1].Samples = spans[k][len(spans[k])-1].Samples[:nextInsert.inner]
 		}
 	}
 }
@@ -520,6 +532,35 @@ func aggregateSpansToDatapoints(
 		if len(aggregateValues) == 0 {
 			continue
 		}
+
+		// Filters data points near the current moment which are "incomplete". Any
+		// data point in the sufficiently-recent past is required to have a valid
+		// contribution from all sources being aggregated.
+		//
+		// A detailed explanation of why this is done: New time series data points
+		// are, in typical usage, always added at the current time; however, due to
+		// the curiosities of clock skew, it is a common occurrence for the most
+		// recent data point to be available for some sources, but not from others.
+		// For queries which aggregate from multiple sources, this can lead to a
+		// situation where a persistent and precipitous dip appears at the very end
+		// of data graphs. This happens because the most recent point only
+		// represents the aggregation of a subset of sources, even though the
+		// missing sources are not actually offline, they are simply slightly
+		// delayed in reporting.
+		//
+		// Linear interpolation can gaps in the middle of data, but it does not work
+		// in this case as the current time is later than any data available from
+		// the missing sources.
+		//
+		// In this case, we can assume that a missing data point will be added soon,
+		// and instead do *not* return the partially aggregated data point to the
+		// client.
+		if lowestTimestamp > timespan.NowNanos-timespan.SampleDurationNanos {
+			if len(aggregateValues) < len(iterators) {
+				continue
+			}
+		}
+
 		*dest = append(*dest, tspb.TimeSeriesDatapoint{
 			TimestampNanos: lowestTimestamp,
 			Value:          aggregate(query.GetSourceAggregator(), aggregateValues),
