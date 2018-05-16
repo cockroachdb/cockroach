@@ -18,7 +18,7 @@ select
  ├── cost: 1010.00
  ├── keys: (1)
  ├── scan a
- │    ├── columns: a.k:1(int!null) a.s:3(string)
+ │    ├── columns: k:1(int!null) s:3(string)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1000.00
  │    └── keys: (1)

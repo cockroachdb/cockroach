@@ -190,7 +190,7 @@ sort
  ├── columns: s:4(string) j:5(jsonb)
  ├── ordering: +4
  └── scan a
-      └── columns: a.s:4(string) a.j:5(jsonb)
+      └── columns: s:4(string) j:5(jsonb)
 
 memo
 SELECT s, j FROM a ORDER BY s

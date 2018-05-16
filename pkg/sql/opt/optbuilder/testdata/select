@@ -62,7 +62,7 @@ SELECT NULL, * FROM abc
 project
  ├── columns: column4:4(unknown) a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── projections
       └── null [type=unknown]
 
@@ -80,7 +80,7 @@ SELECT * FROM abc WHERE NULL
 select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── null [type=unknown]
 
 build
@@ -89,7 +89,7 @@ SELECT * FROM abc WHERE a = NULL
 select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── null [type=unknown]
 
 build
@@ -98,7 +98,7 @@ SELECT *,* FROM abc
 project
  ├── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
  └── scan abc
-      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT a,a,a,a FROM abc
@@ -106,7 +106,7 @@ SELECT a,a,a,a FROM abc
 project
  ├── columns: a:1(int!null) a:1(int!null) a:1(int!null) a:1(int!null)
  └── scan abc
-      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT a,c FROM abc
@@ -114,7 +114,7 @@ SELECT a,c FROM abc
 project
  ├── columns: a:1(int!null) c:3(int)
  └── scan abc
-      └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT a+b+c AS foo FROM abc
@@ -122,7 +122,7 @@ SELECT a+b+c AS foo FROM abc
 project
  ├── columns: foo:4(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── projections
       └── plus [type=int]
            ├── plus [type=int]
@@ -136,9 +136,9 @@ SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 project
  ├── columns: a:1(int!null) b:2(int)
  └── select
-      ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
       ├── scan abc
-      │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+      │    └── columns: a:1(int!null) b:2(int) c:3(int)
       └── case [type=bool]
            ├── true [type=bool]
            ├── when [type=bool]
@@ -181,7 +181,7 @@ SELECT v||'foo' FROM kv
 project
  ├── columns: column3:3(string)
  ├── scan kv
- │    └── columns: kv.k:1(string!null) kv.v:2(string)
+ │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── concat [type=string]
            ├── variable: kv.v [type=string]
@@ -193,7 +193,7 @@ SELECT LOWER(v) FROM kv
 project
  ├── columns: column3:3(string)
  ├── scan kv
- │    └── columns: kv.k:1(string!null) kv.v:2(string)
+ │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── function: lower [type=string]
            └── variable: kv.v [type=string]
@@ -204,7 +204,7 @@ SELECT k FROM kv
 project
  ├── columns: k:1(string!null)
  └── scan kv
-      └── columns: kv.k:1(string!null) kv.v:2(string)
+      └── columns: k:1(string!null) v:2(string)
 
 build
 SELECT kv.K,KV.v FROM kv
@@ -224,7 +224,7 @@ SELECT (kv.*) FROM kv
 project
  ├── columns: column3:3(tuple{string, string})
  ├── scan kv
- │    └── columns: kv.k:1(string!null) kv.v:2(string)
+ │    └── columns: k:1(string!null) v:2(string)
  └── projections
       └── tuple [type=tuple{string, string}]
            ├── variable: kv.k [type=string]
@@ -267,9 +267,9 @@ SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 project
  ├── columns: k:1(string!null)
  └── select
-      ├── columns: kv.k:1(string!null) kv.v:2(string)
+      ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
-      │    └── columns: kv.k:1(string!null) kv.v:2(string)
+      │    └── columns: k:1(string!null) v:2(string)
       └── eq [type=bool]
            ├── variable: kv.k [type=string]
            └── const: 'a' [type=string]
@@ -280,9 +280,9 @@ SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 project
  ├── columns: v:2(string)
  └── select
-      ├── columns: kv.k:1(string!null) kv.v:2(string)
+      ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
-      │    └── columns: kv.k:1(string!null) kv.v:2(string)
+      │    └── columns: k:1(string!null) v:2(string)
       └── eq [type=bool]
            ├── variable: kv.k [type=string]
            └── const: 'a' [type=string]
@@ -301,7 +301,7 @@ SELECT *, "from", kw."from" FROM kw
 project
  ├── columns: from:1(int!null) from:1(int!null) from:1(int!null)
  └── scan kw
-      └── columns: kw.from:1(int!null)
+      └── columns: from:1(int!null)
 
 exec-ddl
 CREATE TABLE xyzw (
@@ -350,7 +350,7 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +1
  ├── scan xyzw
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── ordering: +1
  └── const: 1 [type=int]
 
@@ -366,7 +366,7 @@ SELECT * FROM xyzw LIMIT -100
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── const: -100 [type=int]
 
 # At execution time, this will cause the error: negative value for OFFSET
@@ -376,7 +376,7 @@ SELECT * FROM xyzw OFFSET -100
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── const: -100 [type=int]
 
 build
@@ -386,7 +386,7 @@ offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +1
  ├── scan xyzw
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── ordering: +1
  └── const: 1 [type=int]
 
@@ -396,7 +396,7 @@ SELECT (x,y) FROM xyzw
 project
  ├── columns: column5:5(tuple{int, int})
  ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── projections
       └── tuple [type=tuple{int, int}]
            ├── variable: xyzw.x [type=int]
@@ -408,7 +408,7 @@ SELECT * FROM xyzw LIMIT 0
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── scan xyzw
- │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── const: 0 [type=int]
 
 build
@@ -418,7 +418,7 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +1
  ├── scan xyzw
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── ordering: +1
  └── const: 1 [type=int]
 
@@ -429,10 +429,10 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +1
  ├── offset
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── ordering: +1
  │    ├── scan xyzw
- │    │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    │    └── ordering: +1
  │    └── const: 1 [type=int]
  └── const: 1 [type=int]
@@ -444,10 +444,10 @@ offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +2
  ├── sort
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── ordering: +2
  │    └── scan xyzw
- │         └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  └── const: 1 [type=int]
 
 build
@@ -457,13 +457,13 @@ limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── ordering: +2
  ├── offset
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── ordering: +2
  │    ├── sort
- │    │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    │    ├── ordering: +2
  │    │    └── scan xyzw
- │    │         └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │         └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── const: 1 [type=int]
  └── const: 1 [type=int]
 
@@ -473,9 +473,9 @@ SELECT * FROM xyzw LIMIT (RANDOM() * 0.0)::int OFFSET (RANDOM() * 0.0)::int
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── offset
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── scan xyzw
- │    │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── cast: int [type=int]
  │         └── mult [type=float]
  │              ├── function: random [type=float]
@@ -496,9 +496,9 @@ SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
 offset
  ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  ├── limit
- │    ├── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── scan xyzw
- │    │    └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+ │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    └── const: 5 [type=int]
  └── const: 5 [type=int]
 
@@ -520,7 +520,7 @@ SELECT value FROM boolean_table
 project
  ├── columns: value:2(bool)
  └── scan boolean_table
-      └── columns: boolean_table.id:1(int!null) boolean_table.value:2(bool)
+      └── columns: id:1(int!null) value:2(bool)
 
 build allow-unsupported
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
@@ -543,7 +543,7 @@ SELECT 0 * b, b % 1, 0 % b from abc
 project
  ├── columns: column4:4(int) column5:5(int) column6:6(int)
  ├── scan abc
- │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── projections
       ├── mult [type=int]
       │    ├── const: 0 [type=int]
@@ -932,7 +932,7 @@ SELECT * FROM a WHERE x > 10
 select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── gt [type=bool]
       ├── variable: a.x [type=int]
       └── const: 10 [type=int]
@@ -943,7 +943,7 @@ SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
 select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── and [type=bool]
       ├── gt [type=bool]
       │    ├── variable: a.x [type=int]
@@ -962,7 +962,7 @@ SELECT * FROM a WHERE x IN (1, 2, 3)
 select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── in [type=bool]
       ├── variable: a.x [type=int]
       └── tuple [type=tuple{int, int, int}]
@@ -982,7 +982,7 @@ SELECT @1, @2 FROM a
 project
  ├── columns: column3:3(int) column4:4(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── projections
       ├── variable: a.x [type=int]
       └── variable: a.y [type=float]
@@ -993,7 +993,7 @@ SELECT * FROM a WHERE (x > 10)::bool
 select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── cast: bool [type=bool]
       └── gt [type=bool]
            ├── variable: a.x [type=int]
@@ -1010,7 +1010,7 @@ SELECT * FROM a WHERE x = $1
 select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(float)
+ │    └── columns: x:1(int!null) y:2(float)
  └── eq [type=bool]
       ├── variable: a.x [type=int]
       └── placeholder: $1 [type=int]

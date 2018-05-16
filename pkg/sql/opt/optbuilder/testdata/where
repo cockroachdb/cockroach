@@ -30,7 +30,7 @@ SELECT * FROM kv WHERE k IN (1, 3)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ │    └── columns: k:1(int!null) v:2(int)
  └── in [type=bool]
       ├── variable: kv.k [type=int]
       └── tuple [type=tuple{int, int}]
@@ -43,7 +43,7 @@ SELECT * FROM kv WHERE v IN (6)
 select
  ├── columns: k:1(int!null) v:2(int!null)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ │    └── columns: k:1(int!null) v:2(int)
  └── in [type=bool]
       ├── variable: kv.v [type=int]
       └── tuple [type=tuple{int}]
@@ -95,10 +95,10 @@ project
  ├── columns: column3:3(bool)
  ├── ordering: +1
  ├── select
- │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── columns: k:1(string!null) v:2(string)
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
  │    └── like [type=bool]
  │         ├── variable: kvstring.k [type=string]
@@ -115,10 +115,10 @@ project
  ├── columns: column3:3(bool)
  ├── ordering: +1
  ├── select
- │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── columns: k:1(string!null) v:2(string)
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
  │    └── similar-to [type=bool]
  │         ├── variable: kvstring.k [type=string]
@@ -135,10 +135,10 @@ project
  ├── columns: column3:3(bool)
  ├── ordering: +1
  ├── select
- │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── columns: k:1(string!null) v:2(string)
  │    ├── ordering: +1
  │    ├── scan kvstring
- │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
  │    └── reg-match [type=bool]
  │         ├── variable: kvstring.k [type=string]
@@ -159,7 +159,7 @@ SELECT * FROM kv WHERE k IN (1, 5.0, 9)
 select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
- │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ │    └── columns: k:1(int!null) v:2(int)
  └── in [type=bool]
       ├── variable: kv.k [type=int]
       └── tuple [type=tuple{int, int, int}]
@@ -184,9 +184,9 @@ SELECT * FROM ab WHERE a IN (1, 3, 4)
 project
  ├── columns: a:1(int!null) b:2(int)
  └── select
-      ├── columns: ab.a:1(int!null) ab.b:2(int) ab.rowid:3(int!null)
+      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
-      │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── in [type=bool]
            ├── variable: ab.a [type=int]
            └── tuple [type=tuple{int, int, int}]
@@ -200,9 +200,9 @@ SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
 project
  ├── columns: a:1(int!null) b:2(int)
  └── select
-      ├── columns: ab.a:1(int!null) ab.b:2(int) ab.rowid:3(int!null)
+      ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
-      │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── in [type=bool]
            ├── variable: ab.a [type=int]
            └── tuple [type=tuple{int, int, int, unknown}]
@@ -217,9 +217,9 @@ SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
 project
  ├── columns: a:1(int) b:2(int)
  └── select
-      ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      ├── columns: a:1(int) b:2(int) rowid:3(int!null)
       ├── scan ab
-      │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── in [type=bool]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: ab.a [type=int]
@@ -241,9 +241,9 @@ SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
 project
  ├── columns: a:1(int) b:2(int)
  └── select
-      ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      ├── columns: a:1(int) b:2(int) rowid:3(int!null)
       ├── scan ab
-      │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+      │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
       └── in [type=bool]
            ├── tuple [type=tuple{int, int}]
            │    ├── variable: ab.a [type=int]

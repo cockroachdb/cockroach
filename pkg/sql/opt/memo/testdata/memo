@@ -29,24 +29,24 @@ limit
  ├── stats: [rows=10]
  ├── ordering: +2
  ├── sort
- │    ├── columns: a.y:2(int!null) b.x:3(string!null) column5:5(int)
+ │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(int)
  │    ├── stats: [rows=476]
  │    ├── ordering: +2
  │    └── project
- │         ├── columns: column5:5(int) a.y:2(int!null) b.x:3(string!null)
+ │         ├── columns: column5:5(int) y:2(int!null) b.x:3(string!null)
  │         ├── stats: [rows=476]
  │         ├── select
- │         │    ├── columns: a.x:1(int!null) a.y:2(int!null) b.x:3(string!null) b.z:4(decimal!null)
+ │         │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null) z:4(decimal!null)
  │         │    ├── stats: [rows=476, distinct(2)=1]
  │         │    ├── inner-join
- │         │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
+ │         │    │    ├── columns: a.x:1(int!null) y:2(int) b.x:3(string!null) z:4(decimal!null)
  │         │    │    ├── stats: [rows=1000000, distinct(2)=700]
  │         │    │    ├── scan a
- │         │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │         │    │    │    ├── columns: a.x:1(int!null) y:2(int)
  │         │    │    │    ├── stats: [rows=1000, distinct(2)=700]
  │         │    │    │    └── keys: (1)
  │         │    │    ├── scan b
- │         │    │    │    ├── columns: b.x:3(string!null) b.z:4(decimal!null)
+ │         │    │    │    ├── columns: b.x:3(string!null) z:4(decimal!null)
  │         │    │    │    ├── stats: [rows=1000]
  │         │    │    │    └── keys: (3)
  │         │    │    └── true [type=bool]
@@ -77,23 +77,23 @@ project
  ├── stats: [rows=10]
  ├── ordering: +2
  ├── limit
- │    ├── columns: a.x:1(int!null) a.y:2(int!null) b.x:3(string!null)
+ │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
  │    ├── cardinality: [0 - 10]
  │    ├── stats: [rows=10]
  │    ├── ordering: +2
  │    ├── sort
- │    │    ├── columns: a.x:1(int!null) a.y:2(int!null) b.x:3(string!null)
+ │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
  │    │    ├── stats: [rows=100]
  │    │    ├── ordering: +2
  │    │    └── inner-join
- │    │         ├── columns: a.x:1(int!null) a.y:2(int!null) b.x:3(string!null)
+ │    │         ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
  │    │         ├── stats: [rows=100]
  │    │         ├── select
- │    │         │    ├── columns: a.x:1(int!null) a.y:2(int!null)
+ │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
  │    │         │    ├── stats: [rows=1, distinct(2)=1]
  │    │         │    ├── keys: (1)
  │    │         │    ├── scan a
- │    │         │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │         │    │    ├── columns: a.x:1(int!null) y:2(int)
  │    │         │    │    ├── stats: [rows=1000, distinct(2)=700]
  │    │         │    │    └── keys: (1)
  │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]

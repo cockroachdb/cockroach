@@ -32,7 +32,7 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=1, distinct(1)=1]
  ├── scan t
- │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(1)=700]
  └── filters [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
       └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
@@ -46,7 +46,7 @@ select
  ├── columns: a:1(int!null) b:2(bool) c:3(string)
  ├── stats: [rows=333]
  ├── scan t
- │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
@@ -60,7 +60,7 @@ select
  ├── columns: a:1(int) b:2(bool) c:3(string)
  ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
  ├── scan t
- │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000, distinct(2)=700, distinct(3)=700]
  └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight)]
       ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
@@ -77,7 +77,7 @@ select
  ├── columns: a:1(int) b:2(bool!null) c:3(string!null)
  ├── stats: [rows=111]
  ├── scan t
- │    ├── columns: t.a:1(int) t.b:2(bool) t.c:3(string)
+ │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
       ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
@@ -108,7 +108,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan xy
- │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
@@ -124,7 +124,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── stats: [rows=333]
  ├── scan xy
- │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
@@ -140,7 +140,7 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=111]
  ├── scan xy
- │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
@@ -155,7 +155,7 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── stats: [rows=111]
  ├── scan xy
- │    ├── columns: xy.x:1(int) xy.y:2(int)
+ │    ├── columns: x:1(int) y:2(int)
  │    └── stats: [rows=1000]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]

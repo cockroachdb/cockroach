@@ -25,7 +25,7 @@ select
  ├── stats: [rows=1, distinct(1)=1]
  ├── keys: (1)
  ├── scan xy
- │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1)=1000]
  │    └── keys: (1)
  └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
@@ -39,14 +39,14 @@ select
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
  ├── stats: [rows=111111]
  ├── inner-join
- │    ├── columns: xy.x:1(int!null) xy.y:2(int) kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+ │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
  │    ├── stats: [rows=1000000]
  │    ├── scan xy
- │    │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    │    ├── columns: x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1)
  │    ├── scan kuv
- │    │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+ │    │    ├── columns: k:3(int!null) u:4(float) v:5(string)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (3)
  │    └── true [type=bool]
@@ -63,22 +63,22 @@ select
  ├── stats: [rows=333]
  ├── keys: (1)
  ├── scan xy
- │    ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    ├── columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000]
  │    └── keys: (1)
  └── exists [type=bool, outer=(1,2)]
       └── select
-           ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           ├── columns: k:3(int!null) u:4(float) v:5(string)
            ├── outer: (1,2)
            ├── stats: [rows=12]
            ├── keys: (3)
            ├── select
-           │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           │    ├── columns: k:3(int!null) u:4(float) v:5(string)
            │    ├── outer: (2)
            │    ├── stats: [rows=111]
            │    ├── keys: (3)
            │    ├── scan kuv
-           │    │    ├── columns: kuv.k:3(int!null) kuv.u:4(float) kuv.v:5(string)
+           │    │    ├── columns: k:3(int!null) u:4(float) v:5(string)
            │    │    ├── stats: [rows=1000]
            │    │    └── keys: (3)
            │    └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -103,7 +103,7 @@ select
  │    ├── project
  │    │    ├── stats: [rows=1000]
  │    │    └── scan xy
- │    │         ├── columns: xy.x:1(int!null) xy.y:2(int)
+ │    │         ├── columns: x:1(int!null) y:2(int)
  │    │         ├── stats: [rows=1000]
  │    │         └── keys: (1)
  │    └── aggregations
@@ -120,7 +120,7 @@ row-number
  ├── stats: [rows=1000]
  ├── keys: (1) (3)
  └── scan xy
-      ├── columns: xy.x:1(int!null) xy.y:2(int)
+      ├── columns: x:1(int!null) y:2(int)
       ├── stats: [rows=1000]
       └── keys: (1)
 
@@ -144,11 +144,11 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
  ├── stats: [rows=333]
  └── select
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       ├── stats: [rows=333]
       ├── keys: (5)
       ├── scan abcd
-      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
       └── true [type=bool]
@@ -160,11 +160,11 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── stats: [rows=333]
  └── select
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── stats: [rows=333]
       ├── keys: (5)
       ├── scan abcd
-      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
       └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
@@ -178,11 +178,11 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── stats: [rows=111]
  └── select
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null) abcd.rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
       ├── stats: [rows=111]
       ├── keys: (5)
       ├── scan abcd
-      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
       └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
@@ -196,11 +196,11 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── stats: [rows=111]
  └── select
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── stats: [rows=111]
       ├── keys: (5)
       ├── scan abcd
-      │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
       │    ├── stats: [rows=1000]
       │    └── keys: (5)
       └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
@@ -214,14 +214,14 @@ select
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── stats: [rows=12]
  ├── project
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int)
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  │    ├── stats: [rows=111]
  │    └── select
- │         ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int) abcd.rowid:5(int!null)
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
  │         ├── stats: [rows=111]
  │         ├── keys: (5)
  │         ├── scan abcd
- │         │    ├── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int) abcd.d:4(int) abcd.rowid:5(int!null)
+ │         │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
  │         │    ├── stats: [rows=1000]
  │         │    └── keys: (5)
  │         └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
