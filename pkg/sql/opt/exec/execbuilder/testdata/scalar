@@ -305,7 +305,7 @@ CREATE TABLE str (s STRING);
 INSERT INTO str VALUES ('a'), ('ab'), ('abc')
 ----
 
-exec
+exec rowsort
 SELECT LENGTH(s) FROM str
 ----
 column3:int
@@ -414,7 +414,7 @@ render     ·         ·                      (column8)  ·
 ·          table     t@primary              ·          ·
 ·          spans     ALL                    ·          ·
 
-exec
+exec rowsort
 SELECT LENGTH(s)::float, s FROM str
 ----
 column3:float  s:string
@@ -438,14 +438,14 @@ render       ·              ·                           (column3)           ·
 ·            row 3, expr 0  NULL                        ·                   ·
 ·            row 3, expr 1  NULL                        ·                   ·
 
-exec
+exec rowsort
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
 column3:int
+NULL
 1
 3
 4
-NULL
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
@@ -467,14 +467,14 @@ render       ·              ·                                    (column4)    
 ·            row 3, expr 1  NULL                                 ·                            ·
 ·            row 3, expr 2  NULL                                 ·                            ·
 
-exec
+exec rowsort
 SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
 column4:int
+NULL
 1
 4
 6
-NULL
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a BETWEEN b AND d
