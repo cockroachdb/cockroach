@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -41,17 +41,6 @@ type ctxProvider struct {
 
 func (c ctxProvider) Ctx() context.Context {
 	return c
-}
-
-// groupWorkers creates num worker go routines in an error group.
-func groupWorkers(ctx context.Context, num int, f func(context.Context) error) error {
-	group, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < num; i++ {
-		group.Go(func() error {
-			return f(ctx)
-		})
-	}
-	return group.Wait()
 }
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
@@ -345,7 +334,7 @@ func newReadImportDataProcessor(
 type progressFn func(finished bool) error
 
 type inputConverter interface {
-	start(ctx context.Context, group *errgroup.Group)
+	start(group ctxgroup.Group)
 	readFile(ctx context.Context, input io.Reader, fileIdx int32, filename string, progress progressFn) error
 	inputFinished()
 }
@@ -377,8 +366,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		defer wg.Done()
 	}
 
-	group, gCtx := errgroup.WithContext(ctx)
-	done := gCtx.Done()
+	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan kvBatch)
 	sampleCh := make(chan sqlbase.EncDatumRow)
 
@@ -393,21 +381,21 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
 		return
 	}
-	conv.start(gCtx, group)
+	conv.start(group)
 
 	// Read input files into kvs
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "readImportFiles")
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished()
 
-		job, err := cp.registry.LoadJob(sCtx, cp.progress.JobID)
+		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
 		if err != nil {
 			return err
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(sCtx, func(ctx context.Context, details jobs.Details) float32 {
+			return job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
 				d := details.(*jobs.Payload_Import).Import
 				slotpct := pct * cp.progress.Contribution
 				if len(d.Tables[0].SamplingProgress) > 0 {
@@ -419,12 +407,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 			})
 		}
 
-		return readInputFiles(sCtx, cp.uri, conv.readFile, progFn, cp.settings)
+		return readInputFiles(ctx, cp.uri, conv.readFile, progFn, cp.settings)
 	})
 
 	// Sample KVs
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "sampleImportKVs")
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "sampleImportKVs")
 		defer tracing.FinishSpan(span)
 
 		defer close(sampleCh)
@@ -441,7 +429,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 
 		// Populate the split-point spans which have already been imported.
 		var completedSpans roachpb.SpanGroup
-		job, err := cp.registry.LoadJob(gCtx, cp.progress.JobID)
+		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
 		if err != nil {
 			return err
 		}
@@ -462,8 +450,8 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
 					}
 					select {
-					case <-done:
-						return sCtx.Err()
+					case <-group.Done:
+						return group.Err()
 					case sampleCh <- row:
 					}
 				}
@@ -472,12 +460,12 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		return nil
 	})
 	// Send sampled KVs to dist sql
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(gCtx, "sendImportKVs")
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "sendImportKVs")
 		defer tracing.FinishSpan(span)
 
 		for row := range sampleCh {
-			cs, err := cp.out.EmitRow(sCtx, row)
+			cs, err := cp.out.EmitRow(ctx, row)
 			if err != nil {
 				return err
 			}

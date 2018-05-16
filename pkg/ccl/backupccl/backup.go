@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -650,7 +650,7 @@ func backup(
 	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV))
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 
 	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
 
@@ -658,20 +658,20 @@ func backup(
 	// block forever. This is needed for TestBackupRestoreResume which doesn't
 	// have any spans. Users should never hit this.
 	if len(spans) > 0 {
-		g.Go(func() error {
-			return progressLogger.Loop(gCtx, requestFinishedCh)
+		g.GoCtx(func(ctx context.Context) error {
+			return progressLogger.Loop(ctx, requestFinishedCh)
 		})
 	}
 
 	for i := range allSpans {
 		select {
 		case exportsSem <- struct{}{}:
-		case <-ctx.Done():
-			return mu.exported, ctx.Err()
+		case <-g.Done:
+			return mu.exported, g.Err()
 		}
 
 		span := allSpans[i]
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			defer func() { <-exportsSem }()
 			header := roachpb.Header{Timestamp: span.end}
 			req := &roachpb.ExportRequest{
@@ -680,7 +680,7 @@ func backup(
 				StartTime:  span.start,
 				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
-			rawRes, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
+			rawRes, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
 			if pErr != nil {
 				return pErr.GoError()
 			}

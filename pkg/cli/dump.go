@@ -26,11 +26,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
@@ -509,15 +509,14 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 	for i := range valArray {
 		valArray[i] = make([]driver.Value, len(cols))
 	}
-	g, ctx := errgroup.WithContext(context.Background())
-	done := ctx.Done()
+	g := ctxgroup.WithContext(context.Background())
 	valsCh := make(chan []driver.Value)
 	// stringsCh receives VALUES lines and batches them before writing to the
 	// output. Buffering this chan allows the val encoding to proceed during
 	// writes.
 	stringsCh := make(chan string, insertRows)
 
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		// Fetch SQL rows and put them onto valsCh.
 		defer close(valsCh)
 		for i := 0; ; i++ {
@@ -528,13 +527,13 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				return err
 			}
 			select {
-			case <-done:
-				return ctx.Err()
+			case <-g.Done:
+				return g.Err()
 			case valsCh <- vals:
 			}
 		}
 	})
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		// Convert SQL rows into VALUE strings.
 		defer close(stringsCh)
 		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
@@ -631,8 +630,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				d.Format(&f.FmtCtx)
 			}
 			select {
-			case <-done:
-				return ctx.Err()
+			case <-g.Done:
+				return g.Err()
 			case stringsCh <- f.String():
 			}
 		}

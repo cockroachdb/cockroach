@@ -25,10 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 var sstOutputTypes = []sqlbase.ColumnType{
@@ -147,12 +147,12 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// Since we sampled the CSVs, it is possible for an SST to end up larger
 			// than the max raft command size. Split them up into correctly sized chunks.
 			contentCh := make(chan sstContent)
-			group, gCtx := errgroup.WithContext(ctx)
-			group.Go(func() error {
+			group := ctxgroup.WithContext(ctx)
+			group.GoCtx(func(ctx context.Context) error {
 				defer close(contentCh)
-				return makeSSTs(gCtx, iter, maxSize, contentCh, sp.spec.WalltimeNanos, span.End, nil)
+				return makeSSTs(ctx, iter, maxSize, contentCh, sp.spec.WalltimeNanos, span.End, nil)
 			})
-			group.Go(func() error {
+			group.GoCtx(func(ctx context.Context) error {
 				chunk := -1
 				for sst := range contentCh {
 					chunk++
@@ -169,23 +169,23 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						if sst.more {
 							end = sst.span.EndKey
 						}
-						if err := sp.db.AdminSplit(gCtx, end, end); err != nil {
+						if err := sp.db.AdminSplit(ctx, end, end); err != nil {
 							return err
 						}
 
-						log.VEventf(gCtx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
+						log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
 						scatterReq := &roachpb.AdminScatterRequest{
 							Span: sst.span,
 						}
-						if _, pErr := client.SendWrapped(gCtx, sp.db.GetSender(), scatterReq); pErr != nil {
+						if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
 							// TODO(dan): Unfortunately, Scatter is still too unreliable to
 							// fail the IMPORT when Scatter fails. I'm uncomfortable that
 							// this could break entirely and not start failing the tests,
 							// but on the bright side, it doesn't affect correctness, only
 							// throughput.
-							log.Errorf(gCtx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+							log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
 						}
-						if err := storageccl.AddSSTable(gCtx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+						if err := storageccl.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
 							return err
 						}
 					} else {
@@ -197,11 +197,11 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						if err != nil {
 							return err
 						}
-						es, err := storageccl.MakeExportStorage(gCtx, conf, sp.settings)
+						es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
 						if err != nil {
 							return err
 						}
-						err = es.WriteFile(gCtx, name, bytes.NewReader(sst.data))
+						err = es.WriteFile(ctx, name, bytes.NewReader(sst.data))
 						es.Close()
 						if err != nil {
 							return err
@@ -230,7 +230,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 							tree.NewDBytes(tree.DBytes(sst.span.EndKey)),
 						),
 					}
-					cs, err := sp.out.EmitRow(gCtx, row)
+					cs, err := sp.out.EmitRow(ctx, row)
 					if err != nil {
 						return err
 					}
