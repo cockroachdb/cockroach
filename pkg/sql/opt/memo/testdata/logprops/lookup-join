@@ -35,12 +35,12 @@ select
  ├── stats: [rows=1, distinct(3)=1]
  ├── keys: (1) (3,4) weak(2,3)
  ├── lookup-join
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string) a.d:4(decimal!null)
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── table: a
  │    ├── stats: [rows=1]
  │    ├── keys: (1) weak(3,4) weak(2,3)
  │    └── scan a@secondary
- │         ├── columns: a.x:1(int!null) a.s:3(string) a.d:4(decimal!null)
+ │         ├── columns: x:1(int!null) s:3(string) d:4(decimal!null)
  │         ├── constraint: /-3/4: [/'foo' - /'foo']
  │         ├── stats: [rows=1, distinct(3)=1]
  │         └── keys: (1) weak(3,4)
@@ -58,16 +58,16 @@ project
  ├── columns: y:2(int)
  ├── stats: [rows=1]
  └── select
-      ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string!null)
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null)
       ├── stats: [rows=1, distinct(3)=1]
       ├── keys: (1) weak(2,3)
       ├── lookup-join
-      │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string)
       │    ├── table: a
       │    ├── stats: [rows=1]
       │    ├── keys: (1) weak(2,3)
       │    └── scan a@secondary
-      │         ├── columns: a.x:1(int!null) a.s:3(string)
+      │         ├── columns: x:1(int!null) s:3(string)
       │         ├── constraint: /-3/4: [/'foo' - /'foo']
       │         ├── stats: [rows=1, distinct(3)=1]
       │         └── keys: (1)

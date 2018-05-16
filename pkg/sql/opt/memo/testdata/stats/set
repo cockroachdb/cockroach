@@ -123,7 +123,7 @@ SELECT *, x FROM a UNION SELECT *, rowid FROM b
 union
  ├── columns: x:8(int) y:9(int) s:10(string) x:11(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
- ├── right columns: b.x:4(int) b.z:5(int) b.s:6(string) b.rowid:7(int)
+ ├── right columns: b.x:4(int) z:5(int) b.s:6(string) rowid:7(int)
  ├── stats: [rows=15000, distinct(8-11)=15000]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
@@ -134,7 +134,7 @@ union
  │         ├── stats: [rows=5000, distinct(1-3)=5000]
  │         └── keys: (1)
  └── scan b
-      ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+      ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
       ├── stats: [rows=10000, distinct(4-7)=10000]
       └── keys: (7)
 
@@ -144,7 +144,7 @@ SELECT *, x FROM a UNION ALL SELECT *, rowid FROM b
 union-all
  ├── columns: x:8(int) y:9(int) s:10(string) x:11(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
- ├── right columns: b.x:4(int) b.z:5(int) b.s:6(string) b.rowid:7(int)
+ ├── right columns: b.x:4(int) z:5(int) b.s:6(string) rowid:7(int)
  ├── stats: [rows=15000]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
@@ -155,7 +155,7 @@ union-all
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── scan b
-      ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+      ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
       ├── stats: [rows=10000]
       └── keys: (7)
 
@@ -165,7 +165,7 @@ SELECT y, s FROM a UNION SELECT z, s FROM c
 union
  ├── columns: y:8(int) s:9(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: c.z:5(int) c.s:6(string)
+ ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=2000, distinct(8,9)=2000]
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
@@ -175,10 +175,10 @@ union
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: c.z:5(int!null) c.s:6(string)
+      ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
-           ├── columns: c.x:4(int) c.z:5(int!null) c.s:6(string) c.rowid:7(int!null)
+           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=1000]
            └── keys: (7)
 
@@ -188,7 +188,7 @@ SELECT y, s FROM a UNION SELECT z, s FROM b
 union
  ├── columns: y:8(int) s:9(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=1200, distinct(8,9)=1200]
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
@@ -198,10 +198,10 @@ union
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=200]
            └── keys: (7)
 
@@ -211,7 +211,7 @@ SELECT y, s FROM a UNION ALL SELECT z, s FROM b
 union-all
  ├── columns: y:8(int) s:9(string)
  ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=15000]
  ├── project
  │    ├── columns: a.y:2(int) a.s:3(string)
@@ -221,10 +221,10 @@ union-all
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000]
            └── keys: (7)
 
@@ -233,27 +233,27 @@ SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b 
 ----
 intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
- ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
- ├── right columns: b.z:5(int) b.x:4(int) b.rowid:7(int)
+ ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
+ ├── right columns: z:5(int) b.x:4(int) rowid:7(int)
  ├── stats: [rows=2, distinct(1,2)=2]
  ├── project
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000]
  │    ├── keys: (1)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(1,2)=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.x:4(int!null) b.z:5(int!null) b.rowid:7(int!null)
+      ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2, distinct(4,5,7)=2]
       ├── keys: (7)
       └── select
-           ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1, distinct(4,5,7)=2]
            ├── keys: (7)
            ├── scan b
-           │    ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
            │    └── keys: (7)
            └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
@@ -265,27 +265,27 @@ SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FRO
 ----
 intersect-all
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
- ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
- ├── right columns: b.z:5(int) b.x:4(int) b.rowid:7(int)
+ ├── left columns: a.x:1(int!null) y:2(int) a.x:1(int!null)
+ ├── right columns: z:5(int) b.x:4(int) rowid:7(int)
  ├── stats: [rows=2]
  ├── project
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
  │    ├── keys: (1)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.x:4(int!null) b.z:5(int!null) b.rowid:7(int!null)
+      ├── columns: b.x:4(int!null) z:5(int!null) rowid:7(int!null)
       ├── stats: [rows=2]
       ├── keys: (7)
       └── select
-           ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=2, distinct(4)=1]
            ├── keys: (7)
            ├── scan b
-           │    ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000]
            │    └── keys: (7)
            └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
@@ -297,21 +297,21 @@ SELECT y, s FROM a INTERSECT SELECT z, s FROM c
 ----
 intersect
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: c.z:5(int) c.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: c.z:5(int!null) c.s:6(string)
+      ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
-           ├── columns: c.x:4(int) c.z:5(int!null) c.s:6(string) c.rowid:7(int!null)
+           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=1000]
            └── keys: (7)
 
@@ -320,21 +320,21 @@ SELECT y, s FROM a INTERSECT SELECT z, s FROM b
 ----
 intersect
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=200, distinct(2,3)=200]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=200]
            └── keys: (7)
 
@@ -343,21 +343,21 @@ SELECT y, s FROM a INTERSECT ALL SELECT z, s FROM b
 ----
 intersect-all
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=5000]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000]
            └── keys: (7)
 
@@ -366,29 +366,29 @@ SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
 ----
 except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
- ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
- ├── right columns: b.x:4(int) b.z:5(int) b.z:5(int)
+ ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
+ ├── right columns: b.x:4(int) z:5(int) z:5(int)
  ├── stats: [rows=5000, distinct(1,2)=5000]
  ├── project
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000, distinct(1,2)=5000]
  │    ├── keys: (1)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(1,2)=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.x:4(int!null) b.z:5(int!null)
+      ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2, distinct(4,5)=2]
       └── project
-           ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string)
+           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2, distinct(4,5)=2]
            └── select
-                ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1, distinct(4,5)=2]
                 ├── keys: (7)
                 ├── scan b
-                │    ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+                │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
                 │    └── keys: (7)
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
@@ -400,29 +400,29 @@ SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=
 ----
 except-all
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
- ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
- ├── right columns: b.x:4(int) b.z:5(int) b.z:5(int)
+ ├── left columns: a.x:1(int!null) a.x:1(int!null) y:2(int)
+ ├── right columns: b.x:4(int) z:5(int) z:5(int)
  ├── stats: [rows=5000]
  ├── project
- │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int!null) y:2(int)
  │    ├── stats: [rows=5000]
  │    ├── keys: (1)
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.x:4(int!null) b.z:5(int!null)
+      ├── columns: b.x:4(int!null) z:5(int!null)
       ├── stats: [rows=2]
       └── project
-           ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string)
+           ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string)
            ├── stats: [rows=2]
            └── select
-                ├── columns: b.x:4(int!null) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+                ├── columns: b.x:4(int!null) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 ├── stats: [rows=2, distinct(4)=1]
                 ├── keys: (7)
                 ├── scan b
-                │    ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+                │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000]
                 │    └── keys: (7)
                 └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
@@ -434,21 +434,21 @@ SELECT y, s FROM a EXCEPT SELECT z, s FROM c
 ----
 except
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: c.z:5(int) c.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) c.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: c.z:5(int!null) c.s:6(string)
+      ├── columns: z:5(int!null) c.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=1000]
       └── scan c
-           ├── columns: c.x:4(int) c.z:5(int!null) c.s:6(string) c.rowid:7(int!null)
+           ├── columns: c.x:4(int) z:5(int!null) c.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=1000]
            └── keys: (7)
 
@@ -457,21 +457,21 @@ SELECT y, s FROM a EXCEPT SELECT z, s FROM b
 ----
 except
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=1000, distinct(2,3)=1000]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000, distinct(2,3)=1000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000, distinct(2,3)=1000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000, distinct(5,6)=200]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000, distinct(5,6)=200]
            └── keys: (7)
 
@@ -480,21 +480,21 @@ SELECT y, s FROM a EXCEPT ALL SELECT z, s FROM b
 ----
 except-all
  ├── columns: y:2(int) s:3(string)
- ├── left columns: a.y:2(int) a.s:3(string)
- ├── right columns: b.z:5(int) b.s:6(string)
+ ├── left columns: y:2(int) a.s:3(string)
+ ├── right columns: z:5(int) b.s:6(string)
  ├── stats: [rows=5000]
  ├── project
- │    ├── columns: a.y:2(int) a.s:3(string)
+ │    ├── columns: y:2(int) a.s:3(string)
  │    ├── stats: [rows=5000]
  │    └── scan a
- │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │         ├── stats: [rows=5000]
  │         └── keys: (1)
  └── project
-      ├── columns: b.z:5(int!null) b.s:6(string)
+      ├── columns: z:5(int!null) b.s:6(string)
       ├── stats: [rows=10000]
       └── scan b
-           ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+           ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            ├── stats: [rows=10000]
            └── keys: (7)
 
@@ -505,22 +505,22 @@ select
  ├── columns: y:2(int!null) s:3(string)
  ├── stats: [rows=12, distinct(2)=1]
  ├── except-all
- │    ├── columns: a.y:2(int) a.s:3(string)
- │    ├── left columns: a.y:2(int) a.s:3(string)
- │    ├── right columns: b.z:5(int) b.s:6(string)
+ │    ├── columns: y:2(int) a.s:3(string)
+ │    ├── left columns: y:2(int) a.s:3(string)
+ │    ├── right columns: z:5(int) b.s:6(string)
  │    ├── stats: [rows=5000, distinct(2)=400]
  │    ├── project
- │    │    ├── columns: a.y:2(int) a.s:3(string)
+ │    │    ├── columns: y:2(int) a.s:3(string)
  │    │    ├── stats: [rows=5000, distinct(2)=400]
  │    │    └── scan a
- │    │         ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
+ │    │         ├── columns: a.x:1(int!null) y:2(int) a.s:3(string)
  │    │         ├── stats: [rows=5000, distinct(2)=400]
  │    │         └── keys: (1)
  │    └── project
- │         ├── columns: b.z:5(int!null) b.s:6(string)
+ │         ├── columns: z:5(int!null) b.s:6(string)
  │         ├── stats: [rows=10000, distinct(5)=100]
  │         └── scan b
- │              ├── columns: b.x:4(int) b.z:5(int!null) b.s:6(string) b.rowid:7(int!null)
+ │              ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
  │              ├── stats: [rows=10000, distinct(5)=100]
  │              └── keys: (7)
  └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]

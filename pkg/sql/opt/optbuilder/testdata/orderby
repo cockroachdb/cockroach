@@ -21,9 +21,9 @@ sort
  ├── columns: c:3(bool)
  ├── ordering: +3
  └── project
-      ├── columns: t.c:3(bool)
+      ├── columns: c:3(bool)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT c FROM t ORDER BY c DESC
@@ -32,9 +32,9 @@ sort
  ├── columns: c:3(bool)
  ├── ordering: -3
  └── project
-      ├── columns: t.c:3(bool)
+      ├── columns: c:3(bool)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a, b FROM t ORDER BY b
@@ -43,9 +43,9 @@ sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a, b FROM t ORDER BY b DESC
@@ -54,9 +54,9 @@ sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: -2
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a, b FROM t ORDER BY b DESC LIMIT 2
@@ -65,12 +65,12 @@ limit
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: -2
  ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int)
+ │    ├── columns: a:1(int!null) b:2(int)
  │    ├── ordering: -2
  │    └── project
- │         ├── columns: t.a:1(int!null) t.b:2(int)
+ │         ├── columns: a:1(int!null) b:2(int)
  │         └── scan t
- │              └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │              └── columns: a:1(int!null) b:2(int) c:3(bool)
  └── const: 2 [type=int]
 
 build
@@ -80,9 +80,9 @@ sort
  ├── columns: a:1(int!null)
  ├── ordering: -1
  └── project
-      ├── columns: t.a:1(int!null)
+      ├── columns: a:1(int!null)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 # TODO(rytaft): This query causes an error in Postgres, but it is supported by
 # CockroachDB with the semantics:
@@ -100,9 +100,9 @@ sort
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 # Check that ambiguous references to renders are properly reported.
 build
@@ -119,10 +119,10 @@ limit
  ├── columns: foo:1(int!null) foo:1(int!null)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: a:1(int!null)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
  │         └── ordering: +1
  └── const: 1 [type=int]
 
@@ -135,7 +135,7 @@ project
  ├── columns: b:1(int!null) c:2(int)
  ├── ordering: +1
  └── scan t
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── ordering: +1
 
 build
@@ -145,9 +145,9 @@ sort
  ├── columns: foo.bar:1(int!null) b:2(int)
  ├── ordering: -1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a AS foo, b FROM t ORDER BY a DESC
@@ -156,9 +156,9 @@ sort
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT b FROM t ORDER BY a DESC
@@ -167,9 +167,9 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT b FROM t ORDER BY a LIMIT 1
@@ -178,10 +178,10 @@ limit
  ├── columns: b:2(int)
  ├── ordering: +1
  ├── project
- │    ├── columns: t.a:1(int!null) t.b:2(int)
+ │    ├── columns: a:1(int!null) b:2(int)
  │    ├── ordering: +1
  │    └── scan t
- │         ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │         ├── columns: a:1(int!null) b:2(int) c:3(bool)
  │         └── ordering: +1
  └── const: 1 [type=int]
 
@@ -192,9 +192,9 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1,+2
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT b FROM t ORDER BY a DESC, b DESC
@@ -203,9 +203,9 @@ sort
  ├── columns: b:2(int)
  ├── ordering: -1,-2
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 # both presentation and ordering
 build
@@ -215,9 +215,9 @@ sort
  ├── columns: a:1(int!null) b:2(int) b:2(int)
  ├── ordering: +3
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY (b, t.*)
@@ -226,7 +226,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+2,+3
  └── scan t
-      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY (b, a), c
@@ -235,7 +235,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
  └── scan t
-      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY b, (a, c)
@@ -244,7 +244,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
  └── scan t
-      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT * FROM t ORDER BY (b, (a, c))
@@ -253,7 +253,7 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
  └── scan t
-      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
@@ -262,11 +262,11 @@ sort
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int!null)
+      ├── columns: a:1(int!null) b:2(int!null)
       └── select
-           ├── columns: t.a:1(int!null) t.b:2(int!null) t.c:3(bool)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
            ├── scan t
-           │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           │    └── columns: a:1(int!null) b:2(int) c:3(bool)
            └── eq [type=bool]
                 ├── variable: t.b [type=int]
                 └── const: 7 [type=int]
@@ -278,9 +278,9 @@ sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,-1
  └── project
-      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── columns: a:1(int!null) b:2(int)
       └── scan t
-           └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+           └── columns: a:1(int!null) b:2(int) c:3(bool)
 
 build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
@@ -289,11 +289,11 @@ sort
  ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
  ├── ordering: -4,+1
  └── project
-      ├── columns: ab:4(int) t.a:1(int!null) t.b:2(int!null)
+      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
       ├── select
-      │    ├── columns: t.a:1(int!null) t.b:2(int!null) t.c:3(bool)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
-      │    │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       │    └── eq [type=bool]
       │         ├── variable: t.b [type=int]
       │         └── const: 7 [type=int]
@@ -309,9 +309,9 @@ sort
  ├── columns: a:1(int!null)
  ├── ordering: -4,+1
  └── project
-      ├── columns: column4:4(int) t.a:1(int!null)
+      ├── columns: column4:4(int) a:1(int!null)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
                 ├── variable: t.a [type=int]
@@ -324,7 +324,7 @@ project
  ├── columns: a:1(int!null)
  ├── ordering: +1
  └── scan t
-      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
       └── ordering: +1
 
 build
@@ -334,12 +334,12 @@ limit
  ├── columns: a:1(int!null)
  ├── ordering: -1
  ├── sort
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── project
- │         ├── columns: t.a:1(int!null)
+ │         ├── columns: a:1(int!null)
  │         └── scan t
- │              └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │              └── columns: a:1(int!null) b:2(int) c:3(bool)
  └── const: 4 [type=int]
 
 build
@@ -349,12 +349,12 @@ limit
  ├── columns: a:1(int!null)
  ├── ordering: -1
  ├── sort
- │    ├── columns: t.a:1(int!null)
+ │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── project
- │         ├── columns: t.a:1(int!null)
+ │         ├── columns: a:1(int!null)
  │         └── scan t
- │              └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │              └── columns: a:1(int!null) b:2(int) c:3(bool)
  └── const: 4 [type=int]
 
 build
@@ -443,9 +443,9 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int!null) t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── const: 3 [type=int]
 
@@ -456,9 +456,9 @@ sort
  ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int!null) t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── const: 1 [type=int]
 
@@ -469,9 +469,9 @@ sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int) t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── function: length [type=int]
                 └── const: 'abc' [type=string]
@@ -485,7 +485,7 @@ sort
  └── project
       ├── columns: column4:4(int)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
                 ├── variable: t.b [type=int]
@@ -501,7 +501,7 @@ sort
  └── project
       ├── columns: y:4(int)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
                 ├── variable: t.b [type=int]
@@ -516,7 +516,7 @@ sort
  └── project
       ├── columns: y:4(int)
       ├── scan t
-      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
            └── plus [type=int]
                 ├── variable: t.b [type=int]
@@ -560,9 +560,9 @@ sort
  ├── columns: d:4(string)
  ├── ordering: +5
  └── project
-      ├── columns: column5:5(string) abc.d:4(string)
+      ├── columns: column5:5(string) d:4(string)
       ├── scan abc
-      │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
       └── projections
            └── function: lower [type=string]
                 └── variable: abc.d [type=string]
@@ -581,9 +581,9 @@ sort
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+1
  └── project
-      ├── columns: abc.a:1(int!null) abc.b:2(int!null)
+      ├── columns: a:1(int!null) b:2(int!null)
       └── scan abc
-           └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
 build
 SELECT a, b FROM abc ORDER BY b, c
@@ -592,9 +592,9 @@ sort
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── scan abc
-           └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
 build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
@@ -603,9 +603,9 @@ sort
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+3,-1
  └── project
-      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── scan abc
-           └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
 build
 SELECT a FROM abc ORDER BY a DESC
@@ -614,9 +614,9 @@ sort
  ├── columns: a:1(int!null)
  ├── ordering: -1
  └── project
-      ├── columns: abc.a:1(int!null)
+      ├── columns: a:1(int!null)
       └── scan abc
-           └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
 build
 SELECT a FROM abc ORDER BY a DESC LIMIT 1
@@ -625,12 +625,12 @@ limit
  ├── columns: a:1(int!null)
  ├── ordering: -1
  ├── sort
- │    ├── columns: abc.a:1(int!null)
+ │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── project
- │         ├── columns: abc.a:1(int!null)
+ │         ├── columns: a:1(int!null)
  │         └── scan abc
- │              └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+ │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
  └── const: 1 [type=int]
 
 build
@@ -640,12 +640,12 @@ offset
  ├── columns: a:1(int!null)
  ├── ordering: -1
  ├── sort
- │    ├── columns: abc.a:1(int!null)
+ │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── project
- │         ├── columns: abc.a:1(int!null)
+ │         ├── columns: a:1(int!null)
  │         └── scan abc
- │              └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+ │              └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
  └── const: 1 [type=int]
 
 build
@@ -655,11 +655,11 @@ sort
  ├── columns: c:3(int!null)
  ├── ordering: +3
  └── project
-      ├── columns: abc.c:3(int!null)
+      ├── columns: c:3(int!null)
       └── select
-           ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
-           │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── eq [type=bool]
                 ├── variable: abc.b [type=int]
                 └── const: 2 [type=int]
@@ -671,11 +671,11 @@ sort
  ├── columns: c:3(int!null)
  ├── ordering: -3
  └── project
-      ├── columns: abc.c:3(int!null)
+      ├── columns: c:3(int!null)
       └── select
-           ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
-           │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── eq [type=bool]
                 ├── variable: abc.b [type=int]
                 └── const: 2 [type=int]
@@ -689,11 +689,11 @@ sort
  ├── columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── select
-           ├── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
-           │    └── columns: abc.a:1(int!null) abc.b:2(int!null) abc.c:3(int!null) abc.d:4(string)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            └── eq [type=bool]
                 ├── variable: abc.a [type=int]
                 └── const: 1 [type=int]
@@ -717,7 +717,7 @@ sort
  ├── columns: id:1(int!null) baz:2(string)
  ├── ordering: +2,+1
  └── scan bar
-      └── columns: bar.id:1(int!null) bar.baz:2(string)
+      └── columns: id:1(int!null) baz:2(string)
 
 exec-ddl
 CREATE TABLE abcd (
@@ -749,7 +749,7 @@ SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
 project
  ├── columns: column5:5(int)
  ├── scan abcd
- │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
       └── plus [type=int]
            ├── variable: abcd.a [type=int]
@@ -761,7 +761,7 @@ SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
 project
  ├── columns: column5:5(int)
  ├── scan abcd
- │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
       └── plus [type=int]
            ├── variable: abcd.b [type=int]
@@ -821,10 +821,10 @@ limit
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
  ├── ordering: +1,+2,+3
  ├── project
- │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null)
+ │    ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null)
  │    ├── ordering: +1,+2,+3
  │    └── scan blocks
- │         ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
+ │         ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) raw_bytes:4(bytes)
  │         └── ordering: +1,+2,+3
  └── const: 1 [type=int]
 
@@ -851,9 +851,9 @@ sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,+3
  └── project
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
       └── scan abcd
-           └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build
 SELECT a FROM abcd ORDER BY b, c
@@ -862,9 +862,9 @@ sort
  ├── columns: a:1(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int)
       └── scan abcd
-           └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
 
 build
 SELECT a FROM abcd ORDER BY a, b, c
@@ -873,5 +873,5 @@ project
  ├── columns: a:1(int!null)
  ├── ordering: +1,+2,+3
  └── scan abcd
-      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
       └── ordering: +1,+2,+3
