@@ -1344,7 +1344,7 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 	// read before checking for exit conditions. The tradeoff is between the
 	// time it takes to react to session context cancellation and the overhead
 	// of waking up and checking for exit conditions.
-	const readTimeout = 150 * time.Millisecond
+	const readTimeout = 1 * time.Second
 
 	// Remove the read deadline when returning from this function to avoid
 	// unexpected behavior.
