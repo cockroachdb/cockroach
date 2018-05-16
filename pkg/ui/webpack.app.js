@@ -3,11 +3,7 @@
 const path = require("path");
 const rimraf = require("rimraf");
 const webpack = require("webpack");
-
-const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
-const HtmlWebpackPlugin = require("html-webpack-plugin");
-
-const title = "Cockroach Console";
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 
 // Remove a broken dependency that Yarn insists upon installing before every
 // Webpack compile. We also do this when installing dependencies via Make, but
@@ -101,14 +97,6 @@ module.exports = (distDir, ...additionalRoots) => ({
 
   plugins: [
     new RemoveBrokenDependenciesPlugin(),
-    new HtmlWebpackPlugin({
-      title: title,
-      template: require("html-webpack-template"),
-      scripts: ["protos.dll.js", "vendor.dll.js"],
-      favicon: "favicon.ico",
-      inject: false,
-      appMountId: "react-layout",
-    }),
     // See "DLLs for speedy builds" in the README for details.
     new webpack.DllReferencePlugin({
       manifest: require("./protos-manifest.json"),
@@ -116,6 +104,7 @@ module.exports = (distDir, ...additionalRoots) => ({
     new webpack.DllReferencePlugin({
       manifest: require("./vendor-manifest.json"),
     }),
+    new CopyWebpackPlugin([{ from: "favicon.ico", to: "favicon.ico" }]),
     new DashboardPlugin(),
   ],
 

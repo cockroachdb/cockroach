@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -280,46 +281,42 @@ RETURNING id
 type authenticationMux struct {
 	server *authenticationServer
 	inner  http.Handler
+
+	allowAnonymous bool
+}
+
+func newAuthenticationMuxAllowAnonymous(
+	s *authenticationServer, inner http.Handler,
+) *authenticationMux {
+	return &authenticationMux{
+		server:         s,
+		inner:          inner,
+		allowAnonymous: true,
+	}
 }
 
 func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenticationMux {
 	return &authenticationMux{
-		server: s,
-		inner:  inner,
+		server:         s,
+		inner:          inner,
+		allowAnonymous: false,
 	}
 }
 
+type loggedInUserKey struct{}
+
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// Validate the returned cookie.
-	rawCookie, err := req.Cookie(sessionCookieName)
-	if err != nil {
-		err = errors.Wrap(err, "a valid authentication cookie is required")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+	username, err := am.getSession(w, req)
+	if err != nil && !am.allowAnonymous {
+		log.Infof(req.Context(), "Web session error: %s", err)
+		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
 
-	cookie, err := decodeSessionCookie(rawCookie)
-	if err != nil {
-		err = errors.Wrap(err, "a valid authentication cookie is required")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return
-	}
+	newCtx := context.WithValue(req.Context(), loggedInUserKey{}, username)
+	newReq := req.WithContext(newCtx)
 
-	valid, _, err := am.server.verifySession(req.Context(), cookie)
-	if err != nil {
-		http.Error(w, apiInternalError(req.Context(), err).Error(), http.StatusInternalServerError)
-		return
-	}
-	if !valid {
-		http.Error(w, "The provided authentication session could not be validated.", http.StatusUnauthorized)
-		return
-	}
-
-	// TODO(mrtracy): At this point, we should set the session ID and username
-	// on the request context. However, GRPC Gateway does not correctly use the
-	// request context, and even if it did we are not providing any
-	// authorization for API methods (only authentication).
-	am.inner.ServeHTTP(w, req)
+	am.inner.ServeHTTP(w, newReq)
 }
 
 func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
@@ -335,6 +332,35 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 		HttpOnly: true,
 		Secure:   true,
 	}, nil
+}
+
+// getSession decodes the cookie from the request, looks up the corresponding session, and
+// returns the logged in user name. If there's an error, it returns an error value and the
+// HTTP error code.
+func (am *authenticationMux) getSession(w http.ResponseWriter, req *http.Request) (string, error) {
+	// Validate the returned cookie.
+	rawCookie, err := req.Cookie(sessionCookieName)
+	if err != nil {
+		return "", err
+	}
+
+	cookie, err := decodeSessionCookie(rawCookie)
+	if err != nil {
+		err = errors.Wrap(err, "a valid authentication cookie is required")
+		return "", err
+	}
+
+	valid, username, err := am.server.verifySession(req.Context(), cookie)
+	if err != nil {
+		err := apiInternalError(req.Context(), err)
+		return "", err
+	}
+	if !valid {
+		err := errors.New("the provided authentication session could not be validated")
+		return "", err
+	}
+
+	return username, nil
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
