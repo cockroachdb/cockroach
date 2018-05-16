@@ -315,69 +315,69 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	}{
 		// Func tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
 			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_AVG},
 			expected: false,
 		},
 
 		// ColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 3}},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 2}},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, ColIdx: []uint32{1, 3}},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 
 		// FilterColIdx tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx1},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, FilterColIdx: &colIdx2},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
 			expected: false,
 		},
 
 		// Distinct tests.
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: false},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
 			expected: true,
 		},
 		{
-			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT, Distinct: true},
-			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_IDENT},
+			a:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			b:        AggregatorSpec_Aggregation{Func: AggregatorSpec_ANY_NOT_NULL},
 			expected: false,
 		},
 	} {

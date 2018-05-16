@@ -88,11 +88,11 @@ var passThroughLocalIdxs = []uint32{0}
 // DistAggregationTable is DistAggregationInfo look-up table. Functions that
 // don't have an entry in the table are not optimized with a local stage.
 var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInfo{
-	distsqlrun.AggregatorSpec_IDENT: {
-		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_IDENT},
+	distsqlrun.AggregatorSpec_ANY_NOT_NULL: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_ANY_NOT_NULL},
 		FinalStage: []FinalStageInfo{
 			{
-				Fn:        distsqlrun.AggregatorSpec_IDENT,
+				Fn:        distsqlrun.AggregatorSpec_ANY_NOT_NULL,
 				LocalIdxs: passThroughLocalIdxs,
 			},
 		},

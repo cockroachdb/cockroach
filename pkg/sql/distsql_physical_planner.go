@@ -1149,21 +1149,15 @@ func (dsp *DistSQLPlanner) addAggregators(
 ) error {
 	aggregations := make([]distsqlrun.AggregatorSpec_Aggregation, len(n.funcs))
 	for i, fholder := range n.funcs {
-		// An aggregateFuncHolder either contains an aggregation function or an
-		// expression that also appears as one of the GROUP BY expressions.
-		if fholder.isIdentAggregate() {
-			aggregations[i].Func = distsqlrun.AggregatorSpec_IDENT
-		} else {
-			// Convert the aggregate function to the enum value with the same string
-			// representation.
-			funcStr := strings.ToUpper(fholder.funcName)
-			funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
-			if !ok {
-				return errors.Errorf("unknown aggregate %s", funcStr)
-			}
-			aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
-			aggregations[i].Distinct = fholder.isDistinct()
+		// Convert the aggregate function to the enum value with the same string
+		// representation.
+		funcStr := strings.ToUpper(fholder.funcName)
+		funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
+		if !ok {
+			return errors.Errorf("unknown aggregate %s", funcStr)
 		}
+		aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
+		aggregations[i].Distinct = fholder.isDistinct()
 		if fholder.argRenderIdx != noRenderIdx {
 			aggregations[i].ColIdx = []uint32{uint32(p.planToStreamColMap[fholder.argRenderIdx])}
 		}
@@ -1454,7 +1448,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		finalGroupCols := make([]uint32, len(groupCols))
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
-				Func:   distsqlrun.AggregatorSpec_IDENT,
+				Func:   distsqlrun.AggregatorSpec_ANY_NOT_NULL,
 				ColIdx: []uint32{groupColIdx},
 			}
 			// See if there already is an aggregation like the one

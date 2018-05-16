@@ -601,11 +601,18 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
 	if !(useOptimizer && ex.sessionData.OptimizerMode == sessiondata.OptimizerLocal) {
-		useDistSQL, err = shouldUseDistSQL(
-			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner)
+		ok, err := planner.prepareForDistSQLSupportCheck(ctx)
 		if err != nil {
 			res.SetError(err)
 			return nil
+		}
+		if ok {
+			useDistSQL, err = shouldUseDistSQL(
+				ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
+			if err != nil {
+				res.SetError(err)
+				return nil
+			}
 		}
 	}
 

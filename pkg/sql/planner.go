@@ -518,6 +518,23 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 	return p.EvalContext().SessionData
 }
 
+// prepareForDistSQLSupportCheck prepares p.curPlan.plan for a distSQL support
+// check and does additional verification of the planner state.
+func (p *planner) prepareForDistSQLSupportCheck(ctx context.Context) (bool, error) {
+	// Trigger limit propagation.
+	p.setUnlimited(p.curPlan.plan)
+	// We don't support subqueries yet.
+	if len(p.curPlan.subqueryPlans) > 0 {
+		if p.SessionData().DistSQLMode == sessiondata.DistSQLAlways {
+			err := newQueryNotSupportedError("subqueries not supported yet")
+			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
+			return false, err
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
 type txnModesSetter interface {

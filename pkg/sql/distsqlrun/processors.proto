@@ -417,10 +417,7 @@ message AggregatorSpec {
   // These mirror the aggregate functions supported by sql/parser. See
   // sql/parser/aggregate_builtins.go.
   enum Func {
-    // The identity function is set to be the default zero-value function,
-    // returning the last value added.
-    IDENT = 0;
-
+    ANY_NOT_NULL = 0;
     AVG = 1;
     BOOL_AND = 2;
     BOOL_OR = 3;
