@@ -14,11 +14,10 @@ import (
 	"io"
 	"runtime"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -41,13 +40,13 @@ func newCSVInputReader(
 	}
 }
 
-func (c *csvInputReader) start(ctx context.Context, group *errgroup.Group, kvCh chan kvBatch) {
-	group.Go(func() error {
-		sCtx, span := tracing.ChildSpan(ctx, "convertcsv")
+func (c *csvInputReader) start(group ctxgroup.Group, kvCh chan kvBatch) {
+	group.GoCtx(func(ctx context.Context) error {
+		ctx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
 
 		defer close(kvCh)
-		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
+		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			return c.convertRecord(ctx, kvCh)
 		})
 	})
