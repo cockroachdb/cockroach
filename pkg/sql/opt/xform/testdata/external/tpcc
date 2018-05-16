@@ -1,0 +1,1402 @@
+exec-ddl
+CREATE TABLE warehouse
+(
+    w_id        integer   not null primary key,
+    w_name      varchar(10),
+    w_street_1  varchar(20),
+    w_street_2  varchar(20),
+    w_city      varchar(20),
+    w_state     char(2),
+    w_zip       char(9),
+    w_tax       decimal(4,4),
+    w_ytd       decimal(12,2)
+)
+----
+TABLE warehouse
+ ├── w_id int not null
+ ├── w_name string
+ ├── w_street_1 string
+ ├── w_street_2 string
+ ├── w_city string
+ ├── w_state string
+ ├── w_zip string
+ ├── w_tax decimal
+ ├── w_ytd decimal
+ └── INDEX primary
+      └── w_id int not null
+
+exec-ddl
+ALTER TABLE warehouse INJECT STATISTICS '[
+  {
+    "columns": ["w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE district
+(
+    d_id         integer       not null,
+    d_w_id       integer       not null,
+    d_name       varchar(10),
+    d_street_1   varchar(20),
+    d_street_2   varchar(20),
+    d_city       varchar(20),
+    d_state      char(2),
+    d_zip        char(9),
+    d_tax        decimal(4,4),
+    d_ytd        decimal(12,2),
+    d_next_o_id  integer,
+    primary key (d_w_id, d_id),
+    foreign key (d_w_id) references warehouse (w_id)
+) interleave in parent warehouse (d_w_id)
+----
+TABLE district
+ ├── d_id int not null
+ ├── d_w_id int not null
+ ├── d_name string
+ ├── d_street_1 string
+ ├── d_street_2 string
+ ├── d_city string
+ ├── d_state string
+ ├── d_zip string
+ ├── d_tax decimal
+ ├── d_ytd decimal
+ ├── d_next_o_id int
+ └── INDEX primary
+      ├── d_w_id int not null
+      └── d_id int not null
+
+exec-ddl
+ALTER TABLE warehouse INJECT STATISTICS '[
+  {
+    "columns": ["w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE customer
+(
+    c_id           integer        not null,
+    c_d_id         integer        not null,
+    c_w_id         integer        not null,
+    c_first        varchar(16),
+    c_middle       char(2),
+    c_last         varchar(16),
+    c_street_1     varchar(20),
+    c_street_2     varchar(20),
+    c_city         varchar(20),
+    c_state        char(2),
+    c_zip          char(9),
+    c_phone        char(16),
+    c_since        timestamp,
+    c_credit       char(2),
+    c_credit_lim   decimal(12,2),
+    c_discount     decimal(4,4),
+    c_balance      decimal(12,2),
+    c_ytd_payment  decimal(12,2),
+    c_payment_cnt  integer,
+    c_delivery_cnt integer,
+    c_data         varchar(500),
+    primary key (c_w_id, c_d_id, c_id),
+    index customer_idx (c_w_id, c_d_id, c_last, c_first),
+    foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)
+) interleave in parent district (c_w_id, c_d_id)
+----
+TABLE customer
+ ├── c_id int not null
+ ├── c_d_id int not null
+ ├── c_w_id int not null
+ ├── c_first string
+ ├── c_middle string
+ ├── c_last string
+ ├── c_street_1 string
+ ├── c_street_2 string
+ ├── c_city string
+ ├── c_state string
+ ├── c_zip string
+ ├── c_phone string
+ ├── c_since timestamp
+ ├── c_credit string
+ ├── c_credit_lim decimal
+ ├── c_discount decimal
+ ├── c_balance decimal
+ ├── c_ytd_payment decimal
+ ├── c_payment_cnt int
+ ├── c_delivery_cnt int
+ ├── c_data string
+ ├── INDEX primary
+ │    ├── c_w_id int not null
+ │    ├── c_d_id int not null
+ │    └── c_id int not null
+ └── INDEX customer_idx
+      ├── c_w_id int not null
+      ├── c_d_id int not null
+      ├── c_last string
+      ├── c_first string
+      └── c_id int not null
+
+exec-ddl
+ALTER TABLE customer INJECT STATISTICS '[
+  {
+    "columns": ["c_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["c_w_id", "c_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["c_w_id", "c_d_id", "c_last"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["c_w_id", "c_d_id", "c_last", "c_first"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 300000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE history
+(
+    rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    h_c_id   integer,
+    h_c_d_id integer,
+    h_c_w_id integer,
+    h_d_id   integer,
+    h_w_id   integer,
+    h_date   timestamp,
+    h_amount decimal(6,2),
+    h_data   varchar(24),
+    index (h_w_id, h_d_id),
+    index (h_c_w_id, h_c_d_id, h_c_id),
+    foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
+    foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
+)
+----
+TABLE history
+ ├── rowid uuid not null
+ ├── h_c_id int
+ ├── h_c_d_id int
+ ├── h_c_w_id int
+ ├── h_d_id int
+ ├── h_w_id int
+ ├── h_date timestamp
+ ├── h_amount decimal
+ ├── h_data string
+ ├── INDEX primary
+ │    └── rowid uuid not null
+ ├── INDEX secondary
+ │    ├── h_w_id int
+ │    ├── h_d_id int
+ │    └── rowid uuid not null
+ └── INDEX secondary
+      ├── h_c_w_id int
+      ├── h_c_d_id int
+      ├── h_c_id int
+      └── rowid uuid not null
+
+exec-ddl
+ALTER TABLE history INJECT STATISTICS '[
+  {
+    "columns": ["h_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 30000000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["h_w_id", "h_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 30000000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["h_w_id", "h_d_id", "h_c_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 30000000,
+    "distinct_count": 30000000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE "order"
+(
+    o_id         integer      not null,
+    o_d_id       integer      not null,
+    o_w_id       integer      not null,
+    o_c_id       integer,
+    o_entry_d    timestamp,
+    o_carrier_id integer,
+    o_ol_cnt     integer,
+    o_all_local  integer,
+    primary key (o_w_id, o_d_id, o_id DESC),
+    unique index order_idx (o_w_id, o_d_id, o_carrier_id, o_id),
+    index (o_w_id, o_d_id, o_c_id),
+    foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)
+) interleave in parent district (o_w_id, o_d_id)
+----
+TABLE order
+ ├── o_id int not null
+ ├── o_d_id int not null
+ ├── o_w_id int not null
+ ├── o_c_id int
+ ├── o_entry_d timestamp
+ ├── o_carrier_id int
+ ├── o_ol_cnt int
+ ├── o_all_local int
+ ├── INDEX primary
+ │    ├── o_w_id int not null
+ │    ├── o_d_id int not null
+ │    └── o_id int not null desc
+ ├── INDEX order_idx
+ │    ├── o_w_id int not null
+ │    ├── o_d_id int not null
+ │    ├── o_carrier_id int
+ │    └── o_id int not null
+ └── INDEX secondary
+      ├── o_w_id int not null
+      ├── o_d_id int not null
+      ├── o_c_id int
+      └── o_id int not null
+
+exec-ddl
+ALTER TABLE "order" INJECT STATISTICS '[
+  {
+    "columns": ["o_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["o_w_id", "o_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["o_w_id", "o_d_id", "o_carrier_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["o_w_id", "o_d_id", "o_c_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 300000,
+    "distinct_count": 300000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE new_order
+(
+    no_o_id  integer   not null,
+    no_d_id  integer   not null,
+    no_w_id  integer   not null,
+    primary key (no_w_id, no_d_id, no_o_id)
+) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
+----
+TABLE new_order
+ ├── no_o_id int not null
+ ├── no_d_id int not null
+ ├── no_w_id int not null
+ └── INDEX primary
+      ├── no_w_id int not null
+      ├── no_d_id int not null
+      └── no_o_id int not null
+
+exec-ddl
+ALTER TABLE new_order INJECT STATISTICS '[
+  {
+    "columns": ["no_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 90000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["no_w_id", "no_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 90000,
+    "distinct_count": 100
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE item
+(
+    i_id     integer      not null,
+    i_im_id  integer,
+    i_name   varchar(24),
+    i_price  decimal(5,2),
+    i_data   varchar(50),
+    primary key (i_id)
+)
+----
+TABLE item
+ ├── i_id int not null
+ ├── i_im_id int
+ ├── i_name string
+ ├── i_price decimal
+ ├── i_data string
+ └── INDEX primary
+      └── i_id int not null
+
+exec-ddl
+ALTER TABLE item INJECT STATISTICS '[
+  {
+    "columns": ["i_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE stock
+(
+    s_i_id       integer       not null,
+    s_w_id       integer       not null,
+    s_quantity   integer,
+    s_dist_01    char(24),
+    s_dist_02    char(24),
+    s_dist_03    char(24),
+    s_dist_04    char(24),
+    s_dist_05    char(24),
+    s_dist_06    char(24),
+    s_dist_07    char(24),
+    s_dist_08    char(24),
+    s_dist_09    char(24),
+    s_dist_10    char(24),
+    s_ytd        integer,
+    s_order_cnt  integer,
+    s_remote_cnt integer,
+    s_data       varchar(50),
+    primary key (s_w_id, s_i_id),
+    index (s_i_id),
+    foreign key (s_w_id) references warehouse (w_id),
+    foreign key (s_i_id) references item (i_id)
+) interleave in parent warehouse (s_w_id)
+----
+TABLE stock
+ ├── s_i_id int not null
+ ├── s_w_id int not null
+ ├── s_quantity int
+ ├── s_dist_01 string
+ ├── s_dist_02 string
+ ├── s_dist_03 string
+ ├── s_dist_04 string
+ ├── s_dist_05 string
+ ├── s_dist_06 string
+ ├── s_dist_07 string
+ ├── s_dist_08 string
+ ├── s_dist_09 string
+ ├── s_dist_10 string
+ ├── s_ytd int
+ ├── s_order_cnt int
+ ├── s_remote_cnt int
+ ├── s_data string
+ ├── INDEX primary
+ │    ├── s_w_id int not null
+ │    └── s_i_id int not null
+ └── INDEX secondary
+      ├── s_i_id int not null
+      └── s_w_id int not null
+
+exec-ddl
+ALTER TABLE stock INJECT STATISTICS '[
+  {
+    "columns": ["s_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["s_i_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE order_line
+(
+    ol_o_id         integer   not null,
+    ol_d_id         integer   not null,
+    ol_w_id         integer   not null,
+    ol_number       integer   not null,
+    ol_i_id         integer   not null,
+    ol_supply_w_id  integer,
+    ol_delivery_d   timestamp,
+    ol_quantity     integer,
+    ol_amount       decimal(6,2),
+    ol_dist_info    char(24),
+    primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
+    index order_line_fk (ol_supply_w_id, ol_d_id),
+    foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
+    foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
+) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
+----
+TABLE order_line
+ ├── ol_o_id int not null
+ ├── ol_d_id int not null
+ ├── ol_w_id int not null
+ ├── ol_number int not null
+ ├── ol_i_id int not null
+ ├── ol_supply_w_id int
+ ├── ol_delivery_d timestamp
+ ├── ol_quantity int
+ ├── ol_amount decimal
+ ├── ol_dist_info string
+ ├── INDEX primary
+ │    ├── ol_w_id int not null
+ │    ├── ol_d_id int not null
+ │    ├── ol_o_id int not null desc
+ │    └── ol_number int not null
+ └── INDEX order_line_fk
+      ├── ol_supply_w_id int
+      ├── ol_d_id int not null
+      ├── ol_w_id int not null
+      ├── ol_o_id int not null
+      └── ol_number int not null
+
+exec-ddl
+ALTER TABLE order_line INJECT STATISTICS '[
+  {
+    "columns": ["ol_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["ol_w_id", "ol_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["ol_w_id", "ol_d_id", "ol_o_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["ol_supply_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 10
+  },
+  {
+    "columns": ["ol_supply_w_id", "ol_d_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["ol_supply_w_id", "ol_d_id", "ol_w_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000
+  },
+  {
+    "columns": ["ol_supply_w_id", "ol_d_id", "ol_w_id", "ol_o_id"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000,
+        "distinct_count": 100000
+  }
+]'
+----
+
+# --------------------------------------------------
+# 2.4 The New Order Transaction
+#
+# The New-Order business transaction consists of entering a complete order
+# through a single database transaction. It represents a mid-weight, read-write
+# transaction with a high frequency of execution and stringent response time
+# requirements to satisfy on-line users. This transaction is the backbone of
+# the workload. It is designed to place a variable load on the system to
+# reflect on-line database activity as typically found in production
+# environments.
+# --------------------------------------------------
+opt format=show-all
+SELECT w_tax FROM warehouse WHERE w_id = 10
+----
+project
+ ├── columns: w_tax:8(decimal)
+ ├── stats: [rows=10]
+ ├── cost: 10.00
+ ├── prune: (8)
+ └── scan warehouse
+      ├── columns: warehouse.w_id:1(int!null) warehouse.w_tax:8(decimal)
+      ├── constraint: /1: [/10 - /10]
+      ├── stats: [rows=10, distinct(1)=1]
+      ├── cost: 10.00
+      ├── keys: (1)
+      └── prune: (8)
+
+opt format=show-all
+SELECT c_discount, c_last, c_credit
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
+----
+project
+ ├── columns: c_discount:16(decimal) c_last:6(string) c_credit:14(string)
+ ├── stats: [rows=1]
+ ├── cost: 1.00
+ ├── prune: (6,14,16)
+ └── scan customer
+      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_last:6(string) customer.c_credit:14(string) customer.c_discount:16(decimal)
+      ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+      ├── cost: 1.00
+      ├── keys: (1-3)
+      └── prune: (6,14,16)
+
+opt format=show-all
+SELECT i_price, i_name, i_data
+FROM item
+WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
+ORDER BY i_id
+----
+scan item
+ ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)
+ ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
+ ├── stats: [rows=12, distinct(1)=12]
+ ├── cost: 12.00
+ ├── keys: (1)
+ ├── ordering: +1
+ └── prune: (3-5)
+
+opt format=show-all
+SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
+FROM stock
+WHERE (s_i_id, s_w_id) IN ((1000, 10), (900, 8), (1100, 6), (1500, 4), (1400, 8))
+ORDER BY s_i_id
+----
+project
+ ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)
+ ├── stats: [rows=333333]
+ ├── cost: 250.50
+ ├── ordering: +1
+ ├── prune: (1,3,8,14-17)
+ └── lookup-join
+      ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null) stock.s_quantity:3(int) stock.s_dist_05:8(string) stock.s_ytd:14(int) stock.s_order_cnt:15(int) stock.s_remote_cnt:16(int) stock.s_data:17(string)
+      ├── table: stock
+      ├── stats: [rows=333333]
+      ├── cost: 250.50
+      ├── keys: (1,2)
+      ├── ordering: +1
+      ├── prune: (3,8,14-17)
+      └── scan stock@secondary
+           ├── columns: stock.s_i_id:1(int!null) stock.s_w_id:2(int!null)
+           ├── constraint: /1/2: [/900/8 - /900/8] [/1000/10 - /1000/10] [/1100/6 - /1100/6] [/1400/8 - /1400/8] [/1500/4 - /1500/4]
+           ├── stats: [rows=50, distinct(1)=5]
+           ├── cost: 50.00
+           ├── keys: (1,2)
+           ├── ordering: +1
+           └── prune: (1,2)
+
+# --------------------------------------------------
+# 2.5 The Payment Transaction
+#
+# The Payment business transaction updates the customer's balance and reflects
+# the payment on the district and warehouse sales statistics. It represents a
+# light-weight, read-write transaction with a high frequency of execution and
+# stringent response time requirements to satisfy on-line users. In addition,
+# this transaction includes non-primary key access to the CUSTOMER table.
+# --------------------------------------------------
+opt format=show-all
+SELECT c_id
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
+ORDER BY c_first ASC
+----
+sort
+ ├── columns: c_id:1(int!null)
+ ├── stats: [rows=1]
+ ├── cost: 1.01
+ ├── ordering: +4
+ ├── prune: (1,4)
+ └── project
+      ├── columns: customer.c_id:1(int!null) customer.c_first:4(string)
+      ├── stats: [rows=1]
+      ├── cost: 1.00
+      ├── prune: (1,4)
+      └── scan customer@customer_idx
+           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_last:6(string!null)
+           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
+           ├── stats: [rows=1, distinct(2)=1, distinct(3)=1, distinct(6)=1]
+           ├── cost: 1.00
+           ├── keys: (1-3)
+           └── prune: (1,4)
+
+# --------------------------------------------------
+# 2.6 The Order Status Transaction
+#
+# The Order-Status business transaction queries the status of a customer's last
+# order. It represents a mid-weight read-only database transaction with a low
+# frequency of execution and response time requirement to satisfy on-line
+# users. In addition, this table includes non-primary key access to the
+# CUSTOMER table.
+# --------------------------------------------------
+opt format=show-all
+SELECT c_balance, c_first, c_middle, c_last
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
+----
+project
+ ├── columns: c_balance:17(decimal) c_first:4(string) c_middle:5(string) c_last:6(string)
+ ├── stats: [rows=1]
+ ├── cost: 1.00
+ ├── prune: (4-6,17)
+ └── scan customer
+      ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string) customer.c_balance:17(decimal)
+      ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+      ├── cost: 1.00
+      ├── keys: (1-3)
+      └── prune: (4-6,17)
+
+opt format=show-all
+SELECT c_id, c_balance, c_first, c_middle
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
+ORDER BY c_first ASC
+----
+sort
+ ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
+ ├── stats: [rows=1]
+ ├── cost: 1.02
+ ├── ordering: +4
+ ├── prune: (1,4,5,17)
+ └── project
+      ├── columns: customer.c_id:1(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_balance:17(decimal)
+      ├── stats: [rows=1]
+      ├── cost: 1.01
+      ├── prune: (1,4,5,17)
+      └── select
+           ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string!null) customer.c_balance:17(decimal)
+           ├── stats: [rows=1, distinct(2)=1, distinct(3)=1, distinct(6)=1]
+           ├── cost: 1.01
+           ├── keys: (1-3)
+           ├── prune: (1,4,5,17)
+           ├── scan customer
+           │    ├── columns: customer.c_id:1(int!null) customer.c_d_id:2(int!null) customer.c_w_id:3(int!null) customer.c_first:4(string) customer.c_middle:5(string) customer.c_last:6(string) customer.c_balance:17(decimal)
+           │    ├── constraint: /3/2/1: [/10/100 - /10/100]
+           │    ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
+           │    ├── cost: 1.00
+           │    ├── keys: (1-3)
+           │    └── prune: (1-6,17)
+           └── filters [type=bool, outer=(6), constraints=(/6: [/'Smith' - /'Smith']; tight)]
+                └── eq [type=bool, outer=(6), constraints=(/6: [/'Smith' - /'Smith']; tight)]
+                     ├── variable: customer.c_last [type=string, outer=(6)]
+                     └── const: 'Smith' [type=string]
+
+opt format=show-all
+SELECT o_id, o_entry_d, o_carrier_id
+FROM "order"
+WHERE o_w_id = 10 AND o_d_id = 100 AND o_c_id = 50
+ORDER BY o_id DESC
+LIMIT 1
+----
+project
+ ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.02
+ ├── ordering: -1
+ ├── prune: (1,5,6)
+ └── limit
+      ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 1.02
+      ├── keys: (1-3)
+      ├── ordering: -1
+      ├── prune: (5,6)
+      ├── sort
+      │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │    ├── stats: [rows=1, distinct(2)=1, distinct(3)=1, distinct(4)=1]
+      │    ├── cost: 1.02
+      │    ├── keys: (1-3)
+      │    ├── ordering: -1
+      │    ├── prune: (1,5,6)
+      │    └── select
+      │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int!null) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │         ├── stats: [rows=1, distinct(2)=1, distinct(3)=1, distinct(4)=1]
+      │         ├── cost: 1.01
+      │         ├── keys: (1-3)
+      │         ├── prune: (1,5,6)
+      │         ├── scan order
+      │         │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_c_id:4(int) "order".o_entry_d:5(timestamp) "order".o_carrier_id:6(int)
+      │         │    ├── constraint: /3/2/-1: [/10/100 - /10/100]
+      │         │    ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
+      │         │    ├── cost: 1.00
+      │         │    ├── keys: (1-3)
+      │         │    └── prune: (1-6)
+      │         └── filters [type=bool, outer=(4), constraints=(/4: [/50 - /50]; tight)]
+      │              └── eq [type=bool, outer=(4), constraints=(/4: [/50 - /50]; tight)]
+      │                   ├── variable: "order".o_c_id [type=int, outer=(4)]
+      │                   └── const: 50 [type=int]
+      └── const: 1 [type=int]
+
+opt format=show-all
+SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
+FROM order_line
+WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
+----
+project
+ ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
+ ├── stats: [rows=1]
+ ├── cost: 1.00
+ ├── prune: (5-9)
+ └── scan order_line
+      ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_i_id:5(int!null) order_line.ol_supply_w_id:6(int) order_line.ol_delivery_d:7(timestamp) order_line.ol_quantity:8(int) order_line.ol_amount:9(decimal)
+      ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
+      ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+      ├── cost: 1.00
+      └── prune: (5-9)
+
+# --------------------------------------------------
+# 2.7 The Delivery Transaction
+#
+# The Delivery business transaction consists of processing a batch of 10 new
+# (not yet delivered) orders. Each order is processed (delivered) in full
+# within the scope of a read-write database transaction. The number of orders
+# delivered as a group (or batched) within the same database transaction is
+# implementation specific. The business transaction, comprised of one or more
+# (up to 10) database transactions, has a low frequency of execution and must
+# complete within a relaxed response time requirement.
+#
+# The Delivery transaction is intended to be executed in deferred mode through
+# a queuing mechanism, rather than interactively, with terminal response
+# indicating transaction completion. The result of the deferred execution is
+# recorded into a result file.
+# --------------------------------------------------
+opt format=show-all
+SELECT no_o_id
+FROM new_order
+WHERE no_w_id = 10 AND no_d_id = 100
+ORDER BY no_o_id ASC
+LIMIT 1
+----
+project
+ ├── columns: no_o_id:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.01
+ ├── ordering: +1
+ ├── prune: (1)
+ └── limit
+      ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 1.01
+      ├── keys: (1-3)
+      ├── ordering: +1
+      ├── sort
+      │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │    ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
+      │    ├── cost: 1.01
+      │    ├── keys: (1-3)
+      │    ├── ordering: +1
+      │    ├── prune: (1)
+      │    └── scan new_order
+      │         ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │         ├── constraint: /3/2/1: [/10/100 - /10/100]
+      │         ├── stats: [rows=1, distinct(2)=1, distinct(3)=1]
+      │         ├── cost: 1.00
+      │         ├── keys: (1-3)
+      │         └── prune: (1)
+      └── const: 1 [type=int]
+
+opt format=show-all
+SELECT SUM(ol_amount)
+FROM order_line
+WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
+----
+group-by
+ ├── columns: column11:11(decimal)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.00
+ ├── prune: (11)
+ ├── scan order_line
+ │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) order_line.ol_amount:9(decimal)
+ │    ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
+ │    ├── stats: [rows=1, distinct(1)=1, distinct(2)=1, distinct(3)=1]
+ │    ├── cost: 1.00
+ │    └── prune: (9)
+ └── aggregations [outer=(9)]
+      └── sum [type=decimal, outer=(9)]
+           └── variable: order_line.ol_amount [type=decimal, outer=(9)]
+
+# --------------------------------------------------
+# 2.8 The Stock-Level Transaction
+#
+# The Stock-Level business transaction determines the number of recently sold
+# items that have a stock level below a specified threshold. It represents a
+# heavy read-only database transaction with a low frequency of execution, a
+# relaxed response time requirement, and relaxed consistency requirements.
+# --------------------------------------------------
+opt format=show-all
+SELECT d_next_o_id
+FROM district
+WHERE d_w_id = 10 AND d_id = 100
+----
+project
+ ├── columns: d_next_o_id:11(int)
+ ├── stats: [rows=1]
+ ├── cost: 1.00
+ ├── prune: (11)
+ └── scan district
+      ├── columns: district.d_id:1(int!null) district.d_w_id:2(int!null) district.d_next_o_id:11(int)
+      ├── constraint: /2/1: [/10/100 - /10/100]
+      ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+      ├── cost: 1.00
+      ├── keys: (1,2)
+      └── prune: (11)
+
+# TODO(andyk): re-enable when we support COUNT DISTINCT.
+#opt format=show-all
+#SELECT COUNT(DISTINCT(s_i_id))
+#FROM order_line
+#JOIN stock
+#ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+#WHERE ol_w_id = 10
+#    AND ol_d_id = 100
+#    AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
+#    AND s_quantity < 15
+#----
+
+# --------------------------------------------------
+# Consistency Queries
+#
+# These queries run after TPCC in order to check database consistency.
+# They are not part of the benchmark itself.
+# --------------------------------------------------
+opt format=show-all
+SELECT COUNT(*)
+FROM warehouse
+FULL OUTER JOIN
+(
+    SELECT d_w_id, SUM(d_ytd) as sum_d_ytd
+    FROM district
+    GROUP BY d_w_id
+)
+ON (w_id = d_w_id)
+WHERE w_ytd != sum_d_ytd
+----
+group-by
+ ├── columns: column22:22(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1178.00
+ ├── prune: (22)
+ ├── select
+ │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal!null) district.d_w_id:11(int) sum_d_ytd:21(decimal!null)
+ │    ├── stats: [rows=777]
+ │    ├── cost: 1178.00
+ │    ├── full-join
+ │    │    ├── columns: warehouse.w_id:1(int) warehouse.w_ytd:9(decimal) district.d_w_id:11(int) sum_d_ytd:21(decimal)
+ │    │    ├── stats: [rows=7000]
+ │    │    ├── cost: 1108.00
+ │    │    ├── prune: (9,21)
+ │    │    ├── scan warehouse
+ │    │    │    ├── columns: warehouse.w_id:1(int!null) warehouse.w_ytd:9(decimal)
+ │    │    │    ├── stats: [rows=100]
+ │    │    │    ├── cost: 100.00
+ │    │    │    ├── keys: (1)
+ │    │    │    └── prune: (1,9)
+ │    │    ├── group-by
+ │    │    │    ├── columns: district.d_w_id:11(int!null) sum_d_ytd:21(decimal)
+ │    │    │    ├── grouping columns: district.d_w_id:11(int!null)
+ │    │    │    ├── stats: [rows=700, distinct(11)=700]
+ │    │    │    ├── cost: 1000.00
+ │    │    │    ├── keys: (11)
+ │    │    │    ├── prune: (21)
+ │    │    │    ├── scan district
+ │    │    │    │    ├── columns: district.d_w_id:11(int!null) district.d_ytd:19(decimal)
+ │    │    │    │    ├── stats: [rows=1000, distinct(11)=700]
+ │    │    │    │    ├── cost: 1000.00
+ │    │    │    │    └── prune: (11,19)
+ │    │    │    └── aggregations [outer=(19)]
+ │    │    │         └── sum [type=decimal, outer=(19)]
+ │    │    │              └── variable: district.d_ytd [type=decimal, outer=(19)]
+ │    │    └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ │    │         └── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ │    │              ├── variable: warehouse.w_id [type=int, outer=(1)]
+ │    │              └── variable: district.d_w_id [type=int, outer=(11)]
+ │    └── filters [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │         └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │              ├── variable: warehouse.w_ytd [type=decimal, outer=(9)]
+ │              └── variable: sum_d_ytd [type=decimal, outer=(21)]
+ └── aggregations
+      └── count-rows [type=int]
+
+opt format=show-all
+SELECT d_next_o_id
+FROM district
+ORDER BY d_w_id, d_id
+----
+scan district
+ ├── columns: d_next_o_id:11(int)
+ ├── stats: [rows=1000]
+ ├── cost: 1000.00
+ ├── keys: (1,2)
+ ├── ordering: +2,+1
+ └── prune: (1,2,11)
+
+opt format=show-all
+SELECT MAX(no_o_id)
+FROM new_order
+GROUP BY no_d_id, no_w_id
+ORDER BY no_w_id, no_d_id
+----
+sort
+ ├── columns: column4:4(int)
+ ├── stats: [rows=100, distinct(2,3)=100]
+ ├── cost: 90006.64
+ ├── keys: (2,3)
+ ├── ordering: +3,+2
+ ├── prune: (4)
+ └── group-by
+      ├── columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null) column4:4(int)
+      ├── grouping columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      ├── stats: [rows=100, distinct(2,3)=100]
+      ├── cost: 90000.00
+      ├── keys: (2,3)
+      ├── prune: (4)
+      ├── scan new_order
+      │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+      │    ├── stats: [rows=90000, distinct(2,3)=100]
+      │    ├── cost: 90000.00
+      │    ├── keys: (1-3)
+      │    └── prune: (1-3)
+      └── aggregations [outer=(1)]
+           └── max [type=int, outer=(1)]
+                └── variable: new_order.no_o_id [type=int, outer=(1)]
+
+opt format=show-all
+SELECT MAX(o_id)
+FROM "order"
+GROUP BY o_d_id, o_w_id
+ORDER BY o_w_id, o_d_id
+----
+sort
+ ├── columns: column9:9(int)
+ ├── stats: [rows=100, distinct(2,3)=100]
+ ├── cost: 300006.64
+ ├── keys: (2,3)
+ ├── ordering: +3,+2
+ ├── prune: (9)
+ └── group-by
+      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) column9:9(int)
+      ├── grouping columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
+      ├── stats: [rows=100, distinct(2,3)=100]
+      ├── cost: 300000.00
+      ├── keys: (2,3)
+      ├── prune: (9)
+      ├── scan order
+      │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
+      │    ├── stats: [rows=300000, distinct(2,3)=100]
+      │    ├── cost: 300000.00
+      │    ├── keys: (1-3)
+      │    └── prune: (1-3)
+      └── aggregations [outer=(1)]
+           └── max [type=int, outer=(1)]
+                └── variable: "order".o_id [type=int, outer=(1)]
+
+opt format=show-all
+SELECT COUNT(*)
+FROM
+(
+    SELECT MAX(no_o_id) - MIN(no_o_id) - COUNT(*) AS nod
+    FROM new_order
+    GROUP BY no_w_id, no_d_id
+)
+WHERE nod != -1
+----
+group-by
+ ├── columns: column8:8(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 90001.00
+ ├── prune: (8)
+ ├── select
+ │    ├── columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null) column4:4(int) column5:5(int) column6:6(int)
+ │    ├── stats: [rows=33]
+ │    ├── cost: 90001.00
+ │    ├── keys: (2,3)
+ │    ├── group-by
+ │    │    ├── columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null) column4:4(int) column5:5(int) column6:6(int)
+ │    │    ├── grouping columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+ │    │    ├── stats: [rows=100, distinct(2,3)=100]
+ │    │    ├── cost: 90000.00
+ │    │    ├── keys: (2,3)
+ │    │    ├── prune: (4-6)
+ │    │    ├── scan new_order
+ │    │    │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=90000, distinct(2,3)=100]
+ │    │    │    ├── cost: 90000.00
+ │    │    │    ├── keys: (1-3)
+ │    │    │    └── prune: (1-3)
+ │    │    └── aggregations [outer=(1)]
+ │    │         ├── max [type=int, outer=(1)]
+ │    │         │    └── variable: new_order.no_o_id [type=int, outer=(1)]
+ │    │         ├── min [type=int, outer=(1)]
+ │    │         │    └── variable: new_order.no_o_id [type=int, outer=(1)]
+ │    │         └── count-rows [type=int]
+ │    └── filters [type=bool, outer=(4-6)]
+ │         └── ne [type=bool, outer=(4-6)]
+ │              ├── minus [type=int, outer=(4-6)]
+ │              │    ├── minus [type=int, outer=(4,5)]
+ │              │    │    ├── variable: column4 [type=int, outer=(4)]
+ │              │    │    └── variable: column5 [type=int, outer=(5)]
+ │              │    └── variable: column6 [type=int, outer=(6)]
+ │              └── const: -1 [type=int]
+ └── aggregations
+      └── count-rows [type=int]
+
+opt format=show-all
+SELECT SUM(o_ol_cnt)
+FROM "order"
+GROUP BY o_w_id, o_d_id
+ORDER BY o_w_id, o_d_id
+----
+sort
+ ├── columns: column9:9(decimal)
+ ├── stats: [rows=100, distinct(2,3)=100]
+ ├── cost: 300006.64
+ ├── keys: (2,3)
+ ├── ordering: +3,+2
+ ├── prune: (9)
+ └── group-by
+      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) column9:9(decimal)
+      ├── grouping columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
+      ├── stats: [rows=100, distinct(2,3)=100]
+      ├── cost: 300000.00
+      ├── keys: (2,3)
+      ├── prune: (9)
+      ├── scan order
+      │    ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_ol_cnt:7(int)
+      │    ├── stats: [rows=300000, distinct(2,3)=100]
+      │    ├── cost: 300000.00
+      │    └── prune: (2,3,7)
+      └── aggregations [outer=(7)]
+           └── sum [type=decimal, outer=(7)]
+                └── variable: "order".o_ol_cnt [type=int, outer=(7)]
+
+opt format=show-all
+SELECT COUNT(*)
+FROM order_line
+GROUP BY ol_w_id, ol_d_id
+ORDER BY ol_w_id, ol_d_id
+----
+sort
+ ├── columns: column11:11(int)
+ ├── stats: [rows=100, distinct(2,3)=100]
+ ├── cost: 1000006.64
+ ├── keys: (2,3)
+ ├── ordering: +3,+2
+ ├── prune: (11)
+ └── group-by
+      ├── columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) column11:11(int)
+      ├── grouping columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
+      ├── stats: [rows=100, distinct(2,3)=100]
+      ├── cost: 1000000.00
+      ├── keys: (2,3)
+      ├── prune: (11)
+      ├── scan order_line
+      │    ├── columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
+      │    ├── stats: [rows=1000000, distinct(2,3)=100]
+      │    ├── cost: 1000000.00
+      │    └── prune: (2,3)
+      └── aggregations
+           └── count-rows [type=int]
+
+opt format=show-all
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+EXCEPT ALL
+(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
+----
+except-all
+ ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── left columns: new_order.no_w_id:3(int!null) new_order.no_d_id:2(int!null) new_order.no_o_id:1(int!null)
+ ├── right columns: "order".o_w_id:6(int) "order".o_d_id:5(int) "order".o_id:4(int)
+ ├── stats: [rows=90000]
+ ├── cost: 393000.00
+ ├── scan new_order
+ │    ├── columns: new_order.no_o_id:1(int!null) new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
+ │    ├── stats: [rows=90000]
+ │    ├── cost: 90000.00
+ │    ├── keys: (1-3)
+ │    └── prune: (1-3)
+ └── project
+      ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null)
+      ├── stats: [rows=1]
+      ├── cost: 303000.00
+      ├── keys: (4-6)
+      ├── prune: (4-6)
+      └── select
+           ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null) "order".o_carrier_id:9(int)
+           ├── stats: [rows=1, distinct(9)=1]
+           ├── cost: 303000.00
+           ├── keys: (4-6)
+           ├── prune: (4-6)
+           ├── scan order
+           │    ├── columns: "order".o_id:4(int!null) "order".o_d_id:5(int!null) "order".o_w_id:6(int!null) "order".o_carrier_id:9(int)
+           │    ├── stats: [rows=300000, distinct(9)=210000]
+           │    ├── cost: 300000.00
+           │    ├── keys: (4-6)
+           │    └── prune: (4-6,9)
+           └── filters [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight)]
+                └── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight)]
+                     ├── variable: "order".o_carrier_id [type=int, outer=(9)]
+                     └── null [type=unknown]
+
+opt format=show-all
+(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
+EXCEPT ALL
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+----
+except-all
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── left columns: "order".o_w_id:3(int!null) "order".o_d_id:2(int!null) "order".o_id:1(int!null)
+ ├── right columns: new_order.no_w_id:11(int) new_order.no_d_id:10(int) new_order.no_o_id:9(int)
+ ├── stats: [rows=1]
+ ├── cost: 393000.00
+ ├── project
+ │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
+ │    ├── stats: [rows=1]
+ │    ├── cost: 303000.00
+ │    ├── keys: (1-3)
+ │    ├── prune: (1-3)
+ │    └── select
+ │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │         ├── stats: [rows=1, distinct(6)=1]
+ │         ├── cost: 303000.00
+ │         ├── keys: (1-3)
+ │         ├── prune: (1-3)
+ │         ├── scan order
+ │         │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │         │    ├── stats: [rows=300000, distinct(6)=210000]
+ │         │    ├── cost: 300000.00
+ │         │    ├── keys: (1-3)
+ │         │    └── prune: (1-3,6)
+ │         └── filters [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
+ │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
+ │                   ├── variable: "order".o_carrier_id [type=int, outer=(6)]
+ │                   └── null [type=unknown]
+ └── scan new_order
+      ├── columns: new_order.no_o_id:9(int!null) new_order.no_d_id:10(int!null) new_order.no_w_id:11(int!null)
+      ├── stats: [rows=90000]
+      ├── cost: 90000.00
+      ├── keys: (9-11)
+      └── prune: (9-11)
+
+opt format=show-all
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+----
+sort
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── stats: [rows=300000]
+ ├── cost: 1354583.81
+ ├── ordering: +3,+2,-1
+ └── except-all
+      ├── columns: "order".o_w_id:3(int!null) "order".o_d_id:2(int!null) "order".o_id:1(int!null) "order".o_ol_cnt:7(int)
+      ├── left columns: "order".o_w_id:3(int!null) "order".o_d_id:2(int!null) "order".o_id:1(int!null) "order".o_ol_cnt:7(int)
+      ├── right columns: order_line.ol_w_id:11(int) order_line.ol_d_id:10(int) order_line.ol_o_id:9(int) column19:19(int)
+      ├── stats: [rows=300000]
+      ├── cost: 1300000.00
+      ├── scan order
+      │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_ol_cnt:7(int)
+      │    ├── stats: [rows=300000]
+      │    ├── cost: 300000.00
+      │    ├── keys: (1-3)
+      │    └── prune: (1-3,7)
+      └── group-by
+           ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) column19:19(int)
+           ├── grouping columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null)
+           ├── stats: [rows=100000, distinct(9-11)=100000]
+           ├── cost: 1000000.00
+           ├── keys: (9-11)
+           ├── prune: (19)
+           ├── scan order_line
+           │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null)
+           │    ├── stats: [rows=1000000, distinct(9-11)=100000]
+           │    ├── cost: 1000000.00
+           │    └── prune: (9-11)
+           └── aggregations
+                └── count-rows [type=int]
+
+opt format=show-all
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+----
+sort
+ ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) column11:11(int)
+ ├── stats: [rows=100000]
+ ├── cost: 1316609.64
+ ├── ordering: +3,+2,-1
+ └── except-all
+      ├── columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) column11:11(int)
+      ├── left columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) column11:11(int)
+      ├── right columns: "order".o_w_id:14(int) "order".o_d_id:13(int) "order".o_id:12(int) "order".o_ol_cnt:18(int)
+      ├── stats: [rows=100000]
+      ├── cost: 1300000.00
+      ├── group-by
+      │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) column11:11(int)
+      │    ├── grouping columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
+      │    ├── stats: [rows=100000, distinct(1-3)=100000]
+      │    ├── cost: 1000000.00
+      │    ├── keys: (1-3)
+      │    ├── prune: (11)
+      │    ├── scan order_line
+      │    │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
+      │    │    ├── stats: [rows=1000000, distinct(1-3)=100000]
+      │    │    ├── cost: 1000000.00
+      │    │    └── prune: (1-3)
+      │    └── aggregations
+      │         └── count-rows [type=int]
+      └── scan order
+           ├── columns: "order".o_id:12(int!null) "order".o_d_id:13(int!null) "order".o_w_id:14(int!null) "order".o_ol_cnt:18(int)
+           ├── stats: [rows=300000]
+           ├── cost: 300000.00
+           ├── keys: (12-14)
+           └── prune: (12-14,18)
+
+opt format=show-all
+SELECT COUNT(*)
+FROM
+(
+    SELECT o_w_id, o_d_id, o_id
+    FROM "order"
+    WHERE o_carrier_id IS NULL
+)
+FULL OUTER JOIN
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id
+    FROM order_line
+    WHERE ol_delivery_d IS NULL
+)
+ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
+WHERE ol_o_id IS NULL OR o_id IS NULL
+----
+group-by
+ ├── columns: column19:19(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1313000.02
+ ├── prune: (19)
+ ├── select
+ │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
+ │    ├── stats: [rows=1]
+ │    ├── cost: 1313000.02
+ │    ├── full-join
+ │    │    ├── columns: "order".o_id:1(int) "order".o_d_id:2(int) "order".o_w_id:3(int) order_line.ol_o_id:9(int) order_line.ol_d_id:10(int) order_line.ol_w_id:11(int)
+ │    │    ├── stats: [rows=0]
+ │    │    ├── cost: 1313000.02
+ │    │    ├── project
+ │    │    │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── cost: 303000.00
+ │    │    │    ├── keys: (1-3)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── select
+ │    │    │         ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │    │    │         ├── stats: [rows=1, distinct(6)=1]
+ │    │    │         ├── cost: 303000.00
+ │    │    │         ├── keys: (1-3)
+ │    │    │         ├── prune: (1-3)
+ │    │    │         ├── scan order
+ │    │    │         │    ├── columns: "order".o_id:1(int!null) "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) "order".o_carrier_id:6(int)
+ │    │    │         │    ├── stats: [rows=300000, distinct(6)=210000]
+ │    │    │         │    ├── cost: 300000.00
+ │    │    │         │    ├── keys: (1-3)
+ │    │    │         │    └── prune: (1-3,6)
+ │    │    │         └── filters [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
+ │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
+ │    │    │                   ├── variable: "order".o_carrier_id [type=int, outer=(6)]
+ │    │    │                   └── null [type=unknown]
+ │    │    ├── project
+ │    │    │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null)
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── cost: 1010000.00
+ │    │    │    ├── prune: (9-11)
+ │    │    │    └── select
+ │    │    │         ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
+ │    │    │         ├── stats: [rows=1, distinct(15)=1]
+ │    │    │         ├── cost: 1010000.00
+ │    │    │         ├── prune: (9-11)
+ │    │    │         ├── scan order_line
+ │    │    │         │    ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) order_line.ol_delivery_d:15(timestamp)
+ │    │    │         │    ├── stats: [rows=1000000, distinct(15)=700000]
+ │    │    │         │    ├── cost: 1000000.00
+ │    │    │         │    └── prune: (9-11,15)
+ │    │    │         └── filters [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight)]
+ │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight)]
+ │    │    │                   ├── variable: order_line.ol_delivery_d [type=timestamp, outer=(15)]
+ │    │    │                   └── null [type=unknown]
+ │    │    └── filters [type=bool, outer=(1-3,9-11), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /9: (/NULL - ]; /10: (/NULL - ]; /11: (/NULL - ])]
+ │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ])]
+ │    │         │    ├── variable: order_line.ol_w_id [type=int, outer=(11)]
+ │    │         │    └── variable: "order".o_w_id [type=int, outer=(3)]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
+ │    │         │    ├── variable: order_line.ol_d_id [type=int, outer=(10)]
+ │    │         │    └── variable: "order".o_d_id [type=int, outer=(2)]
+ │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
+ │    │              ├── variable: order_line.ol_o_id [type=int, outer=(9)]
+ │    │              └── variable: "order".o_id [type=int, outer=(1)]
+ │    └── filters [type=bool, outer=(1,9)]
+ │         └── or [type=bool, outer=(1,9)]
+ │              ├── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight)]
+ │              │    ├── variable: order_line.ol_o_id [type=int, outer=(9)]
+ │              │    └── null [type=unknown]
+ │              └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
+ │                   ├── variable: "order".o_id [type=int, outer=(1)]
+ │                   └── null [type=unknown]
+ └── aggregations
+      └── count-rows [type=int]

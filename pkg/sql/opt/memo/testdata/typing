@@ -493,3 +493,42 @@ group-by
       │    └── variable: column20 [type=jsonb]
       └── jsonb-agg [type=jsonb]
            └── variable: column22 [type=jsonb]
+
+# AnyNotNull internal aggregate function.
+opt
+SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT MAX(x) FROM b WHERE y=z::int) > 'foo'
+----
+project
+ ├── columns: x:1(int!null) column3:3(string) y:2(int)
+ └── select
+      ├── columns: a.x:1(int!null) a.y:2(int) column3:3(string) column6:6(string!null)
+      ├── group-by
+      │    ├── columns: a.x:1(int!null) a.y:2(int) column3:3(string) column6:6(string)
+      │    ├── grouping columns: a.x:1(int!null)
+      │    ├── left-join
+      │    │    ├── columns: a.x:1(int!null) a.y:2(int) column3:3(string) b.x:4(string) b.z:5(decimal)
+      │    │    ├── project
+      │    │    │    ├── columns: column3:3(string) a.x:1(int!null) a.y:2(int)
+      │    │    │    ├── scan a
+      │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
+      │    │    │    └── projections
+      │    │    │         └── cast: string [type=string]
+      │    │    │              └── variable: a.x [type=int]
+      │    │    ├── scan b
+      │    │    │    └── columns: b.x:4(string!null) b.z:5(decimal!null)
+      │    │    └── filters [type=bool]
+      │    │         └── eq [type=bool]
+      │    │              ├── variable: a.y [type=int]
+      │    │              └── cast: int [type=int]
+      │    │                   └── variable: b.z [type=decimal]
+      │    └── aggregations
+      │         ├── max [type=string]
+      │         │    └── variable: b.x [type=string]
+      │         ├── any-not-null [type=int]
+      │         │    └── variable: a.y [type=int]
+      │         └── any-not-null [type=string]
+      │              └── variable: column3 [type=string]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── variable: column6 [type=string]
+                └── const: 'foo' [type=string]

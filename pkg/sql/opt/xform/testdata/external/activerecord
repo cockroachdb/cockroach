@@ -1,0 +1,204 @@
+exec-ddl
+CREATE TABLE pg_attribute (
+    attrelid oid NOT NULL,
+    attname text NOT NULL,
+    atttypid oid NOT NULL,
+    attstattarget bigint NOT NULL,
+    attlen bigint NOT NULL,
+    attnum bigint NOT NULL,
+    attndims bigint NOT NULL,
+    attcacheoff bigint NOT NULL,
+    atttypmod bigint NOT NULL,
+    attbyval boolean NOT NULL,
+    attstorage text NOT NULL,
+    attalign text NOT NULL,
+    attnotnull boolean NOT NULL,
+    atthasdef boolean NOT NULL,
+    attisdropped boolean NOT NULL,
+    attislocal boolean NOT NULL,
+    attinhcount bigint NOT NULL,
+    attcollation oid NOT NULL,
+    attacl text[],
+    attoptions text[],
+    attfdwoptions text[],
+    PRIMARY KEY (attrelid, attnum),
+    UNIQUE INDEX pg_attribute_relid_attnam_index (attrelid, attname)
+);
+----
+TABLE pg_attribute
+ ├── attrelid oid not null
+ ├── attname string not null
+ ├── atttypid oid not null
+ ├── attstattarget int not null
+ ├── attlen int not null
+ ├── attnum int not null
+ ├── attndims int not null
+ ├── attcacheoff int not null
+ ├── atttypmod int not null
+ ├── attbyval bool not null
+ ├── attstorage string not null
+ ├── attalign string not null
+ ├── attnotnull bool not null
+ ├── atthasdef bool not null
+ ├── attisdropped bool not null
+ ├── attislocal bool not null
+ ├── attinhcount int not null
+ ├── attcollation oid not null
+ ├── attacl string[]
+ ├── attoptions string[]
+ ├── attfdwoptions string[]
+ ├── INDEX primary
+ │    ├── attrelid oid not null
+ │    └── attnum int not null
+ └── INDEX pg_attribute_relid_attnam_index
+      ├── attrelid oid not null
+      ├── attname string not null
+      └── attnum int not null (storing)
+
+exec-ddl
+CREATE TABLE pg_attrdef (
+    oid oid PRIMARY KEY,
+    adrelid oid NOT NULL,
+    adnum bigint NOT NULL,
+    adbin text,
+    adsrc text,
+    UNIQUE INDEX pg_attrdef_adrelid_adnum_index (adrelid, adnum)
+);
+----
+TABLE pg_attrdef
+ ├── oid oid not null
+ ├── adrelid oid not null
+ ├── adnum int not null
+ ├── adbin string
+ ├── adsrc string
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_attrdef_adrelid_adnum_index
+      ├── adrelid oid not null
+      ├── adnum int not null
+      └── oid oid not null (storing)
+
+exec-ddl
+CREATE TABLE pg_collation (
+    oid oid PRIMARY KEY,
+    collname text NOT NULL,
+    collnamespace oid NOT NULL,
+    collowner oid NOT NULL,
+    collencoding bigint NOT NULL,
+    collcollate text NOT NULL,
+    collctype text NOT NULL,
+    UNIQUE INDEX pg_collation_name_enc_nsp_index (collname, collencoding, collnamespace)
+);
+----
+TABLE pg_collation
+ ├── oid oid not null
+ ├── collname string not null
+ ├── collnamespace oid not null
+ ├── collowner oid not null
+ ├── collencoding int not null
+ ├── collcollate string not null
+ ├── collctype string not null
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_collation_name_enc_nsp_index
+      ├── collname string not null
+      ├── collencoding int not null
+      ├── collnamespace oid not null
+      └── oid oid not null (storing)
+
+exec-ddl
+CREATE TABLE pg_type (
+    oid oid PRIMARY KEY,
+    typname text NOT NULL,
+    typnamespace oid NOT NULL,
+    typowner oid NOT NULL,
+    typlen bigint NOT NULL,
+    typbyval boolean NOT NULL,
+    typtype text NOT NULL,
+    typcategory text NOT NULL,
+    typispreferred boolean NOT NULL,
+    typisdefined boolean NOT NULL,
+    typdelim text NOT NULL,
+    typrelid oid NOT NULL,
+    typelem oid NOT NULL,
+    typarray oid NOT NULL,
+    typinput oid NOT NULL,
+    typoutput oid NOT NULL,
+    typreceive oid NOT NULL,
+    typsend oid NOT NULL,
+    typmodin oid NOT NULL,
+    typmodout oid NOT NULL,
+    typanalyze oid NOT NULL,
+    typalign text NOT NULL,
+    typstorage text NOT NULL,
+    typnotnull boolean NOT NULL,
+    typbasetype oid NOT NULL,
+    typtypmod bigint NOT NULL,
+    typndims bigint NOT NULL,
+    typcollation oid NOT NULL,
+    typdefaultbin text,
+    typdefault text,
+    typacl text[],
+    UNIQUE INDEX pg_type_typname_nsp_index (typname, typnamespace)
+);
+----
+TABLE pg_type
+ ├── oid oid not null
+ ├── typname string not null
+ ├── typnamespace oid not null
+ ├── typowner oid not null
+ ├── typlen int not null
+ ├── typbyval bool not null
+ ├── typtype string not null
+ ├── typcategory string not null
+ ├── typispreferred bool not null
+ ├── typisdefined bool not null
+ ├── typdelim string not null
+ ├── typrelid oid not null
+ ├── typelem oid not null
+ ├── typarray oid not null
+ ├── typinput oid not null
+ ├── typoutput oid not null
+ ├── typreceive oid not null
+ ├── typsend oid not null
+ ├── typmodin oid not null
+ ├── typmodout oid not null
+ ├── typanalyze oid not null
+ ├── typalign string not null
+ ├── typstorage string not null
+ ├── typnotnull bool not null
+ ├── typbasetype oid not null
+ ├── typtypmod int not null
+ ├── typndims int not null
+ ├── typcollation oid not null
+ ├── typdefaultbin string
+ ├── typdefault string
+ ├── typacl string[]
+ ├── INDEX primary
+ │    └── oid oid not null
+ └── INDEX pg_type_typname_nsp_index
+      ├── typname string not null
+      ├── typnamespace oid not null
+      └── oid oid not null (storing)
+
+# TODO(andyk): Need to analyze subquery filter to prove that only one row can be
+#              returned from the subquery.
+#opt
+#SELECT a.attname,
+#  format_type(a.atttypid, a.atttypmod),
+#  pg_get_expr(d.adbin, d.adrelid),
+#  a.attnotnull,
+#  a.atttypid,
+#  a.atttypmod,
+#  (SELECT c.collname
+#   FROM pg_collation c, pg_type t
+#   WHERE c.oid = a.attcollation
+#   AND t.oid = a.atttypid
+#   AND a.attcollation <> t.typcollation),
+#   col_description(a.attrelid, a.attnum) AS comment
+#FROM pg_attribute a LEFT JOIN pg_attrdef d
+#ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+#WHERE a.attrelid = '"numbers"'::regclass
+#AND a.attnum > 0 AND NOT a.attisdropped
+#ORDER BY a.attnum
+#----

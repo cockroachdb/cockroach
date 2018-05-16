@@ -472,12 +472,6 @@ var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID
 	"sqrdiff": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructSqrDiff(argList[0])
 	},
-	"final_variance": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructFinalVariance(argList[0])
-	},
-	"final_stddev": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
-		return f.ConstructFinalStdDev(argList[0])
-	},
 	"variance": func(f *norm.Factory, argList []memo.GroupID) memo.GroupID {
 		return f.ConstructVariance(argList[0])
 	},

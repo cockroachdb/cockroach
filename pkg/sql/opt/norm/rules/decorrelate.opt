@@ -58,13 +58,17 @@
 # right input, and therefore causes the normal form to be (Join (Select)) rather
 # than (Select (Join)) when the choice is ambiguous.
 #
+# This rule is marked as high priority so that it always runs before the
+# PushFilterIntoJoinRight rule. A Select operator with outer columns is always
+# pulled up as far as possible before being pushed back down.
+#
 # Note that citation [3] doesn't directly contain this identity, since it
 # assumes that the Select will be hoisted above the Join rather than becoming
 # part of its On condition. PushFilterIntoJoinRight allows the condition to be
 # pushed down, so this rule can correctly pull it up.
 #
-# Citations: [3]
-[TryDecorrelateSelect, Normalize, DetectCycle]
+# Citations: [3] (see identity #3)
+[TryDecorrelateSelect, Normalize, DetectCycle, HighPriority]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
@@ -78,6 +82,122 @@
     (ConcatFilters $on $filter)
 )
 
+# TryDecorrelateProject "pushes down" a Join into a Project operator, in an
+# attempt to eliminate any correlation between the projection list and the left
+# side of the join, and also to keep "digging" down to find and eliminate other
+# unnecessary correlation. The eventual hope is to trigger the DecorrelateJoin
+# rule to turn a JoinApply operator into a non-apply Join operator.
+#
+# Citations: [3] (see identity #4)
+[TryDecorrelateProject, Normalize]
+(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (Project $input:* $projections:*)
+    $on:*
+)
+=>
+(Select
+    (Project
+        ((OpName)
+            $left
+            $input
+            (True)
+        )
+        (ProjectColsFromBoth $projections $left)
+    )
+    $on
+)
+
+# TryDecorrelateProjectSelect tries to decorrelate a Select operator that sits
+# below a LeftJoin/Project operator combo. The Project operator itself can't be
+# reordered above the LeftJoin like it can in the InnerJoin case. However, the
+# Select filter can be merged with the LeftJoin filter, which is enough to
+# decorrelate in several useful cases.
+#
+# See the comment for TryDecorrelateSelect for an explanation of why the
+# DetectCycle and HighPriority tags are in use.
+[TryDecorrelateProjectSelect, Normalize, DetectCycle, HighPriority]
+(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:(Project
+        $projectInput:* &
+            (HasOuterCols $projectInput) &
+            (Select $selectInput:* $filters:*)
+        $projections:*
+    )
+    $on:*
+)
+=>
+(Project
+    ((OpName)
+        $left
+        (Project
+            $selectInput
+            (ProjectColsFromBoth $projections $selectInput)
+        )
+        (ConcatFilters $on $filters)
+    )
+    (ProjectColsFromBoth $left $right)
+)
+
+# TryDecorrelateScalarGroupBy "pushes down" a Join into a GroupBy operator, in
+# an attempt to keep "digging" down to find and eliminate unnecessary
+# correlation. The eventual hope is to trigger the DecorrelateJoin rule to turn
+# a JoinApply operator into a non-apply Join operator.
+#
+# Example:
+#
+#   SELECT left.x, left.y, input.*
+#   FROM left
+#   INNER JOIN LATERAL
+#   (
+#     SELECT COUNT(*), SUM(c) FROM input WHERE input.x = left.x
+#   )
+#   ON left.y = 10
+#   =>
+#   SELECT ANY_NOT_NULL(left.x), ANY_NOT_NULL(left.y), COUNT(input.t), SUM(input.c)
+#   FROM left WITH ORDINALITY
+#   LEFT JOIN LATERAL
+#   (
+#     SELECT c, True t FROM input WHERE input.x = left.x
+#   )
+#   ON True
+#   GROUP BY left.ordinality
+#   HAVING left.y = 10
+#
+# An ordinality column only needs to be synthesized if "left" does not already
+# have a key. The "true" column only needs to be added if "input" does not
+# already have a not-null column (and COUNT(*) is used).
+#
+# ANY_NOT_NULL is an internal aggregation function that returns the first non-
+# null value in the grouping set (or null if there are no non-null values).
+# Since the grouping column(s) will always be a strong key of the left input,
+# any additional column selected from the left input will always have the same
+# value for all rows in the grouping set (whether it be null or non-null).
+#
+# Citations: [3] (see identity #9)
+[TryDecorrelateScalarGroupBy, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (GroupBy
+            $input:*
+            $aggregations:*
+            $groupingCols:*
+        ) &
+        (IsScalarGroupBy $groupingCols) &
+        (CanAggsIgnoreNulls $aggregations)
+    $on:*
+)
+=>
+(Select
+    (HoistCorrelatedScalarGroupBy $left $input $aggregations)
+    $on
+)
+
 # HoistSelectExists extracts existential subqueries from Select filters,
 # turning them into semi-joins. This eliminates the subquery, which is often
 # expensive to execute and restricts the optimizer's plan choices.
@@ -85,10 +205,10 @@
 (Select
     $input:*
     $filter:* &
-    (HasCorrelatedSubquery $filter) &
-    (Filters
-        $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
-    )
+        (HasCorrelatedSubquery $filter) &
+        (Filters
+            $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
+        )
 )
 =>
 (Select
@@ -107,10 +227,10 @@
 (Select
     $input:*
     $filter:* &
-    (HasCorrelatedSubquery $filter) &
-    (Filters
-        $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
-    )
+        (HasCorrelatedSubquery $filter) &
+        (Filters
+            $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
+        )
 )
 =>
 (Select

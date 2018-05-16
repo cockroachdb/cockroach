@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,8 +31,10 @@ import (
 func BenchmarkExprView(b *testing.B) {
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	catalog := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(b, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", catalog)
+	catalog := testcat.New()
+	if _, err := catalog.ExecuteDDL("CREATE TABLE a (x INT PRIMARY KEY, y INT)"); err != nil {
+		b.Fatal(err)
+	}
 
 	cases := []string{
 		"SELECT x, y FROM a WHERE x + y * 2 - (x * y) > 0",
