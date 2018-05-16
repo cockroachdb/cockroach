@@ -134,6 +134,9 @@ const (
 	OptimizerOff = iota
 	// OptimizerOn means that we use the optimizer for all supported statements.
 	OptimizerOn
+	// OptimizerLocal means that we use the optimizer for all supported
+	// statements, but we don't try to distribute the resulting plan.
+	OptimizerLocal
 	// OptimizerAlways means that we attempt to use the optimizer always, even
 	// for unsupported statements which result in errors. This mode is useful
 	// for testing.
@@ -146,6 +149,8 @@ func (m OptimizerMode) String() string {
 		return "off"
 	case OptimizerOn:
 		return "on"
+	case OptimizerLocal:
+		return "local"
 	case OptimizerAlways:
 		return "always"
 	default:
@@ -160,6 +165,8 @@ func OptimizerModeFromString(val string) (_ OptimizerMode, ok bool) {
 		return OptimizerOff, true
 	case "ON":
 		return OptimizerOn, true
+	case "LOCAL":
+		return OptimizerLocal, true
 	case "ALWAYS":
 		return OptimizerAlways, true
 	default:

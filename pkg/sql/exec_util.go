@@ -398,7 +398,7 @@ func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool 
 			return true
 		}
 
-	case sessiondata.OptimizerOn:
+	case sessiondata.OptimizerOn, sessiondata.OptimizerLocal:
 		// Only handle a subset of the statement types (currently read-only queries).
 		switch stmt.AST.(type) {
 		case *tree.ParenSelect, *tree.Select, *tree.SelectClause,

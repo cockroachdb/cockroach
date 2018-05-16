@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default distsql
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v INT)
@@ -10,7 +10,7 @@ statement ok
 SET EXPERIMENTAL_OPT = ON
 
 # ParenSelect
-query II
+query II rowsort
 (SELECT * FROM test.t)
 ----
 1  10
@@ -18,7 +18,7 @@ query II
 3  30
 
 # Select
-query II
+query II rowsort
 SELECT * FROM test.t ORDER BY 1-t.k
 ----
 3  30
@@ -26,7 +26,7 @@ SELECT * FROM test.t ORDER BY 1-t.k
 1  10
 
 # SelectClause
-query II
+query II rowsort
 SELECT * FROM test.t
 ----
 1  10
@@ -34,7 +34,7 @@ SELECT * FROM test.t
 3  30
 
 # UnionClause
-query II
+query II rowsort
 SELECT * FROM test.t UNION SELECT * FROM test.t
 ----
 1  10
@@ -50,7 +50,7 @@ SELECT EXISTS(SELECT * FROM t WHERE k > 2)
 ----
 true
 
-query II
+query II rowsort
 SELECT * FROM test.t WHERE 2*v > (SELECT MAX(v) FROM test.t)
 ----
 3  30
@@ -61,3 +61,15 @@ SET EXPERIMENTAL_OPT = ALWAYS
 
 query error pq: unexpected statement: \*tree.Insert
 INSERT INTO test (k, v) VALUES (5, 50)
+
+statement ok
+SET EXPERIMENTAL_OPT = LOCAL
+
+# In local mode, we should always get the results in order (no rowsort).
+query II
+SELECT * FROM test.t
+----
+1  10
+2  20
+3  30
+4  40
