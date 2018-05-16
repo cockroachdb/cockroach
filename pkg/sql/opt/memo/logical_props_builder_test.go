@@ -17,13 +17,14 @@ package memo_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 )
 
 func TestLogicalPropsBuilder(t *testing.T) {
-	runDataDrivenTest(t, "testdata/logprops/", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
-	runDataDrivenTest(t, "testdata/stats/", memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps)
+	flags := opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
+	runDataDrivenTest(t, "testdata/logprops/", flags)
+	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
 // Test HasCorrelatedSubquery flag manually since it's not important enough

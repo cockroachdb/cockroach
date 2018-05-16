@@ -17,7 +17,7 @@ package xform_test
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
@@ -27,7 +27,7 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
 //   ...
 func TestCoster(t *testing.T) {
-	runDataDrivenTest(t, "testdata/coster/", memo.ExprFmtHideRuleProps)
+	runDataDrivenTest(t, "testdata/coster/", opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications)
 }
 
 // TestPhysicalPropsFactory files can be run separately like this:
@@ -35,7 +35,7 @@ func TestCoster(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/physprops/", opt.ExprFmtHideAll)
 }
 
 // TestRules files can be run separately like this:
@@ -46,7 +46,7 @@ func TestRules(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/rules/",
-		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps,
+		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications,
 	)
 }
 
@@ -57,7 +57,7 @@ func TestRules(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags opt.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testutils.NewTestCatalog()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
