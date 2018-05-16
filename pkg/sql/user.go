@@ -19,7 +19,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -65,28 +64,6 @@ func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, err
 		users[string(username)] = bool(*isRole)
 	}
 	return users, nil
-}
-
-// Returns true is the requested username is a role, false if it is a user.
-// Returns error if it does not exist.
-func existingUserIsRole(
-	ctx context.Context, ie *InternalExecutor, txn *client.Txn, username string,
-) (bool, error) {
-	values, err := ie.QueryRow(
-		ctx,
-		"is-role",
-		txn,
-		`SELECT "isRole" FROM system.users WHERE username=$1`,
-		username)
-	if err != nil {
-		return false, errors.Wrapf(err, "error looking up user %s", username)
-	}
-	if len(values) == 0 {
-		return false, errors.Errorf("no user or role named %s", username)
-	}
-
-	isRole := bool(*(values[0]).(*tree.DBool))
-	return isRole, nil
 }
 
 var roleMembersTableName = tree.MakeTableName("system", "role_members")

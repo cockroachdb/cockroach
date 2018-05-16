@@ -93,49 +93,48 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
+	// Check if the user/role exists.
+	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(
+		params.ctx,
+		opName,
+		params.p.txn,
+		`select "isRole" from system.users where username = $1`,
+		normalizedUsername,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "error looking up user")
+	}
+	if row != nil {
+		isRole := bool(*row[0].(*tree.DBool))
+		if isRole == n.isRole && n.ifNotExists {
+			// The username exists with the same role setting, and we asked to skip
+			// if it exists: no error.
+			return nil
+		}
+		msg := "a user"
+		if isRole {
+			msg = "a role"
+		}
+		return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
+			"%s named %s already exists",
+			msg, normalizedUsername)
+	}
+
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		"INSERT INTO system.users VALUES ($1, $2, $3);",
+		"insert into system.users values ($1, $2, $3)",
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,
 	)
 	if err != nil {
-		if sqlbase.IsUniquenessConstraintViolationError(err) {
-			// Entry exists. We need to know if it's a user or role.
-			isRole, roleErr := existingUserIsRole(
-				params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, normalizedUsername,
-			)
-			if roleErr != nil {
-				return roleErr
-			}
-			if isRole == n.isRole && n.ifNotExists {
-				// The username exists with the same role setting, and we asked to skip
-				// if it exists: no error.
-				//
-				// INSERT only detects error at the end of each batch.  This
-				// means perhaps the count by InternalExecutor.Exec
-				// will have reported updated rows even though an error was
-				// encountered.  If the error was due to a duplicate entry, we
-				// are not actually inserting anything but are canceling the
-				// error, so clear the row count so that the client can learn
-				// what's going on.
-				n.run.rowsAffected = 0
-				return nil
-			}
-
-			if isRole {
-				err = errors.Errorf("a role named %s already exists", normalizedUsername)
-			} else {
-				err = errors.Errorf("a user named %s already exists", normalizedUsername)
-			}
-		}
 		return err
 	} else if n.run.rowsAffected != 1 {
 		return errors.Errorf(
-			"%d rows affected by user creation; expected exactly one row affected", n.run.rowsAffected,
+			"programming error: %d rows affected by user creation; expected exactly one row affected",
+			n.run.rowsAffected,
 		)
 	}
 
