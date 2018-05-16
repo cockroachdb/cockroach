@@ -64,7 +64,7 @@ type OptTester struct {
 type OptTesterFlags struct {
 	// Format controls the output detail of build / opt/ optsteps command
 	// directives.
-	ExprFormat memo.ExprFmtFlags
+	ExprFormat opt.ExprFmtFlags
 
 	// MemoFormat controls the output detail of memo command directives.
 	MemoFormat memo.FmtFlags
@@ -212,13 +212,13 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 			return fmt.Errorf("format flag requires value(s)")
 		}
 		for _, v := range arg.Vals {
-			m := map[string]memo.ExprFmtFlags{
-				"show-all":         memo.ExprFmtShowAll,
-				"hide-all":         memo.ExprFmtHideAll,
-				"hide-stats":       memo.ExprFmtHideStats,
-				"hide-cost":        memo.ExprFmtHideCost,
-				"hide-constraints": memo.ExprFmtHideConstraints,
-				"hide-ruleprops":   memo.ExprFmtHideRuleProps,
+			m := map[string]opt.ExprFmtFlags{
+				"show-all":         opt.ExprFmtShowAll,
+				"hide-all":         opt.ExprFmtHideAll,
+				"hide-stats":       opt.ExprFmtHideStats,
+				"hide-cost":        opt.ExprFmtHideCost,
+				"hide-constraints": opt.ExprFmtHideConstraints,
+				"hide-ruleprops":   opt.ExprFmtHideRuleProps,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val
@@ -235,6 +235,8 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 
 	case "fully-qualify-names":
 		f.FullyQualifyNames = true
+		// Hiding qualifications defeats the purpose.
+		f.ExprFormat &= ^opt.ExprFmtHideQualifications
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

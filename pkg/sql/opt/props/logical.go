@@ -17,6 +17,7 @@ package props
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -202,13 +203,13 @@ func (p *Logical) OuterCols() opt.ColSet {
 // FormatColSet outputs the specified set of columns using FormatCol to format
 // the output.
 func (p *Logical) FormatColSet(
-	tp treeprinter.Node, md *opt.Metadata, heading string, colSet opt.ColSet,
+	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colSet opt.ColSet,
 ) {
 	if !colSet.Empty() {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		colSet.ForEach(func(i int) {
-			p.FormatCol(&buf, md, "", opt.ColumnID(i))
+			p.FormatCol(f, &buf, "", opt.ColumnID(i))
 		})
 		tp.Child(buf.String())
 	}
@@ -217,13 +218,13 @@ func (p *Logical) FormatColSet(
 // FormatColList outputs the specified list of columns using FormatCol to
 // format the output.
 func (p *Logical) FormatColList(
-	tp treeprinter.Node, md *opt.Metadata, heading string, colList opt.ColList,
+	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colList opt.ColList,
 ) {
 	if len(colList) > 0 {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		for _, col := range colList {
-			p.FormatCol(&buf, md, "", col)
+			p.FormatCol(f, &buf, "", col)
 		}
 		tp.Child(buf.String())
 	}
@@ -237,11 +238,32 @@ func (p *Logical) FormatColList(
 //
 // If a label is given, then it is used. Otherwise, a "best effort" label is
 // used from query metadata.
-func (p *Logical) FormatCol(buf *bytes.Buffer, md *opt.Metadata, label string, id opt.ColumnID) {
+func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, id opt.ColumnID) {
 	if label == "" {
-		label = md.ColumnLabel(id)
+		label = f.Metadata().ColumnLabel(id)
+		if f.HasFlags(opt.ExprFmtHideQualifications) {
+			// If the label is qualified, try to shorten it.
+			if idx := strings.LastIndex(label, "."); idx != -1 {
+				short := label[idx+1:]
+				suffix := label[idx:] // includes the "."
+				// Check if shortening the label could cause ambiguity: is there another
+				// column that would be shortened to the same name?
+				ambiguous := false
+				for col := opt.ColumnID(1); int(col) <= f.Metadata().NumColumns(); col++ {
+					if col != id {
+						if l := f.Metadata().ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
+							ambiguous = true
+							break
+						}
+					}
+				}
+				if !ambiguous {
+					label = short
+				}
+			}
+		}
 	}
-	typ := md.ColumnType(id)
+	typ := f.Metadata().ColumnType(id)
 	buf.WriteByte(' ')
 	buf.WriteString(label)
 	buf.WriteByte(':')
