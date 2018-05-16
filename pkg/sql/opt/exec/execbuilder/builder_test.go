@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -105,7 +104,7 @@ func TestExecBuild(t *testing.T) {
 				evalCtx:           &evalCtx,
 				testEngineFactory: s.InternalExecutor().(exec.TestEngineFactory),
 			}
-			et.tester.Flags.ExprFormat = memo.ExprFmtHideRuleProps
+			et.tester.Flags.ExprFormat = opt.ExprFmtHideRuleProps | opt.ExprFmtHideQualifications
 
 			var noDistSQL bool
 			for _, arg := range d.CmdArgs {
