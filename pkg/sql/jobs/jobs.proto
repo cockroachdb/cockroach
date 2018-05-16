@@ -118,8 +118,8 @@ message SchemaChangeDetails {
 message ChangefeedDetails {
   util.hlc.Timestamp highwater = 1 [(gogoproto.nullable) = false];
   repeated sqlbase.TableDescriptor table_descs = 2 [(gogoproto.nullable) = false];
-  string kafka_topic_prefix = 3;
-  string kafka_bootstrap_servers = 4;
+  string sink_uri = 3 [(gogoproto.customname) = "SinkURI"];
+  map<string, string> opts = 4;
 }
 
 message Payload {
