@@ -141,7 +141,10 @@ func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba roachpb.Ba
 		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
 			splitC <- err
 		}) {
-			// No split ongoing. We may have raced with its completion.
+			// No split ongoing. We may have raced with its completion. There's
+			// no good way to prevent this race, so we conservatively allow the
+			// request to proceed instead of throwing an error that would surface
+			// to the client.
 			return nil
 		}
 
@@ -151,7 +154,7 @@ func (r *Replica) maybeBackpressureWriteBatch(ctx context.Context, ba roachpb.Ba
 			return ctx.Err()
 		case err := <-splitC:
 			if err != nil {
-				return errors.Wrap(err, "waiting on split that failed")
+				return errors.Wrap(err, "split failed while applying backpressure")
 			}
 		}
 	}
