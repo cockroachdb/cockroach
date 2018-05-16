@@ -289,7 +289,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			result.execMode = execModeAllRows
 			// Multi-row types are always wrapped in a tuple-type, but the ARRAY
 			// flatten operator wants the unwrapped type.
-			sub.SetType(sub.ResolvedType().(types.TTuple)[0])
+			sub.SetType(sub.ResolvedType().(types.TTuple).Types[0])
 		}
 
 	case *tree.Subquery:
@@ -435,9 +435,9 @@ func (v *subqueryVisitor) extractSubquery(
 	if len(cols) == 1 {
 		sub.SetType(cols[0].Typ)
 	} else {
-		colTypes := make(types.TTuple, len(cols))
+		colTypes := types.TTuple{Types: make([]types.T, len(cols))}
 		for i, col := range cols {
-			colTypes[i] = col.Typ
+			colTypes.Types[i] = col.Typ
 		}
 		sub.SetType(colTypes)
 	}
@@ -453,7 +453,7 @@ func (v *subqueryVisitor) extractSubquery(
 		// with the current type checking code, but seems semantically incorrect. A
 		// tuple represents a fixed number of elements. Instead, we should either
 		// be using the table type (TTable) or introduce a new vtuple type.
-		sub.SetType(types.TTuple{sub.ResolvedType()})
+		sub.SetType(types.TTuple{Types: []types.T{sub.ResolvedType()}})
 	}
 
 	return result, nil

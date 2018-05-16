@@ -545,6 +545,7 @@ var pgBuiltins = map[string][]tree.Builtin{
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	},
 
+	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": {
 		tree.Builtin{
 			Types:        tree.ArgTypes{{"val", types.Any}},
