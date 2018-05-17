@@ -29,7 +29,7 @@ a         1
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT MAX(ordinality) FROM foo WITH ORDINALITY
 ----
-group            ·            ·                (column3)       ·
+group            ·            ·                (max)           ·
  │               aggregate 0  max(ordinality)  ·               ·
  └── ordinality  ·            ·                ("ordinality")  ·
       └── scan   ·            ·                ()              ·

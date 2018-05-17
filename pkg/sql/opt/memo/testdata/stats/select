@@ -152,10 +152,10 @@ build
 SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 ----
 project
- ├── columns: column4:4(decimal)
+ ├── columns: sum:4(decimal)
  ├── stats: [rows=99]
  └── group-by
-      ├── columns: z:2(int!null) column4:4(decimal)
+      ├── columns: z:2(int!null) sum:4(decimal)
       ├── grouping columns: z:2(int!null)
       ├── stats: [rows=99, distinct(2)=99]
       ├── keys: (2)

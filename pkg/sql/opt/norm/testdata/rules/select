@@ -184,7 +184,7 @@ opt
 SELECT * FROM (SELECT i, i+1, f FROM a) a WHERE f=10.0
 ----
 project
- ├── columns: i:2(int) column6:6(int) f:3(float!null)
+ ├── columns: i:2(int) "i + 1":6(int) f:3(float!null)
  ├── select
  │    ├── columns: i:2(int) f:3(float!null)
  │    ├── scan a
@@ -250,7 +250,7 @@ opt
 SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i HAVING SUM(f)=10.0) a
 ----
 project
- ├── columns: f:3(float) column7:7(float)
+ ├── columns: f:3(float) "f + 1.1":7(float)
  ├── select
  │    ├── columns: i:2(int) f:3(float) column6:6(float!null)
  │    ├── keys: weak(2,3)
@@ -758,7 +758,7 @@ opt
 SELECT * FROM (SELECT i, COUNT(*) FROM a GROUP BY i) a WHERE i=1
 ----
 group-by
- ├── columns: i:2(int!null) column6:6(int)
+ ├── columns: i:2(int!null) count:6(int)
  ├── grouping columns: i:2(int!null)
  ├── keys: (2)
  ├── select

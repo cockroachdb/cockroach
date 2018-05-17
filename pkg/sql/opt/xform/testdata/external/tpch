@@ -365,19 +365,19 @@ project
  ├── cardinality: [0 - 100]
  ├── ordering: -15,+23,+11,+1
  └── limit
-      ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) column48:48(float!null) rownum:49(int!null)
+      ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null) rownum:49(int!null)
       ├── cardinality: [0 - 100]
       ├── keys: (49)
       ├── ordering: -15,+23,+11,+1
       ├── sort
-      │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) column48:48(float!null) rownum:49(int!null)
+      │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null) rownum:49(int!null)
       │    ├── keys: (49)
       │    ├── ordering: -15,+23,+11,+1
       │    └── select
-      │         ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) column48:48(float!null) rownum:49(int!null)
+      │         ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null) rownum:49(int!null)
       │         ├── keys: (49)
       │         ├── group-by
-      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float) nation.n_name:23(string) column48:48(float) rownum:49(int!null)
+      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_supplycost:20(float) nation.n_name:23(string) min:48(float) rownum:49(int!null)
       │         │    ├── grouping columns: rownum:49(int!null)
       │         │    ├── keys: (49)
       │         │    ├── left-join-apply
@@ -503,7 +503,7 @@ project
       │         └── filters [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ])]
       │              └── eq [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ])]
       │                   ├── variable: partsupp.ps_supplycost [type=float, outer=(20)]
-      │                   └── variable: column48 [type=float, outer=(48)]
+      │                   └── variable: min [type=float, outer=(48)]
       └── const: 100 [type=int]
 
 # --------------------------------------------------
@@ -1569,7 +1569,7 @@ sort
                 ├── variable: column37 [type=float, outer=(37)]
                 └── subquery [type=float]
                      └── project
-                          ├── columns: column35:35(float)
+                          ├── columns: "sum(ps_supplycost * ps_availqty::FLOAT) * 0.0001":35(float)
                           ├── cardinality: [1 - 1]
                           ├── group-by
                           │    ├── columns: column34:34(float)
@@ -1771,11 +1771,11 @@ sort
  ├── keys: weak(18)
  ├── ordering: -19,-18
  └── group-by
-      ├── columns: column18:18(int) custdist:19(int)
-      ├── grouping columns: column18:18(int)
+      ├── columns: count:18(int) custdist:19(int)
+      ├── grouping columns: count:18(int)
       ├── keys: weak(18)
       ├── group-by
-      │    ├── columns: c_custkey:1(int!null) column18:18(int)
+      │    ├── columns: c_custkey:1(int!null) count:18(int)
       │    ├── grouping columns: c_custkey:1(int!null)
       │    ├── keys: (1)
       │    ├── left-join
@@ -2141,16 +2141,16 @@ ORDER BY
 LIMIT 100;
 ----
 limit
- ├── columns: c_name:2(string) c_custkey:1(int!null) o_orderkey:9(int!null) o_orderdate:13(date) o_totalprice:12(float) column51:51(float)
+ ├── columns: c_name:2(string) c_custkey:1(int!null) o_orderkey:9(int!null) o_orderdate:13(date) o_totalprice:12(float) sum:51(float)
  ├── cardinality: [0 - 100]
  ├── keys: weak(1,2,9,12,13)
  ├── ordering: -12,+13
  ├── sort
- │    ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) column51:51(float)
+ │    ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
  │    ├── keys: weak(1,2,9,12,13)
  │    ├── ordering: -12,+13
  │    └── group-by
- │         ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) column51:51(float)
+ │         ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date) sum:51(float)
  │         ├── grouping columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_totalprice:12(float) o_orderdate:13(date)
  │         ├── keys: weak(1,2,9,12,13)
  │         ├── semi-join
@@ -2755,7 +2755,7 @@ sort
       │    │    │              ├── variable: customer.c_acctbal [type=float, outer=(6)]
       │    │    │              └── subquery [type=float]
       │    │    │                   └── group-by
-      │    │    │                        ├── columns: column17:17(float)
+      │    │    │                        ├── columns: avg:17(float)
       │    │    │                        ├── cardinality: [1 - 1]
       │    │    │                        ├── select
       │    │    │                        │    ├── columns: customer.c_phone:13(string) customer.c_acctbal:14(float!null)

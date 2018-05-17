@@ -39,7 +39,7 @@ build
 SELECT 1, TRUE, FALSE, NULL
 ----
 project
- ├── columns: column1:1(int!null) column2:2(bool!null) column3:3(bool!null) column4:4(unknown)
+ ├── columns: "1":1(int!null) true:2(bool!null) false:3(bool!null) NULL:4(unknown)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -65,7 +65,7 @@ build
 SELECT (a.x, 1.5), a.y FROM a
 ----
 project
- ├── columns: column3:3(tuple{int, decimal}) y:2(int)
+ ├── columns: "(a.x, 1.5)":3(tuple{int, decimal}) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -231,9 +231,9 @@ build
 SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a
 ----
 project
- ├── columns: column3:3(int) column4:4(int) column5:5(int)
+ ├── columns: "a.x & a.y":3(int) "a.x | a.y":4(int) "a.x # a.y":5(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: x:1(int!null) a.y:2(int)
  └── projections
       ├── bitand [type=int]
       │    ├── variable: a.x [type=int]
@@ -250,9 +250,9 @@ build
 SELECT a.x + 1.5, DATE '2000-01-01' - 15, 10.10 * a.x, 1 / a.y, a.x // 1.5 FROM a
 ----
 project
- ├── columns: column3:3(decimal) column4:4(date) column5:5(decimal) column6:6(decimal) column7:7(decimal)
+ ├── columns: "a.x + 1.5":3(decimal) "DATE '2000-01-01' - 15":4(date) "10.10 * a.x":5(decimal) "1 / a.y":6(decimal) "a.x // 1.5":7(decimal)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections
       ├── plus [type=decimal]
       │    ├── variable: a.x [type=int]
@@ -275,9 +275,9 @@ build
 SELECT 100.1 % a.x, a.x ^ 2.5, a.x << 3, a.y >> 2 FROM a
 ----
 project
- ├── columns: column3:3(decimal) column4:4(decimal) column5:5(int) column6:6(int)
+ ├── columns: "100.1 % a.x":3(decimal) "a.x ^ 2.5":4(decimal) "a.x << 3":5(int) "a.y >> 2":6(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: a.x:1(int!null) y:2(int)
  └── projections
       ├── mod [type=decimal]
       │    ├── const: 100.1 [type=decimal]
@@ -297,7 +297,7 @@ build
 SELECT '[1, 2]'->1, '[1, 2]'->>1, '{"a": 5}'#>ARRAY['a'], '{"a": 5}'#>>ARRAY['a'] FROM a
 ----
 project
- ├── columns: column3:3(jsonb) column4:4(string) column5:5(jsonb) column6:6(string)
+ ├── columns: "'[1, 2]'->1":3(jsonb) "'[1, 2]'->>1":4(string) "'{"a": 5}'#>ARRAY['a']":5(jsonb) "'{"a": 5}'#>>ARRAY['a']":6(string)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
@@ -321,7 +321,7 @@ build
 SELECT b.x || 'more' FROM b
 ----
 project
- ├── columns: column3:3(string)
+ ├── columns: "b.x || 'more'":3(string)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
  └── projections
@@ -334,9 +334,9 @@ build
 SELECT -a.y, ~a.x FROM a
 ----
 project
- ├── columns: column3:3(int) column4:4(int)
+ ├── columns: "-a.y":3(int) "~a.x":4(int)
  ├── scan a
- │    └── columns: x:1(int!null) y:2(int)
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections
       ├── unary-minus [type=int]
       │    └── variable: a.y [type=int]
@@ -348,7 +348,7 @@ build
 SELECT arr || arr, arr || NULL, NULL || arr FROM unusual
 ----
 project
- ├── columns: column3:3(int[]) column4:4(int[]) column5:5(int[])
+ ├── columns: "arr || arr":3(int[]) "arr || NULL":4(int[]) "NULL || arr":5(int[])
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
@@ -367,7 +367,7 @@ build
 SELECT x || arr, arr || x, x || NULL, NULL || x FROM unusual
 ----
 project
- ├── columns: column3:3(int[]) column4:4(int[]) column5:5(int[]) column6:6(int[])
+ ├── columns: "x || arr":3(int[]) "arr || x":4(int[]) "x || NULL":5(int[]) "NULL || x":6(int[])
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[])
  └── projections
@@ -389,7 +389,7 @@ build
 SELECT length('text')
 ----
 project
- ├── columns: column1:1(int)
+ ├── columns: length:1(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -401,7 +401,7 @@ build
 SELECT div(1.0, 2.0)
 ----
 project
- ├── columns: column1:1(decimal)
+ ├── columns: div:1(decimal)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -414,7 +414,7 @@ build
 SELECT NOW()
 ----
 project
- ├── columns: column1:1(timestamptz)
+ ├── columns: now:1(timestamptz)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -425,7 +425,7 @@ build
 SELECT GREATEST(1, 2, 3, 4)
 ----
 project
- ├── columns: column1:1(int)
+ ├── columns: greatest:1(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -444,7 +444,7 @@ SELECT
 FROM b
 ----
 group-by
- ├── columns: column3:3(decimal[]) column4:4(decimal) column6:6(bool) column7:7(bool) column8:8(string) column9:9(int) column10:10(int) column11:11(string) column12:12(decimal) column14:14(int) column15:15(decimal) column16:16(decimal) column17:17(decimal) column18:18(decimal) column19:19(int) column21:21(jsonb) column23:23(jsonb)
+ ├── columns: array_agg:3(decimal[]) avg:4(decimal) bool_and:6(bool) bool_or:7(bool) concat_agg:8(string) count:9(int) count:10(int) max:11(string) max:12(decimal) sum_int:14(int) sum:15(decimal) sqrdiff:16(decimal) variance:17(decimal) stddev:18(decimal) xor_agg:19(int) json_agg:21(jsonb) jsonb_agg:23(jsonb)
  ├── project
  │    ├── columns: column5:5(bool) column13:13(int) column20:20(jsonb) column22:22(jsonb) x:1(string!null) z:2(decimal!null)
  │    ├── scan b
@@ -499,16 +499,16 @@ opt
 SELECT * FROM (SELECT x, x::string, y FROM a) WHERE (SELECT MAX(x) FROM b WHERE y=z::int) > 'foo'
 ----
 project
- ├── columns: x:1(int!null) column3:3(string) y:2(int)
+ ├── columns: x:1(int!null) "x::STRING":3(string) y:2(int)
  └── select
-      ├── columns: a.x:1(int!null) y:2(int) column3:3(string) column6:6(string!null)
+      ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) max:6(string!null)
       ├── group-by
-      │    ├── columns: a.x:1(int!null) y:2(int) column3:3(string) column6:6(string)
+      │    ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) max:6(string)
       │    ├── grouping columns: a.x:1(int!null)
       │    ├── left-join
-      │    │    ├── columns: a.x:1(int!null) y:2(int) column3:3(string) b.x:4(string) z:5(decimal)
+      │    │    ├── columns: a.x:1(int!null) y:2(int) "x::STRING":3(string) b.x:4(string) z:5(decimal)
       │    │    ├── project
-      │    │    │    ├── columns: column3:3(string) a.x:1(int!null) y:2(int)
+      │    │    │    ├── columns: "x::STRING":3(string) a.x:1(int!null) y:2(int)
       │    │    │    ├── scan a
       │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
       │    │    │    └── projections
@@ -527,8 +527,8 @@ project
       │         ├── any-not-null [type=int]
       │         │    └── variable: a.y [type=int]
       │         └── any-not-null [type=string]
-      │              └── variable: column3 [type=string]
+      │              └── variable: x::STRING [type=string]
       └── filters [type=bool]
            └── gt [type=bool]
-                ├── variable: column6 [type=string]
+                ├── variable: max [type=string]
                 └── const: 'foo' [type=string]

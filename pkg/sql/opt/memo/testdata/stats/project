@@ -69,10 +69,10 @@ build
 SELECT count(*) FROM (SELECT x, y FROM a) GROUP BY x, y
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: count:5(int)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: x:1(int!null) y:2(int) column5:5(int)
+      ├── columns: x:1(int!null) y:2(int) count:5(int)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── stats: [rows=2000, distinct(1,2)=2000]
       ├── keys: (1)
@@ -95,7 +95,7 @@ select
  ├── columns: v:5(string!null)
  ├── stats: [rows=20, distinct(5)=1]
  ├── project
- │    ├── columns: column5:5(string)
+ │    ├── columns: concat:5(string)
  │    ├── stats: [rows=2000, distinct(5)=100]
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -107,7 +107,7 @@ select
  │              └── cast: string [type=string, outer=(2)]
  │                   └── variable: a.y [type=int, outer=(2)]
  └── eq [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
-      ├── variable: column5 [type=string, outer=(5)]
+      ├── variable: concat [type=string, outer=(5)]
       └── const: 'foo' [type=string]
 
 # Test that stats for synthesized and non-synthesized columns are combined.
@@ -116,11 +116,11 @@ SELECT * FROM (SELECT CONCAT(s, y::string), x FROM a) AS q(v, x) GROUP BY v, x
 ----
 group-by
  ├── columns: v:5(string) x:1(int!null)
- ├── grouping columns: x:1(int!null) column5:5(string)
+ ├── grouping columns: x:1(int!null) concat:5(string)
  ├── stats: [rows=2000, distinct(1,5)=2000]
  ├── keys: (1)
  └── project
-      ├── columns: column5:5(string) x:1(int!null)
+      ├── columns: concat:5(string) x:1(int!null)
       ├── stats: [rows=2000, distinct(1,5)=2000]
       ├── keys: (1)
       ├── scan a
@@ -141,7 +141,7 @@ select
  ├── columns: v:5(int!null)
  ├── stats: [rows=142, distinct(5)=100]
  ├── project
- │    ├── columns: column5:5(int)
+ │    ├── columns: "y + 3":5(int)
  │    ├── stats: [rows=2000, distinct(5)=1400]
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
@@ -153,10 +153,10 @@ select
  │              └── const: 3 [type=int]
  └── and [type=bool, outer=(5), constraints=(/5: [/1 - /100]; tight)]
       ├── ge [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
-      │    ├── variable: column5 [type=int, outer=(5)]
+      │    ├── variable: y + 3 [type=int, outer=(5)]
       │    └── const: 1 [type=int]
       └── le [type=bool, outer=(5), constraints=(/5: (/NULL - /100]; tight)]
-           ├── variable: column5 [type=int, outer=(5)]
+           ├── variable: y + 3 [type=int, outer=(5)]
            └── const: 100 [type=int]
 
 exec-ddl

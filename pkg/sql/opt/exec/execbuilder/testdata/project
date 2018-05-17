@@ -57,7 +57,7 @@ x:int  y:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT x + 1 FROM a
 ----
-render     ·         ·          (column3)  ·
+render     ·         ·          ("x + 1")  ·
  │         render 0  x + 1      ·          ·
  └── scan  ·         ·          (x)        ·
 ·          table     a@primary  ·          ·
@@ -66,7 +66,7 @@ render     ·         ·          (column3)  ·
 exec rowsort
 SELECT x + 1 FROM a
 ----
-column3:int
+x + 1:int
 2
 3
 4
@@ -74,7 +74,7 @@ column3:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT x, x + 1, y, y + 1, x + y FROM a
 ----
-render     ·         ·          (x, column3, y, column4, column5)  ·
+render     ·         ·          (x, "x + 1", y, "y + 1", "x + y")  ·
  │         render 0  x          ·                                  ·
  │         render 1  x + 1      ·                                  ·
  │         render 2  y          ·                                  ·
@@ -87,27 +87,27 @@ render     ·         ·          (x, column3, y, column4, column5)  ·
 exec rowsort
 SELECT x, x + 1, y, y + 1, x + y FROM a
 ----
-x:int  column3:int  y:int  column4:int  column5:int
-1      2            10     11           11
-2      3            20     21           22
-3      4            30     31           33
+x:int  x + 1:int  y:int  y + 1:int  x + y:int
+1      2          10     11         11
+2      3          20     21         22
+3      4          30     31         33
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT u * v + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
-render          ·         ·                              (column5)           ·
- │              render 0  column4 + (column3 * column4)  ·                   ·
- └── render     ·         ·                              (column3, column4)  ·
-      │         render 0  x + 3                          ·                   ·
-      │         render 1  y + 10                         ·                   ·
-      └── scan  ·         ·                              (x, y)              ·
-·               table     a@primary                      ·                   ·
-·               spans     ALL                            ·                   ·
+render          ·         ·                                ("(u * v) + v")      ·
+ │              render 0  "y + 10" + ("x + 3" * "y + 10")  ·                    ·
+ └── render     ·         ·                                ("x + 3", "y + 10")  ·
+      │         render 0  x + 3                            ·                    ·
+      │         render 1  y + 10                           ·                    ·
+      └── scan  ·         ·                                (x, y)               ·
+·               table     a@primary                        ·                    ·
+·               spans     ALL                              ·                    ·
 
 exec rowsort
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM a) AS foo(u, v)
 ----
-column5:int
+u + v:int
 24
 35
 46
@@ -135,7 +135,7 @@ x:int  x:int  y:int  x:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
-render          ·         ·             (column3, column4)  ·
+render          ·         ·             ("x + 1", "x + y")  ·
  │              render 0  x + 1         ·                   ·
  │              render 1  x + y         ·                   ·
  └── filter     ·         ·             (x, y)              ·
@@ -147,9 +147,9 @@ render          ·         ·             (column3, column4)  ·
 exec rowsort
 SELECT x + 1, x + y FROM a WHERE x + y > 20
 ----
-column3:int  column4:int
-3            22
-4            33
+x + 1:int  x + y:int
+3          22
+4          33
 
 exec-raw
 CREATE TABLE b (x INT, y INT);
@@ -205,13 +205,13 @@ TABLE nocols
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1, * FROM t.nocols
 ----
-render     ·         ·               (column2)  ·
- │         render 0  1               ·          ·
- └── scan  ·         ·               ()         ·
-·          table     nocols@primary  ·          ·
-·          spans     ALL             ·          ·
+render     ·         ·               ("1")  ·
+ │         render 0  1               ·      ·
+ └── scan  ·         ·               ()     ·
+·          table     nocols@primary  ·      ·
+·          spans     ALL             ·      ·
 
 exec
 SELECT 1, * FROM t.nocols
 ----
-column2:int
+1:int

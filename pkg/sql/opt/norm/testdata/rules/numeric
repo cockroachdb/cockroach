@@ -23,7 +23,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
+ ├── columns: "(a.i + a.i) + 0":6(int) "0 + (a.i + a.i)":7(int) "(a.f + a.f) + 0":8(float) "0 + (a.f + a.f)":9(float) "(a.d + a.d) + 0":10(decimal) "0 + (a.d + a.d)":11(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
@@ -59,7 +59,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(int) column7:7(float) column8:8(decimal)
+ ├── columns: "(a.i + a.i) - 0":6(int) "(a.f + a.f) - 0":7(float) "(a.d + a.d) - 0":8(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
@@ -86,7 +86,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
+ ├── columns: "(a.i + a.i) * 1":6(int) "1 * (a.i + a.i)":7(int) "(a.f + a.f) * 1":8(float) "1 * (a.f + a.f)":9(float) "(a.d + a.d) * 1":10(decimal) "1 * (a.d + a.d)":11(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
@@ -121,7 +121,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(decimal) column7:7(float) column8:8(decimal)
+ ├── columns: "a.i / 1":6(decimal) "a.f / 1":7(float) "a.d / 1":8(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
@@ -140,7 +140,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(float) column7:7(decimal) column8:8(interval)
+ ├── columns: "-(a.f - a.f)":6(float) "-(a.d - a.i)":7(decimal) "-(a.t - a.t)":8(interval)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal) t:5(time)
  └── projections [outer=(2-5)]
@@ -161,7 +161,7 @@ opt
 SELECT -(-a.i::int) FROM a
 ----
 project
- ├── columns: column6:6(int)
+ ├── columns: "-(-a.i::INT)":6(int)
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]

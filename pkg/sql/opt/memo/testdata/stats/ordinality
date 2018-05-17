@@ -74,7 +74,7 @@ build
 SELECT 1 FROM a WITH ORDINALITY
 ----
 project
- ├── columns: column4:4(int!null)
+ ├── columns: "1":4(int!null)
  ├── stats: [rows=4000]
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)

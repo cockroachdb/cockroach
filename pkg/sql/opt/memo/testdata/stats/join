@@ -201,11 +201,11 @@ build
 SELECT sum(b.z), a.x, b.z FROM a, b GROUP BY a.x, b.z
 ----
 project
- ├── columns: column8:8(decimal) x:1(int!null) z:6(int!null)
+ ├── columns: sum:8(decimal) x:1(int!null) z:6(int!null)
  ├── stats: [rows=500000]
  ├── keys: (1,6)
  └── group-by
-      ├── columns: a.x:1(int!null) z:6(int!null) column8:8(decimal)
+      ├── columns: a.x:1(int!null) z:6(int!null) sum:8(decimal)
       ├── grouping columns: a.x:1(int!null) z:6(int!null)
       ├── stats: [rows=500000, distinct(1,6)=500000]
       ├── keys: (1,6)
