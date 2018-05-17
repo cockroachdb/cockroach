@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -172,6 +173,8 @@ type DBContext struct {
 	// NodeID provides the node ID for setting the gateway node and avoiding
 	// clock uncertainty for root transactions started at the gateway.
 	NodeID *base.NodeIDContainer
+	// Stopper is used for async tasks.
+	Stopper *stop.Stopper
 	// UseNonCancelableCtxForTxn, when set, means that db.Txn() doesn't signal
 	// transaction completion to the TxnCoordSender through context cancelation.
 	// This means that the TxnCoordSender will consider a transaction to be
@@ -188,6 +191,7 @@ func DefaultDBContext() DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
 		NodeID:       &base.NodeIDContainer{},
+		Stopper:      stop.NewStopper(),
 	}
 }
 

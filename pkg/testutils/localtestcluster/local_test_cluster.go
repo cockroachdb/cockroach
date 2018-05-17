@@ -109,6 +109,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
 		dbCtx := client.DefaultDBContext()
+		dbCtx.Stopper = ltc.Stopper
 		ltc.DBContext = &dbCtx
 	}
 	ltc.DBContext.NodeID.Set(context.Background(), nodeID)
