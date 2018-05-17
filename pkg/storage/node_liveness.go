@@ -703,6 +703,10 @@ func (nl *NodeLiveness) updateLiveness(
 	handleCondFailed func(actual Liveness) error,
 ) error {
 	for {
+		// Before each attempt, ensure that the context has not expired.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := nl.updateLivenessAttempt(ctx, newLiveness, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
 			if _, ok := err.(*errRetryLiveness); ok {
