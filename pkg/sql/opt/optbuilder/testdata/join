@@ -1824,6 +1824,39 @@ project
                 ├── variable: t1.y [type=int]
                 └── variable: t2.y [type=int]
 
+# Regression: computed columns are not wrapped with Variable outside join.
+build
+SELECT * FROM (SELECT x, x+1 AS plus1 FROM t1) NATURAL FULL OUTER JOIN (SELECT x, 2 AS two FROM t2)
+----
+project
+ ├── columns: x:13(int) plus1:6(int) two:12(int)
+ └── project
+      ├── columns: x:13(int) t1.x:2(int) plus1:6(int) t2.x:9(int) two:12(int)
+      ├── full-join
+      │    ├── columns: t1.x:2(int) plus1:6(int) t2.x:9(int) two:12(int)
+      │    ├── project
+      │    │    ├── columns: plus1:6(int) t1.x:2(int)
+      │    │    ├── scan t1
+      │    │    │    └── columns: col1:1(int) t1.x:2(int) col2:3(int) t1.y:4(int) t1.rowid:5(int!null)
+      │    │    └── projections
+      │    │         └── plus [type=int]
+      │    │              ├── variable: t1.x [type=int]
+      │    │              └── const: 1 [type=int]
+      │    ├── project
+      │    │    ├── columns: two:12(int!null) t2.x:9(int)
+      │    │    ├── scan t2
+      │    │    │    └── columns: col3:7(int) t2.y:8(int) t2.x:9(int) col4:10(int) t2.rowid:11(int!null)
+      │    │    └── projections
+      │    │         └── const: 2 [type=int]
+      │    └── filters [type=bool]
+      │         └── eq [type=bool]
+      │              ├── variable: t1.x [type=int]
+      │              └── variable: t2.x [type=int]
+      └── projections
+           └── coalesce [type=int]
+                ├── variable: t1.x [type=int]
+                └── variable: t2.x [type=int]
+
 build
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.x=t2.x
 ----
