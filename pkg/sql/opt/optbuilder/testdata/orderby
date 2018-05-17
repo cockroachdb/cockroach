@@ -259,17 +259,18 @@ build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int)
+ ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+1
  └── project
-      ├── columns: a:1(int!null) b:2(int)
+      ├── columns: a:1(int!null) b:2(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int) c:3(bool)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
            ├── scan t
            │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-           └── eq [type=bool]
-                ├── variable: t.b [type=int]
-                └── const: 7 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: t.b [type=int]
+                     └── const: 7 [type=int]
 
 build
 SELECT a, b FROM t ORDER BY b, a DESC
@@ -286,17 +287,18 @@ build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
 ----
 sort
- ├── columns: a:1(int!null) b:2(int) ab:4(int)
+ ├── columns: a:1(int!null) b:2(int!null) ab:4(int)
  ├── ordering: -4,+1
  └── project
-      ├── columns: ab:4(int) a:1(int!null) b:2(int)
+      ├── columns: ab:4(int) a:1(int!null) b:2(int!null)
       ├── select
-      │    ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      │    └── eq [type=bool]
-      │         ├── variable: t.b [type=int]
-      │         └── const: 7 [type=int]
+      │    └── filters [type=bool]
+      │         └── eq [type=bool]
+      │              ├── variable: t.b [type=int]
+      │              └── const: 7 [type=int]
       └── projections
            └── plus [type=int]
                 ├── variable: t.a [type=int]
@@ -660,9 +662,10 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── eq [type=bool]
-                ├── variable: abc.b [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: abc.b [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
@@ -676,9 +679,10 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── eq [type=bool]
-                ├── variable: abc.b [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: abc.b [type=int]
+                     └── const: 2 [type=int]
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 # TODO(rytaft): Verify that the sort node is removed before execution.
@@ -694,9 +698,10 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── eq [type=bool]
-                ├── variable: abc.a [type=int]
-                └── const: 1 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: abc.a [type=int]
+                     └── const: 1 [type=int]
 
 exec-ddl
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))

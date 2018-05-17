@@ -316,6 +316,8 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		b.assertNoAggregationOrWindowing(texpr, "WHERE")
 
 		filter := b.buildScalar(texpr, outScope)
+		// Wrap the filter in a FiltersOp.
+		filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
 	}
 
