@@ -54,7 +54,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	var tableDesc *TableDescriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tableDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
 	})
 	if err != nil {
@@ -122,7 +122,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				var changedSeqDescs []*TableDescriptor
 				// DDL statements use uncached descriptors, and can view newly added things.
 				// TODO(vivek): check if the cache can be used.
-				params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
 					changedSeqDescs, err = maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
 				})
 				if err != nil {
@@ -248,7 +248,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// on tables that were just added. See the comment at the start of
 				// the global-scope resolveFK().
 				// TODO(vivek): check if the cache can be used.
-				params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
 					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
 				})
 				if err != nil {
@@ -694,7 +694,7 @@ func applyColumnMutation(
 			// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 			// TODO(vivek): check if the cache can be used.
 			var changedSeqDescs []*TableDescriptor
-			params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+			params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
 				changedSeqDescs, err = maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
 			})
 			if err != nil {
