@@ -39,49 +39,60 @@ func registerStoreGen(r *registry, args []string) {
 			c.Put(ctx, workload, "./workload")
 			c.Start(ctx)
 
-			m := newMonitor(ctx, c)
-			m.Go(func(ctx context.Context) error {
-				t.Status("restoring fixture")
-				c.Run(ctx, c.Node(1), fmt.Sprintf("./workload fixtures load %s", workloadArgs))
+			{
+				m := newMonitor(ctx, c)
+				m.Go(func(ctx context.Context) error {
+					t.WorkerStatus("restoring fixture")
+					defer t.WorkerStatus()
 
-				urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(1),
-					fmt.Sprintf(`./workload fixtures url %s`, workloadArgs))
-				if err != nil {
-					t.Fatal(err)
-				}
+					c.Run(ctx, c.Node(1), fmt.Sprintf("./workload fixtures load %s", workloadArgs))
+					return nil
+				})
+				m.Wait()
+			}
 
-				db := c.Conn(ctx, 1)
-				defer db.Close()
-				var binVersion string
-				err = db.QueryRow("SELECT crdb_internal.node_executable_version()").Scan(&binVersion)
-				if err != nil {
-					return err
-				}
+			urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(1),
+				fmt.Sprintf(`./workload fixtures url %s`, workloadArgs))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-				fixturesURL := fmt.Sprintf("%s/stores=%d,bin-version=%s",
-					bytes.TrimSpace(urlBase), stores, binVersion)
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+			var binVersion string
+			err = db.QueryRow("SELECT crdb_internal.node_executable_version()").Scan(&binVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-				// gsutil rm fails if no objects exist, even with -f, so check if any
-				// old store directories exist before attempting to remove them.
-				err = c.RunE(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q ls %s &> /dev/null", fixturesURL))
-				if err == nil {
-					t.Status("deleting old store dumps")
-					c.Run(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q rm -r %s", fixturesURL))
-				}
+			// Stop all the nodes before downloading the store directory, or you end
+			// up with invalid fixtures.
+			c.Stop(ctx, c.All())
 
-				t.Status("uploading store dumps")
-				var g errgroup.Group
-				for store := 1; store <= stores; store++ {
-					store := store
-					g.Go(func() error {
-						c.Run(ctx, c.Node(store), fmt.Sprintf("gsutil -m -q cp -r {store-dir}/* %s/%d/",
-							fixturesURL, store))
-						return nil
-					})
-				}
-				return g.Wait()
-			})
-			m.Wait()
+			fixturesURL := fmt.Sprintf("%s/stores=%d,bin-version=%s",
+				bytes.TrimSpace(urlBase), stores, binVersion)
+
+			// gsutil rm fails if no objects exist, even with -f, so check if any
+			// old store directories exist before attempting to remove them.
+			err = c.RunE(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q ls %s &> /dev/null", fixturesURL))
+			if err == nil {
+				t.Status("deleting old store dumps")
+				c.Run(ctx, c.Node(1), fmt.Sprintf("gsutil -m -q rm -r %s", fixturesURL))
+			}
+
+			t.Status("uploading store dumps")
+			var g errgroup.Group
+			for store := 1; store <= stores; store++ {
+				store := store
+				g.Go(func() error {
+					c.Run(ctx, c.Node(store), fmt.Sprintf("gsutil -m -q cp -r {store-dir}/* %s/%d/",
+						fixturesURL, store))
+					return nil
+				})
+			}
+			if err := g.Wait(); err != nil {
+				t.Fatal(err)
+			}
 		},
 	})
 }
