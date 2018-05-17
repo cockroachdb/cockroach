@@ -25,10 +25,17 @@ tc_start_block "Run local roachtests"
 # TODO(dan): Run kv/splits as a proof of concept of running roachtest on every
 # PR. After we're sure this is stable, curate a suite of the tests that work
 # locally.
-run build/builder.sh ./bin/roachtest run kv/splits \
-  --local \
-  --cockroach "cockroach" \
-  --workload "bin/workload" \
-  --artifacts artifacts \
-  --teamcity
+run build/builder.sh \
+  env \
+    GITHUB_API_TOKEN="$GITHUB_API_TOKEN" \
+    BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" \
+    TC_BUILD_ID="$TC_BUILD_ID" \
+    TC_SERVER_URL="$TC_SERVER_URL" \
+    PKG="${PKG:-}" GOFLAGS="${GOFLAGS:-}" TAGS="${TAGS:-}" \
+  ./bin/roachtest run kv/splits \
+    --local \
+    --cockroach "cockroach" \
+    --workload "bin/workload" \
+    --artifacts artifacts \
+    --teamcity
 tc_end_block "Run local roachtests"
