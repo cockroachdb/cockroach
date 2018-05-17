@@ -156,7 +156,7 @@ CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, ed
 
 
 statement ok
-CREATE TABLE authors (name STRING, book STRING); INSERT INTO authors VALUES ('Hal Abelson', 'SICP'), ('Geral Jay Sussman', 'SICP'), ('Thomas H Cormen', 'Intro to Algo'), ('Charles E Leiserson', 'Intro to Algo'), ('Ronald Rivest', 'Intro to Algo'), ('Clifford Stein', 'Intro to Algo'), ('Donald Knuth', 'Art of Computer Programming')
+CREATE TABLE authors (name STRING, book STRING); INSERT INTO authors VALUES ('Hal Abelson', 'SICP'), ('Geral Jay Sussman', 'SICP'), ('Thomas H Cormen', 'Intro to Algo'), ('Charles E Leiserson', 'Intro to Algo'), ('Ronald Rivest', 'Intro to Algo'), ('Clifford Stein', 'Intro to Algo'), ('Donald Knuth', 'Art of Computer Programming'), ('bell hooks', 'Feminism Is for Everybody')
 
 
 query T rowsort
@@ -225,19 +225,18 @@ Donald Knuth
 Geral Jay Sussman
 Hal Abelson
 
+# Left lookup outer join
+query T
+SELECT a.book FROM authors a LEFT OUTER JOIN books b ON a.book = b.title WHERE b.title IS NULL
+----
+Feminism Is for Everybody
+
 
 # Cross joins should not be planned as lookup joins.
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM books as b1 CROSS JOIN books as b2]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyckTFvszAQhvfvV3y6-apgIB08eWw6JFXUrWJw8ClFJT5kG6lVxH-vwEMCKqTN6PM99z66O4NlQ1t9Ig_yDQQgrKFAaByX5D27vhybNuYTZIJQ2aYNfblAKNkRyDOEKtQEErb8wM0qAwRDQVf10NYhcBsukA_6SCDzDq8Gi-XBr_pQ0560IbdKRuOhcdVJuy91YP7wMJcm7k0T96Sls2mXkNayM-TITLd1u-UH5Sft35-5suRW6dh41wb5XwlUKaoMVY5qjepxVj0bqd-49558w9bTrw6e9N5kjhT34Ll1Jb04LoeY-NwN3FAw5EP8zeNjY-NXL3gNi0U4G8FiCqd_gNMpnC3CyUS76P59BwAA__9upyMC
-
-
-# Outer joins should not be planned as lookup joins.
-query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM books as b1 LEFT OUTER JOIN books as b2 ON b1.title = b2.title]
-----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyckkFr8kAQhu_frwhz-kqnmE20h0BhLxaU1hRJT8VDzE7T0JgJuxuoiP-9JHvQhKqtt92ZeeZ9Z5gdVKxokW7IQPQGAhAmsEKoNWdkDOs27Ipm6gsiH6Go6sa24RVCxpog2oEtbEkQwYLvuB6FgKDIpkXZle0RuLEHyNg0J4jGezxqLM43TtJ1SUtKFemR32sPtS42qd7KNfOngVNq4lo1cY1acFLtINJUrBVpUsNtXS75wfIz6ZzmXFSkR0HfcrKtKfKepo-JF78m06U3j2cLQCjp3f6X4vbmQRf5h3sCQtzYyJMCZYAyRDlGOUF5f3LUsDfqhftYkqm5MvSrA_HbOUnl5PZmuNEZvWjOOhn3jTuuCygy1mXH7jOrXKo1eAyLs3DYg8UQDv4AB0M4PAv7A9ur_b_vAAAA__9wHjBU
 
 
 query T rowsort
@@ -362,3 +361,18 @@ SELECT t1.a, t2.d FROM multiples t1 JOIN multiples@bc t2 ON t1.a = t2.b
 6   12
 8   16
 10  20
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT t1.a FROM multiples t1 LEFT OUTER JOIN multiples@bc t2 ON t1.a = t2.b WHERE t2.a IS NULL]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElM0Km0AUhfd9CrnrKXHU_LnKqpASkpK2q-LCOJcwrZkrMyO0BN-9qIVoSEchgsv5OX7Hc4Z7B0UCj-kNDcQ_gAODABiEwCACBktIGBSaMjSGdH2lFezFb4h9BlIVpa23EwYZaYT4DlbaHCGGb-klxzOmAvXCBwYCbSrzBlNoeUv1n92tzK0scjTA4FTa2NtxSCoGVNrHd41Nrwgxr9h49meS6h962Udfsh71QPSrLLyfJJVHqjHA4JPMLerY2wXe_qt3_H44jPAX_Nffw1apSAvUKHqekurFHxzpIxUL7j_dfM0Oe2w-vhc-dS8D7E4vq1l6CcZnE0ydzQC7k816lmzC8dmEU2czwO5ks5klm2h8NtHU2QywO9lsZ591L_yd0RSkDI6aZH49C1FcsR2chkqd4RdNWYNpl6dG12wINLY95e1ir9qj2mBXzJ3ioCfmz-LATR5Ah0515BZH7_heOsUrN3n1DnntFG_c5M075K27K3_gmbgf2TM7qT78DQAA__8LugdF
+
+# Left outer lookup join on secondary index
+query I rowsort
+SELECT t1.a FROM multiples t1 LEFT OUTER JOIN multiples@bc t2 ON t1.a = t2.b WHERE t2.a IS NULL
+----
+1
+3
+5
+7
+9

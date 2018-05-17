@@ -67,8 +67,6 @@ type joinReader struct {
 	primaryFetcher     *sqlbase.RowFetcher
 	primaryColumnTypes []sqlbase.ColumnType
 	primaryKeyPrefix   []byte
-
-	renderedRow sqlbase.EncDatumRow
 }
 
 var _ Processor = &joinReader{}
@@ -106,7 +104,7 @@ func newJoinReader(
 			processorID,
 			input.OutputTypes(),
 			jr.desc.ColumnTypes(),
-			sqlbase.InnerJoin,
+			spec.Type,
 			spec.OnExpr,
 			jr.lookupCols,
 			indexCols,
@@ -160,8 +158,6 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-
-	jr.renderedRow = make(sqlbase.EncDatumRow, 0, len(jr.out.outputCols))
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -288,6 +284,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 	primaryKeyPrefix := sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	var alloc sqlbase.DatumAlloc
+	rows := make([]sqlbase.EncDatumRow, 0, joinReaderBatchSize)
 	spans := make(roachpb.Spans, 0, joinReaderBatchSize)
 
 	txn := jr.flowCtx.txn
@@ -300,12 +297,15 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		defer log.Infof(ctx, "exiting")
 	}
 
-	spanToRows := make(map[string][]sqlbase.EncDatumRow)
+	spanToRowIndices := make(map[string][]int)
 	for {
 		// TODO(radu): figure out how to send smaller batches if the source has
 		// a soft limit (perhaps send the batch out if we don't get a result
 		// within a certain amount of time).
-		for spans = spans[:0]; len(spans) < joinReaderBatchSize; {
+		rowIdx := 0
+		rows = rows[:0]
+		spans = spans[:0]
+		for len(spans) < joinReaderBatchSize {
 			row, meta := jr.input.Next()
 			if meta != nil {
 				if meta.Err != nil {
@@ -336,10 +336,12 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 				EndKey: key.PrefixEnd(),
 			}
 			if jr.isLookupJoin() {
-				if spanToRows[key.String()] == nil {
+				rows = append(rows, row)
+				if spanToRowIndices[key.String()] == nil {
 					spans = append(spans, span)
 				}
-				spanToRows[key.String()] = append(spanToRows[key.String()], row)
+				spanToRowIndices[key.String()] = append(spanToRowIndices[key.String()], rowIdx)
+				rowIdx++
 			} else {
 				spans = append(spans, span)
 			}
@@ -348,7 +350,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// TODO(radu): we are consuming all results from a fetch before starting
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
-		if earlyExit, err := jr.indexLookup(ctx, txn, spans, spanToRows); err != nil {
+		if earlyExit, err := jr.indexLookup(ctx, txn, spans, rows, spanToRowIndices); err != nil {
 			return err
 		} else if earlyExit {
 			return nil
@@ -372,6 +374,11 @@ func (jr *joinReader) isLookupJoin() bool {
 // Index lookup iterates through all matches of the given spans and emits the
 // corresponding row.
 //
+// For lookup joins, the `rows` and `spanToRowIndices` arguments must be
+// provided. `rows` is the input rows which correspond to the specified spans.
+// `spanToRowIndices` maps span keys onto the indices of the corresponding rows
+// in the `rows` slice. For index joins, these arguments are ignored.
+//
 // Returns false if more rows need to be produced, true otherwise. If true is
 // returned, both the inputs and the output have been drained and closed, except
 // if an error is returned.
@@ -379,7 +386,8 @@ func (jr *joinReader) indexLookup(
 	ctx context.Context,
 	txn *client.Txn,
 	spans roachpb.Spans,
-	spanToRows map[string][]sqlbase.EncDatumRow,
+	rows []sqlbase.EncDatumRow,
+	spanToRowIndices map[string][]int,
 ) (bool, error) {
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	err := jr.fetcher.StartScan(
@@ -394,6 +402,17 @@ func (jr *joinReader) indexLookup(
 		log.Errorf(ctx, "scan error: %s", err)
 		return true, err
 	}
+
+	// If this is an outer join, track emitted rows so we can emit unmatched rows
+	// at the end. (Note: we track emitted rows rather than non-emitted since
+	// there are multiple reasons a row might not be emitted: the index lookup
+	// might return no corresponding rows, or all the rows it returns might fail
+	// the ON condition, which is applied in the render step.)
+	var emitted []bool
+	if jr.joinType == sqlbase.LeftOuterJoin {
+		emitted = make([]bool, len(rows))
+	}
+
 	for {
 		indexKey := jr.fetcher.IndexKeyString(len(jr.lookupCols))
 		indexRow, _, _, err := jr.fetcher.NextRow(ctx)
@@ -406,7 +425,7 @@ func (jr *joinReader) indexLookup(
 			break
 		}
 
-		rows := spanToRows[indexKey]
+		rowIndices := spanToRowIndices[indexKey]
 
 		if !jr.isLookupJoin() {
 			// Emit the row; stop if no more rows are needed.
@@ -421,26 +440,41 @@ func (jr *joinReader) indexLookup(
 					return false, err
 				}
 			}
-			for _, row := range rows {
-				jr.renderedRow = jr.renderedRow[:0]
-				if jr.renderedRow, err = jr.render(row, indexRow); err != nil {
+			for _, rowIdx := range rowIndices {
+				renderedRow, err := jr.render(rows[rowIdx], indexRow)
+				if err != nil {
 					return false, err
 				}
-				if jr.renderedRow == nil {
+				if renderedRow == nil {
 					continue
 				}
 
 				// Emit the row; stop if no more rows are needed.
 				if !emitHelper(
-					ctx, &jr.out, jr.renderedRow, nil /* meta */, jr.pushTrailingMeta, jr.input,
+					ctx, &jr.out, renderedRow, nil /* meta */, jr.pushTrailingMeta, jr.input,
+				) {
+					return true, nil
+				}
+				if emitted != nil {
+					emitted[rowIdx] = true
+				}
+			}
+		}
+	}
+
+	if emitted != nil {
+		// Emit unmatched rows.
+		for i := 0; i < len(rows); i++ {
+			if !emitted[i] {
+				renderedRow := jr.renderUnmatchedRow(rows[i], leftSide)
+				if !emitHelper(
+					ctx, &jr.out, renderedRow, nil /* meta */, jr.pushTrailingMeta, jr.input,
 				) {
 					return true, nil
 				}
 			}
 		}
-
 	}
-
 	return false, nil
 }
 

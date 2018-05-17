@@ -1941,6 +1941,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			IndexIdx:      indexIdx,
 			LookupColumns: lookupCols,
 			OnExpr:        onExpr,
+			Type:          joinType,
 		}
 	} else if leftMergeOrd.Columns == nil {
 		core.HashJoiner = &distsqlrun.HashJoinerSpec{
@@ -1994,8 +1995,8 @@ func verifyLookupJoin(
 		return false, nil, "lookup join's right side must be a scan or index join"
 	}
 
-	if joinType != sqlbase.InnerJoin {
-		return false, nil, "lookup joins are only supported for inner joins"
+	if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
+		return false, nil, "lookup joins are only supported for inner and left outer joins"
 	}
 
 	// Check if equality columns still allow for lookup join.
