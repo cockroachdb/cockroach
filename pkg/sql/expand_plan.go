@@ -153,8 +153,7 @@ func doExpandPlan(
 		// trace. distSQL does not handle kv tracing because this option is not
 		// plumbed down to the tableReader level.
 		// TODO(asubiotto): Handle kv tracing in distSQL.
-		ok, err := p.prepareForDistSQLSupportCheck(ctx)
-		if ok && err == nil {
+		if ok, _ := p.prepareForDistSQLSupportCheck(ctx, false /* returnError */); ok {
 			if useDistSQL, err := shouldUseDistSQL(
 				ctx, p.SessionData().DistSQLMode, p.ExecCfg().DistSQLPlanner, n.plan,
 			); useDistSQL && err == nil && !n.kvTracingEnabled {
