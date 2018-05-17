@@ -1383,6 +1383,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	// through here.
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = ba.UserPriority
+	dbCtx.Stopper = tc.stopper
 	tmpDB := client.NewDBWithContext(tc.AmbientContext, tc.TxnCoordSenderFactory, tc.clock, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
