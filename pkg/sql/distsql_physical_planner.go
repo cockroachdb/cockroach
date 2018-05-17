@@ -1902,10 +1902,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
 	if isLookupJoin {
-		lookupExpr := shiftExprCols(
-			planCtx.EvalContext(), lookupJoinScan.origFilter, leftPlan.planToStreamColMap, rightPlan.planToStreamColMap,
-		)
-		post.Filter = lookupExpr
 		var indexColumns = make([]uint32, len(lookupJoinScan.index.ColumnIDs))
 		for i, id := range lookupJoinScan.index.ColumnIDs {
 			indexColumns[i] = uint32(id)
@@ -1932,15 +1928,24 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			return physicalPlan{}, err
 		}
 
+		// If the right side scan has a filter, specify this as IndexFilterExpr so
+		// it will be applied before joining to the left side.
+		var indexFilterExpr distsqlrun.Expression
+		if lookupJoinScan.origFilter != nil {
+			indexFilterExpr = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx.EvalContext(), nil)
+		}
+
 		indexIdx, err := getIndexIdx(lookupJoinScan)
 		if err != nil {
 			return physicalPlan{}, err
 		}
 		core.JoinReader = &distsqlrun.JoinReaderSpec{
-			Table:         *(lookupJoinScan.desc),
-			IndexIdx:      indexIdx,
-			LookupColumns: lookupCols,
-			OnExpr:        onExpr,
+			Table:           *(lookupJoinScan.desc),
+			IndexIdx:        indexIdx,
+			LookupColumns:   lookupCols,
+			OnExpr:          onExpr,
+			Type:            joinType,
+			IndexFilterExpr: indexFilterExpr,
 		}
 	} else if leftMergeOrd.Columns == nil {
 		core.HashJoiner = &distsqlrun.HashJoinerSpec{
@@ -1994,8 +1999,8 @@ func verifyLookupJoin(
 		return false, nil, "lookup join's right side must be a scan or index join"
 	}
 
-	if joinType != sqlbase.InnerJoin {
-		return false, nil, "lookup joins are only supported for inner joins"
+	if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
+		return false, nil, "lookup joins are only supported for inner and left outer joins"
 	}
 
 	// Check if equality columns still allow for lookup join.
