@@ -464,10 +464,15 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 // fast and loose with granting range leases.
 func TestReplicaReadConsistency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -547,6 +552,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	tc := testContext{manualClock: manual}
 	tsc := TestStoreConfig(clock)
 	var leaseAcquisitionTrap atomic.Value
+	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tsc.TestingKnobs.LeaseRequestEvent = func(ts hlc.Timestamp) {
 		val := leaseAcquisitionTrap.Load()
 		if val == nil {
@@ -681,10 +687,15 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 // returned. This prevents regression of #1483.
 func TestApplyCmdLeaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -1009,10 +1020,15 @@ func TestReplicaLeaseCounters(t *testing.T) {
 // upon acquisition of the range lease.
 func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
@@ -1090,10 +1106,15 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 // some point; now we're just testing the cache on the first replica.
 func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	// Disable raft log truncation which confuses this test.
 	tc.store.SetRaftLogQueueActive(false)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
@@ -1170,10 +1191,14 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 // using a real second store.
 func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	now := tc.Clock().Now()

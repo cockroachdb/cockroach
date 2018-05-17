@@ -711,6 +711,9 @@ type StoreTestingKnobs struct {
 	// allowing the replica to use the lease that it had in a previous life (in
 	// case the tests persisted the engine used in said previous life).
 	DontPreventUseOfOldLeaseOnStart bool
+	// DisableAutomaticLeaseRenewal enables turning off the background worker
+	// that attempts to automatically renew expiration-based leases.
+	DisableAutomaticLeaseRenewal bool
 	// LeaseRequestEvent, if set, is called when replica.requestLeaseLocked() is
 	// called to acquire a new lease. This can be used to assert that a request
 	// triggers a lease acquisition.
@@ -1381,7 +1384,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		log.Event(ctx, "computed initial metrics")
 	}
 
-	s.startLeaseRenewer(ctx)
+	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
+		s.startLeaseRenewer(ctx)
+	}
 
 	// Start the storage engine compactor.
 	if envutil.EnvOrDefaultBool("COCKROACH_ENABLE_COMPACTOR", true) {
