@@ -32,6 +32,7 @@ import (
 func TestFactoryProjectColsFromBoth(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	f := NewFactory(&evalCtx)
+	pb := projectionsBuilder{f: f}
 
 	cat := createFiltersCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
@@ -48,24 +49,26 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	scan2 := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a2, Cols: a2Cols}))
 
 	// Construct Projections with two passthrough columns.
-	def := memo.ProjectionsOpDef{PassthroughCols: f.outputCols(scan)}
-	passthroughProj := f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def))
+	pb.addPassthroughCols(f.outputCols(scan))
+	passthroughProj := pb.buildProjections()
 
 	// Construct Projections with one passthrough and two synthesized columns.
-	plusACol := f.Metadata().AddColumn("plusA", types.Int)
-	plusBCol := f.Metadata().AddColumn("plusB", types.Int)
-	def2 := memo.ProjectionsOpDef{
-		SynthesizedCols: opt.ColList{plusACol, plusBCol},
-		PassthroughCols: util.MakeFastIntSet(int(ax)),
-	}
 	plus := f.ConstructPlus(
 		f.ConstructVariable(f.InternColumnID(ay)),
 		f.ConstructConst(f.InternDatum(tree.NewDInt(1))),
 	)
-	synthProj := f.ConstructProjections(
-		f.InternList([]memo.GroupID{plus, plus}),
-		f.InternProjectionsOpDef(&def2),
-	)
+	plusACol := f.Metadata().AddColumn("plusA", types.Int)
+	plusBCol := f.Metadata().AddColumn("plusB", types.Int)
+	pb.addPassthroughCol(ax)
+	pb.addSynthesized(plus, plusACol)
+	pb.addSynthesized(plus, plusBCol)
+	synthProj := pb.buildProjections()
+
+	// Construct Projections with two partially overlapping synthesized columns.
+	plusCCol := f.Metadata().AddColumn("plusC", types.Int)
+	pb.addSynthesized(plus, plusBCol)
+	pb.addSynthesized(plus, plusCCol)
+	synth2Proj := pb.buildProjections()
 
 	testCases := []struct {
 		left     memo.GroupID
@@ -89,6 +92,8 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 		{left: scan, right: synthProj, expected: "(1,2,5,6)"},
 		{left: synthProj, right: scan2, expected: "(1,3-6)"},
 		{left: scan2, right: synthProj, expected: "(1,3-6)"},
+
+		{left: synthProj, right: synth2Proj, expected: "(1,5-7)"},
 	}
 
 	for _, tc := range testCases {
@@ -97,6 +102,13 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 		actual := f.outputCols(combined).String()
 		if actual != tc.expected {
 			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
+		}
+
+		def := f.extractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
+		expectedCount := def.PassthroughCols.Len() + len(def.SynthesizedCols)
+		actualCount := f.outputCols(combined).Len()
+		if actualCount != expectedCount {
+			t.Errorf("expected column count: %d, actual column count: %d", expectedCount, actualCount)
 		}
 	}
 }

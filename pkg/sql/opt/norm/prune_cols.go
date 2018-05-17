@@ -107,7 +107,7 @@ func (f *Factory) pruneCols(target memo.GroupID, neededCols opt.ColSet) memo.Gro
 		return f.ConstructAggregations(f.InternList(groups), f.InternColList(cols))
 
 	case opt.ProjectionsOp:
-		def := f.mem.LookupPrivate(targetExpr.AsProjections().Def()).(*memo.ProjectionsOpDef)
+		def := f.extractProjectionsOpDef(targetExpr.AsProjections().Def())
 		groups, cols := filterColList(
 			f.mem.LookupList(targetExpr.AsProjections().Elems()),
 			def.SynthesizedCols,
@@ -149,7 +149,7 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 	newCols := make(opt.ColList, 0, neededCols.Len())
 
 	existingRows := f.mem.LookupList(valuesExpr.Rows())
-	newRows := make([]memo.GroupID, 0, len(existingRows))
+	newRows := listBuilder{f: f}
 
 	// Create new list of columns that only contains needed columns.
 	for _, colID := range existingCols {
@@ -159,9 +159,8 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 		newCols = append(newCols, colID)
 	}
 
-	// newElems is used to store tuple values, and can be allocated once and
-	// reused repeatedly, since InternList will copy values to memo storage.
-	newElems := make([]memo.GroupID, len(newCols))
+	// newElems is used to store tuple values.
+	newElems := listBuilder{f: f}
 
 	for _, row := range existingRows {
 		existingElems := f.mem.LookupList(f.mem.NormExpr(row).AsTuple().Elems())
@@ -172,14 +171,14 @@ func (f *Factory) pruneValuesCols(values memo.GroupID, neededCols opt.ColSet) me
 				continue
 			}
 
-			newElems[n] = elem
+			newElems.addItem(elem)
 			n++
 		}
 
-		newRows = append(newRows, f.ConstructTuple(f.InternList(newElems)))
+		newRows.addItem(f.ConstructTuple(newElems.buildList()))
 	}
 
-	return f.ConstructValues(f.InternList(newRows), f.InternColList(newCols))
+	return f.ConstructValues(newRows.buildList(), f.InternColList(newCols))
 }
 
 // filterColList removes columns not in colWhitelist from a list of groups and

@@ -1788,36 +1788,37 @@ SELECT (VALUES ((SELECT i+1)), (10), ((SELECT k+1))) FROM a
 ----
 project
  ├── columns: column9:9(int)
- ├── outer: (6)
  ├── inner-join-apply
- │    ├── columns: k:1(int!null) column1:8(int)
- │    ├── outer: (6)
+ │    ├── columns: k:1(int!null) i:2(int) column1:8(int)
  │    ├── keys: (1)
  │    ├── scan a
- │    │    ├── columns: k:1(int!null)
+ │    │    ├── columns: k:1(int!null) i:2(int)
  │    │    └── keys: (1)
  │    ├── max1-row
  │    │    ├── columns: column1:8(int)
- │    │    ├── outer: (1,6)
+ │    │    ├── outer: (1,2)
  │    │    ├── cardinality: [1 - 1]
  │    │    └── project
  │    │         ├── columns: column1:8(int)
- │    │         ├── outer: (1,6)
+ │    │         ├── outer: (1,2)
  │    │         ├── cardinality: [3 - 3]
  │    │         └── inner-join-apply
  │    │              ├── columns: column6:6(int) column7:7(int) column1:8(int)
- │    │              ├── outer: (1,6)
+ │    │              ├── outer: (1,2)
  │    │              ├── cardinality: [3 - 3]
  │    │              ├── project
  │    │              │    ├── columns: column7:7(int) column6:6(int)
- │    │              │    ├── outer: (1,6)
+ │    │              │    ├── outer: (1,2)
  │    │              │    ├── cardinality: [1 - 1]
  │    │              │    ├── values
  │    │              │    │    ├── cardinality: [1 - 1]
  │    │              │    │    └── tuple [type=tuple{}]
- │    │              │    └── projections [outer=(1,6)]
- │    │              │         └── plus [type=int, outer=(1)]
- │    │              │              ├── variable: a.k [type=int, outer=(1)]
+ │    │              │    └── projections [outer=(1,2)]
+ │    │              │         ├── plus [type=int, outer=(1)]
+ │    │              │         │    ├── variable: a.k [type=int, outer=(1)]
+ │    │              │         │    └── const: 1 [type=int]
+ │    │              │         └── plus [type=int, outer=(2)]
+ │    │              │              ├── variable: a.i [type=int, outer=(2)]
  │    │              │              └── const: 1 [type=int]
  │    │              ├── values
  │    │              │    ├── columns: column1:8(int)

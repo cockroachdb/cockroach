@@ -65,7 +65,15 @@ type Factory struct {
 	mem     *memo.Memo
 	evalCtx *tree.EvalContext
 	props   rulePropsBuilder
-	items   []memo.GroupID
+
+	// scratchItems is a slice that is reused by listBuilder to store temporary
+	// results that are accumulated before passing them to InternList.
+	scratchItems []memo.GroupID
+
+	// scratchColList is a ColList that is reused by projectionsBuilder to store
+	// temporary results that are accumulated before constructing a new
+	// Projections operator.
+	scratchColList opt.ColList
 
 	// ruleCycles is used to detect cyclical rule invocations. Each rule with
 	// the "DetectCycles" tag adds its expression fingerprint into this map
@@ -184,6 +192,10 @@ func (f *Factory) extractOrdering(private memo.PrivateID) props.Ordering {
 	return f.mem.LookupPrivate(private).(props.Ordering)
 }
 
+func (f *Factory) extractProjectionsOpDef(private memo.PrivateID) *memo.ProjectionsOpDef {
+	return f.mem.LookupPrivate(private).(*memo.ProjectionsOpDef)
+}
+
 // ----------------------------------------------------------------------
 //
 // List functions
@@ -210,20 +222,18 @@ func (f *Factory) listOnlyHasNulls(list memo.ListID) bool {
 // removeListItem returns a new list that is a copy of the given list, except
 // that it does not contain the given search item. If the list contains the item
 // multiple times, then only the first instance is removed. If the list does not
-// contain the item, then removeListItem will panic.
+// contain the item, then the method is a no-op.
 func (f *Factory) removeListItem(list memo.ListID, search memo.GroupID) memo.ListID {
 	existingList := f.mem.LookupList(list)
-	newList := make([]memo.GroupID, len(existingList)-1)
+	b := listBuilder{f: f}
 	for i, item := range existingList {
 		if item == search {
-			newList = append(newList[:i], existingList[i+1:]...)
+			b.addItems(existingList[i+1:])
 			break
 		}
-
-		// If the list does not contain the item, this will panic.
-		newList[i] = item
+		b.addItem(item)
 	}
-	return f.mem.InternList(newList)
+	return b.buildList()
 }
 
 // replaceListItem returns a new list that is a copy of the given list, except
@@ -233,24 +243,25 @@ func (f *Factory) removeListItem(list memo.ListID, search memo.GroupID) memo.Lis
 // is a no-op.
 func (f *Factory) replaceListItem(list memo.ListID, search, replace memo.GroupID) memo.ListID {
 	existingList := f.mem.LookupList(list)
-	newList := make([]memo.GroupID, len(existingList))
+	b := listBuilder{f: f}
 	for i, item := range existingList {
 		if item == search {
 			// Replace item and copy remainder of list.
-			newList[i] = replace
-			copy(newList[i+1:], existingList[i+1:])
+			b.addItem(replace)
+			b.addItems(existingList[i+1:])
 			break
 		}
-		newList[i] = item
+		b.addItem(item)
 	}
-	return f.mem.InternList(newList)
+	return b.buildList()
 }
 
 // internSingletonList interns a list containing the single given item and
 // returns its id.
 func (f *Factory) internSingletonList(item memo.GroupID) memo.ListID {
-	f.items = append(f.items[:0], item)
-	return f.InternList(f.items)
+	b := listBuilder{f: f}
+	b.addItem(item)
+	return b.buildList()
 }
 
 // isSortedUniqueList returns true if the list is in sorted order, with no
@@ -271,9 +282,9 @@ func (f *Factory) isSortedUniqueList(list memo.ListID) bool {
 // comparison rule details.
 func (f *Factory) constructSortedUniqueList(list memo.ListID) memo.ListID {
 	// Make a copy of the list, since it needs to stay immutable.
-	newList := make([]memo.GroupID, list.Length)
-	copy(newList, f.mem.LookupList(list))
-	ls := listSorter{f: f, list: newList}
+	lb := listBuilder{f: f}
+	lb.addItems(f.mem.LookupList(list))
+	ls := listSorter{f: f, list: lb.items}
 
 	// Sort the list.
 	sort.Slice(ls.list, ls.less)
@@ -282,11 +293,12 @@ func (f *Factory) constructSortedUniqueList(list memo.ListID) memo.ListID {
 	n := 0
 	for i := 0; i < int(list.Length); i++ {
 		if i == 0 || ls.compare(i-1, i) < 0 {
-			newList[n] = newList[i]
+			lb.items[n] = lb.items[i]
 			n++
 		}
 	}
-	return f.mem.InternList(newList[:n])
+	lb.setLength(n)
+	return lb.buildList()
 }
 
 // listSorter is a helper struct that implements the sort.Slice "less"
@@ -408,7 +420,7 @@ func (f *Factory) outputCols(group memo.GroupID) opt.ColSet {
 		return opt.ColListToSet(f.extractColList(expr.AsAggregations().Cols()))
 
 	case opt.ProjectionsOp:
-		return f.mem.LookupPrivate(expr.AsProjections().Def()).(*memo.ProjectionsOpDef).AllCols()
+		return f.extractProjectionsOpDef(expr.AsProjections().Def()).AllCols()
 
 	default:
 		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.Operator()))
@@ -533,94 +545,34 @@ func (f *Factory) ensureKey(in memo.GroupID) (out memo.GroupID, key opt.ColSet) 
 //
 // ----------------------------------------------------------------------
 
-// projectColsFrom returns a Projections operator that projects the output
-// columns from the given group as passthrough columns. If the group is already
-// a Projections operator, then projectColsFrom is a no-op.
-func (f *Factory) projectColsFrom(group memo.GroupID) memo.GroupID {
-	// If group is already a ProjectionsOp, then no more to do.
-	if f.mem.NormExpr(group).Operator() == opt.ProjectionsOp {
-		return group
-	}
-
-	def := memo.ProjectionsOpDef{PassthroughCols: f.lookupLogical(group).Relational.OutputCols}
-	return f.ConstructProjections(memo.EmptyList, f.InternProjectionsOpDef(&def))
-}
-
 // projectColsFromBoth returns a Projections operator that combines distinct
 // columns from both the provided left and right groups. If the group is a
 // Projections operator, then the projected expressions will be directly added
 // to the new Projections operator. Otherwise, the group's output columns will
 // be added as passthrough columns to the new Projections operator.
 func (f *Factory) projectColsFromBoth(left, right memo.GroupID) memo.GroupID {
-	leftCols := f.outputCols(left)
-	rightCols := f.outputCols(right)
-	if leftCols.SubsetOf(rightCols) {
-		return f.projectColsFrom(right)
-	}
-	if rightCols.SubsetOf(leftCols) {
-		return f.projectColsFrom(left)
-	}
-
-	synthLen := 0
+	pb := projectionsBuilder{f: f}
 	if f.operator(left) == opt.ProjectionsOp {
-		synthLen += leftCols.Len()
+		pb.addProjections(left)
+	} else {
+		pb.addPassthroughCols(f.outputCols(left))
 	}
 	if f.operator(right) == opt.ProjectionsOp {
-		synthLen += rightCols.Len()
+		pb.addProjections(right)
+	} else {
+		pb.addPassthroughCols(f.outputCols(right))
 	}
-
-	remaining := leftCols.Union(rightCols)
-	elems := make([]memo.GroupID, 0, synthLen)
-	def := memo.ProjectionsOpDef{SynthesizedCols: make(opt.ColList, 0, synthLen)}
-
-	// Define function that can append either existing Projections columns or
-	// synthesize new columns from other operators' output columns.
-	appendCols := func(group memo.GroupID, groupCols opt.ColSet) {
-		projectionsExpr := f.mem.NormExpr(group).AsProjections()
-		if projectionsExpr != nil {
-			// Projections case.
-			projectionsElems := f.mem.LookupList(projectionsExpr.Elems())
-			projectionsDef := f.mem.LookupPrivate(projectionsExpr.Def()).(*memo.ProjectionsOpDef)
-
-			// Add synthesized columns.
-			for i := 0; i < len(projectionsDef.SynthesizedCols); i++ {
-				colID := projectionsDef.SynthesizedCols[i]
-				if remaining.Contains(int(colID)) {
-					elems = append(elems, projectionsElems[i])
-					def.SynthesizedCols = append(def.SynthesizedCols, colID)
-				}
-			}
-
-			// Add pass-through columns.
-			def.PassthroughCols.UnionWith(projectionsDef.PassthroughCols)
-		} else {
-			// Non-projections case.
-			def.PassthroughCols.UnionWith(groupCols)
-		}
-
-		// Remove all appended columns from the remaining column set.
-		remaining.DifferenceWith(groupCols)
-	}
-
-	appendCols(left, leftCols)
-	appendCols(right, rightCols)
-	return f.ConstructProjections(f.mem.InternList(elems), f.mem.InternProjectionsOpDef(&def))
+	return pb.buildProjections()
 }
 
 // projectExtraCol constructs a new Project operator that passes through all
 // columns in the given "in" expression, and then adds the given "extra"
 // expression as an additional column.
 func (f *Factory) projectExtraCol(in, extra memo.GroupID, extraID opt.ColumnID) memo.GroupID {
-	return f.ConstructProject(
-		in,
-		f.ConstructProjections(
-			f.InternList([]memo.GroupID{extra}),
-			f.InternProjectionsOpDef(&memo.ProjectionsOpDef{
-				PassthroughCols: f.outputCols(in),
-				SynthesizedCols: opt.ColList{extraID},
-			}),
-		),
-	)
+	pb := projectionsBuilder{f: f}
+	pb.addPassthroughCols(f.outputCols(in))
+	pb.addSynthesized(extra, extraID)
+	return f.ConstructProject(in, pb.buildProjections())
 }
 
 // ----------------------------------------------------------------------
@@ -677,13 +629,13 @@ func (f *Factory) isBoundBy(src, dst memo.GroupID) bool {
 // columns of (Scan a) would extract the (Gt) expression, since its outer
 // references only reference columns from a.
 func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
-	extracted := make([]memo.GroupID, 0, list.Length)
+	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(list) {
 		if f.isBoundBy(item, group) {
-			extracted = append(extracted, item)
+			lb.addItem(item)
 		}
 	}
-	return f.mem.InternList(extracted)
+	return lb.buildList()
 }
 
 // extractUnboundConditions is the inverse of extractBoundConditions. Instead of
@@ -691,13 +643,13 @@ func (f *Factory) extractBoundConditions(list memo.ListID, group memo.GroupID) m
 // list expressions that have at least one outer reference that is *not* bound
 // by the given expression (i.e. it has a "free" variable).
 func (f *Factory) extractUnboundConditions(list memo.ListID, group memo.GroupID) memo.ListID {
-	extracted := make([]memo.GroupID, 0, list.Length)
+	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(list) {
 		if !f.isBoundBy(item, group) {
-			extracted = append(extracted, item)
+			lb.addItem(item)
 		}
 	}
-	return f.mem.InternList(extracted)
+	return lb.buildList()
 }
 
 // concatFilters creates a new Filters operator that contains conditions from
@@ -728,18 +680,18 @@ func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
 	}
 
 	// Create the conditions slice and populate it.
-	conditions := make([]memo.GroupID, 0, cnt)
+	lb := listBuilder{f: f}
 	if leftFiltersExpr != nil {
-		conditions = append(conditions, f.mem.LookupList(leftFiltersExpr.Conditions())...)
+		lb.addItems(f.mem.LookupList(leftFiltersExpr.Conditions()))
 	} else {
-		conditions = append(conditions, left)
+		lb.addItem(left)
 	}
 	if rightFiltersExpr != nil {
-		conditions = append(conditions, f.mem.LookupList(rightFiltersExpr.Conditions())...)
+		lb.addItems(f.mem.LookupList(rightFiltersExpr.Conditions()))
 	} else {
-		conditions = append(conditions, right)
+		lb.addItem(right)
 	}
-	return f.ConstructFilters(f.InternList(conditions))
+	return f.ConstructFilters(lb.buildList())
 }
 
 // ----------------------------------------------------------------------
@@ -844,14 +796,14 @@ func (f *Factory) limitGeMaxRows(limit memo.PrivateID, input memo.GroupID) bool 
 // matched any And operator children. If, after simplification, no operands
 // remain, then simplifyAnd returns True.
 func (f *Factory) simplifyAnd(conditions memo.ListID) memo.GroupID {
-	list := make([]memo.GroupID, 0, conditions.Length+1)
+	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(conditions) {
 		itemExpr := f.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			list = append(list, f.mem.LookupList(itemExpr.AsAnd().Conditions())...)
+			lb.addItems(f.mem.LookupList(itemExpr.AsAnd().Conditions()))
 
 		case opt.TrueOp:
 			// And operator skips True operands.
@@ -861,14 +813,14 @@ func (f *Factory) simplifyAnd(conditions memo.ListID) memo.GroupID {
 			return item
 
 		default:
-			list = append(list, item)
+			lb.addItem(item)
 		}
 	}
 
-	if len(list) == 0 {
+	if len(lb.items) == 0 {
 		return f.ConstructTrue()
 	}
-	return f.ConstructAnd(f.mem.InternList(list))
+	return f.ConstructAnd(lb.buildList())
 }
 
 // simplifyOr removes False operands from an Or operator, and eliminates the Or
@@ -878,14 +830,14 @@ func (f *Factory) simplifyAnd(conditions memo.ListID) memo.GroupID {
 // matched any Or operator children. If, after simplification, no operands
 // remain, then simplifyOr returns False.
 func (f *Factory) simplifyOr(conditions memo.ListID) memo.GroupID {
-	list := make([]memo.GroupID, 0, conditions.Length+1)
+	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(conditions) {
 		itemExpr := f.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.OrOp:
 			// Flatten nested Or operands.
-			list = append(list, f.mem.LookupList(itemExpr.AsOr().Conditions())...)
+			lb.addItems(f.mem.LookupList(itemExpr.AsOr().Conditions()))
 
 		case opt.FalseOp:
 			// Or operator skips False operands.
@@ -895,14 +847,14 @@ func (f *Factory) simplifyOr(conditions memo.ListID) memo.GroupID {
 			return item
 
 		default:
-			list = append(list, item)
+			lb.addItem(item)
 		}
 	}
 
-	if len(list) == 0 {
+	if len(lb.items) == 0 {
 		return f.ConstructFalse()
 	}
-	return f.ConstructOr(f.mem.InternList(list))
+	return f.ConstructOr(lb.buildList())
 }
 
 // simplifyFilters behaves the same way as simplifyAnd, with one addition: if
@@ -911,14 +863,14 @@ func (f *Factory) simplifyOr(conditions memo.ListID) memo.GroupID {
 // as a Select or Join filter condition, both of which treat a Null filter
 // conjunct exactly as if it were False.
 func (f *Factory) simplifyFilters(conditions memo.ListID) memo.GroupID {
-	list := make([]memo.GroupID, 0, conditions.Length+1)
+	lb := listBuilder{f: f}
 	for _, item := range f.mem.LookupList(conditions) {
 		itemExpr := f.mem.NormExpr(item)
 
 		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			list = append(list, f.mem.LookupList(itemExpr.AsAnd().Conditions())...)
+			lb.addItems(f.mem.LookupList(itemExpr.AsAnd().Conditions()))
 
 		case opt.TrueOp:
 			// Filters operator skips True operands.
@@ -932,23 +884,23 @@ func (f *Factory) simplifyFilters(conditions memo.ListID) memo.GroupID {
 			return f.ConstructFalse()
 
 		default:
-			list = append(list, item)
+			lb.addItem(item)
 		}
 	}
 
-	if len(list) == 0 {
+	if len(lb.items) == 0 {
 		return f.ConstructTrue()
 	}
-	return f.ConstructFilters(f.mem.InternList(list))
+	return f.ConstructFilters(lb.buildList())
 }
 
 func (f *Factory) negateConditions(conditions memo.ListID) memo.ListID {
+	lb := listBuilder{f: f}
 	list := f.mem.LookupList(conditions)
-	negCond := make([]memo.GroupID, len(list))
 	for i := range list {
-		negCond[i] = f.ConstructNot(list[i])
+		lb.addItem(f.ConstructNot(list[i]))
 	}
-	return f.mem.InternList(negCond)
+	return lb.buildList()
 }
 
 // negateComparison negates a comparison op like:
@@ -997,13 +949,13 @@ func (f *Factory) normalizeTupleEquality(left, right memo.ListID) memo.GroupID {
 		panic("tuple length mismatch")
 	}
 
+	lb := listBuilder{f: f}
 	leftList := f.mem.LookupList(left)
 	rightList := f.mem.LookupList(right)
-	conditions := make([]memo.GroupID, left.Length)
-	for i := range conditions {
-		conditions[i] = f.ConstructEq(leftList[i], rightList[i])
+	for i := 0; i < len(leftList); i++ {
+		lb.addItem(f.ConstructEq(leftList[i], rightList[i]))
 	}
-	return f.ConstructAnd(f.InternList(conditions))
+	return f.ConstructAnd(lb.buildList())
 }
 
 // ----------------------------------------------------------------------
