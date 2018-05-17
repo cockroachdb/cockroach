@@ -16,10 +16,10 @@ package tree
 
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
-	Targets  TargetList
-	SinkType string
-	AsOf     AsOfClause
-	Options  KVOptions
+	Targets TargetList
+	SinkURI Expr
+	AsOf    AsOfClause
+	Options KVOptions
 }
 
 var _ Statement = &CreateChangefeed{}
@@ -29,7 +29,7 @@ func (node *CreateChangefeed) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE EXPERIMENTAL_CHANGEFEED EMIT ")
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" TO ")
-	ctx.WriteString(node.SinkType)
+	ctx.FormatNode(node.SinkURI)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
