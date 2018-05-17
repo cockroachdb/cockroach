@@ -265,7 +265,7 @@ opt
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "5 = ANY (SELECT y FROM xy WHERE x = k)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -322,16 +322,16 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) column8:8(int!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) "y + 1":8(int!null)
       ├── keys: (1)
       ├── left-join
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) column8:8(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) "y + 1":8(int)
       │    ├── keys: (1)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    └── keys: (1)
       │    ├── project
-      │    │    ├── columns: column8:8(int) x:6(int!null)
+      │    │    ├── columns: "y + 1":8(int) x:6(int!null)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── keys: (6)
       │    │    ├── scan xy
@@ -348,7 +348,7 @@ project
       │              └── variable: a.k [type=int, outer=(1)]
       └── filters [type=bool, outer=(8), constraints=(/8: [/11 - ]; tight)]
            └── gt [type=bool, outer=(8), constraints=(/8: [/11 - ]; tight)]
-                ├── variable: column8 [type=int, outer=(8)]
+                ├── variable: y + 1 [type=int, outer=(8)]
                 └── const: 10 [type=int]
 
 # Any clause with constant.
@@ -356,7 +356,7 @@ opt
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "5 = ANY (SELECT y FROM xy WHERE x = k)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -410,7 +410,7 @@ opt
 SELECT i=ANY(SELECT y FROM xy WHERE x=k) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "i = ANY (SELECT y FROM xy WHERE x = k)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -466,7 +466,7 @@ opt
 SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "((i * i) / 5) = ANY (SELECT y FROM xy WHERE x = k)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -640,11 +640,11 @@ semi-join-apply
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  ├── select
- │    ├── columns: x:6(int!null) y:7(int) column10:10(decimal) cnt:11(int!null)
+ │    ├── columns: x:6(int!null) y:7(int) sum:10(decimal) cnt:11(int!null)
  │    ├── outer: (2)
  │    ├── keys: (6)
  │    ├── group-by
- │    │    ├── columns: x:6(int!null) y:7(int) column10:10(decimal) cnt:11(int)
+ │    │    ├── columns: x:6(int!null) y:7(int) sum:10(decimal) cnt:11(int)
  │    │    ├── grouping columns: x:6(int!null)
  │    │    ├── outer: (2)
  │    │    ├── keys: (6)
@@ -678,21 +678,21 @@ opt
 SELECT * FROM (SELECT i, 'foo' FROM a) WHERE 5=(SELECT MAX(y) FROM xy WHERE x=i)
 ----
 project
- ├── columns: i:2(int) column6:6(string)
+ ├── columns: i:2(int) "'foo'":6(string)
  └── select
-      ├── columns: i:2(int) column6:6(string) column9:9(int!null) rownum:10(int!null)
+      ├── columns: i:2(int) "'foo'":6(string) max:9(int!null) rownum:10(int!null)
       ├── keys: (10)
       ├── group-by
-      │    ├── columns: i:2(int) column6:6(string) column9:9(int) rownum:10(int!null)
+      │    ├── columns: i:2(int) "'foo'":6(string) max:9(int) rownum:10(int!null)
       │    ├── grouping columns: rownum:10(int!null)
       │    ├── keys: (10)
       │    ├── left-join
-      │    │    ├── columns: i:2(int) column6:6(string!null) x:7(int) y:8(int) rownum:10(int!null)
+      │    │    ├── columns: i:2(int) "'foo'":6(string!null) x:7(int) y:8(int) rownum:10(int!null)
       │    │    ├── row-number
-      │    │    │    ├── columns: i:2(int) column6:6(string!null) rownum:10(int!null)
+      │    │    │    ├── columns: i:2(int) "'foo'":6(string!null) rownum:10(int!null)
       │    │    │    ├── keys: (10)
       │    │    │    └── project
-      │    │    │         ├── columns: column6:6(string!null) i:2(int)
+      │    │    │         ├── columns: "'foo'":6(string!null) i:2(int)
       │    │    │         ├── scan a
       │    │    │         │    └── columns: i:2(int)
       │    │    │         └── projections [outer=(2)]
@@ -710,10 +710,10 @@ project
       │         ├── any-not-null [type=int, outer=(2)]
       │         │    └── variable: a.i [type=int, outer=(2)]
       │         └── any-not-null [type=string, outer=(6)]
-      │              └── variable: column6 [type=string, outer=(6)]
+      │              └── variable: 'foo' [type=string, outer=(6)]
       └── filters [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
            └── eq [type=bool, outer=(9), constraints=(/9: [/5 - /5]; tight)]
-                ├── variable: column9 [type=int, outer=(9)]
+                ├── variable: max [type=int, outer=(9)]
                 └── const: 5 [type=int]
 
 # Don't decorrelate when agg function that doesn't ignore nulls is used.
@@ -724,17 +724,17 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── inner-join-apply
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column9:9(string!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) concat_agg:9(string!null)
       ├── keys: (1)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    └── keys: (1)
       ├── select
-      │    ├── columns: column9:9(string!null)
+      │    ├── columns: concat_agg:9(string!null)
       │    ├── outer: (1)
       │    ├── cardinality: [0 - 1]
       │    ├── group-by
-      │    │    ├── columns: column9:9(string)
+      │    │    ├── columns: concat_agg:9(string)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── project
@@ -759,7 +759,7 @@ project
       │    │              └── variable: column8 [type=string, outer=(8)]
       │    └── filters [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
       │         └── eq [type=bool, outer=(9), constraints=(/9: [/'foo' - /'foo']; tight)]
-      │              ├── variable: column9 [type=string, outer=(9)]
+      │              ├── variable: concat_agg [type=string, outer=(9)]
       │              └── const: 'foo' [type=string]
       └── true [type=bool]
 
@@ -1105,16 +1105,16 @@ project
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) column8:8(int!null) xy.y:10(int!null)
+      ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int!null)
       ├── keys: (1)
       ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int!null) xy.y:10(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null) xy.y:10(int)
       │    ├── keys: (1)
       │    ├── select
-      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int!null)
+      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int!null)
       │    │    ├── keys: (1)
       │    │    ├── group-by
-      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
+      │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
       │    │    │    ├── grouping columns: k:1(int!null)
       │    │    │    ├── keys: (1)
       │    │    │    ├── left-join
@@ -1141,7 +1141,7 @@ project
       │    │    │              └── variable: a.j [type=jsonb, outer=(5)]
       │    │    └── filters [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
       │    │         └── gt [type=bool, outer=(8), constraints=(/8: [/1 - ]; tight)]
-      │    │              ├── variable: column8 [type=int, outer=(8)]
+      │    │              ├── variable: count [type=int, outer=(8)]
       │    │              └── const: 0 [type=int]
       │    ├── limit
       │    │    ├── columns: xy.y:10(int!null)
@@ -1172,10 +1172,10 @@ project
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── keys: (1)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
       ├── keys: (1)
       ├── group-by
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) column8:8(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) count:8(int)
       │    ├── grouping columns: k:1(int!null)
       │    ├── keys: (1)
       │    ├── left-join
@@ -1208,7 +1208,7 @@ project
                 │    │    ├── const: 0 [type=int]
                 │    │    └── function: length [type=int, outer=(8)]
                 │    │         └── cast: string [type=string, outer=(8)]
-                │    │              └── variable: column8 [type=int, outer=(8)]
+                │    │              └── variable: count [type=int, outer=(8)]
                 │    └── tuple [type=tuple{int, int}]
                 │         ├── const: 0 [type=int]
                 │         └── const: 1 [type=int]
@@ -1336,7 +1336,7 @@ opt
 SELECT i*i/100 < ALL(SELECT y FROM xy), s FROM a
 ----
 project
- ├── columns: column8:8(bool) s:4(string)
+ ├── columns: "((i * i) / 100) < ALL (SELECT y FROM xy)":8(bool) s:4(string)
  ├── group-by
  │    ├── columns: k:1(int!null) s:4(string) scalar:9(decimal) bool_or:11(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -1401,7 +1401,7 @@ opt
 SELECT (SELECT x FROM xy WHERE x=k) FROM a
 ----
 project
- ├── columns: column8:8(int)
+ ├── columns: "(SELECT x FROM xy WHERE x = k)":8(int)
  ├── left-join-apply
  │    ├── columns: k:1(int!null) x:6(int)
  │    ├── keys: (1)
@@ -1440,9 +1440,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:6(int!null) column9:9(int) column12:12(int) column15:15(bool) column18:18(bool) column22:22(int)
+ ├── columns: "5":6(int!null) "(SELECT x FROM xy WHERE x = k)":9(int) "(SELECT y FROM xy LIMIT 1)":12(int) "5 IN (SELECT y FROM xy)":15(bool) "EXISTS (SELECT * FROM xy)":18(bool) "(SELECT count(*) FROM xy WHERE y = k)":22(int)
  ├── group-by
- │    ├── columns: k:1(int!null) xy.x:7(int) column21:21(int)
+ │    ├── columns: k:1(int!null) xy.x:7(int) count:21(int)
  │    ├── grouping columns: k:1(int!null)
  │    ├── keys: (1)
  │    ├── left-join
@@ -1496,14 +1496,14 @@ project
       │    └── scan xy
       │         ├── columns: xy.x:16(int!null) xy.y:17(int)
       │         └── keys: (16)
-      └── variable: column21 [type=int, outer=(21)]
+      └── variable: count [type=int, outer=(21)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
 opt
 SELECT MAX((SELECT y FROM xy WHERE y=i)) FROM a
 ----
 group-by
- ├── columns: column9:9(int)
+ ├── columns: max:9(int)
  ├── cardinality: [1 - 1]
  ├── project
  │    ├── columns: column8:8(int)
@@ -1536,7 +1536,7 @@ opt
 SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "EXISTS (SELECT * FROM xy WHERE y = i)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) exists_agg:10(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -1567,7 +1567,7 @@ opt
 SELECT 5 < ANY(SELECT y FROM xy WHERE y=i) FROM a
 ----
 project
- ├── columns: column8:8(bool)
+ ├── columns: "5 < ANY (SELECT y FROM xy WHERE y = i)":8(bool)
  ├── group-by
  │    ├── columns: k:1(int!null) bool_or:10(bool)
  │    ├── grouping columns: k:1(int!null)
@@ -1787,7 +1787,7 @@ opt
 SELECT (VALUES ((SELECT i+1)), (10), ((SELECT k+1))) FROM a
 ----
 project
- ├── columns: column9:9(int)
+ ├── columns: "(VALUES ((SELECT i + 1)), (10), ((SELECT k + 1)))":9(int)
  ├── inner-join-apply
  │    ├── columns: k:1(int!null) i:2(int) column1:8(int)
  │    ├── keys: (1)
@@ -1803,11 +1803,11 @@ project
  │    │         ├── outer: (1,2)
  │    │         ├── cardinality: [3 - 3]
  │    │         └── inner-join-apply
- │    │              ├── columns: column6:6(int) column7:7(int) column1:8(int)
+ │    │              ├── columns: "i + 1":6(int) "k + 1":7(int) column1:8(int)
  │    │              ├── outer: (1,2)
  │    │              ├── cardinality: [3 - 3]
  │    │              ├── project
- │    │              │    ├── columns: column7:7(int) column6:6(int)
+ │    │              │    ├── columns: "k + 1":7(int) "i + 1":6(int)
  │    │              │    ├── outer: (1,2)
  │    │              │    ├── cardinality: [1 - 1]
  │    │              │    ├── values
@@ -1825,11 +1825,11 @@ project
  │    │              │    ├── outer: (6,7)
  │    │              │    ├── cardinality: [3 - 3]
  │    │              │    ├── tuple [type=tuple{int}, outer=(6)]
- │    │              │    │    └── variable: column6 [type=int, outer=(6)]
+ │    │              │    │    └── variable: i + 1 [type=int, outer=(6)]
  │    │              │    ├── tuple [type=tuple{int}]
  │    │              │    │    └── const: 10 [type=int]
  │    │              │    └── tuple [type=tuple{int}, outer=(7)]
- │    │              │         └── variable: column7 [type=int, outer=(7)]
+ │    │              │         └── variable: k + 1 [type=int, outer=(7)]
  │    │              └── true [type=bool]
  │    └── true [type=bool]
  └── projections [outer=(8)]
@@ -1840,7 +1840,7 @@ opt
 SELECT (VALUES (EXISTS(SELECT * FROM xy WHERE x=k))) FROM a
 ----
 project
- ├── columns: column9:12(bool)
+ ├── columns: "(VALUES (EXISTS (SELECT * FROM xy WHERE x = k)))":12(bool)
  ├── left-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool)
  │    ├── keys: (1)
@@ -1905,7 +1905,7 @@ opt
 SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
- ├── columns: column9:13(bool)
+ ├── columns: "(VALUES (5 IN (SELECT y FROM xy WHERE x = k)))":13(bool)
  ├── left-join-apply
  │    ├── columns: k:1(int!null) column1:8(bool)
  │    ├── keys: (1)
@@ -2054,7 +2054,7 @@ semi-join
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── variable: xy.y [type=int, outer=(7)]
  ├── project
- │    ├── columns: column10:10(string)
+ │    ├── columns: "y::STRING":10(string)
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
@@ -2063,7 +2063,7 @@ semi-join
  └── filters [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
       └── eq [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
            ├── variable: a.s [type=string, outer=(4)]
-           └── variable: column10 [type=string, outer=(10)]
+           └── variable: y::STRING [type=string, outer=(10)]
 
 # Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
 opt
@@ -2198,7 +2198,7 @@ anti-join
  │              │    └── variable: xy.y [type=int, outer=(7)]
  │              └── false [type=bool]
  ├── project
- │    ├── columns: column10:10(string)
+ │    ├── columns: "y::STRING":10(string)
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
@@ -2208,7 +2208,7 @@ anti-join
       └── is-not [type=bool, outer=(4,10)]
            ├── eq [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
            │    ├── variable: a.s [type=string, outer=(4)]
-           │    └── variable: column10 [type=string, outer=(10)]
+           │    └── variable: y::STRING [type=string, outer=(10)]
            └── false [type=bool]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
@@ -2308,7 +2308,7 @@ anti-join
  │              ├── variable: a.i [type=int, outer=(2)]
  │              └── variable: xy.y [type=int, outer=(7)]
  ├── project
- │    ├── columns: column10:10(string)
+ │    ├── columns: "y::STRING":10(string)
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
@@ -2318,5 +2318,5 @@ anti-join
       └── is-not [type=bool, outer=(4,10)]
            ├── eq [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
            │    ├── variable: a.s [type=string, outer=(4)]
-           │    └── variable: column10 [type=string, outer=(10)]
+           │    └── variable: y::STRING [type=string, outer=(10)]
            └── false [type=bool]

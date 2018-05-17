@@ -93,7 +93,7 @@ opt
 SELECT k, f*2.0 FROM a LIMIT 5
 ----
 project
- ├── columns: k:1(int!null) column6:6(float)
+ ├── columns: k:1(int!null) "f * 2.0":6(float)
  ├── cardinality: [0 - 5]
  ├── keys: (1)
  ├── scan a
@@ -110,7 +110,7 @@ opt
 SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f LIMIT 5
 ----
 project
- ├── columns: f:3(float) column6:6(float)
+ ├── columns: f:3(float) "f + 1.1":6(float)
  ├── cardinality: [0 - 5]
  ├── ordering: +3
  ├── limit
@@ -167,7 +167,7 @@ opt
 SELECT k, f*2.0 FROM a OFFSET 5
 ----
 project
- ├── columns: k:1(int!null) column6:6(float)
+ ├── columns: k:1(int!null) "f * 2.0":6(float)
  ├── keys: (1)
  ├── offset
  │    ├── columns: k:1(int!null) f:3(float)
@@ -186,7 +186,7 @@ opt
 SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5
 ----
 project
- ├── columns: f:3(float) column6:6(float)
+ ├── columns: f:3(float) "f + 1.1":6(float)
  ├── ordering: +3
  ├── offset
  │    ├── columns: i:2(int) f:3(float)
@@ -215,7 +215,7 @@ opt
 SELECT k, f*2.0 FROM a OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: k:1(int!null) column6:6(float)
+ ├── columns: k:1(int!null) "f * 2.0":6(float)
  ├── cardinality: [0 - 10]
  ├── keys: (1)
  ├── limit
@@ -239,7 +239,7 @@ opt
 SELECT f, f+1.1 FROM (SELECT f, i FROM a GROUP BY f, i) a ORDER BY f OFFSET 5 LIMIT 10
 ----
 project
- ├── columns: f:3(float) column6:6(float)
+ ├── columns: f:3(float) "f + 1.1":6(float)
  ├── cardinality: [0 - 10]
  ├── ordering: +3
  ├── limit

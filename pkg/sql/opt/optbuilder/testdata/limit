@@ -127,15 +127,15 @@ build
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 limit
- ├── columns: column4:4(decimal)
+ ├── columns: sum:4(decimal)
  ├── ordering: -2
  ├── sort
- │    ├── columns: v:2(int) column4:4(decimal)
+ │    ├── columns: v:2(int) sum:4(decimal)
  │    ├── ordering: -2
  │    └── project
- │         ├── columns: v:2(int) column4:4(decimal)
+ │         ├── columns: v:2(int) sum:4(decimal)
  │         └── group-by
- │              ├── columns: k:1(int!null) v:2(int) column4:4(decimal)
+ │              ├── columns: k:1(int!null) v:2(int) sum:4(decimal)
  │              ├── grouping columns: k:1(int!null) v:2(int)
  │              ├── scan t
  │              │    └── columns: k:1(int!null) v:2(int) w:3(int)

@@ -837,7 +837,7 @@ FROM order_line
 WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
 ----
 group-by
- ├── columns: column11:11(decimal)
+ ├── columns: sum:11(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1.00
@@ -909,7 +909,7 @@ ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
 ----
 group-by
- ├── columns: column22:22(int)
+ ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1178.00
@@ -975,14 +975,14 @@ GROUP BY no_d_id, no_w_id
 ORDER BY no_w_id, no_d_id
 ----
 sort
- ├── columns: column4:4(int)
+ ├── columns: max:4(int)
  ├── stats: [rows=100, distinct(2,3)=100]
  ├── cost: 90006.64
  ├── keys: (2,3)
  ├── ordering: +3,+2
  ├── prune: (4)
  └── group-by
-      ├── columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null) column4:4(int)
+      ├── columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null) max:4(int)
       ├── grouping columns: new_order.no_d_id:2(int!null) new_order.no_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100]
       ├── cost: 90000.00
@@ -1005,14 +1005,14 @@ GROUP BY o_d_id, o_w_id
 ORDER BY o_w_id, o_d_id
 ----
 sort
- ├── columns: column9:9(int)
+ ├── columns: max:9(int)
  ├── stats: [rows=100, distinct(2,3)=100]
  ├── cost: 300006.64
  ├── keys: (2,3)
  ├── ordering: +3,+2
  ├── prune: (9)
  └── group-by
-      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) column9:9(int)
+      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) max:9(int)
       ├── grouping columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100]
       ├── cost: 300000.00
@@ -1039,7 +1039,7 @@ FROM
 WHERE nod != -1
 ----
 group-by
- ├── columns: column8:8(int)
+ ├── columns: count:8(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 90001.00
@@ -1086,14 +1086,14 @@ GROUP BY o_w_id, o_d_id
 ORDER BY o_w_id, o_d_id
 ----
 sort
- ├── columns: column9:9(decimal)
+ ├── columns: sum:9(decimal)
  ├── stats: [rows=100, distinct(2,3)=100]
  ├── cost: 300006.64
  ├── keys: (2,3)
  ├── ordering: +3,+2
  ├── prune: (9)
  └── group-by
-      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) column9:9(decimal)
+      ├── columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null) sum:9(decimal)
       ├── grouping columns: "order".o_d_id:2(int!null) "order".o_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100]
       ├── cost: 300000.00
@@ -1115,14 +1115,14 @@ GROUP BY ol_w_id, ol_d_id
 ORDER BY ol_w_id, ol_d_id
 ----
 sort
- ├── columns: column11:11(int)
+ ├── columns: count:11(int)
  ├── stats: [rows=100, distinct(2,3)=100]
  ├── cost: 1000006.64
  ├── keys: (2,3)
  ├── ordering: +3,+2
  ├── prune: (11)
  └── group-by
-      ├── columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) column11:11(int)
+      ├── columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) count:11(int)
       ├── grouping columns: order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100]
       ├── cost: 1000000.00
@@ -1238,7 +1238,7 @@ sort
  └── except-all
       ├── columns: "order".o_w_id:3(int!null) "order".o_d_id:2(int!null) "order".o_id:1(int!null) "order".o_ol_cnt:7(int)
       ├── left columns: "order".o_w_id:3(int!null) "order".o_d_id:2(int!null) "order".o_id:1(int!null) "order".o_ol_cnt:7(int)
-      ├── right columns: order_line.ol_w_id:11(int) order_line.ol_d_id:10(int) order_line.ol_o_id:9(int) column19:19(int)
+      ├── right columns: order_line.ol_w_id:11(int) order_line.ol_d_id:10(int) order_line.ol_o_id:9(int) count:19(int)
       ├── stats: [rows=300000]
       ├── cost: 1300000.00
       ├── scan order
@@ -1248,7 +1248,7 @@ sort
       │    ├── keys: (1-3)
       │    └── prune: (1-3,7)
       └── group-by
-           ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) column19:19(int)
+           ├── columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null) count:19(int)
            ├── grouping columns: order_line.ol_o_id:9(int!null) order_line.ol_d_id:10(int!null) order_line.ol_w_id:11(int!null)
            ├── stats: [rows=100000, distinct(9-11)=100000]
            ├── cost: 1000000.00
@@ -1277,18 +1277,18 @@ EXCEPT ALL
 )
 ----
 sort
- ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) column11:11(int)
+ ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
  ├── stats: [rows=100000]
  ├── cost: 1316609.64
  ├── ordering: +3,+2,-1
  └── except-all
-      ├── columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) column11:11(int)
-      ├── left columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) column11:11(int)
+      ├── columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) count:11(int)
+      ├── left columns: order_line.ol_w_id:3(int!null) order_line.ol_d_id:2(int!null) order_line.ol_o_id:1(int!null) count:11(int)
       ├── right columns: "order".o_w_id:14(int) "order".o_d_id:13(int) "order".o_id:12(int) "order".o_ol_cnt:18(int)
       ├── stats: [rows=100000]
       ├── cost: 1300000.00
       ├── group-by
-      │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) column11:11(int)
+      │    ├── columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null) count:11(int)
       │    ├── grouping columns: order_line.ol_o_id:1(int!null) order_line.ol_d_id:2(int!null) order_line.ol_w_id:3(int!null)
       │    ├── stats: [rows=100000, distinct(1-3)=100000]
       │    ├── cost: 1000000.00
@@ -1326,7 +1326,7 @@ ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
 WHERE ol_o_id IS NULL OR o_id IS NULL
 ----
 group-by
- ├── columns: column19:19(int)
+ ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1313000.02

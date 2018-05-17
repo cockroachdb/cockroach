@@ -27,7 +27,7 @@ build
 SELECT y, x+1, 1, x FROM xysd
 ----
 project
- ├── columns: y:2(int) column5:5(int) column6:6(int!null) x:1(int!null)
+ ├── columns: y:2(int) "x + 1":5(int) "1":6(int!null) x:1(int!null)
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── scan xysd
@@ -66,12 +66,12 @@ select
  └── gt [type=bool, outer=(1,2)]
       ├── subquery [type=int, outer=(1,2)]
       │    └── max1-row
-      │         ├── columns: column8:8(int)
+      │         ├── columns: "(SELECT y)":8(int)
       │         ├── outer: (1,2)
       │         ├── cardinality: [0 - 1]
       │         ├── stats: [rows=1]
       │         └── project
-      │              ├── columns: column8:8(int)
+      │              ├── columns: "(SELECT y)":8(int)
       │              ├── outer: (1,2)
       │              ├── stats: [rows=111]
       │              ├── select
@@ -129,7 +129,7 @@ build
 SELECT 1, 'foo', null, 1::decimal + null, null::string FROM xysd
 ----
 project
- ├── columns: column5:5(int!null) column6:6(string!null) column7:7(unknown) column7:7(unknown) column8:8(string)
+ ├── columns: "1":5(int!null) "'foo'":6(string!null) NULL:7(unknown) "1::DECIMAL + NULL":7(unknown) "NULL::STRING":8(string)
  ├── stats: [rows=1000]
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)

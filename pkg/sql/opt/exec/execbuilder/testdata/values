@@ -2,21 +2,21 @@
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1
 ----
-render       ·         ·                 (column1)  ·
- │           render 0  1                 ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render       ·         ·                 ("1")  ·
+ │           render 0  1                 ·      ·
+ └── values  ·         ·                 ()     ·
+·            size      0 columns, 1 row  ·      ·
 
 exec
 SELECT 1
 ----
-column1:int
+1:int
 1
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
-render       ·         ·                 (column1)  ·
+render       ·         ·                 ("1 + 2")  ·
  │           render 0  3                 ·          ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
@@ -24,7 +24,7 @@ render       ·         ·                 (column1)  ·
 exec
 SELECT 1 + 2
 ----
-column1:int
+1 + 2:int
 3
 
 exec hide-colnames nodist
@@ -68,7 +68,7 @@ column1:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-render       ·              ·                  (column3)           ·
+render       ·              ·                  ("a + b")           ·
  │           render 0       column1 + column2  ·                   ·
  └── values  ·              ·                  (column1, column2)  ·
 ·            size           2 columns, 3 rows  ·                   ·
@@ -82,7 +82,7 @@ render       ·              ·                  (column3)           ·
 exec
 SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
-column3:int
+a + b:int
 3
 7
 11

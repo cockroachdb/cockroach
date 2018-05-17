@@ -141,14 +141,14 @@ NULL
 exec rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
-x:int  column7:string
+x:int  pg_typeof:string
 1      unknown
 2      int
 
 exec rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
-x:int  column7:string
+x:int  pg_typeof:string
 1      int
 2      unknown
 

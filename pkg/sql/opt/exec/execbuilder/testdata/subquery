@@ -7,7 +7,7 @@ opt
 SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
 project
- ├── columns: column4:4(bool)
+ ├── columns: "EXISTS (SELECT * FROM t WHERE u = (k * k))":4(bool)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 1010.01
@@ -38,31 +38,31 @@ project
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
-root                 ·          ·                 (column4)  ·
- ├── render          ·          ·                 (column4)  ·
- │    │              render 0   @S1               ·          ·
- │    └── values     ·          ·                 ()         ·
- │                   size       0 columns, 1 row  ·          ·
- └── subquery        ·          ·                 (column4)  ·
-      │              id         @S1               ·          ·
-      │              sql        EXISTS <unknown>  ·          ·
-      │              exec mode  exists            ·          ·
-      └── filter     ·          ·                 (k, u, v)  ·
-           │         filter     u = (k * k)       ·          ·
-           └── scan  ·          ·                 (k, u, v)  ·
-·                    table      t@primary         ·          ·
-·                    spans      ALL               ·          ·
+root                 ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+ ├── render          ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+ │    │              render 0   @S1               ·                                               ·
+ │    └── values     ·          ·                 ()                                              ·
+ │                   size       0 columns, 1 row  ·                                               ·
+ └── subquery        ·          ·                 ("EXISTS (SELECT * FROM t WHERE u = (k * k))")  ·
+      │              id         @S1               ·                                               ·
+      │              sql        EXISTS <unknown>  ·                                               ·
+      │              exec mode  exists            ·                                               ·
+      └── filter     ·          ·                 (k, u, v)                                       ·
+           │         filter     u = (k * k)       ·                                               ·
+           └── scan  ·          ·                 (k, u, v)                                       ·
+·                    table      t@primary         ·                                               ·
+·                    spans      ALL               ·                                               ·
 
 exec nodist
 SELECT EXISTS(SELECT * FROM t WHERE u = k*k)
 ----
-column4:bool
+EXISTS (SELECT * FROM t WHERE u = (k * k)):bool
 true
 
 exec nodist
 SELECT EXISTS(SELECT * FROM t WHERE u != k*k)
 ----
-column4:bool
+EXISTS (SELECT * FROM t WHERE u != (k * k)):bool
 false
 
 exec hide-colnames nodist

@@ -35,7 +35,7 @@ opt
 SELECT 1 FROM (SELECT i+1, k FROM a) a
 ----
 project
- ├── columns: column6:6(int!null)
+ ├── columns: "1":6(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -45,7 +45,7 @@ opt
 SELECT k+i FROM (SELECT i, k, s || 'foo' FROM a) a
 ----
 project
- ├── columns: column6:6(int)
+ ├── columns: "k + i":6(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -73,7 +73,7 @@ opt
 SELECT l*l, k FROM (SELECT k, length(s) l, i FROM a) a
 ----
 project
- ├── columns: column6:6(int) k:1(int!null)
+ ├── columns: "l * l":6(int) k:1(int!null)
  ├── keys: (1)
  ├── project
  │    ├── columns: l:5(int) k:1(int!null)
@@ -106,7 +106,7 @@ opt
 SELECT k, k+1, i+1 FROM a
 ----
 project
- ├── columns: k:1(int!null) column5:5(int) column6:6(int)
+ ├── columns: k:1(int!null) "k + 1":5(int) "i + 1":6(int)
  ├── keys: (1)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
@@ -124,7 +124,7 @@ opt
 SELECT k+i FROM a
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: "k + i":5(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -138,7 +138,7 @@ opt
 SELECT 1 FROM a
 ----
 project
- ├── columns: column5:5(int!null)
+ ├── columns: "1":5(int!null)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -186,7 +186,7 @@ opt
 SELECT 1 FROM a WHERE now()<'2000-01-01T02:00:00'::timestamp
 ----
 project
- ├── columns: column5:5(int!null)
+ ├── columns: "1":5(int!null)
  ├── select
  │    ├── scan a
  │    └── filters [type=bool]
@@ -201,7 +201,7 @@ opt
 SELECT i-1, k*k FROM a WHERE k+1<5 AND s||'o'='foo'
 ----
 project
- ├── columns: column5:5(int) column6:6(int)
+ ├── columns: "i - 1":5(int) "k * k":6(int)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    ├── keys: (1)
@@ -256,7 +256,7 @@ opt
 SELECT f, f+1.1 FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
 ----
 project
- ├── columns: f:3(float) column6:6(float)
+ ├── columns: f:3(float) "f + 1.1":6(float)
  ├── select
  │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
  │    ├── keys: (1)
@@ -335,7 +335,7 @@ opt
 SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s LIMIT 5) a
 ----
 project
- ├── columns: f:3(float) column5:5(float)
+ ├── columns: f:3(float) "f * 2.0":5(float)
  ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
@@ -511,7 +511,7 @@ opt
 SELECT f, f*2.0 FROM (SELECT f, s FROM a GROUP BY f, s OFFSET 5 LIMIT 5) a
 ----
 project
- ├── columns: f:3(float) column5:5(float)
+ ├── columns: f:3(float) "f * 2.0":5(float)
  ├── cardinality: [0 - 5]
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
@@ -600,7 +600,7 @@ opt
 SELECT a.k+1, xy.* FROM a FULL JOIN xy ON True
 ----
 project
- ├── columns: column7:7(int) x:5(int) y:6(int)
+ ├── columns: "a.k + 1":7(int) x:5(int) y:6(int)
  ├── full-join
  │    ├── columns: k:1(int) x:5(int) y:6(int)
  │    ├── scan a
@@ -632,7 +632,7 @@ opt
 SELECT a.k+1, a.i/2, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s||'o'='foo'
 ----
 project
- ├── columns: column7:7(int) column8:8(decimal) x:5(int!null) y:6(int)
+ ├── columns: "a.k + 1":7(int) "a.i / 2":8(decimal) x:5(int!null) y:6(int)
  ├── inner-join
  │    ├── columns: k:1(int!null) i:2(int) s:4(string) x:5(int!null) y:6(int)
  │    ├── select
@@ -765,7 +765,7 @@ opt
 SELECT xy.*, a.k+1 FROM xy FULL JOIN a ON True
 ----
 project
- ├── columns: x:1(int) y:2(int) column7:7(int)
+ ├── columns: x:1(int) y:2(int) "a.k + 1":7(int)
  ├── full-join
  │    ├── columns: x:1(int) y:2(int) k:3(int)
  │    ├── scan xy
@@ -797,7 +797,7 @@ opt
 SELECT xy.*, a.k+1, a.i/2 FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s||'o'='foo'
 ----
 project
- ├── columns: x:1(int!null) y:2(int) column7:7(int) column8:8(decimal)
+ ├── columns: x:1(int!null) y:2(int) "a.k + 1":7(int) "a.i / 2":8(decimal)
  ├── inner-join
  │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) s:6(string)
  │    ├── scan xy
@@ -872,7 +872,7 @@ opt
 SELECT 1 FROM a,xy
 ----
 project
- ├── columns: column7:7(int!null)
+ ├── columns: "1":7(int!null)
  ├── inner-join
  │    ├── scan a
  │    ├── scan xy
@@ -885,14 +885,14 @@ opt
 SELECT a.k, xy.x, a.k+xy.x FROM a LEFT JOIN xy ON a.k=xy.x
 ----
 project
- ├── columns: k:1(int!null) x:5(int) column7:7(int)
+ ├── columns: k:1(int!null) x:5(int) "a.k + xy.x":7(int)
  ├── left-join
- │    ├── columns: k:1(int!null) x:5(int)
+ │    ├── columns: k:1(int!null) xy.x:5(int)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── keys: (1)
  │    ├── scan xy
- │    │    ├── columns: x:5(int!null)
+ │    │    ├── columns: xy.x:5(int!null)
  │    │    └── keys: (5)
  │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
  │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
@@ -937,7 +937,7 @@ opt
 SELECT 1 FROM (SELECT s FROM a GROUP BY s) a
 ----
 project
- ├── columns: column5:5(int!null)
+ ├── columns: "1":5(int!null)
  ├── group-by
  │    ├── columns: s:4(string)
  │    ├── grouping columns: s:4(string)
@@ -956,7 +956,7 @@ opt
 SELECT s, SUM(i) FROM a GROUP BY s
 ----
 group-by
- ├── columns: s:4(string) column5:5(decimal)
+ ├── columns: s:4(string) sum:5(decimal)
  ├── grouping columns: s:4(string)
  ├── keys: weak(4)
  ├── scan a
@@ -970,7 +970,7 @@ opt
 SELECT AVG(s::int+i), s, i FROM a GROUP BY s, i
 ----
 group-by
- ├── columns: column6:6(decimal) s:4(string) i:2(int)
+ ├── columns: avg:6(decimal) s:4(string) i:2(int)
  ├── grouping columns: i:2(int) s:4(string)
  ├── keys: weak(2,4)
  ├── project
@@ -991,7 +991,7 @@ opt
 SELECT MIN(i), MAX(k), MAX(k) FROM a
 ----
 group-by
- ├── columns: column5:5(int) column6:6(int) column6:6(int)
+ ├── columns: min:5(int) max:6(int) max:6(int)
  ├── cardinality: [1 - 1]
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
@@ -1007,7 +1007,7 @@ opt
 SELECT s, i+1 FROM a GROUP BY i, s
 ----
 project
- ├── columns: s:4(string) column5:5(int)
+ ├── columns: s:4(string) "i + 1":5(int)
  ├── group-by
  │    ├── columns: i:2(int) s:4(string)
  │    ├── grouping columns: i:2(int) s:4(string)
@@ -1024,7 +1024,7 @@ opt
 SELECT MIN(sm), i FROM (SELECT s, i, SUM(k) sm, AVG(k) av FROM a GROUP BY i, s) a GROUP BY i
 ----
 group-by
- ├── columns: column7:7(decimal) i:2(int)
+ ├── columns: min:7(decimal) i:2(int)
  ├── grouping columns: i:2(int)
  ├── keys: weak(2)
  ├── group-by
@@ -1086,7 +1086,7 @@ opt
 SELECT 1 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 project
- ├── columns: column4:4(int!null)
+ ├── columns: "1":4(int!null)
  ├── cardinality: [2 - 2]
  ├── values
  │    ├── cardinality: [2 - 2]
