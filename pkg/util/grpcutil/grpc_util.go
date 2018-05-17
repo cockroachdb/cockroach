@@ -56,8 +56,7 @@ func IsClosedConnection(err error) bool {
 	}
 	if s, ok := status.FromError(err); ok {
 		if s.Code() == codes.Canceled ||
-			s.Code() == codes.Unavailable ||
-			s.Message() == grpc.ErrClientConnClosing.Error() {
+			s.Code() == codes.Unavailable {
 			return true
 		}
 	}

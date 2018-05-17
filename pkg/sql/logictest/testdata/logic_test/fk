@@ -808,6 +808,7 @@ refers  CREATE TABLE refers (
     INDEX another_idx (b ASC),
     CONSTRAINT fk_a_ref_referee FOREIGN KEY (a) REFERENCES referee (id),
     INDEX refers_auto_index_fk_a_ref_referee (a ASC),
+    INDEX foo (a ASC),
     FAMILY "primary" (a, b, rowid)
 )
 

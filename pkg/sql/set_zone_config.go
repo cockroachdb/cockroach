@@ -353,3 +353,34 @@ func getZoneConfigRaw(
 	}
 	return zone, nil
 }
+
+func removeIndexZoneConfigs(
+	ctx context.Context,
+	txn *client.Txn,
+	execCfg *ExecutorConfig,
+	tableID sqlbase.ID,
+	indexDescs []sqlbase.IndexDescriptor,
+) error {
+	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+	if err != nil {
+		return err
+	}
+
+	zone, err := getZoneConfigRaw(ctx, txn, tableID)
+	if err != nil {
+		return err
+	}
+
+	for _, indexDesc := range indexDescs {
+		zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+	}
+
+	hasNewSubzones := false
+	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, hasNewSubzones)
+	if sqlbase.IsCCLRequiredError(err) {
+		return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+			"because table %q has at least one remaining index or partition with a zone config",
+			tableDesc.Name))
+	}
+	return err
+}
