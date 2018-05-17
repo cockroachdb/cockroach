@@ -107,58 +107,12 @@ var oldFriendsMap = map[string]string{
 
 func getAssignee(
 	ctx context.Context,
-	packageName, testName string,
+	authorEmail string,
 	listCommits func(ctx context.Context, owner string, repo string,
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error),
 ) (string, error) {
-	// Search the source code for the email address of the last committer to touch
-	// the first line of the source code that contains testName. Then, ask GitHub
-	// for the GitHub username of the user with that email address by searching
-	// commits in cockroachdb/cockroach for commits authored by the address.
-	subtests := strings.Split(testName, "/")
-	testName = subtests[0]
-	packageName = strings.TrimPrefix(packageName, "github.com/cockroachdb/cockroach/")
-	cmd := exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git grep -n "func %s" $(git rev-parse --show-toplevel)/%s/*_test.go`,
-			testName, packageName))
-	// This command returns output such as:
-	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Errorf("couldn't find test %s in %s: %s %s",
-			testName, packageName, err, string(out))
-	}
-	re := regexp.MustCompile(`(.*):(.*):`)
-	// The first 2 :-delimited fields are the filename and line number.
-	matches := re.FindSubmatch(out)
-	if matches == nil {
-		return "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s",
-			testName, packageName, string(out))
-	}
-	filename := matches[1]
-	linenum := matches[2]
-
-	// Now run git blame.
-	cmd = exec.Command(`/bin/bash`, `-c`,
-		fmt.Sprintf(`git blame --porcelain -L%s,+1 %s | grep author-mail`,
-			linenum, filename))
-	// This command returns output such as:
-	// author-mail <jordan@cockroachlabs.com>
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Errorf("couldn't find author of test %s in %s: %s %s",
-			testName, packageName, err, string(out))
-	}
-	re = regexp.MustCompile("author-mail <(.*)>")
-	matches = re.FindSubmatch(out)
-	if matches == nil {
-		return "", errors.Errorf("couldn't find author email of test %s in %s: %s",
-			testName, packageName, string(out))
-	}
-	email := string(matches[1])
-
 	commits, _, err := listCommits(ctx, githubUser, githubRepo, &github.CommitsListOptions{
-		Author: email,
+		Author: authorEmail,
 		ListOptions: github.ListOptions{
 			PerPage: 1,
 		},
@@ -167,7 +121,7 @@ func getAssignee(
 		return "", err
 	}
 	if len(commits) == 0 {
-		return "", errors.Errorf("couldn't find GitHub commits for user email %s", email)
+		return "", errors.Errorf("couldn't find GitHub commits for user email %s", authorEmail)
 	}
 
 	assignee := *commits[0].Author.Login
@@ -283,15 +237,14 @@ func (p *poster) init() {
 	p.milestone = getProbableMilestone(context.Background(), p.getLatestTag, p.listMilestones)
 }
 
-func (p *poster) post(ctx context.Context, detail, packageName, testName, message string) error {
+func (p *poster) post(
+	ctx context.Context, detail, packageName, testName, message, authorEmail string,
+) error {
 	packageName = cockroachPkgPrefix + packageName
 
 	const bodyTemplate = `SHA: https://github.com/cockroachdb/cockroach/commits/%[1]s
 
-Parameters:
-` + "```" + `
-%[2]s
-` + "```" + `
+Parameters:%[2]s
 
 Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
@@ -321,7 +274,7 @@ Failed test: %[3]s`
 		return &github.IssueComment{Body: &body}
 	}
 
-	assignee, err := getAssignee(ctx, packageName, testName, p.listCommits)
+	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
 	if err != nil {
 		// if we *can't* assign anyone, sigh, feel free to hard-code me.
 		// -- tschottdorf, 11/3/2017
@@ -392,7 +345,10 @@ func (p *poster) parameters() string {
 			parameters = append(parameters, parameter+"="+val)
 		}
 	}
-	return strings.Join(parameters, "\n")
+	if len(parameters) == 0 {
+		return ""
+	}
+	return "\n```\n" + strings.Join(parameters, "\n") + "\n```"
 }
 
 var defaultP struct {
@@ -402,10 +358,16 @@ var defaultP struct {
 
 // Post either creates a new issue for a failed test, or posts a comment to an
 // existing open issue.
-func Post(ctx context.Context, detail, packageName, testName, message string) error {
+func Post(ctx context.Context, detail, packageName, testName, message, authorEmail string) error {
 	defaultP.Do(func() {
 		defaultP.poster = newPoster()
 		defaultP.init()
 	})
-	return defaultP.post(ctx, detail, packageName, testName, message)
+	return defaultP.post(ctx, detail, packageName, testName, message, authorEmail)
+}
+
+// CanPost returns true if the github API token environment variable is set.
+func CanPost() bool {
+	_, ok := os.LookupEnv(githubAPITokenEnv)
+	return ok
 }
