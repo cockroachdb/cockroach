@@ -154,6 +154,9 @@ type TableCollection struct {
 	// table is marked dropped.
 	uncommittedTables []*sqlbase.TableDescriptor
 
+	// Map of tables created in the transaction.
+	createdTables map[sqlbase.ID]struct{}
+
 	// databaseCache is used as a cache for database names.
 	// TODO(andrei): get rid of it and replace it with a leasing system for
 	// database descriptors.
@@ -400,6 +403,7 @@ func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) er
 		tc.leasedTables = tc.leasedTables[:0]
 	}
 	tc.uncommittedTables = nil
+	tc.createdTables = nil
 
 	if opt == blockForDBCacheUpdate {
 		for _, uc := range tc.uncommittedDatabases {
@@ -442,6 +446,19 @@ func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
 	tc.releaseAllDescriptors()
 }
 
+func (tc *TableCollection) addCreatedTable(id sqlbase.ID) {
+	if tc.createdTables == nil {
+		tc.createdTables = make(map[sqlbase.ID]struct{})
+	}
+	tc.createdTables[id] = struct{}{}
+	tc.releaseAllDescriptors()
+}
+
+func (tc *TableCollection) isCreatedTable(id sqlbase.ID) bool {
+	_, ok := tc.createdTables[id]
+	return ok
+}
+
 type dbAction bool
 
 const (
@@ -461,7 +478,9 @@ func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, ac
 func (tc *TableCollection) getUncommittedDatabaseID(
 	requestedDbName string, required bool,
 ) (c bool, res sqlbase.ID, err error) {
-	// Walk latest to earliest.
+	// Walk latest to earliest so that a DROP DATABASE followed by a
+	// CREATE DATABASE with the same name will result in the CREATE DATABASE
+	// being seen.
 	for i := len(tc.uncommittedDatabases) - 1; i >= 0; i-- {
 		db := tc.uncommittedDatabases[i]
 		if requestedDbName == db.name {
@@ -488,7 +507,10 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 func (tc *TableCollection) getUncommittedTable(
 	dbID sqlbase.ID, tn *tree.TableName, required bool,
 ) (refuseFurtherLookup bool, table *sqlbase.TableDescriptor, err error) {
-	for _, table := range tc.uncommittedTables {
+	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
+	// with the same name will result in the CREATE TABLE being seen.
+	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
+		table := tc.uncommittedTables[i]
 		// If a table has gotten renamed we'd like to disallow using the old names.
 		// The renames could have happened in another transaction but it's still okay
 		// to disallow the use of the old name in this transaction because the other
@@ -597,6 +619,11 @@ func (p *planner) createSchemaChangeJob(
 func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
+	if !tableDesc.UpVersion {
+		// If a version change has not been requested there is no pending
+		// schema change to be executed.
+		return
+	}
 	sc := SchemaChanger{
 		tableID:              tableDesc.GetID(),
 		mutationID:           mutationID,
@@ -618,6 +645,12 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if isVirtualDescriptor(tableDesc) {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"programming error: virtual descriptors cannot be stored, found: %v", tableDesc)
+	}
+
+	if p.Tables().isCreatedTable(tableDesc.ID) {
+		if err := runSchemaChangesInTxn(ctx, p.txn, p.execCfg, p.EvalContext(), tableDesc); err != nil {
+			return err
+		}
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {

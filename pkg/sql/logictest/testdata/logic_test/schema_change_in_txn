@@ -1,0 +1,328 @@
+# LogicTest: default parallel-stmts distsql distsql-metadata
+
+subtest create_with_other_commands_in_txn
+
+statement count 3
+CREATE TABLE kv (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE test.parent (id int primary key)
+
+statement ok
+INSERT into test.parent values (1)
+
+statement ok
+CREATE TABLE test.chill (id int primary key, parent_id int)
+
+# random schema change that doesn't require a backfill.
+statement ok
+ALTER TABLE test.chill RENAME TO test.child
+
+statement ok
+INSERT INTO test.child VALUES (1, 1)
+
+# index is over data added in the transaction so the backfill runs
+# within the trasaction.
+statement ok
+CREATE INDEX idx_child_parent_id ON test.child (parent_id)
+
+# FK can be added because the index is visible.
+statement ok
+ALTER TABLE test.child ADD CONSTRAINT fk_child_parent_id FOREIGN KEY (parent_id) REFERENCES test.parent (id);
+
+statement ok
+INSERT INTO test.child VALUES (2, 1)
+
+# check that the index is indeed visible.
+query II rowsort
+SELECT * FROM test.child@idx_child_parent_id
+----
+1 1
+2 1
+
+# create index on a table that was created outside of the trasanction
+statement ok
+CREATE INDEX foo ON test.kv (quantity)
+
+statement ok
+COMMIT
+
+# foo is visible
+query TI rowsort
+SELECT * FROM test.kv@foo
+----
+cups   10
+forks  15
+plates 30
+
+subtest create_index_references_create_table_outside_txn
+
+statement ok
+BEGIN
+
+# create index on a table that was created outside of the trasanction
+statement ok
+CREATE INDEX bar ON test.kv (quantity)
+
+# bar is invisible
+statement error pgcode XX000 index "bar" not found
+SELECT * FROM test.kv@bar
+
+statement ok
+COMMIT
+
+# bar is still invisible because the error above prevents the
+# transaction from committing.
+statement error pgcode XX000 index "bar" not found
+SELECT * FROM test.kv@bar
+
+subtest create_reference_to_create_outside_txn_17949
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE b (parent_id INT REFERENCES parent(id));
+
+# table b is not visible to the transaction #17949
+statement error pgcode 42P01 relation "b" does not exist
+INSERT INTO b VALUES (1);
+
+statement ok
+COMMIT
+
+subtest create_as_with_add_column_index_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE stock (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+# index is only over data added in the transaction so the backfill occurs
+# within the trasaction.
+statement ok
+CREATE INDEX idx_quantity ON stock (quantity)
+
+# Add two columns and a constraint in the same statement.
+statement ok
+ALTER TABLE stock ADD COLUMN c INT AS (quantity + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
+
+# check that the index and columns are indeed visible.
+query TIII rowsort
+SELECT * FROM test.stock@idx_quantity
+----
+cups   10 14 23
+forks  15 19 23
+plates 30 34 23
+
+# check that the constraint bar is indeed visible.
+query TIII rowsort
+SELECT * FROM test.stock@bar
+----
+cups   10 14 23
+forks  15 19 23
+plates 30 34 23
+
+statement ok
+COMMIT
+
+subtest create_as_with_reuse_column_index_name_in_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE warehouse (item STRING PRIMARY KEY, quantity INT, UNIQUE (quantity), INDEX bar (quantity))
+
+statement ok
+INSERT INTO warehouse VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+DROP INDEX warehouse@bar
+
+statement ok
+ALTER TABLE warehouse DROP quantity
+
+# See if the column and index names can be reused.
+statement ok
+ALTER TABLE warehouse ADD COLUMN quantity INT DEFAULT 23
+
+statement ok
+CREATE INDEX bar ON warehouse (item)
+
+# check that the index is indeed visible.
+query TI rowsort
+SELECT * FROM warehouse@bar
+----
+cups   23
+forks  23
+plates 23
+
+statement ok
+COMMIT
+
+subtest create_as_drop_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE hood (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+DROP TABLE hood
+
+statement count 3
+CREATE TABLE hood (item, quantity) AS VALUES ('plates', 10), ('knives', 30), ('spoons', 12)
+
+query TI rowsort
+SELECT * FROM hood
+----
+plates 10
+knives 30
+spoons 12
+
+statement ok
+COMMIT
+
+subtest create_as_rename_and_create_in_txn
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE shop (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+statement ok
+ALTER TABLE shop RENAME TO ship
+
+statement count 3
+CREATE TABLE shop (item, quantity) AS VALUES ('spoons', 11), ('plates', 34), ('knives', 22)
+
+query TI rowsort
+SELECT * FROM shop
+----
+spoons 11
+plates 34
+knives 22
+
+query TI rowsort
+SELECT * FROM ship
+----
+cups   10
+plates 30
+forks  15
+
+statement ok
+COMMIT
+
+subtest create_as_fail_unique_index
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement error pgcode 23505 duplicate key value \(quantity\)=\(10\) violates unique constraint "bar"
+CREATE UNIQUE INDEX bar ON shopping (quantity)
+
+statement ok
+COMMIT
+
+# Ensure the above transaction didn't commit.
+query error pgcode 42P01 relation \"shopping\" does not exist
+SELECT * FROM shopping
+
+subtest add_column_not_null_violation
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement error pgcode 23502 null value in column \"q\" violates not-null constraint
+ALTER TABLE shopping ADD COLUMN q DECIMAL NOT NULL
+
+statement ok
+COMMIT
+
+# Ensure the above transaction didn't commit.
+statement error pgcode 42P01 relation \"shopping\" does not exist
+SELECT * FROM shopping
+
+subtest add_column_computed_column_failure
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE shopping (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 10)
+
+statement error pgcode 42P15 division by zero
+ALTER TABLE shopping ADD COLUMN c int AS (quantity::int // 0) STORED
+
+statement ok
+COMMIT
+
+subtest create_as_add_multiple_columns
+
+statement ok
+BEGIN
+
+statement count 3
+CREATE TABLE cutlery (item, quantity) AS VALUES ('cups', 10), ('plates', 30), ('forks', 15)
+
+# Add two columns, one with a computed and the other without any default.
+statement ok
+ALTER TABLE cutlery ADD COLUMN c INT AS (quantity + 4) STORED, ADD COLUMN d INT
+
+query TIII rowsort
+SELECT * FROM test.cutlery
+----
+cups   10 14 NULL
+plates 30 34 NULL
+forks  15 19 NULL
+
+statement ok
+COMMIT
+
+subtest table_rename_within_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE dontwant (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+CREATE TABLE want (k CHAR PRIMARY KEY, v CHAR)
+
+statement ok
+INSERT INTO dontwant (k,v) VALUES ('a', 'b')
+
+statement ok
+INSERT INTO want (k,v) VALUES ('c', 'd')
+
+statement ok
+ALTER TABLE want RENAME TO forlater
+
+statement ok
+ALTER TABLE dontwant RENAME TO want
+
+statement ok
+INSERT INTO want (k,v) VALUES ('e', 'f')
+
+statement ok
+COMMIT
+
+query TT rowsort
+SELECT * FROM want
+----
+a b
+e f

@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -144,8 +143,7 @@ func (sc *SchemaChanger) runBackfill(
 		case sqlbase.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
 			case *sqlbase.DescriptorMutation_Column:
-				desc := m.GetColumn()
-				if desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed() {
+				if columnNeedsBackfill(m.GetColumn()) {
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
@@ -172,15 +170,19 @@ func (sc *SchemaChanger) runBackfill(
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
 	// Drop indexes.
-	if err := sc.truncateIndexes(
-		ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
-	); err != nil {
-		return err
-	}
+	if len(droppedIndexDescs) > 0 {
+		if err := sc.truncateIndexes(
+			ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
+		); err != nil {
+			return err
+		}
 
-	// Remove index zone configs.
-	if err := sc.removeIndexZoneConfigs(ctx, tableDesc.ID, droppedIndexDescs); err != nil {
-		return err
+		// Remove index zone configs.
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, tableDesc.ID, droppedIndexDescs)
+		}); err != nil {
+			return err
+		}
 	}
 
 	// Add and drop columns.
@@ -211,39 +213,6 @@ func (sc *SchemaChanger) getTableVersion(
 		return nil, makeErrTableVersionMismatch(tableDesc.Version, version)
 	}
 	return tableDesc, nil
-}
-
-func (sc *SchemaChanger) removeIndexZoneConfigs(
-	ctx context.Context, tableID sqlbase.ID, indexDescs []sqlbase.IndexDescriptor,
-) error {
-	if len(indexDescs) == 0 {
-		return nil
-	}
-
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-
-		zone, err := getZoneConfigRaw(ctx, txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-
-		for _, indexDesc := range indexDescs {
-			zone.DeleteIndexSubzones(uint32(indexDesc.ID))
-		}
-
-		hasNewSubzones := false
-		_, err = writeZoneConfig(ctx, txn, sc.tableID, tableDesc, zone, sc.execCfg, hasNewSubzones)
-		if sqlbase.IsCCLRequiredError(err) {
-			return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
-				"because table %q has at least one remaining index or partition with a zone config",
-				tableDesc.Name))
-		}
-		return err
-	})
 }
 
 func (sc *SchemaChanger) truncateIndexes(
@@ -611,4 +580,163 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 		ctx, evalCtx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
 		backfill.ColumnMutationFilter)
+}
+
+func columnNeedsBackfill(desc *sqlbase.ColumnDescriptor) bool {
+	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
+}
+
+// runSchemaChangesInTxn runs all the schema changes immediately in a
+// transaction. This is called when a CREATE TABLE is followed by
+// schema changes in the same transaction. The CREATE TABLE is
+// invisible to the rest of the cluster, so the schema changes
+// can be executed immediately on the same version of the table.
+func runSchemaChangesInTxn(
+	ctx context.Context,
+	txn *client.Txn,
+	execCfg *ExecutorConfig,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+) error {
+	tableDesc.UpVersion = false
+
+	if len(tableDesc.DrainingNames) > 0 {
+		// Reclaim all the old names. Leave the data and descriptor
+		// cleanup for later.
+		b := txn.NewBatch()
+		for _, drain := range tableDesc.DrainingNames {
+			tbKey := tableKey{drain.ParentID, drain.Name}.Key()
+			b.Del(tbKey)
+		}
+		tableDesc.DrainingNames = nil
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+	}
+
+	if tableDesc.Dropped() {
+		return nil
+	}
+
+	// Only needed because columnBackfillInTxn() backfills
+	// all column mutations.
+	doneColumnBackfill := false
+	for _, m := range tableDesc.Mutations {
+		switch m.Direction {
+		case sqlbase.DescriptorMutation_ADD:
+			switch m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Column:
+				if doneColumnBackfill || !columnNeedsBackfill(m.GetColumn()) {
+					break
+				}
+				if err := columnBackfillInTxn(ctx, txn, evalCtx, tableDesc); err != nil {
+					return err
+				}
+				doneColumnBackfill = true
+
+			case *sqlbase.DescriptorMutation_Index:
+				if err := indexBackfillInTxn(ctx, txn, tableDesc); err != nil {
+					return err
+				}
+
+			default:
+				return errors.Errorf("unsupported mutation: %+v", m)
+			}
+
+		case sqlbase.DescriptorMutation_DROP:
+			// Drop the name and drop the associated data later.
+			switch m.Descriptor_.(type) {
+			case *sqlbase.DescriptorMutation_Column:
+				if doneColumnBackfill {
+					break
+				}
+				if err := columnBackfillInTxn(ctx, txn, evalCtx, tableDesc); err != nil {
+					return err
+				}
+				doneColumnBackfill = true
+
+			case *sqlbase.DescriptorMutation_Index:
+				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc); err != nil {
+					return err
+				}
+
+			default:
+				return errors.Errorf("unsupported mutation: %+v", m)
+			}
+
+		}
+		tableDesc.MakeMutationComplete(m)
+	}
+	tableDesc.Mutations = nil
+
+	return nil
+}
+
+// columnBackfillInTxn backfills columns for all mutation columns in
+// the mutation list.
+func columnBackfillInTxn(
+	ctx context.Context,
+	txn *client.Txn,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+) error {
+	var backfiller backfill.ColumnBackfiller
+	if err := backfiller.Init(evalCtx, *tableDesc); err != nil {
+		return err
+	}
+	sp := tableDesc.PrimaryIndexSpan()
+	for sp.Key != nil {
+		var err error
+		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx, txn, *tableDesc, nil, sp, columnTruncateAndBackfillChunkSize, false)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func indexBackfillInTxn(
+	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor,
+) error {
+	var backfiller backfill.IndexBackfiller
+	if err := backfiller.Init(*tableDesc); err != nil {
+		return err
+	}
+	sp := tableDesc.PrimaryIndexSpan()
+	for sp.Key != nil {
+		var err error
+		sp.Key, err = backfiller.RunIndexBackfillChunk(ctx, txn, *tableDesc, sp, indexBackfillChunkSize, false)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func indexTruncateInTxn(
+	ctx context.Context, txn *client.Txn, execCfg *ExecutorConfig, tableDesc *sqlbase.TableDescriptor,
+) error {
+	alloc := &sqlbase.DatumAlloc{}
+	idx := tableDesc.Mutations[0].GetIndex()
+	var sp roachpb.Span
+	for done := false; !done; done = sp.Key == nil {
+		rd, err := sqlbase.MakeRowDeleter(
+			txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+		)
+		if err != nil {
+			return err
+		}
+		td := tableDeleter{rd: rd, alloc: alloc}
+		if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
+			return err
+		}
+		sp, err = td.deleteIndex(
+			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, false, /* traceKV */
+		)
+		if err != nil {
+			return err
+		}
+	}
+	// Remove index zone configs.
+	return removeIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []sqlbase.IndexDescriptor{*idx})
 }
