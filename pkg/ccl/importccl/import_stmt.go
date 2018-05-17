@@ -418,7 +418,7 @@ func importPlanHook(
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
 				Tables: []jobs.ImportDetails_Table{{
-
+					Format:        format,
 					Desc:          tableDesc,
 					URIs:          files,
 					BackupPath:    transform,
