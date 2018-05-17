@@ -115,16 +115,12 @@ func ResolveExistingObject(
 //
 // var someVar T
 // var err error
-// p.runWithOptions(resolveFlags{allowAdding: true}, func() {
+// p.runWithOptions(resolveFlags{skipCache: true}, func() {
 //    someVar, err = ResolveExistingObject(ctx, p, ...)
 // })
 // if err != nil { ... }
 // use(someVar)
 func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
-	if flags.allowAdding {
-		defer func(prev bool) { p.revealNewDescriptors = prev }(p.revealNewDescriptors)
-		p.revealNewDescriptors = true
-	}
 	if flags.skipCache {
 		defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
 		p.avoidCachedDescriptors = true
@@ -133,8 +129,7 @@ func (p *planner) runWithOptions(flags resolveFlags, fn func()) {
 }
 
 type resolveFlags struct {
-	allowAdding bool
-	skipCache   bool
+	skipCache bool
 }
 
 // ResolveTargetObject determines a valid target path for an object
@@ -216,7 +211,6 @@ func (p *planner) CommonLookupFlags(ctx context.Context, required bool) CommonLo
 func (p *planner) ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags {
 	return ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(ctx, required),
-		allowAdding:       p.revealNewDescriptors,
 	}
 }
 
@@ -429,7 +423,7 @@ func (p *planner) getTableAndIndex(
 
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		if tableWithIndex == nil {
 			// Variant: ALTER TABLE
 			tn, err = table.Normalize()

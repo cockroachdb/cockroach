@@ -1783,7 +1783,6 @@ func (ex *connExecutor) resetPlanner(
 	p.isPreparing = false
 	p.asOfSystemTime = false
 	p.avoidCachedDescriptors = false
-	p.revealNewDescriptors = false
 }
 
 // txnStateTransitionsApplyWrapper is a wrapper on top of Machine built with the

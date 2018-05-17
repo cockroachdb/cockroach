@@ -79,7 +79,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	lookupFlags.required = false
 	for i := range tbNames {
 		tbDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
-			ObjectLookupFlags{CommonLookupFlags: lookupFlags, allowAdding: true})
+			ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
 			return nil, err
 		}

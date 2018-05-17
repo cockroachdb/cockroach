@@ -154,7 +154,7 @@ func (p *planner) prepareDrop(
 ) (tableDesc *sqlbase.TableDescriptor, err error) {
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
 	})
 	if err != nil {

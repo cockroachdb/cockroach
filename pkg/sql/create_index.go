@@ -42,7 +42,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	var tableDesc *TableDescriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	})
 	if err != nil {

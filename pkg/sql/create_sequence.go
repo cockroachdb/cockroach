@@ -36,7 +36,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}
 
 	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		dbDesc, err = ResolveTargetObject(ctx, p, name)
 	})
 	if err != nil {

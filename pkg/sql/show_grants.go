@@ -84,12 +84,10 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 				}
 				var tables tree.TableNames
 				// We avoid the cache so that we can observe the grants taking
-				// a lease, like other SHOW commands. We also use
-				// allowAdding=true so we can look at the grants of a table
-				// added in the same transaction.
+				// a lease, like other SHOW commands.
 				//
 				// TODO(vivek): check if the cache can be used.
-				p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+				p.runWithOptions(resolveFlags{skipCache: true}, func() {
 					tables, err = expandTableGlob(ctx, p, tableGlob)
 				})
 				if err != nil {

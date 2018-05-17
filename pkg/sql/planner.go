@@ -132,11 +132,6 @@ type planner struct {
 	// if it is SNAPSHOT.
 	avoidCachedDescriptors bool
 
-	// revealNewDescriptors, when true, instructs the name resolution
-	// code to also use descriptors in state ADD.
-	// Used by e.g. multiple DDL inside transactions.
-	revealNewDescriptors bool
-
 	// If set, the planner should skip checking for the SELECT privilege when
 	// initializing plans to read from a table. This should be used with care.
 	skipSelectPrivilegeChecks bool

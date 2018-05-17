@@ -50,12 +50,10 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the stats without
-	// taking a lease, like other SHOW commands. We also use
-	// allowAdding=true so we can look at the stats of a table
-	// added in the same transaction.
+	// taking a lease, like other SHOW commands.
 	//
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	})
 	if err != nil {
