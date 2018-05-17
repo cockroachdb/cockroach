@@ -169,9 +169,12 @@ func testFeature(ctx context.Context, t *testing.T, c cluster.Cluster, f feature
 
 // clusterVersionUpgrade performs a cluster version upgrade to its version.
 // It waits until all nodes have seen the upgraded cluster version.
-type clusterVersionUpgrade string
+type clusterVersionUpgrade struct {
+	newVersion string
+	manual     bool
+}
 
-func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s", cv) }
+func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s", cv.newVersion) }
 
 func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
 	t.Helper()
@@ -186,24 +189,26 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 	// in this test. When this flag is set to true, we query
 	// `crdb_internal.cluster_settings` instead, which *does* take everything from
 	// Gossip.
-	v, err := roachpb.ParseVersion(string(cv))
+	v, err := roachpb.ParseVersion(cv.newVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 	hasShowSettingBug := v.Less(roachpb.Version{Major: 1, Minor: 1, Unstable: 1})
 
-	func() {
-		db := makePGClient(t, c.PGUrl(ctx, rand.Intn(c.NumNodes())))
-		defer db.Close()
+	if cv.manual {
+		func() {
+			db := makePGClient(t, c.PGUrl(ctx, rand.Intn(c.NumNodes())))
+			defer db.Close()
 
-		log.Infof(ctx, "upgrading cluster version to %s", cv)
-		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, cv)); err != nil {
-			t.Fatal(err)
-		}
-	}()
+			log.Infof(ctx, "upgrading cluster version to %s", cv.newVersion)
+			if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, cv.newVersion)); err != nil {
+				t.Fatal(err)
+			}
+		}()
+	}
 
 	if hasShowSettingBug {
-		log.Infof(ctx, "using workaround for upgrade to %s", cv)
+		log.Infof(ctx, "using workaround for upgrade to %s", cv.newVersion)
 	}
 
 	for i := 0; i < c.NumNodes(); i++ {
@@ -225,14 +230,14 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 					t.Fatalf("%d: %s", i, err)
 				}
 			}
-			if version != string(cv) {
-				return errors.Errorf("%d: expected version %s, got %s", i, cv, version)
+			if version != cv.newVersion {
+				return errors.Errorf("%d: expected version %s, got %s", i, cv.newVersion, version)
 			}
 			return nil
 		})
 	}
 
-	log.Infof(ctx, "cluster is now at version %s", cv)
+	log.Infof(ctx, "cluster is now at version %s", cv.newVersion)
 
 	// TODO(nvanbenschoten): add upgrade qualification step.
 	time.Sleep(1 * time.Second)
@@ -251,21 +256,21 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		// v1.1.0 is the first binary version that knows about cluster versions,
 		// but thinks it can only support up to 1.0-3.
 		binaryVersionUpgrade{newVersion: "v1.1.0"},
-		clusterVersionUpgrade("1.0"),
-		clusterVersionUpgrade("1.0-3"),
+		clusterVersionUpgrade{newVersion: "1.0", manual: true},
+		clusterVersionUpgrade{newVersion: "1.0-3", manual: true},
 
 		binaryVersionUpgrade{newVersion: "v1.1.1"},
-		clusterVersionUpgrade("1.1"),
+		clusterVersionUpgrade{newVersion: "1.1", manual: true},
 
 		// Wipe out the data dir for the last nodes to start it fresh.
 		binaryVersionUpgrade{newVersion: "v2.0.0", wipeNodes: []int{min(3, len(cfg.Nodes)) - 1}},
 
 		binaryVersionUpgrade{newVersion: "v2.0.0"},
-		clusterVersionUpgrade("1.1-6"),
-		clusterVersionUpgrade("2.0"),
+		clusterVersionUpgrade{newVersion: "1.1-6", manual: true},
+		clusterVersionUpgrade{newVersion: "2.0", manual: true},
 
 		binaryVersionUpgrade{newVersion: sourceVersion},
-		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()),
+		clusterVersionUpgrade{newVersion: clusterversion.BinaryServerVersion.String()},
 	}
 
 	features := []feature{
@@ -327,7 +332,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		step.run(ctx, t, c)
 		if s, ok := step.(clusterVersionUpgrade); ok {
 			for _, feature := range features {
-				testFeature(ctx, t, c, feature, string(s))
+				testFeature(ctx, t, c, feature, s.newVersion)
 			}
 		}
 	}

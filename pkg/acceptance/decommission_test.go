@@ -346,7 +346,7 @@ func testDecommissionInner(
 	// waste too much time waiting for the node to be recognized as dead. Note that
 	// we don't want to set this number too low or everything will seem dead to the
 	// allocator at all times, so nothing will ever happen.
-	withDB(1, "SET CLUSTER SETTING server.time_until_store_dead = '15s'")
+	withDB(1, "SET CLUSTER SETTING server.time_until_store_dead = '1m15s'")
 
 	log.Info(ctx, "intentionally killing first node")
 	if err := c.Kill(ctx, 0); err != nil {
