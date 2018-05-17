@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -30,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
@@ -346,8 +348,12 @@ type test struct {
 	end      time.Time
 	mu       struct {
 		syncutil.RWMutex
-		done   bool
-		failed bool
+		done    bool
+		failed  bool
+		failLoc struct {
+			file string
+			line int
+		}
 		status map[int64]testStatus
 		output []byte
 	}
@@ -418,16 +424,16 @@ func (t *test) WorkerProgress(frac float64) {
 func (t *test) Fatal(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.failed = true
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
+	t.mu.failed = true
 	runtime.Goexit()
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.failed = true
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
+	t.mu.failed = true
 	runtime.Goexit()
 }
 
@@ -450,6 +456,13 @@ func (t *test) decorate(s string) string {
 		}
 		if frame.Function == t.runner {
 			break
+		}
+		if !t.mu.failed {
+			// Keep track of the highest stack frame that is lower than the t.runner
+			// stack frame. This is used to determine the author of that line of code
+			// and issue assignment.
+			t.mu.failLoc.file = frame.File
+			t.mu.failLoc.line = frame.Line
 		}
 		file := frame.File
 		if index := strings.LastIndexByte(file, '/'); index >= 0 {
@@ -546,6 +559,13 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 						)
 					}
 					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, t.mu.output)
+					if issues.CanPost() {
+						authorEmail := getAuthorEmail(t.mu.failLoc.file, t.mu.failLoc.line)
+						if err := issues.Post(context.Background(), "", "roachtest",
+							t.Name(), string(t.mu.output), authorEmail); err != nil {
+							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
+						}
+					}
 				} else if t.spec.SkippedBecause == "" {
 					fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -639,4 +659,31 @@ func teamCityEscape(s string) string {
 
 func teamCityNameEscape(name string) string {
 	return strings.Replace(name, ",", "_", -1)
+}
+
+// getAuthorEmail retrieves the author of a line of code. Returns the empty
+// string if the author cannot be determined.
+func getAuthorEmail(file string, line int) string {
+	const repo = "github.com/cockroachdb/cockroach/"
+	i := strings.Index(file, repo)
+	if i == -1 {
+		return ""
+	}
+	file = file[i+len(repo):]
+
+	cmd := exec.Command(`/bin/bash`, `-c`,
+		fmt.Sprintf(`git blame --porcelain -L%d,+1 $(git rev-parse --show-toplevel)/%s | grep author-mail`,
+			line, file))
+	// This command returns output such as:
+	// author-mail <jordan@cockroachlabs.com>
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	re := regexp.MustCompile("author-mail <(.*)>")
+	matches := re.FindSubmatch(out)
+	if matches == nil {
+		return ""
+	}
+	return string(matches[1])
 }
