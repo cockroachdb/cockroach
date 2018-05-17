@@ -57,6 +57,12 @@ type scopeColumn struct {
 	exprStr string
 }
 
+// isPassthrough is true if this column is just being passed through unmodified
+// from an inner scope.
+func (c *scopeColumn) isPassthrough() bool {
+	return c.group == 0
+}
+
 // getExprStr gets a stringified representation of the expression that this
 // column refers to, or the original column name if the column does not refer
 // to an expression. It caches the result in exprStr.
