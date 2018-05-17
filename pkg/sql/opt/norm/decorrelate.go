@@ -114,12 +114,12 @@ func (f *Factory) hoistValuesSubquery(rows memo.ListID, cols memo.PrivateID) mem
 	var hoister subqueryHoister
 	hoister.init(f.evalCtx, f, f.constructNoColsRow())
 
-	replaced := make([]memo.GroupID, rows.Length)
-	for i, item := range f.mem.LookupList(rows) {
-		replaced[i] = hoister.hoistAll(item)
+	lb := listBuilder{f: f}
+	for _, item := range f.mem.LookupList(rows) {
+		lb.addItem(hoister.hoistAll(item))
 	}
 
-	values := f.ConstructValues(f.mem.InternList(replaced), cols)
+	values := f.ConstructValues(lb.buildList(), cols)
 	projCols := f.mem.GroupProperties(values).Relational.OutputCols
 	join := f.ConstructInnerJoinApply(hoister.input(), values, f.ConstructTrue())
 	return f.ConstructSimpleProject(join, projCols)
@@ -306,8 +306,9 @@ func (f *Factory) ensureNotNullCol(in memo.GroupID) (out memo.GroupID, colID opt
 // constructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (f *Factory) constructNoColsRow() memo.GroupID {
-	rows := []memo.GroupID{f.ConstructTuple(f.InternList(nil))}
-	return f.ConstructValues(f.InternList(rows), f.InternColList(opt.ColList{}))
+	lb := listBuilder{f: f}
+	lb.addItem(f.ConstructTuple(f.InternList(nil)))
+	return f.ConstructValues(lb.buildList(), f.InternColList(opt.ColList{}))
 }
 
 // referenceSingleColumn returns a Variable operator that refers to the one and
@@ -480,7 +481,9 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 // unaffected.
 func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.GroupID {
 	trueColID := r.f.Metadata().AddColumn("true", types.Bool)
-	trueCols := memo.ProjectionsOpDef{SynthesizedCols: opt.ColList{trueColID}}
+	pb := projectionsBuilder{f: r.f}
+	pb.addSynthesized(r.f.ConstructTrue(), trueColID)
+	trueProjection := pb.buildProjections()
 
 	aggColID := r.f.Metadata().AddColumn("exists_agg", types.Bool)
 
@@ -488,10 +491,7 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.GroupID) memo.Gro
 	return r.f.ConstructGroupBy(
 		r.f.ConstructProject(
 			subquery,
-			r.f.ConstructProjections(
-				r.f.internSingletonList(r.f.ConstructTrue()),
-				r.f.InternProjectionsOpDef(&trueCols),
-			),
+			trueProjection,
 		),
 		r.f.ConstructAggregations(
 			r.f.internSingletonList(
