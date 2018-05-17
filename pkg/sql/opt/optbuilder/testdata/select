@@ -81,7 +81,8 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── null [type=unknown]
+ └── filters [type=bool]
+      └── null [type=unknown]
 
 build
 SELECT * FROM abc WHERE a = NULL
@@ -90,7 +91,8 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── null [type=unknown]
+ └── filters [type=bool]
+      └── null [type=unknown]
 
 build
 SELECT *,* FROM abc
@@ -139,18 +141,19 @@ project
       ├── columns: a:1(int!null) b:2(int) c:3(int)
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int) c:3(int)
-      └── case [type=bool]
-           ├── true [type=bool]
-           ├── when [type=bool]
-           │    ├── ne [type=bool]
-           │    │    ├── variable: abc.a [type=int]
-           │    │    └── const: 0 [type=int]
-           │    └── gt [type=bool]
-           │         ├── div [type=decimal]
-           │         │    ├── variable: abc.b [type=int]
-           │         │    └── variable: abc.a [type=int]
-           │         └── const: 1.5 [type=decimal]
-           └── false [type=bool]
+      └── filters [type=bool]
+           └── case [type=bool]
+                ├── true [type=bool]
+                ├── when [type=bool]
+                │    ├── ne [type=bool]
+                │    │    ├── variable: abc.a [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── gt [type=bool]
+                │         ├── div [type=decimal]
+                │         │    ├── variable: abc.b [type=int]
+                │         │    └── variable: abc.a [type=int]
+                │         └── const: 1.5 [type=decimal]
+                └── false [type=bool]
 
 # SELECT of NULL value.
 
@@ -270,9 +273,10 @@ project
       ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
-      └── eq [type=bool]
-           ├── variable: kv.k [type=string]
-           └── const: 'a' [type=string]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: kv.k [type=string]
+                └── const: 'a' [type=string]
 
 build
 SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
@@ -283,9 +287,10 @@ project
       ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
-      └── eq [type=bool]
-           ├── variable: kv.k [type=string]
-           └── const: 'a' [type=string]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: kv.k [type=string]
+                └── const: 'a' [type=string]
 
 exec-ddl
 CREATE TABLE kw ("from" INT PRIMARY KEY)
@@ -711,14 +716,15 @@ project
  └── projections
       └── any: eq [type=bool]
            ├── select
-           │    ├── columns: column1:1(int)
+           │    ├── columns: column1:1(int!null)
            │    ├── values
            │    │    ├── columns: column1:1(int)
            │    │    └── tuple [type=tuple{int}]
            │    │         └── const: 1 [type=int]
-           │    └── gt [type=bool]
-           │         ├── variable: column1 [type=int]
-           │         └── const: 1 [type=int]
+           │    └── filters [type=bool]
+           │         └── gt [type=bool]
+           │              ├── variable: column1 [type=int]
+           │              └── const: 1 [type=int]
            └── cast: int [type=int]
                 └── null [type=unknown]
 
@@ -734,15 +740,16 @@ project
            ├── project
            │    ├── columns: column3:3(tuple{int, int})
            │    ├── select
-           │    │    ├── columns: column1:1(int) column2:2(int)
+           │    │    ├── columns: column1:1(int!null) column2:2(int)
            │    │    ├── values
            │    │    │    ├── columns: column1:1(int) column2:2(int)
            │    │    │    └── tuple [type=tuple{int, int}]
            │    │    │         ├── const: 1 [type=int]
            │    │    │         └── const: 1 [type=int]
-           │    │    └── gt [type=bool]
-           │    │         ├── variable: column1 [type=int]
-           │    │         └── const: 1 [type=int]
+           │    │    └── filters [type=bool]
+           │    │         └── gt [type=bool]
+           │    │              ├── variable: column1 [type=int]
+           │    │              └── const: 1 [type=int]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
            │              ├── variable: column1 [type=int]
@@ -763,14 +770,15 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── select
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── gt [type=bool]
-                │         ├── variable: column1 [type=int]
-                │         └── const: 1 [type=int]
+                │    └── filters [type=bool]
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
                 └── cast: int [type=int]
                      └── null [type=unknown]
 
@@ -787,15 +795,16 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
                 │    │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── gt [type=bool]
-                │    │         ├── variable: column1 [type=int]
-                │    │         └── const: 1 [type=int]
+                │    │    └── filters [type=bool]
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
                 │    └── projections
                 │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
@@ -816,14 +825,15 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── select
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── gt [type=bool]
-                │         ├── variable: column1 [type=int]
-                │         └── const: 1 [type=int]
+                │    └── filters [type=bool]
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
                 └── cast: int [type=int]
                      └── null [type=unknown]
 
@@ -840,15 +850,16 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
                 │    │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── gt [type=bool]
-                │    │         ├── variable: column1 [type=int]
-                │    │         └── const: 1 [type=int]
+                │    │    └── filters [type=bool]
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
                 │    └── projections
                 │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
@@ -869,14 +880,15 @@ project
       └── not [type=bool]
            └── any: eq [type=bool]
                 ├── select
-                │    ├── columns: column1:1(int)
+                │    ├── columns: column1:1(int!null)
                 │    ├── values
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── gt [type=bool]
-                │         ├── variable: column1 [type=int]
-                │         └── const: 1 [type=int]
+                │    └── filters [type=bool]
+                │         └── gt [type=bool]
+                │              ├── variable: column1 [type=int]
+                │              └── const: 1 [type=int]
                 └── cast: int [type=int]
                      └── null [type=unknown]
 
@@ -893,15 +905,16 @@ project
                 ├── project
                 │    ├── columns: column3:3(tuple{int, int})
                 │    ├── select
-                │    │    ├── columns: column1:1(int) column2:2(int)
+                │    │    ├── columns: column1:1(int!null) column2:2(int)
                 │    │    ├── values
                 │    │    │    ├── columns: column1:1(int) column2:2(int)
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── gt [type=bool]
-                │    │         ├── variable: column1 [type=int]
-                │    │         └── const: 1 [type=int]
+                │    │    └── filters [type=bool]
+                │    │         └── gt [type=bool]
+                │    │              ├── variable: column1 [type=int]
+                │    │              └── const: 1 [type=int]
                 │    └── projections
                 │         └── tuple [type=tuple{int, int}]
                 │              ├── variable: column1 [type=int]
@@ -933,9 +946,10 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── gt [type=bool]
-      ├── variable: a.x [type=int]
-      └── const: 10 [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: a.x [type=int]
+           └── const: 10 [type=int]
 
 build
 SELECT * FROM a WHERE (x > 10 AND (x < 20 AND x != 13))
@@ -944,17 +958,18 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── and [type=bool]
-      ├── gt [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 10 [type=int]
+ └── filters [type=bool]
       └── and [type=bool]
-           ├── lt [type=bool]
+           ├── gt [type=bool]
            │    ├── variable: a.x [type=int]
-           │    └── const: 20 [type=int]
-           └── ne [type=bool]
-                ├── variable: a.x [type=int]
-                └── const: 13 [type=int]
+           │    └── const: 10 [type=int]
+           └── and [type=bool]
+                ├── lt [type=bool]
+                │    ├── variable: a.x [type=int]
+                │    └── const: 20 [type=int]
+                └── ne [type=bool]
+                     ├── variable: a.x [type=int]
+                     └── const: 13 [type=int]
 
 build
 SELECT * FROM a WHERE x IN (1, 2, 3)
@@ -963,12 +978,13 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── in [type=bool]
-      ├── variable: a.x [type=int]
-      └── tuple [type=tuple{int, int, int}]
-           ├── const: 1 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 3 [type=int]
+ └── filters [type=bool]
+      └── in [type=bool]
+           ├── variable: a.x [type=int]
+           └── tuple [type=tuple{int, int, int}]
+                ├── const: 1 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 3 [type=int]
 
 build
 SELECT * FROM a AS A(X, Y)
@@ -994,10 +1010,11 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── cast: bool [type=bool]
-      └── gt [type=bool]
-           ├── variable: a.x [type=int]
-           └── const: 10 [type=int]
+ └── filters [type=bool]
+      └── cast: bool [type=bool]
+           └── gt [type=bool]
+                ├── variable: a.x [type=int]
+                └── const: 10 [type=int]
 
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
@@ -1011,6 +1028,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
-      └── placeholder: $1 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: a.x [type=int]
+           └── placeholder: $1 [type=int]

@@ -187,9 +187,10 @@ select
  ├── columns: x:1(int) y:2(float) rowid:3(int!null)
  ├── scan c
  │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
- └── gt [type=bool]
-      ├── variable: c.rowid [type=int]
-      └── const: 0 [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: c.rowid [type=int]
+           └── const: 0 [type=int]
 
 build
 SELECT r FROM (SELECT x, y, rowid AS r FROM c)

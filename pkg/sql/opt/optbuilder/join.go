@@ -333,6 +333,8 @@ func (b *Builder) constructFilter(conditions []memo.GroupID) memo.GroupID {
 func (b *Builder) constructJoin(
 	joinType sqlbase.JoinType, left, right, filter memo.GroupID,
 ) memo.GroupID {
+	// Wrap the ON condition in a FiltersOp.
+	filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 	switch joinType {
 	case sqlbase.InnerJoin:
 		return b.factory.ConstructInnerJoin(left, right, filter)
