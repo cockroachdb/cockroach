@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -241,28 +242,35 @@ func (p *Logical) FormatColList(
 func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, id opt.ColumnID) {
 	if label == "" {
 		label = f.Metadata().ColumnLabel(id)
-		if f.HasFlags(opt.ExprFmtHideQualifications) {
-			// If the label is qualified, try to shorten it.
-			if idx := strings.LastIndex(label, "."); idx != -1 {
-				short := label[idx+1:]
-				suffix := label[idx:] // includes the "."
-				// Check if shortening the label could cause ambiguity: is there another
-				// column that would be shortened to the same name?
-				ambiguous := false
-				for col := opt.ColumnID(1); int(col) <= f.Metadata().NumColumns(); col++ {
-					if col != id {
-						if l := f.Metadata().ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
-							ambiguous = true
-							break
-						}
+	}
+
+	if !isSimpleColumnName(label) {
+		// Add quotations around the column name if it appears to be an
+		// expression. This also indicates that the column name is not eligible
+		// to be shortened.
+		label = "\"" + label + "\""
+	} else if f.HasFlags(opt.ExprFmtHideQualifications) {
+		// If the label is qualified, try to shorten it.
+		if idx := strings.LastIndex(label, "."); idx != -1 {
+			short := label[idx+1:]
+			suffix := label[idx:] // includes the "."
+			// Check if shortening the label could cause ambiguity: is there another
+			// column that would be shortened to the same name?
+			ambiguous := false
+			for col := opt.ColumnID(1); int(col) <= f.Metadata().NumColumns(); col++ {
+				if col != id {
+					if l := f.Metadata().ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
+						ambiguous = true
+						break
 					}
 				}
-				if !ambiguous {
-					label = short
-				}
+			}
+			if !ambiguous {
+				label = short
 			}
 		}
 	}
+
 	typ := f.Metadata().ColumnType(id)
 	buf.WriteByte(' ')
 	buf.WriteString(label)
@@ -274,4 +282,29 @@ func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, 
 		buf.WriteString("!null")
 	}
 	buf.WriteByte(')')
+}
+
+// isSimpleColumnName returns true if the given label consists of only ASCII
+// letters, numbers, underscores, quotation marks, and periods ("."). It is
+// used to determine whether or not we can shorten a column label by removing
+// the prefix up to the last ".". Although isSimpleColumnName excludes some
+// valid table column names, it ensures that we don't shorten expressions such
+// as "a.x + b.x" to "x". It is better to err on the side of not shortening
+// than to incorrectly shorten a column name representing an expression.
+func isSimpleColumnName(label string) bool {
+	for i, r := range label {
+		if r > unicode.MaxASCII {
+			return false
+		}
+
+		if i == 0 {
+			if r != '"' && !unicode.IsLetter(r) {
+				// The first character must be a letter or quotation mark.
+				return false
+			}
+		} else if r != '.' && r != '_' && r != '"' && !unicode.IsNumber(r) && !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
 }
