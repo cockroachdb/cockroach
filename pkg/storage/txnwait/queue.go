@@ -454,12 +454,20 @@ func (q *Queue) MaybeWaitForPush(
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
+	first := true
 	for {
 		// Set the timer to check for the pushee txn's expiration.
-		{
+		if !first {
 			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
 			now := q.store.Clock().Now().GoTime()
 			pusheeTxnTimer.Reset(expiration.Sub(now))
+		} else {
+			// The first time we want to check the pushee's txn record immediately:
+			// the pushee might be gone by the time the pusher gets here if it cleaned
+			// itself up after the pusher saw an intent but before it entered this
+			// queue.
+			pusheeTxnTimer.Reset(0)
+			first = false
 		}
 
 		select {
