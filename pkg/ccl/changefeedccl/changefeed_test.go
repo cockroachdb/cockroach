@@ -48,28 +48,66 @@ func TestChangefeedBasics(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING external.kafka.bootstrap_servers = $1`, t.Name())
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO KAFKA`)
+	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name())
 
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
 	})
 
 	sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 2, "b": "c"}`,
-		`{"a": 3, "b": "d"}`,
+		`[2]->{"a": 2, "b": "c"}`,
+		`[3]->{"a": 3, "b": "d"}`,
 	})
 
 	// TODO(dan): Doesn't work yet
 	// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+}
+
+func TestChangefeedEnvelope(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	const testPollingInterval = 10 * time.Millisecond
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = testPollingInterval
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+
+	testHost := t.Name()
+	t.Run(`envelope=row`, func(t *testing.T) {
+		k := newTestKafkaProducer()
+		testProducersHook[testHost+`_row`] = k
+		sqlDB.Exec(t,
+			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='row'`,
+			`kafka://`+testHost+`_row`)
+		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->{"a": 1, "b": "a"}`})
+	})
+	t.Run(`envelope=key_only`, func(t *testing.T) {
+		k := newTestKafkaProducer()
+		testProducersHook[testHost+`_key_only`] = k
+		sqlDB.Exec(t,
+			`CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1 WITH envelope='key_only'`,
+			`kafka://`+testHost+`_key_only`)
+		assertPayloads(t, k.WaitUntilNewMessages(), []string{`[1]->`})
+	})
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -89,7 +127,6 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING external.kafka.bootstrap_servers = $1`, t.Name())
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -98,11 +135,11 @@ func TestChangefeedMultiTable(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 	sqlDB.Exec(t, `INSERT INTO bar VALUES (2, 'b')`)
 
-	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO KAFKA`)
+	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT DATABASE d TO $1`, `kafka://`+t.Name())
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
 	})
 }
 
@@ -123,7 +160,6 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING external.kafka.bootstrap_servers = $1`, t.Name())
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -133,11 +169,13 @@ func TestChangefeedAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts)
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
-	sqlDB.Exec(t, fmt.Sprintf(
-		`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO KAFKA AS OF SYSTEM TIME %s`, ts))
+	sqlDB.Exec(t,
+		fmt.Sprintf(`CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1 AS OF SYSTEM TIME %s`, ts),
+		`kafka://`+t.Name(),
+	)
 
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 2, "b": "after"}`,
+		`[2]->{"a": 2, "b": "after"}`,
 	})
 }
 
@@ -160,7 +198,6 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	k := newTestKafkaProducer()
 	testProducersHook[t.Name()] = k
-	sqlDB.Exec(t, `SET CLUSTER SETTING external.kafka.bootstrap_servers = $1`, t.Name())
 	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -168,15 +205,15 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
 
 	var jobID int
-	sqlDB.QueryRow(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO KAFKA`).Scan(&jobID)
+	sqlDB.QueryRow(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name()).Scan(&jobID)
 
 	<-k.flushCh
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 1, "b": "a"}`,
-		`{"a": 2, "b": "b"}`,
-		`{"a": 4, "b": "c"}`,
-		`{"a": 7, "b": "d"}`,
-		`{"a": 8, "b": "e"}`,
+		`[1]->{"a": 1, "b": "a"}`,
+		`[2]->{"a": 2, "b": "b"}`,
+		`[4]->{"a": 4, "b": "c"}`,
+		`[7]->{"a": 7, "b": "d"}`,
+		`[8]->{"a": 8, "b": "e"}`,
 	})
 
 	// PAUSE JOB is asynchronous, so wait out a few polling intervals for it to
@@ -191,7 +228,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 
 	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
 	assertPayloads(t, k.WaitUntilNewMessages(), []string{
-		`{"a": 16, "b": "f"}`,
+		`[16]->{"a": 16, "b": "f"}`,
 	})
 }
 
@@ -279,11 +316,15 @@ func assertPayloads(t testing.TB, messages []*sarama.ProducerMessage, expected [
 	t.Helper()
 	var actual []string
 	for _, m := range messages {
+		key, err := m.Key.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
 		value, err := m.Value.Encode()
 		if err != nil {
 			t.Fatal(err)
 		}
-		actual = append(actual, string(value))
+		actual = append(actual, string(key)+`->`+string(value))
 	}
 	sort.Strings(actual)
 	sort.Strings(expected)

@@ -748,6 +748,10 @@ func (nl *NodeLiveness) updateLiveness(
 	handleCondFailed func(actual Liveness) error,
 ) error {
 	for {
+		// Before each attempt, ensure that the context has not expired.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for _, eng := range nl.engines {
 			// Synchronously writing to all disks before updating node liveness because
 			// we don't want any excessively slow disks to prevent the lease from
