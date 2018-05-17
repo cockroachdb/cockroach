@@ -27,7 +27,7 @@ case "${cmd}" in
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "default,cloud-platform"
-    gcloud compute firewall-rules create "mosh" --allow udp:60000-61000
+    gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # Retry while vm and sshd to start up.
     retry gcloud compute ssh "${NAME}" --command=true
@@ -47,7 +47,10 @@ case "${cmd}" in
     gcloud compute instances stop "${NAME}"
     ;;
     delete|destroy)
-    gcloud compute instances delete "${NAME}"
+    status=0
+    gcloud compute firewall-rules delete "${NAME}-mosh" || status=$((status+1))
+    gcloud compute instances delete "${NAME}" || status=$((status+1))
+    exit ${status}
     ;;
     ssh)
     retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
