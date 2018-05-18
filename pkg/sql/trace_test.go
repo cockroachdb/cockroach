@@ -114,6 +114,31 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 
+				// Check that stat collection from the above SELECT statement is output
+				// to trace. We don't insert any rows in this test, thus the expected
+				// stat value is 0.
+				rows, err = sqlDB.Query(
+					"SELECT COUNT(message) FROM crdb_internal.session_trace " +
+						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !rows.Next() {
+					t.Fatal("unable to retrieve count")
+				}
+
+				var count int
+				if err := rows.Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if err := rows.Close(); err != nil {
+					t.Fatal(err)
+				}
+				if count == 0 {
+					t.Fatalf("no stat messages found")
+				}
+
 				return sqlDB.Query(
 					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
 						"WHERE operation IS NOT NULL ORDER BY op")

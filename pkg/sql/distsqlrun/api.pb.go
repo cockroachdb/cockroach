@@ -8,6 +8,7 @@
 		sql/distsqlrun/api.proto
 		sql/distsqlrun/data.proto
 		sql/distsqlrun/processors.proto
+		sql/distsqlrun/stats.proto
 
 	It has these top-level messages:
 		SetupFlowRequest
@@ -28,7 +29,6 @@
 		ProducerData
 		ProducerMessage
 		RemoteProducerMetadata
-		InputStats
 		DistSQLVersionGossipInfo
 		DistSQLDrainingInfo
 		ProcessorSpec
@@ -58,6 +58,8 @@
 		SamplerSpec
 		SampleAggregatorSpec
 		InterleavedReaderJoinerSpec
+		InputStats
+		TableReaderStats
 */
 package distsqlrun
 

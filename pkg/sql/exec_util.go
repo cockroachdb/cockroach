@@ -1293,15 +1293,32 @@ func getMessagesForSubtrace(
 	var allLogs []logRecordRow
 	const spanStartMsgTemplate = "=== SPAN START: %s ==="
 
-	// Add a dummy log message marking the beginning of the span, to indicate
-	// the start time and duration of span.
-	allLogs = append(allLogs,
+	// spanStartMsgs are metadata about the span, e.g. the operation name and tags
+	// contained in the span. They are added as one log message.
+	spanStartMsgs := make([]string, 0, len(span.Tags)+1)
+
+	spanStartMsgs = append(spanStartMsgs, fmt.Sprintf(spanStartMsgTemplate, span.Operation))
+
+	// Add recognized tags to the output.
+	for name, value := range span.Tags {
+		if !strings.HasPrefix(name, tracing.TagPrefix) {
+			// Not a tag to be output.
+			continue
+		}
+		spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s: %s", name, value))
+	}
+
+	// This message holds all the spanStartMsgs and marks the beginning of the
+	// span, to indicate the start time and duration of the span.
+	allLogs = append(
+		allLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
-			msg:       fmt.Sprintf(spanStartMsgTemplate, span.Operation),
+			msg:       strings.Join(spanStartMsgs, "\n"),
 			span:      span,
 			index:     0,
-		})
+		},
+	)
 
 	seenSpans[span.SpanID] = struct{}{}
 	childSpans := getOrderedChildSpans(span.SpanID, allSpans)
@@ -1325,7 +1342,8 @@ func getMessagesForSubtrace(
 					timestamp: logTime,
 					msg:       extractMsgFromRecord(span.Logs[i]),
 					span:      span,
-					// Add 1 to the index to account for the first dummy message in a span.
+					// Add 1 to the index to account for the first dummy message in a
+					// span.
 					index: i + 1,
 				})
 			i++
