@@ -138,6 +138,9 @@ func (c *csvInputReader) convertRecord(ctx context.Context, kvCh chan<- kvBatch)
 	if err != nil {
 		return err
 	}
+	if conv.evalCtx.SessionData == nil {
+		panic("uninitialized session data")
+	}
 
 	for batch := range c.recordCh {
 		for batchIdx, record := range batch.r {
