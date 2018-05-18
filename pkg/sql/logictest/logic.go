@@ -362,6 +362,8 @@ type testClusterConfig struct {
 	name                string
 	numNodes            int
 	useFakeSpanResolver bool
+	// if non-empty, overrides the default optimizer mode.
+	overrideOptimizerMode string
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
 	// if set, queries using distSQL processors that can fall back to disk do
@@ -396,12 +398,15 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
+	{name: "opt", numNodes: 1, overrideOptimizerMode: "On"},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
+	{name: "distsql-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
 	{name: "distsql-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "distsql-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true},
 	{name: "5node", numNodes: 5, overrideDistSQLMode: "Off"},
 	{name: "5node-distsql", numNodes: 5, overrideDistSQLMode: "On"},
+	{name: "5node-distsql-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
 	{name: "5node-distsql-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "5node-distsql-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true},
 }
@@ -947,6 +952,13 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 CREATE DATABASE test;
 `); err != nil {
 		t.Fatal(err)
+	}
+
+	// Enable the cost-based optimizer rather than the heuristic planner.
+	if cfg.overrideOptimizerMode != "" {
+		if _, err := t.db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", cfg.overrideOptimizerMode)); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", server.TestUser)); err != nil {
