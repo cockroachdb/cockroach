@@ -52,7 +52,7 @@ limit
 build
 VALUES (1), (1), (2), (3) ORDER BY z
 ----
-error: column name "z" not found
+error (42703): column name "z" not found
 
 build
 VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)

@@ -110,12 +110,12 @@ TABLE a
 build fully-qualify-names
 SELECT a.x FROM db1.a, db2.a
 ----
-error: ambiguous source name: "a"
+error (42P09): ambiguous source name: "a"
 
 build fully-qualify-names
 SELECT x FROM a, b
 ----
-error: column reference "x" is ambiguous (candidates: a.x, b.x)
+error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 
 build fully-qualify-names
 SELECT * FROM db1.a, db2.a
@@ -152,4 +152,4 @@ inner-join
 build fully-qualify-names
 SELECT a.* FROM t.a, a AS a
 ----
-error: ambiguous source name: "a"
+error (42P09): ambiguous source name: "a"

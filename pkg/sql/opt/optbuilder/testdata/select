@@ -48,7 +48,7 @@ TABLE abc
 build
 SELECT * FROM abc WHERE 'hello'
 ----
-error: could not parse "hello" as type bool: invalid bool value
+error (22P02): could not parse "hello" as type bool: invalid bool value
 
 build
 SELECT * FROM abc
@@ -236,33 +236,33 @@ project
 build
 SELECT foo.* FROM kv
 ----
-error: no data source matches pattern: foo.*
+error (42P01): no data source matches pattern: foo.*
 
 build
 SELECT *
 ----
-error: cannot use "*" without a FROM clause
+error (42602): cannot use "*" without a FROM clause
 
 build
 SELECT kv.* AS foo FROM kv
 ----
-error: "kv.*" cannot be aliased
+error (42601): "kv.*" cannot be aliased
 
 build
 SELECT bar.kv.* FROM kv
 ----
-error: no data source matches pattern: bar.kv.*
+error (42P01): no data source matches pattern: bar.kv.*
 
 # Don't panic with invalid names (#8024)
 build
 SELECT kv.*[1] FROM kv
 ----
-error: cannot subscript type tuple{string, string} because it is not an array
+error (42804): cannot subscript type tuple{string, string} because it is not an array
 
 build
 SELECT ARRAY[]
 ----
-error: cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY[]:::int[]
+error (42P18): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY[]:::int[]
 
 build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
@@ -334,19 +334,19 @@ TABLE xyzw
 build
 SELECT * FROM xyzw LIMIT x
 ----
-error: column name "x" not found
+error (42703): column name "x" not found
 
 # TODO(rytaft): Fix error message:
 # error: name "y" is not defined
 build
 SELECT * FROM xyzw OFFSET 1 + y
 ----
-error: column name "y" not found
+error (42703): column name "y" not found
 
 build
 SELECT * FROM xyzw LIMIT 3.3
 ----
-error: argument of LIMIT must be type int, not type decimal
+error (42804): argument of LIMIT must be type int, not type decimal
 
 build
 SELECT * FROM xyzw ORDER BY 1 LIMIT '1'
@@ -362,7 +362,7 @@ limit
 build
 SELECT * FROM xyzw OFFSET 1.5
 ----
-error: argument of OFFSET must be type int, not type decimal
+error (42804): argument of OFFSET must be type int, not type decimal
 
 # At execution time, this will cause the error: negative value for LIMIT
 build
@@ -1019,7 +1019,7 @@ select
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
 ----
-error: invalid cast: bool -> INT[]
+error (42846): invalid cast: bool -> INT[]
 
 build
 SELECT * FROM a WHERE x = $1
