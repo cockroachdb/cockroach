@@ -81,7 +81,7 @@ k:int  v:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-render                    ·            ·          (column4)     ·
+render                    ·            ·          (sum)         ·
  │                        render 0     agg0       ·             ·
  └── limit                ·            ·          (k, v, agg0)  -v
       │                   count        10         ·             ·
@@ -99,7 +99,7 @@ render                    ·            ·          (column4)     ·
 exec
 SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
-column4:decimal
+sum:decimal
 125
 27
 1

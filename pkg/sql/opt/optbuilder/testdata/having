@@ -21,7 +21,7 @@ build
 SELECT 3 FROM kv HAVING TRUE
 ----
 project
- ├── columns: column5:5(int!null)
+ ├── columns: "3":5(int!null)
  ├── select
  │    ├── group-by
  │    │    └── project
@@ -35,7 +35,7 @@ build
 SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
 ----
 select
- ├── columns: s:4(string) column5:5(int!null)
+ ├── columns: s:4(string) count:5(int!null)
  ├── group-by
  │    ├── columns: s:4(string) column5:5(int)
  │    ├── grouping columns: s:4(string)
@@ -53,11 +53,11 @@ build
 SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
 ----
 project
- ├── columns: column6:6(int) column5:5(int!null)
+ ├── columns: max:6(int) min:5(int!null)
  └── select
-      ├── columns: column5:5(int!null) column6:6(int)
+      ├── columns: column5:5(int!null) max:6(int)
       ├── group-by
-      │    ├── columns: column5:5(int) column6:6(int)
+      │    ├── columns: column5:5(int) max:6(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
       │    │    └── scan kv
@@ -75,11 +75,11 @@ build
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 ----
 project
- ├── columns: column6:6(int) column7:7(int)
+ ├── columns: max:6(int) min:7(int)
  └── select
-      ├── columns: column5:5(int!null) column6:6(int) column7:7(int)
+      ├── columns: column5:5(int!null) max:6(int) min:7(int)
       ├── group-by
-      │    ├── columns: column5:5(int) column6:6(int) column7:7(int)
+      │    ├── columns: column5:5(int) max:6(int) min:7(int)
       │    ├── project
       │    │    ├── columns: k:1(int!null) v:2(int)
       │    │    └── scan kv
@@ -127,11 +127,11 @@ build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 project
- ├── columns: column6:6(int) column5:5(int)
+ ├── columns: count:6(int) "k + w":5(int)
  └── select
-      ├── columns: column5:5(int) column6:6(int)
+      ├── columns: column5:5(int) count:6(int)
       ├── group-by
-      │    ├── columns: column5:5(int) column6:6(int)
+      │    ├── columns: column5:5(int) count:6(int)
       │    ├── grouping columns: column5:5(int)
       │    ├── project
       │    │    ├── columns: column5:5(int)
@@ -159,11 +159,11 @@ build
 SELECT MAX(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: max:5(int)
  └── select
-      ├── columns: v:2(int!null) column5:5(int)
+      ├── columns: v:2(int!null) max:5(int)
       ├── group-by
-      │    ├── columns: v:2(int) column5:5(int)
+      │    ├── columns: v:2(int) max:5(int)
       │    ├── grouping columns: v:2(int)
       │    ├── project
       │    │    ├── columns: v:2(int)
@@ -180,11 +180,11 @@ build
 SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING LOWER(kv.s) LIKE 'test%'
 ----
 project
- ├── columns: column6:6(decimal)
+ ├── columns: sum:6(decimal)
  └── select
-      ├── columns: column5:5(string) column6:6(decimal)
+      ├── columns: column5:5(string) sum:6(decimal)
       ├── group-by
-      │    ├── columns: column5:5(string) column6:6(decimal)
+      │    ├── columns: column5:5(string) sum:6(decimal)
       │    ├── grouping columns: column5:5(string)
       │    ├── project
       │    │    ├── columns: column5:5(string) w:3(int)
@@ -205,7 +205,7 @@ build
 SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING SUM(w) IN (4, 5, 6)
 ----
 project
- ├── columns: column6:6(decimal!null)
+ ├── columns: sum:6(decimal!null)
  └── select
       ├── columns: column5:5(string) column6:6(decimal!null)
       ├── group-by
@@ -261,9 +261,9 @@ build fully-qualify-names
 SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
 ----
 select
- ├── columns: column5:5(string) column6:6(int!null) column7:7(int)
+ ├── columns: upper:5(string) count:6(int!null) count:7(int)
  ├── group-by
- │    ├── columns: column5:5(string) column6:6(int) column7:7(int)
+ │    ├── columns: column5:5(string) column6:6(int) count:7(int)
  │    ├── grouping columns: column5:5(string)
  │    ├── project
  │    │    ├── columns: column5:5(string) t.public.kv.s:4(string)

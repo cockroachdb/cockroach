@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // constructProjectForScope constructs a projection if it will result in a different
@@ -73,28 +74,72 @@ func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.
 // (scope.groupby.aggs)
 func (b *Builder) buildProjectionList(selects tree.SelectExprs, inScope *scope, outScope *scope) {
 	for _, e := range selects {
-		b.buildProjection(e.Expr, string(e.As), inScope, outScope)
+		// Pre-normalize any VarName so the work is not done twice below.
+		if err := e.NormalizeTopLevelVarName(); err != nil {
+			panic(builderError{err})
+		}
+
+		// Special handling for "*" and "<table>.*".
+		if v, ok := e.Expr.(tree.VarName); ok {
+			switch v.(type) {
+			case tree.UnqualifiedStar, *tree.AllColumnsSelector:
+				if e.As != "" {
+					panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+						"%q cannot be aliased", tree.ErrString(v))})
+				}
+
+				exprs := b.expandStar(e.Expr, inScope)
+				for _, e := range exprs {
+					b.buildScalarProjection(e, "", inScope, outScope)
+				}
+				continue
+			}
+		}
+
+		// Output column names should exactly match the original expression, so we
+		// have to determine the output column name before we perform type
+		// checking.
+		label := b.getColName(e)
+		texpr := inScope.resolveType(e.Expr, types.Any)
+		b.buildScalarProjection(texpr, label, inScope, outScope)
 	}
 }
 
-// buildProjection builds a set of memo groups that represent a projection
-// expression.
-//
-// projection  The given projection expression.
-// label       If a new column is synthesized (e.g., for a scalar expression),
-//             it will be labeled with this string.
-//
-// See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) buildProjection(projection tree.Expr, label string, inScope, outScope *scope) {
-	exprs := b.expandStarAndResolveType(projection, inScope)
-	if len(exprs) > 1 && label != "" {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"%q cannot be aliased", tree.ErrString(projection))})
+// getColName returns the output column name for a projection expression.
+// It assumes that top-level variable names have already been normalized via a
+// call to NormalizeTopLevelVarName().
+// NB: This function is copied from sql/getRenderColName() in sql/render.go.
+func (b *Builder) getColName(expr tree.SelectExpr) string {
+	if expr.As != "" {
+		return string(expr.As)
 	}
 
-	for _, e := range exprs {
-		b.buildScalarProjection(e, label, inScope, outScope)
+	switch t := expr.Expr.(type) {
+	case *tree.ColumnItem:
+		// If the expression designates a column, try to reuse that column's name
+		// as projection name.
+		return t.Column()
+
+	case *tree.FuncExpr:
+		// Special case for projecting builtin functions: the column name for an
+		// otherwise un-named builtin output column is just the name of the builtin.
+		fd, err := t.Func.Resolve(b.semaCtx.SearchPath)
+		if err != nil {
+			panic(builderError{err})
+		}
+		return fd.Name
+
+	case *tree.ColumnAccessExpr:
+		// Special case for projecting a column accessor.
+		if t.Star {
+			// TODO(bram): remove this, this case should never happen once (srf).* is
+			// correctly implemented.
+			return t.Expr.String()
+		}
+		return t.ColName
 	}
+
+	return expr.Expr.String()
 }
 
 // buildScalarProjection builds a set of memo groups that represent a scalar

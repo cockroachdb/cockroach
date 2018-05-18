@@ -142,7 +142,7 @@ build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
 sort
- ├── columns: foo.bar:1(int!null) b:2(int)
+ ├── columns: bar:1(int!null) b:2(int)
  ├── ordering: -1
  └── project
       ├── columns: a:1(int!null) b:2(int)
@@ -453,10 +453,10 @@ build
 SELECT 1, * FROM t ORDER BY 1
 ----
 sort
- ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
+ ├── columns: "1":4(int!null) a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int!null) a:1(int!null) b:2(int) c:3(bool)
+      ├── columns: "1":4(int!null) a:1(int!null) b:2(int) c:3(bool)
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
@@ -480,10 +480,10 @@ build
 SELECT b+2 FROM t ORDER BY b+2
 ----
 sort
- ├── columns: column4:4(int)
+ ├── columns: "b + 2":4(int)
  ├── ordering: +4
  └── project
-      ├── columns: column4:4(int)
+      ├── columns: "b + 2":4(int)
       ├── scan t
       │    └── columns: a:1(int!null) b:2(int) c:3(bool)
       └── projections
@@ -747,7 +747,7 @@ build
 SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: "a + b":5(int)
  ├── scan abcd
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections
@@ -759,7 +759,7 @@ build
 SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: "b + d":5(int)
  ├── scan abcd
  │    └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
  └── projections

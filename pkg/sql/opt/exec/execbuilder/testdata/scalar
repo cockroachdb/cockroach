@@ -9,7 +9,7 @@ CREATE TABLE t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1 + 2
 ----
-render       ·         ·                 (column1)  ·
+render       ·         ·                 ("1 + 2")  ·
  │           render 0  3                 ·          ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
@@ -17,15 +17,15 @@ render       ·         ·                 (column1)  ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT true
 ----
-render       ·         ·                 (column1)  ·
- │           render 0  true              ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render       ·         ·                 ("true")  ·
+ │           render 0  true              ·         ·
+ └── values  ·         ·                 ()        ·
+·            size      0 columns, 1 row  ·         ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT false
 ----
-render       ·         ·                 (column1)  ·
+render       ·         ·                 ("false")  ·
  │           render 0  false             ·          ·
  └── values  ·         ·                 ()         ·
 ·            size      0 columns, 1 row  ·          ·
@@ -33,23 +33,23 @@ render       ·         ·                 (column1)  ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (1, 2)
 ----
-render       ·         ·                 (column1)  ·
- │           render 0  (1, 2)            ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render       ·         ·                 ("(1, 2)")  ·
+ │           render 0  (1, 2)            ·           ·
+ └── values  ·         ·                 ()          ·
+·            size      0 columns, 1 row  ·           ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (true, false)
 ----
-render       ·         ·                 (column1)  ·
- │           render 0  (true, false)     ·          ·
- └── values  ·         ·                 ()         ·
-·            size      0 columns, 1 row  ·          ·
+render       ·         ·                 ("(true, false)")  ·
+ │           render 0  (true, false)     ·                  ·
+ └── values  ·         ·                 ()                 ·
+·            size      0 columns, 1 row  ·                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT 1 + 2 FROM t
 ----
-render     ·         ·          (column8)  ·
+render     ·         ·          ("1 + 2")  ·
  │         render 0  3          ·          ·
  └── scan  ·         ·          ()         ·
 ·          table     t@primary  ·          ·
@@ -58,7 +58,7 @@ render     ·         ·          (column8)  ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a + 2 FROM t
 ----
-render     ·         ·          (column8)  ·
+render     ·         ·          ("a + 2")  ·
  │         render 0  a + 2      ·          ·
  └── scan  ·         ·          (a)        ·
 ·          table     t@primary  ·          ·
@@ -67,219 +67,219 @@ render     ·         ·          (column8)  ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a >= 5 AND b <= 10 AND c < 4 FROM t
 ----
-render     ·         ·                                     (column8)  ·
- │         render 0  ((a >= 5) AND (b <= 10)) AND (c < 4)  ·          ·
- └── scan  ·         ·                                     (a, b, c)  ·
-·          table     t@primary                             ·          ·
-·          spans     ALL                                   ·          ·
+render     ·         ·                                     ("((a >= 5) AND (b <= 10)) AND (c < 4)")  ·
+ │         render 0  ((a >= 5) AND (b <= 10)) AND (c < 4)  ·                                         ·
+ └── scan  ·         ·                                     (a, b, c)                                 ·
+·          table     t@primary                             ·                                         ·
+·          spans     ALL                                   ·                                         ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a >= 5 OR b <= 10 OR c < 4  FROM t
 ----
-render     ·         ·                                   (column8)  ·
- │         render 0  ((a >= 5) OR (b <= 10)) OR (c < 4)  ·          ·
- └── scan  ·         ·                                   (a, b, c)  ·
-·          table     t@primary                           ·          ·
-·          spans     ALL                                 ·          ·
+render     ·         ·                                   ("((a >= 5) OR (b <= 10)) OR (c < 4)")  ·
+ │         render 0  ((a >= 5) OR (b <= 10)) OR (c < 4)  ·                                       ·
+ └── scan  ·         ·                                   (a, b, c)                               ·
+·          table     t@primary                           ·                                       ·
+·          spans     ALL                                 ·                                       ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT NOT (a = 5) FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  a != 5     ·          ·
- └── scan  ·         ·          (a)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("NOT (a = 5)")  ·
+ │         render 0  a != 5     ·                ·
+ └── scan  ·         ·          (a)              ·
+·          table     t@primary  ·                ·
+·          spans     ALL        ·                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT NOT (a > 5 AND b >= 10) FROM t
 ----
-render     ·         ·                     (column8)  ·
- │         render 0  (a <= 5) OR (b < 10)  ·          ·
- └── scan  ·         ·                     (a, b)     ·
-·          table     t@primary             ·          ·
-·          spans     ALL                   ·          ·
+render     ·         ·                     ("NOT ((a > 5) AND (b >= 10))")  ·
+ │         render 0  (a <= 5) OR (b < 10)  ·                                ·
+ └── scan  ·         ·                     (a, b)                           ·
+·          table     t@primary             ·                                ·
+·          spans     ALL                   ·                                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) FROM t
 ----
-render     ·         ·                                                    (column8)  ·
- │         render 0  ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·          ·
- └── scan  ·         ·                                                    (a, b, c)  ·
-·          table     t@primary                                            ·          ·
-·          spans     ALL                                                  ·          ·
+render     ·         ·                                                    ("((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))")  ·
+ │         render 0  ((a >= 5) AND (b <= 10)) OR ((a <= 10) AND (c > 5))  ·                                                        ·
+ └── scan  ·         ·                                                    (a, b, c)                                                ·
+·          table     t@primary                                            ·                                                        ·
+·          spans     ALL                                                  ·                                                        ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) FROM t
 ----
-render     ·         ·                                    (column8)  ·
- │         render 0  ((a < 5) AND (b > 10)) AND (c < 10)  ·          ·
- └── scan  ·         ·                                    (a, b, c)  ·
-·          table     t@primary                            ·          ·
-·          spans     ALL                                  ·          ·
+render     ·         ·                                    ("(NOT ((a >= 5) OR (b <= 10))) AND (NOT (c >= 10))")  ·
+ │         render 0  ((a < 5) AND (b > 10)) AND (c < 10)  ·                                                      ·
+ └── scan  ·         ·                                    (a, b, c)                                              ·
+·          table     t@primary                            ·                                                      ·
+·          spans     ALL                                  ·                                                      ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (a, b) = (1, 2)  FROM t
 ----
-render     ·         ·                    (column8)  ·
- │         render 0  (a = 1) AND (b = 2)  ·          ·
- └── scan  ·         ·                    (a, b)     ·
-·          table     t@primary            ·          ·
-·          spans     ALL                  ·          ·
+render     ·         ·                    ("(a, b) = (1, 2)")  ·
+ │         render 0  (a = 1) AND (b = 2)  ·                    ·
+ └── scan  ·         ·                    (a, b)               ·
+·          table     t@primary            ·                    ·
+·          spans     ALL                  ·                    ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IN (1, 2) FROM t
 ----
-render     ·         ·            (column8)  ·
- │         render 0  a IN (1, 2)  ·          ·
- └── scan  ·         ·            (a)        ·
-·          table     t@primary    ·          ·
-·          spans     ALL          ·          ·
+render     ·         ·            ("a IN (1, 2)")  ·
+ │         render 0  a IN (1, 2)  ·                ·
+ └── scan  ·         ·            (a)              ·
+·          table     t@primary    ·                ·
+·          spans     ALL          ·                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (a, b) IN ((1, 2), (3, 4)) FROM t
 ----
-render     ·         ·                           (column8)  ·
- │         render 0  (a, b) IN ((1, 2), (3, 4))  ·          ·
- └── scan  ·         ·                           (a, b)     ·
-·          table     t@primary                   ·          ·
-·          spans     ALL                         ·          ·
+render     ·         ·                           ("(a, b) IN ((1, 2), (3, 4))")  ·
+ │         render 0  (a, b) IN ((1, 2), (3, 4))  ·                               ·
+ └── scan  ·         ·                           (a, b)                          ·
+·          table     t@primary                   ·                               ·
+·          spans     ALL                         ·                               ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t
 ----
-render     ·         ·                                                                (column8)     ·
- │         render 0  ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·             ·
- └── scan  ·         ·                                                                (a, b, c, d)  ·
-·          table     t@primary                                                        ·             ·
-·          spans     ALL                                                              ·             ·
+render     ·         ·                                                                ("(a, b + c, 5 + (d * 2)) = (b + c, 8, a - c)")  ·
+ │         render 0  ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·                                                ·
+ └── scan  ·         ·                                                                (a, b, c, d)                                     ·
+·          table     t@primary                                                        ·                                                ·
+·          spans     ALL                                                              ·                                                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  FROM t
 ----
-render     ·         ·                                                (column8)     ·
- │         render 0  (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·             ·
- └── scan  ·         ·                                                (a, b, c, d)  ·
-·          table     t@primary                                        ·             ·
-·          spans     ALL                                              ·             ·
+render     ·         ·                                                ("((a, b), (c, d)) = ((1, 2), (3, 4))")  ·
+ │         render 0  (((a = 1) AND (b = 2)) AND (c = 3)) AND (d = 4)  ·                                        ·
+ └── scan  ·         ·                                                (a, b, c, d)                             ·
+·          table     t@primary                                        ·                                        ·
+·          spans     ALL                                              ·                                        ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) FROM t
 ----
-render     ·         ·                                                                                      (column8)     ·
- │         render 0  (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·             ·
- └── scan  ·         ·                                                                                      (a, b, c, s)  ·
-·          table     t@primary                                                                              ·             ·
-·          spans     ALL                                                                                    ·             ·
+render     ·         ·                                                                                      ("(a, (b, 'a'), (c, 'b', 5)) = (9, (a + c, s), (5, s, a))")  ·
+ │         render 0  (((((a = 9) AND (b = (a + c))) AND (s = 'a')) AND (c = 5)) AND (s = 'b')) AND (a = 5)  ·                                                            ·
+ └── scan  ·         ·                                                                                      (a, b, c, s)                                                 ·
+·          table     t@primary                                                                              ·                                                            ·
+·          spans     ALL                                                                                    ·                                                            ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS NULL FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  a IS NULL  ·          ·
- └── scan  ·         ·          (a)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("a IS NULL")  ·
+ │         render 0  a IS NULL  ·              ·
+ └── scan  ·         ·          (a)            ·
+·          table     t@primary  ·              ·
+·          spans     ALL        ·              ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM NULL FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  a IS NULL  ·          ·
- └── scan  ·         ·          (a)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("a IS NULL")  ·
+ │         render 0  a IS NULL  ·              ·
+ └── scan  ·         ·          (a)            ·
+·          table     t@primary  ·              ·
+·          spans     ALL        ·              ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS NOT DISTINCT FROM b FROM t
 ----
-render     ·         ·                         (column8)  ·
- │         render 0  a IS NOT DISTINCT FROM b  ·          ·
- └── scan  ·         ·                         (a, b)     ·
-·          table     t@primary                 ·          ·
-·          spans     ALL                       ·          ·
+render     ·         ·                         ("a IS NOT DISTINCT FROM b")  ·
+ │         render 0  a IS NOT DISTINCT FROM b  ·                             ·
+ └── scan  ·         ·                         (a, b)                        ·
+·          table     t@primary                 ·                             ·
+·          spans     ALL                       ·                             ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS NOT NULL FROM t
 ----
-render     ·         ·              (column8)  ·
- │         render 0  a IS NOT NULL  ·          ·
- └── scan  ·         ·              (a)        ·
-·          table     t@primary      ·          ·
-·          spans     ALL            ·          ·
+render     ·         ·              ("a IS NOT NULL")  ·
+ │         render 0  a IS NOT NULL  ·                  ·
+ └── scan  ·         ·              (a)                ·
+·          table     t@primary      ·                  ·
+·          spans     ALL            ·                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM NULL FROM t
 ----
-render     ·         ·              (column8)  ·
- │         render 0  a IS NOT NULL  ·          ·
- └── scan  ·         ·              (a)        ·
-·          table     t@primary      ·          ·
-·          spans     ALL            ·          ·
+render     ·         ·              ("a IS NOT NULL")  ·
+ │         render 0  a IS NOT NULL  ·                  ·
+ └── scan  ·         ·              (a)                ·
+·          table     t@primary      ·                  ·
+·          spans     ALL            ·                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a IS DISTINCT FROM b FROM t
 ----
-render     ·         ·                     (column8)  ·
- │         render 0  a IS DISTINCT FROM b  ·          ·
- └── scan  ·         ·                     (a, b)     ·
-·          table     t@primary             ·          ·
-·          spans     ALL                   ·          ·
+render     ·         ·                     ("a IS DISTINCT FROM b")  ·
+ │         render 0  a IS DISTINCT FROM b  ·                         ·
+ └── scan  ·         ·                     (a, b)                    ·
+·          table     t@primary             ·                         ·
+·          spans     ALL                   ·                         ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT +a + (-b) FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  a + (-b)   ·          ·
- └── scan  ·         ·          (a, b)     ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("(+a) + (-b)")  ·
+ │         render 0  a + (-b)   ·                ·
+ └── scan  ·         ·          (a, b)           ·
+·          table     t@primary  ·                ·
+·          spans     ALL        ·                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t
 ----
-render     ·         ·                                              (column8)  ·
- │         render 0  CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·          ·
- └── scan  ·         ·                                              (a)        ·
-·          table     t@primary                                      ·          ·
-·          spans     ALL                                            ·          ·
+render     ·         ·                                              ("CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END")  ·
+ │         render 0  CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·                                                  ·
+ └── scan  ·         ·                                              (a)                                                ·
+·          table     t@primary                                      ·                                                  ·
+·          spans     ALL                                            ·                                                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t
 ----
-render     ·         ·                                  (column8)  ·
- │         render 0  CASE WHEN a = 2 THEN 1 ELSE 2 END  ·          ·
- └── scan  ·         ·                                  (a)        ·
-·          table     t@primary                          ·          ·
-·          spans     ALL                                ·          ·
+render     ·         ·                                  ("CASE WHEN a = 2 THEN 1 ELSE 2 END")  ·
+ │         render 0  CASE WHEN a = 2 THEN 1 ELSE 2 END  ·                                      ·
+ └── scan  ·         ·                                  (a)                                    ·
+·          table     t@primary                          ·                                      ·
+·          spans     ALL                                ·                                      ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END FROM t
 ----
-render     ·         ·                                                           (column8)  ·
- │         render 0  CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·          ·
- └── scan  ·         ·                                                           (a, b)     ·
-·          table     t@primary                                                   ·          ·
-·          spans     ALL                                                         ·          ·
+render     ·         ·                                                           ("CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END")  ·
+ │         render 0  CASE a + 3 WHEN b * 5 THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·                                                               ·
+ └── scan  ·         ·                                                           (a, b)                                                          ·
+·          table     t@primary                                                   ·                                                               ·
+·          spans     ALL                                                         ·                                                               ·
 
 # Tests for CASE with no ELSE statement
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CASE WHEN a = 2 THEN 1 END FROM t
 ----
-render     ·         ·                           (column8)  ·
- │         render 0  CASE WHEN a = 2 THEN 1 END  ·          ·
- └── scan  ·         ·                           (a)        ·
-·          table     t@primary                   ·          ·
-·          spans     ALL                         ·          ·
+render     ·         ·                           ("CASE WHEN a = 2 THEN 1 END")  ·
+ │         render 0  CASE WHEN a = 2 THEN 1 END  ·                               ·
+ └── scan  ·         ·                           (a)                             ·
+·          table     t@primary                   ·                               ·
+·          spans     ALL                         ·                               ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CASE a WHEN 2 THEN 1 END FROM t
 ----
-render     ·         ·                         (column8)  ·
- │         render 0  CASE a WHEN 2 THEN 1 END  ·          ·
- └── scan  ·         ·                         (a)        ·
-·          table     t@primary                 ·          ·
-·          spans     ALL                       ·          ·
+render     ·         ·                         ("CASE a WHEN 2 THEN 1 END")  ·
+ │         render 0  CASE a WHEN 2 THEN 1 END  ·                             ·
+ └── scan  ·         ·                         (a)                           ·
+·          table     t@primary                 ·                             ·
+·          spans     ALL                       ·                             ·
 
 exec allow-unsupported hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE a IS OF (INT)
@@ -293,11 +293,11 @@ filter     ·       ·                (a)  ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT LENGTH(s) FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  length(s)  ·          ·
- └── scan  ·         ·          (s)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          (length)  ·
+ │         render 0  length(s)  ·         ·
+ └── scan  ·         ·          (s)       ·
+·          table     t@primary  ·         ·
+·          spans     ALL        ·         ·
 
 # Verify that the built function can be executed.
 exec-raw
@@ -308,7 +308,7 @@ INSERT INTO str VALUES ('a'), ('ab'), ('abc')
 exec rowsort
 SELECT LENGTH(s) FROM str
 ----
-column3:int
+length:int
 1
 2
 3
@@ -316,116 +316,116 @@ column3:int
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j @> '{"a": 1}' FROM t
 ----
-render     ·         ·                (column8)  ·
- │         render 0  j @> '{"a": 1}'  ·          ·
- └── scan  ·         ·                (j)        ·
-·          table     t@primary        ·          ·
-·          spans     ALL              ·          ·
+render     ·         ·                ("j @> '{""a"": 1}'")  ·
+ │         render 0  j @> '{"a": 1}'  ·                      ·
+ └── scan  ·         ·                (j)                    ·
+·          table     t@primary        ·                      ·
+·          spans     ALL              ·                      ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT '{"a": 1}' <@ j FROM t
 ----
-render     ·         ·                (column8)  ·
- │         render 0  j @> '{"a": 1}'  ·          ·
- └── scan  ·         ·                (j)        ·
-·          table     t@primary        ·          ·
-·          spans     ALL              ·          ·
+render     ·         ·                ("'{""a"": 1}' <@ j")  ·
+ │         render 0  j @> '{"a": 1}'  ·                      ·
+ └── scan  ·         ·                (j)                    ·
+·          table     t@primary        ·                      ·
+·          spans     ALL              ·                      ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j->>'a' FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  j->>'a'    ·          ·
- └── scan  ·         ·          (j)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("j->>'a'")  ·
+ │         render 0  j->>'a'    ·            ·
+ └── scan  ·         ·          (j)          ·
+·          table     t@primary  ·            ·
+·          spans     ALL        ·            ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j->'a' FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  j->'a'     ·          ·
- └── scan  ·         ·          (j)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("j->'a'")  ·
+ │         render 0  j->'a'     ·           ·
+ └── scan  ·         ·          (j)         ·
+·          table     t@primary  ·           ·
+·          spans     ALL        ·           ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j ? 'a' FROM t
 ----
-render     ·         ·          (column8)  ·
- │         render 0  j ? 'a'    ·          ·
- └── scan  ·         ·          (j)        ·
-·          table     t@primary  ·          ·
-·          spans     ALL        ·          ·
+render     ·         ·          ("j ? 'a'")  ·
+ │         render 0  j ? 'a'    ·            ·
+ └── scan  ·         ·          (j)          ·
+·          table     t@primary  ·            ·
+·          spans     ALL        ·            ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j ?| ARRAY['a', 'b', 'c'] FROM t
 ----
-render     ·         ·                          (column8)  ·
- │         render 0  j ?| ARRAY['a', 'b', 'c']  ·          ·
- └── scan  ·         ·                          (j)        ·
-·          table     t@primary                  ·          ·
-·          spans     ALL                        ·          ·
+render     ·         ·                          ("j ?| ARRAY['a', 'b', 'c']")  ·
+ │         render 0  j ?| ARRAY['a', 'b', 'c']  ·                              ·
+ └── scan  ·         ·                          (j)                            ·
+·          table     t@primary                  ·                              ·
+·          spans     ALL                        ·                              ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j ?& ARRAY['a', 'b', 'c'] FROM t
 ----
-render     ·         ·                          (column8)  ·
- │         render 0  j ?& ARRAY['a', 'b', 'c']  ·          ·
- └── scan  ·         ·                          (j)        ·
-·          table     t@primary                  ·          ·
-·          spans     ALL                        ·          ·
+render     ·         ·                          ("j ?& ARRAY['a', 'b', 'c']")  ·
+ │         render 0  j ?& ARRAY['a', 'b', 'c']  ·                              ·
+ └── scan  ·         ·                          (j)                            ·
+·          table     t@primary                  ·                              ·
+·          spans     ALL                        ·                              ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j#>ARRAY['a'] FROM t
 ----
-render     ·         ·              (column8)  ·
- │         render 0  j#>ARRAY['a']  ·          ·
- └── scan  ·         ·              (j)        ·
-·          table     t@primary      ·          ·
-·          spans     ALL            ·          ·
+render     ·         ·              ("j#>ARRAY['a']")  ·
+ │         render 0  j#>ARRAY['a']  ·                  ·
+ └── scan  ·         ·              (j)                ·
+·          table     t@primary      ·                  ·
+·          spans     ALL            ·                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT j#>>ARRAY['a'] FROM t
 ----
-render     ·         ·               (column8)  ·
- │         render 0  j#>>ARRAY['a']  ·          ·
- └── scan  ·         ·               (j)        ·
-·          table     t@primary       ·          ·
-·          spans     ALL             ·          ·
+render     ·         ·               ("j#>>ARRAY['a']")  ·
+ │         render 0  j#>>ARRAY['a']  ·                   ·
+ └── scan  ·         ·               (j)                 ·
+·          table     t@primary       ·                   ·
+·          spans     ALL             ·                   ·
 
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CAST(a AS string), b::float FROM t
 ----
-render     ·         ·          (column8, column9)  ·
- │         render 0  a::STRING  ·                   ·
- │         render 1  b::FLOAT   ·                   ·
- └── scan  ·         ·          (a, b)              ·
-·          table     t@primary  ·                   ·
-·          spans     ALL        ·                   ·
+render     ·         ·          ("CAST(a AS STRING)", "b::FLOAT")  ·
+ │         render 0  a::STRING  ·                                  ·
+ │         render 1  b::FLOAT   ·                                  ·
+ └── scan  ·         ·          (a, b)                             ·
+·          table     t@primary  ·                                  ·
+·          spans     ALL        ·                                  ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
-render     ·         ·                      (column8)  ·
- │         render 0  (c + (a + b))::STRING  ·          ·
- └── scan  ·         ·                      (a, b, c)  ·
-·          table     t@primary              ·          ·
-·          spans     ALL                    ·          ·
+render     ·         ·                      ("CAST((a + b) + c AS STRING)")  ·
+ │         render 0  (c + (a + b))::STRING  ·                                ·
+ └── scan  ·         ·                      (a, b, c)                        ·
+·          table     t@primary              ·                                ·
+·          spans     ALL                    ·                                ·
 
 exec rowsort
 SELECT LENGTH(s)::float, s FROM str
 ----
-column3:float  s:string
-1.0            a
-2.0            ab
-3.0            abc
+length(s)::FLOAT:float  s:string
+1.0                     a
+2.0                     ab
+3.0                     abc
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
-render       ·              ·                           (column3)           ·
+render       ·              ·                           ("COALESCE(a, b)")  ·
  │           render 0       COALESCE(column1, column2)  ·                   ·
  └── values  ·              ·                           (column1, column2)  ·
 ·            size           2 columns, 4 rows           ·                   ·
@@ -441,7 +441,7 @@ render       ·              ·                           (column3)           ·
 exec rowsort
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
-column3:int
+COALESCE(a, b):int
 NULL
 1
 3
@@ -450,7 +450,7 @@ NULL
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
-render       ·              ·                                    (column4)                    ·
+render       ·              ·                                    ("COALESCE(a, b, c)")        ·
  │           render 0       COALESCE(column1, column2, column3)  ·                            ·
  └── values  ·              ·                                    (column1, column2, column3)  ·
 ·            size           3 columns, 4 rows                    ·                            ·
@@ -470,7 +470,7 @@ render       ·              ·                                    (column4)    
 exec rowsort
 SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
-column4:int
+COALESCE(a, b, c):int
 NULL
 1
 4
@@ -501,26 +501,26 @@ render          ·         ·                   (a)        ·
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a BETWEEN SYMMETRIC b AND d FROM t
 ----
-render     ·         ·                                                   (column8)  ·
- │         render 0  ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·          ·
- └── scan  ·         ·                                                   (a, b, d)  ·
-·          table     t@primary                                           ·          ·
-·          spans     ALL                                                 ·          ·
+render     ·         ·                                                   ("a BETWEEN SYMMETRIC b AND d")  ·
+ │         render 0  ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·                                ·
+ └── scan  ·         ·                                                   (a, b, d)                        ·
+·          table     t@primary                                           ·                                ·
+·          spans     ALL                                                 ·                                ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT a NOT BETWEEN SYMMETRIC b AND d FROM t
 ----
-render     ·         ·                                              (column8)  ·
- │         render 0  ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·          ·
- └── scan  ·         ·                                              (a, b, d)  ·
-·          table     t@primary                                      ·          ·
-·          spans     ALL                                            ·          ·
+render     ·         ·                                              ("a NOT BETWEEN SYMMETRIC b AND d")  ·
+ │         render 0  ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·                                    ·
+ └── scan  ·         ·                                              (a, b, d)                            ·
+·          table     t@primary                                      ·                                    ·
+·          spans     ALL                                            ·                                    ·
 
 exec hide-colnames nodist
 EXPLAIN (VERBOSE) SELECT ARRAY[a + 1, 2, 3] FROM t
 ----
-render     ·         ·                   (column8)  ·
- │         render 0  ARRAY[a + 1, 2, 3]  ·          ·
- └── scan  ·         ·                   (a)        ·
-·          table     t@primary           ·          ·
-·          spans     ALL                 ·          ·
+render     ·         ·                   ("ARRAY[a + 1, 2, 3]")  ·
+ │         render 0  ARRAY[a + 1, 2, 3]  ·                       ·
+ └── scan  ·         ·                   (a)                     ·
+·          table     t@primary           ·                       ·
+·          spans     ALL                 ·                       ·

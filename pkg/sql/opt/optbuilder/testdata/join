@@ -2989,7 +2989,7 @@ FROM
     (VALUES (1, 1)) AS u)
 ----
 project
- ├── columns: column1:5(int) column7:7(int)
+ ├── columns: column1:5(int) "column1 + 1":7(int)
  ├── project
  │    ├── columns: column1:5(int) column2:6(int)
  │    └── project

@@ -27,11 +27,11 @@ build
 SELECT y, SUM(z), x, False FROM xyzs GROUP BY x, y
 ----
 project
- ├── columns: y:2(int) column5:5(float) x:1(int!null) column6:6(bool!null)
+ ├── columns: y:2(int) sum:5(float) x:1(int!null) false:6(bool!null)
  ├── stats: [rows=1000]
  ├── keys: (1)
  ├── group-by
- │    ├── columns: x:1(int!null) y:2(int) column5:5(float)
+ │    ├── columns: x:1(int!null) y:2(int) sum:5(float)
  │    ├── grouping columns: x:1(int!null) y:2(int)
  │    ├── stats: [rows=1000, distinct(1,2)=1000]
  │    ├── keys: (1)
@@ -54,7 +54,7 @@ build
 SELECT SUM(x), MAX(y) FROM xyzs
 ----
 group-by
- ├── columns: column5:5(decimal) column6:6(int)
+ ├── columns: sum:5(decimal) max:6(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── project
@@ -97,10 +97,10 @@ build
 SELECT y, SUM(z) FROM xyzs GROUP BY z, y
 ----
 project
- ├── columns: y:2(int) column5:5(float)
+ ├── columns: y:2(int) sum:5(float)
  ├── stats: [rows=1000]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) column5:5(float)
+      ├── columns: y:2(int) z:3(float!null) sum:5(float)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=1000, distinct(2,3)=1000]
       ├── keys: weak(2,3)
@@ -120,7 +120,7 @@ build
 SELECT z, MAX(s) FROM xyzs GROUP BY z
 ----
 group-by
- ├── columns: z:3(float!null) column5:5(string)
+ ├── columns: z:3(float!null) max:5(string)
  ├── grouping columns: z:3(float!null)
  ├── stats: [rows=700, distinct(3)=700]
  ├── keys: (3)
@@ -168,16 +168,16 @@ select
  └── gt [type=bool, outer=(1,2)]
       ├── subquery [type=decimal, outer=(1,2)]
       │    └── max1-row
-      │         ├── columns: column8:8(decimal)
+      │         ├── columns: sum:8(decimal)
       │         ├── outer: (1,2)
       │         ├── cardinality: [0 - 1]
       │         ├── stats: [rows=1]
       │         └── project
-      │              ├── columns: column8:8(decimal)
+      │              ├── columns: sum:8(decimal)
       │              ├── outer: (1,2)
       │              ├── stats: [rows=700]
       │              └── group-by
-      │                   ├── columns: u:6(float) column8:8(decimal)
+      │                   ├── columns: u:6(float) sum:8(decimal)
       │                   ├── grouping columns: u:6(float)
       │                   ├── outer: (1,2)
       │                   ├── stats: [rows=700, distinct(6)=700]

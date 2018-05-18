@@ -171,7 +171,7 @@ opt
 SELECT expr, i+1 FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool) column7:7(int)
+ ├── columns: expr:6(bool) "i + 1":7(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -188,7 +188,7 @@ opt
 SELECT expr+1, i, expr2 || 'bar' FROM (SELECT k+1 AS expr, s || 'foo' AS expr2, i FROM a)
 ----
 project
- ├── columns: column8:8(int) i:2(int) column9:9(string)
+ ├── columns: "expr + 1":8(int) i:2(int) "expr2 || 'bar'":9(string)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    └── keys: (1)
@@ -209,7 +209,7 @@ opt
 SELECT expr, expr*2 FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: expr:6(int) column7:7(int)
+ ├── columns: expr:6(int) "expr * 2":7(int)
  ├── project
  │    ├── columns: expr:6(int)
  │    ├── scan a
@@ -229,7 +229,7 @@ opt
 SELECT EXISTS(SELECT * FROM xy WHERE x=1 OR x=2), expr*2 FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: column9:9(bool) column10:10(int)
+ ├── columns: "EXISTS (SELECT * FROM xy WHERE (x = 1) OR (x = 2))":9(bool) "expr * 2":10(int)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
@@ -250,7 +250,7 @@ opt
 SELECT EXISTS(SELECT * FROM xy WHERE expr<0) FROM (SELECT k+1 AS expr FROM a)
 ----
 project
- ├── columns: column9:9(bool)
+ ├── columns: "EXISTS (SELECT * FROM xy WHERE expr < 0)":9(bool)
  ├── group-by
  │    ├── columns: exists_agg:11(bool) rownum:12(int!null)
  │    ├── grouping columns: rownum:12(int!null)

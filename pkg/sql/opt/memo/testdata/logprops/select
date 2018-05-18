@@ -93,7 +93,7 @@ build
 SELECT COUNT(*) FROM xy HAVING COUNT(*) = 5
 ----
 select
- ├── columns: column3:3(int!null)
+ ├── columns: count:3(int!null)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(3)=1]
  ├── group-by
