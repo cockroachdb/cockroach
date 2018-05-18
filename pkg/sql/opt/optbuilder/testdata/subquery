@@ -683,7 +683,8 @@ project
            │    │         ├── columns: a:1(int!null) b:2(int) c:3(int)
            │    │         ├── scan abc
            │    │         │    └── columns: a:1(int!null) b:2(int) c:3(int)
-           │    │         └── false [type=bool]
+           │    │         └── filters [type=bool]
+           │    │              └── false [type=bool]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
            │              ├── variable: abc.a [type=int]
@@ -744,7 +745,8 @@ project
                           ├── columns: a:1(int!null) b:2(int) c:3(int)
                           ├── scan abc
                           │    └── columns: a:1(int!null) b:2(int) c:3(int)
-                          └── false [type=bool]
+                          └── filters [type=bool]
+                               └── false [type=bool]
 
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)
@@ -784,9 +786,10 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── eq [type=bool]
-      ├── variable: abc.a [type=int]
-      └── const: 7 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: abc.a [type=int]
+           └── const: 7 [type=int]
 
 exec-ddl
 CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT)
@@ -826,20 +829,21 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- └── eq [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: min:7(int)
-                └── group-by
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── subquery [type=int]
+                └── max1-row
                      ├── columns: min:7(int)
-                     ├── project
-                     │    ├── columns: xyz.x:4(int!null)
-                     │    └── scan xyz
-                     │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── aggregations
-                          └── min [type=int]
-                               └── variable: xyz.x [type=int]
+                     └── group-by
+                          ├── columns: min:7(int)
+                          ├── project
+                          │    ├── columns: xyz.x:4(int!null)
+                          │    └── scan xyz
+                          │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                          └── aggregations
+                               └── min [type=int]
+                                    └── variable: xyz.x [type=int]
 
 build
 SELECT * FROM xyz WHERE x = (SELECT MAX(x) FROM xyz)
@@ -848,20 +852,21 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- └── eq [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: max:7(int)
-                └── group-by
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── subquery [type=int]
+                └── max1-row
                      ├── columns: max:7(int)
-                     ├── project
-                     │    ├── columns: xyz.x:4(int!null)
-                     │    └── scan xyz
-                     │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── aggregations
-                          └── max [type=int]
-                               └── variable: xyz.x [type=int]
+                     └── group-by
+                          ├── columns: max:7(int)
+                          ├── project
+                          │    ├── columns: xyz.x:4(int!null)
+                          │    └── scan xyz
+                          │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                          └── aggregations
+                               └── max [type=int]
+                                    └── variable: xyz.x [type=int]
 
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v STRING)
@@ -879,24 +884,26 @@ select
  ├── columns: k:1(int!null) v:2(string)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(string)
- └── eq [type=bool]
-      ├── variable: kv.k [type=int]
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: kv.k:3(int!null)
-                └── project
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: kv.k [type=int]
+           └── subquery [type=int]
+                └── max1-row
                      ├── columns: kv.k:3(int!null)
-                     └── select
-                          ├── columns: kv.k:3(int!null) kv.v:4(string)
-                          ├── scan kv
-                          │    └── columns: kv.k:3(int!null) kv.v:4(string)
-                          └── eq [type=bool]
-                               ├── tuple [type=tuple{int, string}]
-                               │    ├── variable: kv.k [type=int]
-                               │    └── variable: kv.v [type=string]
-                               └── tuple [type=tuple{int, string}]
-                                    ├── const: 1 [type=int]
-                                    └── const: 'one' [type=string]
+                     └── project
+                          ├── columns: kv.k:3(int!null)
+                          └── select
+                               ├── columns: kv.k:3(int!null) kv.v:4(string)
+                               ├── scan kv
+                               │    └── columns: kv.k:3(int!null) kv.v:4(string)
+                               └── filters [type=bool]
+                                    └── eq [type=bool]
+                                         ├── tuple [type=tuple{int, string}]
+                                         │    ├── variable: kv.k [type=int]
+                                         │    └── variable: kv.v [type=string]
+                                         └── tuple [type=tuple{int, string}]
+                                              ├── const: 1 [type=int]
+                                              └── const: 'one' [type=string]
 
 build
 SELECT EXISTS(SELECT 1 FROM kv AS x WHERE x.k = 1)
@@ -913,9 +920,10 @@ project
                 │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
-                │    └── eq [type=bool]
-                │         ├── variable: kv.k [type=int]
-                │         └── const: 1 [type=int]
+                │    └── filters [type=bool]
+                │         └── eq [type=bool]
+                │              ├── variable: kv.k [type=int]
+                │              └── const: 1 [type=int]
                 └── projections
                      └── const: 1 [type=int]
 
@@ -934,9 +942,10 @@ project
                 │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
-                │    └── eq [type=bool]
-                │         ├── variable: kv.k [type=int]
-                │         └── const: 2 [type=int]
+                │    └── filters [type=bool]
+                │         └── eq [type=bool]
+                │              ├── variable: kv.k [type=int]
+                │              └── const: 2 [type=int]
                 └── projections
                      └── const: 1 [type=int]
 
@@ -1025,9 +1034,10 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── lt [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── const: 7 [type=int]
+ └── filters [type=bool]
+      └── lt [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── const: 7 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM xyz) AS foo (foo1) WHERE foo1 < 7
@@ -1036,9 +1046,10 @@ select
  ├── columns: foo1:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── lt [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── const: 7 [type=int]
+ └── filters [type=bool]
+      └── lt [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── const: 7 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3)) as foo (foo1) WHERE foo1 < 7
@@ -1047,9 +1058,10 @@ select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── lt [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── const: 7 [type=int]
+ └── filters [type=bool]
+      └── lt [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── const: 7 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7
@@ -1058,9 +1070,10 @@ select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── lt [type=bool]
-      ├── variable: xyz.x [type=int]
-      └── const: 7 [type=int]
+ └── filters [type=bool]
+      └── lt [type=bool]
+           ├── variable: xyz.x [type=int]
+           └── const: 7 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM xyz AS moo (moo1, moo2, moo3) ORDER BY moo1) as foo (foo1) WHERE foo1 < 7 ORDER BY moo2 DESC
@@ -1072,9 +1085,10 @@ sort
       ├── columns: x:1(int!null) y:2(int) z:3(int)
       ├── scan xyz
       │    └── columns: x:1(int!null) y:2(int) z:3(int)
-      └── lt [type=bool]
-           ├── variable: xyz.x [type=int]
-           └── const: 7 [type=int]
+      └── filters [type=bool]
+           └── lt [type=bool]
+                ├── variable: xyz.x [type=int]
+                └── const: 7 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS moo (moo1, moo2, moo3) WHERE moo1 = 4) as foo (foo1)
@@ -1091,9 +1105,10 @@ select
  │         ├── const: 4 [type=int]
  │         ├── const: 5 [type=int]
  │         └── const: 6 [type=int]
- └── eq [type=bool]
-      ├── variable: column1 [type=int]
-      └── const: 4 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: column1 [type=int]
+           └── const: 4 [type=int]
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1, 8, 8), (3, 1, 1), (2, 4, 4)) AS moo (moo1, moo2, moo3) ORDER BY moo2) as foo (foo1) ORDER BY foo1
@@ -1137,11 +1152,12 @@ project
       │         ├── const: 5 [type=int]
       │         ├── const: 6 [type=int]
       │         └── const: 10 [type=int]
-      └── eq [type=bool]
-           ├── plus [type=int]
-           │    ├── variable: column1 [type=int]
-           │    └── variable: column2 [type=int]
-           └── variable: column3 [type=int]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── plus [type=int]
+                │    ├── variable: column1 [type=int]
+                │    └── variable: column2 [type=int]
+                └── variable: column3 [type=int]
 
 build
 SELECT foo.a FROM (VALUES (1), (2), (3)) AS foo (a)
@@ -1181,17 +1197,19 @@ project
       ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
       ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
-      └── any: eq [type=bool]
-           ├── project
-           │    ├── columns: xyz.x:4(int!null)
-           │    └── select
-           │         ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-           │         ├── scan xyz
-           │         │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-           │         └── eq [type=bool]
-           │              ├── variable: xyz.x [type=int]
-           │              └── const: 7 [type=int]
-           └── variable: xyz.x [type=int]
+      └── filters [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: xyz.x:4(int!null)
+                │    └── select
+                │         ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                │         ├── scan xyz
+                │         │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                │         └── filters [type=bool]
+                │              └── eq [type=bool]
+                │                   ├── variable: xyz.x [type=int]
+                │                   └── const: 7 [type=int]
+                └── variable: xyz.x [type=int]
 
 build
 SELECT x FROM xyz WHERE x = 7 LIMIT (SELECT x FROM xyz WHERE x = 1)
@@ -1204,9 +1222,10 @@ limit
  │         ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
  │         ├── scan xyz
  │         │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- │         └── eq [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── const: 7 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── const: 7 [type=int]
  └── subquery [type=int]
       └── max1-row
            ├── columns: xyz.x:4(int!null)
@@ -1216,9 +1235,10 @@ limit
                      ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── eq [type=bool]
-                          ├── variable: xyz.x [type=int]
-                          └── const: 1 [type=int]
+                     └── filters [type=bool]
+                          └── eq [type=bool]
+                               ├── variable: xyz.x [type=int]
+                               └── const: 1 [type=int]
 
 build
 SELECT x FROM xyz ORDER BY x OFFSET (SELECT x FROM xyz WHERE x = 1)
@@ -1241,9 +1261,10 @@ offset
                      ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── eq [type=bool]
-                          ├── variable: xyz.x [type=int]
-                          └── const: 1 [type=int]
+                     └── filters [type=bool]
+                          └── eq [type=bool]
+                               ├── variable: xyz.x [type=int]
+                               └── const: 1 [type=int]
 
 # check that residual filters are not expanded twice
 build
@@ -1255,12 +1276,13 @@ project
       ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
       ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
-      └── any: eq [type=bool]
-           ├── project
-           │    ├── columns: xyz.x:4(int!null)
-           │    └── scan xyz
-           │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-           └── variable: xyz.x [type=int]
+      └── filters [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: xyz.x:4(int!null)
+                │    └── scan xyz
+                │         └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
+                └── variable: xyz.x [type=int]
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
@@ -1290,37 +1312,39 @@ project
       ├── columns: tab4.col0:1(int) tab4.col1:2(float) tab4.col3:3(int) tab4.col4:4(float) tab4.rowid:5(int!null)
       ├── scan tab4
       │    └── columns: tab4.col0:1(int) tab4.col1:2(float) tab4.col3:3(int) tab4.col4:4(float) tab4.rowid:5(int!null)
-      └── or [type=bool]
-           ├── and [type=bool]
-           │    ├── le [type=bool]
-           │    │    ├── variable: tab4.col0 [type=int]
-           │    │    └── const: 0 [type=int]
-           │    └── le [type=bool]
-           │         ├── variable: tab4.col4 [type=float]
-           │         └── const: 5.38 [type=float]
-           └── and [type=bool]
-                ├── any: eq [type=bool]
-                │    ├── project
-                │    │    ├── columns: tab4.col1:7(float!null)
-                │    │    └── select
-                │    │         ├── columns: tab4.col0:6(int) tab4.col1:7(float!null) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
-                │    │         ├── scan tab4
-                │    │         │    └── columns: tab4.col0:6(int) tab4.col1:7(float) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
-                │    │         └── gt [type=bool]
-                │    │              ├── variable: tab4.col1 [type=float]
-                │    │              └── const: 8.27 [type=float]
-                │    └── variable: tab4.col4 [type=float]
+      └── filters [type=bool]
+           └── or [type=bool]
+                ├── and [type=bool]
+                │    ├── le [type=bool]
+                │    │    ├── variable: tab4.col0 [type=int]
+                │    │    └── const: 0 [type=int]
+                │    └── le [type=bool]
+                │         ├── variable: tab4.col4 [type=float]
+                │         └── const: 5.38 [type=float]
                 └── and [type=bool]
-                     ├── le [type=bool]
-                     │    ├── variable: tab4.col3 [type=int]
-                     │    └── const: 5 [type=int]
+                     ├── any: eq [type=bool]
+                     │    ├── project
+                     │    │    ├── columns: tab4.col1:7(float!null)
+                     │    │    └── select
+                     │    │         ├── columns: tab4.col0:6(int) tab4.col1:7(float!null) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
+                     │    │         ├── scan tab4
+                     │    │         │    └── columns: tab4.col0:6(int) tab4.col1:7(float) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
+                     │    │         └── filters [type=bool]
+                     │    │              └── gt [type=bool]
+                     │    │                   ├── variable: tab4.col1 [type=float]
+                     │    │                   └── const: 8.27 [type=float]
+                     │    └── variable: tab4.col4 [type=float]
                      └── and [type=bool]
-                          ├── ge [type=bool]
+                          ├── le [type=bool]
                           │    ├── variable: tab4.col3 [type=int]
-                          │    └── const: 7 [type=int]
-                          └── le [type=bool]
-                               ├── variable: tab4.col3 [type=int]
-                               └── const: 9 [type=int]
+                          │    └── const: 5 [type=int]
+                          └── and [type=bool]
+                               ├── ge [type=bool]
+                               │    ├── variable: tab4.col3 [type=int]
+                               │    └── const: 7 [type=int]
+                               └── le [type=bool]
+                                    ├── variable: tab4.col3 [type=int]
+                                    └── const: 9 [type=int]
 
 # Multiple subqueries in same projection list.
 build

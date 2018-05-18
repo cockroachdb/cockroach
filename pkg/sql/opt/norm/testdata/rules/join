@@ -73,10 +73,10 @@ inner-join
  │    └── keys: (6)
  └── filters [type=bool, outer=(4,7)]
       └── or [type=bool, outer=(4,7)]
-           ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           ├── eq [type=bool, outer=(4)]
            │    ├── variable: a.s [type=string, outer=(4)]
            │    └── const: 'foo' [type=string]
-           └── lt [type=bool, outer=(7), constraints=(/7: (/NULL - /9]; tight)]
+           └── lt [type=bool, outer=(7)]
                 ├── variable: b.y [type=int, outer=(7)]
                 └── const: 10 [type=int]
 
@@ -119,10 +119,10 @@ right-join
  │    │    └── keys: (1)
  │    └── filters [type=bool, outer=(2,4), constraints=(/4: [/'foo' - /'foo'])]
  │         ├── or [type=bool, outer=(2)]
- │         │    ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
+ │         │    ├── lt [type=bool, outer=(2)]
  │         │    │    ├── variable: a.i [type=int, outer=(2)]
  │         │    │    └── const: 0 [type=int]
- │         │    └── gt [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
+ │         │    └── gt [type=bool, outer=(2)]
  │         │         ├── variable: a.i [type=int, outer=(2)]
  │         │         └── const: 10 [type=int]
  │         └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
@@ -247,10 +247,10 @@ left-join
  │    │    └── keys: (3)
  │    └── filters [type=bool, outer=(4,6), constraints=(/6: [/'foo' - /'foo'])]
  │         ├── or [type=bool, outer=(4)]
- │         │    ├── lt [type=bool, outer=(4), constraints=(/4: (/NULL - /-1]; tight)]
+ │         │    ├── lt [type=bool, outer=(4)]
  │         │    │    ├── variable: a.i [type=int, outer=(4)]
  │         │    │    └── const: 0 [type=int]
- │         │    └── gt [type=bool, outer=(4), constraints=(/4: [/11 - ]; tight)]
+ │         │    └── gt [type=bool, outer=(4)]
  │         │         ├── variable: a.i [type=int, outer=(4)]
  │         │         └── const: 10 [type=int]
  │         └── eq [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]

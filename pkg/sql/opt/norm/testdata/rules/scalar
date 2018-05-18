@@ -37,12 +37,12 @@ project
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
-      ├── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      ├── eq [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── plus [type=int, outer=(2)]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── const: 1 [type=int]
-      ├── ne [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+      ├── ne [type=bool, outer=(1,2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int, outer=(1)]
       │         ├── const: 2 [type=int]
@@ -371,8 +371,8 @@ project
  ├── columns: "NULL IN (i)":7(bool) "NULL NOT IN (s)":8(bool)
  ├── scan a
  └── projections
-      ├── null [type=bool, constraints=(contradiction; tight)]
-      └── null [type=bool, constraints=(contradiction; tight)]
+      ├── null [type=bool]
+      └── null [type=bool]
 
 # --------------------------------------------------
 # FoldInNull
@@ -384,8 +384,8 @@ project
  ├── columns: "i IN (NULL, NULL)":7(bool) "k NOT IN (1 * NULL, NULL::INT, 1 < NULL)":8(bool)
  ├── scan a
  └── projections
-      ├── null [type=bool, constraints=(contradiction; tight)]
-      └── null [type=bool, constraints=(contradiction; tight)]
+      ├── null [type=bool]
+      └── null [type=bool]
 
 # --------------------------------------------------
 # NormalizeInConst
@@ -398,7 +398,7 @@ project
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]
-      └── in [type=bool, outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+      └── in [type=bool, outer=(2)]
            ├── variable: a.i [type=int, outer=(2)]
            └── tuple [type=tuple{unknown, int, int, int}]
                 ├── null [type=unknown]

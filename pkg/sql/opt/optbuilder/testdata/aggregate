@@ -926,9 +926,10 @@ group-by
  │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │         └── gt [type=bool]
- │              ├── variable: kv.k [type=int]
- │              └── const: 8 [type=int]
+ │         └── filters [type=bool]
+ │              └── gt [type=bool]
+ │                   ├── variable: kv.k [type=int]
+ │                   └── const: 8 [type=int]
  └── aggregations
       ├── min [type=int]
       │    └── variable: kv.k [type=int]
@@ -965,9 +966,10 @@ group-by
  │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │         └── is [type=bool]
- │              ├── variable: kv.s [type=string]
- │              └── null [type=unknown]
+ │         └── filters [type=bool]
+ │              └── is [type=bool]
+ │                   ├── variable: kv.s [type=string]
+ │                   └── null [type=unknown]
  └── aggregations
       └── array-agg [type=string[]]
            └── variable: kv.s [type=string]
@@ -1052,11 +1054,12 @@ project
  │    │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    │         ├── scan kv
  │    │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │    │         └── eq [type=bool]
- │    │              ├── mult [type=int]
- │    │              │    ├── variable: kv.w [type=int]
- │    │              │    └── const: 2 [type=int]
- │    │              └── variable: kv.k [type=int]
+ │    │         └── filters [type=bool]
+ │    │              └── eq [type=bool]
+ │    │                   ├── mult [type=int]
+ │    │                   │    ├── variable: kv.w [type=int]
+ │    │                   │    └── const: 2 [type=int]
+ │    │                   └── variable: kv.k [type=int]
  │    └── aggregations
  │         ├── avg [type=decimal]
  │         │    └── variable: kv.k [type=int]
@@ -1241,12 +1244,13 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── in [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── tuple [type=tuple{int, int, int}]
- │                   ├── const: 0 [type=int]
- │                   ├── const: 4 [type=int]
- │                   └── const: 7 [type=int]
+ │         └── filters [type=bool]
+ │              └── in [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── tuple [type=tuple{int, int, int}]
+ │                        ├── const: 0 [type=int]
+ │                        ├── const: 4 [type=int]
+ │                        └── const: 7 [type=int]
  └── aggregations
       └── min [type=int]
            └── variable: xyz.x [type=int]
@@ -1275,9 +1279,10 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── const: 1 [type=int]
  └── aggregations
       └── max [type=int]
            └── variable: xyz.y [type=int]
@@ -1293,9 +1298,10 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── const: 7 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── const: 7 [type=int]
  └── aggregations
       └── min [type=int]
            └── variable: xyz.y [type=int]
@@ -1311,13 +1317,14 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── tuple [type=tuple{int, float}]
- │              │    ├── variable: xyz.y [type=int]
- │              │    └── variable: xyz.z [type=float]
- │              └── tuple [type=tuple{int, float}]
- │                   ├── const: 2 [type=int]
- │                   └── const: 3.0 [type=float]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── tuple [type=tuple{int, float}]
+ │                   │    ├── variable: xyz.y [type=int]
+ │                   │    └── variable: xyz.z [type=float]
+ │                   └── tuple [type=tuple{int, float}]
+ │                        ├── const: 2 [type=int]
+ │                        └── const: 3.0 [type=float]
  └── aggregations
       └── min [type=int]
            └── variable: xyz.x [type=int]
@@ -1333,13 +1340,14 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── tuple [type=tuple{float, int}]
- │              │    ├── variable: xyz.z [type=float]
- │              │    └── variable: xyz.y [type=int]
- │              └── tuple [type=tuple{float, int}]
- │                   ├── const: 3.0 [type=float]
- │                   └── const: 2 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── tuple [type=tuple{float, int}]
+ │                   │    ├── variable: xyz.z [type=float]
+ │                   │    └── variable: xyz.y [type=int]
+ │                   └── tuple [type=tuple{float, int}]
+ │                        ├── const: 3.0 [type=float]
+ │                        └── const: 2 [type=int]
  └── aggregations
       └── max [type=int]
            └── variable: xyz.x [type=int]
@@ -1384,9 +1392,10 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── const: 10 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── const: 10 [type=int]
  └── aggregations
       └── variance [type=decimal]
            └── variable: xyz.x [type=int]
@@ -1428,9 +1437,10 @@ group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── eq [type=bool]
- │              ├── variable: xyz.x [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: xyz.x [type=int]
+ │                   └── const: 1 [type=int]
  └── aggregations
       └── std-dev [type=decimal]
            └── variable: xyz.x [type=int]
@@ -2426,9 +2436,10 @@ project
       │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │         ├── scan abc
       │         │    └── columns: a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
-      │         └── ge [type=bool]
-      │              ├── variable: kv.k [type=int]
-      │              └── variable: abc.d [type=decimal]
+      │         └── filters [type=bool]
+      │              └── ge [type=bool]
+      │                   ├── variable: kv.k [type=int]
+      │                   └── variable: abc.d [type=decimal]
       └── aggregations
            └── sum [type=decimal]
                 └── variable: abc.d [type=decimal]

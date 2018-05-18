@@ -55,11 +55,11 @@ project
  ├── scan a
  │    └── columns: i:2(int) s:4(string)
  └── projections [outer=(2,4)]
-      └── and [type=bool, outer=(2,4), constraints=(/2: [/5 - /5]; /4: (/NULL - /'foo'); tight)]
-           ├── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      └── and [type=bool, outer=(2,4)]
+           ├── eq [type=bool, outer=(2)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── const: 5 [type=int]
-           └── lt [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo'); tight)]
+           └── lt [type=bool, outer=(4)]
                 ├── variable: a.s [type=string, outer=(4)]
                 └── const: 'foo' [type=string]
 
@@ -96,7 +96,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
-      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── eq [type=bool, outer=(1)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
 
@@ -109,11 +109,11 @@ project
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
  └── projections [outer=(1,2)]
-      └── and [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/2 - /2]; tight)]
-           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── and [type=bool, outer=(1,2)]
+           ├── eq [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 1 [type=int]
-           └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+           └── eq [type=bool, outer=(2)]
                 ├── variable: a.i [type=int, outer=(2)]
                 └── const: 2 [type=int]
 
@@ -135,17 +135,17 @@ project
  │    ├── columns: k:1(int!null) f:3(float) s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1,3,4)]
-      └── and [type=bool, outer=(1,3,4), constraints=(/1: [/2 - /4]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight)]
-           ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
+      └── and [type=bool, outer=(1,3,4)]
+           ├── gt [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 1 [type=int]
-           ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+           ├── lt [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 5 [type=int]
-           ├── eq [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
+           ├── eq [type=bool, outer=(3)]
            │    ├── variable: a.f [type=float, outer=(3)]
            │    └── const: 3.5 [type=float]
-           └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           └── eq [type=bool, outer=(4)]
                 ├── variable: a.s [type=string, outer=(4)]
                 └── const: 'foo' [type=string]
 
@@ -182,7 +182,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
-      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── eq [type=bool, outer=(1)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
 
@@ -197,10 +197,10 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1,2)]
       └── or [type=bool, outer=(1,2)]
-           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           ├── eq [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 1 [type=int]
-           └── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+           └── eq [type=bool, outer=(2)]
                 ├── variable: a.i [type=int, outer=(2)]
                 └── const: 2 [type=int]
 
@@ -225,16 +225,16 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-4)]
       └── or [type=bool, outer=(1-4)]
-           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           ├── eq [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 1 [type=int]
-           ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+           ├── eq [type=bool, outer=(2)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── const: 2 [type=int]
-           ├── eq [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
+           ├── eq [type=bool, outer=(3)]
            │    ├── variable: a.f [type=float, outer=(3)]
            │    └── const: 3.5 [type=float]
-           └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           └── eq [type=bool, outer=(4)]
                 ├── variable: a.s [type=string, outer=(4)]
                 └── const: 'foo' [type=string]
 
@@ -250,11 +250,11 @@ project
  │    ├── columns: k:1(int!null)
  │    └── keys: (1)
  └── projections [outer=(1)]
-      └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
-           ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── and [type=bool, outer=(1)]
+           ├── eq [type=bool, outer=(1)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── const: 1 [type=int]
-           └── eq [type=bool, outer=(1), constraints=(/1: [/2 - /2]; tight)]
+           └── eq [type=bool, outer=(1)]
                 ├── variable: a.k [type=int, outer=(1)]
                 └── const: 2 [type=int]
 
@@ -268,21 +268,21 @@ project
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
  │    └── keys: (1)
  └── projections [outer=(1-4)]
-      └── and [type=bool, outer=(1-4), constraints=(/4: [/'foo' - /'foo'])]
+      └── and [type=bool, outer=(1-4)]
            ├── or [type=bool, outer=(1-3)]
-           │    ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+           │    ├── eq [type=bool, outer=(1)]
            │    │    ├── variable: a.k [type=int, outer=(1)]
            │    │    └── const: 1 [type=int]
-           │    ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+           │    ├── eq [type=bool, outer=(2)]
            │    │    ├── variable: a.i [type=int, outer=(2)]
            │    │    └── const: 2 [type=int]
-           │    └── eq [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
+           │    └── eq [type=bool, outer=(3)]
            │         ├── variable: a.f [type=float, outer=(3)]
            │         └── const: 3.5 [type=float]
-           ├── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+           ├── eq [type=bool, outer=(4)]
            │    ├── variable: a.s [type=string, outer=(4)]
            │    └── const: 'foo' [type=string]
-           └── ne [type=bool, outer=(4), constraints=(/4: (/NULL - /'bar') [/e'bar\x00' - ]; tight)]
+           └── ne [type=bool, outer=(4)]
                 ├── variable: a.s [type=string, outer=(4)]
                 └── const: 'bar' [type=string]
 
@@ -328,7 +328,7 @@ project
  ├── columns: "NULL AND NULL":6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool, constraints=(contradiction; tight)]
+      └── null [type=bool]
 
 opt
 SELECT null or null FROM a
@@ -337,7 +337,7 @@ project
  ├── columns: "NULL OR NULL":6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool, constraints=(contradiction; tight)]
+      └── null [type=bool]
 
 opt
 SELECT null or (null and null and null) or null FROM a
@@ -346,7 +346,7 @@ project
  ├── columns: "(NULL OR ((NULL AND NULL) AND NULL)) OR NULL":6(bool)
  ├── scan a
  └── projections
-      └── null [type=bool, constraints=(contradiction; tight)]
+      └── null [type=bool]
 
 # Don't fold.
 opt
@@ -360,9 +360,9 @@ project
  └── projections [outer=(1)]
       └── or [type=bool, outer=(1)]
            ├── null [type=unknown]
-           └── and [type=bool, outer=(1), constraints=(contradiction; tight)]
+           └── and [type=bool, outer=(1)]
                 ├── null [type=unknown]
-                └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+                └── eq [type=bool, outer=(1)]
                      ├── variable: a.k [type=int, outer=(1)]
                      └── const: 1 [type=int]
 
@@ -567,10 +567,10 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── lt [type=bool, outer=(1,2)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── variable: a.i [type=int, outer=(2)]
-           └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           └── ge [type=bool, outer=(2,3)]
                 ├── variable: a.i [type=int, outer=(2)]
                 └── variable: a.f [type=float, outer=(3)]
 
@@ -585,19 +585,19 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── lt [type=bool, outer=(1,2)]
            │    ├── variable: a.k [type=int, outer=(1)]
            │    └── variable: a.i [type=int, outer=(2)]
-           ├── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           ├── ge [type=bool, outer=(2,3)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── variable: a.f [type=float, outer=(3)]
-           ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - /5]; tight)]
+           ├── le [type=bool, outer=(2)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── const: 5 [type=int]
-           ├── ge [type=bool, outer=(2), constraints=(/2: [/10 - ]; tight)]
+           ├── ge [type=bool, outer=(2)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── const: 10 [type=int]
-           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
+           └── le [type=bool, outer=(3)]
                 ├── variable: a.f [type=float, outer=(3)]
                 └── const: 1.0 [type=float]
 
@@ -667,18 +667,18 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       └── or [type=bool, outer=(1-3)]
-           ├── and [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ])]
-           │    ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+           ├── and [type=bool, outer=(1-3)]
+           │    ├── lt [type=bool, outer=(1,2)]
            │    │    ├── variable: a.k [type=int, outer=(1)]
            │    │    └── variable: a.i [type=int, outer=(2)]
-           │    └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+           │    └── ge [type=bool, outer=(2,3)]
            │         ├── variable: a.i [type=int, outer=(2)]
            │         └── variable: a.f [type=float, outer=(3)]
-           └── and [type=bool, outer=(2,3), constraints=(/2: (/NULL - /5]; /3: (/NULL - /1.0]; tight)]
-                ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - /5]; tight)]
+           └── and [type=bool, outer=(2,3)]
+                ├── le [type=bool, outer=(2)]
                 │    ├── variable: a.i [type=int, outer=(2)]
                 │    └── const: 5 [type=int]
-                └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
+                └── le [type=bool, outer=(3)]
                      ├── variable: a.f [type=float, outer=(3)]
                      └── const: 1.0 [type=float]
 
@@ -693,16 +693,16 @@ select
  │    └── keys: (1)
  └── filters [type=bool, outer=(1-3)]
       ├── or [type=bool, outer=(1-3)]
-      │    ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+      │    ├── lt [type=bool, outer=(1,2)]
       │    │    ├── variable: a.k [type=int, outer=(1)]
       │    │    └── variable: a.i [type=int, outer=(2)]
-      │    └── ge [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      │    └── ge [type=bool, outer=(2,3)]
       │         ├── variable: a.i [type=int, outer=(2)]
       │         └── variable: a.f [type=float, outer=(3)]
       └── or [type=bool, outer=(2,3)]
-           ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - /5]; tight)]
+           ├── le [type=bool, outer=(2)]
            │    ├── variable: a.i [type=int, outer=(2)]
            │    └── const: 5 [type=int]
-           └── le [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
+           └── le [type=bool, outer=(3)]
                 ├── variable: a.f [type=float, outer=(3)]
                 └── const: 1.0 [type=float]

@@ -56,9 +56,10 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
-      └── placeholder: $1 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: a.x [type=int]
+           └── placeholder: $1 [type=int]
 
 # Tuple, Projections
 build
@@ -81,18 +82,19 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 1 [type=int]
-      └── not [type=bool]
-           └── or [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: a.y [type=int]
-                │    └── const: 2 [type=int]
-                └── eq [type=bool]
-                     ├── variable: a.y [type=int]
-                     └── const: 3.5 [type=decimal]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── eq [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── const: 1 [type=int]
+           └── not [type=bool]
+                └── or [type=bool]
+                     ├── eq [type=bool]
+                     │    ├── variable: a.y [type=int]
+                     │    └── const: 2 [type=int]
+                     └── eq [type=bool]
+                          ├── variable: a.y [type=int]
+                          └── const: 3.5 [type=decimal]
 
 # Eq, Ne
 build
@@ -102,13 +104,14 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── const: 1 [type=int]
-      └── ne [type=bool]
-           ├── variable: a.x [type=int]
-           └── const: 2 [type=int]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── eq [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── const: 1 [type=int]
+           └── ne [type=bool]
+                ├── variable: a.x [type=int]
+                └── const: 2 [type=int]
 
 # Le, Ge, Lt, Gt
 build
@@ -118,21 +121,22 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── and [type=bool]
-      ├── and [type=bool]
-      │    ├── and [type=bool]
-      │    │    ├── ge [type=bool]
-      │    │    │    ├── variable: a.x [type=int]
-      │    │    │    └── const: 1 [type=int]
-      │    │    └── le [type=bool]
-      │    │         ├── variable: a.x [type=int]
-      │    │         └── const: 10 [type=int]
-      │    └── gt [type=bool]
-      │         ├── variable: a.y [type=int]
-      │         └── const: 1 [type=int]
-      └── lt [type=bool]
-           ├── variable: a.y [type=int]
-           └── const: 10 [type=int]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── and [type=bool]
+           │    ├── and [type=bool]
+           │    │    ├── ge [type=bool]
+           │    │    │    ├── variable: a.x [type=int]
+           │    │    │    └── const: 1 [type=int]
+           │    │    └── le [type=bool]
+           │    │         ├── variable: a.x [type=int]
+           │    │         └── const: 10 [type=int]
+           │    └── gt [type=bool]
+           │         ├── variable: a.y [type=int]
+           │         └── const: 1 [type=int]
+           └── lt [type=bool]
+                ├── variable: a.y [type=int]
+                └── const: 10 [type=int]
 
 # In, NotIn
 build
@@ -142,17 +146,18 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── and [type=bool]
-      ├── in [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
-      └── not-in [type=bool]
-           ├── variable: a.y [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 3 [type=int]
-                └── const: 4 [type=int]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── in [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── tuple [type=tuple{int, int}]
+           │         ├── const: 1 [type=int]
+           │         └── const: 2 [type=int]
+           └── not-in [type=bool]
+                ├── variable: a.y [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 3 [type=int]
+                     └── const: 4 [type=int]
 
 # Like, NotLike
 build
@@ -162,13 +167,14 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── and [type=bool]
-      ├── like [type=bool]
-      │    ├── variable: b.x [type=string]
-      │    └── const: '%foo%' [type=string]
-      └── not-like [type=bool]
-           ├── variable: b.x [type=string]
-           └── const: '%bar%' [type=string]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── like [type=bool]
+           │    ├── variable: b.x [type=string]
+           │    └── const: '%foo%' [type=string]
+           └── not-like [type=bool]
+                ├── variable: b.x [type=string]
+                └── const: '%bar%' [type=string]
 
 # ILike, INotLike
 build
@@ -178,13 +184,14 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── and [type=bool]
-      ├── i-like [type=bool]
-      │    ├── variable: b.x [type=string]
-      │    └── const: '%foo%' [type=string]
-      └── not-i-like [type=bool]
-           ├── variable: b.x [type=string]
-           └── const: '%bar%' [type=string]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── i-like [type=bool]
+           │    ├── variable: b.x [type=string]
+           │    └── const: '%foo%' [type=string]
+           └── not-i-like [type=bool]
+                ├── variable: b.x [type=string]
+                └── const: '%bar%' [type=string]
 
 # RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
 build
@@ -194,21 +201,22 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── and [type=bool]
-      ├── and [type=bool]
-      │    ├── and [type=bool]
-      │    │    ├── reg-match [type=bool]
-      │    │    │    ├── variable: b.x [type=string]
-      │    │    │    └── const: 'foo' [type=string]
-      │    │    └── not-reg-match [type=bool]
-      │    │         ├── variable: b.x [type=string]
-      │    │         └── const: 'bar' [type=string]
-      │    └── reg-i-match [type=bool]
-      │         ├── variable: b.x [type=string]
-      │         └── const: 'foo' [type=string]
-      └── not-reg-i-match [type=bool]
-           ├── variable: b.x [type=string]
-           └── const: 'bar' [type=string]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── and [type=bool]
+           │    ├── and [type=bool]
+           │    │    ├── reg-match [type=bool]
+           │    │    │    ├── variable: b.x [type=string]
+           │    │    │    └── const: 'foo' [type=string]
+           │    │    └── not-reg-match [type=bool]
+           │    │         ├── variable: b.x [type=string]
+           │    │         └── const: 'bar' [type=string]
+           │    └── reg-i-match [type=bool]
+           │         ├── variable: b.x [type=string]
+           │         └── const: 'foo' [type=string]
+           └── not-reg-i-match [type=bool]
+                ├── variable: b.x [type=string]
+                └── const: 'bar' [type=string]
 
 # Is, IsNot
 build
@@ -218,13 +226,14 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── and [type=bool]
-      ├── is-not [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── variable: a.y [type=int]
-      └── is [type=bool]
-           ├── variable: a.x [type=int]
-           └── null [type=unknown]
+ └── filters [type=bool]
+      └── and [type=bool]
+           ├── is-not [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── variable: a.y [type=int]
+           └── is [type=bool]
+                ├── variable: a.x [type=int]
+                └── null [type=unknown]
 
 # Bitand, Bitor, Bitxor
 build

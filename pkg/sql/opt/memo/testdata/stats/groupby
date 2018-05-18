@@ -180,11 +180,12 @@ project
       │    └── aggregations [outer=(1)]
       │         └── max [type=int, outer=(1)]
       │              └── variable: a.x [type=int, outer=(1)]
-      └── in [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-           ├── variable: a.s [type=string, outer=(4)]
-           └── tuple [type=tuple{string, string}]
-                ├── const: 'a' [type=string]
-                └── const: 'b' [type=string]
+      └── filters [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+           └── in [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+                ├── variable: a.s [type=string, outer=(4)]
+                └── tuple [type=tuple{string, string}]
+                     ├── const: 'a' [type=string]
+                     └── const: 'b' [type=string]
 
 # Estimate the distinct count for an aggregate column.
 build
@@ -214,6 +215,7 @@ project
       │    └── aggregations [outer=(1)]
       │         └── sum [type=decimal, outer=(1)]
       │              └── variable: a.x [type=int, outer=(1)]
-      └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
-           ├── variable: column5 [type=decimal, outer=(5)]
-           └── const: 5 [type=decimal]
+      └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+           └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+                ├── variable: column5 [type=decimal, outer=(5)]
+                └── const: 5 [type=decimal]
