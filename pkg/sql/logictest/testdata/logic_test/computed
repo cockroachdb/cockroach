@@ -107,6 +107,28 @@ DELETE FROM x
 statement ok
 DROP TABLE x
 
+statement ok
+CREATE TABLE x (
+  a INT NOT NULL,
+  b INT,
+  c INT AS (a) STORED,
+  d INT AS (a + b) STORED
+)
+
+statement ok
+INSERT INTO x (a) VALUES (1)
+
+statement error null value in column "a" violates not-null constraint
+INSERT INTO x (b) VALUES (1)
+
+query II
+SELECT c, d FROM x
+----
+1  NULL
+
+statement ok
+DROP TABLE x
+
 # Check with upserts
 statement ok
 CREATE TABLE x (
