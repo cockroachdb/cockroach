@@ -108,7 +108,7 @@ sort
 build
 SELECT a AS foo, b AS foo FROM t ORDER BY foo
 ----
-error: ORDER BY "foo" is ambiguous
+error (42P09): ORDER BY "foo" is ambiguous
 
 # Check that no ambiguity is reported if the ORDER BY name refers
 # to two or more equivalent renders (special case in SQL92).
@@ -392,12 +392,12 @@ error: non-integer constant in ORDER BY: 2.5
 build
 SELECT * FROM t ORDER BY foo
 ----
-error: column name "foo" not found
+error (42703): column name "foo" not found
 
 build
 SELECT a FROM t ORDER BY a.b
 ----
-error: no data source matches prefix: a
+error (42P01): no data source matches prefix: a
 
 build
 SELECT GENERATE_SERIES FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
