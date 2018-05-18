@@ -197,7 +197,13 @@ const kvBatchSize = 1000
 func newRowConverter(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
-	c := &rowConverter{ctx: ctx, done: ctx.Done(), tableDesc: tableDesc, kvCh: kvCh}
+	c := &rowConverter{
+		ctx:       ctx,
+		done:      ctx.Done(),
+		tableDesc: tableDesc,
+		kvCh:      kvCh,
+		evalCtx:   tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}},
+	}
 
 	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
 		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
@@ -207,11 +213,10 @@ func newRowConverter(
 	c.ri = ri
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &c.evalCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default columns")
 	}
