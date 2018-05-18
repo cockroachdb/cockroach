@@ -424,6 +424,10 @@ DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file) {
   return db->EnvOpenFile(path, (rocksdb::WritableFile**)file);
 }
 
+DBStatus DBEnvReadFile(DBEngine* db, DBSlice path, DBSlice* contents) {
+  return db->EnvReadFile(path, contents);
+}
+
 DBStatus DBEnvCloseFile(DBEngine* db, DBWritableFile file) {
   return db->EnvCloseFile((rocksdb::WritableFile*)file);
 }
@@ -434,6 +438,10 @@ DBStatus DBEnvSyncFile(DBEngine* db, DBWritableFile file) {
 
 DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile file, DBSlice contents) {
   return db->EnvAppendFile((rocksdb::WritableFile*)file, contents);
+}
+
+DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path) {
+  return db->EnvDeleteFile(path);
 }
 
 DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats) {
