@@ -879,10 +879,15 @@ func TestReplicaLease(t *testing.T) {
 
 func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
+
+	tc := testContext{manualClock: hlc.NewManualClock(123)}
+	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
+	tc.StartWithStoreConfig(t, stopper, cfg)
+
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
 	if err != nil {
 		t.Fatal(err)
