@@ -53,8 +53,12 @@ func TestShowTraceReplica(t *testing.T) {
 	}}
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
+	// Make sure all stores are present in the NodeStatus endpoint or else zone
+	// config changes may flake (#25488).
+	tc.WaitForNodeStatuses(t)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
