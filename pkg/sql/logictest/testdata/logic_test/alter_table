@@ -89,7 +89,7 @@ ORDER BY created DESC
 LIMIT 2
 ----
 SCHEMA CHANGE  ROLL BACK ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.10  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.00  duplicate key value (c)=(1) violates unique constraint "bar"
 
 query IIII colnames,rowsort
 SELECT * FROM t

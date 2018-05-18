@@ -3083,3 +3083,86 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		t.Fatalf("invalid version = %d", tableDesc.Version)
 	}
 }
+
+// TestCancelSchemaChange tests that a CANCEL JOB run midway through column
+// and index backfills is canceled.
+func TestCancelSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		numNodes = 3
+		maxValue = 100
+	)
+
+	var sqlDB *sqlutils.SQLRunner
+	var db *gosql.DB
+	params, _ := tests.CreateTestServerParams()
+	doCancel := false
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: 10,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if !doCancel {
+					return nil
+				}
+				if _, err := db.Exec(`CANCEL JOB (
+					SELECT id FROM [SHOW JOBS]
+					WHERE
+						type = 'SCHEMA CHANGE' AND
+						status = $1 AND
+						description NOT LIKE 'ROLL BACK%'
+				)`, jobs.StatusRunning); err != nil {
+					panic(err)
+				}
+				return nil
+			},
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs:      params,
+	})
+	defer tc.Stopper().Stop(context.TODO())
+	db = tc.ServerConn(0)
+	kvDB := tc.Server(0).DB()
+	sqlDB = sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	// Split the table into multiple ranges.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// SplitTable moves the right range, so we split things back to front
+	// in order to move less data.
+	const numSplits = numNodes * 2
+	for i := numSplits - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i%numNodes, maxValue/numSplits*i)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	doCancel = true
+	if _, err := db.Exec(`ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')`); !testutils.IsError(err, "job canceled") {
+		t.Fatalf("unexpected %v", err)
+	}
+	if _, err := db.Exec(`CREATE INDEX ON t.test (v)`); !testutils.IsError(err, "job canceled") {
+		t.Fatalf("unexpected %v", err)
+	}
+
+	doCancel = false
+	sqlDB.Exec(t, `ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.2')`)
+	sqlDB.Exec(t, `CREATE INDEX ON t.test (v)`)
+}

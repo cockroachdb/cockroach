@@ -16,6 +16,7 @@ package jobs
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -322,6 +323,22 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error {
 	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
+		// Special case schema change jobs to mark the job as canceled.
+		if job != nil {
+			payload := job.Payload()
+			// TODO(mjibson): Use an unfortunate workaround to enable canceling of
+			// schema change jobs by comparing the string description. When a schema
+			// change job fails or is canceled, a new job is created with the ROLL BACK
+			// prefix. These rollback jobs cannot be canceled. We could add a field to
+			// the payload proto to indicate if this job is cancelable or not, but in
+			// a split version cluster an older node could pick up the schema change
+			// and fail to clear/set that field appropriately. Thus it seems that the
+			// safest way for now (i.e., without a larger jobs/schema change refactor)
+			// is to hack this up with a string comparison.
+			if payload.Type() == TypeSchemaChange && !strings.HasPrefix(job.Record.Description, "ROLL BACK") {
+				return job.WithTxn(txn).canceled(ctx, NoopFn)
+			}
+		}
 		return err
 	}
 	return job.WithTxn(txn).canceled(ctx, resumer.OnFailOrCancel)
