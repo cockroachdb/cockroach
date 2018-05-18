@@ -17,6 +17,7 @@ package testcluster
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -545,6 +547,33 @@ func (tc *TestCluster) WaitForFullReplication() error {
 		}
 	}
 	return nil
+}
+
+// WaitForNodeStatuses waits until a NodeStatus is persisted for every node and
+// store in the cluster.
+func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
+	testutils.SucceedsSoon(t, func() error {
+		url := tc.Server(0).ServingAddr()
+		conn, err := tc.Server(0).RPCContext().GRPCDial(url).Connect(context.Background())
+		if err != nil {
+			return err
+		}
+		client := serverpb.NewStatusClient(conn)
+		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
+		if err != nil {
+			return err
+		}
+
+		if len(response.Nodes) != tc.NumServers() {
+			return fmt.Errorf("expected %d nodes registered, got %+v", tc.NumServers(), response)
+		}
+		for _, node := range response.Nodes {
+			if len(node.StoreStatuses) == 0 {
+				return fmt.Errorf("missing StoreStatuses in NodeStatus: %+v", node)
+			}
+		}
+		return nil
+	})
 }
 
 type testClusterFactoryImpl struct{}
