@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
 type slKey struct {
@@ -35,7 +36,7 @@ type inMemSideloadStorage struct {
 func mustNewInMemSideloadStorage(
 	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
 ) sideloadStorage {
-	ss, err := newInMemSideloadStorage(cluster.MakeTestingClusterSettings(), rangeID, replicaID, baseDir)
+	ss, err := newInMemSideloadStorage(cluster.MakeTestingClusterSettings(), rangeID, replicaID, baseDir, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +44,11 @@ func mustNewInMemSideloadStorage(
 }
 
 func newInMemSideloadStorage(
-	_ *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
+	_ *cluster.Settings,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	baseDir string,
+	eng engine.Engine,
 ) (sideloadStorage, error) {
 	return &inMemSideloadStorage{
 		prefix: filepath.Join(baseDir, fmt.Sprintf("%d.%d", rangeID, replicaID)),

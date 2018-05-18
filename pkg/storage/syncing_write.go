@@ -16,13 +16,14 @@ package storage
 
 import (
 	"context"
-	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/time/rate"
@@ -75,6 +76,7 @@ func writeFileSyncing(
 	ctx context.Context,
 	filename string,
 	data []byte,
+	eng engine.Engine,
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
@@ -86,8 +88,11 @@ func writeFileSyncing(
 		sync = false
 	}
 
-	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	f, err := eng.OpenFile(filename)
 	if err != nil {
+		if strings.Contains(err.Error(), "No such file or directory") {
+			return os.ErrNotExist
+		}
 		return err
 	}
 
@@ -100,12 +105,7 @@ func writeFileSyncing(
 
 		// rate limit
 		limitBulkIOWrite(ctx, limiter, len(chunk))
-
-		var wrote int
-		wrote, err = f.Write(chunk)
-		if err == nil && wrote < len(chunk) {
-			err = io.ErrShortWrite
-		}
+		err = f.Append(chunk)
 		if err == nil && sync {
 			err = f.Sync()
 		}

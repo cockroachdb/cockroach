@@ -2616,6 +2616,16 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 	return statusToError(C.DBEnvWriteFile(r.rdb, goToCSlice([]byte(filename)), goToCSlice(data)))
 }
 
+// OpenFile opens a DBFile, which is essentially a rocksdb WritableFile
+// with the given filename, in this RocksDB's env.
+func (r *RocksDB) OpenFile(filename string) (DBFile, error) {
+	var file C.DBWritableFile
+	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), &file)); err != nil {
+		return nil, err
+	}
+	return &rocksdbFile{file: file, rdb: r.rdb}, nil
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
@@ -2660,4 +2670,36 @@ func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 	repr = repr[keySize+valSize:]
 	key, err = DecodeKey(rawKey)
 	return key, value, repr, err
+}
+
+// DBFile is an interface for interacting with DBWritableFile in RocksDB.
+type DBFile interface {
+	// Append appends data to this DBFile.
+	Append(data []byte) error
+	// Close closes this DBFile.
+	Close() error
+	// Sync synchronously flushes this DBFile's data to disk.
+	Sync() error
+}
+
+// rocksdbFile implements DBFile interface. It is used to interact with the
+// DBWritableFile in the corresponding RocksDB env.
+type rocksdbFile struct {
+	file C.DBWritableFile
+	rdb  *C.DBEngine
+}
+
+// Append implements the DBFile interface.
+func (f *rocksdbFile) Append(data []byte) error {
+	return statusToError(C.DBEnvAppendFile(f.rdb, f.file, goToCSlice(data)))
+}
+
+// Close implements the DBFile interface.
+func (f *rocksdbFile) Close() error {
+	return statusToError(C.DBEnvCloseFile(f.rdb, f.file))
+}
+
+// Sync implements the DBFile interface.
+func (f *rocksdbFile) Sync() error {
+	return statusToError(C.DBEnvSyncFile(f.rdb, f.file))
 }
