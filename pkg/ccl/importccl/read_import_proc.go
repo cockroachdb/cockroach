@@ -285,6 +285,9 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 }
 
 func (c *rowConverter) sendBatch(ctx context.Context) error {
+	if len(c.kvBatch) == 0 {
+		return nil
+	}
 	select {
 	case c.kvCh <- c.kvBatch:
 	case <-ctx.Done():
@@ -334,7 +337,7 @@ type progressFn func(finished bool) error
 type inputConverter interface {
 	start(group ctxgroup.Group)
 	readFile(ctx context.Context, input io.Reader, fileIdx int32, filename string, progress progressFn) error
-	inputFinished()
+	inputFinished(ctx context.Context)
 }
 
 type readImportDataProcessor struct {
@@ -386,7 +389,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 	group.GoCtx(func(ctx context.Context) error {
 		ctx, span := tracing.ChildSpan(ctx, "readImportFiles")
 		defer tracing.FinishSpan(span)
-		defer conv.inputFinished()
+		defer conv.inputFinished(ctx)
 
 		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
 		if err != nil {

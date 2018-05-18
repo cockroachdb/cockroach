@@ -59,7 +59,7 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 	})
 }
 
-func (c *csvInputReader) inputFinished() {
+func (c *csvInputReader) inputFinished(_ context.Context) {
 	close(c.recordCh)
 }
 
