@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata distsql-disk
+# LogicTest: default opt parallel-stmts distsql distsql-opt distsql-metadata distsql-disk
 
 # These are postgres regress sql join test suite
 # https://github.com/postgres/postgres/blob/master/src/test/regress/sql/join.sql
