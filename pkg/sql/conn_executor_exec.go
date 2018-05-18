@@ -575,7 +575,19 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if useOptimizer {
 		// Experimental path (disabled by default).
 		err = planner.makeOptimizerPlan(ctx, stmt)
-	} else {
+
+		if err != nil && ex.sessionData.OptimizerMode != sessiondata.OptimizerAlways {
+			// Fall back on the heuristic planner if the cost-based optimizer returns
+			// an "unsupported feature" error.
+			if pgerr, ok := err.(*pgerror.Error); ok {
+				if pgerr.Code == pgerror.CodeFeatureNotSupportedError {
+					useOptimizer = false
+				}
+			}
+		}
+	}
+
+	if !useOptimizer {
 		err = planner.makePlan(ctx, stmt)
 	}
 
