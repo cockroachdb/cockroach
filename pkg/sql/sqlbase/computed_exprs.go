@@ -41,7 +41,11 @@ var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
 func (r *RowIndexedVarContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	return r.CurSourceRow[r.Mapping[r.Cols[idx].ID]], nil
+	rowIdx, ok := r.Mapping[r.Cols[idx].ID]
+	if !ok {
+		return tree.DNull, nil
+	}
+	return r.CurSourceRow[rowIdx], nil
 }
 
 // IndexedVarResolvedType implements tree.IndexedVarContainer.
