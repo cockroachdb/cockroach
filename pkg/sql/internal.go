@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strconv"
 	"sync"
@@ -385,6 +386,9 @@ func (ie *internalExecutorImpl) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (retRes result, retErr error) {
+	if sargs != nil && sargs.ApplicationName == "" {
+		sargs.ApplicationName = fmt.Sprintf("internal-%s", opName)
+	}
 
 	defer func() {
 		// We wrap errors with the opName, but not if they're retriable - in that

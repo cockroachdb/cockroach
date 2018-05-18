@@ -572,24 +572,17 @@ func TestShowSessions(t *testing.T) {
 
 	var conn *gosql.DB
 
-	execKnobs := &sql.ExecutorTestingKnobs{}
-
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
-				Knobs: base.TestingKnobs{
-					SQLExecutor: execKnobs,
-				},
-			},
-		})
+	tc := serverutils.StartTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.TODO())
 
 	conn = tc.ServerConn(0)
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
 
-	const showSessions = "SELECT node_id, (now() - session_start)::FLOAT FROM [SHOW CLUSTER SESSIONS]"
+	// We'll skip "internal" sessions, as those are unpredictable.
+	const showSessions = `
+	select node_id, (now() - session_start)::float from
+		[show cluster sessions] where application_name not like 'internal-%'
+	`
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {
@@ -622,7 +615,34 @@ func TestShowSessions(t *testing.T) {
 	}
 
 	if expectedCount := 1; count != expectedCount {
-		t.Fatalf("unexpected number of running sessions: %d, expected %d", count, expectedCount)
+		// Print the sessions to aid debugging.
+		report, err := func() (string, error) {
+			result := "Active sessions (results might have changed since the test checked):\n"
+			rows, err = conn.Query(`
+				select active_queries, last_active_query, application_name
+					from [show cluster sessions]`)
+			if err != nil {
+				return "", err
+			}
+			var q, lq, name string
+			for rows.Next() {
+				if err := rows.Scan(&q, &lq, &name); err != nil {
+					return "", err
+				}
+				result += fmt.Sprintf("app: %q, query: %q, last query: %s",
+					name, q, lq)
+			}
+			if err := rows.Close(); err != nil {
+				return "", err
+			}
+			return result, nil
+		}()
+		if err != nil {
+			report = fmt.Sprintf("failed to generate report: %s", err)
+		}
+
+		t.Fatalf("unexpected number of running sessions: %d, expected %d.\n%s",
+			count, expectedCount, report)
 	}
 }
 
