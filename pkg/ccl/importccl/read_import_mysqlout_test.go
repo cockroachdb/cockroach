@@ -45,7 +45,7 @@ type dumpCfg struct {
 
 const injectNull = "inject-null"
 
-func writeMysqlOutfileTestdata(t *testing.T, rows []testRow, configs []dumpCfg) {
+func loadMysqlTestdata(t *testing.T, rows []testRow) func() {
 	db, err := gosql.Open("mysql", "root@/test")
 	if err != nil {
 		t.Fatal(err)
@@ -72,12 +72,23 @@ func writeMysqlOutfileTestdata(t *testing.T, rows []testRow, configs []dumpCfg) 
 			t.Fatal(err)
 		}
 	}
+	return func() {
+		if _, err := db.Exec(
+			`DROP TABLE IF EXISTS test`,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func writeMysqlOutfileTestdata(t *testing.T, rows []testRow, configs []dumpCfg) {
+	cleanup := loadMysqlTestdata(t, rows)
+	defer cleanup()
 
 	if err := os.RemoveAll(filepath.Join(`testdata`, `mysqlout`)); err != nil {
 		t.Fatal(err)
 	}
 	for _, cfg := range configs {
-
 		dest := filepath.Dir(cfg.filename)
 		if err := os.MkdirAll(dest, 0777); err != nil {
 			t.Fatal(err)
@@ -106,12 +117,6 @@ func writeMysqlOutfileTestdata(t *testing.T, rows []testRow, configs []dumpCfg) 
 			t.Fatal(err)
 		}
 	}
-	if _, err := db.Exec(
-		`DROP TABLE IF EXISTS test`,
-	); err != nil {
-		t.Fatal(err)
-	}
-
 }
 
 func randStr(r *rand.Rand, from []rune, length int) string {
@@ -122,10 +127,9 @@ func randStr(r *rand.Rand, from []rune, length int) string {
 	return string(s)
 }
 
-func getMysqlOutfileTestdata(t *testing.T) ([]testRow, []dumpCfg) {
+func getMysqlTestRows() []testRow {
 	badChars := []rune{'a', ';', '\n', ',', '"', '\\', '\r', '<', '\t', '✅', 'π', rune(0), rune(10), rune(2425), rune(5183), utf8.RuneError}
 	r := rand.New(rand.NewSource(1))
-
 	testRows := []testRow{
 		{i: 0, s: `str`},
 		{i: 1, s: ``},
@@ -158,6 +162,11 @@ func getMysqlOutfileTestdata(t *testing.T) ([]testRow, []dumpCfg) {
 		r.Read(buf)
 		testRows = append(testRows, testRow{i: i + 100, s: randStr(r, badChars, 1000), b: buf})
 	}
+	return testRows
+}
+
+func getMysqlOutfileTestdata(t *testing.T) ([]testRow, []dumpCfg) {
+	testRows := getMysqlTestRows()
 
 	configs := []dumpCfg{
 		{
@@ -233,7 +242,7 @@ func TestMysqlOutfileReader(t *testing.T) {
 			if err := converter.readFile(ctx, in, 1, config.name, func(_ bool) error { return nil }); err != nil {
 				t.Fatal(err)
 			}
-			converter.inputFinished()
+			converter.inputFinished(ctx)
 
 			csvVersion := filepath.Join(filepath.Dir(config.filename), `test.out.csv`)
 			csvOut, err := os.Create(csvVersion)
