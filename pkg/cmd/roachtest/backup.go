@@ -23,24 +23,24 @@ import (
 
 func registerBackup(r *registry) {
 	r.Add(testSpec{
-		Name:  `backup2TB`,
-		Nodes: nodes(10),
+		Name:   `backup2TB`,
+		Nodes:  nodes(10),
+		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes
 
 			t.Status(`downloading store dumps`)
 			var wg sync.WaitGroup
 			for node := 1; node <= nodes; node++ {
-				node := c.Node(node)
 				wg.Add(1)
-				go func() {
+				go func(node int) {
 					defer wg.Done()
-					c.Run(ctx, node, `mkdir -p /mnt/data1/cockroach`)
+					c.Run(ctx, c.Node(node), `mkdir -p /mnt/data1/cockroach`)
 					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
 						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
-						`stores=%d/%d/*`, nodes, node)
-					c.Run(ctx, node, `gsutil -m -q cp -r `+path+` /mnt/data1/cockroach`)
-				}()
+						`stores=%d,bin-version=2.0/%d/*`, nodes, node)
+					c.Run(ctx, c.Node(node), `gsutil -m -q cp -r `+path+` /mnt/data1/cockroach`)
+				}(node)
 			}
 			wg.Wait()
 
