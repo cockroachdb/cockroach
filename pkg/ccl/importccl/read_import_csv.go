@@ -64,7 +64,7 @@ func (c *csvInputReader) start(group ctxgroup.Group) {
 	})
 }
 
-func (c *csvInputReader) inputFinished() {
+func (c *csvInputReader) inputFinished(_ context.Context) {
 	close(c.recordCh)
 }
 
@@ -163,7 +163,7 @@ func (c *csvInputReader) convertRecordWorker(ctx context.Context) error {
 					conv.datums[i] = tree.DNull
 				} else {
 					var err error
-					conv.datums[i], err = tree.ParseDatumStringAs(col.Type.ToDatumType(), v, conv.evalCtx)
+					conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], v, conv.evalCtx)
 					if err != nil {
 						return makeRowErr(batch.file, rowNum, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
 					}
