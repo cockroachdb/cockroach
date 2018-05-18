@@ -3094,7 +3094,7 @@ func TestReplicaLazyLoad(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	sc := storage.TestStoreConfig(nil)
-	sc.RaftTickInterval = time.Millisecond // safe because there is only a single node
+	sc.RaftTickInterval = 10 * time.Millisecond // safe because there is only a single node
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{storeConfig: &sc}
