@@ -285,6 +285,10 @@ type Engine interface {
 	CompactRange(start, end roachpb.Key, forceBottommost bool) error
 	// OpenFile opens a DBFile with the given filename.
 	OpenFile(filename string) (DBFile, error)
+	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
+	ReadFile(filename string) ([]byte, error)
+	// DeleteFile deletes the file with the given filename from this RocksDB's env.
+	DeleteFile(filename string) error
 }
 
 // WithSSTables extends the Engine interface with a method to get info

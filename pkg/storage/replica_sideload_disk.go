@@ -17,7 +17,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,7 +94,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 
 func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
-	b, err := ioutil.ReadFile(filename)
+	b, err := ss.eng.ReadFile(filename)
 	if os.IsNotExist(err) {
 		return nil, errSideloadedFileNotFound
 	}
@@ -115,7 +114,7 @@ func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) er
 }
 
 func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) error {
-	if err := os.Remove(filename); err != nil {
+	if err := ss.eng.DeleteFile(filename); err != nil {
 		if os.IsNotExist(err) {
 			return errSideloadedFileNotFound
 		}

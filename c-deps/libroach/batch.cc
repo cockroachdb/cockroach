@@ -519,11 +519,19 @@ DBStatus DBBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
   return FmtStatus("unsupported");
 }
 
+DBStatus DBBatch::EnvReadFile(DBSlice path, DBSlice* contents) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBBatch::EnvCloseFile(rocksdb::WritableFile* file) { return FmtStatus("unsupported"); }
 
 DBStatus DBBatch::EnvSyncFile(rocksdb::WritableFile* file) { return FmtStatus("unsupported"); }
 
 DBStatus DBBatch::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBBatch::EnvDeleteFile(DBSlice path) {
   return FmtStatus("unsupported");
 }
 
@@ -598,6 +606,10 @@ DBStatus DBWriteOnlyBatch::EnvOpenFile(DBSlice path, rocksdb::WritableFile** fil
   return FmtStatus("unsupported");
 }
 
+DBStatus DBWriteOnlyBatch::EnvReadFile(DBSlice path, DBSlice* contents) {
+  return FmtStatus("unsupported");
+}
+
 DBStatus DBWriteOnlyBatch::EnvCloseFile(rocksdb::WritableFile* file) {
   return FmtStatus("unsupported");
 }
@@ -607,6 +619,10 @@ DBStatus DBWriteOnlyBatch::EnvSyncFile(rocksdb::WritableFile* file) {
 }
 
 DBStatus DBWriteOnlyBatch::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
+  return FmtStatus("unsupported");
+}
+
+DBStatus DBWriteOnlyBatch::EnvDeleteFile(DBSlice path) {
   return FmtStatus("unsupported");
 }
 
