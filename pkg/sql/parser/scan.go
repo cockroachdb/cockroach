@@ -235,7 +235,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		// placeholder? $[0-9]+
 		if lex.IsDigit(s.peek()) {
 			s.scanPlaceholder(lval)
-			return
 		}
 		return
 
@@ -311,7 +310,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			return
 		case lex.IsDigit(t):
 			s.scanNumber(lval, ch)
-			return
 		}
 		return
 
@@ -330,7 +328,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 				return
 			}
 			lval.id = NOT_REGMATCH
-			return
 		}
 		return
 
@@ -347,7 +344,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '&': // ?&
 			s.pos++
 			lval.id = JSON_ALL_EXISTS
-			return
 		}
 		return
 
@@ -374,7 +370,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '@': // <@
 			s.pos++
 			lval.id = CONTAINED_BY
-			return
 		}
 		return
 
@@ -393,7 +388,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '=': // >=
 			s.pos++
 			lval.id = GREATER_EQUALS
-			return
 		}
 		return
 
@@ -408,7 +402,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			}
 			s.pos++
 			lval.id = TYPECAST
-			return
 		}
 		return
 
@@ -417,7 +410,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '|': // ||
 			s.pos++
 			lval.id = CONCAT
-			return
 		}
 		return
 
@@ -426,7 +418,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '/': // //
 			s.pos++
 			lval.id = FLOORDIV
-			return
 		}
 		return
 
@@ -435,7 +426,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '*': // ~*
 			s.pos++
 			lval.id = REGIMATCH
-			return
 		}
 		return
 
@@ -444,7 +434,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '>': // @>
 			s.pos++
 			lval.id = CONTAINS
-			return
 		}
 		return
 
@@ -453,7 +442,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '&': // &&
 			s.pos++
 			lval.id = INET_CONTAINS_OR_CONTAINED_BY
-			return
 		}
 		return
 
@@ -468,7 +456,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			}
 			s.pos++
 			lval.id = FETCHVAL
-			return
 		}
 		return
 
@@ -487,7 +474,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		case '-': // #-
 			s.pos++
 			lval.id = REMOVE_PATH
-			return
 		}
 		return
 
@@ -498,7 +484,6 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		if lex.IsIdentStart(ch) {
 			s.scanIdent(lval)
-			return
 		}
 	}
 
