@@ -61,6 +61,7 @@ typedef struct {
 typedef struct DBCache DBCache;
 typedef struct DBEngine DBEngine;
 typedef struct DBIterator DBIterator;
+typedef void* DBWritableFile;
 
 // DBOptions contains local database options.
 typedef struct {
@@ -358,6 +359,19 @@ void DBRunLDB(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
+
+// DBEnvOpenFile opens a DBWritableFile as a new "file" in the given engine.
+DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file);
+
+// DBEnvAppendFile appends the given data to the given DBWritableFile in the
+// given engine.
+DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile file, DBSlice contents);
+
+// DBEnvSyncFile synchronously writes the data of the file to the disk.
+DBStatus DBEnvSyncFile(DBEngine* db, DBWritableFile file);
+
+// DBEnvCloseFile closes the given DBWritableFile in the given engine.
+DBStatus DBEnvCloseFile(DBEngine* db, DBWritableFile file);
 
 // DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
 typedef void* DBFileLock;
