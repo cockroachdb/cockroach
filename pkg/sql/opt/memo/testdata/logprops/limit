@@ -41,11 +41,11 @@ build
 SELECT COUNT(*) FROM xyzs LIMIT 10
 ----
 limit
- ├── columns: column5:5(int)
+ ├── columns: count:5(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── group-by
- │    ├── columns: column5:5(int)
+ │    ├── columns: count:5(int)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
  │    ├── project
@@ -71,11 +71,11 @@ limit
  │    └── keys: (1) weak(3,4)
  └── subquery [type=int]
       └── max1-row
-           ├── columns: column5:5(int!null)
+           ├── columns: "1":5(int!null)
            ├── cardinality: [1 - 1]
            ├── stats: [rows=1]
            └── project
-                ├── columns: column5:5(int!null)
+                ├── columns: "1":5(int!null)
                 ├── cardinality: [1 - 1]
                 ├── stats: [rows=1]
                 ├── values
@@ -104,7 +104,7 @@ build
 SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 ----
 project
- ├── columns: column8:8(int)
+ ├── columns: "(SELECT x FROM kuv LIMIT y)":8(int)
  ├── stats: [rows=1000]
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)

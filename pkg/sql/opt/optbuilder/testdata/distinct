@@ -104,13 +104,13 @@ build
 SELECT DISTINCT y + x FROM xyz ORDER by (y + x)
 ----
 sort
- ├── columns: column4:4(int)
+ ├── columns: "y + x":4(int)
  ├── ordering: +4
  └── group-by
-      ├── columns: column4:4(int)
-      ├── grouping columns: column4:4(int)
+      ├── columns: "y + x":4(int)
+      ├── grouping columns: "y + x":4(int)
       └── project
-           ├── columns: column4:4(int)
+           ├── columns: "y + x":4(int)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
@@ -122,13 +122,13 @@ build
 SELECT DISTINCT y + x FROM xyz ORDER BY y + x
 ----
 sort
- ├── columns: column4:4(int)
+ ├── columns: "y + x":4(int)
  ├── ordering: +4
  └── group-by
-      ├── columns: column4:4(int)
-      ├── grouping columns: column4:4(int)
+      ├── columns: "y + x":4(int)
+      ├── grouping columns: "y + x":4(int)
       └── project
-           ├── columns: column4:4(int)
+           ├── columns: "y + x":4(int)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
            └── projections
@@ -168,10 +168,10 @@ build
 SELECT DISTINCT (y,z) FROM xyz
 ----
 group-by
- ├── columns: column4:4(tuple{int, float})
- ├── grouping columns: column4:4(tuple{int, float})
+ ├── columns: "(y, z)":4(tuple{int, float})
+ ├── grouping columns: "(y, z)":4(tuple{int, float})
  └── project
-      ├── columns: column4:4(tuple{int, float})
+      ├── columns: "(y, z)":4(tuple{int, float})
       ├── scan xyz
       │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
@@ -183,7 +183,7 @@ build
 SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 group-by
- ├── columns: column4:4(int)
+ ├── columns: count:4(int)
  ├── project
  │    └── group-by
  │         ├── columns: y:2(int)
@@ -231,12 +231,12 @@ build
 SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
 ----
 group-by
- ├── columns: column4:4(int)
- ├── grouping columns: column4:4(int)
+ ├── columns: max:4(int)
+ ├── grouping columns: max:4(int)
  └── project
-      ├── columns: column4:4(int)
+      ├── columns: max:4(int)
       └── group-by
-           ├── columns: x:1(int!null) column4:4(int)
+           ├── columns: x:1(int!null) max:4(int)
            ├── grouping columns: x:1(int!null)
            ├── project
            │    ├── columns: x:1(int!null)
@@ -250,10 +250,10 @@ build
 SELECT DISTINCT x+y FROM xyz
 ----
 group-by
- ├── columns: column4:4(int)
- ├── grouping columns: column4:4(int)
+ ├── columns: "x + y":4(int)
+ ├── grouping columns: "x + y":4(int)
  └── project
-      ├── columns: column4:4(int)
+      ├── columns: "x + y":4(int)
       ├── scan xyz
       │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
@@ -265,10 +265,10 @@ build
 SELECT DISTINCT 3 FROM xyz
 ----
 group-by
- ├── columns: column4:4(int!null)
- ├── grouping columns: column4:4(int!null)
+ ├── columns: "3":4(int!null)
+ ├── grouping columns: "3":4(int!null)
  └── project
-      ├── columns: column4:4(int!null)
+      ├── columns: "3":4(int!null)
       ├── scan xyz
       │    └── columns: x:1(int!null) y:2(int) z:3(float)
       └── projections
@@ -278,10 +278,10 @@ build
 SELECT DISTINCT 3
 ----
 group-by
- ├── columns: column1:1(int!null)
- ├── grouping columns: column1:1(int!null)
+ ├── columns: "3":1(int!null)
+ ├── grouping columns: "3":1(int!null)
  └── project
-      ├── columns: column1:1(int!null)
+      ├── columns: "3":1(int!null)
       ├── values
       │    └── tuple [type=tuple{}]
       └── projections
@@ -291,14 +291,14 @@ build
 SELECT DISTINCT MAX(z), x+y, 3 FROM xyz GROUP BY x, y HAVING y > 4
 ----
 group-by
- ├── columns: column4:4(float) column5:5(int) column6:6(int!null)
- ├── grouping columns: column4:4(float) column5:5(int) column6:6(int!null)
+ ├── columns: max:4(float) "x + y":5(int) "3":6(int!null)
+ ├── grouping columns: max:4(float) "x + y":5(int) "3":6(int!null)
  └── project
-      ├── columns: column5:5(int) column6:6(int!null) column4:4(float)
+      ├── columns: "x + y":5(int) "3":6(int!null) max:4(float)
       ├── select
-      │    ├── columns: x:1(int!null) y:2(int!null) column4:4(float)
+      │    ├── columns: x:1(int!null) y:2(int!null) max:4(float)
       │    ├── group-by
-      │    │    ├── columns: x:1(int!null) y:2(int) column4:4(float)
+      │    │    ├── columns: x:1(int!null) y:2(int) max:4(float)
       │    │    ├── grouping columns: x:1(int!null) y:2(int)
       │    │    ├── scan xyz
       │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
@@ -343,13 +343,13 @@ build
 SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
 ----
 sort
- ├── columns: column5:5(int!null) d:4(int!null) b:2(int!null)
+ ├── columns: "1":5(int!null) d:4(int!null) b:2(int!null)
  ├── ordering: +4,+2
  └── group-by
-      ├── columns: b:2(int!null) d:4(int!null) column5:5(int!null)
-      ├── grouping columns: b:2(int!null) d:4(int!null) column5:5(int!null)
+      ├── columns: b:2(int!null) d:4(int!null) "1":5(int!null)
+      ├── grouping columns: b:2(int!null) d:4(int!null) "1":5(int!null)
       └── project
-           ├── columns: column5:5(int!null) b:2(int!null) d:4(int!null)
+           ├── columns: "1":5(int!null) b:2(int!null) d:4(int!null)
            ├── scan abcd
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
            └── projections

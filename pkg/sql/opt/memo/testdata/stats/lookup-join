@@ -49,10 +49,10 @@ opt
 SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s, y
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: count:5(int)
  ├── stats: [rows=65]
  └── group-by
-      ├── columns: y:2(int) s:3(string!null) column5:5(int)
+      ├── columns: y:2(int) s:3(string!null) count:5(int)
       ├── grouping columns: y:2(int) s:3(string!null)
       ├── stats: [rows=65, distinct(2,3)=65]
       ├── keys: weak(2,3)

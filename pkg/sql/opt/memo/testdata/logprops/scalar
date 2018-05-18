@@ -36,13 +36,13 @@ build
 SELECT xy.x + 1 = length('foo') + xy.y, uv.rowid * xy.x FROM xy, uv
 ----
 project
- ├── columns: column6:6(bool) column7:7(int)
+ ├── columns: "(xy.x + 1) = (length('foo') + xy.y)":6(bool) "uv.rowid * xy.x":7(int)
  ├── stats: [rows=1000000]
  ├── inner-join
- │    ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
+ │    ├── columns: xy.x:1(int!null) y:2(int) u:3(int) v:4(int!null) rowid:5(int!null)
  │    ├── stats: [rows=1000000]
  │    ├── scan xy
- │    │    ├── columns: x:1(int!null) y:2(int)
+ │    │    ├── columns: xy.x:1(int!null) y:2(int)
  │    │    ├── stats: [rows=1000]
  │    │    └── keys: (1)
  │    ├── scan uv

@@ -69,10 +69,10 @@ build
 SELECT max(y) FROM a GROUP BY x
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: max:5(int)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: x:1(int!null) column5:5(int)
+      ├── columns: x:1(int!null) max:5(int)
       ├── grouping columns: x:1(int!null)
       ├── stats: [rows=2000, distinct(1)=2000]
       ├── keys: (1)
@@ -93,7 +93,7 @@ build
 SELECT y, sum(z) FROM a GROUP BY y
 ----
 group-by
- ├── columns: y:2(int) column5:5(float)
+ ├── columns: y:2(int) sum:5(float)
  ├── grouping columns: y:2(int)
  ├── stats: [rows=400, distinct(2)=400]
  ├── keys: weak(2)
@@ -112,10 +112,10 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: max:5(int)
  ├── stats: [rows=600]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) s:4(string) column5:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=600, distinct(2-4)=600]
       ├── keys: weak(3,4)
@@ -135,10 +135,10 @@ build
 SELECT min(x) FROM a GROUP BY y, z
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: min:5(int)
  ├── stats: [rows=2000]
  └── group-by
-      ├── columns: y:2(int) z:3(float!null) column5:5(int)
+      ├── columns: y:2(int) z:3(float!null) min:5(int)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=2000, distinct(2,3)=2000]
       ├── keys: weak(2,3)
@@ -158,14 +158,14 @@ build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
 ----
 project
- ├── columns: column5:5(int)
+ ├── columns: max:5(int)
  ├── stats: [rows=120]
  └── select
-      ├── columns: y:2(int) z:3(float!null) s:4(string!null) column5:5(int)
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
       ├── stats: [rows=120, distinct(4)=2]
       ├── keys: (3,4)
       ├── group-by
-      │    ├── columns: y:2(int) z:3(float!null) s:4(string) column5:5(int)
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
       │    ├── keys: weak(3,4)
@@ -191,7 +191,7 @@ build
 SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 project
- ├── columns: column5:5(decimal!null) s:4(string)
+ ├── columns: sum:5(decimal!null) s:4(string)
  ├── stats: [rows=1]
  ├── keys: weak(4)
  └── select

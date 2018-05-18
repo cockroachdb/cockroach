@@ -32,7 +32,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(int) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
+ ├── columns: "(1 + i) = k":7(bool) "(2 - k) != i":8(bool) "(i + 1) IS NOT DISTINCT FROM k":9(bool) "(i - 1) IS DISTINCT FROM k":10(bool) "(i * 2) + k":11(int) "(i + 2) * k":12(int) "(i ^ 2) & k":13(int) "(i ^ 2) | k":14(int) "(i * i) # k":15(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    └── keys: (1)
@@ -101,7 +101,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(float) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
+ ├── columns: "(length('foo') + 1) = (i + k)":7(bool) "length('bar') != (i * 2)":8(bool) "5 IS NOT DISTINCT FROM (1 - k)":9(bool) "(10::DECIMAL + 1::INT) IS DISTINCT FROM k":10(bool) "1 + f":11(float) "(5 * length('foo')) * (i * i)":12(int) "(100 ^ 2) & (i + i)":13(int) "(length('foo') + 1) | (i + i)":14(int) "(1 - length('foo')) # (k ^ 2)":15(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float)
  │    └── keys: (1)
@@ -172,7 +172,7 @@ opt
 SELECT COALESCE(i) FROM a
 ----
 project
- ├── columns: column7:7(int)
+ ├── columns: "COALESCE(i)":7(int)
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]
@@ -185,7 +185,7 @@ opt
 SELECT COALESCE(NULL) FROM a
 ----
 project
- ├── columns: column7:7(unknown)
+ ├── columns: "COALESCE(NULL)":7(unknown)
  ├── scan a
  └── projections
       └── null [type=unknown]
@@ -194,7 +194,7 @@ opt
 SELECT COALESCE(NULL, 'foo', s) FROM a
 ----
 project
- ├── columns: column7:7(string!null)
+ ├── columns: "COALESCE(NULL, 'foo', s)":7(string!null)
  ├── scan a
  └── projections
       └── const: 'foo' [type=string]
@@ -203,7 +203,7 @@ opt
 SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
 ----
 project
- ├── columns: column7:7(string)
+ ├── columns: "COALESCE(NULL, NULL, s, s || 'foo')":7(string)
  ├── scan a
  │    └── columns: s:4(string)
  └── projections [outer=(4)]
@@ -218,7 +218,7 @@ opt
 SELECT COALESCE(i, NULL, NULL) FROM a
 ----
 project
- ├── columns: column7:7(int)
+ ├── columns: "COALESCE(i, NULL, NULL)":7(int)
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]
@@ -234,7 +234,7 @@ opt
 SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
 ----
 project
- ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb!null) column10:10(int)
+ ├── columns: "i::INT":7(int) "arr::INT[]":8(int[]) "'[1, 2]'::JSON::JSON":9(jsonb!null) "NULL::STRING::INT":10(int)
  ├── scan a
  │    └── columns: i:2(int) arr:6(int[])
  └── projections [outer=(2,6)]
@@ -248,7 +248,7 @@ opt
 SELECT i::float, arr::decimal[], s::json::json FROM a
 ----
 project
- ├── columns: column7:7(float) column8:8(decimal[]) column9:9(jsonb)
+ ├── columns: "i::FLOAT":7(float) "arr::DECIMAL[]":8(decimal[]) "s::JSON::JSON":9(jsonb)
  ├── scan a
  │    └── columns: i:2(int) s:4(string) arr:6(int[])
  └── projections [outer=(2,4,6)]
@@ -266,7 +266,7 @@ opt
 SELECT null::int, null::timestamptz
 ----
 project
- ├── columns: column1:1(int) column2:2(timestamptz)
+ ├── columns: "NULL::INT":1(int) "NULL::TIMESTAMP WITH TIME ZONE":2(timestamptz)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
@@ -282,7 +282,7 @@ opt
 SELECT +null::int, -null::int, ~null::int FROM a
 ----
 project
- ├── columns: column7:7(int) column8:8(int) column9:9(int)
+ ├── columns: "+NULL::INT":7(int) "-NULL::INT":8(int) "~NULL::INT":9(int)
  ├── scan a
  └── projections
       ├── null [type=int]
@@ -308,7 +308,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column7:7(int) column8:8(int) column9:9(decimal) column10:10(decimal) column11:11(float) column12:12(float) column13:13(int) column14:14(int) column15:15(decimal[]) column16:16(string[]) column17:17(decimal[]) column18:18(float[])
+ ├── columns: "NULL::INT & 1":7(int) "1 & NULL::INT":8(int) "NULL::DECIMAL + 1":9(decimal) "1 + NULL::DECIMAL":10(decimal) "NULL::FLOAT % 1":11(float) "1 % NULL::FLOAT":12(float) "NULL::INT << 4":13(int) "4 << NULL::INT":14(int) "arr::DECIMAL[] || NULL":15(decimal[]) "NULL || arr::STRING[]":16(string[]) "i::DECIMAL || NULL":17(decimal[]) "NULL || i::FLOAT":18(float[])
  ├── scan a
  │    └── columns: i:2(int) arr:6(int[])
  └── projections [outer=(2,6)]
@@ -348,7 +348,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column7:7(jsonb) column8:8(jsonb) column9:9(jsonb) column10:10(jsonb) column11:11(string) column12:12(string) column11:11(string) column12:12(string) column13:13(jsonb) column14:14(unknown) column15:15(string) column14:14(unknown)
+ ├── columns: "NULL::JSON || '[1, 2]'":7(jsonb) "'[1, 2]' || NULL::JSON":8(jsonb) "NULL::JSON->'foo'":9(jsonb) "'{}'::JSONB->NULL::STRING":10(jsonb) "NULL::JSON->>'foo'":11(string) "'{}'::JSONB->>NULL::STRING":12(string) "NULL::JSON->>'foo'":11(string) "'{}'::JSONB->>NULL::STRING":12(string) "NULL::JSON#>ARRAY['foo']":13(jsonb) "'{}'::JSONB#>NULL":14(unknown) "NULL::JSON#>>ARRAY['foo']":15(string) "'{}'::JSONB#>>NULL":14(unknown)
  ├── scan a
  └── projections
       ├── null [type=jsonb]
@@ -368,7 +368,7 @@ opt
 SELECT null IN (i), null NOT IN (s) FROM a
 ----
 project
- ├── columns: column7:7(bool) column8:8(bool)
+ ├── columns: "NULL IN (i)":7(bool) "NULL NOT IN (s)":8(bool)
  ├── scan a
  └── projections
       ├── null [type=bool, constraints=(contradiction; tight)]
@@ -381,7 +381,7 @@ opt
 SELECT i IN (null, null), k NOT IN (1 * null, null::int, 1 < null) FROM a
 ----
 project
- ├── columns: column7:7(bool) column8:8(bool)
+ ├── columns: "i IN (NULL, NULL)":7(bool) "k NOT IN (1 * NULL, NULL::INT, 1 < NULL)":8(bool)
  ├── scan a
  └── projections
       ├── null [type=bool, constraints=(contradiction; tight)]
@@ -394,7 +394,7 @@ opt
 SELECT i IN (2, 1, 1, null, 3, null, 2, 3.0) FROM a
 ----
 project
- ├── columns: column7:7(bool)
+ ├── columns: "i IN (2, 1, 1, NULL, 3, NULL, 2, 3.0)":7(bool)
  ├── scan a
  │    └── columns: i:2(int)
  └── projections [outer=(2)]
@@ -410,7 +410,7 @@ opt
 SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) FROM a
 ----
 project
- ├── columns: column7:7(bool)
+ ├── columns: "s NOT IN ('foo', s || 'foo', 'bar', length(s)::STRING, NULL)":7(bool)
  ├── scan a
  │    └── columns: s:4(string)
  └── projections [outer=(4)]
@@ -462,7 +462,7 @@ select
  └── filters [type=bool]
       └── exists [type=bool]
            └── group-by
-                ├── columns: column13:13(string)
+                ├── columns: max:13(string)
                 ├── cardinality: [1 - 1]
                 ├── scan a
                 │    ├── columns: a.s:10(string)

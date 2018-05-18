@@ -70,7 +70,7 @@ build
 SELECT i, s, k+1 FROM a
 ----
 project
- ├── columns: i:2(int) s:4(string) column5:5(int)
+ ├── columns: i:2(int) s:4(string) "k + 1":5(int)
  ├── prune: (2,4,5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
@@ -128,11 +128,11 @@ project
  ├── keys: (1)
  ├── prune: (1-4)
  └── select
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) column7:7(int!null)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) "k + 1":7(int!null)
       ├── keys: (1)
       ├── prune: (2-4)
       ├── left-join-apply
-      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) column7:7(int)
+      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) "k + 1":7(int)
       │    ├── keys: (1)
       │    ├── prune: (2-4,7)
       │    ├── scan a
@@ -140,12 +140,12 @@ project
       │    │    ├── keys: (1)
       │    │    └── prune: (1-4)
       │    ├── max1-row
-      │    │    ├── columns: column7:7(int)
+      │    │    ├── columns: "k + 1":7(int)
       │    │    ├── outer: (1)
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── prune: (7)
       │    │    └── project
-      │    │         ├── columns: column7:7(int)
+      │    │         ├── columns: "k + 1":7(int)
       │    │         ├── outer: (1)
       │    │         ├── prune: (7)
       │    │         ├── select
@@ -167,7 +167,7 @@ project
       │    └── true [type=bool]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
            └── eq [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
-                ├── variable: column7 [type=int, outer=(7)]
+                ├── variable: k + 1 [type=int, outer=(7)]
                 └── const: 1 [type=int]
 
 # SemiJoin operator.
@@ -255,10 +255,10 @@ opt
 SELECT COUNT(*), SUM(i) FROM a GROUP BY s, f
 ----
 project
- ├── columns: column5:5(int) column6:6(decimal)
+ ├── columns: count:5(int) sum:6(decimal)
  ├── prune: (5,6)
  └── group-by
-      ├── columns: f:3(float) s:4(string) column5:5(int) column6:6(decimal)
+      ├── columns: f:3(float) s:4(string) count:5(int) sum:6(decimal)
       ├── grouping columns: f:3(float) s:4(string)
       ├── keys: weak(3,4)
       ├── prune: (5,6)
@@ -275,7 +275,7 @@ opt
 SELECT COUNT(*), SUM(i) FROM a
 ----
 group-by
- ├── columns: column5:5(int) column6:6(decimal)
+ ├── columns: count:5(int) sum:6(decimal)
  ├── cardinality: [1 - 1]
  ├── prune: (5,6)
  ├── scan a
@@ -429,7 +429,7 @@ build
 SELECT (SELECT 1 FROM a)
 ----
 project
- ├── columns: column6:6(int)
+ ├── columns: "(SELECT 1 FROM a)":6(int)
  ├── cardinality: [1 - 1]
  ├── prune: (6)
  ├── values
@@ -438,11 +438,11 @@ project
  └── projections
       └── subquery [type=int]
            └── max1-row
-                ├── columns: column5:5(int!null)
+                ├── columns: "1":5(int!null)
                 ├── cardinality: [0 - 1]
                 ├── prune: (5)
                 └── project
-                     ├── columns: column5:5(int!null)
+                     ├── columns: "1":5(int!null)
                      ├── prune: (5)
                      ├── scan a
                      │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
