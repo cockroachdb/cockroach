@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/gogo/protobuf/types"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -325,7 +326,8 @@ func TestLimitScans(t *testing.T) {
 		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
 	}
 	// We're going to ask for 3 rows, all contained in the first range.
-	post := PostProcessSpec{Limit: 3}
+	const limit = 3
+	post := PostProcessSpec{Limit: limit}
 
 	tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
 	if err != nil {
@@ -357,8 +359,8 @@ func TestLimitScans(t *testing.T) {
 			break
 		}
 	}
-	if rows != 3 {
-		t.Fatalf("expected 3 rows, got: %d", rows)
+	if rows != limit {
+		t.Fatalf("expected %d rows, got: %d", limit, rows)
 	}
 
 	// We're now going to count how many distinct scans we've done. This regex is
@@ -369,6 +371,16 @@ func TestLimitScans(t *testing.T) {
 	spans := tracing.GetRecording(sp)
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
+		if span.Operation == tableReaderProcName {
+			// Verify that stat collection lines up with results.
+			trs := TableReaderStats{}
+			if err := types.UnmarshalAny(span.Stats, &trs); err != nil {
+				t.Fatal(err)
+			}
+			if trs.InputStats.NumRows != limit {
+				t.Fatalf("read %d rows, but stats only counted: %d", limit, trs.InputStats.NumRows)
+			}
+		}
 		for _, l := range span.Logs {
 			for _, f := range l.Fields {
 				match := re.FindStringSubmatch(f.Value)

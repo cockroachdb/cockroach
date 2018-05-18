@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -189,12 +190,6 @@ func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	// If stats have been collected, output a summary to the trace.
-	if len(tr.stats) != 0 {
-		for _, stat := range tr.stats {
-			log.VEventf(tr.ctx, 2, stat.SummarizeStats())
-		}
-	}
 
 	if tr.flowCtx.txn.Type() == client.LeafTxn {
 		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
@@ -213,9 +208,8 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	}
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		isc := NewInputStatCollector(tr.input, "tableReader input")
-		tr.stats = append(tr.stats, isc)
-		tr.input = isc
+		tr.input = NewInputStatCollector(tr.input)
+		tr.finishTrace = tr.outputStatsToTrace
 	}
 
 	// Like every processor, the tableReader will have a context with a log tag
@@ -268,4 +262,27 @@ func (tr *tableReader) ConsumerDone() {
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	tr.internalClose()
+}
+
+var _ tracing.SpanStats = &TableReaderStats{}
+
+// Stats implements the SpanStats interface.
+func (trs *TableReaderStats) Stats() map[string]string {
+	return map[string]string{
+		"tablereader.input.rows": fmt.Sprintf("%d", trs.InputStats.NumRows),
+	}
+}
+
+// outputStatsToTrace outputs the collected tableReader stats to the trace. Will
+// fail silently if the tableReader is not collecting stats.
+func (tr *tableReader) outputStatsToTrace() {
+	isc, ok := tr.input.(*InputStatCollector)
+	if !ok {
+		return
+	}
+	sp := opentracing.SpanFromContext(tr.ctx)
+	if sp == nil {
+		return
+	}
+	tracing.SetSpanStats(sp, &TableReaderStats{InputStats: isc.InputStats})
 }
