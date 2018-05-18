@@ -238,6 +238,49 @@ DBStatus DBImpl::EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) {
   return kSuccess;
 }
 
+// EnvReadFile reads the content of the given filename.
+DBStatus DBImpl::EnvReadFile(DBSlice path, DBSlice* contents) {
+  rocksdb::Status status;
+  const rocksdb::EnvOptions soptions;
+  rocksdb::unique_ptr<rocksdb::RandomRWFile> file;
+  uint64_t filesize;
+
+  status = this->rep->GetEnv()->FileExists(ToString(path));
+  if (!status.ok()) {
+    if (status.IsNotFound()) {
+      return FmtStatus("No such file or directory");
+    }
+    return ToDBStatus(status);
+  }
+
+  status = this->rep->GetEnv()->NewRandomRWFile(ToString(path), &file, soptions);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  status = this->rep->GetEnv()->GetFileSize(ToString(path), &filesize);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  size_t size = (size_t)filesize;
+  char* scratch = static_cast<char*>(malloc(size));
+  contents->data = static_cast<char*>(malloc(size));
+  rocksdb::Slice slice = ToSlice(*contents);
+  status = file->Read(0, size, &slice, scratch);
+  if (!status.ok()) {
+    free(scratch);
+    free(contents->data);
+    return ToDBStatus(status);
+  }
+
+  const char* data = slice.data();
+  memcpy(contents->data, data, slice.size());
+  contents->len = slice.size();
+  free(scratch);
+  return kSuccess;
+}
+
 // CloseFile closes the given file in the given engine.
 DBStatus DBImpl::EnvCloseFile(rocksdb::WritableFile* file) {
   rocksdb::Status status = file->Close();
@@ -254,6 +297,15 @@ DBStatus DBImpl::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents) {
 // EnvSyncFile synchronously writes the data of the file to the disk.
 DBStatus DBImpl::EnvSyncFile(rocksdb::WritableFile* file) {
   rocksdb::Status status = file->Sync();
+  return ToDBStatus(status);
+}
+
+// EnvDelete deletes the file with the given filename.
+DBStatus DBImpl::EnvDeleteFile(DBSlice path) {
+  rocksdb::Status status = this->rep->GetEnv()->DeleteFile(ToString(path));
+  if (status.IsNotFound()) {
+    return FmtStatus("No such file or directory");
+  }
   return ToDBStatus(status);
 }
 
