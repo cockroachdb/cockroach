@@ -18,10 +18,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/pkg/errors"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
 )
 
 func (p *planner) showStateMachineSetting(
@@ -41,8 +42,10 @@ func (p *planner) showStateMachineSetting(
 	// immediately while at the same time guaranteeing that a node reporting a certain version has
 	// also processed the corresponding Gossip update (which is important as only then does the node
 	// update its persisted state; see #22796).
-	const maxAttempts = 10
-	if err := retry.WithMaxAttempts(ctx, retry.Options{}, maxAttempts, func() error {
+	retryCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
+	if err := retry.WithMaxAttempts(retryCtx, retry.Options{}, math.MaxInt32, func() error {
 		datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 			ctx, "read-setting",
 			p.txn,
