@@ -373,22 +373,33 @@ func (n *insertNode) Next(params runParams) (bool, error) {
 // rowIndexedVarContainer is used to evaluate expressions over various rows.
 type rowIndexedVarContainer struct {
 	curSourceRow tree.Datums
+
 	// Because the rows we have might not be permuted in the same way as the
 	// original table, we need to store a mapping between them.
+
 	cols    []sqlbase.ColumnDescriptor
 	mapping map[sqlbase.ColumnID]int
 }
 
+var _ tree.IndexedVarContainer = &rowIndexedVarContainer{}
+
+// IndexedVarEval implements tree.IndexedVarContainer.
 func (r *rowIndexedVarContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	return r.curSourceRow[r.mapping[r.cols[idx].ID]].Eval(ctx)
+	rowIdx, ok := r.mapping[r.cols[idx].ID]
+	if !ok {
+		return tree.DNull, nil
+	}
+	return r.curSourceRow[rowIdx], nil
 }
 
-func (r *rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+// IndexedVarResolvedType implements tree.IndexedVarContainer.
+func (*rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
 	panic("unsupported")
 }
 
+// IndexedVarNodeFormatter implements tree.IndexedVarContainer.
 func (*rowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	return nil
 }
