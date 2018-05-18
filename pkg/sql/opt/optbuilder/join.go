@@ -144,10 +144,14 @@ func (b *Builder) buildUsingJoin(
 	outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
 
 	if len(mergedCols) > 0 {
-		// Wrap in a projection to include the merged columns.
+		// Wrap in a projection to include the merged columns and ensure that all
+		// remaining columns are passed through unchanged.
 		for i, col := range outScope.cols {
 			if mergedCol, ok := mergedCols[col.id]; ok {
 				outScope.cols[i].group = mergedCol
+			} else {
+				// Mark column as passthrough.
+				outScope.cols[i].group = 0
 			}
 		}
 

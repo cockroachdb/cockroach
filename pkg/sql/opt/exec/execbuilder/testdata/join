@@ -302,3 +302,35 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM c WHERE x-1 = u)
 x:int  y:int
 1      10
 2      20
+
+exec hide-colnames nodist
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, x+1 plus1 FROM a) NATURAL FULL JOIN (SELECT x, 2 two FROM b)
+----
+render               ·         ·                       (x, plus1, two)             ·
+ │                   render 0  COALESCE("a.x", "b.x")  ·                           ·
+ │                   render 1  plus1                   ·                           ·
+ │                   render 2  two                     ·                           ·
+ └── join            ·         ·                       (plus1, "a.x", two, "b.x")  ·
+      │              type      full outer              ·                           ·
+      │              equality  ("a.x") = ("b.x")       ·                           ·
+      ├── render     ·         ·                       (plus1, "a.x")              ·
+      │    │         render 0  x + 1                   ·                           ·
+      │    │         render 1  x                       ·                           ·
+      │    └── scan  ·         ·                       (x)                         ·
+      │              table     a@primary               ·                           ·
+      │              spans     ALL                     ·                           ·
+      └── render     ·         ·                       (two, "b.x")                ·
+           │         render 0  2                       ·                           ·
+           │         render 1  x                       ·                           ·
+           └── scan  ·         ·                       (x)                         ·
+·                    table     b@primary               ·                           ·
+·                    spans     ALL                     ·                           ·
+
+exec rowsort
+SELECT * FROM (SELECT x, x+1 plus1 FROM a) NATURAL FULL JOIN (SELECT x, 2 two FROM b)
+----
+x:int  plus1:int  two:int
+1      2          NULL
+2      3          2
+3      4          2
+4      NULL       2
