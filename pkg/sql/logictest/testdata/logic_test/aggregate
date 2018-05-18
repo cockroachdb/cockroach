@@ -1728,3 +1728,30 @@ join                       ·               ·                        (x, max, z
 # Regression test for #23798 until #10495 is fixed.
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv
+
+# Regression test for #25533 (crash when propagating filter through GROUP BY).
+query TTTTT
+EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
+----
+render                    ·            ·                          ("1")                           "1"=CONST           
+ │                        render 0     1                          ·                               ·                   
+ └── group                ·            ·                          (agg0)                          weak-key(agg0)      
+      │                   aggregate 0  w::DECIMAL                 ·                               ·                   
+      │                   group by     @1-@2                      ·                               ·                   
+      └── filter          ·            ·                          (v, "w::DECIMAL")               "w::DECIMAL"!=NULL  
+           │              filter       "w::DECIMAL" > 1           ·                               ·                   
+           └── render     ·            ·                          (v, "w::DECIMAL")               ·                   
+                │         render 0     test.public.kv.v           ·                               ·                   
+                │         render 1     test.public.kv.w::DECIMAL  ·                               ·                   
+                └── scan  ·            ·                          (k[omitted], v, w, s[omitted])  k!=NULL; key(k)     
+·                         table        kv@primary                 ·                               ·                   
+·                         spans        ALL                        ·                               ·                   
+
+query I
+SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
+----
+1
+1
+1
+1
+1

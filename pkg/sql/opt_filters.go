@@ -467,8 +467,7 @@ func (p *planner) addGroupFilter(
 	}
 
 	// Propagate the inner filter.
-	newPlan, err := p.propagateOrWrapFilters(
-		ctx, g.plan, info, innerFilter)
+	newPlan, err := p.propagateOrWrapFilters(ctx, g.plan, nil /* info */, innerFilter)
 	if err != nil {
 		return g, extraFilter, err
 	}
