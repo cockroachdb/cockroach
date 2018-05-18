@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1121,28 +1120,7 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 
 	// Make sure all stores are present in the NodeStatus endpoint or else zone
 	// config changes may flake (#25488).
-	testutils.SucceedsSoon(t, func() error {
-		url := tc.Server(0).ServingAddr()
-		conn, err := tc.Server(0).RPCContext().GRPCDial(url).Connect(context.Background())
-		if err != nil {
-			return err
-		}
-		client := serverpb.NewStatusClient(conn)
-		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
-		if err != nil {
-			return err
-		}
-
-		if len(response.Nodes) != 3 {
-			return fmt.Errorf("not enough nodes registered: %+v", response)
-		}
-		for _, node := range response.Nodes {
-			if len(node.StoreStatuses) != 1 {
-				return fmt.Errorf("expected 1 StoreStatus in NodeStatus, got %+v", node)
-			}
-		}
-		return nil
-	})
+	tc.WaitForNodeStatuses(t)
 
 	return sqlDB, func() {
 		tc.Stopper().Stop(context.Background())
