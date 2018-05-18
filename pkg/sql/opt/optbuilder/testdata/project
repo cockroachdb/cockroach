@@ -139,7 +139,7 @@ project
 build
 SELECT rowid FROM (SELECT * FROM b)
 ----
-error: column name "rowid" not found
+error (42703): column name "rowid" not found
 
 build
 SELECT rowid FROM (SELECT rowid FROM b)
@@ -178,7 +178,7 @@ TABLE c
 build
 SELECT rowid FROM b, c
 ----
-error: column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
+error (42702): column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
 
 build
 SELECT x, y, rowid FROM c WHERE rowid > 0
@@ -214,12 +214,12 @@ project
 build
 SELECT (x, y)::timestamp FROM b
 ----
-error: invalid cast: tuple{int, float} -> TIMESTAMP
+error (42846): invalid cast: tuple{int, float} -> TIMESTAMP
 
 build
 SELECT CAST(x AS int[]) FROM b
 ----
-error: invalid cast: int -> INT[]
+error (42846): invalid cast: int -> INT[]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
@@ -234,22 +234,22 @@ TABLE abc
 build
 SELECT c FROM (SELECT a FROM abc)
 ----
-error: column name "c" not found
+error (42703): column name "c" not found
 
 build
 SELECT c FROM (SELECT a FROM abc ORDER BY c)
 ----
-error: column name "c" not found
+error (42703): column name "c" not found
 
 build
 SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
 ----
-error: column name "c" not found
+error (42703): column name "c" not found
 
 build fully-qualify-names
 SELECT t.kv.k FROM abc AS kv
 ----
-error: no data source matches prefix: t.kv
+error (42P01): no data source matches prefix: t.kv
 
 exec-ddl
 CREATE TABLE kv (k INT PRIMARY KEY, v INT)

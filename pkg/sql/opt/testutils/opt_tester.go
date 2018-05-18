@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -171,7 +172,12 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "build":
 		ev, err := ot.OptBuild()
 		if err != nil {
-			return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
+			text := strings.TrimSpace(err.Error())
+			if pgerr, ok := err.(*pgerror.Error); ok {
+				// Output Postgres error code if it's available.
+				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
+			}
+			return fmt.Sprintf("error: %s\n", text)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 

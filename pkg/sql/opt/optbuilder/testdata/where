@@ -90,7 +90,7 @@ select
 build
 SELECT * FROM kv WHERE nonexistent = 1
 ----
-error: column name "nonexistent" not found
+error (42703): column name "nonexistent" not found
 
 build
 SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%' ORDER BY k
@@ -275,4 +275,4 @@ project
 build
 SELECT * FROM ab WHERE a
 ----
-error: argument of WHERE must be type bool, not type int
+error (42804): argument of WHERE must be type bool, not type int
