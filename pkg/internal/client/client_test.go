@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // testUser has valid client certs.
@@ -1026,5 +1027,59 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// Test that a reader unblocks quickly after an intent is cleaned up.
+func TestIntentCleanupUnblocksReaders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx := context.TODO()
+	key := roachpb.Key("a")
+
+	// We're going to repeatedly lay down an intent and then race a reader with
+	// the intent cleanup, and check that the reader was not blocked for too long.
+	for i := 0; i < 100; i++ {
+		block := make(chan struct{})
+		done := make(chan error)
+		var start time.Time
+		go func() {
+			// Wait for the writer to lay down its intent.
+			<-block
+			start = timeutil.Now()
+			if _, err := db.Get(ctx, key); err != nil {
+				done <- err
+			}
+			close(done)
+		}()
+
+		err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if err := txn.Put(ctx, key, "txn-value"); err != nil {
+				close(block)
+				return err
+			}
+			// Unblock the writer.
+			close(block)
+			return fmt.Errorf("test err causing rollback")
+		})
+		if !testutils.IsError(err, "test err causing rollback") {
+			t.Fatal(err)
+		}
+
+		// Wait for the reader.
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		dur := timeutil.Since(start)
+
+		// It's likely that the get always takes less than 2s (that's when a txn is
+		// considered abandoned by a pusher), so the timeout below needs to stay below
+		// that for this test to be meaningful.
+		if dur > 800*time.Millisecond {
+			t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+		}
 	}
 }
