@@ -256,9 +256,10 @@ intersect
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
            │    └── keys: (7)
-           └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
-                ├── variable: b.x [type=int, outer=(4)]
-                └── const: 1 [type=int]
+           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                     ├── variable: b.x [type=int, outer=(4)]
+                     └── const: 1 [type=int]
 
 build
 SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -288,9 +289,10 @@ intersect-all
            │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
            │    ├── stats: [rows=10000, distinct(4)=5000]
            │    └── keys: (7)
-           └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
-                ├── variable: b.x [type=int, outer=(4)]
-                └── const: 1 [type=int]
+           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                     ├── variable: b.x [type=int, outer=(4)]
+                     └── const: 1 [type=int]
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM c
@@ -391,9 +393,10 @@ except
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
                 │    └── keys: (7)
-                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
-                     ├── variable: b.x [type=int, outer=(4)]
-                     └── const: 1 [type=int]
+                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                     └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                          ├── variable: b.x [type=int, outer=(4)]
+                          └── const: 1 [type=int]
 
 build
 SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -425,9 +428,10 @@ except-all
                 │    ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
                 │    ├── stats: [rows=10000, distinct(4)=5000]
                 │    └── keys: (7)
-                └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
-                     ├── variable: b.x [type=int, outer=(4)]
-                     └── const: 1 [type=int]
+                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                     └── eq [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                          ├── variable: b.x [type=int, outer=(4)]
+                          └── const: 1 [type=int]
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM c
@@ -523,6 +527,7 @@ select
  │              ├── columns: b.x:4(int) z:5(int!null) b.s:6(string) rowid:7(int!null)
  │              ├── stats: [rows=10000, distinct(5)=100]
  │              └── keys: (7)
- └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-      ├── variable: a.y [type=int, outer=(2)]
-      └── const: 5 [type=int]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+      └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+           ├── variable: a.y [type=int, outer=(2)]
+           └── const: 5 [type=int]

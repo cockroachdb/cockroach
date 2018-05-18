@@ -27,7 +27,8 @@ project
  │    │    └── project
  │    │         └── scan kv
  │    │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │    └── true [type=bool]
+ │    └── filters [type=bool]
+ │         └── true [type=bool]
  └── projections
       └── const: 3 [type=int]
 
@@ -45,9 +46,10 @@ select
  │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── aggregations
  │         └── count-rows [type=int]
- └── gt [type=bool]
-      ├── variable: column5 [type=int]
-      └── const: 1 [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: column5 [type=int]
+           └── const: 1 [type=int]
 
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
@@ -67,9 +69,10 @@ project
       │         │    └── variable: kv.v [type=int]
       │         └── max [type=int]
       │              └── variable: kv.k [type=int]
-      └── gt [type=bool]
-           ├── variable: column5 [type=int]
-           └── const: 2 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── variable: column5 [type=int]
+                └── const: 2 [type=int]
 
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
@@ -91,9 +94,10 @@ project
       │         │    └── variable: kv.k [type=int]
       │         └── min [type=int]
       │              └── variable: kv.v [type=int]
-      └── gt [type=bool]
-           ├── variable: column5 [type=int]
-           └── const: 2 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── variable: column5 [type=int]
+                └── const: 2 [type=int]
 
 build
 SELECT MAX(k), MIN(v) FROM kv HAVING MAX(MIN(v)) > 2
@@ -143,11 +147,12 @@ project
       │    │              └── variable: kv.w [type=int]
       │    └── aggregations
       │         └── count-rows [type=int]
-      └── gt [type=bool]
-           ├── plus [type=int]
-           │    ├── variable: kv.k [type=int]
-           │    └── variable: kv.w [type=int]
-           └── const: 5 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── plus [type=int]
+                │    ├── variable: kv.k [type=int]
+                │    └── variable: kv.w [type=int]
+                └── const: 5 [type=int]
 
 build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+v) > 5
@@ -172,9 +177,10 @@ project
       │    └── aggregations
       │         └── max [type=int]
       │              └── variable: kv.v [type=int]
-      └── gt [type=bool]
-           ├── variable: kv.v [type=int]
-           └── const: 5 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── variable: kv.v [type=int]
+                └── const: 5 [type=int]
 
 build
 SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING LOWER(kv.s) LIKE 'test%'
@@ -196,10 +202,11 @@ project
       │    └── aggregations
       │         └── sum [type=decimal]
       │              └── variable: kv.w [type=int]
-      └── like [type=bool]
-           ├── function: lower [type=string]
-           │    └── variable: kv.s [type=string]
-           └── const: 'test%' [type=string]
+      └── filters [type=bool]
+           └── like [type=bool]
+                ├── function: lower [type=string]
+                │    └── variable: kv.s [type=string]
+                └── const: 'test%' [type=string]
 
 build
 SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING SUM(w) IN (4, 5, 6)
@@ -221,12 +228,13 @@ project
       │    └── aggregations
       │         └── sum [type=decimal]
       │              └── variable: kv.w [type=int]
-      └── in [type=bool]
-           ├── variable: column6 [type=decimal]
-           └── tuple [type=tuple{decimal, decimal, decimal}]
-                ├── const: 4 [type=decimal]
-                ├── const: 5 [type=decimal]
-                └── const: 6 [type=decimal]
+      └── filters [type=bool]
+           └── in [type=bool]
+                ├── variable: column6 [type=decimal]
+                └── tuple [type=tuple{decimal, decimal, decimal}]
+                     ├── const: 4 [type=decimal]
+                     ├── const: 5 [type=decimal]
+                     └── const: 6 [type=decimal]
 
 build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
@@ -246,11 +254,12 @@ project
       │              └── mult [type=int]
       │                   ├── variable: t.public.kv.k [type=int]
       │                   └── variable: t.public.kv.w [type=int]
-      └── gt [type=bool]
-           ├── mult [type=int]
-           │    ├── variable: t.public.kv.k [type=int]
-           │    └── variable: t.public.kv.w [type=int]
-           └── const: 5 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── mult [type=int]
+                │    ├── variable: t.public.kv.k [type=int]
+                │    └── variable: t.public.kv.w [type=int]
+                └── const: 5 [type=int]
 
 build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
@@ -277,9 +286,10 @@ select
  │         │    └── variable: t.public.kv.s [type=string]
  │         └── count [type=int]
  │              └── variable: column5 [type=string]
- └── gt [type=bool]
-      ├── variable: column6 [type=int]
-      └── const: 1 [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: column6 [type=int]
+           └── const: 1 [type=int]
 
 # Check that ordering by an alias of an aggregate works when HAVING is present.
 build
@@ -302,9 +312,10 @@ sort
            │    └── aggregations
            │         └── sum [type=decimal]
            │              └── variable: kv.k [type=int]
-           └── eq [type=bool]
-                ├── variable: column5 [type=decimal]
-                └── const: 10 [type=decimal]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: column5 [type=decimal]
+                     └── const: 10 [type=decimal]
 
 build
 SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk
@@ -328,9 +339,10 @@ sort
            │         │    └── variable: kv.k [type=int]
            │         └── sum [type=decimal]
            │              └── variable: kv.k [type=int]
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 10 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: column5 [type=int]
+                     └── const: 10 [type=int]
 
 build
 SELECT SUM(k) AS mk FROM kv GROUP BY v HAVING v > 10 ORDER BY mk
@@ -352,9 +364,10 @@ sort
            │    └── aggregations
            │         └── sum [type=decimal]
            │              └── variable: kv.k [type=int]
-           └── gt [type=bool]
-                ├── variable: kv.v [type=int]
-                └── const: 10 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: kv.v [type=int]
+                     └── const: 10 [type=int]
 
 build
 SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk1
@@ -376,9 +389,10 @@ sort
            │    └── aggregations
            │         └── max [type=int]
            │              └── variable: kv.k [type=int]
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 10 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: column5 [type=int]
+                     └── const: 10 [type=int]
 
 build
 SELECT MAX(k) AS mk1, MAX(k) AS mk2 FROM kv GROUP BY v HAVING MAX(k) > 10 ORDER BY mk2
@@ -400,6 +414,7 @@ sort
            │    └── aggregations
            │         └── max [type=int]
            │              └── variable: kv.k [type=int]
-           └── gt [type=bool]
-                ├── variable: column5 [type=int]
-                └── const: 10 [type=int]
+           └── filters [type=bool]
+                └── gt [type=bool]
+                     ├── variable: column5 [type=int]
+                     └── const: 10 [type=int]

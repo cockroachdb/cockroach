@@ -77,9 +77,10 @@ inner-join
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
- └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── variable: b.x [type=int, outer=(5)]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]
 
 build
 SELECT *, rowid FROM a LEFT JOIN b ON a.x=b.x
@@ -95,9 +96,10 @@ left-join
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
- └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── variable: b.x [type=int, outer=(5)]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]
 
 build
 SELECT *, rowid FROM a RIGHT JOIN b ON a.x=b.x
@@ -113,9 +115,10 @@ right-join
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
- └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── variable: b.x [type=int, outer=(5)]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]
 
 build
 SELECT *, rowid FROM a FULL JOIN b ON a.x=b.x
@@ -131,9 +134,10 @@ full-join
  │    ├── columns: b.x:5(int) z:6(int!null) rowid:7(int!null)
  │    ├── stats: [rows=10000]
  │    └── keys: (7)
- └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── variable: b.x [type=int, outer=(5)]
+ └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]
 
 build
 SELECT * FROM a, b
@@ -191,9 +195,10 @@ project
       │    │    ├── stats: [rows=10000, distinct(6)=100]
       │    │    └── keys: (7)
       │    └── true [type=bool]
-      └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
-           ├── variable: b.z [type=int, outer=(6)]
-           └── const: 5 [type=int]
+      └── filters [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
+           └── eq [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
+                ├── variable: b.z [type=int, outer=(6)]
+                └── const: 5 [type=int]
 
 # Force calculation of the distinct count for the column set spanning both
 # tables in the join.

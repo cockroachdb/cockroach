@@ -34,17 +34,18 @@ select
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │    ├── stats: [rows=1000]
  │    └── keys: (1) weak(3,4)
- └── eq [type=bool]
-      ├── subquery [type=string]
-      │    └── max1-row
-      │         ├── columns: v:7(string)
-      │         ├── cardinality: [0 - 1]
-      │         ├── stats: [rows=1]
-      │         └── project
-      │              ├── columns: v:7(string)
-      │              ├── stats: [rows=1000]
-      │              └── scan kuv
-      │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
-      │                   ├── stats: [rows=1000]
-      │                   └── keys: (5)
-      └── const: 'foo' [type=string]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── subquery [type=string]
+           │    └── max1-row
+           │         ├── columns: v:7(string)
+           │         ├── cardinality: [0 - 1]
+           │         ├── stats: [rows=1]
+           │         └── project
+           │              ├── columns: v:7(string)
+           │              ├── stats: [rows=1000]
+           │              └── scan kuv
+           │                   ├── columns: k:5(int!null) u:6(float) v:7(string)
+           │                   ├── stats: [rows=1000]
+           │                   └── keys: (5)
+           └── const: 'foo' [type=string]

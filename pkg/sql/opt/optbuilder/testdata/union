@@ -391,18 +391,20 @@ union
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
@@ -417,18 +419,20 @@ union-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
@@ -443,18 +447,20 @@ intersect
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
@@ -469,18 +475,20 @@ intersect-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
@@ -495,18 +503,20 @@ except
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
@@ -521,18 +531,20 @@ except-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── eq [type=bool]
- │              ├── variable: uniontest.k [type=int]
- │              └── const: 1 [type=int]
+ │         └── filters [type=bool]
+ │              └── eq [type=bool]
+ │                   ├── variable: uniontest.k [type=int]
+ │                   └── const: 1 [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       └── select
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── eq [type=bool]
-                ├── variable: uniontest.k [type=int]
-                └── const: 2 [type=int]
+           └── filters [type=bool]
+                └── eq [type=bool]
+                     ├── variable: uniontest.k [type=int]
+                     └── const: 2 [type=int]
 
 build
 (SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
@@ -553,18 +565,20 @@ limit
  │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── eq [type=bool]
- │         │              ├── variable: uniontest.k [type=int]
- │         │              └── const: 1 [type=int]
+ │         │         └── filters [type=bool]
+ │         │              └── eq [type=bool]
+ │         │                   ├── variable: uniontest.k [type=int]
+ │         │                   └── const: 1 [type=int]
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
  │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── eq [type=bool]
- │                        ├── variable: uniontest.k [type=int]
- │                        └── const: 2 [type=int]
+ │                   └── filters [type=bool]
+ │                        └── eq [type=bool]
+ │                             ├── variable: uniontest.k [type=int]
+ │                             └── const: 2 [type=int]
  └── const: 2 [type=int]
 
 # The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
@@ -587,18 +601,20 @@ limit
  │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── eq [type=bool]
- │         │              ├── variable: uniontest.k [type=int]
- │         │              └── const: 1 [type=int]
+ │         │         └── filters [type=bool]
+ │         │              └── eq [type=bool]
+ │         │                   ├── variable: uniontest.k [type=int]
+ │         │                   └── const: 1 [type=int]
  │         └── project
  │              ├── columns: uniontest.v:5(int)
  │              └── select
  │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── eq [type=bool]
- │                        ├── variable: uniontest.k [type=int]
- │                        └── const: 2 [type=int]
+ │                   └── filters [type=bool]
+ │                        └── eq [type=bool]
+ │                             ├── variable: uniontest.k [type=int]
+ │                             └── const: 2 [type=int]
  └── const: 2 [type=int]
 
 build
@@ -654,9 +670,10 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── eq [type=bool]
-      ├── variable: column1 [type=int]
-      └── variable: column1 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: column1 [type=int]
+           └── variable: column1 [type=int]
 
 build
 SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
@@ -679,9 +696,10 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── eq [type=bool]
-      ├── variable: column1 [type=int]
-      └── variable: column1 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: column1 [type=int]
+           └── variable: column1 [type=int]
 
 build
 SELECT 1, 2 UNION SELECT 3
