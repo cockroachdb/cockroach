@@ -52,7 +52,7 @@ FILES :=
 SUBTESTS :=
 
 ## Test timeout to use for regular tests.
-TESTTIMEOUT := 4m
+TESTTIMEOUT := 8m
 
 ## Test timeout to use for race tests.
 RACETIMEOUT := 25m
