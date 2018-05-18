@@ -64,6 +64,8 @@ func registerKVSplits(r *registry) {
 		Nodes:  nodes(4),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("TODO(peter): testing, remove before merging")
+
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
