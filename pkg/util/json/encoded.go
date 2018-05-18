@@ -80,7 +80,11 @@ func newEncodedFromRoot(v []byte) (*jsonEncoded, error) {
 	return &jsonEncoded{
 		typ:          typ,
 		containerLen: containerLen,
-		value:        v,
+		// Manually set the capacity of the new slice to its length, so we properly
+		// report the memory size of this encoded json object. The original slice
+		// capacity is very large, since it probably points to the backing byte
+		// slice of a kv batch.
+		value: v[:len(v):len(v)],
 	}, nil
 }
 
