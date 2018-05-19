@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -187,6 +188,7 @@ func DefaultDBContext() DBContext {
 // concurrent use by multiple goroutines.
 type DB struct {
 	factory TxnSenderFactory
+	st      *cluster.Settings
 	clock   *hlc.Clock
 	ctx     DBContext
 }
@@ -204,14 +206,17 @@ func (db *DB) GetFactory() TxnSenderFactory {
 }
 
 // NewDB returns a new DB.
-func NewDB(factory TxnSenderFactory, clock *hlc.Clock) *DB {
-	return NewDBWithContext(factory, clock, DefaultDBContext())
+func NewDB(factory TxnSenderFactory, st *cluster.Settings, clock *hlc.Clock) *DB {
+	return NewDBWithContext(factory, st, clock, DefaultDBContext())
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
-func NewDBWithContext(factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext) *DB {
+func NewDBWithContext(
+	factory TxnSenderFactory, st *cluster.Settings, clock *hlc.Clock, ctx DBContext,
+) *DB {
 	return &DB{
 		factory: factory,
+		st:      st,
 		clock:   clock,
 		ctx:     ctx,
 	}

@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -98,14 +97,14 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	tsf := kv.NewTxnCoordSenderFactory(
 		ambient,
-		cluster.MakeTestingClusterSettings(),
+		s.ClusterSettings(),
 		ds,
 		s.Clock(),
 		false, /* linearizable */
 		s.Stopper(),
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	db := client.NewDB(tsf, s.Clock())
+	db := client.NewDB(tsf, s.ClusterSettings(), s.Clock())
 
 	// Now, with an intent pending, attempt (asynchronously) to read
 	// from an arbitrary key. This will cause the distributed sender to

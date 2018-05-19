@@ -367,7 +367,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		s.Stopper,
 		MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	db := client.NewDB(tsf, s.Clock)
+	db := client.NewDB(tsf, st, s.Clock)
 
 	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 	for i, tc := range testCases {
@@ -1000,6 +1000,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			stopper := stop.NewStopper()
 
+			st := cluster.MakeTestingClusterSettings()
 			manual := hlc.NewManualClock(origTS.WallTime)
 			clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
 
@@ -1016,14 +1017,14 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			tsf := NewTxnCoordSenderFactory(
 				ambient,
-				cluster.MakeTestingClusterSettings(),
+				st,
 				senderFn,
 				clock,
 				false, /* linearizable */
 				stopper,
 				MakeTxnMetrics(metric.TestSampleInterval),
 			)
-			db := client.NewDB(tsf, clock)
+			db := client.NewDB(tsf, st, clock)
 			key := roachpb.Key("test-key")
 			origTxnProto := roachpb.MakeTransaction(
 				"test txn",
@@ -1287,6 +1288,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
+	st := cluster.MakeTestingClusterSettings()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
@@ -1309,7 +1311,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	factory := NewTxnCoordSenderFactory(
 		ambient,
-		cluster.MakeTestingClusterSettings(),
+		st,
 		senderFn,
 		clock,
 		false,
@@ -1318,7 +1320,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	)
 	defer stopper.Stop(context.TODO())
 
-	db := client.NewDB(factory, clock)
+	db := client.NewDB(factory, st, clock)
 	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	// Write to a, b, u-w before the final batch.
@@ -1492,7 +1494,7 @@ func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
 			return tc.Send(context.Background(), ba)
 		})
 	}
-	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock), tc
+	return client.NewDB(factory, tc.st, tc.clock), tc
 }
 
 func TestTxnAbandonCount(t *testing.T) {
@@ -1767,6 +1769,7 @@ func TestContextDoneNil(t *testing.T) {
 // aborted on the correct errors.
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
@@ -1838,7 +1841,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 			factory := NewTxnCoordSenderFactory(
 				ambient,
-				cluster.MakeTestingClusterSettings(),
+				st,
 				senderFn,
 				clock,
 				false,
@@ -1846,7 +1849,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				MakeTxnMetrics(metric.TestSampleInterval),
 			)
 
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(factory, st, clock)
 			txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 			if pErr := txn.Put(context.Background(), "a", "b"); pErr != nil {
 				t.Fatalf("put failed: %s", pErr)

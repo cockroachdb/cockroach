@@ -163,7 +163,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
-	cfg.DB = client.NewDB(factory, cfg.Clock)
+	cfg.DB = client.NewDB(factory, cfg.Settings, cfg.Clock)
 	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.store = store
 	if err := store.Bootstrap(

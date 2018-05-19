@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -805,8 +806,9 @@ func TestReadConsistencyTypes(t *testing.T) {
 					return ba.CreateReply(), nil
 				})
 			})
+			st := cluster.MakeTestingClusterSettings()
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(factory, st, clock)
 			ctx := context.TODO()
 
 			prepWithRC := func() *client.Batch {
@@ -976,10 +978,11 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		})
 	})
 
+	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(factory, clock, dbCtx)
+	db := client.NewDBWithContext(factory, st, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.

@@ -138,7 +138,7 @@ func createTestStoreWithEngine(
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	storeCfg.DB = client.NewDB(tcsFactory, storeCfg.Clock)
+	storeCfg.DB = client.NewDB(tcsFactory, storeCfg.Settings, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
 	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -661,7 +661,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	m.dbs[idx] = client.NewDB(tcsFactory, m.clocks[idx])
+	m.dbs[idx] = client.NewDB(tcsFactory, m.storeConfig.Settings, m.clocks[idx])
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {

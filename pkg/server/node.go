@@ -193,7 +193,7 @@ func bootstrapCluster(
 	})
 	tcsFactory := kv.NewTxnCoordSenderFactory(cfg.AmbientCtx, cfg.Settings, localSender, cfg.Clock,
 		false /* linearizable */, stopper, txnMetrics)
-	cfg.DB = client.NewDB(tcsFactory, cfg.Clock)
+	cfg.DB = client.NewDB(tcsFactory, cfg.Settings, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(cfg.Settings)
 	if err := cfg.Settings.InitializeVersion(bootstrapVersion); err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "while initializing cluster version")

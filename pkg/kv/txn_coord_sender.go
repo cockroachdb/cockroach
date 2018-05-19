@@ -1374,7 +1374,7 @@ func (tc *TxnCoordSender) resendWithTxn(
 	// through here.
 	dbCtx := client.DefaultDBContext()
 	dbCtx.UserPriority = ba.UserPriority
-	tmpDB := client.NewDBWithContext(tc.TxnCoordSenderFactory, tc.clock, dbCtx)
+	tmpDB := client.NewDBWithContext(tc.TxnCoordSenderFactory, tc.st, tc.clock, dbCtx)
 	var br *roachpb.BatchResponse
 	err := tmpDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetDebugName("auto-wrap")

@@ -146,7 +146,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 			store.TestSender(), store.cfg.Clock,
 			false, stopper, kv.MakeTxnMetrics(time.Second),
 		)
-		db := client.NewDB(tcsf, store.cfg.Clock)
+		db := client.NewDB(tcsf, st, store.cfg.Clock)
 		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
 		ctx := context.Background()
 		if err := txn.Run(ctx, b); err != nil {

@@ -67,7 +67,7 @@ func makeTestContext() testContext {
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
-		mockDB:      client.NewDB(factory, clock),
+		mockDB:      client.NewDB(factory, settings, clock),
 		mon: mon.MakeMonitor(
 			"test root mon",
 			mon.MemoryResource,
