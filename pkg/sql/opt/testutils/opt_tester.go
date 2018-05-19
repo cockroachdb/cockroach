@@ -137,7 +137,7 @@ func (ot *OptTester) SetCatalog(catalog opt.Catalog) {
 //
 //  - format: controls the formatting of expressions for build, opt, and
 //    optsteps commands. Possible values: show-all, hide-all, or any combination
-//    of hide-cost, hide-stats, hide-constraints. Example:
+//    of hide-cost, hide-stats, hide-constraints, hide-scalars. Example:
 //      build format={hide-cost,hide-stats}
 //
 //  - raw-memo: show the raw memo groups, in the order they were originally
@@ -225,6 +225,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 				"hide-cost":        opt.ExprFmtHideCost,
 				"hide-constraints": opt.ExprFmtHideConstraints,
 				"hide-ruleprops":   opt.ExprFmtHideRuleProps,
+				"hide-scalars":     opt.ExprFmtHideScalars,
 			}
 			if val, ok := m[v]; ok {
 				f.ExprFormat |= val

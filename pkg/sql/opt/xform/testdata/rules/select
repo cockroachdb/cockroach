@@ -165,11 +165,7 @@ project
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1)
       └── filters [type=bool, outer=(1,2)]
-           └── eq [type=bool, outer=(1,2)]
-                ├── plus [type=int, outer=(1,2)]
-                │    ├── variable: a.k [type=int, outer=(1)]
-                │    └── variable: a.u [type=int, outer=(2)]
-                └── const: 1 [type=int]
+           └── (a.k + a.u) = 1 [type=bool, outer=(1,2)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
@@ -215,9 +211,7 @@ project
       │    ├── constraint: /2/1: [/1 - /1]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
-           └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
-                ├── variable: a.v [type=int, outer=(3)]
-                └── const: 5 [type=int]
+           └── a.v = 5 [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -269,9 +263,7 @@ project
       │    ├── constraint: /2/1: (/NULL - ]
       │    └── keys: (1) weak(3)
       └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-           └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-                ├── variable: a.u [type=int, outer=(2)]
-                └── variable: a.v [type=int, outer=(3)]
+           └── a.u = a.v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
 
 # Don't push constraint into already limited scan.
 opt
@@ -286,9 +278,7 @@ select
  │    ├── limit: 1
  │    └── keys: (1)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: a.k [type=int, outer=(1)]
-           └── const: 1 [type=int]
+      └── a.k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
 
 # --------------------------------------------------
 # ConstrainLookupJoinIndexScan
@@ -346,9 +336,7 @@ select
  │    ├── columns: k:1(int!null) u:2(int) v:3(int)
  │    └── keys: (1) weak(3)
  └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
-      └── gt [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
-           ├── variable: b.v [type=int, outer=(3)]
-           └── const: 1 [type=int]
+      └── b.v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
 
 # Constraint + remaining filter.
 opt
@@ -366,11 +354,7 @@ select
  │         ├── constraint: /3: [/1 - /1]
  │         └── keys: (1) weak(3)
  └── filters [type=bool, outer=(1,2)]
-      └── eq [type=bool, outer=(1,2)]
-           ├── plus [type=int, outer=(1,2)]
-           │    ├── variable: b.k [type=int, outer=(1)]
-           │    └── variable: b.u [type=int, outer=(2)]
-           └── const: 1 [type=int]
+      └── (b.k + b.u) = 1 [type=bool, outer=(1,2)]
 
 memo
 SELECT * FROM b WHERE v = 1 AND k+u = 1
