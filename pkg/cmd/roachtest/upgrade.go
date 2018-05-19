@@ -46,7 +46,7 @@ func registerUpgrade(r *registry) {
 		c.Start(ctx, c.Range(1, nodes))
 
 		const stageDuration = 30 * time.Second
-		const timeUntilStoreDead = stageDuration
+		const timeUntilStoreDead = 90 * time.Second
 		const buff = 10 * time.Second
 
 		sleep := func(ts time.Duration) error {
