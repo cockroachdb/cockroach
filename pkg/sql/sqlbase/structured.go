@@ -2134,6 +2134,13 @@ func (c *ColumnType) elementColumnType() *ColumnType {
 	return &result
 }
 
+// Equivalent checks whether a column type is equivalent to another, excluding
+// its VisibleType type alias, which doesn't effect equality.
+func (this ColumnType) Equivalent(that ColumnType) bool {
+	this.VisibleType = that.VisibleType
+	return this.Equal(that)
+}
+
 // SQLString returns the SQL string corresponding to the type.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {

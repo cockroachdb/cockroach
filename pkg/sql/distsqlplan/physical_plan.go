@@ -800,7 +800,7 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 			merged[i] = leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
 			merged[i] = rightType
-		} else if leftType.Equal(rightType) {
+		} else if leftType.Equivalent(rightType) {
 			merged[i] = leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
