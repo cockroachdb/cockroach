@@ -670,7 +670,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// We can't directly compare the node against the empty descriptor because
 	// the proto has a repeated field and thus isn't comparable.
 	if desc.NodeID == 0 && desc.Address.IsEmpty() {
-		nodeID, err := NodeIDFromKey(key)
+		nodeID, err := NodeIDFromKey(key, KeyNodeIDPrefix)
 		if err != nil {
 			log.Errorf(ctx, "unable to update node address for removed node: %s", err)
 			return
