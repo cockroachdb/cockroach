@@ -16,6 +16,8 @@ fi
 
 case "${cmd}" in
     create)
+    echo -n "Enter your dev license key (if any): "
+    read cr_dev_license
     gcloud compute instances \
            create "${NAME}" \
            --machine-type "custom-24-32768" \
@@ -34,6 +36,10 @@ case "${cmd}" in
 
     gcloud compute copy-files "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
+
+    if [[ -n "${cr_dev_license}" ]]; then
+        $0 ssh "echo COCKROACH_DEV_LICENSE=${cr_dev_license} >> ~/.bashrc_bootstrap"
+    fi
 
     # Install automatic shutdown after ten minutes of operation without a
     # logged in user. To disable this, `sudo touch /.active`.
