@@ -332,9 +332,6 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 	}
 
 	for {
-		// TODO(dan): Handle DELETEs. This uses RowFetcher out of convenience
-		// (specifically for kv decoding and interleaved tables), but it's not
-		// built to output deletes.
 		row, tableDesc, _, err := cf.rf.NextRowDecoded(ctx)
 		if err != nil {
 			return err
@@ -342,6 +339,7 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		if row == nil {
 			break
 		}
+		rowIsDeleted := cf.rf.RowIsDeleted()
 
 		keyColumns := tableDesc.PrimaryIndex.ColumnNames
 		jsonKeyRaw := make([]interface{}, len(keyColumns))
@@ -363,7 +361,7 @@ func (cf *changefeed) poll(ctx context.Context, startTime, endTime hlc.Timestamp
 		var key bytes.Buffer
 		jsonKey.Format(&key)
 		var value bytes.Buffer
-		if cf.envelope == optEnvelopeRow {
+		if !rowIsDeleted && cf.envelope == optEnvelopeRow {
 			jsonValue, err := json.MakeJSON(jsonValueRaw)
 			if err != nil {
 				return err

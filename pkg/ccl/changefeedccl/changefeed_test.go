@@ -67,8 +67,10 @@ func TestChangefeedBasics(t *testing.T) {
 		`[3]->{"a": 3, "b": "d"}`,
 	})
 
-	// TODO(dan): Doesn't work yet
-	// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+	sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+	assertPayloads(t, k.WaitUntilNewMessages(), []string{
+		`[1]->`,
+	})
 }
 
 func TestChangefeedEnvelope(t *testing.T) {
