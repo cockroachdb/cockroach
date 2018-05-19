@@ -113,7 +113,7 @@ func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err erro
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
 			if bldErr, ok := r.(builderError); ok {
-				err = bldErr
+				err = bldErr.error
 			} else {
 				panic(r)
 			}

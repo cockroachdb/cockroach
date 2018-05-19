@@ -27,7 +27,7 @@ project
 build
 SELECT x FROM onecolumn AS a, onecolumn AS b
 ----
-error: column reference "x" is ambiguous (candidates: a.x, b.x)
+error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 
 # Check that name resolution does not choke on ambiguity if an
 # unqualified column name is requested and there is an anonymous
@@ -879,12 +879,12 @@ project
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b) AS q
 ----
-error: no data source matches prefix: a
+error (42P01): no data source matches prefix: a
 
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b)
 ----
-error: no data source matches prefix: a
+error (42P01): no data source matches prefix: a
 
 
 ## Simple test cases for inner, left, right, and outer joins
@@ -1265,17 +1265,17 @@ project
 build
 SELECT x FROM (SELECT * FROM onecolumn), (SELECT * FROM onecolumn)
 ----
-error: column reference "x" is ambiguous (candidates: <anonymous>.x, <anonymous>.x)
+error (42702): column reference "x" is ambiguous (candidates: <anonymous>.x, <anonymous>.x)
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON x > 32)
 ----
-error: column reference "x" is ambiguous (candidates: a.x, b.x)
+error (42702): column reference "x" is ambiguous (candidates: a.x, b.x)
 
 build
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b ON a.y > y)
 ----
-error: column name "a.y" not found
+error (42703): column name "a.y" not found
 
 # THe following queries verify that only the necessary columns are scanned.
 build
@@ -3206,4 +3206,4 @@ project
 build
 SELECT * FROM foo JOIN bar ON foo.c
 ----
-error: argument of ON must be type bool, not type float
+error (42804): argument of ON must be type bool, not type float

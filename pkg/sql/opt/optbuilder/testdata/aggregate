@@ -207,7 +207,7 @@ project
 build
 SELECT ARRAY_AGG(NULL)
 ----
-error: ambiguous call: array_agg(unknown), candidates are:
+error (42725): ambiguous call: array_agg(unknown), candidates are:
 array_agg(int) -> int[]
 array_agg(float) -> float[]
 array_agg(decimal) -> decimal[]
@@ -278,7 +278,7 @@ error: column "kv.k" must appear in the GROUP BY clause or be used in an aggrega
 build
 SELECT COUNT(*) FROM kv GROUP BY s < 5
 ----
-error: unsupported comparison operator: <string> < <int>
+error (22023): unsupported comparison operator: <string> < <int>
 
 build
 SELECT COUNT(*), k FROM kv GROUP BY k
@@ -314,27 +314,27 @@ project
 build
 SELECT * FROM kv GROUP BY v, COUNT(w)
 ----
-error: aggregate functions are not allowed in GROUP BY
+error (42803): aggregate functions are not allowed in GROUP BY
 
 build
 SELECT COUNT(w) FROM kv GROUP BY 1
 ----
-error: aggregate functions are not allowed in GROUP BY
+error (42803): aggregate functions are not allowed in GROUP BY
 
 build
 SELECT SUM(v) FROM kv GROUP BY k LIMIT SUM(v)
 ----
-error: aggregate functions are not allowed in LIMIT
+error (42803): aggregate functions are not allowed in LIMIT
 
 build
 SELECT SUM(v) FROM kv GROUP BY k LIMIT 1 OFFSET SUM(v)
 ----
-error: aggregate functions are not allowed in OFFSET
+error (42803): aggregate functions are not allowed in OFFSET
 
 build
 VALUES (99, COUNT(1))
 ----
-error: aggregate functions are not allowed in VALUES
+error (42803): aggregate functions are not allowed in VALUES
 
 build
 SELECT COUNT(*), k FROM kv GROUP BY 5
@@ -585,12 +585,12 @@ error: column "kv.v" must appear in the GROUP BY clause or be used in an aggrega
 build
 SELECT k FROM kv WHERE AVG(k) > 1
 ----
-error: aggregate functions are not allowed in WHERE
+error (42803): aggregate functions are not allowed in WHERE
 
 build
 SELECT MAX(AVG(k)) FROM kv
 ----
-error: aggregate functions are not allowed in the argument of max()
+error (42803): aggregate functions are not allowed in the argument of max()
 
 # Test case from #2761.
 build
@@ -669,7 +669,7 @@ group-by
 build
 SELECT COUNT(k, v) FROM kv
 ----
-error: unknown signature: count(int, int)
+error (42883): unknown signature: count(int, int)
 
 build
 SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
@@ -1167,32 +1167,32 @@ group-by
 build
 SELECT AVG(a) FROM abc
 ----
-error: unknown signature: avg(string)
+error (42883): unknown signature: avg(string)
 
 build
 SELECT AVG(c) FROM abc
 ----
-error: unknown signature: avg(bool)
+error (42883): unknown signature: avg(bool)
 
 build
 SELECT AVG((a,c)) FROM abc
 ----
-error: unknown signature: avg(tuple{string, bool})
+error (42883): unknown signature: avg(tuple{string, bool})
 
 build
 SELECT SUM(a) FROM abc
 ----
-error: unknown signature: sum(string)
+error (42883): unknown signature: sum(string)
 
 build
 SELECT SUM(c) FROM abc
 ----
-error: unknown signature: sum(bool)
+error (42883): unknown signature: sum(bool)
 
 build
 SELECT SUM((a,c)) FROM abc
 ----
-error: unknown signature: sum(tuple{string, bool})
+error (42883): unknown signature: sum(tuple{string, bool})
 
 exec-ddl
 CREATE TABLE xyz (
@@ -2447,12 +2447,12 @@ project
 build
 SELECT SUM(DISTINCT abc.d) FROM abc
 ----
-error: aggregates with DISTINCT are not supported yet
+error (0A000): aggregates with DISTINCT are not supported yet
 
 build
 SELECT SUM(abc.d) FILTER (WHERE abc.d > 0) FROM abc
 ----
-error: aggregates with FILTER are not supported yet
+error (0A000): aggregates with FILTER are not supported yet
 
 # Check that ordering by an alias of an aggregate works.
 build

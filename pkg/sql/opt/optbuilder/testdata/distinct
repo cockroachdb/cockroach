@@ -139,7 +139,7 @@ sort
 build
 SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
-error: unsupported binary operator: <int> + <float>
+error (22023): unsupported binary operator: <int> + <float>
 
 # TODO(rytaft): This query causes an error in Postgres, but it is supported by
 # CockroachDB with the semantics:

@@ -82,7 +82,7 @@ project
 build
 SELECT 1 + (SELECT 1, 2)
 ----
-error: unsupported binary operator: <int> + <tuple{int, int}>
+error (22023): unsupported binary operator: <int> + <tuple{int, int}>
 
 build
 SELECT (1, 2, 3) IN (SELECT 1, 2, 3)
@@ -621,12 +621,12 @@ error: subquery must return only one column, found 2
 build
 SELECT 1 IN (SELECT 1, 2)
 ----
-error: unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
+error (22023): unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
 
 build
 SELECT (1, 2) IN (SELECT 1)
 ----
-error: unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
+error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{int}>
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
@@ -641,7 +641,7 @@ TABLE abc
 build
 SELECT (1, 2) IN (SELECT * FROM abc)
 ----
-error: unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int, int, int}}>
+error (22023): unsupported comparison operator: <tuple{int, int}> IN <tuple{tuple{int, int, int}}>
 
 build
 SELECT (1, 2) IN (SELECT a, b FROM abc)
@@ -760,7 +760,7 @@ TABLE kv
 build
 SELECT (SELECT abc.k FROM abc) FROM kv AS abc
 ----
-error: column name "abc.k" not found
+error (42703): column name "abc.k" not found
 
 build
 VALUES (1, (SELECT (2)))
@@ -1487,13 +1487,13 @@ project
 build fully-qualify-names
 SELECT (SELECT kv.k) FROM db1.kv, kv
 ----
-error: ambiguous source name: "kv"
+error (42P09): ambiguous source name: "kv"
 
 # Name not found after searching multiple scopes.
 build fully-qualify-names
 SELECT (SELECT kv1.k) FROM db1.kv, kv
 ----
-error: no data source matches prefix: kv1
+error (42P01): no data source matches prefix: kv1
 
 build fully-qualify-names
 SELECT (SELECT kv1.k) FROM db1.kv AS kv1, kv
