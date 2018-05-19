@@ -35,6 +35,9 @@ func registerBackup(r *registry) {
 				wg.Add(1)
 				go func(node int) {
 					defer wg.Done()
+					// Created via:
+					// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
+					//           --payload-bytes=10240 --ranges=0 --rows=65104166
 					c.Run(ctx, c.Node(node), `mkdir -p /mnt/data1/cockroach`)
 					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
 						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
