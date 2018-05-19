@@ -27,9 +27,6 @@ type normalizableExpr interface {
 }
 
 func (expr *CastExpr) normalize(v *NormalizeVisitor) TypedExpr {
-	if expr.Expr == DNull {
-		return DNull
-	}
 	return expr
 }
 
@@ -727,12 +724,27 @@ func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 		if _, ok := expr.(*Placeholder); ok {
 			return expr
 		}
-		newExpr, err := expr.(TypedExpr).Eval(v.ctx)
+		value, err := expr.(TypedExpr).Eval(v.ctx)
 		if err != nil {
+			// Ignore any errors here (e.g. division by zero), so they can happen
+			// during execution where they are correctly handled. Note that in some
+			// cases we might not even get an error (if this particular expression
+			// does not get evaluated when the query runs, e.g. it's inside a CASE).
 			return expr
 		}
-		expr = newExpr
+		if value == DNull {
+			// We don't want to return an expression that has a different type; cast
+			// the NULL if necessary.
+			var newExpr TypedExpr
+			newExpr, v.err = ReType(DNull, expr.(TypedExpr).ResolvedType())
+			if v.err != nil {
+				return expr
+			}
+			return newExpr
+		}
+		return value
 	}
+
 	return expr
 }
 
