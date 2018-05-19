@@ -245,6 +245,7 @@ func evalEndTransaction(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTransactionRequest)
+	log.Infof(ctx, "!!! evalEndTransaction: %s", cArgs.Header.Txn.ID)
 	h := cArgs.Header
 	ms := cArgs.Stats
 	reply := resp.(*roachpb.EndTransactionResponse)

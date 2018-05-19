@@ -998,6 +998,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+	log.Infof(ctx, "!!! tryAsyncAbort")
 	// Clone the intents and the txn to avoid data races.
 	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
 	tc.cleanupTxnLocked(ctx, aborted)

@@ -76,6 +76,9 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 
 // Add implements the Cache interface.
 func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+	if !readCache {
+		log.Infof(context.TODO(), "!!! write ts cached adding: %s->%s (%s)", start, end, readCache)
+	}
 	start, end = tc.boundKeyLengths(start, end)
 
 	skl := tc.getSkl(readCache)

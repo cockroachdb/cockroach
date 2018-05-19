@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -208,6 +209,7 @@ func (sc *AbortSpan) Put(
 	txnID uuid.UUID,
 	entry *roachpb.AbortSpanEntry,
 ) error {
+	log.Infof(ctx, "!!! AbortSpan.Put: %s", txnID)
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return engine.MVCCPutProto(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }

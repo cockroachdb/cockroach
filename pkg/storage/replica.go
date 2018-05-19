@@ -2316,6 +2316,7 @@ func (r *Replica) applyTimestampCache(
 				// associated txnID and will be due to the low-water mark.
 				switch wTxnID {
 				case ba.Txn.ID:
+					log.Infof(ctx, "!!! BeginTxn ran into ts cache => replay. key: %s", key)
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				case uuid.UUID{} /* noTxnID */ :
 					if !wTS.Less(ba.Txn.Timestamp) {
@@ -5191,6 +5192,8 @@ func checkIfTxnAborted(
 		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
+		log.Infof(ctx, "!!! found AbortSpan entry for %s with priority %d",
+			txn.ID.Short(), entry.Priority)
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
 			log.Infof(ctx, "found AbortSpan entry for %s with priority %d",

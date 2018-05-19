@@ -896,6 +896,7 @@ func (txn *Txn) isRetryableErrMeantForTxnLocked(retryErr roachpb.HandledRetryabl
 func (txn *Txn) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
+	log.Infof(ctx, "!!! txn.Send: %s (txn: %s)", ba, txn.ID())
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
 	// we still need to accept it as a parameter for this to compile.
 	if ba.ReadConsistency != roachpb.CONSISTENT {
@@ -1089,6 +1090,7 @@ func (txn *Txn) Send(
 		}
 
 		if !retriable && txn.mu.state == txnWriting {
+			log.Infof(ctx, "!!! putting txn in Error state")
 			txn.mu.state = txnError
 		}
 

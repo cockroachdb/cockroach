@@ -313,7 +313,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
 
-	for _, commit := range []bool{true, false} {
+	testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 		value := []byte("value")
 		keySuffixes := "abc"
 		keys := make([][]byte, len(keySuffixes))
@@ -321,8 +321,11 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 			keys[j] = []byte(fmt.Sprintf("%s/key-%t/%s", testUser, commit, string(s)))
 		}
 
+		attempt := 0
 		// Use snapshot isolation so non-transactional read can always push.
 		err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+			log.Infof(ctx, "!!! txn attempt: %d", attempt)
+			attempt++
 			if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 				return err
 			}
@@ -337,20 +340,26 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 					defer wg.Done()
 					// Put transactional value.
 					if err := txn.Put(ctx, key, value); err != nil {
+						log.Infof(ctx, "test: put err for key: %s: %s", key, err)
 						concErrs[i] = err
 						return
 					}
+					log.Infof(ctx, "test: put succeeded for key: %s", key)
 					// Attempt to read outside of txn. We need to guarantee that the
 					// BeginTxnRequest has finished or we risk aborting the transaction.
+					log.Infof(ctx, "test: non-txn get for key: %s", key)
 					if gr, err := db.Get(ctx, key); err != nil {
+						log.Infof(ctx, "test: get err: %s", err)
 						concErrs[i] = err
 						return
 					} else if gr.Value != nil {
 						concErrs[i] = errors.Errorf("expected nil value; got %+v", gr.Value)
 						return
 					}
+					log.Infof(ctx, "test: non-txn get for key: %s... success", key)
 					// Read within the transaction.
 					if gr, err := txn.Get(ctx, key); err != nil {
+						log.Infof(ctx, "test: txn.get err for key: %s %s", key, err)
 						concErrs[i] = err
 						return
 					} else if gr.Value == nil || !bytes.Equal(gr.ValueBytes(), value) {
@@ -363,6 +372,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 
 			// Check for any TxnAborted errors before deferring to any other errors.
 			var anyError error
+			log.Infof(context.TODO(), "!!! concErrs: %v", concErrs)
 			for _, err := range concErrs {
 				if err != nil {
 					anyError = err
@@ -399,7 +409,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 				}
 			}
 		}
-	}
+	})
 }
 
 // TestClientGetAndPutProto verifies gets and puts of protobufs using the
