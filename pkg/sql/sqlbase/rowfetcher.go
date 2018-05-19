@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -87,6 +88,21 @@ type tableInfo struct {
 	extraVals   []EncDatum
 	row         EncDatumRow
 	decodedRow  tree.Datums
+
+	// The following fields contain MVCC metadata for each row and may be
+	// returned to users of RowFetcher immediately after NextRow returns.
+	// They're not important to ordinary consumers of RowFetcher that only
+	// concern themselves with actual SQL row data.
+	//
+	// rowLastModified is the timestamp of the last time any family in the row
+	// was modified in any way.
+	rowLastModified hlc.Timestamp
+	// rowIsDeleted is true when the row has been deleted. This is only
+	// meaningful when kv deletion tombstones are returned by the kvFetcher,
+	// which the one used by `StartScan` (the common case) doesnt. Notably,
+	// changefeeds use this by providing raw kvs with tombstones unfiltered via
+	// `StartScanFrom`.
+	rowIsDeleted bool
 
 	// hasLast indicates whether there was a previously scanned k/v.
 	hasLast bool
@@ -647,6 +663,22 @@ func (rf *RowFetcher) processKV(
 		}
 
 		rf.valueColsFound = 0
+
+		// Reset the MVCC metadata for the next row.
+
+		// set rowLastModified to a sentinel that's before any real timestamp.
+		// As kvs are iterated for this row, it keeps track of the greatest
+		// timestamp seen.
+		table.rowLastModified = hlc.Timestamp{}
+		// All row encodings (both before and after column families) have a
+		// sentinel kv (column family 0) that is always present when a row is
+		// present, even if that row is all NULLs. Thus, a row is deleted if and
+		// only if the first kv in it a tombstone (RawBytes is empty).
+		table.rowIsDeleted = len(kv.Value.RawBytes) == 0
+	}
+
+	if table.rowLastModified.Less(kv.Value.Timestamp) {
+		table.rowLastModified = kv.Value.Timestamp
 	}
 
 	if table.neededCols.Empty() {
@@ -773,6 +805,9 @@ func (rf *RowFetcher) processValueSingle(
 		if idx, ok := table.colIdxMap[colID]; ok {
 			if rf.traceKV {
 				prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.desc.Columns[idx].Name)
+			}
+			if len(kv.Value.RawBytes) == 0 {
+				return prettyKey, "", nil
 			}
 			typ := table.cols[idx].Type
 			// TODO(arjun): The value is a directly marshaled single value, so we
@@ -957,6 +992,20 @@ func (rf *RowFetcher) NextRowDecoded(
 	}
 
 	return rf.rowReadyTable.decodedRow, table, index, nil
+}
+
+// RowLastModified may only be called after NextRow has returned a non-nil row
+// and returns the timestamp of the last modification to that row.
+func (rf *RowFetcher) RowLastModified() hlc.Timestamp {
+	return rf.rowReadyTable.rowLastModified
+}
+
+// RowIsDeleted may only be called after NextRow has returned a non-nil row and
+// returns true if that row was most recently deleted. This method is only
+// meaningful when the configured kvFetcher returns deletion tombstones, which
+// the normal one (via `StartScan`) does not.
+func (rf *RowFetcher) RowIsDeleted() bool {
+	return rf.rowReadyTable.rowIsDeleted
 }
 
 // NextRowWithErrors calls NextRow to fetch the next row and also run

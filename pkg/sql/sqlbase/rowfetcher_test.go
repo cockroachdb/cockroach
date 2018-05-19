@@ -453,7 +453,7 @@ func generateIdxSubsets(maxIdx int, subsets [][]int) [][]int {
 // parent2
 //   child1
 //      grandchild1
-//	  grandgrandchild1
+//	      grandgrandchild1
 //   child2
 //   grandgrandchild1@ggc1_unique_idx
 // parent3
