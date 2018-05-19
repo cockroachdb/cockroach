@@ -33,9 +33,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: a.y [type=int]
-           └── const: 1 [type=int]
+      └── a.y = 1 [type=bool]
 
 # Project operator.
 opt
@@ -46,9 +44,7 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
  └── projections
-      └── plus [type=int]
-           ├── variable: a.y [type=int]
-           └── const: 1 [type=int]
+      └── a.y + 1 [type=int]
 
 # Join operator.
 opt

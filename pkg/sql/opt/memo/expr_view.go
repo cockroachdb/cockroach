@@ -239,6 +239,9 @@ func (ev ExprView) FormatString(flags opt.ExprFmtFlags) string {
 // format constructs a treeprinter view of this expression for testing and
 // debugging. The given flags control which properties are added.
 func (ev ExprView) format(f *opt.ExprFmtCtx, tp treeprinter.Node) {
+	if ExprFmtInterceptor(f, tp, ev) {
+		return
+	}
 	if ev.IsScalar() {
 		ev.formatScalar(f, tp)
 	} else {
@@ -403,10 +406,20 @@ func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		return
 	}
 	var buf bytes.Buffer
-
 	fmt.Fprintf(&buf, "%v", ev.op)
 	ev.formatScalarPrivate(&buf, ev.Private())
+	ev.FormatScalarProps(f, &buf)
+	tp = tp.Child(buf.String())
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
+		child.format(f, tp)
+	}
+}
 
+// FormatScalarProps writes out a string representation of the scalar
+// properties (with a preceding space); for example:
+//  " [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
+func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
 	// Don't panic if scalar properties don't yet exist when printing
 	// expression.
 	scalar := ev.Logical().Scalar
@@ -429,19 +442,19 @@ func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		if showType || hasOuterCols || hasConstraints {
 			buf.WriteString(" [")
 			if showType {
-				fmt.Fprintf(&buf, "type=%s", scalar.Type)
+				fmt.Fprintf(buf, "type=%s", scalar.Type)
 				if hasOuterCols || hasConstraints {
 					buf.WriteString(", ")
 				}
 			}
 			if hasOuterCols {
-				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
+				fmt.Fprintf(buf, "outer=%s", scalar.OuterCols)
 				if hasConstraints {
 					buf.WriteString(", ")
 				}
 			}
 			if hasConstraints {
-				fmt.Fprintf(&buf, "constraints=(%s", scalar.Constraints)
+				fmt.Fprintf(buf, "constraints=(%s", scalar.Constraints)
 				if scalar.TightConstraints {
 					buf.WriteString("; tight")
 				}
@@ -451,11 +464,6 @@ func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 		}
 	}
 
-	tp = tp.Child(buf.String())
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		child.format(f, tp)
-	}
 }
 
 func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
@@ -522,3 +530,7 @@ func MatchesTupleOfConstants(ev ExprView) bool {
 	}
 	return true
 }
+
+// ExprFmtInterceptor is a callback that can be set to a custom formatting
+// function. If the function returns true, the normal formatting code is bypassed.
+var ExprFmtInterceptor func(f *opt.ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool

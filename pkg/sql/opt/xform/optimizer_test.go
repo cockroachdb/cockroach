@@ -28,7 +28,10 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
 //   ...
 func TestCoster(t *testing.T) {
-	runDataDrivenTest(t, "testdata/coster/", opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications)
+	runDataDrivenTest(
+		t, "testdata/coster/",
+		opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+	)
 }
 
 // TestPhysicalPropsFactory files can be run separately like this:
@@ -47,7 +50,8 @@ func TestRules(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/rules/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications,
+		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
+			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
 	)
 }
 
@@ -62,7 +66,8 @@ func TestExternal(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/external/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications,
+		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
+			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
 	)
 }
 

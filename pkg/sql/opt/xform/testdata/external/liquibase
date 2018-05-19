@@ -310,31 +310,19 @@ project
  │    │    │         │    │    │    │    │    │    │    │    │    ├── columns: pg_class.oid:1(oid!null) pg_class.relname:2(string!null) pg_class.relnamespace:3(oid!null) pg_class.relowner:5(oid!null) pg_class.reltablespace:8(oid!null) pg_class.reltuples:10(float!null) pg_class.relhasindex:13(bool!null) pg_class.relpersistence:15(string!null) pg_class.relkind:17(string!null) pg_class.relhasoids:20(bool!null) pg_class.relhasrules:22(bool!null) pg_class.relhastriggers:23(bool!null) pg_class.relacl:26(string[]) pg_class.reloptions:27(string[])
  │    │    │         │    │    │    │    │    │    │    │    │    └── keys: (1) (2,3)
  │    │    │         │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │         └── or [type=bool, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │              ├── eq [type=bool, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │              │    ├── variable: pg_class.relkind [type=string, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │              │    └── const: 'r' [type=string]
- │    │    │         │    │    │    │    │    │    │    │              └── eq [type=bool, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │                   ├── variable: pg_class.relkind [type=string, outer=(17)]
- │    │    │         │    │    │    │    │    │    │    │                   └── const: 'f' [type=string]
+ │    │    │         │    │    │    │    │    │    │    │         └── (pg_class.relkind = 'r') OR (pg_class.relkind = 'f') [type=bool, outer=(17)]
  │    │    │         │    │    │    │    │    │    │    ├── scan pg_namespace
  │    │    │         │    │    │    │    │    │    │    │    ├── columns: pg_namespace.oid:28(oid!null) pg_namespace.nspname:29(string!null)
  │    │    │         │    │    │    │    │    │    │    │    └── keys: (28) (29)
  │    │    │         │    │    │    │    │    │    │    └── filters [type=bool, outer=(3,28), constraints=(/3: (/NULL - ]; /28: (/NULL - ])]
- │    │    │         │    │    │    │    │    │    │         └── eq [type=bool, outer=(3,28), constraints=(/3: (/NULL - ]; /28: (/NULL - ])]
- │    │    │         │    │    │    │    │    │    │              ├── variable: pg_namespace.oid [type=oid, outer=(28)]
- │    │    │         │    │    │    │    │    │    │              └── variable: pg_class.relnamespace [type=oid, outer=(3)]
+ │    │    │         │    │    │    │    │    │    │         └── pg_namespace.oid = pg_class.relnamespace [type=bool, outer=(3,28), constraints=(/3: (/NULL - ]; /28: (/NULL - ])]
  │    │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(29), constraints=(/29: [/'public' - /'public']; tight)]
- │    │    │         │    │    │    │    │    │         └── eq [type=bool, outer=(29), constraints=(/29: [/'public' - /'public']; tight)]
- │    │    │         │    │    │    │    │    │              ├── variable: pg_namespace.nspname [type=string, outer=(29)]
- │    │    │         │    │    │    │    │    │              └── const: 'public' [type=string]
+ │    │    │         │    │    │    │    │    │         └── pg_namespace.nspname = 'public' [type=bool, outer=(29), constraints=(/29: [/'public' - /'public']; tight)]
  │    │    │         │    │    │    │    │    ├── scan pg_tablespace
  │    │    │         │    │    │    │    │    │    ├── columns: pg_tablespace.oid:32(oid!null) spcname:33(string!null)
  │    │    │         │    │    │    │    │    │    └── keys: (32) (33)
  │    │    │         │    │    │    │    │    └── filters [type=bool, outer=(8,32), constraints=(/8: (/NULL - ]; /32: (/NULL - ])]
- │    │    │         │    │    │    │    │         └── eq [type=bool, outer=(8,32), constraints=(/8: (/NULL - ]; /32: (/NULL - ])]
- │    │    │         │    │    │    │    │              ├── variable: pg_tablespace.oid [type=oid, outer=(32)]
- │    │    │         │    │    │    │    │              └── variable: pg_class.reltablespace [type=oid, outer=(8)]
+ │    │    │         │    │    │    │    │         └── pg_tablespace.oid = pg_class.reltablespace [type=bool, outer=(8,32), constraints=(/8: (/NULL - ]; /32: (/NULL - ])]
  │    │    │         │    │    │    │    ├── left-join
  │    │    │         │    │    │    │    │    ├── columns: pg_inherits.inhrelid:38(oid!null) pg_inherits.inhparent:39(oid!null) pg_class.oid:41(oid!null) pg_class.relname:42(string!null) pg_class.relnamespace:43(oid!null) pg_namespace.oid:68(oid) pg_namespace.nspname:69(string)
  │    │    │         │    │    │    │    │    ├── inner-join
@@ -345,20 +333,14 @@ project
  │    │    │         │    │    │    │    │    │    │    ├── columns: pg_class.oid:41(oid!null) pg_class.relname:42(string!null) pg_class.relnamespace:43(oid!null)
  │    │    │         │    │    │    │    │    │    │    └── keys: (41) (42,43)
  │    │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(39,41), constraints=(/39: (/NULL - ]; /41: (/NULL - ])]
- │    │    │         │    │    │    │    │    │         └── eq [type=bool, outer=(39,41), constraints=(/39: (/NULL - ]; /41: (/NULL - ])]
- │    │    │         │    │    │    │    │    │              ├── variable: pg_inherits.inhparent [type=oid, outer=(39)]
- │    │    │         │    │    │    │    │    │              └── variable: pg_class.oid [type=oid, outer=(41)]
+ │    │    │         │    │    │    │    │    │         └── pg_inherits.inhparent = pg_class.oid [type=bool, outer=(39,41), constraints=(/39: (/NULL - ]; /41: (/NULL - ])]
  │    │    │         │    │    │    │    │    ├── scan pg_namespace
  │    │    │         │    │    │    │    │    │    ├── columns: pg_namespace.oid:68(oid!null) pg_namespace.nspname:69(string!null)
  │    │    │         │    │    │    │    │    │    └── keys: (68) (69)
  │    │    │         │    │    │    │    │    └── filters [type=bool, outer=(43,68), constraints=(/43: (/NULL - ]; /68: (/NULL - ])]
- │    │    │         │    │    │    │    │         └── eq [type=bool, outer=(43,68), constraints=(/43: (/NULL - ]; /68: (/NULL - ])]
- │    │    │         │    │    │    │    │              ├── variable: pg_namespace.oid [type=oid, outer=(68)]
- │    │    │         │    │    │    │    │              └── variable: pg_class.relnamespace [type=oid, outer=(43)]
+ │    │    │         │    │    │    │    │         └── pg_namespace.oid = pg_class.relnamespace [type=bool, outer=(43,68), constraints=(/43: (/NULL - ]; /68: (/NULL - ])]
  │    │    │         │    │    │    │    └── filters [type=bool, outer=(1,38), constraints=(/1: (/NULL - ]; /38: (/NULL - ])]
- │    │    │         │    │    │    │         └── eq [type=bool, outer=(1,38), constraints=(/1: (/NULL - ]; /38: (/NULL - ])]
- │    │    │         │    │    │    │              ├── variable: pg_inherits.inhrelid [type=oid, outer=(38)]
- │    │    │         │    │    │    │              └── variable: pg_class.oid [type=oid, outer=(1)]
+ │    │    │         │    │    │    │         └── pg_inherits.inhrelid = pg_class.oid [type=bool, outer=(1,38), constraints=(/1: (/NULL - ]; /38: (/NULL - ])]
  │    │    │         │    │    │    ├── select
  │    │    │         │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
  │    │    │         │    │    │    │    ├── keys: (72)
@@ -366,40 +348,28 @@ project
  │    │    │         │    │    │    │    │    ├── columns: indexrelid:72(oid!null) indrelid:73(oid!null) indisclustered:79(bool!null)
  │    │    │         │    │    │    │    │    └── keys: (72)
  │    │    │         │    │    │    │    └── filters [type=bool, outer=(79), constraints=(/79: [/true - /true]; tight)]
- │    │    │         │    │    │    │         └── eq [type=bool, outer=(79), constraints=(/79: [/true - /true]; tight)]
- │    │    │         │    │    │    │              ├── variable: pg_index.indisclustered [type=bool, outer=(79)]
- │    │    │         │    │    │    │              └── true [type=bool]
+ │    │    │         │    │    │    │         └── pg_index.indisclustered = true [type=bool, outer=(79), constraints=(/79: [/true - /true]; tight)]
  │    │    │         │    │    │    └── filters [type=bool, outer=(1,73), constraints=(/1: (/NULL - ]; /73: (/NULL - ])]
- │    │    │         │    │    │         └── eq [type=bool, outer=(1,73), constraints=(/1: (/NULL - ]; /73: (/NULL - ])]
- │    │    │         │    │    │              ├── variable: pg_index.indrelid [type=oid, outer=(73)]
- │    │    │         │    │    │              └── variable: pg_class.oid [type=oid, outer=(1)]
+ │    │    │         │    │    │         └── pg_index.indrelid = pg_class.oid [type=bool, outer=(1,73), constraints=(/1: (/NULL - ]; /73: (/NULL - ])]
  │    │    │         │    │    ├── scan pg_class
  │    │    │         │    │    │    ├── columns: pg_class.oid:91(oid!null) pg_class.relname:92(string!null)
  │    │    │         │    │    │    └── keys: (91)
  │    │    │         │    │    └── filters [type=bool, outer=(72,91), constraints=(/72: (/NULL - ]; /91: (/NULL - ])]
- │    │    │         │    │         └── eq [type=bool, outer=(72,91), constraints=(/72: (/NULL - ]; /91: (/NULL - ])]
- │    │    │         │    │              ├── variable: pg_class.oid [type=oid, outer=(91)]
- │    │    │         │    │              └── variable: pg_index.indexrelid [type=oid, outer=(72)]
+ │    │    │         │    │         └── pg_class.oid = pg_index.indexrelid [type=bool, outer=(72,91), constraints=(/72: (/NULL - ]; /91: (/NULL - ])]
  │    │    │         │    ├── scan pg_foreign_table
  │    │    │         │    │    ├── columns: ftrelid:118(oid!null) ftserver:119(oid!null) ftoptions:120(string[])
  │    │    │         │    │    └── keys: (118)
  │    │    │         │    └── filters [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
- │    │    │         │         └── eq [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
- │    │    │         │              ├── variable: pg_foreign_table.ftrelid [type=oid, outer=(118)]
- │    │    │         │              └── variable: pg_class.oid [type=oid, outer=(1)]
+ │    │    │         │         └── pg_foreign_table.ftrelid = pg_class.oid [type=bool, outer=(1,118), constraints=(/1: (/NULL - ]; /118: (/NULL - ])]
  │    │    │         ├── scan pg_foreign_server
  │    │    │         │    ├── columns: pg_foreign_server.oid:121(oid!null) srvname:122(string!null)
  │    │    │         │    └── keys: (121) (122)
  │    │    │         └── filters [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ])]
- │    │    │              └── eq [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ])]
- │    │    │                   ├── variable: pg_foreign_table.ftserver [type=oid, outer=(119)]
- │    │    │                   └── variable: pg_foreign_server.oid [type=oid, outer=(121)]
+ │    │    │              └── pg_foreign_table.ftserver = pg_foreign_server.oid [type=bool, outer=(119,121), constraints=(/119: (/NULL - ]; /121: (/NULL - ])]
  │    │    ├── scan pg_inherits
  │    │    │    └── columns: pg_inherits.inhparent:132(oid!null)
  │    │    └── filters [type=bool, outer=(1,132), constraints=(/1: (/NULL - ]; /132: (/NULL - ])]
- │    │         └── eq [type=bool, outer=(1,132), constraints=(/1: (/NULL - ]; /132: (/NULL - ])]
- │    │              ├── variable: pg_inherits.inhparent [type=oid, outer=(132)]
- │    │              └── variable: pg_class.oid [type=oid, outer=(1)]
+ │    │         └── pg_inherits.inhparent = pg_class.oid [type=bool, outer=(1,132), constraints=(/1: (/NULL - ]; /132: (/NULL - ])]
  │    └── aggregations [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122)]
  │         ├── count [type=int, outer=(1)]
  │         │    └── variable: pg_class.oid [type=oid, outer=(1)]
@@ -442,10 +412,6 @@ project
  │         └── any-not-null [type=string, outer=(122)]
  │              └── variable: pg_foreign_server.srvname [type=string, outer=(122)]
  └── projections [outer=(1,2,5,10,13,15,17,20,22,23,26,27,29,33,42,69,92,120,122,134)]
-      ├── function: pg_get_userbyid [type=string, outer=(5)]
-      │    └── variable: pg_class.relowner [type=oid, outer=(5)]
-      ├── function: obj_description [type=string, outer=(1)]
-      │    └── variable: pg_class.oid [type=oid, outer=(1)]
-      └── gt [type=bool, outer=(134)]
-           ├── variable: count [type=int, outer=(134)]
-           └── const: 0 [type=int]
+      ├── pg_get_userbyid(pg_class.relowner) [type=string, outer=(5)]
+      ├── obj_description(pg_class.oid) [type=string, outer=(1)]
+      └── count > 0 [type=bool, outer=(134)]

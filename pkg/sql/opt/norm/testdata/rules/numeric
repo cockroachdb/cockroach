@@ -27,24 +27,12 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── plus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── plus [type=decimal, outer=(4)]
-      │    ├── variable: a.d [type=decimal, outer=(4)]
-      │    └── variable: a.d [type=decimal, outer=(4)]
-      └── plus [type=decimal, outer=(4)]
-           ├── variable: a.d [type=decimal, outer=(4)]
-           └── variable: a.d [type=decimal, outer=(4)]
+      ├── a.i + a.i [type=int, outer=(2)]
+      ├── a.i + a.i [type=int, outer=(2)]
+      ├── a.f + a.f [type=float, outer=(3)]
+      ├── a.f + a.f [type=float, outer=(3)]
+      ├── a.d + a.d [type=decimal, outer=(4)]
+      └── a.d + a.d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldMinusZero
@@ -63,15 +51,9 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      └── plus [type=decimal, outer=(4)]
-           ├── variable: a.d [type=decimal, outer=(4)]
-           └── variable: a.d [type=decimal, outer=(4)]
+      ├── a.i + a.i [type=int, outer=(2)]
+      ├── a.f + a.f [type=float, outer=(3)]
+      └── a.d + a.d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
@@ -90,24 +72,12 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
  └── projections [outer=(2-4)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=int, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── plus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── plus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── plus [type=decimal, outer=(4)]
-      │    ├── variable: a.d [type=decimal, outer=(4)]
-      │    └── variable: a.d [type=decimal, outer=(4)]
-      └── plus [type=decimal, outer=(4)]
-           ├── variable: a.d [type=decimal, outer=(4)]
-           └── variable: a.d [type=decimal, outer=(4)]
+      ├── a.i + a.i [type=int, outer=(2)]
+      ├── a.i + a.i [type=int, outer=(2)]
+      ├── a.f + a.f [type=float, outer=(3)]
+      ├── a.f + a.f [type=float, outer=(3)]
+      ├── a.d + a.d [type=decimal, outer=(4)]
+      └── a.d + a.d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -144,15 +114,9 @@ project
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal) t:5(time)
  └── projections [outer=(2-5)]
-      ├── minus [type=float, outer=(3)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── minus [type=decimal, outer=(2,4)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.d [type=decimal, outer=(4)]
-      └── minus [type=interval, outer=(5)]
-           ├── variable: a.t [type=time, outer=(5)]
-           └── variable: a.t [type=time, outer=(5)]
+      ├── a.f - a.f [type=float, outer=(3)]
+      ├── a.i - a.d [type=decimal, outer=(2,4)]
+      └── a.t - a.t [type=interval, outer=(5)]
 
 # --------------------------------------------------
 # EliminateUnaryMinus
