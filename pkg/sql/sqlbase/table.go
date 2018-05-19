@@ -23,6 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"runtime/debug"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1858,6 +1860,54 @@ func checkElementType(paramType types.T, columnType ColumnType) error {
 	return nil
 }
 
+// NewMismatchedTypeError creates an error indicating a mismatched value and
+// column type.
+func NewMismatchedTypeError(
+	valType types.T, colType ColumnType_SemanticType, colName string,
+) error {
+	debug.PrintStack()
+	return pgerror.NewErrorWithDepthf(1,
+		pgerror.CodeDatatypeMismatchError,
+		"value type %s doesn't match type %s of column %q",
+		valType, colType, colName)
+}
+
+// NewMismatchedLocaleError creates an error indicating a mismatched collated
+// string locale in a value and column.
+func NewMismatchedLocaleError(valLocale, colLocale string, colName string) error {
+	return pgerror.NewErrorWithDepthf(1,
+		pgerror.CodeDatatypeMismatchError,
+		"locale %q doesn't match locale %q of column %q",
+		valLocale, colLocale, colName)
+}
+
+// CheckColumnValueType checks to see if valType and colType are compatible,
+// returning an error similar to that of MarshalColumnValue if they're not.
+func CheckColumnValueType(valType types.T, colType ColumnType, colName string) error {
+	switch colType.SemanticType {
+	case ColumnType_ARRAY:
+		if t, ok := valType.(types.TArray); ok {
+			if err := checkElementType(t.Typ, colType); err != nil {
+				return err
+			}
+		}
+	case ColumnType_COLLATEDSTRING:
+		if t, ok := valType.(types.TCollatedString); ok {
+			if t.Locale != *colType.Locale {
+				return NewMismatchedLocaleError(t.Locale, *colType.Locale, colName)
+			}
+		}
+	}
+	valColType, err := DatumTypeToColumnType(valType)
+	if err != nil {
+		return err
+	}
+	if !valColType.Equal(colType) {
+		return NewMismatchedTypeError(valType, colType.SemanticType, colName)
+	}
+	return nil
+}
+
 // MarshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
@@ -1970,8 +2020,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 				r.SetString(v.Contents)
 				return r, nil
 			}
-			return r, fmt.Errorf("locale %q doesn't match locale %q of column %q",
-				v.Locale, *col.Type.Locale, col.Name)
+			return r, NewMismatchedLocaleError(v.Locale, *col.Type.Locale, col.Name)
 		}
 	case ColumnType_OID:
 		if v, ok := val.(*tree.DOid); ok {
@@ -1981,8 +2030,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 	default:
 		return r, errors.Errorf("unsupported column type: %s", col.Type.SemanticType)
 	}
-	return r, fmt.Errorf("value type %s doesn't match type %s of column %q",
-		val.ResolvedType(), col.Type.SemanticType, col.Name)
+	return r, NewMismatchedTypeError(val.ResolvedType(), col.Type.SemanticType, col.Name)
 }
 
 const hasNullFlag = 1 << 4

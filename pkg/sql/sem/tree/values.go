@@ -38,3 +38,15 @@ func (node *ValuesClause) Format(ctx *FmtCtx) {
 		ctx.FormatNode(n)
 	}
 }
+
+// ValuesClauseWithNames is a VALUES clause that has been annotated with column
+// names. This is only produced at plan time, never by the parser. It's used to
+// pass column names to the VALUES planNode, so it can produce intelligible
+// error messages during value type checking.
+type ValuesClauseWithNames struct {
+	ValuesClause
+
+	// Names is a list of the column names that each tuple in the ValuesClause
+	// corresponds to.
+	Names NameList
+}
