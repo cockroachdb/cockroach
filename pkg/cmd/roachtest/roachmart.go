@@ -31,7 +31,7 @@ func registerRoachmart(r *registry) {
 			i    int
 			zone string
 		}{
-			{1, "us-central1-b"},
+			{1, "us-east1-b"},
 			{4, "us-west1-b"},
 			{7, "europe-west2-b"},
 		}
