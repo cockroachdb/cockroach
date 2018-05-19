@@ -2977,10 +2977,6 @@ func (s *Store) Send(
 				}
 				// We've resolved the write intent; retry command.
 			}
-
-			// Increase the sequence counter to avoid getting caught in replay
-			// protection on retry.
-			ba.SetNewRequest()
 		}
 
 		if pErr != nil {
