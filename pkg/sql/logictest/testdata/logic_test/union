@@ -237,3 +237,14 @@ union             ·     ·
  └── render       ·     ·
       └── values  ·     ·
 ·                 size  3 columns, 6 rows
+
+# Check that UNION permits columns of different visible types
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE b (a INTEGER PRIMARY KEY)
+
+query I
+SELECT * FROM a UNION ALL SELECT * FROM b
