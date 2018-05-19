@@ -304,6 +304,7 @@ func TestJSONSize(t *testing.T) {
 		{`{"":{}}`, sliceHeaderSize + keyValuePairSize + sliceHeaderSize},
 		{`{"a":"b"}`, sliceHeaderSize + keyValuePairSize + 1 + stringHeaderSize + 1},
 	}
+	largeBuf := make([]byte, 0, 10240)
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
 			j, err := ParseJSON(tc.input)
@@ -313,6 +314,31 @@ func TestJSONSize(t *testing.T) {
 			if j.Size() != tc.size {
 				t.Fatalf("expected %v to have size %d, but had size %d", j, tc.size, j.Size())
 			}
+
+			t.Run("jsonEncodedSize", func(t *testing.T) {
+				largeBuf = largeBuf[:0]
+				var buf []byte
+				var err error
+
+				if buf, err = EncodeJSON(buf, j); err != nil {
+					t.Fatal(err)
+				}
+				if largeBuf, err = EncodeJSON(largeBuf, j); err != nil {
+					t.Fatal(err)
+				}
+
+				encoded, err := newEncodedFromRoot(buf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				encodedFromLargeBuf, err := newEncodedFromRoot(largeBuf)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if encodedFromLargeBuf.Size() != encoded.Size() {
+					t.Errorf("expected jsonEncoded on a large buf for %v to have size %d, found %d", j, encoded.Size(), encodedFromLargeBuf.Size())
+				}
+			})
 		})
 	}
 }
