@@ -47,6 +47,10 @@ const (
 	// (except when a shortened name would be ambiguous).
 	ExprFmtHideQualifications
 
+	// ExprFmtHideScalars removes subtrees that contain only scalars and replaces
+	// them with the SQL expression (if possible).
+	ExprFmtHideScalars
+
 	// ExprFmtHideAll shows only the most basic properties of the expression.
 	ExprFmtHideAll ExprFmtFlags = (1 << iota) - 1
 )

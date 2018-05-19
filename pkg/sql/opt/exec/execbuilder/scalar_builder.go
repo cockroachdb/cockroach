@@ -83,7 +83,7 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typed
 	if fn := scalarBuildFuncMap[ev.Operator()]; fn != nil {
 		return fn(b, ctx, ev)
 	}
-	panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
+	return nil, errors.Errorf("unsupported op %s", ev.Operator())
 }
 
 func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
@@ -130,7 +130,14 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedE
 
 func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	switch ev.Operator() {
-	case opt.AndOp, opt.OrOp, opt.FiltersOp:
+	case opt.FiltersOp:
+		if ev.ChildCount() == 0 {
+			// This can happen if the expression is not normalized (build tests).
+			return tree.DBoolTrue, nil
+		}
+		fallthrough
+
+	case opt.AndOp, opt.OrOp:
 		expr, err := b.buildScalar(ctx, ev.Child(0))
 		if err != nil {
 			return nil, err

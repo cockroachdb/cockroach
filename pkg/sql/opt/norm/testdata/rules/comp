@@ -26,26 +26,10 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-      ├── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── plus [type=int, outer=(2)]
-      │         ├── variable: a.i [type=int, outer=(2)]
-      │         └── const: 1 [type=int]
-      ├── ge [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=int, outer=(1)]
-      │         ├── variable: a.k [type=int, outer=(1)]
-      │         └── const: 1 [type=int]
-      ├── lt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── mult [type=int, outer=(2)]
-      │         ├── variable: a.i [type=int, outer=(2)]
-      │         └── variable: a.i [type=int, outer=(2)]
-      └── le [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
-           ├── variable: a.i [type=int, outer=(2)]
-           └── div [type=decimal, outer=(1)]
-                ├── variable: a.k [type=int, outer=(1)]
-                └── const: 2 [type=int]
+      ├── a.k > (a.i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      ├── a.i >= (a.k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
+      ├── a.k < (a.i * a.i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+      └── a.i <= (a.k / 2) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
 
 # --------------------------------------------------
 # CommuteConstInequality
@@ -60,26 +44,10 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(1,2,4), constraints=(/2: (/NULL - /4]; /4: (/NULL - /'foo'])]
-      ├── gt [type=bool, outer=(1,2)]
-      │    ├── plus [type=int, outer=(1,2)]
-      │    │    ├── variable: a.i [type=int, outer=(2)]
-      │    │    └── variable: a.k [type=int, outer=(1)]
-      │    └── plus [type=int]
-      │         ├── function: length [type=int]
-      │         │    └── const: 'foo' [type=string]
-      │         └── const: 1 [type=int]
-      ├── ge [type=bool, outer=(2)]
-      │    ├── mult [type=int, outer=(2)]
-      │    │    ├── variable: a.i [type=int, outer=(2)]
-      │    │    └── const: 2 [type=int]
-      │    └── function: length [type=int]
-      │         └── const: 'bar' [type=string]
-      ├── lt [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 5 [type=int]
-      └── le [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
-           ├── variable: a.s [type=string, outer=(4)]
-           └── const: 'foo' [type=string]
+      ├── (a.i + a.k) > (length('foo') + 1) [type=bool, outer=(1,2)]
+      ├── (a.i * 2) >= length('bar') [type=bool, outer=(2)]
+      ├── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── a.s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
 # --------------------------------------------------
 # NormalizeCmpPlusConst
@@ -101,37 +69,11 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 1 [type=int]
-      ├── lt [type=bool, outer=(3)]
-      │    ├── plus [type=float, outer=(3)]
-      │    │    ├── variable: a.f [type=float, outer=(3)]
-      │    │    └── variable: a.f [type=float, outer=(3)]
-      │    └── minus [type=float]
-      │         ├── const: 5.0 [type=float]
-      │         └── const: 2.0 [type=float]
-      ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=decimal]
-      │         ├── function: length [type=int]
-      │         │    └── const: 'foo' [type=string]
-      │         └── const: 1 [type=decimal]
-      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=int]
-      │         ├── minus [type=int]
-      │         │    ├── const: 10 [type=int]
-      │         │    └── const: 2 [type=int]
-      │         └── const: 2 [type=int]
-      └── ge [type=bool, outer=(2)]
-           ├── cast: INTERVAL [type=interval, outer=(2)]
-           │    └── variable: a.i [type=int, outer=(2)]
-           └── minus [type=interval]
-                ├── const: '02:00:00' [type=time]
-                └── const: '01:00:00' [type=time]
+      ├── a.i = (2 - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (a.f + a.f) < (5.0 - 2.0) [type=bool, outer=(3)]
+      ├── a.i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── a.i > ((10 - 2) - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── a.i::INTERVAL >= ('02:00:00' - '01:00:00') [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
@@ -144,12 +86,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(4)]
-      └── eq [type=bool, outer=(4)]
-           ├── plus [type=timestamp, outer=(4)]
-           │    ├── cast: DATE [type=date, outer=(4)]
-           │    │    └── variable: a.s [type=string, outer=(4)]
-           │    └── const: '02:00:00' [type=time]
-           └── const: '2000-01-01 02:00:00+00:00' [type=timestamp]
+      └── (a.s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
@@ -171,39 +108,11 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── plus [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── const: 1 [type=int]
-      ├── lt [type=bool, outer=(3)]
-      │    ├── plus [type=float, outer=(3)]
-      │    │    ├── variable: a.f [type=float, outer=(3)]
-      │    │    └── variable: a.f [type=float, outer=(3)]
-      │    └── plus [type=float]
-      │         ├── const: 5.0 [type=float]
-      │         └── const: 2.0 [type=float]
-      ├── le [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── plus [type=decimal]
-      │         ├── function: length [type=int]
-      │         │    └── const: 'foo' [type=string]
-      │         └── const: 1 [type=decimal]
-      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── plus [type=int]
-      │         ├── plus [type=int]
-      │         │    ├── const: 10 [type=int]
-      │         │    └── const: 2 [type=int]
-      │         └── const: 2 [type=int]
-      └── ge [type=bool, outer=(2,3)]
-           ├── plus [type=float, outer=(2,3)]
-           │    ├── variable: a.f [type=float, outer=(3)]
-           │    └── cast: FLOAT [type=float, outer=(2)]
-           │         └── variable: a.i [type=int, outer=(2)]
-           └── plus [type=float]
-                ├── const: 100.0 [type=float]
-                └── const: 10.0 [type=float]
+      ├── a.i = (2 + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (a.f + a.f) < (5.0 + 2.0) [type=bool, outer=(3)]
+      ├── a.i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── a.i > ((10 + 2) + 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── (a.f + a.i::FLOAT) >= (100.0 + 10.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Plus overload is not defined.
 opt
@@ -216,12 +125,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(4)]
-      └── eq [type=bool, outer=(4)]
-           ├── minus [type=jsonb, outer=(4)]
-           │    ├── cast: JSON [type=jsonb, outer=(4)]
-           │    │    └── variable: a.s [type=string, outer=(4)]
-           │    └── const: 1 [type=int]
-           └── const: '[1]' [type=jsonb]
+      └── (a.s::JSON - 1) = '[1]' [type=bool, outer=(4)]
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
@@ -243,39 +147,11 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ])]
-      ├── eq [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=int]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
-      ├── gt [type=bool, outer=(3)]
-      │    ├── plus [type=float, outer=(3)]
-      │    │    ├── variable: a.f [type=float, outer=(3)]
-      │    │    └── variable: a.f [type=float, outer=(3)]
-      │    └── minus [type=float]
-      │         ├── const: 2.0 [type=float]
-      │         └── const: 5.0 [type=float]
-      ├── ge [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=decimal]
-      │         ├── const: 1 [type=decimal]
-      │         └── function: length [type=int]
-      │              └── const: 'foo' [type=string]
-      ├── gt [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── minus [type=int]
-      │         ├── const: 2 [type=int]
-      │         └── minus [type=int]
-      │              ├── const: 2 [type=int]
-      │              └── const: 10 [type=int]
-      └── le [type=bool, outer=(2,3)]
-           ├── plus [type=float, outer=(2,3)]
-           │    ├── variable: a.f [type=float, outer=(3)]
-           │    └── cast: FLOAT [type=float, outer=(2)]
-           │         └── variable: a.i [type=int, outer=(2)]
-           └── minus [type=float]
-                ├── const: 10.0 [type=float]
-                └── const: 100.0 [type=float]
+      ├── a.i = (1 - 2) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (a.f + a.f) > (2.0 - 5.0) [type=bool, outer=(3)]
+      ├── a.i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── a.i > (2 - (2 - 10)) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      └── (a.f + a.i::FLOAT) <= (10.0 - 100.0) [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
 opt
@@ -288,11 +164,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2)]
-      └── eq [type=bool, outer=(2)]
-           ├── minus [type=jsonb, outer=(2)]
-           │    ├── const: '[1, 2]' [type=jsonb]
-           │    └── variable: a.i [type=int, outer=(2)]
-           └── const: '[1]' [type=jsonb]
+      └── ('[1, 2]' - a.i) = '[1]' [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
@@ -307,15 +179,9 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    └── keys: (1)
  └── filters [type=bool, outer=(2-4), constraints=(/2: [/1 - /1]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight)]
-      ├── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 1 [type=int]
-      ├── eq [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
-      │    ├── variable: a.f [type=float, outer=(3)]
-      │    └── const: 3.5 [type=float]
-      └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
-           ├── variable: a.s [type=string, outer=(4)]
-           └── const: 'foo' [type=string]
+      ├── a.i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+      ├── a.f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
+      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality, FlattenAnd
@@ -333,12 +199,8 @@ select
  │    ├── constraint: /1: [/1 - /1]
  │    └── keys: (1)
  └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - /2]; /4: [/'foo' - /'foo']; tight)]
-      ├── eq [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 2 [type=int]
-      └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
-           ├── variable: a.s [type=string, outer=(4)]
-           └── const: 'foo' [type=string]
+      ├── a.i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
+      └── a.s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
 
 # --------------------------------------------------
 # FoldNullComparisonLeft, FoldNullComparisonRight
@@ -437,12 +299,8 @@ project
  │    └── keys: (1)
  └── projections [outer=(1,2)]
       ├── true [type=bool]
-      ├── is-not [type=bool, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── null [type=unknown]
-      └── is-not [type=bool, outer=(2)]
-           ├── variable: a.i [type=int, outer=(2)]
-           └── null [type=unknown]
+      ├── a.k IS NOT NULL [type=bool, outer=(1)]
+      └── a.i IS NOT NULL [type=bool, outer=(2)]
 
 # --------------------------------------------------
 # CommuteNullIs
