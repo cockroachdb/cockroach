@@ -46,7 +46,7 @@ func TestNodeIDFromKey(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.key, func(t *testing.T) {
-			nodeID, err := NodeIDFromKey(tc.key)
+			nodeID, err := NodeIDFromKey(tc.key, KeyNodeIDPrefix)
 			if err != nil {
 				if tc.success {
 					t.Errorf("expected success, got error: %s", err)
