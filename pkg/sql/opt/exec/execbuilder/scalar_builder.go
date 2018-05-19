@@ -90,7 +90,7 @@ func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev memo.ExprView) (tree.Ty
 }
 
 func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
-	return tree.DNull, nil
+	return tree.ReType(tree.DNull, ev.Logical().Scalar.Type)
 }
 
 func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {

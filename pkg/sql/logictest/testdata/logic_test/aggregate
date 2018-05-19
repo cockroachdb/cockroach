@@ -100,6 +100,13 @@ SELECT ARRAY_AGG(NULL::TEXT)
 ----
 {NULL}
 
+# Regression test for #25724 (problem with typed NULLs and distsql planning).
+# The previous query doesn't run under distsql.
+query T
+SELECT ARRAY_AGG(NULL::TEXT) FROM (VALUES (1)) AS t(x)
+----
+{NULL}
+
 # Check that COALESCE using aggregate results over an empty table
 # work properly.
 query I
