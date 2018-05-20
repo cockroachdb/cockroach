@@ -1723,9 +1723,13 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	}
 }
 
-// TestSequenceUpdate verifies txn sequence number is incremented
-// on successive commands.
-func TestSequenceUpdate(t *testing.T) {
+// TestDeprecatedSequenceUpdate verifies that txn sequence number is incremented
+// on successive commands if the Requests do not specify sequence numbers
+// themselves.
+//
+// TODO(nvanbenschoten): Remove in 2.2 once we disallow transactional
+// BatchRequests without individually sequenced Requests.
+func TestDeprecatedSequenceUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -1743,7 +1747,7 @@ func TestSequenceUpdate(t *testing.T) {
 
 	}
 
-	var expSequence int32 = 1 // sequence numbers are 1-based.
+	expSequence := int32(0)
 	var testFn rpcSendFn = func(
 		_ context.Context,
 		_ SendOptions,
@@ -1751,6 +1755,13 @@ func TestSequenceUpdate(t *testing.T) {
 		ba roachpb.BatchRequest,
 		_ *rpc.Context,
 	) (*roachpb.BatchResponse, error) {
+		for _, ru := range ba.Requests {
+			args := ru.GetInner()
+			if args.SequenceNumber() != 0 {
+				t.Errorf("individual requests should not have sequence numbers; found %v", args)
+			}
+		}
+
 		expSequence++
 		if expSequence != ba.Txn.Sequence {
 			t.Errorf("expected sequence %d; got %d", expSequence, ba.Txn.Sequence)
@@ -1780,6 +1791,9 @@ func TestSequenceUpdate(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		var ba roachpb.BatchRequest
 		ba.Txn = &txn
+		// Purposely do not include sequence numbers on the Requests.
+		// This emulates the Requests provided by client.Txn before
+		// VersionIndividualSequenceNumbers is active.
 		ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
 		br, pErr := ds.Send(context.Background(), ba)
 		if pErr != nil {

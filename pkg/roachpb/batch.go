@@ -427,10 +427,17 @@ func (*BatchRequest) GetUser() string {
 // The sequence counter is used for replay and reordering protection. At the
 // Store, a sequence counter less than or equal to the last observed one incurs
 // a transaction restart (if the request is transactional).
+//
+// TODO(nvanbenschoten): Remove this method in 2.2.
 func (ba *BatchRequest) SetNewRequest() {
 	if ba.Txn != nil {
-		txn := *ba.Txn
-		txn.Sequence++
-		ba.Txn = &txn
+		// Determine if each Request was given an individual sequence number.
+		// If so, we don't need to set a legacy BatchRequest-scoped sequence
+		// number.
+		if len(ba.Requests) > 0 && ba.Requests[0].GetInner().SequenceNumber() == 0 {
+			txn := *ba.Txn
+			txn.Sequence++
+			ba.Txn = &txn
+		}
 	}
 }

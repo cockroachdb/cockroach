@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -937,6 +938,25 @@ func (txn *Txn) Send(
 
 		if elideEndTxn {
 			ba.Requests = ba.Requests[:lastIndex]
+		}
+
+		// Set the sequence number of each individual Request. The sequence
+		// number is used for replay and reordering protection. At the Store, a
+		// sequence number less than or equal to the last observed one (on a
+		// given key) incurs a transaction restart (if the request is
+		// transactional).
+		//
+		// This semantic could be adjusted in the future to provide idempotency
+		// for replays and re-issues. However, a side effect of providing this
+		// property is that reorder protection would no longer be provided by
+		// the counter, so ordering guarantees between requests within the same
+		// transaction would need to be strengthened elsewhere (e.g. by the
+		// transport layer).
+		if txn.db.st.Version.IsActive(cluster.VersionIndividualSequenceNumbers) {
+			for _, ru := range ba.Requests {
+				txn.mu.Proto.Sequence++
+				ru.GetInner().SetSequenceNumber(txn.mu.Proto.Sequence)
+			}
 		}
 
 		// Clone the Txn's Proto so that future modifications can be made without

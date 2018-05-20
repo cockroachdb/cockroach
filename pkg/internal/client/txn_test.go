@@ -854,6 +854,42 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 }
 
+// TestSequenceNumbers verifies Requests are given sequence numbers and that
+// they are incremented on successive commands.
+func TestSequenceNumbers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+	expSequence := int32(0)
+	db := NewDB(newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		for _, ru := range ba.Requests {
+			args := ru.GetInner()
+			expSequence++
+			if expSequence != args.SequenceNumber() {
+				t.Errorf("expected Request sequence %d; got %d", expSequence, args.SequenceNumber())
+			}
+		}
+		if expSequence != ba.Txn.Sequence {
+			t.Errorf("expected header sequence %d; got %d", expSequence, ba.Txn.Sequence)
+		}
+		br := ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	}), st, clock)
+
+	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	for i := 0; i < 5; i++ {
+		var ba roachpb.BatchRequest
+		for j := 0; j < i; j++ {
+			ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
+		}
+		if _, pErr := txn.Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+}
+
 // TestConcurrentTxnRequests verifies that multiple requests can be executed on
 // a transaction at the same time from multiple goroutines. It makes sure that
 // exactly one BeginTxnRequest and one EndTxnRequest are sent.

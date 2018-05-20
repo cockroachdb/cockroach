@@ -51,6 +51,14 @@ message RangeInfo {
   Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
+// SeqNum is provided with every storage node request.
+message SeqNum {
+  option (gogoproto.equal) = true;
+
+  // A one-indexed sequence number.
+  int32 sequence = 1;
+}
+
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
   enum ResumeReason {
@@ -99,6 +107,7 @@ message GetRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -116,6 +125,9 @@ message PutRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
   // Specify as true to put the value without a corresponding
   // timestamp. This option should be used with care as it precludes
@@ -142,6 +154,8 @@ message ConditionalPutRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
   // Set exp_value.bytes empty to test for non-existence. Specify as nil
@@ -170,6 +184,9 @@ message InitPutRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
@@ -194,6 +211,8 @@ message IncrementRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   int64 increment = 2;
 }
 
@@ -210,6 +229,7 @@ message DeleteRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteResponse is the return value from the Delete() method.
@@ -223,6 +243,8 @@ message DeleteRangeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   reserved 2;
   // return the keys that are deleted in the response.
   bool return_keys = 3;
@@ -266,6 +288,7 @@ message ClearRangeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ClearRangeResponse is the return value from the ClearRange() method.
@@ -325,6 +348,7 @@ message ScanRequest {
   reserved 2;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Replaced by the READ_UNCOMMITTED consistency level.
   bool deprecated_return_intents = 3;
@@ -350,6 +374,7 @@ message ReverseScanRequest {
   reserved 2;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Replaced by the READ_UNCOMMITTED consistency level.
   bool deprecated_return_intents = 3;
@@ -374,6 +399,8 @@ message CheckConsistencyRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // log a diff of inconsistencies if such inconsistencies are found.
   bool with_diff = 2;
 }
@@ -399,6 +426,8 @@ message RecomputeStatsRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // When dry_run is true, the stats delta is computed, but no stats adjustment
   // is performed. This isn't useful outside of testing since RecomputeStats is
   // safe and idempotent.
@@ -418,6 +447,7 @@ message BeginTransactionRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A BeginTransactionResponse is the return value from the BeginTransaction() method.
@@ -430,7 +460,9 @@ message BeginTransactionResponse {
 message EndTransactionRequest {
   option (gogoproto.equal) = true;
 
-  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1  [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 10 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // False to abort and rollback.
   bool commit = 2;
   // If set, deadline represents the maximum timestamp at which the transaction
@@ -512,6 +544,8 @@ message AdminSplitRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
 }
 
@@ -534,6 +568,7 @@ message AdminMergeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeResponse is the return value from the AdminMerge()
@@ -550,6 +585,8 @@ message AdminTransferLeaseRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   int32 target = 2 [(gogoproto.casttype) = "StoreID"];
 }
 
@@ -564,6 +601,8 @@ message AdminChangeReplicasRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   ReplicaChangeType change_type = 2;
   repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
 }
@@ -590,6 +629,8 @@ message DeprecatedRangeLookupRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   int32 max_ranges = 2;
   reserved 3;
   // Use a reverse scan to pre-fill the range descriptor cache instead
@@ -616,6 +657,8 @@ message HeartbeatTxnRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
@@ -633,6 +676,7 @@ message GCRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 6 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message GCKey {
     option (gogoproto.equal) = true;
@@ -686,6 +730,8 @@ message PushTxnRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 9 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // Transaction which encountered the intent, if applicable. For a
   // non-transactional pusher, pusher_txn will only have the priority set (in
   // particular, ID won't be set). Used to compare priorities and timestamps if
@@ -740,6 +786,8 @@ message QueryTxnRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // Transaction record to query.
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   // If true, the query will not return until there are changes to either the
@@ -767,6 +815,8 @@ message ResolveIntentRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // The transaction whose intent is being resolved.
   storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
@@ -790,6 +840,8 @@ message ResolveIntentRangeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 6 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // The transaction whose intents are being resolved.
   storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
@@ -822,6 +874,8 @@ message MergeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   Value value = 2 [(gogoproto.nullable) = false];
 }
 
@@ -839,6 +893,7 @@ message TruncateLogRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Log entries < this index are to be discarded.
   uint64 index = 2;
@@ -862,6 +917,8 @@ message RequestLeaseRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
@@ -888,6 +945,8 @@ message TransferLeaseRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
@@ -902,6 +961,7 @@ message LeaseInfoRequest{
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 // LeaseInfoResponse is the response to a LeaseInfo() operation.
 message LeaseInfoResponse{
@@ -925,6 +985,8 @@ message ComputeChecksumRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 5 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   uint32 version = 2;
@@ -947,6 +1009,7 @@ message DeprecatedVerifyChecksumRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message DeprecatedVerifyChecksumResponse {
@@ -1018,6 +1081,8 @@ message WriteBatchRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // The span of keys encoded in data, duplicated because the header span can
   // be modified by DistSender and we use this one to fail fast.
   Span data_span = 2 [(gogoproto.nullable) = false];
@@ -1041,6 +1106,8 @@ message ExportRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 6 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   ExportStorage storage = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
@@ -1082,6 +1149,9 @@ message ExportResponse {
 message ImportRequest {
   option (gogoproto.equal) = true;
 
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 7 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   message File {
     option (gogoproto.equal) = true;
 
@@ -1090,7 +1160,6 @@ message ImportRequest {
     reserved 3;
     bytes sha512 = 4;
   }
-  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Files contains an ordered list of files, each containing kv entries to
   // import. Entries in later files with the same key override earlier ones.
   repeated File files = 2 [(gogoproto.nullable) = false];
@@ -1132,6 +1201,8 @@ message AdminScatterRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   bool randomize_leases = 2;
 }
 
@@ -1152,6 +1223,8 @@ message AddSSTableRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   bytes data = 2;
 }
 
@@ -1171,6 +1244,8 @@ message RefreshRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // If set, indicates that the write timestamp cache should be
   // updated. This handles the case of DeleteRange, which must set the
   // write too old flag on transactions which attempt earlier writes.
@@ -1189,6 +1264,8 @@ message RefreshRangeRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  SeqNum seq  = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
   // If set, indicates that the write timestamp cache should be
   // updated. This handles the case of DeleteRange, which must set the
   // write too old flag on transactions which attempt earlier writes.

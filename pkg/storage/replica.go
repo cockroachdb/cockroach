@@ -5501,8 +5501,8 @@ func evaluateBatch(
 	}
 
 	// Create a shallow clone of the transaction. We only modify a few
-	// non-pointer fields (BatchIndex, WriteTooOld, Timestamp), so this saves
-	// a few allocs.
+	// non-pointer fields (Sequence, DeprecatedBatchIndex, WriteTooOld, Timestamp),
+	// so this saves a few allocs.
 	if ba.Txn != nil {
 		txnShallow := *ba.Txn
 		ba.Txn = &txnShallow
@@ -5537,7 +5537,34 @@ func evaluateBatch(
 		// Execute the command.
 		args := union.GetInner()
 		if ba.Txn != nil {
-			ba.Txn.BatchIndex = int32(index)
+			// Sequence numbers used to be set on each BatchRequest instead of
+			// on each individual Request. This meant that all Requests in a
+			// BatchRequest shared the same sequence number, so a BatchIndex was
+			// augmented to provide an ordering between them. Individual
+			// Requests were later given their own sequence numbers, so the
+			// BatchIndex was no longer necessary.
+			if seqNum := args.SequenceNumber(); seqNum != 0 {
+				// Set the Request's sequence number on the TxnMeta for this
+				// request. Each request will set their own sequence number on
+				// the TxnMeta, which is stored as part of an intent.
+				ba.Txn.Sequence = seqNum
+			} else {
+				// If the DisallowUnsequencedTransactionalWrites testing knob
+				// is set, we assert that all transaction writes has assigned
+				// Request-scoped sequence numbers.
+				if rec.EvalKnobs().DisallowUnsequencedTransactionalWrites {
+					if roachpb.IsTransactionWrite(args) {
+						log.Fatalf(ctx, "found unsequenced transactional request %v in %v", args, ba)
+					}
+				}
+
+				// The Txn coordinator must not be setting sequence numbers on
+				// individual requests. Use the now-deprecated BatchIndex field.
+				//
+				// TODO(nvanbenschoten): remove this case and the explanation
+				// above in version 2.2.
+				ba.Txn.DeprecatedBatchIndex = int32(index)
+			}
 		}
 		// Note that responses are populated even when an error is returned.
 		// TODO(tschottdorf): Change that. IIRC there is nontrivial use of it currently.

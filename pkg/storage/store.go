@@ -148,6 +148,10 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		EnableEpochRangeLeases:      true,
 	}
 
+	// Tests should never send unsequenced transactional writes,
+	// so we set this testing knob in all tests.
+	sc.TestingKnobs.EvalKnobs.DisallowUnsequencedTransactionalWrites = true
+
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
 	sc.RaftElectionTimeoutTicks = 3

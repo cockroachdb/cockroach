@@ -181,6 +181,10 @@ type Request interface {
 	Header() Span
 	// SetHeader sets the request header.
 	SetHeader(Span)
+	// SequenceNumber returns the request's sequence number.
+	SequenceNumber() int32
+	// SetSequenceNumber sets the request's sequence number.
+	SetSequenceNumber(int32)
 	// Method returns the request method.
 	Method() Method
 	// ShallowCopy returns a shallow copy of the receiver.
@@ -348,6 +352,16 @@ func (rh *Span) SetHeader(other Span) {
 	*rh = other
 }
 
+// SequenceNumber implements the Request interface.
+func (s SeqNum) SequenceNumber() int32 {
+	return s.Sequence
+}
+
+// SetSequenceNumber implements the Request interface.
+func (s *SeqNum) SetSequenceNumber(seqNum int32) {
+	s.Sequence = seqNum
+}
+
 func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	if h.Error != nil || o.Error != nil {
 		return errors.Errorf(
@@ -371,6 +385,12 @@ func (*NoopRequest) Header() Span { panic("NoopRequest has no span") }
 
 // SetHeader implements the Request interface.
 func (*NoopRequest) SetHeader(_ Span) { panic("NoopRequest has no span") }
+
+// SequenceNumber implements the Request interface.
+func (*NoopRequest) SequenceNumber() int32 { panic("NoopRequest has no sequence number") }
+
+// SetSequenceNumber implements the Request interface.
+func (*NoopRequest) SetSequenceNumber(_ int32) { panic("NoopRequest has no sequence number") }
 
 // SetHeader implements the Response interface.
 func (rh *ResponseHeader) SetHeader(other ResponseHeader) {
