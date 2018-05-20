@@ -3621,7 +3621,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 				// then a single bad/slow Replica can disrupt tick processing for every
 				// Replica on the store which cascades into Raft elections and more
 				// disruption.
-				rangeIDs = append(rangeIDs, roachpb.RangeID(k))
+				rangeIDs = append(rangeIDs, k)
 			}
 			s.unquiescedReplicas.Unlock()
 
