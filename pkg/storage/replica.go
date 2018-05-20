@@ -577,28 +577,36 @@ func (r *Replica) withRaftGroup(
 	return r.withRaftGroupLocked(f)
 }
 
-// maybeCampaignOnWakeLocked is called when the range wakes from a
-// dormant state (either the initial "raftGroup == nil" state or after
-// being quiescent) and campaigns for raft leadership if appropriate.
-func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
+func shouldCampaignOnWake(
+	leaseStatus LeaseStatus, lease roachpb.Lease, storeID roachpb.StoreID, raftStatus raft.Status,
+) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
 	// when all replicas create their raft groups at about the same
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
-	anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
-		LeaseState_VALID &&
-		!r.mu.state.Lease.OwnedBy(r.store.StoreID())
+	anotherOwnsLease := leaseStatus.State == LeaseState_VALID && !lease.OwnedBy(storeID)
+	// If we're already campaigning or know who the leader is, don't
+	// start a new term.
+	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
+	return !anotherOwnsLease && noLeader
+}
+
+// maybeCampaignOnWakeLocked is called when the range wakes from a
+// dormant state (either the initial "raftGroup == nil" state or after
+// being quiescent) and campaigns for raft leadership if appropriate.
+func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
 	// group tries to campaign. That happens primarily when we apply
 	// preemptive snapshots.
-	_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
-	// If we're already campaigning or know who the leader is, don't
-	// start a new term.
-	status := r.mu.internalRaftGroup.Status()
-	noLeader := status.RaftState == raft.StateFollower && status.Lead == 0
-	if currentMember && !anotherOwnsLease && noLeader {
+	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID); !currentMember {
+		return
+	}
+
+	leaseStatus := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	raftStatus := r.mu.internalRaftGroup.Status()
+	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), *raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
