@@ -12,10 +12,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,12 +26,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func writeMysqldumpTestdata(t *testing.T, dest string, rows []testRow) {
-	cleanup := loadMysqlTestdata(t, rows)
+var testEvalCtx = &tree.EvalContext{
+	SessionData:   &sessiondata.SessionData{Location: time.UTC},
+	StmtTimestamp: timeutil.Unix(100000000, 0),
+}
 
+func writeMysqldumpTestdata(t *testing.T, dest string, args ...string) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0777); err != nil {
 		t.Fatal(err)
 	}
@@ -40,8 +46,11 @@ func writeMysqldumpTestdata(t *testing.T, dest string, rows []testRow) {
 	defer out.Close()
 	writer := bufio.NewWriter(out)
 
-	cmd := exec.Command(`mysqldump`, `-u`, `root`, `test`, `test`)
+	baseArgs := []string{`-u`, `root`, `cockroachtestdata`}
+	args = append(baseArgs, args...)
+	cmd := exec.Command(`mysqldump`, args...)
 	cmd.Stdout = writer
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -54,18 +63,20 @@ func writeMysqldumpTestdata(t *testing.T, dest string, rows []testRow) {
 	if err := out.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	cleanup()
 }
 
-func descForTable(t *testing.T, create string) *sqlbase.TableDescriptor {
+func descForTable(t *testing.T, create string, parent, id sqlbase.ID) *sqlbase.TableDescriptor {
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stmt := parsed.(*tree.CreateTable)
-	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, 10, 20, 100)
+	table, err := MakeSimpleTableDescriptor(context.TODO(), nil, stmt, parent, id, testEvalCtx.StmtTimestamp.UnixNano())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if table.PrimaryIndex.Name == "primary" {
+		table.PrimaryIndex.Name = "PRIMARY"
 	}
 	return table
 }
@@ -74,20 +85,22 @@ func getMysqldumpTestdata(t *testing.T) ([]testRow, string) {
 	testRows := getMysqlTestRows()
 	dest := filepath.Join(`testdata`, `mysqldump`, `example.sql`)
 	if false {
-		writeMysqldumpTestdata(t, dest, testRows)
+		cleanup := loadMysqlTestdata(t, testRows)
+		defer cleanup()
+		writeMysqldumpTestdata(t, dest, `test`)
 	}
 	return testRows, dest
 }
-func TestMysqldumpReader(t *testing.T) {
+
+func TestMysqldumpDataReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testRows, dest := getMysqldumpTestdata(t)
 
 	ctx := context.TODO()
-	table := descForTable(t, `CREATE TABLE test (i INT PRIMARY KEY, s text, b bytea)`)
+	table := descForTable(t, `CREATE TABLE test (i INT PRIMARY KEY, s text, b bytea)`, 10, 20)
 
-	evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
-	converter, err := newMysqldumpReader(make(chan kvBatch, 10), table, evalCtx)
+	converter, err := newMysqldumpReader(make(chan kvBatch, 10), table, testEvalCtx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,5 +146,208 @@ func TestMysqldumpReader(t *testing.T) {
 			t.Fatalf("row %d: expected b = NULL, got %T: %v", i, row[2], row[2])
 		}
 	}
+}
 
+func readMysqlCreateFrom(t *testing.T, path, name string) *sqlbase.TableDescriptor {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tbl, err := readMysqlCreateTable(f, testEvalCtx, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tbl
+}
+
+func TestMysqldumpSchemaReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	simple := filepath.Join(`testdata`, `mysqldump`, `simple-schema.sql`)
+	everything := filepath.Join(`testdata`, `mysqldump`, `everything-schema.sql`)
+	multi := filepath.Join(`testdata`, `mysqldump`, `multi-schema.sql`)
+
+	if true {
+		db, err := gosql.Open("mysql", "root@/cockroachtestdata")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+
+		if _, err := db.Exec(`DROP TABLE IF EXISTS simple`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := db.Exec(`CREATE TABLE simple (i INT PRIMARY KEY, s text, b BINARY(200))`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := db.Exec(`DROP TABLE IF EXISTS everything`); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := db.Exec(`CREATE TABLE everything (
+			i			INT PRIMARY KEY,
+
+			c 		CHAR(10),
+			s			VARCHAR(100),
+			tx		TEXT,
+
+			bin		BINARY(100),
+			vbin	VARBINARY(100),
+			bl 		BLOB,
+
+			dt 		DATETIME,
+			d 		DATE,
+			ts 		TIMESTAMP,
+			t			TIME,
+			-- TODO(dt): fix parser: for YEAR's length option
+			-- y			YEAR,
+
+			de 		DECIMAL,
+			nu		NUMERIC,
+			d53		DECIMAL(5,3),
+
+			iw		INT(5),
+			iz		INT ZEROFILL,
+			ti 		TINYINT,
+			si 		SMALLINT,
+			mi 		MEDIUMINT,
+			bi 		BIGINT,
+
+			fl 		FLOAT,
+			rl		REAL,
+			db 		DOUBLE,
+
+			f17		FLOAT(17),
+			f47		FLOAT(47),
+			f75		FLOAT(7, 5)
+		)`); err != nil {
+			t.Fatal(err)
+		}
+
+		writeMysqldumpTestdata(t, simple, `simple`)
+		writeMysqldumpTestdata(t, everything, `everything`)
+		writeMysqldumpTestdata(t, multi)
+
+		if _, err := db.Exec(`DROP TABLE simple`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`DROP TABLE everything`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("simple", func(t *testing.T) {
+		expected := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 52, 53)
+		got := readMysqlCreateFrom(t, simple, "")
+
+		compareTables(t, expected, got)
+	})
+
+	t.Run("everything", func(t *testing.T) {
+		expected := descForTable(t, `
+			CREATE TABLE everything (
+				i			INT PRIMARY KEY,
+
+				c 		CHAR(10),
+				s			VARCHAR(100),
+				tx		TEXT,
+
+				bin		BYTEA,
+				vbin	BYTEA,
+				bl 		BLOB,
+
+				dt 		TIMESTAMPTZ,
+				d 		DATE,
+				ts 		TIMESTAMPTZ NOT NULL DEFAULT current_timestamp(),
+				t			TIME,
+				-- TODO(dt): Fix year parsing.
+				-- y			SMALLINT,
+
+				de 		DECIMAL(10, 0),
+				nu		NUMERIC(10, 0),
+				d53		DECIMAL(5,3),
+
+				iw		INT,
+				iz		INT,
+				ti 		SMALLINT,
+				si 		SMALLINT,
+				mi 		INT,
+				bi 		BIGINT,
+
+				fl 		FLOAT4,
+				rl		DOUBLE PRECISION,
+				db 		DOUBLE PRECISION,
+
+				f17		FLOAT4,
+				f47		DOUBLE PRECISION,
+				f75		FLOAT4
+			)`, 52, 53)
+
+		got := readMysqlCreateFrom(t, everything, "")
+		compareTables(t, expected, got)
+	})
+}
+
+func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
+	colNames := func(cols []sqlbase.ColumnDescriptor) string {
+		names := make([]string, len(cols))
+		for i := range cols {
+			names[i] = cols[i].Name
+		}
+		return strings.Join(names, ", ")
+	}
+	idxNames := func(indexes []sqlbase.IndexDescriptor) string {
+		names := make([]string, len(indexes))
+		for i := range indexes {
+			names[i] = indexes[i].Name
+		}
+		return strings.Join(names, ", ")
+	}
+
+	// Attempt to verify the pieces individually, and return more helpful errors
+	// if an individual column or index does not match. If the pieces look right
+	// when compared individually, move on to compare the whole table desc as
+	// rendered to a string via `%+v`, as a more comprehensive check.
+
+	if expectedCols, gotCols := expected.Columns, got.Columns; len(gotCols) != len(expectedCols) {
+		t.Fatalf("expected columns (%d):\n%v\ngot columns (%d):\n%v\n",
+			len(expectedCols), colNames(expectedCols), len(gotCols), colNames(gotCols),
+		)
+	}
+	for i := range expected.Columns {
+		e, g := expected.Columns[i].SQLString(), got.Columns[i].SQLString()
+		if e != g {
+			t.Fatalf("column %d (%q): expected\n%s\ngot\n%s\n", i, expected.Columns[i].Name, e, g)
+		}
+	}
+
+	if expectedIdx, gotIdx := expected.Indexes, got.Indexes; len(expectedIdx) != len(gotIdx) {
+		t.Fatalf("expected indexes (%d):\n%v\ngot indexes (%d):\n%v\n",
+			len(expectedIdx), idxNames(expectedIdx), len(gotIdx), idxNames(gotIdx),
+		)
+	}
+	for i := range expected.Indexes {
+		e, g := expected.Indexes[i].SQLString(expected.Name), got.Indexes[i].SQLString(expected.Name)
+		if e != g {
+			t.Fatalf("index %d: expected\n%s\ngot\n%s\n", i, e, g)
+		}
+	}
+
+	// Our attempts to check parts individually (and return readable errors if
+	// they didn't match) found nothing.
+	expectedBytes, err := protoutil.Marshal(expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotBytes, err := protoutil.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(expectedBytes, gotBytes) {
+		t.Fatalf("expected\n%+v\n, got\n%+v\n", expected, got)
+	}
 }

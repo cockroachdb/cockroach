@@ -10,17 +10,24 @@ package importccl
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/pkg/errors"
 	mysql "github.com/xwb1989/sqlparser"
+	mysqltypes "github.com/xwb1989/sqlparser/dependency/sqltypes"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -143,5 +150,197 @@ func mysqlToCockroach(
 	default:
 		return nil, errors.Errorf("unexpected value type %T: %v", v, v)
 	}
+}
 
+func readMysqlCreateTable(
+	input io.Reader,
+	evalCtx *tree.EvalContext,
+	match string,
+) (*sqlbase.TableDescriptor, error) {
+	r := bufio.NewReaderSize(input, 1024*64)
+	tokens := mysql.NewTokenizer(r)
+
+	for {
+		stmt, err := mysql.ParseNext(tokens)
+		if err != nil {
+			return nil, errors.Wrap(err, "mysql parse error")
+		}
+		if i, ok := stmt.(*mysql.DDL); ok && i.Action == mysql.CreateStr {
+			name := i.NewName.Name.String()
+			if match != "" && match != name {
+				continue
+			}
+			id := sqlbase.ID(int(defaultCSVTableID))
+			return mysqlTableToCockroach(evalCtx, id, name, i.TableSpec)
+		}
+	}
+}
+
+func mysqlTableToCockroach(
+	evalCtx *tree.EvalContext, id sqlbase.ID, name string, in *mysql.TableSpec,
+) (*sqlbase.TableDescriptor, error) {
+	if in == nil {
+		return nil, errors.Errorf("could not read definition for table %q (possible unsupoprted type?)", name)
+	}
+
+	time := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
+	priv := sqlbase.NewDefaultPrivilegeDescriptor()
+	desc := sql.InitTableDescriptor(id, defaultCSVParentID, name, time, priv)
+
+	colNames := make(map[string]string)
+	for _, raw := range in.Columns {
+		def, err := mysqlColToCockroach(raw.Name.String(), raw.Type)
+		if err != nil {
+			return nil, err
+		}
+		col, _, _, err := sqlbase.MakeColumnDefDescs(def, &tree.SemaContext{}, evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		desc.AddColumn(*col)
+		colNames[raw.Name.String()] = col.Name
+	}
+
+	for _, raw := range in.Indexes {
+		var elems tree.IndexElemList
+		for _, col := range raw.Columns {
+			elems = append(elems, tree.IndexElem{Column: tree.Name(colNames[col.Column.String()])})
+		}
+		idx := sqlbase.IndexDescriptor{Name: raw.Info.Name.String(), Unique: raw.Info.Unique}
+		if err := idx.FillColumns(elems); err != nil {
+			return nil, err
+		}
+		if err := desc.AddIndex(idx, raw.Info.Primary); err != nil {
+			return nil, err
+		}
+	}
+
+	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err := desc.AllocateIDs()
+	return &desc, err
+}
+
+func mysqlColToCockroach(name string, col mysql.ColumnType) (*tree.ColumnTableDef, error) {
+	def := &tree.ColumnTableDef{Name: tree.Name(name)}
+
+	var length, scale int
+
+	if col.Length != nil {
+		num, err := strconv.Atoi(string(col.Length.Val))
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not parse length for column %q", name)
+		}
+		length = num
+	}
+
+	if col.Scale != nil {
+		num, err := strconv.Atoi(string(col.Scale.Val))
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not parse scale for column %q", name)
+		}
+		scale = num
+	}
+
+	switch col.SQLType() {
+	case mysqltypes.Char:
+		def.Type = strOpt(coltypes.Char, length)
+	case mysqltypes.VarChar:
+		def.Type = strOpt(coltypes.VarChar, length)
+	case mysqltypes.Text:
+		def.Type = strOpt(coltypes.Text, length)
+	case mysqltypes.Blob:
+		def.Type = coltypes.Bytes
+	case mysqltypes.VarBinary:
+		def.Type = coltypes.Bytes
+	case mysqltypes.Binary:
+		def.Type = coltypes.Bytes
+
+	case mysqltypes.Int8:
+		def.Type = coltypes.SmallInt
+	case mysqltypes.Uint8:
+		def.Type = coltypes.SmallInt
+	case mysqltypes.Int16:
+		def.Type = coltypes.SmallInt
+	case mysqltypes.Uint16:
+		def.Type = coltypes.SmallInt
+	case mysqltypes.Int24:
+		def.Type = coltypes.Int
+	case mysqltypes.Uint24:
+		def.Type = coltypes.Int
+	case mysqltypes.Int32:
+		def.Type = coltypes.Int
+	case mysqltypes.Uint32:
+		def.Type = coltypes.Int
+	case mysqltypes.Int64:
+		def.Type = coltypes.BigInt
+	case mysqltypes.Uint64:
+		def.Type = coltypes.BigInt
+
+	case mysqltypes.Float32:
+		def.Type = coltypes.Float4
+	case mysqltypes.Float64:
+		def.Type = coltypes.Double
+
+	case mysqltypes.Decimal:
+		def.Type = decOpt(coltypes.Decimal, length, scale)
+
+	case mysqltypes.Date:
+		def.Type = coltypes.Date
+	case mysqltypes.Time:
+		def.Type = coltypes.Time
+	case mysqltypes.Timestamp:
+		def.Type = coltypes.TimestampWithTZ
+	case mysqltypes.Datetime:
+		def.Type = coltypes.TimestampWithTZ
+	case mysqltypes.Year:
+		def.Type = coltypes.SmallInt
+
+	case mysqltypes.Enum:
+		fallthrough
+	case mysqltypes.Set:
+		fallthrough
+	case mysqltypes.Geometry:
+		fallthrough
+	case mysqltypes.TypeJSON:
+		fallthrough
+	case mysqltypes.Bit:
+		fallthrough
+	default:
+		return nil, errors.Errorf("unsupported mysql type %q", col.Type)
+	}
+	if col.NotNull {
+		def.Nullable.Nullability = tree.NotNull
+	} else {
+		def.Nullable.Nullability = tree.Null
+	}
+	if col.Default != nil && !bytes.EqualFold(col.Default.Val, []byte("null")) {
+		expr, err := parser.ParseExpr(string(col.Default.Val))
+		if err != nil {
+			return nil, errors.Wrapf(err, "unsupported default expression for column %q", name)
+		}
+		def.DefaultExpr.Expr = expr
+	}
+	return def, nil
+}
+
+func strOpt(in *coltypes.TString, i int) coltypes.T {
+	if i == 0 {
+		return in
+	}
+	res := *in
+	res.N = i
+	return &res
+}
+
+func decOpt(in *coltypes.TDecimal, prec, scale int) coltypes.T {
+	if prec == 0 && scale == 0 {
+		return in
+	}
+	res := *in
+	res.Prec = prec
+	res.Scale = scale
+	return &res
 }
