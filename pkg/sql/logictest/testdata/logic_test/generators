@@ -469,17 +469,29 @@ a 3
 
 subtest srf_accessor
 
-query error pq: unimplemented: access to field in composite expression: "1"
+query error pq: type int is not composite
 SELECT (1).*
 
-query error pq: unimplemented: access to field in composite expression: "1"
+query error pq: type int is not composite
+SELECT ((1)).*
+
+query error pq: type int is not composite
 SELECT (1).x
 
-query error pq: unimplemented: access to field in composite expression: "'a'"
+query error pq: type int is not composite
+SELECT ((1)).x
+
+query error pq: type string is not composite
 SELECT ('a').*
 
-query error pq: unimplemented: access to field in composite expression: "'a'"
+query error pq: type string is not composite
+SELECT (('a')).*
+
+query error pq: type string is not composite
 SELECT ('a').x
+
+query error pq: type string is not composite
+SELECT (('a')).x
 
 query error pq: unnest\(\): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
 SELECT (unnest(ARRAY[])).*

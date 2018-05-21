@@ -141,6 +141,10 @@ func TestTypeCheck(t *testing.T) {
 		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
 		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
 
+		{`((ROW (1) AS a)).a`, `((ROW(1:::INT) AS a)).a`},
+		{`((('1', 2) AS a, b)).a`, `((('1':::STRING, 2:::INT) AS a, b)).a`},
+		{`((('1', 2) AS a, b)).b`, `((('1':::STRING, 2:::INT) AS a, b)).b`},
+
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
@@ -214,9 +218,6 @@ func TestTypeCheckError(t *testing.T) {
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 
-		{`((unnest(ARRAY[]:::int[])).*)`, `column access expressions must be replaced before type checking`},
-		{`((unnest(ARRAY[]:::int[])).unnest)`, `column access expressions must be replaced before type checking`},
-
 		{
 			`((1,2) AS a)`,
 			`the number of expressions in a labeled tuple (2) must match the number of labels (1)`,
@@ -225,6 +226,31 @@ func TestTypeCheckError(t *testing.T) {
 			`(ROW (1) AS a,b)`,
 			`the number of expressions in a labeled tuple (1) must match the number of labels (2)`,
 		},
+		{
+			`((1,2) AS a,a)`,
+			`each label in a tuple must be unique (["a" "a"])`,
+		},
+		{
+			`((1,2,3) AS a,b,a)`,
+			`each label in a tuple must be unique (["a" "b" "a"])`,
+		},
+		{
+			`((ROW (1, '2') AS a,b)).x`,
+			`could not identify column "x" in tuple{int AS a, string AS b}`,
+		},
+		{
+			`(((1, '2') AS a,b)).x`,
+			`could not identify column "x" in tuple{int AS a, string AS b}`,
+		},
+		{
+			`((ROW (1) AS a)).*`,
+			`star expansion of tuples is not supported`,
+		},
+		{
+			`((('1', 2) AS a, b)).*`,
+			`star expansion of tuples is not supported`,
+		},
+		// TODO(bram): same label failure case here ********
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)
