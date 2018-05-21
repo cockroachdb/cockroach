@@ -365,21 +365,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			}
 
-			// Output results that mimic Go's built-in benchmark format.
-			benchmarkName := strings.Join([]string{
-				"BenchmarkWorkload",
-				fmt.Sprintf("generator=%s", gen.Meta().Name),
-			}, "/")
-			if *duration != time.Duration(0) {
-				benchmarkName += `/duration=` + duration.String()
-			}
-			if f, ok := gen.(workload.Flagser); ok {
-				// NB: This visits in a deterministic order.
-				f.Flags().Visit(func(f *pflag.Flag) {
-					benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
-				})
-			}
-
 			if *histFile == "-" {
 				if err := histwriter.WriteDistribution(
 					resultTick.Cumulative, nil, 1, os.Stdout,
