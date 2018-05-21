@@ -203,7 +203,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "error decoding %d bytes", len(ed.encoded))
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil

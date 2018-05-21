@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -480,4 +481,41 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestValueEncodeDecodeTuple(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	tests := make([]tree.Datum, 1000)
+	colTypes := make([]ColumnType, 1000)
+
+	for i := range tests {
+		colTypes[i] = ColumnType{SemanticType: ColumnType_TUPLE}
+
+		len := rng.Intn(5)
+		colTypes[i].TupleContents = make([]ColumnType, len)
+		for j := range colTypes[i].TupleContents {
+			colTypes[i].TupleContents[j] = RandColumnType(rng)
+		}
+		tests[i] = RandDatum(rng, colTypes[i], true)
+	}
+
+	for i, test := range tests {
+
+		buf, err := encodeTuple(test.(*tree.DTuple), nil, encoding.NoColumnID, nil)
+		if err != nil {
+			t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
+				seed, test, colTypes[i], err)
+		}
+		var decodedTuple tree.Datum
+		decodedTuple, buf, err = decodeTuple(&DatumAlloc{}, test.ResolvedType().(types.TTuple), buf)
+		if err != nil {
+			t.Fatalf("seed %d: decoding tuple %v with types %v failed with error: %v",
+				seed, test, colTypes[i], err)
+		}
+
+		if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
+			t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
+		}
+	}
+
 }
