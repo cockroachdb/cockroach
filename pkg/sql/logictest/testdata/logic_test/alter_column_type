@@ -1,0 +1,65 @@
+# LogicTest: default parallel-stmts distsql distsql-metadata
+
+
+# Demonstrate that we can change to an alias of a type
+subtest ChangeVisibleColumnType
+
+statement ok
+CREATE TABLE t (a INT)
+
+query TTBTT colnames
+SHOW COLUMNS FROM t
+----
+Field  Type  Null  Default  Indices
+a      INT   true  NULL     {}
+
+statement ok
+ALTER TABLE t ALTER a TYPE INTEGER
+
+query TTBTT colnames
+SHOW COLUMNS FROM t
+----
+Field  Type  Null  Default  Indices
+a      INTEGER   true  NULL     {}
+
+statement ok
+DROP TABLE t
+
+
+# Verify error handling when a bad COLLATE is used
+subtest BadStringLocale
+
+statement ok
+CREATE TABLE t (s STRING)
+
+statement error pq: invalid locale bad_locale
+ALTER TABLE t ALTER s TYPE STRING COLLATE bad_locale
+
+statement ok
+DROP TABLE t
+
+
+# Verify error handling when a silly COLLATE is used
+subtest BadCollateOnNotString
+
+statement ok
+CREATE TABLE t (i INT)
+
+statement error pq: COLLATE can only be used with string types
+ALTER TABLE t ALTER i TYPE INT COLLATE nope
+
+statement ok
+DROP TABLE t
+
+
+# Verify that making a no-op change is ok
+subtest NoOpColumnChange
+
+statement ok
+CREATE TABLE t (s STRING)
+
+statement ok
+ALTER TABLE t ALTER s TYPE STRING
+
+statement ok
+DROP TABLE t
