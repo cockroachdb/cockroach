@@ -790,11 +790,11 @@ SELECT "Level", "Type", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT
 0   sort       ·          ·
 0   ·          order      +pktable_schem,+pktable_name,+fk_name,+key_seq
 1   render     ·          ·
-1   ·          render 0   NULL
+1   ·          render 0   CAST(NULL AS STRING)
 1   ·          render 1   pkn.nspname
 1   ·          render 2   pkc.relname
 1   ·          render 3   pka.attname
-1   ·          render 4   NULL
+1   ·          render 4   CAST(NULL AS STRING)
 1   ·          render 5   fkn.nspname
 1   ·          render 6   fkc.relname
 1   ·          render 7   fka.attname

@@ -204,9 +204,7 @@ SELECT JSONB_AGG(NULL)
 jsonb_agg:jsonb
 '[null]'
 
-# With an explicit cast, this works as expected.
-# TODO(radu): investigate distsql issue (relate to the input type)
-exec nodist
+exec
 SELECT ARRAY_AGG(NULL::TEXT)
 ----
 array_agg:string[]

@@ -9948,3 +9948,77 @@ func TestReplicaMigrateRangeAppliedStateKey(t *testing.T) {
 	// in-memory and on-disk ReplicaStates are not diverging.
 	assertMigrationComplete(t, true)
 }
+
+func TestReplicaShouldCampaignOnWake(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const storeID = roachpb.StoreID(1)
+
+	myLease := roachpb.Lease{
+		Replica: roachpb.ReplicaDescriptor{
+			StoreID: storeID,
+		},
+	}
+	otherLease := roachpb.Lease{
+		Replica: roachpb.ReplicaDescriptor{
+			StoreID: roachpb.StoreID(2),
+		},
+	}
+
+	followerWithoutLeader := raft.Status{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      0,
+		},
+	}
+	followerWithLeader := raft.Status{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      1,
+		},
+	}
+	candidate := raft.Status{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateCandidate,
+			Lead:      0,
+		},
+	}
+	leader := raft.Status{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateLeader,
+			Lead:      1,
+		},
+	}
+
+	tests := []struct {
+		leaseStatus LeaseStatus
+		lease       roachpb.Lease
+		raftStatus  raft.Status
+		exp         bool
+	}{
+		{LeaseStatus{State: LeaseState_VALID}, myLease, followerWithoutLeader, true},
+		{LeaseStatus{State: LeaseState_VALID}, otherLease, followerWithoutLeader, false},
+		{LeaseStatus{State: LeaseState_VALID}, myLease, followerWithLeader, false},
+		{LeaseStatus{State: LeaseState_VALID}, otherLease, followerWithLeader, false},
+		{LeaseStatus{State: LeaseState_VALID}, myLease, candidate, false},
+		{LeaseStatus{State: LeaseState_VALID}, otherLease, candidate, false},
+		{LeaseStatus{State: LeaseState_VALID}, myLease, leader, false},
+		{LeaseStatus{State: LeaseState_VALID}, otherLease, leader, false},
+
+		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
+		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
+		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, followerWithLeader, false},
+		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
+		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, candidate, false},
+		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, candidate, false},
+		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, leader, false},
+		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, leader, false},
+	}
+
+	for i, test := range tests {
+		v := shouldCampaignOnWake(test.leaseStatus, test.lease, storeID, test.raftStatus)
+		if v != test.exp {
+			t.Errorf("%d: expected %v but got %v", i, test.exp, v)
+		}
+	}
+}
