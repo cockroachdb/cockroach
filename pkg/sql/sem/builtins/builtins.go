@@ -2053,10 +2053,9 @@ may increase either contention or retry errors, or both.`,
 
 	"array_to_string": {
 		tree.Builtin{
-			Types:        tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
-			ReturnType:   tree.FixedReturnType(types.String),
-			Category:     categoryArray,
-			NullableArgs: true,
+			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Category:   categoryArray,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
 				delimOrNil := stringOrNil(args[1])
@@ -2070,6 +2069,9 @@ may increase either contention or retry errors, or both.`,
 			Category:     categoryArray,
 			NullableArgs: true,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				arr := tree.MustBeDArray(args[0])
 				delimOrNil := stringOrNil(args[1])
 				nullStr := stringOrNil(args[2])

@@ -1733,3 +1733,8 @@ query TT
 SELECT array_to_string(ARRAY['a', 'b,', 'c'], NULL), array_to_string(ARRAY['a', 'b,', NULL, 'c'], 'foo', 'zerp')
 ----
 NULL  afoob,foozerpfooc
+
+query TT
+SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
+----
+NULL  NULL
