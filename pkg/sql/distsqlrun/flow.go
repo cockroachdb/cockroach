@@ -339,7 +339,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 			switch is.Type {
 			case InputSyncSpec_UNORDERED:
 				if len(is.Streams) == 1 {
-					rowChan := &RowChannel{}
+					rowChan := &BatchRowChannel{}
 					rowChan.Init(is.ColumnTypes)
 					if err := f.setupInboundStream(ctx, is.Streams[0], rowChan); err != nil {
 						return err
@@ -359,7 +359,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 				// Ordered synchronizer: create a RowChannel for each input.
 				streams := make([]RowSource, len(is.Streams))
 				for i, s := range is.Streams {
-					rowChan := &RowChannel{}
+					rowChan := &BatchRowChannel{}
 					rowChan.Init(is.ColumnTypes)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return err
