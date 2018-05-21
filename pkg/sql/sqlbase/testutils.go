@@ -114,6 +114,9 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
+	case ColumnType_TUPLE:
+		// TODO(arjun)
+		return tree.DNull
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
