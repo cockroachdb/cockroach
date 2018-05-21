@@ -24,31 +24,38 @@ import (
 )
 
 type csvInputReader struct {
-	expectedCols int
+	kvCh         chan kvBatch
 	recordCh     chan csvRecord
+	batchSize    int
+	batch        csvRecord
 	opts         roachpb.CSVOptions
 	tableDesc    *sqlbase.TableDescriptor
+	expectedCols int
 }
 
+var _ inputConverter = &csvInputReader{}
+
 func newCSVInputReader(
-	opts roachpb.CSVOptions, tableDesc *sqlbase.TableDescriptor, expectedCols int,
+	kvCh chan kvBatch, opts roachpb.CSVOptions, tableDesc *sqlbase.TableDescriptor, expectedCols int,
 ) *csvInputReader {
 	return &csvInputReader{
 		opts:         opts,
+		kvCh:         kvCh,
 		expectedCols: expectedCols,
 		tableDesc:    tableDesc,
 		recordCh:     make(chan csvRecord),
+		batchSize:    500,
 	}
 }
 
-func (c *csvInputReader) start(ctx context.Context, group *errgroup.Group, kvCh chan kvBatch) {
+func (c *csvInputReader) start(ctx context.Context, group *errgroup.Group) {
 	group.Go(func() error {
 		sCtx, span := tracing.ChildSpan(ctx, "convertcsv")
 		defer tracing.FinishSpan(span)
 
-		defer close(kvCh)
+		defer close(c.kvCh)
 		return groupWorkers(sCtx, runtime.NumCPU(), func(ctx context.Context) error {
-			return c.convertRecord(ctx, kvCh)
+			return c.convertRecord(ctx)
 		})
 	})
 }
@@ -57,14 +64,27 @@ func (c *csvInputReader) inputFinished() {
 	close(c.recordCh)
 }
 
+func (c *csvInputReader) flushBatch(ctx context.Context, finished bool, progFn progressFn) error {
+	// if the batch isn't empty, we need to flush it.
+	if len(c.batch.r) > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case c.recordCh <- c.batch:
+		}
+	}
+	if progressErr := progFn(finished); progressErr != nil {
+		return progressErr
+	}
+	if !finished {
+		c.batch.r = make([][]string, 0, c.batchSize)
+	}
+	return nil
+}
+
 func (c *csvInputReader) readFile(
-	ctx context.Context,
-	input io.Reader,
-	inputIdx int32,
-	inputName string,
-	progressFn func(finished bool) error,
+	ctx context.Context, input io.Reader, inputIdx int32, inputName string, progressFn progressFn,
 ) error {
-	done := ctx.Done()
 	cr := csv.NewReader(input)
 	if c.opts.Comma != 0 {
 		cr.Comma = c.opts.Comma
@@ -73,36 +93,24 @@ func (c *csvInputReader) readFile(
 	cr.LazyQuotes = true
 	cr.Comment = c.opts.Comment
 
-	const batchSize = 500
-
-	batch := csvRecord{
+	c.batch = csvRecord{
 		file:      inputName,
 		fileIndex: inputIdx,
 		rowOffset: 1,
-		r:         make([][]string, 0, batchSize),
+		r:         make([][]string, 0, c.batchSize),
 	}
 
-	var count int64
 	for i := 1; ; i++ {
 		record, err := cr.Read()
-		if err == io.EOF || len(batch.r) >= batchSize {
-			// if the batch isn't empty, we need to flush it.
-			if len(batch.r) > 0 {
-				select {
-				case <-done:
-					return ctx.Err()
-				case c.recordCh <- batch:
-					count += int64(len(batch.r))
-				}
+		finished := err == io.EOF
+		if finished || len(c.batch.r) >= c.batchSize {
+			if err := c.flushBatch(ctx, finished, progressFn); err != nil {
+				return err
 			}
-			if progressErr := progressFn(err == io.EOF); progressErr != nil {
-				return progressErr
-			}
-			if err == io.EOF {
-				break
-			}
-			batch.rowOffset = i
-			batch.r = make([][]string, 0, batchSize)
+			c.batch.rowOffset = i
+		}
+		if finished {
+			break
 		}
 		if err != nil {
 			return errors.Wrapf(err, "row %d: reading CSV record", i)
@@ -119,7 +127,7 @@ func (c *csvInputReader) readFile(
 		} else {
 			return errors.Errorf("row %d: expected %d fields, got %d", i, c.expectedCols, len(record))
 		}
-		batch.r = append(batch.r, record)
+		c.batch.r = append(c.batch.r, record)
 	}
 	return nil
 }
@@ -133,8 +141,8 @@ type csvRecord struct {
 
 // convertRecord converts CSV records into KV pairs and sends them on the
 // kvCh chan.
-func (c *csvInputReader) convertRecord(ctx context.Context, kvCh chan<- kvBatch) error {
-	conv, err := newRowConverter(ctx, c.tableDesc, kvCh)
+func (c *csvInputReader) convertRecord(ctx context.Context) error {
+	conv, err := newRowConverter(ctx, c.tableDesc, c.kvCh)
 	if err != nil {
 		return err
 	}

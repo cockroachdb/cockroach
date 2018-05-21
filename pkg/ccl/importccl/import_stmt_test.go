@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"golang.org/x/sync/errgroup"
@@ -245,7 +246,7 @@ func makeCSVData(
 	return files, filesWithOpts, filesWithDups
 }
 
-func TestImportStmt(t *testing.T) {
+func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
@@ -327,7 +328,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
+			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
 			"",
 		},
 		{
@@ -336,7 +337,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH sstsize = '10K'`,
 			schema,
 			files,
-			`WITH sstsize = '10K'`,
+			` WITH sstsize = '10K'`,
 			"",
 		},
 		{
@@ -344,7 +345,7 @@ func TestImportStmt(t *testing.T) {
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///5'`,
+			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///5'`,
 			"",
 		},
 		{
@@ -447,7 +448,7 @@ func TestImportStmt(t *testing.T) {
 			} else {
 				jobPrefix += `""."".`
 			}
-			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
+			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
@@ -709,7 +710,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {
-			return c.convertRecord(ctx, kvCh)
+			return c.convertRecord(ctx)
 		})
 	}
 	const batchSize = 500
@@ -1117,4 +1118,69 @@ func TestImportMVCCChecksums(t *testing.T) {
 		INDEX (b) STORING (c)
 	) CSV DATA ($1)`, srv.URL)
 	sqlDB.Exec(t, `UPDATE d.t SET c = 2 WHERE a = 1`)
+}
+
+func TestImportMysqlOutfile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "mysqlout")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	testRows, configs := getMysqlOutfileTestdata(t)
+
+	for i, cfg := range configs {
+		t.Run(cfg.name, func(t *testing.T) {
+			var opts []interface{}
+
+			cmd := fmt.Sprintf(`IMPORT TABLE test%d (i INT PRIMARY KEY, s text, b bytea) MYSQLOUTFILE DATA ($1)`, i)
+			opts = append(opts, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(cfg.filename, baseDir)))
+
+			var flags []string
+			if cfg.opts.RowSeparator != '\n' {
+				opts = append(opts, string(cfg.opts.RowSeparator))
+				flags = append(flags, fmt.Sprintf("rows_terminated_by = $%d", len(opts)))
+			}
+			if cfg.opts.FieldSeparator != '\t' {
+				opts = append(opts, string(cfg.opts.FieldSeparator))
+				flags = append(flags, fmt.Sprintf("fields_terminated_by = $%d", len(opts)))
+			}
+			if cfg.opts.Enclose == roachpb.MySQLOutfileOptions_Always {
+				opts = append(opts, string(cfg.opts.Encloser))
+				flags = append(flags, fmt.Sprintf("fields_enclosed_by = $%d", len(opts)))
+			}
+			if cfg.opts.HasEscape {
+				opts = append(opts, string(cfg.opts.Escape))
+				flags = append(flags, fmt.Sprintf("fields_escaped_by = $%d", len(opts)))
+			}
+			if len(flags) > 0 {
+				cmd += " WITH " + strings.Join(flags, ", ")
+			}
+			sqlDB.Exec(t, cmd, opts...)
+			for idx, row := range sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM test%d ORDER BY i", i)) {
+				expected, actual := testRows[idx].s, row[1]
+				if expected == injectNull {
+					expected = "NULL"
+				}
+				// TODO(dt): known limitation: even escaped `\N` becomes null.
+				if expected == `\N` {
+					expected = "NULL"
+				}
+
+				if expected != actual {
+					t.Fatalf("expected row i=%s string to be %q, got %q", row[0], expected, actual)
+				}
+			}
+		})
+	}
 }

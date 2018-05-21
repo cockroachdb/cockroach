@@ -37,20 +37,32 @@ import (
 )
 
 const (
-	importOptionDelimiter = "delimiter"
-	importOptionComment   = "comment"
-	importOptionNullIf    = "nullif"
+	csvDelimiter = "delimiter"
+	csvComment   = "comment"
+	csvNullIf    = "nullif"
+	csvSkip      = "skip"
+
+	mysqlOutfileRowSep   = "rows_terminated_by"
+	mysqlOutfileFieldSep = "fields_terminated_by"
+	mysqlOutfileEnclose  = "fields_enclosed_by"
+	mysqlOutfileEscape   = "fields_escaped_by"
+
 	importOptionTransform = "transform"
-	importOptionSkip      = "skip"
 	importOptionSSTSize   = "sstsize"
 )
 
 var importOptionExpectValues = map[string]bool{
-	importOptionDelimiter: true,
-	importOptionComment:   true,
-	importOptionNullIf:    true,
+	csvDelimiter: true,
+	csvComment:   true,
+	csvNullIf:    true,
+	csvSkip:      true,
+
+	mysqlOutfileRowSep:   true,
+	mysqlOutfileFieldSep: true,
+	mysqlOutfileEnclose:  true,
+	mysqlOutfileEscape:   true,
+
 	importOptionTransform: true,
-	importOptionSkip:      true,
 	importOptionSSTSize:   true,
 }
 
@@ -240,11 +252,6 @@ func importPlanHook(
 		}
 	}
 
-	if importStmt.FileFormat != "CSV" {
-		// not possible with current parser rules.
-		return nil, nil, nil, errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
-	}
-
 	optsFn, err := p.TypeAsStringOpts(importStmt.Options, importOptionExpectValues)
 	if err != nil {
 		return nil, nil, nil, err
@@ -299,42 +306,95 @@ func importPlanHook(
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
 		}
 
-		format := roachpb.IOFileFormat{Format: roachpb.IOFileFormat_CSV}
-		if override, ok := opts[importOptionDelimiter]; ok {
-			comma, err := util.GetSingleRune(override)
-			if err != nil {
-				return errors.Wrap(err, "invalid comma value")
+		format := roachpb.IOFileFormat{}
+		switch importStmt.FileFormat {
+		case "CSV":
+			format.Format = roachpb.IOFileFormat_CSV
+			if override, ok := opts[csvDelimiter]; ok {
+				comma, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrap(err, "invalid comma value")
+				}
+				format.Csv.Comma = comma
 			}
-			format.Csv.Comma = comma
+
+			if override, ok := opts[csvComment]; ok {
+				comment, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrap(err, "invalid comment value")
+				}
+				format.Csv.Comment = comment
+			}
+
+			if override, ok := opts[csvNullIf]; ok {
+				format.Csv.NullEncoding = &override
+			}
+
+			if override, ok := opts[csvSkip]; ok {
+				skip, err := strconv.Atoi(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %s value", csvSkip)
+				}
+				if skip < 0 {
+					return errors.Errorf("%s must be >= 0", csvSkip)
+				}
+				// We need to handle the case where the user wants to skip records and the node
+				// interpreting the statement might be newer than other nodes in the cluster.
+				if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportSkipRecords) {
+					return errors.Errorf("Using non-CSV import format requires all nodes to be upgraded to %s",
+						cluster.VersionByKey(cluster.VersionImportSkipRecords))
+				}
+				format.Csv.Skip = uint32(skip)
+			}
+		case "MYSQLOUTFILE":
+			format.Format = roachpb.IOFileFormat_MysqlOutfile
+			format.MysqlOut = roachpb.MySQLOutfileOptions{
+				RowSeparator:   '\n',
+				FieldSeparator: '\t',
+			}
+			if override, ok := opts[mysqlOutfileRowSep]; ok {
+				c, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+				}
+				format.MysqlOut.RowSeparator = c
+			}
+
+			if override, ok := opts[mysqlOutfileFieldSep]; ok {
+				c, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %q value", mysqlOutfileFieldSep)
+				}
+				format.MysqlOut.FieldSeparator = c
+			}
+
+			if override, ok := opts[mysqlOutfileEnclose]; ok {
+				c, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+				}
+				format.MysqlOut.Enclose = roachpb.MySQLOutfileOptions_Always
+				format.MysqlOut.Encloser = c
+			}
+
+			if override, ok := opts[mysqlOutfileEscape]; ok {
+				c, err := util.GetSingleRune(override)
+				if err != nil {
+					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+				}
+				format.MysqlOut.HasEscape = true
+				format.MysqlOut.Escape = c
+			}
+
+		default:
+			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 		}
 
-		if override, ok := opts[importOptionComment]; ok {
-			comment, err := util.GetSingleRune(override)
-			if err != nil {
-				return errors.Wrap(err, "invalid comment value")
-			}
-			format.Csv.Comment = comment
-		}
-
-		if override, ok := opts[importOptionNullIf]; ok {
-			format.Csv.NullEncoding = &override
-		}
-
-		if override, ok := opts[importOptionSkip]; ok {
-			skip, err := strconv.Atoi(override)
-			if err != nil {
-				return errors.Wrapf(err, "invalid %s value", importOptionSkip)
-			}
-			if skip < 0 {
-				return errors.Errorf("%s must be >= 0", importOptionSkip)
-			}
-			// We need to handle the case where the user wants to skip records and the node
-			// interpreting the statement might be newer than other nodes in the cluster.
-			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportSkipRecords) {
+		if format.Format != roachpb.IOFileFormat_CSV {
+			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportFormats) {
 				return errors.Errorf("Using %s requires all nodes to be upgraded to %s",
-					importOptionSkip, cluster.VersionByKey(cluster.VersionImportSkipRecords))
+					csvSkip, cluster.VersionByKey(cluster.VersionImportFormats))
 			}
-			format.Csv.Skip = uint32(skip)
 		}
 
 		// sstSize, if 0, will be set to an appropriate default by the specific
@@ -418,7 +478,7 @@ func importPlanHook(
 			Username:    p.User(),
 			Details: jobs.ImportDetails{
 				Tables: []jobs.ImportDetails_Table{{
-
+					Format:        format,
 					Desc:          tableDesc,
 					URIs:          files,
 					BackupPath:    transform,
