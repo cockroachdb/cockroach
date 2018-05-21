@@ -67,7 +67,9 @@ func (p *planner) computeRenderAllowingStars(
 		return nil, nil, false, err
 	}
 
-	if hasStar, cols, typedExprs, err := sqlbase.CheckRenderStar(ctx, target, info, ivarHelper); err != nil {
+	if hasStar, cols, typedExprs, err := sqlbase.CheckRenderStar(
+		ctx, p.analyzeExpr, target, info, ivarHelper,
+	); err != nil {
 		return nil, nil, false, err
 	} else if hasStar {
 		return cols, typedExprs, hasStar, nil
