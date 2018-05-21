@@ -491,7 +491,7 @@ func (sc *SchemaChanger) distBackfill(
 			// backfiller processor.
 			var otherTableDescs []sqlbase.TableDescriptor
 			if backfillType == columnBackfill {
-				fkTables, _ := sqlbase.TablesNeededForFKs(
+				fkTables, err := sqlbase.TablesNeededForFKs(
 					ctx,
 					*tableDesc,
 					sqlbase.CheckUpdates,
@@ -499,6 +499,9 @@ func (sc *SchemaChanger) distBackfill(
 					sqlbase.NoCheckPrivilege,
 					nil, /* AnalyzeExprFunction */
 				)
+				if err != nil {
+					return err
+				}
 				for k := range fkTables {
 					table, err := tc.getTableVersionByID(ctx, txn, k)
 					if err != nil {
@@ -594,6 +597,7 @@ func columnNeedsBackfill(desc *sqlbase.ColumnDescriptor) bool {
 func runSchemaChangesInTxn(
 	ctx context.Context,
 	txn *client.Txn,
+	tc *TableCollection,
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
@@ -629,7 +633,7 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !columnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, evalCtx, tableDesc); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
@@ -650,7 +654,7 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, evalCtx, tableDesc); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
@@ -677,17 +681,46 @@ func runSchemaChangesInTxn(
 func columnBackfillInTxn(
 	ctx context.Context,
 	txn *client.Txn,
+	tc *TableCollection,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 ) error {
+	// A column backfill in the ADD state is a noop.
+	if tableDesc.Adding() {
+		return nil
+	}
 	var backfiller backfill.ColumnBackfiller
 	if err := backfiller.Init(evalCtx, *tableDesc); err != nil {
 		return err
 	}
+	// otherTableDescs contains any other table descriptors required by the
+	// backfiller processor.
+	var otherTableDescs []sqlbase.TableDescriptor
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx,
+		*tableDesc,
+		sqlbase.CheckUpdates,
+		sqlbase.NoLookup,
+		sqlbase.NoCheckPrivilege,
+		nil, /* AnalyzeExprFunction */
+	)
+	if err != nil {
+		return err
+	}
+	// All the FKs here are guaranteed to be created in the same transaction
+	// or else this table would be created in the ADD state.
+	for k := range fkTables {
+		if !tc.isCreatedTable(k) {
+			return errors.Errorf(
+				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
+		}
+		table := tc.getUncommittedTableByID(k)
+		otherTableDescs = append(otherTableDescs, *table)
+	}
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
 		var err error
-		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx, txn, *tableDesc, nil, sp, columnTruncateAndBackfillChunkSize, false)
+		sp.Key, err = backfiller.RunColumnBackfillChunk(ctx, txn, *tableDesc, otherTableDescs, sp, columnTruncateAndBackfillChunkSize, false)
 		if err != nil {
 			return err
 		}
