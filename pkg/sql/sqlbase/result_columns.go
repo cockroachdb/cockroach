@@ -104,3 +104,32 @@ var ExplainPlanVerboseColumns = ResultColumns{
 	// Ordering indicates the known ordering of the data from this source.
 	{Name: "Ordering", Typ: types.String},
 }
+
+// ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
+var ShowTraceColumns = ResultColumns{
+	{Name: "timestamp", Typ: types.TimestampTZ},
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "loc", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+	{Name: "span", Typ: types.Int},
+}
+
+// ShowCompactTraceColumns are the result columns of a
+// SHOW COMPACT [KV] TRACE statement.
+var ShowCompactTraceColumns = ResultColumns{
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+}
+
+// ShowReplicaTraceColumns are the result columns of a
+// SHOW EXPERIMENTAL_REPLICA TRACE statement.
+var ShowReplicaTraceColumns = ResultColumns{
+	{Name: "timestamp", Typ: types.TimestampTZ},
+	{Name: "node_id", Typ: types.Int},
+	{Name: "store_id", Typ: types.Int},
+	{Name: "replica_id", Typ: types.Int},
+}

@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -100,9 +99,9 @@ func (p *planner) makeShowTraceNode(
 	}
 	if compact {
 		// We make a copy here because n.columns can be mutated to rename columns.
-		n.columns = append(n.columns, showCompactTraceColumns...)
+		n.columns = append(n.columns, sqlbase.ShowCompactTraceColumns...)
 	} else {
-		n.columns = append(n.columns, showTraceColumns...)
+		n.columns = append(n.columns, sqlbase.ShowTraceColumns...)
 	}
 	return n
 }
@@ -333,20 +332,3 @@ var kvMsgRegexp = regexp.MustCompile(
 		"^starting plan$",
 	}, "|"),
 )
-
-var showTraceColumns = sqlbase.ResultColumns{
-	{Name: "timestamp", Typ: types.TimestampTZ},
-	{Name: "age", Typ: types.Interval},
-	{Name: "message", Typ: types.String},
-	{Name: "tag", Typ: types.String},
-	{Name: "loc", Typ: types.String},
-	{Name: "operation", Typ: types.String},
-	{Name: "span", Typ: types.Int},
-}
-
-var showCompactTraceColumns = sqlbase.ResultColumns{
-	{Name: "age", Typ: types.Interval},
-	{Name: "message", Typ: types.String},
-	{Name: "tag", Typ: types.String},
-	{Name: "operation", Typ: types.String},
-}
