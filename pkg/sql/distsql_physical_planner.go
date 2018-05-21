@@ -2360,6 +2360,19 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			}
 			p.AddSingleGroupStage(
 				dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+		} else {
+			// UNION ALL is special: it doesn't have any required downstream
+			// processor, so its two inputs might have different post-processing
+			// which would violate an assumption later down the line. Check for this
+			// condition and add a no-op stage if it exists.
+			if err := p.CheckLastStagePost(); err != nil {
+				p.AddSingleGroupStage(
+					dsp.nodeDesc.NodeID,
+					distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
+					distsqlrun.PostProcessSpec{},
+					p.ResultTypes,
+				)
+			}
 		}
 	} else {
 		// We plan INTERSECT and EXCEPT queries with joiners. Get the appropriate
