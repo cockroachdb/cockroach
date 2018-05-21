@@ -9,6 +9,7 @@
 package importccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -1152,6 +1153,50 @@ func TestImportMVCCChecksums(t *testing.T) {
 		INDEX (b) STORING (c)
 	) CSV DATA ($1)`, srv.URL)
 	sqlDB.Exec(t, `UPDATE d.t SET c = 2 WHERE a = 1`)
+}
+
+func TestImportMysql(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	testRows, dest := getMysqldumpTestdata(t)
+
+	cmd := `IMPORT TABLE test_dump (i INT PRIMARY KEY, s text, b bytea) MYSQLDUMP DATA ($1)`
+	sqlDB.Exec(t, cmd, fmt.Sprintf("nodelocal://%s", strings.TrimPrefix(dest, baseDir)))
+	for idx, row := range sqlDB.QueryStr(t, "SELECT * FROM test_dump ORDER BY i") {
+		{
+			expected, actual := testRows[idx].s, row[1]
+			if expected == injectNull {
+				expected = "NULL"
+			}
+			if expected != actual {
+				t.Fatalf("expected rowi=%s string to be %q, got %q", row[0], expected, actual)
+			}
+		}
+
+		{
+			expected, actual := testRows[idx].b, row[2]
+			if expected == nil {
+				expected = []byte("NULL")
+			}
+			if !bytes.Equal(expected, []byte(actual)) {
+				t.Fatalf("expected rowi=%s bytes to be %q, got %q", row[0], expected, actual)
+			}
+		}
+	}
 }
 
 func TestImportMysqlOutfile(t *testing.T) {
