@@ -91,6 +91,7 @@ set(tests
   db_test.cc
   encoding_test.cc
   file_registry_test.cc
+  merge_test.cc
   ccl/db_test.cc
   ccl/key_manager_test.cc
 )
