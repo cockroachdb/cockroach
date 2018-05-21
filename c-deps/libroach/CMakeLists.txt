@@ -65,6 +65,7 @@ add_library(roachccl
   ccl/key_manager.cc
   protosccl/ccl/baseccl/encryption_options.pb.cc
   protosccl/ccl/storageccl/engineccl/enginepbccl/key_registry.pb.cc
+  protosccl/ccl/storageccl/engineccl/enginepbccl/stats.pb.cc
 )
 target_include_directories(roachccl
   PRIVATE .. # CryptoPP headers are directly in the directory. Include .. to be able to include <cryptopp/....h>

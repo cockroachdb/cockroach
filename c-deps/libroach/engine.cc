@@ -204,6 +204,24 @@ DBString DBImpl::GetCompactionStats() {
   return ToDBString(tmp);
 }
 
+DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
+  // Always initialize the field to the empty string.
+  stats->encryption_status = DBString();
+
+  if (this->env_mgr->env_stats_handler == nullptr) {
+    return kSuccess;
+  }
+
+  std::string encryption_status;
+  auto status = this->env_mgr->env_stats_handler->GetEncryptionStats(&encryption_status);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+
+  stats->encryption_status = ToDBString(encryption_status);
+  return kSuccess;
+}
+
 // EnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBImpl::EnvWriteFile(DBSlice path, DBSlice contents) {
   rocksdb::Status s;

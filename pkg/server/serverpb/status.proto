@@ -34,16 +34,14 @@ import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 message CertificatesRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 }
 
 message CertificateDetails {
-  // We use an enum to allow reporting of client certs and potential others (eg: UI).
+  // We use an enum to allow reporting of client certs and potential others (eg:
+  // UI).
   enum CertificateType {
     CA = 0;
     NODE = 1;
@@ -64,20 +62,18 @@ message CertificateDetails {
   CertificateType type = 1;
   // "error_message" and "data" are mutually exclusive.
   string error_message = 2;
-  // data is the raw file contents of the certificate. This means PEM-encoded DER data.
+  // data is the raw file contents of the certificate. This means PEM-encoded
+  // DER data.
   bytes data = 3;
-  repeated Fields fields = 4 [(gogoproto.nullable) = false];
+  repeated Fields fields = 4 [ (gogoproto.nullable) = false ];
 }
 
 message CertificatesResponse {
-  repeated CertificateDetails certificates = 1 [(gogoproto.nullable) = false];
+  repeated CertificateDetails certificates = 1 [ (gogoproto.nullable) = false ];
 }
 
 // DetailsRequest requests a nodes details.
 message DetailsRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
@@ -87,23 +83,22 @@ message DetailsRequest {
 }
 
 message DetailsResponse {
-  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
-  build.Info build_info = 3 [(gogoproto.nullable) = false];
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  util.UnresolvedAddr address = 2 [ (gogoproto.nullable) = false ];
+  build.Info build_info = 3 [ (gogoproto.nullable) = false ];
 }
 
-message NodesRequest {
-}
+message NodesRequest {}
 
 message NodesResponse {
-  repeated status.NodeStatus nodes = 1 [(gogoproto.nullable) = false];
+  repeated status.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
 }
 
 message NodeRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
@@ -120,8 +115,8 @@ message RaftState {
     uint64 pending_snapshot = 5;
   }
 
-  uint64 replica_id = 1 [(gogoproto.customname) = "ReplicaID"];
-  raftpb.HardState hard_state  = 2 [(gogoproto.nullable) = false];
+  uint64 replica_id = 1 [ (gogoproto.customname) = "ReplicaID" ];
+  raftpb.HardState hard_state = 2 [ (gogoproto.nullable) = false ];
   // Lead is part of Raft's SoftState.
   uint64 lead = 3;
   // State is part of Raft's SoftState.
@@ -129,16 +124,16 @@ message RaftState {
   // are issues associated with them.
   string state = 4;
   uint64 applied = 5;
-  map<uint64, Progress> progress = 6 [(gogoproto.nullable) = false];
+  map<uint64, Progress> progress = 6 [ (gogoproto.nullable) = false ];
   uint64 lead_transferee = 7;
 }
 
 message RangeProblems {
-    bool unavailable = 1;
-    bool leader_not_lease_holder = 2;
-    bool no_raft_leader = 3;
-    bool underreplicated = 4;
-    bool no_lease = 5;
+  bool unavailable = 1;
+  bool leader_not_lease_holder = 2;
+  bool no_raft_leader = 3;
+  bool underreplicated = 4;
+  bool no_lease = 5;
 }
 
 message RangeStatistics {
@@ -163,46 +158,45 @@ message CommandQueueMetrics {
 }
 
 message RangeInfo {
-  PrettySpan span = 1 [(gogoproto.nullable) = false];
-  RaftState raft_state = 2 [(gogoproto.nullable) = false];
-  storage.storagebase.RangeInfo state = 4 [(gogoproto.nullable) = false];
+  PrettySpan span = 1 [ (gogoproto.nullable) = false ];
+  RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
+  storage.storagebase.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
   int32 source_store_id = 6 [
-     (gogoproto.customname) = "SourceStoreID",
-     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+    (gogoproto.customname) = "SourceStoreID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
   ];
   string error_message = 7;
-  repeated roachpb.Lease lease_history = 8 [(gogoproto.nullable) = false];
-  RangeProblems problems = 9 [(gogoproto.nullable) = false];
-  RangeStatistics stats = 10 [(gogoproto.nullable) = false];
-  CommandQueueMetrics cmd_q_local = 11 [(gogoproto.nullable) = false];
-  CommandQueueMetrics cmd_q_global = 12 [(gogoproto.nullable) = false];
-  storage.LeaseStatus lease_status = 13 [(gogoproto.nullable) = false];
+  repeated roachpb.Lease lease_history = 8 [ (gogoproto.nullable) = false ];
+  RangeProblems problems = 9 [ (gogoproto.nullable) = false ];
+  RangeStatistics stats = 10 [ (gogoproto.nullable) = false ];
+  CommandQueueMetrics cmd_q_local = 11 [ (gogoproto.nullable) = false ];
+  CommandQueueMetrics cmd_q_global = 12 [ (gogoproto.nullable) = false ];
+  storage.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
 }
 
 message RangesRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  repeated int64 range_ids = 2 [(gogoproto.customname) = "RangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated int64 range_ids = 2 [
+    (gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
 }
 
 message RangesResponse {
-  repeated RangeInfo ranges = 1 [(gogoproto.nullable) = false];
+  repeated RangeInfo ranges = 1 [ (gogoproto.nullable) = false ];
 }
 
 message GossipRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
@@ -210,48 +204,47 @@ message GossipRequest {
 
 message AllocatorDryRun {
   message Event {
-    google.protobuf.Timestamp time = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+    google.protobuf.Timestamp time = 1
+        [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
     string message = 2;
   }
-  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  int64 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
   repeated Event events = 2;
 }
 
 message AllocatorRangeRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
   int64 range_id = 1;
 }
 
 message AllocatorRangeResponse {
   // The NodeID of the store whose dry run is returned. Only the leaseholder
   // for a given range will do an allocator dry run for it.
-  int64 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int64 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
   AllocatorDryRun dry_run = 2;
 }
 
 message AllocatorRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
   string node_id = 1;
-  repeated int64 range_ids = 2 [(gogoproto.customname) = "RangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated int64 range_ids = 2 [
+    (gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
 }
 
-message AllocatorResponse {
-  repeated AllocatorDryRun dry_runs = 1;
-}
+message AllocatorResponse { repeated AllocatorDryRun dry_runs = 1; }
 
-message JSONResponse {
-  bytes data = 1;
-}
+message JSONResponse { bytes data = 1; }
 
 message LogsRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
@@ -263,26 +256,22 @@ message LogsRequest {
 }
 
 message LogEntriesResponse {
-  repeated cockroach.util.log.Entry entries = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.util.log.Entry entries = 1
+      [ (gogoproto.nullable) = false ];
 }
 
 message LogFilesListRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 }
 
 message LogFilesListResponse {
-  repeated cockroach.util.log.FileInfo files = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.util.log.FileInfo files = 1
+      [ (gogoproto.nullable) = false ];
 }
 
 message LogFileRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
@@ -290,74 +279,74 @@ message LogFileRequest {
 }
 
 message StacksRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 }
 
 message ProfileRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 
-  enum Type {
-    HEAP = 0;
-  }
+  enum Type { HEAP = 0; }
   // The type of profile to retrieve.
   Type type = 5;
 }
 
 message MetricsRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 }
 
 message RaftRangeNode {
-  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  RangeInfo range = 2 [(gogoproto.nullable) = false];
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  RangeInfo range = 2 [ (gogoproto.nullable) = false ];
 }
 
-message RaftRangeError {
-  string message = 1;
-}
+message RaftRangeError { string message = 1; }
 
 message RaftRangeStatus {
-  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
-  repeated RaftRangeNode nodes = 3 [(gogoproto.nullable) = false];
+  int64 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated RaftRangeError errors = 2 [ (gogoproto.nullable) = false ];
+  repeated RaftRangeNode nodes = 3 [ (gogoproto.nullable) = false ];
 }
 
 message RaftDebugRequest {
-  repeated int64 range_ids = 1 [(gogoproto.customname) = "RangeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  repeated int64 range_ids = 1 [
+    (gogoproto.customname) = "RangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
 }
 
 message RaftDebugResponse {
-  map<int64, RaftRangeStatus> ranges = 1 [(gogoproto.nullable) = false,
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  repeated RaftRangeError errors = 2 [(gogoproto.nullable) = false];
+  map<int64, RaftRangeStatus> ranges = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated RaftRangeError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
 // ActiveQuery represents a query in flight on some Session.
 message ActiveQuery {
   // ID of the query (uint128 presented as a hexadecimal string).
-  string id = 1 [(gogoproto.customname) = "ID"];
+  string id = 1 [ (gogoproto.customname) = "ID" ];
   // SQL query string specified by the user.
   string sql = 2;
   // Start timestamp of this query.
-  google.protobuf.Timestamp start = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start = 3
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
   // True if this query is distributed.
   bool is_distributed = 4;
 
@@ -379,8 +368,11 @@ message ListSessionsRequest {
 // Session represents one SQL session.
 message Session {
   // ID of node where this session exists.
-  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
   // Username of the user for this session.
   string username = 2;
   // Connected client's IP address and port.
@@ -388,24 +380,31 @@ message Session {
   // Application name specified by the client.
   string application_name = 4;
   // Queries in progress on this session.
-  repeated ActiveQuery active_queries = 5 [(gogoproto.nullable) = false];
+  repeated ActiveQuery active_queries = 5 [ (gogoproto.nullable) = false ];
   // Timestamp of session's start.
-  google.protobuf.Timestamp start = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp start = 6
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
   // ID of the current KV transaction for this session. Nil if the session
   // doesn't currently have a transaction.
-  bytes kv_txn_id = 7 [(gogoproto.customname) = "KvTxnID",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  bytes kv_txn_id = 7 [
+    (gogoproto.customname) = "KvTxnID",
+    (gogoproto.customtype) =
+        "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
   // ID of the session (uint128 represented as raw bytes).
-  bytes id = 9 [(gogoproto.customname) = "ID"];
+  bytes id = 9 [ (gogoproto.customname) = "ID" ];
 }
 
 // An error wrapper object for ListSessionsResponse.
 message ListSessionsError {
   // ID of node that was being contacted when this error occurred
-  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
   // Error message.
   string message = 2;
 }
@@ -413,9 +412,9 @@ message ListSessionsError {
 // Response object for ListSessions and ListLocalSessions.
 message ListSessionsResponse {
   // A list of sessions on this node or cluster.
-  repeated Session sessions = 1 [(gogoproto.nullable) = false];
+  repeated Session sessions = 1 [ (gogoproto.nullable) = false ];
   // Any errors that occurred during fan-out calls to other nodes.
-  repeated ListSessionsError errors = 2 [(gogoproto.nullable) = false];
+  repeated ListSessionsError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
 // Request object for issing a query cancel request.
@@ -429,7 +428,7 @@ message CancelQueryRequest {
   // forwarding is necessary.
   string node_id = 1;
   // ID of query to be canceled (converted to string).
-  string query_id = 2 [(gogoproto.customname) = "QueryID"];
+  string query_id = 2 [ (gogoproto.customname) = "QueryID" ];
   // Username of the user making this cancellation request.
   string username = 3;
 }
@@ -449,7 +448,7 @@ message CancelSessionRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  bytes session_id = 2 [(gogoproto.customname) = "SessionID"];
+  bytes session_id = 2 [ (gogoproto.customname) = "SessionID" ];
   string username = 3;
 }
 
@@ -459,19 +458,23 @@ message CancelSessionResponse {
 }
 
 message SpanStatsRequest {
-  string node_id = 1 [(gogoproto.customname) = "NodeID"];
-  bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
-  bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RKey"];
+  string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
+  bytes start_key = 2
+      [ (gogoproto.casttype) =
+            "github.com/cockroachdb/cockroach/pkg/roachpb.RKey" ];
+  bytes end_key = 3 [ (gogoproto.casttype) =
+                          "github.com/cockroachdb/cockroach/pkg/roachpb.RKey" ];
 }
 
 message SpanStatsResponse {
   int32 range_count = 2;
   uint64 approximate_disk_bytes = 3;
-  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
+  cockroach.storage.engine.enginepb.MVCCStats total_stats = 1
+      [ (gogoproto.nullable) = false ];
 }
 
 message ProblemRangesRequest {
-  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
 }
 
 message ProblemRangesResponse {
@@ -479,30 +482,36 @@ message ProblemRangesResponse {
     string error_message = 1;
     repeated int64 unavailable_range_ids = 2 [
       (gogoproto.customname) = "UnavailableRangeIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 raft_leader_not_lease_holder_range_ids = 3 [
       (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 no_raft_leader_range_ids = 4 [
       (gogoproto.customname) = "NoRaftLeaderRangeIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 no_lease_range_ids = 5 [
       (gogoproto.customname) = "NoLeaseRangeIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 underreplicated_range_ids = 6 [
       (gogoproto.customname) = "UnderreplicatedRangeIDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
   }
   reserved 1 to 7;
   // NodeID is the node that submitted all the requests.
   int32 node_id = 8 [
     (gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
   map<int32, NodeProblems> problems_by_node_id = 9 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
@@ -512,8 +521,6 @@ message ProblemRangesResponse {
 }
 
 message RangeRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
   int64 range_id = 1;
 }
 
@@ -521,16 +528,18 @@ message RangeResponse {
   message NodeResponse {
     bool response = 1;
     string error_message = 2;
-    repeated RangeInfo infos = 3 [(gogoproto.nullable) = false];
+    repeated RangeInfo infos = 3 [ (gogoproto.nullable) = false ];
   }
   // NodeID is the node that submitted all the requests.
   int32 node_id = 1 [
     (gogoproto.customname) = "NodeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
   int64 range_id = 2 [
     (gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
   map<int32, NodeResponse> responses_by_node_id = 3 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
@@ -540,91 +549,112 @@ message RangeResponse {
   reserved 4; // Previously used.
 }
 
-message CommandQueueRequest {
-  int64 range_id = 1;
-}
+message CommandQueueRequest { int64 range_id = 1; }
 
 message CommandQueueResponse {
-  storage.storagebase.CommandQueuesSnapshot snapshot = 1 [(gogoproto.nullable) = false];
+  storage.storagebase.CommandQueuesSnapshot snapshot = 1
+      [ (gogoproto.nullable) = false ];
 }
 
 // DiagnosticsRequest requests a diagnostics report.
 message DiagnosticsRequest {
-  // TODO(tamird): use [(gogoproto.customname) = "NodeID"] below. Need to
-  // figure out how to teach grpc-gateway about custom names.
-  //
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
 }
 
+message StoresRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message StoreDetails {
+  int32 store_id = 1 [
+    (gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"
+  ];
+
+  // TODO(mberhault): add a lot more information about stores. eg:
+  // - path
+  // - settings
+  // - encryption settings
+
+  // encryption_status is a serialized
+  // ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf.
+  bytes encryption_status = 2;
+}
+
+message StoresResponse {
+  repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
+}
+
 service Status {
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
     option (google.api.http) = {
-      get: "/_status/certificates/{node_id}"
+      get : "/_status/certificates/{node_id}"
     };
   }
   rpc Details(DetailsRequest) returns (DetailsResponse) {
     option (google.api.http) = {
-      get: "/_status/details/{node_id}"
-      additional_bindings {
-        get: "/health"
-      }
+      get : "/_status/details/{node_id}"
+      additional_bindings {get : "/health"}
     };
   }
   rpc Nodes(NodesRequest) returns (NodesResponse) {
     option (google.api.http) = {
-      get: "/_status/nodes"
+      get : "/_status/nodes"
     };
   }
   rpc Node(NodeRequest) returns (status.NodeStatus) {
     option (google.api.http) = {
-      get: "/_status/nodes/{node_id}"
+      get : "/_status/nodes/{node_id}"
     };
   }
   rpc RaftDebug(RaftDebugRequest) returns (RaftDebugResponse) {
     option (google.api.http) = {
-      get: "/_status/raft"
+      get : "/_status/raft"
     };
   }
   rpc Ranges(RangesRequest) returns (RangesResponse) {
     option (google.api.http) = {
-      get: "/_status/ranges/{node_id}"
+      get : "/_status/ranges/{node_id}"
     };
   }
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
-      get: "/_status/gossip/{node_id}"
+      get : "/_status/gossip/{node_id}"
     };
   }
   rpc Allocator(AllocatorRequest) returns (AllocatorResponse) {
     option (google.api.http) = {
-      get: "/_status/allocator/node/{node_id}"
+      get : "/_status/allocator/node/{node_id}"
     };
   }
   rpc AllocatorRange(AllocatorRangeRequest) returns (AllocatorRangeResponse) {
     option (google.api.http) = {
-      get: "/_status/allocator/range/{range_id}"
+      get : "/_status/allocator/range/{range_id}"
     };
   }
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = {
-      get: "/_status/sessions"
+      get : "/_status/sessions"
     };
   }
   rpc ListLocalSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = {
-      get: "/_status/local_sessions"
+      get : "/_status/local_sessions"
     };
   }
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {
     option (google.api.http) = {
-      get: "/_status/cancel_query/{node_id}"
+      get : "/_status/cancel_query/{node_id}"
     };
   }
   rpc CancelSession(CancelSessionRequest) returns (CancelSessionResponse) {
     option (google.api.http) = {
-      get: "/_status/cancel_session/{node_id}"
+      get : "/_status/cancel_session/{node_id}"
     };
   }
 
@@ -635,58 +665,64 @@ service Status {
   // information about the resources on a node used by that table.
   rpc SpanStats(SpanStatsRequest) returns (SpanStatsResponse) {
     option (google.api.http) = {
-      post: "/_status/span"
-      body: "*"
+      post : "/_status/span"
+      body : "*"
     };
   }
   rpc Stacks(StacksRequest) returns (JSONResponse) {
     option (google.api.http) = {
-      get: "/_status/stacks/{node_id}"
+      get : "/_status/stacks/{node_id}"
     };
   }
   rpc Profile(ProfileRequest) returns (JSONResponse) {
     option (google.api.http) = {
-      get: "/_status/profile/{node_id}"
+      get : "/_status/profile/{node_id}"
     };
   }
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
-      get: "/_status/metrics/{node_id}"
+      get : "/_status/metrics/{node_id}"
     };
   }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
     option (google.api.http) = {
-      get: "/_status/logfiles/{node_id}"
+      get : "/_status/logfiles/{node_id}"
     };
   }
   rpc LogFile(LogFileRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
-      get: "/_status/logfiles/{node_id}/{file}"
+      get : "/_status/logfiles/{node_id}/{file}"
     };
   }
   rpc Logs(LogsRequest) returns (LogEntriesResponse) {
     option (google.api.http) = {
-      get: "/_status/logs/{node_id}"
+      get : "/_status/logs/{node_id}"
     };
   }
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
-      get: "/_status/problemranges"
+      get : "/_status/problemranges"
     };
   }
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
-      get: "/_status/range/{range_id}"
+      get : "/_status/range/{range_id}"
     };
   }
   rpc CommandQueue(CommandQueueRequest) returns (CommandQueueResponse) {
     option (google.api.http) = {
-      get: "/_status/range/{range_id}/cmdqueue"
+      get : "/_status/range/{range_id}/cmdqueue"
     };
   }
-  rpc Diagnostics(DiagnosticsRequest) returns (cockroach.server.diagnosticspb.DiagnosticReport) {
+  rpc Diagnostics(DiagnosticsRequest)
+      returns (cockroach.server.diagnosticspb.DiagnosticReport) {
     option (google.api.http) = {
-      get: "/_status/diagnostics/{node_id}"
+      get : "/_status/diagnostics/{node_id}"
+    };
+  }
+  rpc Stores(StoresRequest) returns (StoresResponse) {
+    option (google.api.http) = {
+      get : "/_status/stores/{node_id}"
     };
   }
 }
