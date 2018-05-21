@@ -66,7 +66,10 @@ func registerImportTPCH(r *registry) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx)
 				conn := c.Conn(ctx, 1)
-				if _, err := conn.Exec(`create database csv`); err != nil {
+				if _, err := conn.Exec(`
+					CREATE DATABASE csv;
+					SET CLUSTER SETTING jobs.registry.leniency = '5m';
+				`); err != nil {
 					t.Fatal(err)
 				}
 				t.Status(`running import`)
