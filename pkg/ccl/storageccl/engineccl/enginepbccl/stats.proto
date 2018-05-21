@@ -1,0 +1,22 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+syntax = "proto3";
+package cockroach.ccl.storageccl.engineccl.enginepbccl;
+option go_package = "enginepbccl";
+
+import "gogoproto/gogo.proto";
+import "ccl/storageccl/engineccl/enginepbccl/key_registry.proto";
+
+// EncryptionStatus contains encryption-related information.
+message EncryptionStatus {
+  // Information about the active store key, if any.
+  KeyInfo active_store_key = 1;
+  // Information about the active data key, if any.
+  KeyInfo active_data_key = 2;
+}
