@@ -438,6 +438,8 @@ type TempStorageConfig struct {
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
+	// StoreIdx stores the index of the StoreSpec this TempStorageConfig will use.
+	SpecIdx int
 }
 
 // TempStorageConfigFromEnv creates a TempStorageConfig.
@@ -449,6 +451,7 @@ func TempStorageConfigFromEnv(
 	firstStore StoreSpec,
 	parentDir string,
 	maxSizeBytes int64,
+	specIdx int,
 ) TempStorageConfig {
 	inMem := parentDir == "" && firstStore.InMemory
 	var monitor mon.BytesMonitor
@@ -479,6 +482,7 @@ func TempStorageConfigFromEnv(
 	return TempStorageConfig{
 		InMemory: inMem,
 		Mon:      &monitor,
+		SpecIdx:  specIdx,
 	}
 }
 

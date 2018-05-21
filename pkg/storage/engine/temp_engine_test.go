@@ -29,7 +29,7 @@ func TestNewTempEngine(t *testing.T) {
 	tempDir, tempDirCleanup := testutils.TempDir(t)
 	defer tempDirCleanup()
 
-	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir})
+	engine, err := NewTempEngine(base.TempStorageConfig{Path: tempDir}, base.StoreSpec{Path: tempDir})
 	if err != nil {
 		t.Fatalf("error encountered when invoking NewTempEngine: %v", err)
 	}

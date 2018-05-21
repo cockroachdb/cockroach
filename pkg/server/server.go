@@ -342,7 +342,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL temp engine.
 
-	tempEngine, err := engine.NewTempEngine(s.cfg.TempStorageConfig)
+	useStoreSpec := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
+	tempEngine, err := engine.NewTempEngine(s.cfg.TempStorageConfig, useStoreSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
 	}
@@ -350,7 +351,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	s.stopper.AddCloser(stop.CloserFn(func() {
-		firstStore := cfg.Stores.Specs[0]
+		firstStore := cfg.Stores.Specs[s.cfg.TempStorageConfig.SpecIdx]
 		var err error
 		if firstStore.InMemory {
 			// First store is in-memory so we remove the temp
