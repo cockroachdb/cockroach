@@ -18,8 +18,23 @@ package main
 import (
 	"context"
 	"fmt"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
+
+func downloadStoreDumps(
+	ctx context.Context, c *cluster, location string, binVersion string, nodeCount int,
+) error {
+	var g errgroup.Group
+	for node := 1; node <= nodeCount; node++ {
+		node := node
+		g.Go(func() error {
+			path := location + fmt.Sprintf(`/stores=%d,bin-version=%s/%d/*`, nodeCount, binVersion, node)
+			return c.RunE(ctx, c.Node(node), `mkdir -p {store-dir} && gsutil -m -q cp -r `+path+` {store-dir}`)
+		})
+	}
+	return g.Wait()
+}
 
 func registerBackup(r *registry) {
 	r.Add(testSpec{
@@ -30,22 +45,13 @@ func registerBackup(r *registry) {
 			nodes := c.nodes
 
 			t.Status(`downloading store dumps`)
-			var wg sync.WaitGroup
-			for node := 1; node <= nodes; node++ {
-				wg.Add(1)
-				go func(node int) {
-					defer wg.Done()
-					// Created via:
-					// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
-					//           --payload-bytes=10240 --ranges=0 --rows=65104166
-					c.Run(ctx, c.Node(node), `mkdir -p /mnt/data1/cockroach`)
-					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
-						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
-						`stores=%d,bin-version=2.0/%d/*`, nodes, node)
-					c.Run(ctx, c.Node(node), `gsutil -m -q cp -r `+path+` /mnt/data1/cockroach`)
-				}(node)
+			// Created via:
+			// roachtest --cockroach cockroach-v2.0.1 store-gen --stores=10 bank \
+			//           --payload-bytes=10240 --ranges=0 --rows=65104166
+			location := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
+			if err := downloadStoreDumps(ctx, c, location, "2.0", nodes); err != nil {
+				t.Fatal(err)
 			}
-			wg.Wait()
 
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx)

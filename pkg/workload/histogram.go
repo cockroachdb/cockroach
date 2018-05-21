@@ -25,11 +25,14 @@ import (
 )
 
 const (
-	numUnderlyingHistograms = 1
-	sigFigs                 = 1
-	minLatency              = 100 * time.Microsecond
-	maxLatency              = 100 * time.Second
+	sigFigs    = 1
+	minLatency = 100 * time.Microsecond
+	maxLatency = 100 * time.Second
 )
+
+func newHistogram() *hdrhistogram.Histogram {
+	return hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+}
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
 // but intended to be thread-local.
@@ -37,19 +40,13 @@ type NamedHistogram struct {
 	name string
 	mu   struct {
 		syncutil.Mutex
-		numOps int64
-		hist   *hdrhistogram.WindowedHistogram
+		current *hdrhistogram.Histogram
 	}
 }
 
 func newNamedHistogram(name string) *NamedHistogram {
 	w := &NamedHistogram{name: name}
-	// TODO(dan): Does this really need to be a windowed histogram, given that
-	// we're using a window size of 1? I'm intentionally waiting on this until
-	// after we're quite sure that the workload versions of `kv` and `tpcc` are
-	// producing the same results as the old tools.
-	w.mu.hist = hdrhistogram.NewWindowed(
-		numUnderlyingHistograms, minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	w.mu.current = newHistogram()
 	return w
 }
 
@@ -62,23 +59,25 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 	}
 
 	w.mu.Lock()
-	err := w.mu.hist.Current.RecordValue(elapsed.Nanoseconds())
-	w.mu.numOps++
+	err := w.mu.current.RecordValue(elapsed.Nanoseconds())
 	w.mu.Unlock()
 
 	if err != nil {
+		// Note that a histogram only drops recorded values that are out of range,
+		// but we clamp the latency value to the configured range to prevent such
+		// drops. This code path should never happen.
 		panic(fmt.Sprintf(`%s: recording value: %s`, w.name, err))
 	}
 }
 
 // tick resets the current histogram to a new "period". The old one's data
 // should be saved via the closure argument.
-func (w *NamedHistogram) tick(fn func(numOps int64, h *hdrhistogram.Histogram)) {
+func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	m := w.mu.hist.Merge()
-	w.mu.hist.Rotate()
-	fn(w.mu.numOps, m)
+	h := w.mu.current
+	w.mu.current = newHistogram()
+	fn(h)
 }
 
 // HistogramRegistry is a thread-safe enclosure for a (possibly large) number of
@@ -92,7 +91,7 @@ type HistogramRegistry struct {
 
 	start      time.Time
 	cumulative map[string]*hdrhistogram.Histogram
-	prevTick   map[string]HistogramTick
+	prevTick   map[string]time.Time
 }
 
 // NewHistogramRegistry returns an initialized HistogramRegistry.
@@ -100,7 +99,7 @@ func NewHistogramRegistry() *HistogramRegistry {
 	return &HistogramRegistry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
-		prevTick:   make(map[string]HistogramTick),
+		prevTick:   make(map[string]time.Time),
 	}
 }
 
@@ -121,15 +120,8 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 
 	merged := make(map[string]*hdrhistogram.Histogram)
 	var names []string
-	totalOps := make(map[string]int64)
 	for _, hist := range registered {
-		hist.tick(func(numOps int64, h *hdrhistogram.Histogram) {
-			// TODO(dan): It really seems like we should be able to use
-			// `h.TotalCount()` for the number of operations but for some reason
-			// that doesn't line up in practice. Investigate. Merge returns the
-			// number of samples that had to be dropped during the merge - we
-			// ignore that value. Perhaps that is the discrepancy.
-			totalOps[hist.name] += numOps
+		hist.tick(func(h *hdrhistogram.Histogram) {
 			if m, ok := merged[hist.name]; ok {
 				m.Merge(h)
 			} else {
@@ -139,30 +131,27 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 		})
 	}
 
+	now := timeutil.Now()
 	sort.Strings(names)
 	for _, name := range names {
 		mergedHist := merged[name]
 		if _, ok := w.cumulative[name]; !ok {
-			w.cumulative[name] = hdrhistogram.New(
-				minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+			w.cumulative[name] = newHistogram()
 		}
 		w.cumulative[name].Merge(mergedHist)
 
 		prevTick, ok := w.prevTick[name]
 		if !ok {
-			prevTick.start = w.start
+			prevTick = w.start
 		}
-		now := timeutil.Now()
-		w.prevTick[name] = HistogramTick{
+		w.prevTick[name] = now
+		fn(HistogramTick{
 			Name:       name,
 			Hist:       merged[name],
 			Cumulative: w.cumulative[name],
-			Ops:        totalOps[name],
-			LastOps:    prevTick.Ops,
-			Elapsed:    now.Sub(prevTick.start),
-			start:      now,
-		}
-		fn(w.prevTick[name])
+			Elapsed:    now.Sub(prevTick),
+			Now:        now,
+		})
 	}
 }
 
@@ -202,16 +191,15 @@ type HistogramTick struct {
 	// Name is the name given to the histograms represented by this tick.
 	Name string
 	// Hist is the merged result of the represented histograms for this tick.
+	// Hist.TotalCount() is the number of operations that occurred for this tick.
 	Hist *hdrhistogram.Histogram
 	// Cumulative is the merged result of the represented histograms for all
-	// time.
+	// time. Cumulative.TotalCount() is the total number of operations that have
+	// occurred over all time.
 	Cumulative *hdrhistogram.Histogram
-	// Ops is the total number of `Record` calls for all represented histograms.
-	Ops int64
-	// LastOps is the value of Ops for the last tick.
-	LastOps int64
 	// Elapsed is the amount of time since the last tick.
 	Elapsed time.Duration
-
-	start time.Time
+	// Now is the time at which the tick was gathered. It covers the period
+	// [Now-Elapsed,Now).
+	Now time.Time
 }
