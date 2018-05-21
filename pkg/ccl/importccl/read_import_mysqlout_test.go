@@ -41,6 +41,8 @@ func loadMysqlTestdata(t *testing.T, rows []testRow) func() {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
+
 	if _, err := db.Exec(
 		`DROP TABLE IF EXISTS test`,
 	); err != nil {
