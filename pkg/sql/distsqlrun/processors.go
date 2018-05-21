@@ -67,7 +67,7 @@ type ProcOutputHelper struct {
 	//
 	// If renderExprs is set, these types correspond to the types of those
 	// expressions.
-	// If outpuCols is set, these types correspond to the types of
+	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
 	outputTypes []sqlbase.ColumnType
