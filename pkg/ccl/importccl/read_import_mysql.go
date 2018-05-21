@@ -32,9 +32,9 @@ type mysqldumpReader struct {
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan kvBatch, table *sqlbase.TableDescriptor,
+	kvCh chan kvBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
-	conv, err := newRowConverter(table, kvCh)
+	conv, err := newRowConverter(table, evalCtx, kvCh)
 	if err != nil {
 		return nil, err
 	}

@@ -385,7 +385,8 @@ func importPlanHook(
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
 			}
-
+		case "MYSQLDUMP":
+			format.Format = roachpb.IOFileFormat_Mysqldump
 		default:
 			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
 		}
