@@ -577,28 +577,36 @@ func (r *Replica) withRaftGroup(
 	return r.withRaftGroupLocked(f)
 }
 
-// maybeCampaignOnWakeLocked is called when the range wakes from a
-// dormant state (either the initial "raftGroup == nil" state or after
-// being quiescent) and campaigns for raft leadership if appropriate.
-func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
+func shouldCampaignOnWake(
+	leaseStatus LeaseStatus, lease roachpb.Lease, storeID roachpb.StoreID, raftStatus raft.Status,
+) bool {
 	// When waking up a range, campaign unless we know that another
 	// node holds a valid lease (this is most important after a split,
 	// when all replicas create their raft groups at about the same
 	// time, with a lease pre-assigned to one of them). Note that
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
-	anotherOwnsLease := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS).State ==
-		LeaseState_VALID &&
-		!r.mu.state.Lease.OwnedBy(r.store.StoreID())
+	anotherOwnsLease := leaseStatus.State == LeaseState_VALID && !lease.OwnedBy(storeID)
+	// If we're already campaigning or know who the leader is, don't
+	// start a new term.
+	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
+	return !anotherOwnsLease && noLeader
+}
+
+// maybeCampaignOnWakeLocked is called when the range wakes from a
+// dormant state (either the initial "raftGroup == nil" state or after
+// being quiescent) and campaigns for raft leadership if appropriate.
+func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// Raft panics if a node that is not currently a member of the
 	// group tries to campaign. That happens primarily when we apply
 	// preemptive snapshots.
-	_, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID)
-	// If we're already campaigning or know who the leader is, don't
-	// start a new term.
-	status := r.mu.internalRaftGroup.Status()
-	noLeader := status.RaftState == raft.StateFollower && status.Lead == 0
-	if currentMember && !anotherOwnsLease && noLeader {
+	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID); !currentMember {
+		return
+	}
+
+	leaseStatus := r.leaseStatus(*r.mu.state.Lease, r.store.Clock().Now(), r.mu.minLeaseProposedTS)
+	raftStatus := r.mu.internalRaftGroup.Status()
+	if shouldCampaignOnWake(leaseStatus, *r.mu.state.Lease, r.store.StoreID(), *raftStatus) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
@@ -3385,6 +3393,10 @@ func (r *Replica) quiesceLocked() bool {
 			log.Infof(ctx, "quiescing")
 		}
 		r.mu.quiescent = true
+
+		r.store.unquiescedReplicas.Lock()
+		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
 		log.Infof(ctx, "already quiesced")
 	}
@@ -3398,6 +3410,9 @@ func (r *Replica) unquiesceLocked() {
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
+		r.store.unquiescedReplicas.Lock()
+		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+		r.store.unquiescedReplicas.Unlock()
 		r.maybeCampaignOnWakeLocked(ctx)
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
@@ -3882,22 +3897,6 @@ func (r *Replica) tick() (bool, error) {
 	}
 
 	if r.mu.quiescent {
-		// While a replica is quiesced we still advance its logical clock.
-		//
-		// Since we no longer use CheckQuorum, the call to TickQuiesced is
-		// less critical, but still improves our responsiveness to node
-		// failures by priming the replica to start an election
-		// immediately upon unquiescing, instead of waiting for a full
-		// election timeout.
-		//
-		// Enabling TickQuiesced slightly increases the rate of contested
-		// elections. Deployments with high inter-node latency and skewed
-		// range access patterns may benefit from disabling it.
-		//
-		// For more details, see #9372 and #16950.
-		if enableTickQuiesced {
-			r.mu.internalRaftGroup.TickQuiesced()
-		}
 		return false, nil
 	}
 	if r.maybeQuiesceLocked() {
@@ -3919,27 +3918,6 @@ func (r *Replica) tick() (bool, error) {
 		)
 	}
 	return true, nil
-}
-
-// maybeTickQuiesced attempts to tick a quiesced or dormant replica, returning
-// true on success and false if the regular tick path must be taken
-// (i.e. Replica.tick).
-func (r *Replica) maybeTickQuiesced() bool {
-	var done bool
-	r.mu.Lock()
-	if r.mu.internalRaftGroup == nil {
-		done = true
-	} else if r.mu.quiescent {
-		done = true
-		if enableTickQuiesced {
-			// NB: It is safe to call TickQuiesced without holding Replica.raftMu
-			// because that method simply increments a counter without performing any
-			// other logic.
-			r.mu.internalRaftGroup.TickQuiesced()
-		}
-	}
-	r.mu.Unlock()
-	return done
 }
 
 // maybeQuiesceLocked checks to see if the replica is quiescable and initiates
@@ -4996,6 +4974,9 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
+			r.store.unquiescedReplicas.Lock()
+			delete(r.store.unquiescedReplicas.m, rightRng.RangeID)
+			r.store.unquiescedReplicas.Unlock()
 			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
 			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
 			r.store.replicaQueues.Delete(int64(rightRng.RangeID))

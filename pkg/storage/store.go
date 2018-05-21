@@ -100,9 +100,6 @@ var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeTy
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_SCHEDULER_CONCURRENCY", 8*runtime.NumCPU())
 
-var enableTickQuiesced = envutil.EnvOrDefaultBool(
-	"COCKROACH_ENABLE_TICK_QUIESCED", false)
-
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
@@ -513,6 +510,12 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
+	// The unquiesced subset of replicas.
+	unquiescedReplicas struct {
+		syncutil.Mutex
+		m map[roachpb.RangeID]struct{}
+	}
+
 	// replicaQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
@@ -872,6 +875,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
+
+	s.unquiescedReplicas.Lock()
+	s.unquiescedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.unquiescedReplicas.Unlock()
 
 	tsCacheMetrics := tscache.MakeMetrics()
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
@@ -2230,6 +2237,9 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, newRng)
 		}
 		delete(s.mu.uninitReplicas, newDesc.RangeID)
+		s.unquiescedReplicas.Lock()
+		delete(s.unquiescedReplicas.m, newDesc.RangeID)
+		s.unquiescedReplicas.Unlock()
 		s.mu.replicas.Delete(int64(newDesc.RangeID))
 		s.replicaQueues.Delete(int64(newDesc.RangeID))
 	}
@@ -2439,6 +2449,9 @@ func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
+	s.unquiescedReplicas.Lock()
+	s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+	s.unquiescedReplicas.Unlock()
 	return nil
 }
 
@@ -2536,6 +2549,9 @@ func (s *Store) removeReplicaImpl(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.unquiescedReplicas.Lock()
+	delete(s.unquiescedReplicas.m, rep.RangeID)
+	s.unquiescedReplicas.Unlock()
 	s.mu.replicas.Delete(int64(rep.RangeID))
 	delete(s.mu.uninitReplicas, rep.RangeID)
 	s.replicaQueues.Delete(int64(rep.RangeID))
@@ -3677,25 +3693,16 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		case <-ticker.C:
 			rangeIDs = rangeIDs[:0]
 
-			s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-				// Fast-path handling of quiesced replicas. This avoids the overhead of
-				// queueing the replica on the Raft scheduler. This overhead is
-				// significant and there is overhead to filling the Raft scheduler with
-				// replicas to tick. A node with 3TB of disk might contain 50k+
-				// replicas. Filling the Raft scheduler with all of those replicas
-				// every tick interval can starve other Raft processing of cycles.
-				//
+			s.unquiescedReplicas.Lock()
+			for k := range s.unquiescedReplicas.m {
 				// Why do we bother to ever queue a Replica on the Raft scheduler for
 				// tick processing? Couldn't we just call Replica.tick() here? Yes, but
 				// then a single bad/slow Replica can disrupt tick processing for every
 				// Replica on the store which cascades into Raft elections and more
-				// disruption. Replica.maybeTickQuiesced only grabs short-duration
-				// locks and not locks that are held during disk I/O.
-				if !(*Replica)(v).maybeTickQuiesced() {
-					rangeIDs = append(rangeIDs, roachpb.RangeID(k))
-				}
-				return true
-			})
+				// disruption.
+				rangeIDs = append(rangeIDs, k)
+			}
+			s.unquiescedReplicas.Unlock()
 
 			s.scheduler.EnqueueRaftTick(rangeIDs...)
 			s.metrics.RaftTicks.Inc(1)
@@ -3937,6 +3944,9 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
+		s.unquiescedReplicas.Lock()
+		delete(s.unquiescedReplicas.m, rangeID)
+		s.unquiescedReplicas.Unlock()
 		s.mu.replicas.Delete(int64(rangeID))
 		delete(s.mu.uninitReplicas, rangeID)
 		s.replicaQueues.Delete(int64(rangeID))
