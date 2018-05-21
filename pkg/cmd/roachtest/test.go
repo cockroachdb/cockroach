@@ -561,7 +561,11 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, t.mu.output)
 					if issues.CanPost() {
 						authorEmail := getAuthorEmail(t.mu.failLoc.file, t.mu.failLoc.line)
-						if err := issues.Post(context.Background(), "", "roachtest",
+						branch := "<unknown branch>"
+						if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+							branch = b
+						}
+						if err := issues.Post(context.Background(), " on "+branch, "roachtest",
 							t.Name(), string(t.mu.output), authorEmail); err != nil {
 							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
 						}
