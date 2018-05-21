@@ -162,10 +162,8 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
-	// RaceEnabled ensures that checks are run on every change (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	// TODO(radu): replace this with a flag that is true for all tests.
-	if util.RaceEnabled {
+	// Run extra checks, but only for test builds.
+	if util.IsMakeTest {
 		f.checkExpr(e)
 	}
 	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
