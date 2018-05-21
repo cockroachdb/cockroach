@@ -81,6 +81,8 @@ func TestEval(t *testing.T) {
 		{`2:::int ^ 2.1:::decimal`, `4.2870938501451726569`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8`},
+		{`1 / 3`, `0.33333333333333333333`},
+		{`-1 / 3`, `-0.33333333333333333333`},
 		{`1.1:::decimal / 2.2:::decimal`, `0.5`},
 		{`1:::int / 2.2:::decimal`, `0.45454545454545454545`},
 		{`1.1:::decimal / 2:::int`, `0.55`},
