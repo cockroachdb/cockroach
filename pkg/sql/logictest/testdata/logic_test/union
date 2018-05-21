@@ -248,3 +248,14 @@ CREATE TABLE b (a INTEGER PRIMARY KEY)
 
 query I
 SELECT * FROM a UNION ALL SELECT * FROM b
+
+
+# Make sure that UNION ALL doesn't crash when its two children have different
+# post-processing stages.
+
+statement ok
+CREATE TABLE c (a INT PRIMARY KEY, b INT)
+
+query I
+SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
+----
