@@ -182,7 +182,7 @@ query error no data source matches pattern: bar.kv.\*
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
-query error cannot subscript type tuple\{string, string\} because it is not an array
+query error cannot subscript type tuple\{string AS k, string AS v\} because it is not an array
 SELECT kv.*[1] FROM kv
 
 query T colnames

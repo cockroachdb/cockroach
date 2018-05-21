@@ -515,12 +515,12 @@ func (s *scope) Resolve(
 	return nil, sqlbase.NewUndefinedColumnError(tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
-func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
+func makeUntypedTuple(labels []string, texprs []tree.TypedExpr) *tree.Tuple {
 	exprs := make(tree.Exprs, len(texprs))
 	for i, e := range texprs {
 		exprs[i] = e
 	}
-	return &tree.Tuple{Exprs: exprs}
+	return &tree.Tuple{Exprs: exprs, Labels: labels}
 }
 
 // VisitPre is part of the Visitor interface.
@@ -529,8 +529,16 @@ func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
 // sql/subquery.go.
 func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
+	case *tree.TupleStar:
+		// TupleStars at the top level of a SELECT clause are replaced
+		// when the select's renders are prepared. If we encounter one
+		// here during expression analysis, it's being used as an argument
+		// to an inner expression. In that case, we just report its tuple
+		// operand unchanged.
+		return true, t.Expr
+
 	case *tree.AllColumnsSelector:
-		// AllColumnsSelector at the top level of a SELECT clause are
+		// AllColumnsSelectors at the top level of a SELECT clause are
 		// replaced when the select's renders are prepared. If we
 		// encounter one here during expression analysis, it's being used
 		// as an argument to an inner expression/function. In that case,
@@ -541,8 +549,12 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
 		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
 		//
-		exprs := s.builder.expandStar(expr, s)
-		return false, makeUntypedTuple(exprs)
+		labels, exprs := s.builder.expandStar(expr, s)
+		// We return an untyped tuple because name resolution occurs
+		// before type checking, and type checking will resolve the
+		// tuple's type. However we need to preserve the labels in
+		// case of e.g. `SELECT (kv.*).v`.
+		return false, makeUntypedTuple(labels, exprs)
 
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
