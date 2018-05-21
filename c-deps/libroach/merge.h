@@ -17,6 +17,7 @@
 #include <libroach.h>
 #include <rocksdb/merge_operator.h>
 #include "defines.h"
+#include "protos/roachpb/internal.pb.h"
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 
 namespace cockroach {
@@ -26,5 +27,7 @@ WARN_UNUSED_RESULT bool MergeValues(cockroach::storage::engine::enginepb::MVCCMe
                                     bool full_merge, rocksdb::Logger* logger);
 DBStatus MergeResult(cockroach::storage::engine::enginepb::MVCCMetadata* meta, DBString* result);
 rocksdb::MergeOperator* NewMergeOperator();
+void sortAndDeduplicateColumns(roachpb::InternalTimeSeriesData* data, int first_unsorted);
+void convertToColumnar(roachpb::InternalTimeSeriesData* data);
 
 }  // namespace cockroach
