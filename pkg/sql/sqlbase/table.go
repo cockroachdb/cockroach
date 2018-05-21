@@ -726,12 +726,33 @@ func EncodeTableValue(
 			return nil, err
 		}
 		return encoding.EncodeArrayValue(appendTo, uint32(colID), a), nil
+	case *tree.DTuple:
+		scratch = scratch[0:0]
+		// TODO(arjun): How do we eliminate this allocation?
+		var v []byte
+		var err error
+		v, err = encodeTupleValue(v, t, scratch)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeTupleValue(appendTo, uint32(colID), v), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
+}
+
+func encodeTupleValue(appendTo []byte, t *tree.DTuple, scratch []byte) ([]byte, error) {
+	var err error
+	for _, dd := range t.D {
+		appendTo, err = EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), dd, scratch)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return appendTo, nil
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
@@ -1412,13 +1433,27 @@ func DecodeTableKey(
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
 	default:
-		if t, ok := valType.(types.TCollatedString); ok {
+		switch t := valType.(type) {
+		case types.TCollatedString:
 			var r string
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 			if err != nil {
 				return nil, nil, err
 			}
 			return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
+		case types.TTuple:
+			dtuple := tree.DTuple{}
+			dtuple.D = make(tree.Datums, len(t.Types))
+			rkey := key
+			for i, tupleType := range t.Types {
+				var err error
+				dtuple.D[i], rkey, err = DecodeTableKey(a, tupleType, rkey, dir)
+				if err != nil {
+					return nil, nil, errors.Wrapf(err, "error decoding tuple at %d'th value", i)
+				}
+			}
+
+			return &dtuple, key, errors.Errorf("cannot decode tuple key: %s", valType)
 		}
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
@@ -1515,6 +1550,22 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 			}
 			result.Array[i] = val
 		}
+	}
+	return &result, b, nil
+}
+
+func decodeTuple(a *DatumAlloc, elementTypes types.TTuple, b []byte) (tree.Datum, []byte, error) {
+	result := tree.DTuple{
+		D: make([]tree.Datum, len(elementTypes.Types)),
+	}
+	var err error
+	var datum tree.Datum
+	for i, typ := range elementTypes.Types {
+		datum, b, err = DecodeTableValue(a, typ, b)
+		if err != nil {
+			return nil, b, err
+		}
+		result.D[i] = datum
 	}
 	return &result, b, nil
 }
@@ -1624,6 +1675,8 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
 		case types.TArray:
 			return decodeArray(a, typ.Typ, buf)
+		case types.TTuple:
+			return decodeTuple(a, typ, buf[1:])
 		}
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}
