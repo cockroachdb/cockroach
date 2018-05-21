@@ -70,14 +70,20 @@ func descForTable(t *testing.T, create string) *sqlbase.TableDescriptor {
 	return table
 }
 
+func getMysqldumpTestdata(t *testing.T) ([]testRow, string) {
+	testRows := getMysqlTestRows()
+	dest := filepath.Join(`testdata`, `mysqldump`, `example.sql`)
+	if false {
+		writeMysqldumpTestdata(t, dest, testRows)
+	}
+	return testRows, dest
+}
 func TestMysqldumpReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testRows := getMysqlTestRows()
-	dest := filepath.Join(`testdata`, `mysqldump`, `example.sql`)
+	testRows, dest := getMysqldumpTestdata(t)
 
 	ctx := context.TODO()
-
 	table := descForTable(t, `CREATE TABLE test (i INT PRIMARY KEY, s text, b bytea)`)
 
 	evalCtx := &tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}}
