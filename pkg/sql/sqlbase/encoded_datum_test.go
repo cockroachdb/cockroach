@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -212,7 +213,7 @@ func TestEncDatumCompare(t *testing.T) {
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
 		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR ||
-			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSON {
+			kind == ColumnType_OIDVECTOR || kind == ColumnType_JSON || kind == ColumnType_TUPLE {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}
@@ -480,4 +481,56 @@ func TestEncDatumRowAlloc(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestValueEncodeDecodeTuple(t *testing.T) {
+	rng, seed := randutil.NewPseudoRand()
+	tests := make([]tree.Datum, 1000)
+	colTypes := make([]ColumnType, 1000)
+
+	for i := range tests {
+		colTypes[i] = ColumnType{SemanticType: ColumnType_TUPLE}
+
+		len := rng.Intn(5)
+		colTypes[i].TupleContents = make([]ColumnType, len)
+		for j := range colTypes[i].TupleContents {
+			colTypes[i].TupleContents[j] = RandColumnType(rng)
+		}
+		tests[i] = RandDatum(rng, colTypes[i], true)
+	}
+
+	for i, test := range tests {
+
+		switch typedTest := test.(type) {
+		case *tree.DTuple:
+
+			buf, err := EncodeTableValue(nil, ColumnID(encoding.NoColumnID), typedTest, nil)
+			if err != nil {
+				t.Fatalf("seed %d: encoding tuple %v with types %v failed with error: %v",
+					seed, test, colTypes[i], err)
+			}
+			var decodedTuple tree.Datum
+			testTyp := test.ResolvedType().(types.TTuple)
+
+			decodedTuple, buf, err = DecodeTableValue(&DatumAlloc{}, testTyp, buf)
+			if err != nil {
+				t.Fatalf("seed %d: decoding tuple %v with type (%+v, %+v) failed with error: %v",
+					seed, test, colTypes[i], testTyp, err)
+			}
+			if len(buf) != 0 {
+				t.Fatalf("seed %d: decoding tuple %v with type (%+v, %+v) left %d remaining bytes",
+					seed, test, colTypes[i], testTyp, len(buf))
+			}
+
+			if cmp := decodedTuple.Compare(&tree.EvalContext{}, test); cmp != 0 {
+				t.Fatalf("seed %d: encoded %+v, decoded %+v, expected equal, received comparison: %d", seed, test, decodedTuple, cmp)
+			}
+		default:
+			if test == tree.DNull {
+				continue
+			}
+			t.Fatalf("seed %d: non-null test case %v is not a tuple", seed, test)
+		}
+	}
+
 }

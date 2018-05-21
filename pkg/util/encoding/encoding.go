@@ -1037,7 +1037,7 @@ func DecodeDurationDescending(b []byte) ([]byte, duration.Duration, error) {
 type Type int
 
 // Type values.
-// TODO(dan): Make this into a proto enum.
+// TODO(dan, arjun): Make this into a proto enum.
 const (
 	Unknown Type = iota
 	Null
@@ -1057,7 +1057,8 @@ const (
 	// Do not change SentinelType from 15. This value is specifically used for bit
 	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
-	JSON
+	JSON         Type = iota
+	Tuple
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -1972,6 +1973,20 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 	case Bytes, Array, JSON:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
+	case Tuple:
+		rem, l, numTuples, err := DecodeNonsortingUvarint(b)
+		if err != nil {
+			return 0, errors.Wrapf(err, "cannot decode tuple header: ")
+		}
+		for i := 0; i < int(numTuples); i++ {
+			_, entryLen, err := PeekValueLength(rem)
+			if err != nil {
+				return 0, errors.Wrapf(err, "cannot peek tuple entry %d", i)
+			}
+			l += entryLen
+			rem = rem[entryLen:]
+		}
+		return dataOffset + l, nil
 	case Decimal:
 		_, n, i, err := DecodeNonsortingStdlibUvarint(b)
 		return dataOffset + n + int(i), err

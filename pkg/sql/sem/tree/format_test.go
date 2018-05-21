@@ -194,6 +194,7 @@ func TestFormatExpr(t *testing.T) {
 			`unique_rowid() + 123:::INT`},
 		{`sqrt(123.0) + 456`, tree.FmtParsable,
 			`sqrt(123.0:::DECIMAL) + 456:::DECIMAL`},
+		{`ROW()`, tree.FmtParsable, `ROW()`},
 		{`now() + interval '3s'`, tree.FmtSimple,
 			`now() + '3s'`},
 		{`now() + interval '3s'`, tree.FmtParsable,
