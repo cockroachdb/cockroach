@@ -280,7 +280,11 @@ func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, 
 }
 
 func initTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, firstStore base.StoreSpec,
+	ctx context.Context,
+	st *cluster.Settings,
+	stopper *stop.Stopper,
+	firstStore base.StoreSpec,
+	specIdx int,
 ) (base.TempStorageConfig, error) {
 	var recordPath string
 	if !firstStore.InMemory {
@@ -339,6 +343,7 @@ func initTempStorageConfig(
 		firstStore,
 		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
+		specIdx,
 	)
 
 	// Set temp directory to first store's path if the temp storage is not
@@ -436,7 +441,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[0]); err != nil {
+	// Find a StoreSpec that has encryption at rest turned on. If can't find
+	// one, use the first StoreSpec in the list.
+	var specIdx = 0
+	for i := range serverCfg.Stores.Specs {
+		if serverCfg.Stores.Specs[i].ExtraOptions != nil {
+			specIdx = i
+		}
+	}
+	useStore := serverCfg.Stores.Specs[specIdx]
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, useStore, specIdx); err != nil {
 		return err
 	}
 
