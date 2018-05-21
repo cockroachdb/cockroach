@@ -72,45 +72,17 @@ type groupby struct {
 	// using symbolic notation. These strings are used to determine if SELECT
 	// and HAVING expressions contain sub-expressions matching a GROUP BY
 	// expression. This enables queries such as:
-	//    SELECT x+y FROM t GROUP BY x+y
+	//   SELECT x+y FROM t GROUP BY x+y
 	// but not:
-	//    SELECT x+y FROM t GROUP BY y+x
+	//   SELECT x+y FROM t GROUP BY y+x
+	//
+	// Each string maps to the grouping column in an aggOutScope scope that
+	// projects that expression.
 	groupStrs groupByStrSet
 
 	// inAgg is true within the body of an aggregate function. inAgg is used
 	// to ensure that nested aggregates are disallowed.
 	inAgg bool
-
-	// varsUsed is only utilized when groupingsScope is not nil.
-	// It keeps track of variables that are encountered by the builder that are:
-	//   (1) not explicit GROUP BY columns,
-	//   (2) not part of a sub-expression that matches a GROUP BY expression, and
-	//   (3) not contained in an aggregate.
-	//
-	// varsUsed is a slice rather than a set because the builder appends
-	// variables found in each sub-expression, and variables from individual
-	// sub-expresssions may be removed if they are found to match a GROUP BY
-	// expression. If any variables remain in varsUsed when the builder is
-	// done building a SELECT expression or HAVING clause, the builder throws
-	// an error.
-	//
-	// For example, consider this query:
-	//   SELECT COUNT(*), v/(k+v) FROM t.kv GROUP BY k+v
-	// When building the expression v/(k+v), varsUsed will contain the variables
-	// shown in brackets after each of the following expressions is built (in
-	// order of completed recursive calls):
-	//
-	//  1.   Build v [v]
-	//          \
-	//  2.       \  Build k [v, k]
-	//            \    \
-	//  3.         \    \  Build v [v, k, v]
-	//              \    \   /
-	//  4.           \  Build (k+v) [v]  <- truncate varsUsed since (k+v) matches
-	//                \   /                 a GROUP BY expression
-	//  5.          Build v/(k+v) [v] <- error - build is complete and varsUsed
-	//                                   is not empty
-	varsUsed []opt.ColumnID
 }
 
 // aggregateInfo stores information about an aggregation function call.
@@ -286,13 +258,7 @@ func (b *Builder) buildAggregation(
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
 func (b *Builder) buildHaving(having tree.Expr, inScope *scope) memo.GroupID {
-	out := b.buildScalar(inScope.resolveAndRequireType(having, types.Bool, "HAVING"), inScope)
-	if len(inScope.groupby.varsUsed) > 0 {
-		i := inScope.groupby.varsUsed[0]
-		col := b.colMap[i]
-		panic(groupingError(col.String()))
-	}
-	return out
+	return b.buildScalar(inScope.resolveAndRequireType(having, types.Bool, "HAVING"), inScope)
 }
 
 // buildGroupingList builds a set of memo groups that represent a list of
@@ -308,7 +274,6 @@ func (b *Builder) buildHaving(having tree.Expr, inScope *scope) memo.GroupID {
 func (b *Builder) buildGroupingList(
 	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
 ) {
-
 	inScope.groupby.groupings = make([]memo.GroupID, 0, len(groupBy))
 	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
 	for _, e := range groupBy {
@@ -350,23 +315,34 @@ func (b *Builder) buildGrouping(
 	for _, e := range exprs {
 		// Save a representation of the GROUP BY expression for validation of the
 		// SELECT and HAVING expressions. This enables queries such as:
-		//    SELECT x+y FROM t GROUP BY x+y
-		inScope.groupby.groupStrs[symbolicExprStr(e)] = exists
+		//   SELECT x+y FROM t GROUP BY x+y
 		col := b.buildScalarProjection(e, label, inScope, outScope)
+		inScope.groupby.groupStrs[symbolicExprStr(e)] = col
 		inScope.groupby.groupings = append(inScope.groupby.groupings, col.group)
 	}
 }
 
 // buildAggregateFunction is called when we are building a function which is an
-// aggregate. Returns an aggOutScope column that contains the result of the
-// aggregation.
+// aggregate. Any non-trivial parameters (i.e. not column reference) to the
+// aggregate function are extracted and added to aggInScope. The aggregate
+// function expression itself is added to aggOutScope. For example:
+//
+//   SELECT SUM(x+1) FROM xy
+//   =>
+//   aggInScope : x+1 AS column1
+//   aggOutScope: SUM(column1)
+//
+// If outScope is nil, then buildAggregateFunction returns a Variable reference
+// to the aggOutScope column. Otherwise, it adds that column to the outScope
+// projection, and returns 0.
 func (b *Builder) buildAggregateFunction(
-	f *tree.FuncExpr, funcDef memo.FuncOpDef, label string, inScope *scope,
-) *scopeColumn {
+	f *tree.FuncExpr, funcDef memo.FuncOpDef, label string, inScope, outScope *scope,
+) (out memo.GroupID) {
 	if len(f.Exprs) > 1 {
 		// TODO: #10495
-		panic(builderError{
-			pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet"),
+		panic(builderError{pgerror.UnimplementedWithIssueError(
+			10495,
+			"aggregate functions with multiple arguments are not supported yet"),
 		})
 	}
 	if f.Type == tree.DistinctFuncType {
@@ -410,6 +386,8 @@ func (b *Builder) buildAggregateFunction(
 	// expression and synthesize a column for the aggregation result.
 	col := aggOutScope.findAggregate(info)
 	if col == nil {
+		// Use 0 as the group for now; it will be filled in later by the
+		// buildAggregation method.
 		col = b.synthesizeColumn(aggOutScope, label, f.ResolvedType(), f, 0 /* group */)
 
 		// Add the aggregate to the list of aggregates that need to be computed by
@@ -425,16 +403,15 @@ func (b *Builder) buildAggregateFunction(
 			col.name = tree.Name(label)
 		}
 	}
-	return col
+
+	// Either wrap the column in a Variable expression if it's part of a larger
+	// expression, or else add it to the outScope if it needs to be projected.
+	return b.finishBuildScalarRef(col, label, aggOutScope, outScope)
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
 	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
 	return ok
-}
-
-func groupingError(colName string) error {
-	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
 }
 
 var constructAggLookup = map[string]func(f *norm.Factory, argList []memo.GroupID) memo.GroupID{
