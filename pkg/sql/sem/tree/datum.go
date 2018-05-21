@@ -2609,6 +2609,10 @@ func (*DTuple) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 // TODO(bram): We don't format tuples in the same way as postgres. See #25522.
 func (d *DTuple) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
+		ctx.WriteString("ROW()")
+		return
+	}
 	ctx.FormatNode(&d.D)
 }
 

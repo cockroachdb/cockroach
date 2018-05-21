@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -280,15 +279,6 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 var mutationsNotSupportedError = newQueryNotSupportedError("mutations not supported")
 var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING should never distribute")
 
-// leafType returns the element type if the given type is an array, and the type
-// itself otherwise.
-func leafType(t types.T) types.T {
-	if a, ok := t.(types.TArray); ok {
-		return leafType(a.Typ)
-	}
-	return t
-}
-
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
 // TODO(radu): add tests for this.
@@ -301,11 +291,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.source.plan)
 
 	case *renderNode:
-		for i, e := range n.render {
-			typ := n.columns[i].Typ
-			if leafType(typ).FamilyEqual(types.FamTuple) {
-				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
-			}
+		for _, e := range n.render {
 			if err := dsp.checkExpr(e); err != nil {
 				return 0, err
 			}
