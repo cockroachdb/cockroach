@@ -16,7 +16,16 @@ package timeutil
 
 import (
 	"testing"
+	"time"
 )
+
+// TestNowUTC asserts that Now()'s timezone is UTC.
+func TestNowUTC(t *testing.T) {
+	n := Now()
+	if l := n.Location(); l != time.UTC {
+		t.Fatalf("expected UTC, got %v", l)
+	}
+}
 
 func BenchmarkNow(b *testing.B) {
 	for i := 0; i < b.N; i++ {

@@ -12,15 +12,23 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !windows
-
 package timeutil
 
 import (
 	"time"
 )
 
+func init() {
+	// While our datastore uses the HLC clock to protect against backward time
+	// jumps, there are various user-facing timestamps that do not. Go 1.9 added
+	// monotonic timestamps, but our forcing of all timezones to UTC using the
+	// time.UTC() method strips the monotonic clock out of the struct. In order
+	// to get both the benefits of the monotonic timestamps and force all times
+	// to be in UTC we must unfortunately set this global variable.
+	time.Local = time.UTC
+}
+
 // Now returns the current UTC time.
 func Now() time.Time {
-	return time.Now().UTC()
+	return time.Now()
 }
