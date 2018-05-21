@@ -1253,7 +1253,7 @@ SELECT OVERLAY(foo.* PLACING 'string' FROM 'string') FROM (VALUES (1)) AS foo(x)
 query error cannot use "nonexistent.\*" without a FROM clause
 SELECT nonexistent.* IS NOT TRUE
 
-query error unsupported comparison operator: <tuple{int}> IS DISTINCT FROM <bool>
+query error unsupported comparison operator: <tuple{int AS x}> IS DISTINCT FROM <bool>
 SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 
 query T
