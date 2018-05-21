@@ -1972,6 +1972,11 @@ CREATE TABLE crdb_internal.kv_store_status (
 						return nil, err
 					}
 					b.Add("P90", v)
+					v, err = json.FromFloat64(ps.PMax)
+					if err != nil {
+						return nil, err
+					}
+					b.Add("PMax", v)
 					return b.Build(), nil
 				}
 

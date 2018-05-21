@@ -257,11 +257,12 @@ func PercentilesFromData(data []float64) Percentiles {
 	sort.Float64s(data)
 
 	return Percentiles{
-		P10: percentileFromSortedData(data, 10),
-		P25: percentileFromSortedData(data, 25),
-		P50: percentileFromSortedData(data, 50),
-		P75: percentileFromSortedData(data, 75),
-		P90: percentileFromSortedData(data, 90),
+		P10:  percentileFromSortedData(data, 10),
+		P25:  percentileFromSortedData(data, 25),
+		P50:  percentileFromSortedData(data, 50),
+		P75:  percentileFromSortedData(data, 75),
+		P90:  percentileFromSortedData(data, 90),
+		PMax: percentileFromSortedData(data, 100),
 	}
 }
 
@@ -282,8 +283,8 @@ func percentileFromSortedData(data []float64, percent float64) float64 {
 
 // String returns a string representation of the Percentiles.
 func (p Percentiles) String() string {
-	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f",
-		p.P10, p.P25, p.P50, p.P75, p.P90)
+	return fmt.Sprintf("p10=%.2f p25=%.2f p50=%.2f p75=%.2f p90=%.2f pMax=%.2f",
+		p.P10, p.P25, p.P50, p.P75, p.P90, p.PMax)
 }
 
 // String returns a string representation of the StoreCapacity.
