@@ -228,6 +228,10 @@
 </span></td></tr>
 <tr><td><code>array_replace(array: timetz[], toreplace: timetz, replacewith: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
+<tr><td><code>array_to_string(input: anyelement[], delim: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a string with a delimiter.</p>
+</span></td></tr>
+<tr><td><code>array_to_string(input: anyelement[], delimiter: <a href="string.html">string</a>, null: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a string with a delimiter, replacing NULLs with a null string.</p>
+</span></td></tr>
 <tr><td><code>array_upper(input: anyelement[], array_dimension: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the maximum value of <code>input</code> on the provided <code>array_dimension</code>. However, because CockroachDB doesn’t yet support multi-dimensional arrays, the only supported <code>array_dimension</code> is <strong>1</strong>.</p>
 </span></td></tr>
 <tr><td><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>

@@ -2051,6 +2051,34 @@ may increase either contention or retry errors, or both.`,
 		},
 	},
 
+	"array_to_string": {
+		tree.Builtin{
+			Types:        tree.ArgTypes{{"input", types.AnyArray}, {"delim", types.String}},
+			ReturnType:   tree.FixedReturnType(types.String),
+			Category:     categoryArray,
+			NullableArgs: true,
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				delimOrNil := stringOrNil(args[1])
+				return arrayToString(arr, delimOrNil, nil)
+			},
+			Info: "Join an array into a string with a delimiter.",
+		},
+		tree.Builtin{
+			Types:        tree.ArgTypes{{"input", types.AnyArray}, {"delimiter", types.String}, {"null", types.String}},
+			ReturnType:   tree.FixedReturnType(types.String),
+			Category:     categoryArray,
+			NullableArgs: true,
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				delimOrNil := stringOrNil(args[1])
+				nullStr := stringOrNil(args[2])
+				return arrayToString(arr, delimOrNil, nullStr)
+			},
+			Info: "Join an array into a string with a delimiter, replacing NULLs with a null string.",
+		},
+	},
+
 	"array_length": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
@@ -3669,6 +3697,32 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 		}
 	}
 	return result, nil
+}
+
+// arrayToString implements the array_to_string builtin - arr is joined using
+// delim. If nullStr is non-nil, NULL values in the array will be replaced by
+// it.
+func arrayToString(arr *tree.DArray, delimPtr *string, nullStr *string) (tree.Datum, error) {
+	if delimPtr == nil {
+		return tree.DNull, nil
+	}
+
+	f := tree.NewFmtCtxWithBuf(tree.FmtParseDatums)
+
+	for i := range arr.Array {
+		if arr.Array[i] == tree.DNull {
+			if nullStr == nil {
+				continue
+			}
+			f.WriteString(*nullStr)
+		} else {
+			f.FormatNode(arr.Array[i])
+		}
+		if i < len(arr.Array)-1 {
+			f.WriteString(*delimPtr)
+		}
+	}
+	return tree.NewDString(f.CloseAndGetString()), nil
 }
 
 // encodeEscape implements the encode(..., 'escape') Postgres builtin. It's

@@ -1723,3 +1723,13 @@ SELECT lpad('abc', 100000000000000)
 
 query error memory budget exceeded
 SELECT rpad('abc', 100000000000000)
+
+query TT
+SELECT array_to_string(ARRAY['a', 'b,', NULL, 'c'], ','), array_to_string(ARRAY['a', 'b,', NULL, 'c'], ',', NULL)
+----
+a,b,,c  a,b,,c
+
+query TT
+SELECT array_to_string(ARRAY['a', 'b,', 'c'], NULL), array_to_string(ARRAY['a', 'b,', NULL, 'c'], 'foo', 'zerp')
+----
+NULL  afoob,foozerpfooc

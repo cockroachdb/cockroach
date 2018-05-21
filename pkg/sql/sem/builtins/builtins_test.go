@@ -59,7 +59,7 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 	}
 }
 
-func TestStringToArray(t *testing.T) {
+func TestStringToArrayAndBack(t *testing.T) {
 	// s allows us to have a string pointer literal.
 	s := func(x string) *string { return &x }
 	cases := []struct {
@@ -108,7 +108,22 @@ func TestStringToArray(t *testing.T) {
 
 			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			if result.Compare(evalContext, expectedArray) != 0 {
-				t.Fatalf("expected %v, got %v", tc.expected, result)
+				t.Errorf("expected %v, got %v", tc.expected, result)
+			}
+
+			s, err := arrayToString(result.(*tree.DArray), tc.sep, tc.nullStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.sep == nil {
+				if s != tree.DNull {
+					t.Errorf("expected null, found %s", s)
+				}
+				return
+			}
+			fmt.Println(s)
+			if string(*s.(*tree.DString)) != tc.input {
+				t.Errorf("original %s, roundtripped %s", tc.input, s)
 			}
 		})
 	}
