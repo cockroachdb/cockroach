@@ -136,10 +136,6 @@ func DatumToEncDatum(ctyp ColumnType, d tree.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}
-	if ptyp := ctyp.ToDatumType(); d != tree.DNull && !ptyp.Equivalent(d.ResolvedType()) {
-		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
-			d.ResolvedType(), ptyp))
-	}
 	return EncDatum{Datum: d}
 }
 
@@ -203,7 +199,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
 	}
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "error decoding % bytes", len(ed.encoded))
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
