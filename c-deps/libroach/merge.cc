@@ -12,6 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include <numeric>
 #include "merge.h"
 #include <rocksdb/env.h>
 #include "db.h"
@@ -77,6 +78,85 @@ void SerializeTimeSeriesToValue(std::string* val,
   SetTag(val, cockroach::roachpb::TIMESERIES);
 }
 
+// convertToColumnar detects time series data which is in the old row format,
+// converting the data within into the new columnar format.
+void convertToColumnar(cockroach::roachpb::InternalTimeSeriesData& data) {
+  if (data.samples_size() > 0) {
+    for (auto sample : data.samples()) {
+      // While the row format contains other values (such as min and max), these
+      // were not stored in actual usage. Furthermore, the new columnar format
+      // has been designed to be "sparse", with high resolutions containing
+      // values only for the "offset" and "last" columns. Thus, the other row
+      // fields are ignored.
+      data.add_offset(sample.offset());
+      data.add_last(sample.sum());
+    }
+    data.clear_samples();
+  }
+}
+
+void sortAndDeduplicateColumns(cockroach::roachpb::InternalTimeSeriesData& data, int first_unsorted) {
+  // Create an auxilliary array of array indexes, and sort that array according
+  // to the corresponding offset value in the data.offset() collection. This
+  // yields the permutation of the current array indexes that will place the
+  // offsets into sorted order.
+  auto order = std::vector<int>(data.offset_size() - first_unsorted);
+  std::iota(order.begin(), order.end(), first_unsorted);
+  std::stable_sort(order.begin(), order.end(), [&](const int &a, const int &b) {
+    return data.offset(a) < data.offset(b);
+  });
+
+  // Remove any duplicates from the permutation, keeping the *last* element
+  // merged for any given offset. Note the number of duplicates.
+  auto it = std::unique(order.rbegin(), order.rend(), [&](const int &a, const int &b) {
+    return data.offset(a) == data.offset(b);
+  });
+  int duplicates = std::distance(order.begin(), it.base());
+  order.erase(order.begin(), it.base());
+
+  // Apply the permutation in the auxilliary array to all of the relevant column
+  // arrays in the data set.
+  for (int i = 0; i < order.size(); i++) {
+    int dest_idx = i + first_unsorted;
+    int src_idx = order[i];
+    // If the source index is less than the current destination, then the
+    // source value was already swapped to a different location. Follow the
+    // permutation of swaps until we find the source value at its current index.
+    while (src_idx < dest_idx) {
+      src_idx = order[src_idx - first_unsorted];
+    }
+    if (src_idx == dest_idx) {
+      continue;
+    }
+
+    data.mutable_offset()->SwapElements(src_idx, dest_idx);
+    data.mutable_last()->SwapElements(src_idx, dest_idx);
+
+    // The other columns are only present at resolutions generated as rollups.
+    if (data.count_size() > 0) {
+      data.mutable_count()->SwapElements(src_idx, dest_idx);
+      data.mutable_sum()->SwapElements(src_idx, dest_idx);
+      data.mutable_min()->SwapElements(src_idx, dest_idx);
+      data.mutable_max()->SwapElements(src_idx, dest_idx);
+      data.mutable_first()->SwapElements(src_idx, dest_idx);
+      data.mutable_variance()->SwapElements(src_idx, dest_idx);
+    }
+  }
+
+  // Resize to account for removed duplicates.
+  auto new_size = data.offset_size() - duplicates;
+  data.mutable_offset()->Truncate(new_size);
+  data.mutable_last()->Truncate(new_size);
+  if (data.count_size() > 0) {
+    data.mutable_count()->Truncate(new_size);
+    data.mutable_sum()->Truncate(new_size);
+    data.mutable_min()->Truncate(new_size);
+    data.mutable_max()->Truncate(new_size);
+    data.mutable_first()->Truncate(new_size);
+    data.mutable_variance()->Truncate(new_size);
+  }
+}
+
 // MergeTimeSeriesValues attempts to merge two Values which contain
 // InternalTimeSeriesData messages. The messages cannot be merged if they have
 // different start timestamps or sample durations. Returns true if the merge is
@@ -115,58 +195,81 @@ WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::stri
     return true;
   }
 
-  // Initialize new_ts and its primitive data fields. Values from the left and
-  // right collections will be merged into the new collection.
-  cockroach::roachpb::InternalTimeSeriesData new_ts;
-  new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
-  new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
+  // Determine if we are using row or columnar format, by checking if either
+  // format has a "last" column.
+  bool use_column_format = left_ts.last_size() > 0 || right_ts.last_size() > 0;
 
-  // Sort values in right_ts. Assume values in left_ts have been sorted.
-  std::stable_sort(right_ts.mutable_samples()->pointer_begin(),
-                   right_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
+  if (use_column_format) {
+    // Convert from row format to column format if necessary.
+    convertToColumnar(left_ts);
+    convertToColumnar(right_ts);
 
-  // Merge sample values of left and right into new_ts.
-  auto left_front = left_ts.samples().begin();
-  auto left_end = left_ts.samples().end();
-  auto right_front = right_ts.samples().begin();
-  auto right_end = right_ts.samples().end();
+    // Find the minimum offset of the right collection, and find the highest
+    // index in the left collection which is greater than or equal to that
+    // minimum. This determines how many elements of the left collection will
+    // need to be re-sorted and de-duplicated.
+    auto min_offset = std::min_element(right_ts.offset().begin(), right_ts.offset().end());
+    auto first_unsorted_index = std::distance(
+      left_ts.offset().begin(),
+      std::lower_bound(left_ts.offset().begin(), left_ts.offset().end(), *min_offset)
+    );
+    left_ts.MergeFrom(right_ts);
+    sortAndDeduplicateColumns(left_ts, first_unsorted_index);
+    SerializeTimeSeriesToValue(left, left_ts);
+  } else {
+    // Initialize new_ts and its primitive data fields. Values from the left and
+    // right collections will be merged into the new collection.
+    cockroach::roachpb::InternalTimeSeriesData new_ts;
+    new_ts.set_start_timestamp_nanos(left_ts.start_timestamp_nanos());
+    new_ts.set_sample_duration_nanos(left_ts.sample_duration_nanos());
 
-  // Loop until samples from both sides have been exhausted.
-  while (left_front != left_end || right_front != right_end) {
-    // Select the lowest offset from either side.
-    long next_offset;
-    if (left_front == left_end) {
-      next_offset = right_front->offset();
-    } else if (right_front == right_end) {
-      next_offset = left_front->offset();
-    } else if (left_front->offset() <= right_front->offset()) {
-      next_offset = left_front->offset();
-    } else {
-      next_offset = right_front->offset();
+    // Sort values in right_ts. Assume values in left_ts have been sorted.
+    std::stable_sort(right_ts.mutable_samples()->pointer_begin(),
+                     right_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
+
+    // Merge sample values of left and right into new_ts.
+    auto left_front = left_ts.samples().begin();
+    auto left_end = left_ts.samples().end();
+    auto right_front = right_ts.samples().begin();
+    auto right_end = right_ts.samples().end();
+
+    // Loop until samples from both sides have been exhausted.
+    while (left_front != left_end || right_front != right_end) {
+      // Select the lowest offset from either side.
+      long next_offset;
+      if (left_front == left_end) {
+        next_offset = right_front->offset();
+      } else if (right_front == right_end) {
+        next_offset = left_front->offset();
+      } else if (left_front->offset() <= right_front->offset()) {
+        next_offset = left_front->offset();
+      } else {
+        next_offset = right_front->offset();
+      }
+
+      // Create an empty sample in the output collection.
+      cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
+
+      // Only the most recently merged value with a given sample offset is kept;
+      // samples merged earlier at the same offset are discarded. We will now
+      // parse through the left and right sample sets, finding the most recently
+      // merged sample at the current offset.
+      cockroach::roachpb::InternalTimeSeriesSample src;
+      while (left_front != left_end && left_front->offset() == next_offset) {
+        src = *left_front;
+        left_front++;
+      }
+      while (right_front != right_end && right_front->offset() == next_offset) {
+        src = *right_front;
+        right_front++;
+      }
+
+      ns->CopyFrom(src);
     }
 
-    // Create an empty sample in the output collection.
-    cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
-
-    // Only the most recently merged value with a given sample offset is kept;
-    // samples merged earlier at the same offset are discarded. We will now
-    // parse through the left and right sample sets, finding the most recently
-    // merged sample at the current offset.
-    cockroach::roachpb::InternalTimeSeriesSample src;
-    while (left_front != left_end && left_front->offset() == next_offset) {
-      src = *left_front;
-      left_front++;
-    }
-    while (right_front != right_end && right_front->offset() == next_offset) {
-      src = *right_front;
-      right_front++;
-    }
-
-    ns->CopyFrom(src);
+    // Serialize the new TimeSeriesData into the left value's byte field.
+    SerializeTimeSeriesToValue(left, new_ts);
   }
-
-  // Serialize the new TimeSeriesData into the left value's byte field.
-  SerializeTimeSeriesToValue(left, new_ts);
   return true;
 }
 
@@ -184,34 +287,25 @@ WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string* val, rocksdb::Lo
     return false;
   }
 
-  // Initialize new_ts and its primitive data fields.
-  cockroach::roachpb::InternalTimeSeriesData new_ts;
-  new_ts.set_start_timestamp_nanos(val_ts.start_timestamp_nanos());
-  new_ts.set_sample_duration_nanos(val_ts.sample_duration_nanos());
 
-  // Sort values in the ts value.
-  std::stable_sort(val_ts.mutable_samples()->pointer_begin(),
-                   val_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
+  if (val_ts.offset_size() > 0) {
+    sortAndDeduplicateColumns(val_ts, 0);
+  } else {
+    std::stable_sort(val_ts.mutable_samples()->pointer_begin(),
+                    val_ts.mutable_samples()->pointer_end(), TimeSeriesSampleOrdering);
 
-  // Consolidate sample values from the ts value with duplicate offsets.
-  auto front = val_ts.samples().begin();
-  auto end = val_ts.samples().end();
-
-  // Loop until samples have been exhausted.
-  while (front != end) {
-    // Create an empty sample in the output collection.
-    cockroach::roachpb::InternalTimeSeriesSample* ns = new_ts.add_samples();
-    ns->set_offset(front->offset());
-    while (front != end && front->offset() == ns->offset()) {
-      // Only the last sample in the value's repeated samples field with a given
-      // offset is kept in the case of multiple samples with identical offsets.
-      ns->CopyFrom(*front);
-      ++front;
-    }
+    // Deduplicate values, keeping only the *last* sample merged with a given index.
+    using sample = cockroach::roachpb::InternalTimeSeriesSample;
+    auto it = std::unique(val_ts.mutable_samples()->rbegin(),
+                          val_ts.mutable_samples()->rend(),
+                          [](const sample& a, const sample& b) {
+                            return a.offset() == b.offset();
+                          });
+    val_ts.mutable_samples()->DeleteSubrange(0, std::distance(val_ts.mutable_samples()->begin(), it.base()));
   }
 
   // Serialize the new TimeSeriesData into the value's byte field.
-  SerializeTimeSeriesToValue(val, new_ts);
+  SerializeTimeSeriesToValue(val, val_ts);
   return true;
 }
 
