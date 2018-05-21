@@ -1506,7 +1506,7 @@ alter_column_default:
 // block on various issues.
 opt_alter_column_collate:
   COLLATE collation_name { $$ = $2 }
-| /* EMPTY */ {}
+| /* EMPTY */ { $$ = "" }
 
 opt_alter_column_using:
   USING a_expr { $$ = $2 }
