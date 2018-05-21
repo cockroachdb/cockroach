@@ -128,6 +128,9 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
+message DumpRequest {
+}
+
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service TimeSeries {
@@ -138,4 +141,8 @@ service TimeSeries {
       body: "*"
     };
   }
+
+  // Dump returns a stream of all of the raw TimeSeriesData. No
+  // downsampling, interpolation or other processing is performed.
+  rpc Dump(DumpRequest) returns (stream TimeSeriesData) {}
 }

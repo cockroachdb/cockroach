@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -39,10 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -994,6 +997,50 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 	return strings.Join(output, "\n"), nil
 }
 
+var debugTimeSeriesDumpCmd = &cobra.Command{
+	Use:   "tsdump",
+	Short: "dump all the raw timeseries values in a cluster",
+	Long: `
+Dumps all of the raw timeseries values in a cluster.
+`,
+	RunE: MaybeDecorateGRPCError(runTimeSeriesDump),
+}
+
+func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, _, finish, err := getClientGRPCConn(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+
+	tsClient := tspb.NewTimeSeriesClient(conn)
+	stream, err := tsClient.Dump(context.Background(), &tspb.DumpRequest{})
+	if err != nil {
+		log.Fatal(context.Background(), err)
+	}
+
+	var name, source string
+	for {
+		data, err := stream.Recv()
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			return nil
+		}
+		if name != data.Name || source != data.Source {
+			name, source = data.Name, data.Source
+			fmt.Printf("%s %s\n", name, source)
+		}
+		for _, d := range data.Datapoints {
+			fmt.Printf("%d %v\n", d.TimestampNanos, d.Value)
+		}
+	}
+}
+
 var debugSyncTestCmd = &cobra.Command{
 	Use:   "synctest [directory]",
 	Short: "Run a performance test for WAL sync speed",
@@ -1042,6 +1089,7 @@ var debugCmds = []*cobra.Command{
 	debugCompactCmd,
 	debugSSTablesCmd,
 	debugGossipValuesCmd,
+	debugTimeSeriesDumpCmd,
 	debugSyncTestCmd,
 	debugEnvCmd,
 	debugZipCmd,
