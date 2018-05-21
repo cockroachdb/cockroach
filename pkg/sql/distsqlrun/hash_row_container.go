@@ -417,7 +417,7 @@ func (h *hashDiskRowContainer) Init(
 	h.columnEncoder.init(types, storedEqCols)
 	// Provide the diskRowContainer with an ordering on the equality columns of
 	// the rows that we will store. This will result in rows with the
-	// same equality columns ocurring contiguously in the keyspace.
+	// same equality columns occurring contiguously in the keyspace.
 	ordering := make(sqlbase.ColumnOrdering, len(storedEqCols))
 	for i := range ordering {
 		ordering[i] = sqlbase.ColumnOrderInfo{

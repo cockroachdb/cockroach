@@ -726,12 +726,29 @@ func EncodeTableValue(
 			return nil, err
 		}
 		return encoding.EncodeArrayValue(appendTo, uint32(colID), a), nil
+	case *tree.DTuple:
+		return encodeTuple(t, appendTo, uint32(colID), scratch)
 	case *tree.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
+}
+
+func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
+	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
+	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
+
+	var err error
+	for _, dd := range t.D {
+		appendTo, err = EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), dd, scratch)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return appendTo, nil
+
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
@@ -1046,11 +1063,13 @@ func ExtractIndexKey(
 	return indexKey, err
 }
 
-const datumAllocSize = 16 // Arbitrary, could be tuned.
+const datumAllocSize = 16      // Arbitrary, could be tuned.
+const datumAllocMultiplier = 4 // Arbitrary, could be tuned.
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.
 type DatumAlloc struct {
+	datumAlloc        []tree.Datum
 	dintAlloc         []tree.DInt
 	dfloatAlloc       []tree.DFloat
 	dstringAlloc      []tree.DString
@@ -1065,9 +1084,25 @@ type DatumAlloc struct {
 	duuidAlloc        []tree.DUuid
 	dipnetAlloc       []tree.DIPAddr
 	djsonAlloc        []tree.DJSON
+	dtupleAlloc       []tree.DTuple
 	doidAlloc         []tree.DOid
 	scratch           []byte
 	env               tree.CollationEnvironment
+}
+
+// NewDatums allocates Datums of the specified size.
+func (a *DatumAlloc) NewDatums(num int) tree.Datums {
+	buf := &a.datumAlloc
+	if len(*buf) < num {
+		extensionSize := datumAllocSize
+		if extTupleLen := num * datumAllocMultiplier; extensionSize < extTupleLen {
+			extensionSize = extTupleLen
+		}
+		*buf = make(tree.Datums, extensionSize)
+	}
+	r := (*buf)[:num]
+	*buf = (*buf)[num:]
+	return r
 }
 
 // NewDInt allocates a DInt.
@@ -1236,6 +1271,18 @@ func (a *DatumAlloc) NewDJSON(v tree.DJSON) *tree.DJSON {
 	buf := &a.djsonAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DJSON, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTuple allocates a DTuple.
+func (a *DatumAlloc) NewDTuple(v tree.DTuple) *tree.DTuple {
+	buf := &a.dtupleAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DTuple, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1412,7 +1459,8 @@ func DecodeTableKey(
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
 	default:
-		if t, ok := valType.(types.TCollatedString); ok {
+		switch t := valType.(type) {
+		case types.TCollatedString:
 			var r string
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 			if err != nil {
@@ -1517,6 +1565,27 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 		}
 	}
 	return &result, b, nil
+}
+
+func decodeTuple(a *DatumAlloc, elementTypes types.TTuple, b []byte) (tree.Datum, []byte, error) {
+	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result := tree.DTuple{
+		D: a.NewDatums(len(elementTypes.Types)),
+	}
+
+	var datum tree.Datum
+	for i, typ := range elementTypes.Types {
+		datum, b, err = DecodeTableValue(a, typ, b)
+		if err != nil {
+			return nil, b, err
+		}
+		result.D[i] = datum
+	}
+	return a.NewDTuple(result), b, nil
 }
 
 // decodeUntaggedDatum is used to decode a Datum whose type is known, and which
@@ -1624,6 +1693,8 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
 		case types.TArray:
 			return decodeArray(a, typ.Typ, buf)
+		case types.TTuple:
+			return decodeTuple(a, typ, buf)
 		}
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}

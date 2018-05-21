@@ -83,7 +83,7 @@ CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM in
 statement error pq: relation "foo" already exists
 CREATE TABLE foo (x, y, z) AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
 
-statement error pq: unsupported result type: tuple{}
+statement error pq: unexpected type coltypes.TTuple
 CREATE TABLE foo2 (x) AS (VALUES(ROW()))
 
 statement error pq: value type setof tuple{int AS generate_series} cannot be used for table columns

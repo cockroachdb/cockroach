@@ -114,6 +114,12 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
+	case ColumnType_TUPLE:
+		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents))}
+		for i, internalType := range typ.TupleContents {
+			tuple.D[i] = RandDatum(rng, internalType, true)
+		}
+		return &tuple
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
@@ -197,6 +203,14 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 			// TODO(justin): change this when collated arrays are supported.
 			s := ColumnType_STRING
 			typ.ArrayContents = &s
+		}
+	}
+	if typ.SemanticType == ColumnType_TUPLE {
+		// Generate tuples between 0 and 4 datums in length
+		len := rng.Intn(5)
+		typ.TupleContents = make([]ColumnType, len)
+		for i := range typ.TupleContents {
+			typ.TupleContents[i] = RandColumnType(rng)
 		}
 	}
 	return typ
