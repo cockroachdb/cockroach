@@ -210,7 +210,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
 			log.Infof(ctx, `wrote csv %s [%d,%d] of %d row batches (%.2f%% (%s) in %s: %.1f MB/s)`,
 				table.Name, rowStart, rowIdx, table.InitialRows.NumBatches,
-				float64(100*table.InitialRows.NumBatches)/float64(rowIdx),
+				float64(100*rowIdx)/float64(table.InitialRows.NumBatches),
 				humanizeutil.IBytes(newBytesWritten), d, throughput)
 
 			return nil
