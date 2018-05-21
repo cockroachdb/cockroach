@@ -838,6 +838,10 @@ type rowSourceBase struct {
 	// RowSource.Consumer{Done,Closed} methods to signal that the consumer is
 	// done accepting rows or is no longer accepting data.
 	consumerStatus ConsumerStatus
+
+	// numSenders is an atomic counter that keeps track of how many senders have
+	// yet to call ProducerDone().
+	numSenders int32
 }
 
 // consumerDone helps processors implement RowSource.ConsumerDone.
@@ -854,6 +858,14 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 		log.Fatalf(context.Background(), "%s already closed", name)
 	}
 	atomic.StoreUint32((*uint32)(&rb.consumerStatus), uint32(ConsumerClosed))
+}
+
+func (rb *rowSourceBase) producerDone() int32 {
+	newVal := atomic.AddInt32(&rb.numSenders, -1)
+	if newVal < 0 {
+		panic("too many ProducerDone() calls")
+	}
+	return newVal
 }
 
 // processorSpan creates a child span for a processor (if we are doing any

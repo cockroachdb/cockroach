@@ -155,7 +155,56 @@ func processProducerMessage(
 			consumerClosed: false,
 		}
 	}
+
 	var types []sqlbase.ColumnType
+	if rr, ok := dst.(BatchRowReceiver); ok {
+		msgs := make([]RowChannelMsg, 0, 16)
+		for {
+			row, meta, err := sd.GetRow(nil /* rowBuf */)
+			if err != nil {
+				return processMessageResult{err: err, consumerClosed: false}
+			}
+			if row == nil && meta == nil {
+				// No more rows in the last message.
+				if len(msgs) > 0 {
+					sendMsgs := msgs
+					msgs = msgs[:0]
+					switch rr.PushBatch(sendMsgs) {
+					case NeedMoreRows:
+						continue
+					case DrainRequested:
+						// The rest of rows are not needed by the consumer. We'll send a drain
+						// signal to the producer and expect it to quickly send trailing
+						// metadata and close its side of the stream, at which point we also
+						// close the consuming side of the stream and call dst.ProducerDone().
+						if *draining {
+							*draining = true
+							if err := sendDrainSignalToStreamProducer(ctx, stream); err != nil {
+								log.Errorf(ctx, "draining error: %s", err)
+							}
+						}
+					case ConsumerClosed:
+						return processMessageResult{err: nil, consumerClosed: true}
+					}
+				}
+				return processMessageResult{err: nil, consumerClosed: false}
+			}
+
+			if log.V(3) && row != nil {
+				if types == nil {
+					types = sd.Types()
+				}
+				log.Infof(ctx, "inbound stream pushing row %s", row.String(types))
+			}
+			if *draining && meta == nil {
+				// Don't forward data rows when we're draining.
+				continue
+			}
+
+			msgs = append(msgs, RowChannelMsg{Row: row, Meta: meta})
+		}
+	}
+
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {

@@ -99,6 +99,84 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 	}
 }
 
+func BenchmarkRowBuffer(b *testing.B) {
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+
+	for _, length := range []int{1, 2, 3, 4} {
+		b.Run(fmt.Sprintf("length=%d", length), func(b *testing.B) {
+			rc := make([]RowBuffer, length)
+			var wg sync.WaitGroup
+			wg.Add(len(rc))
+
+			for i := range rc {
+				go func(i int) {
+					defer wg.Done()
+					cur := &rc[i]
+					var next *RowBuffer
+					if i+1 != len(rc) {
+						next = &rc[i+1]
+					}
+					for {
+						row, meta := cur.Next()
+						if row == nil {
+							if next != nil {
+								next.ProducerDone()
+							}
+							break
+						}
+						if next != nil {
+							_ = next.Push(row, meta)
+						}
+					}
+				}(i)
+			}
+
+			row := sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1))),
+			}
+			b.SetBytes(int64(8 * 1 * 1))
+			for i := 0; i < b.N; i++ {
+				_ = rc[0].Push(row, nil /* meta */)
+			}
+			rc[0].ProducerDone()
+			wg.Wait()
+		})
+	}
+}
+
+func BenchmarkBatchRowChannel(b *testing.B) {
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+
+	rc := &BatchRowChannel{}
+	rc.Init(oneIntCol)
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for {
+			row, _ := rc.Next()
+			if row == nil {
+				break
+			}
+		}
+	}()
+
+	row := sqlbase.EncDatumRow{
+		sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1))),
+	}
+	b.SetBytes(int64(8 * 1 * 16))
+	for i := 0; i < b.N; i++ {
+		rowBuf := make([]RowChannelMsg, 0, 16)
+		for j := 0; j < 16; j++ {
+			rowBuf = append(rowBuf, RowChannelMsg{Row: row, Meta: nil})
+		}
+		_ = rc.PushBatch(rowBuf)
+	}
+	rc.ProducerDone()
+	wg.Wait()
+}
+
 func BenchmarkMultiplexedRowChannel(b *testing.B) {
 	numRows := 1 << 16
 	row := sqlbase.EncDatumRow{intEncDatum(0)}
