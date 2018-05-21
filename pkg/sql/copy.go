@@ -71,7 +71,7 @@ type copyMachine struct {
 	p planner
 
 	// parsingEvalCtx is an EvalContext used for the very limited needs to strings
-	// parsing. Is it not correcly initialized with timestamps, transactions and
+	// parsing. Is it not correctly initialized with timestamps, transactions and
 	// other things that statements more generally need.
 	parsingEvalCtx *tree.EvalContext
 }

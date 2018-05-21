@@ -390,8 +390,49 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 
 // TypeCheck implements the Expr interface.
 func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-		"programmer error: column access expressions must be replaced before type checking")
+	subExpr, err := expr.Expr.TypeCheck(ctx, desired)
+	if err != nil {
+		return nil, err
+	}
+	expr.Expr = subExpr
+	resolvedType := subExpr.ResolvedType()
+
+	if !resolvedType.FamilyEqual(types.FamTuple) {
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"type %s is not composite", resolvedType,
+		)
+	}
+
+	labels := resolvedType.(types.TTuple).Labels
+	// Ensure that the tuple is indeed labeled.
+	if len(labels) == 0 {
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"type %s is not composite", resolvedType,
+		)
+	}
+
+	if expr.Star {
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"star expansion of tuples is not supported",
+		)
+	}
+
+	// Go through all of the labels to find a match.
+	colIndex := -1
+	for i, label := range labels {
+		if label == expr.ColName {
+			colIndex = i
+			break
+		}
+	}
+
+	if colIndex < 0 {
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"could not identify column \"%s\" in %s", expr.ColName, resolvedType,
+		)
+	}
+
+	return expr.Expr.(*Tuple).Exprs[colIndex].(TypedExpr), nil
 }
 
 // TypeCheck implements the Expr interface.
@@ -826,10 +867,10 @@ func (expr *StrVal) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, err
 
 // TypeCheck implements the Expr interface.
 func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	// If there are labels, make sure there are the correct number.
+	// Ensure the number of labels matches the number of expressions.
 	if len(expr.Labels) > 0 && len(expr.Labels) != len(expr.Exprs) {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"the number of expressions in a labeled tuple (%d) must match the number of labels (%d)",
+			"mismatch in tuple definition: %d expressions, %d labels",
 			len(expr.Exprs), len(expr.Labels),
 		)
 	}
@@ -849,9 +890,20 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 	}
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
+		// Ensure that there are no repeat labels.
+		for i := range expr.Labels {
+			for j := 0; j < i; j++ {
+				if expr.Labels[i] == expr.Labels[j] {
+					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+						"found duplicate tuple label: %q", ErrString(&expr.Labels),
+					)
+				}
+			}
+		}
+
 		expr.types.Labels = make([]string, len(expr.Labels))
-		for i, label := range expr.Labels {
-			expr.types.Labels[i] = label.Normalize()
+		for i := range expr.Labels {
+			expr.types.Labels[i] = expr.Labels[i].Normalize()
 		}
 	}
 	return expr, nil

@@ -793,9 +793,97 @@ true                                                                            
 query error pq: tuples \(\(\(\(1, 2\) AS a, b\), 'equal'\) AS c, d\), \(\(\(\(1, 'huh'\) AS e, f\), 'equal'\) AS g, h\) are not comparable at index 1: tuples \(\(1, 2\) AS a, b\), \(\(1, 'huh'\) AS e, f\) are not comparable at index 2: unsupported comparison operator: <int> = <string>
 SELECT ((((1, 2) AS a, b), 'equal') AS c, d) = ((((1, 'huh') AS e, f), 'equal') AS g, h)
 
-# Try giving everything the same name for a fairly well nested tuple.
+# Ensure the number of labels matches the number of expressions
+query error pq: mismatch in tuple definition: 2 expressions, 1 labels
+SELECT ((1, '2') AS a)
+
+query error pq: mismatch in tuple definition: 1 expressions, 2 labels
+SELECT (ROW(1) AS a, b)
+
+# Tuple labels must be different
+query error pq: found duplicate tuple label: "a, a"
+SELECT ((1, '2') AS a, a)
+
+query error pq: found duplicate tuple label: "a, a, b"
+SELECT ((1, '2', true) AS a, a, b)
+
+query error pq: found duplicate tuple label: "a, b, a"
+SELECT ((1, '2', true) AS a, b, a)
+
+query error pq: found duplicate tuple label: "b, a, a"
+SELECT ((1, '2', true) AS b, a, a)
+
+# But inner tuples can reuse labels
 query T colnames
-SELECT ((((((1, '2', 3) AS a, a, a), ((4,'5') AS a, a), (ROW(6) AS a)) AS a, a, a), ((7, 8) AS a, a), (ROW('9') AS a)) AS a, a, a)
+SELECT ((((((1, '2', 3) AS a, b, c), ((4,'5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c)
 ----
-((((((1, '2', 3) AS a, a, a), ((4, '5') AS a, a), (ROW(6) AS a)) AS a, a, a), ((7, 8) AS a, a), (ROW('9') AS a)) AS a, a, a)
+((((((1, '2', 3) AS a, b, c), ((4, '5') AS a, b), (ROW(6) AS a)) AS a, b, c), ((7, 8) AS a, b), (ROW('9') AS a)) AS a, b, c)
 (((1, '2', 3), (4, '5'), (6)),(7, 8),('9'))
+
+### Accessing a specific column
+
+## base working case
+
+query ITBITB colnames
+SELECT (((1,'2',true) AS a,b,c)).a
+      ,(((1,'2',true) AS a,b,c)).b
+      ,(((1,'2',true) AS a,b,c)).c
+      ,((ROW(1,'2',true) AS a,b,c)).a
+      ,((ROW(1,'2',true) AS a,b,c)).b
+      ,((ROW(1,'2',true) AS a,b,c)).c
+----
+a  b  c     a  b  c
+1  2  true  1  2  true
+
+## A collection of error cases
+
+# column doesn't exist
+query error pq: could not identify column "x" in tuple{int AS a, int AS b, int AS c}
+SELECT (((1,2,3) AS a,b,c)).x
+
+# Missing extra parentheses
+query error pq: syntax error at or near "."
+SELECT ((1,2,3) AS a,b,c).x
+
+query error pq: syntax error at or near "."
+SELECT ((1,2,3) AS a,b,c).*
+
+# No labels
+query error pq: type tuple{int, int, int} is not composite
+SELECT ((1,2,3)).x
+
+query error pq: type tuple{int, int, int} is not composite
+SELECT ((1,2,3)).*
+
+# Non unique labels
+query error pq: found duplicate tuple label: "a, b, a"
+SELECT (((1,'2',true) AS a,b,a)).a
+
+## The following are all cases that will be addressed in future work
+
+# Accessing all the columns
+query error pq: star expansion of tuples is not supported
+SELECT (((1,'2',true) AS a,b,c)).*
+
+query error pq: star expansion of tuples is not supported
+SELECT ((ROW(1,'2',true) AS a,b,c)).*
+
+# From a Subquery
+query error pq: type tuple{int, string, bool} is not composite
+SELECT ((t)).e, ((t)).f, ((t)).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS t
+)
+
+# From a table directly
+statement ok
+CREATE TABLE t (a int, b string)
+
+statement ok
+INSERT INTO t VALUES (1, 'one'), (2, 'two')
+
+query error pq: column name "t" not found
+SELECT (t).a FROM t
+
+statement ok
+DROP TABLE t
