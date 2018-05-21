@@ -20,8 +20,10 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -668,7 +670,46 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		return pgerror.Unimplemented("alter column type", "changing column types is not supported")
+		// Convert the parsed type into one of the basic datum types.
+		datum := coltypes.CastTargetToDatumType(t.ToType)
+
+		// Special handling for STRING COLLATE xy to verify that we recognize the language.
+		if len(t.Collation) > 0 {
+			if types.IsStringType(datum) {
+				if _, err := language.Parse(t.Collation); err != nil {
+					return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid COLLATE locale: "%s""`, t.Collation)
+				}
+				datum = types.TCollatedString{Locale: t.Collation}
+			} else {
+				return pgerror.NewError(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
+			}
+		}
+
+		// First pass at converting the datum type to the SQL column type.
+		nextType, err := sqlbase.DatumTypeToColumnType(datum)
+		if err != nil {
+			return err
+		}
+
+		// Finish populating width, precision, etc. from parsed data.
+		nextType, err = sqlbase.PopulateTypeAttrs(nextType, t.ToType)
+		if err != nil {
+			return err
+		}
+
+		kind, err := classifyConversion(&col.Type, &nextType)
+		if err != nil {
+			return err
+		}
+
+		switch kind {
+		case columnConversionNoOp:
+			break
+		case columnConversionTrivial:
+			col.Type = nextType
+		default:
+			return pgerror.Unimplemented("alter column type", "type conversion not yet implemented")
+		}
 
 	case *tree.AlterTableSetDefault:
 		if len(col.UsesSequenceIds) > 0 {
