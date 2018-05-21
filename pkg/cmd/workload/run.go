@@ -311,8 +311,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				fmt.Printf("%8s %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
 					time.Duration(startElapsed.Seconds()+0.5)*time.Second,
 					numErr,
-					float64(t.Ops-t.LastOps)/t.Elapsed.Seconds(),
-					float64(t.Ops)/startElapsed.Seconds(),
+					float64(t.Hist.TotalCount())/t.Elapsed.Seconds(),
+					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
 					time.Duration(t.Hist.ValueAtQuantile(50)).Seconds()*1000,
 					time.Duration(t.Hist.ValueAtQuantile(95)).Seconds()*1000,
 					time.Duration(t.Hist.ValueAtQuantile(99)).Seconds()*1000,
@@ -326,12 +326,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
 			printTotalHist := func(t workload.HistogramTick) {
-				if t.Ops == 0 {
+				if t.Cumulative.TotalCount() == 0 {
 					return
 				}
 				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
 					startElapsed.Seconds(), numErr,
-					t.Ops, float64(t.Ops)/startElapsed.Seconds(),
+					t.Cumulative.TotalCount(),
+					float64(t.Cumulative.TotalCount())/startElapsed.Seconds(),
 					time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 					time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 					time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
@@ -345,7 +346,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			reg.Tick(func(t workload.HistogramTick) {
 				printTotalHist(t)
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
-					resultTick.Ops += t.Ops
 					if resultTick.Cumulative == nil {
 						resultTick.Cumulative = t.Cumulative
 					} else {
@@ -363,21 +363,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 						fmt.Printf("failed post-run hook: %v\n", err)
 					}
 				}
-			}
-
-			// Output results that mimic Go's built-in benchmark format.
-			benchmarkName := strings.Join([]string{
-				"BenchmarkWorkload",
-				fmt.Sprintf("generator=%s", gen.Meta().Name),
-			}, "/")
-			if *duration != time.Duration(0) {
-				benchmarkName += `/duration=` + duration.String()
-			}
-			if f, ok := gen.(workload.Flagser); ok {
-				// NB: This visits in a deterministic order.
-				f.Flags().Visit(func(f *pflag.Flag) {
-					benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
-				})
 			}
 
 			if *histFile == "-" {

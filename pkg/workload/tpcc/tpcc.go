@@ -190,7 +190,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t workload.HistogramTick) {
 				if newOrderName == t.Name {
-					tpmC := float64(t.Ops) / startElapsed.Seconds() * 60
+					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
