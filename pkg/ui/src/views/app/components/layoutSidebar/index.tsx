@@ -6,7 +6,7 @@ import PropTypes from "prop-types";
 import { Link } from "react-router";
 
 import { AdminUIState } from "src/redux/state";
-import { LoginState } from "src/redux/login";
+import { selectLoginState, LoginState } from "src/redux/login";
 import { cockroachIcon } from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
@@ -59,11 +59,18 @@ class IconLink extends React.Component<IconLinkProps, {}> {
 }
 
 function LoginIndicator({ loginState }: { loginState: LoginState }) {
+  if (!loginState.loginEnabled()) {
+    return (<div className="login-indicator">Insecure mode</div>);
+  }
+
+  const user = loginState.loggedInUser();
+  if (user == null) {
+    return null;
+  }
+
   return (
     <div className="login-indicator">
-      {window.dataFromServer.LoginEnabled
-        ? <span>Logged in as {loginState.loggedInUser}</span>
-        : <span>Insecure mode</span>}
+        Logged in as {user}
     </div>
   );
 }
@@ -71,7 +78,7 @@ function LoginIndicator({ loginState }: { loginState: LoginState }) {
 // tslint:disable-next-line:variable-name
 const LoginIndicatorConnected = connect(
   (state: AdminUIState) => ({
-    loginState: state.login,
+    loginState: selectLoginState(state),
   }),
 )(LoginIndicator);
 

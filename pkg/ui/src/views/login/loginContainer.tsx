@@ -4,7 +4,7 @@ import { connect } from "react-redux";
 
 import { AdminUIState } from "src/redux/state";
 import LoginPage from "src/views/login/loginPage";
-import { LoginState } from "src/redux/login";
+import { selectLoginState, LoginState } from "src/redux/login";
 import Layout from "src/views/app/containers/layout";
 
 interface LoginContainerProps {
@@ -13,7 +13,9 @@ interface LoginContainerProps {
 
 class LoginContainer extends React.Component<RouterState & LoginContainerProps> {
   render() {
-    if (!window.dataFromServer.LoginEnabled || this.props.loginState.loggedInUser) {
+    const { loginState } = this.props;
+
+    if (!loginState.loginEnabled() || loginState.hasAccess()) {
       return (
         <Layout {...this.props}>
           {this.props.children}
@@ -29,7 +31,7 @@ class LoginContainer extends React.Component<RouterState & LoginContainerProps> 
 const LoginContainerConnected = connect(
   (state: AdminUIState) => {
     return {
-      loginState: state.login,
+      loginState: selectLoginState(state),
     };
   },
 )(LoginContainer);

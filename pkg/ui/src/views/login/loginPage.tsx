@@ -2,11 +2,11 @@ import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
 
-import { doLogin, LoginState } from "src/redux/login";
+import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 
 interface LoginPageProps {
-  loginState: LoginState;
+  loginState: LoginAPIState;
   handleLogin: (username: string, password: string) => void;
 }
 
