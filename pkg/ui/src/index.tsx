@@ -25,9 +25,11 @@ import { alertDataSync } from "src/redux/alerts";
 import "src/redux/analytics";
 import { store, history } from "src/redux/state";
 
+import loginRoutes from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 
 import NotFound from "src/views/app/components/NotFound";
+import Layout from "src/views/app/containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
@@ -49,7 +51,6 @@ import Nodes from "src/views/reports/containers/nodes";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
-import LoginContainer from "src/views/login/loginContainer";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -63,7 +64,10 @@ import LoginContainer from "src/views/login/loginContainer";
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
-      <Route path="/" component={LoginContainer}>
+      { /* login */}
+      { loginRoutes() }
+
+      <Route path="/" component={Layout}>
         <IndexRedirect to="overview" />
 
         { /* overview page */ }
