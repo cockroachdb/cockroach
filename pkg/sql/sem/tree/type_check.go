@@ -483,50 +483,52 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 	}
 
 	expr.Expr = subExpr
-	resolvedType := subExpr.ResolvedType()
+	resolvedType := types.UnwrapType(subExpr.ResolvedType())
 
-	if !resolvedType.FamilyEqual(types.FamTuple) {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"type %s is not composite", resolvedType,
-		)
-	}
-
-	// For now, only support column access into tuple expressions.
-	if _, ok := expr.Expr.(*Tuple); !ok {
-		return nil, pgerror.UnimplementedWithIssueErrorf(
-			24866, "cannot access column \"%s\" in non-tuple expression", expr.ColName)
-	}
-
-	labels := resolvedType.(types.TTuple).Labels
-	// Ensure that the tuple is indeed labeled.
-	if len(labels) == 0 {
+	tType, ok := resolvedType.(types.TTuple)
+	if !ok || len(tType.Labels) == 0 {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"type %s is not composite", resolvedType,
 		)
 	}
 
 	if expr.Star {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"star expansion of tuples is not supported",
-		)
-	}
-
-	// Go through all of the labels to find a match.
-	colIndex := -1
-	for i, label := range labels {
-		if label == expr.ColName {
-			colIndex = i
-			break
+		// If more than one column, we don't know what to do.
+		if len(tType.Labels) != 1 {
+			return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"star expansion of tupled non-relational scalars is not supported")
+		}
+		// But if there's just one column, we know exactly what to do.
+		expr.Star = false
+		expr.ColName = tType.Labels[0]
+		expr.ColIndex = 0
+	} else {
+		// Go through all of the labels to find a match.
+		expr.ColIndex = -1
+		for i, label := range tType.Labels {
+			if label == expr.ColName {
+				expr.ColIndex = i
+				break
+			}
+		}
+		if expr.ColIndex < 0 {
+			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				"could not identify column %q in %s",
+				ErrNameString(&expr.ColName), resolvedType,
+			)
 		}
 	}
 
-	if colIndex < 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"could not identify column \"%s\" in %s", expr.ColName, resolvedType,
-		)
+	// Optimization: if the expression is actually a tuple, then
+	// simplify the tuple straight away.
+	if tExpr, ok := expr.Expr.(*Tuple); ok {
+		return tExpr.Exprs[expr.ColIndex].(TypedExpr), nil
 	}
 
-	return expr.Expr.(*Tuple).Exprs[colIndex].(TypedExpr), nil
+	// Otherwise, let the expression be, it's probably more complex.
+	// Just annotate the type of the result properly.
+	expr.typ = tType.Types[expr.ColIndex]
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.

@@ -779,7 +779,7 @@ SELECT information_schema._pg_expandarray(indkey) FROM pg_index ORDER BY x, n
 # ----
 
 statement ok
-CREATE TABLE j(x INT, y JSON);
+CREATE TABLE j(x INT PRIMARY KEY, y JSON);
   INSERT INTO j VALUES
      (1, '{"a":123,"b":456}'),
      (2, '{"c":111,"d":222}')
@@ -792,26 +792,62 @@ SELECT x, y->>json_object_keys(y) FROM j
 2  111
 2  222
 
+query I colnames
+SELECT (i.keys).n FROM (SELECT information_schema._pg_expandarray(indkey) AS keys FROM pg_index) AS i
+----
+n
+1
+1
+1
+1
+2
+1
 
-# The following needs some more tuple support to work. #24866
-# query TTI
-# SELECT   a.attname, a.atttypid, atttypmod
-#     FROM pg_catalog.pg_class ct
-#     JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
-#     JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
-#     JOIN (
-#       SELECT i.indexrelid, i.indrelid, i.indisprimary,
-#              information_schema._pg_expandarray(i.indkey) AS keys
-#         FROM pg_catalog.pg_index i
-#         ) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
-#    WHERE true
-#      AND n.nspname = 'information_schema'
-#      AND ct.relname = 'columns'
-#      AND i.indisprimary
-# ORDER BY a.attnum
-# ----
+# DbVisualizer query from #24649 listed in #16971.
+query TTI
+SELECT   a.attname, a.atttypid, atttypmod
+    FROM pg_catalog.pg_class ct
+    JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
+    JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+    JOIN (
+      SELECT i.indexrelid, i.indrelid, i.indisprimary,
+             information_schema._pg_expandarray(i.indkey) AS keys
+        FROM pg_catalog.pg_index i
+        ) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
+   WHERE true
+     AND n.nspname = 'public'
+     AND ct.relname = 'j'
+     AND i.indisprimary
+ORDER BY a.attnum
+----
+x  20  -1
 
-# Ditto #24866
+# Test from metabase listed on #16971.
+# Also Kafka Confluent sink query from #25854.
+query TTTTIT
+SELECT NULL AS TABLE_CAT,
+       n.nspname AS TABLE_SCHEM,
+       ct.relname AS TABLE_NAME,
+       a.attname AS COLUMN_NAME,
+       (i.keys).n AS KEY_SEQ,
+       ci.relname AS PK_NAME
+    FROM pg_catalog.pg_class ct
+    JOIN pg_catalog.pg_attribute a ON (ct.oid = a.attrelid)
+    JOIN pg_catalog.pg_namespace n ON (ct.relnamespace = n.oid)
+    JOIN (SELECT i.indexrelid,
+		 i.indrelid,
+	     i.indisprimary,
+	     information_schema._pg_expandarray(i.indkey) AS keys
+	FROM pg_catalog.pg_index i) i ON (a.attnum = (i.keys).x AND a.attrelid = i.indrelid)
+    JOIN pg_catalog.pg_class ci ON (ci.oid = i.indexrelid)
+   WHERE true AND ct.relname = 'j' AND i.indisprimary
+ORDER BY table_name, pk_name, key_seq
+----
+NULL  public  j  x  1  primary
+
+# # Test from #24713 (Liquibase) listed on #16971.
+# # TODO(knz) Needs support for pg_get_indexdef with 3 arguments,
+# # see #26629.
 # query TTTBTTIITTTTT
 # SELECT NULL AS table_cat,
 #        n.nspname AS table_schem,
@@ -856,7 +892,7 @@ SELECT x, y->>json_object_keys(y) FROM j
 # JOIN pg_catalog.pg_am am ON (ci.relam = am.oid)
 # WHERE TRUE
 #   AND n.nspname = 'public'
-#   AND ct.relname = 'act_de_databasechangelog'
+#   AND ct.relname = 'j'
 # ORDER BY non_unique,
 #          TYPE,
 #          index_name,

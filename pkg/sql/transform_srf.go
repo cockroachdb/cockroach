@@ -107,8 +107,8 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 		// TODO(knz): support arbitrary composite expressions.
 		fe, ok := t.Expr.(*tree.FuncExpr)
 		if !ok || !fe.EscapeSRF {
-			v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programmer error: invalid Walk recursion on ColumnAccessExpr")
+			// If there is no function inside the column access expression, then it
+			// will be dealt with elsewhere.
 			return expr
 		}
 		fd, err := v.lookupSRF(fe)
