@@ -18,9 +18,11 @@ package main
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +68,10 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 var histFile = runFlags.String(
 	"hist-file", "",
 	"Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
+
+var jsonStats = runFlags.String(
+	"stats", "",
+	"File to write per-op incremental and cumulative histogram data.")
 
 func init() {
 	for _, meta := range workload.Registered() {
@@ -291,6 +297,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}()
 	}
 
+	var jsonEnc *json.Encoder
+	if *jsonStats != "" {
+		_ = os.MkdirAll(filepath.Dir(*jsonStats), 0755)
+		jsonF, err := os.Create(*jsonStats)
+		if err != nil {
+			return err
+		}
+		jsonEnc = json.NewEncoder(jsonF)
+	}
+
 	for i := 0; ; {
 		select {
 		case err := <-errCh:
@@ -319,6 +335,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					time.Duration(t.Hist.ValueAtQuantile(100)).Seconds()*1000,
 					t.Name,
 				)
+				if jsonEnc != nil {
+					_ = jsonEnc.Encode(t.Snapshot())
+				}
 			})
 
 		case <-done:
@@ -345,8 +364,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			resultTick := workload.HistogramTick{Name: ops.ResultHist}
 			reg.Tick(func(t workload.HistogramTick) {
 				printTotalHist(t)
+				if jsonEnc != nil {
+					// Note that we're outputting the delta from the last tick. The
+					// cumulative histogram can be computed by merging all of the
+					// per-tick histograms.
+					_ = jsonEnc.Encode(t.Snapshot())
+				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
 					if resultTick.Cumulative == nil {
+						resultTick.Now = t.Now
 						resultTick.Cumulative = t.Cumulative
 					} else {
 						resultTick.Cumulative.Merge(t.Cumulative)
