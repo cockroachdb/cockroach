@@ -485,33 +485,33 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
-		var sizeInBytes = spec.SizeInBytes
+		var sizeInBytes = spec.Size.InBytes
 		if spec.InMemory {
-			if spec.SizePercent > 0 {
+			if spec.Size.Percent > 0 {
 				sysMem, err := GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
-				sizeInBytes = int64(float64(sysMem) * spec.SizePercent / 100)
+				sizeInBytes = int64(float64(sysMem) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 			details = append(details, fmt.Sprintf("store %d: in-memory, size %s",
 				i, humanizeutil.IBytes(sizeInBytes)))
 			engines = append(engines, engine.NewInMem(spec.Attributes, sizeInBytes))
 		} else {
-			if spec.SizePercent > 0 {
+			if spec.Size.Percent > 0 {
 				fileSystemUsage := gosigar.FileSystemUsage{}
 				if err := fileSystemUsage.Get(spec.Path); err != nil {
 					return Engines{}, err
 				}
-				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.SizePercent / 100)
+				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
-					spec.SizePercent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
+					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
 
 			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",

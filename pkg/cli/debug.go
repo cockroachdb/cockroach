@@ -20,7 +20,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/coreos/etcd/raft/raftpb"
@@ -62,6 +65,16 @@ Pretty-prints all keys in a store.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugKeys),
+}
+
+var debugBallastCmd = &cobra.Command{
+	Use:   "ballast <file>",
+	Short: "create a ballast file",
+	Long: `
+Create a ballast file to fill the store directory up to a given amount
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: runDebugBallast,
 }
 
 func parseRangeID(arg string) (roachpb.RangeID, error) {
@@ -150,6 +163,60 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 
 	return db.Iterate(debugCtx.startKey, debugCtx.endKey, printer)
+}
+
+func runDebugBallast(cmd *cobra.Command, args []string) error {
+	ballastFile := args[0] // we use cobra.ExactArgs(1)
+	dataDirectory := filepath.Dir(ballastFile)
+	fs := sysutil.StatfsT{}
+
+	err := sysutil.Statfs(dataDirectory, &fs)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat the directory %s", dataDirectory)
+	}
+	total := int64(fs.Blocks) * fs.Bsize
+	free := int64(fs.Bavail) * fs.Bsize
+	used := total - free
+	var targetUsage int64
+	p := debugCtx.ballastSize.Percent
+	if math.Abs(p) > 100 {
+		return errors.Errorf("absolute percentage value %f greater than 100", p)
+	}
+	b := debugCtx.ballastSize.InBytes
+	if p != 0 && b != 0 {
+		return errors.New("expected exactly one of percentage or bytes non-zero, found both")
+	}
+	switch {
+	case p > 0:
+		fillRatio := p / float64(100)
+		targetUsage = used + int64((fillRatio)*float64(total))
+	case p < 0:
+		// Negative means leave the absolute %age of disk space.
+		fillRatio := 1.0 + (p / float64(100))
+		targetUsage = int64((fillRatio) * float64(total))
+	case b > 0:
+		targetUsage = used + b
+	case b < 0:
+		// Negative means leave that many bytes of disk space.
+		targetUsage = total + b
+	default:
+		return errors.New("expected exactly one of percentage or bytes non-zero, found none")
+	}
+	if used > targetUsage {
+		return errors.Errorf(
+			"Used space %s already more than needed to be filled %s\n",
+			humanizeutil.IBytes(used),
+			humanizeutil.IBytes(targetUsage),
+		)
+	}
+	if used == targetUsage {
+		return nil
+	}
+	ballastSize := targetUsage - used
+	if err := sysutil.CreateLargeFile(ballastFile, ballastSize); err != nil {
+		return errors.Wrap(err, "failed to fallocate to ballast file")
+	}
+	return nil
 }
 
 var debugRangeDataCmd = &cobra.Command{
@@ -1031,6 +1098,7 @@ func init() {
 }
 
 var debugCmds = []*cobra.Command{
+	debugBallastCmd,
 	debugKeysCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,

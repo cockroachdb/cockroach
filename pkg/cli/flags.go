@@ -376,6 +376,10 @@ func init() {
 		StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile, debugCtx.inputFile)
 		BoolFlag(f, &debugCtx.printSystemConfig, cliflags.PrintSystemConfig, debugCtx.printSystemConfig)
 	}
+	{
+		f := debugBallastCmd.Flags()
+		VarFlag(f, &debugCtx.ballastSize, cliflags.Size)
+	}
 }
 
 func extraServerFlagInit() {
