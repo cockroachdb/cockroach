@@ -22,7 +22,6 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
-	"go/build"
 	"io"
 	"net/url"
 	"os"
@@ -81,16 +80,15 @@ import (
 //
 // Input files for unit testing are stored alongside the source code
 // in the `testdata` subdirectory. The input files for the larger
-// `bigtest` are stored in a separate repository.
+// TestSqlLiteLogic tests are stored in a separate repository.
 //
 // The test input is expressed using a domain-specific language, called
 // Test-Script, defined by SQLite's "Sqllogictest".  The official home
 // of Sqllogictest and Test-Script is
 //      https://www.sqlite.org/sqllogictest/
 //
-// (CockroachDB's `bigtest` is actually a fork of the Sqllogictest
-// test files; its input files are hosted at
-// https://github.com/cockroachdb/sqllogictest )
+// (the TestSqlLiteLogic test uses a fork of the Sqllogictest test files;
+// its input files are hosted at https://github.com/cockroachdb/sqllogictest)
 //
 // Test-Script is line-oriented. It supports both statements which
 // generate no result rows, and queries that produce result rows. The
@@ -118,11 +116,11 @@ import (
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
 //
-// - statement count N
-//   Like "statement ok" but expect a final RowsAffected count of N.
-//   example:
-//     statement count 2
-//     INSERT INTO kv VALUES (1,2), (2,3)
+//  - statement count N
+//    Like "statement ok" but expect a final RowsAffected count of N.
+//    example:
+//      statement count 2
+//      INSERT INTO kv VALUES (1,2), (2,3)
 //
 //  - statement error <regexp>
 //    Runs the statement that follows and expects an
@@ -247,8 +245,8 @@ import (
 // -d <glob>  selects all files matching <glob>. This can mix and
 //            match wildcards (*/?) or groups like {a,b,c}.
 //
-// -bigtest   cancels any -d setting and selects all relevant input
-//            files from CockroachDB's fork of Sqllogictest.
+// -bigtest   enable the long-running SqlLiteLogic test, which uses files from
+//            CockroachDB's fork of Sqllogictest.
 //
 // Configuration:
 //
@@ -315,10 +313,8 @@ var (
 	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
 	// Input selection
-	logictestdata = flag.String("d", "testdata/logic_test/[^.]*", "test data glob")
-	bigtest       = flag.Bool(
-		"bigtest", false, "use the big set of logic test files (overrides testdata)",
-	)
+	logictestdata = flag.String("d", "", "glob that selects subset of files to run")
+	bigtest       = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
 	defaultConfig = flag.String(
 		"config", "default",
 		"customizes the default test cluster configuration for files that lack LogicTest directives",
@@ -1858,8 +1854,9 @@ var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", fals
 var logicTestsConfigExclude = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_SKIP_CONFIG", "")
 var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_CONFIG", "")
 
-// RunLogicTest is the main entry point for the logic test.
-func RunLogicTest(t *testing.T) {
+// RunLogicTest is the main entry point for the logic test. The globs parameter
+// specifies the default sets of files to run.
+func RunLogicTest(t *testing.T, globs ...string) {
 	if testutils.NightlyStress() {
 		// See https://github.com/cockroachdb/cockroach/pull/10966.
 		t.Skip()
@@ -1869,51 +1866,15 @@ func RunLogicTest(t *testing.T) {
 		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
 	}
 
-	// Set time.Local to time.UTC to circumvent pq's timetz parsing flaw.
-	time.Local = time.UTC
-
-	// run the logic tests indicated by the bigtest and logictestdata flags.
-	// A new cluster is set up for each separate file in the test.
-	var globs []string
-	if *bigtest {
-		logicTestPath := build.Default.GOPATH + "/src/github.com/cockroachdb/sqllogictest"
-		if _, err := os.Stat(logicTestPath); os.IsNotExist(err) {
-			fullPath, err := filepath.Abs(logicTestPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Fatalf("unable to find sqllogictest repo: %s\n"+
-				"git clone https://github.com/cockroachdb/sqllogictest %s",
-				logicTestPath, fullPath)
-			return
-		}
-		globs = []string{
-			logicTestPath + "/test/index/between/*/*.test",
-			logicTestPath + "/test/index/commute/*/*.test",
-			logicTestPath + "/test/index/delete/*/*.test",
-			logicTestPath + "/test/index/in/*/*.test",
-			logicTestPath + "/test/index/orderby/*/*.test",
-			logicTestPath + "/test/index/orderby_nosort/*/*.test",
-			logicTestPath + "/test/index/view/*/*.test",
-
-			// TODO(pmattis): Incompatibilities in numeric types.
-			// For instance, we type SUM(int) as a decimal since all of our ints are
-			// int64.
-			// logicTestPath + "/test/random/expr/*.test",
-
-			// TODO(pmattis): We don't support correlated subqueries.
-			// logicTestPath + "/test/select*.test",
-
-			// TODO(pmattis): We don't support unary + on strings.
-			// logicTestPath + "/test/index/random/*/*.test",
-			// [uses joins] logicTestPath + "/test/random/aggregates/*.test",
-			// [uses joins] logicTestPath + "/test/random/groupby/*.test",
-			// [uses joins] logicTestPath + "/test/random/select/*.test",
-		}
-	} else {
+	// Override default glob sets if -d flag was specified.
+	if *logictestdata != "" {
 		globs = []string{*logictestdata}
 	}
 
+	// Set time.Local to time.UTC to circumvent pq's timetz parsing flaw.
+	time.Local = time.UTC
+
+	// A new cluster is set up for each separate file in the test.
 	var paths []string
 	for _, g := range globs {
 		match, err := filepath.Glob(g)
