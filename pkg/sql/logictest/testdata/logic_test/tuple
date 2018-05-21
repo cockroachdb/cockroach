@@ -713,6 +713,10 @@ r
 
 ## base working case
 
+# Accessing a specific column
+query error pq: could not identify column "x" in tuple{int AS a, int AS b, int AS c}
+SELECT (((1,2,3) AS a,b,c)).x
+
 query ITBITB colnames
 SELECT (((1,'2',true) AS a,b,c)).a
       ,(((1,'2',true) AS a,b,c)).b
@@ -744,32 +748,59 @@ SELECT ((1,2,3)).x
 query error pq: type tuple{int, int, int} is not composite
 SELECT ((1,2,3)).*
 
-# Non unique labels
-query error pq: found duplicate tuple label: "a"
-SELECT (((1,'2',true) AS a,b,a)).a
-
-## The following are all cases that will be addressed in future work
-
 # Accessing all the columns
-query error pq: star expansion of tuples is not supported
+query error pq: star expansion of tupled non-relational scalars is not supported
 SELECT (((1,'2',true) AS a,b,c)).*
 
-query error pq: star expansion of tuples is not supported
+query error pq: star expansion of tupled non-relational scalars is not supported
 SELECT ((ROW(1,'2',true) AS a,b,c)).*
 
-# From a Subquery
-query error pq: unimplemented: cannot access column "e" in non-tuple expression
-SELECT ((t)).e, ((t)).f, ((t)).g
-FROM (
-  SELECT ((1,'2',true) AS e,f,g) AS t
-)
+query I
+SELECT ((ROW(1) AS a)).*
+----
+1
 
-# From a table directly
 statement ok
 CREATE TABLE t (a int, b string)
 
 statement ok
 INSERT INTO t VALUES (1, 'one'), (2, 'two')
+
+
+# From a subquery with constant literals (checks labels in DTuple).
+
+query ITB
+SELECT (x).e, (x).f, (x).g
+FROM (
+  SELECT ((1,'2',true) AS e,f,g) AS x
+)
+----
+1 2 true
+
+# From a subquery with labels.
+
+# Needed until #26627 is resolved.
+statement ok
+set distsql=off
+
+query IT
+  SELECT (x).a, (x).b
+    FROM (SELECT (ROW(a, b) AS a, b) AS x FROM (VALUES (1, 'one')) AS t(a, b))
+----
+1 one
+
+query IT
+  SELECT (x).a, (x).b
+    FROM (SELECT (ROW(a, b) AS a, b) AS x FROM t)
+ORDER BY 1
+   LIMIT 1
+----
+1 one
+
+statement ok
+set distsql=auto
+
+# From a table directly
 
 query error pq: column "t" does not exist
 SELECT (t).a FROM t
