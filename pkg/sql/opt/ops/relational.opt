@@ -311,18 +311,34 @@ define Offset {
     Ordering Ordering
 }
 
-# Max1Row is an operator which enforces that its input must return at most one
-# row. It is used as input to the Subquery operator. See the comment above
-# Subquery for more details.
+# Max1Row enforces that its input must return at most one row. It is used as
+# input to the Subquery operator. See the comment above Subquery for more
+# details.
 [Relational]
 define Max1Row {
     Input Expr
 }
 
+# Explain returns information about the execution plan of the "input"
+# expression.
 [Relational]
 define Explain {
     Input Expr
     Def   ExplainOpDef
+}
+
+# ShowTrace runs the "input" expressions in a special tracing mode and returns
+# trace results.
+[Relational]
+define ShowTrace {
+    Input Expr
+    Def   ShowTraceOpDef
+}
+
+# ShowTraceForSession returns the current session traces.
+[Relational]
+define ShowTraceForSession {
+    Def   ShowTraceOpDef
 }
 
 # RowNumber adds a column to each row in its input containing a unique,

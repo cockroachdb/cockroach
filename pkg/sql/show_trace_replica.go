@@ -21,8 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
@@ -66,7 +64,7 @@ func (n *showTraceReplicaNode) Next(params runParams) (bool, error) {
 			return ok, err
 		}
 		values := n.plan.Values()
-		// The rows are received from showTraceNode; see showTraceColumns.
+		// The rows are received from showTraceNode; see ShowTraceColumns.
 		const (
 			tsCol  = 0
 			msgCol = 2
@@ -112,13 +110,6 @@ func (n *showTraceReplicaNode) Values() tree.Datums {
 
 func (n *showTraceReplicaNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-}
-
-var showTraceReplicaColumns = sqlbase.ResultColumns{
-	{Name: "timestamp", Typ: types.TimestampTZ},
-	{Name: "node_id", Typ: types.Int},
-	{Name: "store_id", Typ: types.Int},
-	{Name: "replica_id", Typ: types.Int},
 }
 
 var nodeStoreRangeRE = regexp.MustCompile(`^\[n(\d+),s(\d+),r(\d+)/`)
