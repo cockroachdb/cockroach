@@ -174,8 +174,12 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to stat the directory %s", dataDirectory)
 	}
-	total := int64(fs.Blocks) * fs.Bsize
-	free := int64(fs.Bavail) * fs.Bsize
+	// This int casting may look awkward, but serves to avoid TestLint/TestMegaCheck/misccheck/uncovert
+	// which likes to fire since the struct fields of `fs` have different types on
+	// different systems.
+	total := int64(int(fs.Blocks) * int(fs.Bsize))
+	free := int64(int(fs.Bavail) * int(fs.Bsize))
+
 	used := total - free
 	var targetUsage int64
 	p := debugCtx.ballastSize.Percent
