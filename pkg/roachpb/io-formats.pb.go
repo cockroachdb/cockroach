@@ -17,17 +17,20 @@ var _ = math.Inf
 type IOFileFormat_FileFormat int32
 
 const (
-	IOFileFormat_Unknown IOFileFormat_FileFormat = 0
-	IOFileFormat_CSV     IOFileFormat_FileFormat = 1
+	IOFileFormat_Unknown      IOFileFormat_FileFormat = 0
+	IOFileFormat_CSV          IOFileFormat_FileFormat = 1
+	IOFileFormat_MysqlOutfile IOFileFormat_FileFormat = 2
 )
 
 var IOFileFormat_FileFormat_name = map[int32]string{
 	0: "Unknown",
 	1: "CSV",
+	2: "MysqlOutfile",
 }
 var IOFileFormat_FileFormat_value = map[string]int32{
-	"Unknown": 0,
-	"CSV":     1,
+	"Unknown":      0,
+	"CSV":          1,
+	"MysqlOutfile": 2,
 }
 
 func (x IOFileFormat_FileFormat) Enum() *IOFileFormat_FileFormat {
@@ -50,9 +53,49 @@ func (IOFileFormat_FileFormat) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptorIoFormats, []int{0, 0}
 }
 
+type MySQLOutfileOptions_Enclose int32
+
+const (
+	MySQLOutfileOptions_Never    MySQLOutfileOptions_Enclose = 0
+	MySQLOutfileOptions_Always   MySQLOutfileOptions_Enclose = 1
+	MySQLOutfileOptions_Optional MySQLOutfileOptions_Enclose = 2
+)
+
+var MySQLOutfileOptions_Enclose_name = map[int32]string{
+	0: "Never",
+	1: "Always",
+	2: "Optional",
+}
+var MySQLOutfileOptions_Enclose_value = map[string]int32{
+	"Never":    0,
+	"Always":   1,
+	"Optional": 2,
+}
+
+func (x MySQLOutfileOptions_Enclose) Enum() *MySQLOutfileOptions_Enclose {
+	p := new(MySQLOutfileOptions_Enclose)
+	*p = x
+	return p
+}
+func (x MySQLOutfileOptions_Enclose) String() string {
+	return proto.EnumName(MySQLOutfileOptions_Enclose_name, int32(x))
+}
+func (x *MySQLOutfileOptions_Enclose) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(MySQLOutfileOptions_Enclose_value, data, "MySQLOutfileOptions_Enclose")
+	if err != nil {
+		return err
+	}
+	*x = MySQLOutfileOptions_Enclose(value)
+	return nil
+}
+func (MySQLOutfileOptions_Enclose) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorIoFormats, []int{2, 0}
+}
+
 type IOFileFormat struct {
-	Format IOFileFormat_FileFormat `protobuf:"varint,1,opt,name=format,enum=cockroach.roachpb.IOFileFormat_FileFormat" json:"format"`
-	Csv    CSVOptions              `protobuf:"bytes,2,opt,name=csv" json:"csv"`
+	Format   IOFileFormat_FileFormat `protobuf:"varint,1,opt,name=format,enum=cockroach.roachpb.IOFileFormat_FileFormat" json:"format"`
+	Csv      CSVOptions              `protobuf:"bytes,2,opt,name=csv" json:"csv"`
+	MysqlOut MySQLOutfileOptions     `protobuf:"bytes,3,opt,name=mysql_out,json=mysqlOut" json:"mysql_out"`
 }
 
 func (m *IOFileFormat) Reset()                    { *m = IOFileFormat{} }
@@ -77,10 +120,33 @@ func (m *CSVOptions) String() string            { return proto.CompactTextString
 func (*CSVOptions) ProtoMessage()               {}
 func (*CSVOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{1} }
 
+// MySQLOutfileOptions describe the format of mysql's outfile.
+type MySQLOutfileOptions struct {
+	// row_separator is the delimitor between rows (mysql's --rows-terminated-by)
+	RowSeparator int32 `protobuf:"varint,1,opt,name=row_separator,json=rowSeparator" json:"row_separator"`
+	// field_separator is the delimitor between fields (mysql's --fields-terminated-by)
+	FieldSeparator int32 `protobuf:"varint,2,opt,name=field_separator,json=fieldSeparator" json:"field_separator"`
+	// enclose is the enclosing (quoting) behavior (i.e. if specified and if optional).
+	Enclose MySQLOutfileOptions_Enclose `protobuf:"varint,3,opt,name=enclose,enum=cockroach.roachpb.MySQLOutfileOptions_Enclose" json:"enclose"`
+	// encloser is the character used to enclose (qupte) fields (--fields-enclosed-by)
+	Encloser int32 `protobuf:"varint,4,opt,name=encloser" json:"encloser"`
+	// has_escape indicates that an escape character is set (mysql's default is not).
+	HasEscape bool `protobuf:"varint,5,opt,name=has_escape,json=hasEscape" json:"has_escape"`
+	// escape is the character used to prefix the other delimitors (--fields-escaped-by)
+	Escape int32 `protobuf:"varint,6,opt,name=escape" json:"escape"`
+}
+
+func (m *MySQLOutfileOptions) Reset()                    { *m = MySQLOutfileOptions{} }
+func (m *MySQLOutfileOptions) String() string            { return proto.CompactTextString(m) }
+func (*MySQLOutfileOptions) ProtoMessage()               {}
+func (*MySQLOutfileOptions) Descriptor() ([]byte, []int) { return fileDescriptorIoFormats, []int{2} }
+
 func init() {
 	proto.RegisterType((*IOFileFormat)(nil), "cockroach.roachpb.IOFileFormat")
 	proto.RegisterType((*CSVOptions)(nil), "cockroach.roachpb.CSVOptions")
+	proto.RegisterType((*MySQLOutfileOptions)(nil), "cockroach.roachpb.MySQLOutfileOptions")
 	proto.RegisterEnum("cockroach.roachpb.IOFileFormat_FileFormat", IOFileFormat_FileFormat_name, IOFileFormat_FileFormat_value)
+	proto.RegisterEnum("cockroach.roachpb.MySQLOutfileOptions_Enclose", MySQLOutfileOptions_Enclose_name, MySQLOutfileOptions_Enclose_value)
 }
 func (m *IOFileFormat) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -108,6 +174,14 @@ func (m *IOFileFormat) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n1
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.MysqlOut.Size()))
+	n2, err := m.MysqlOut.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
 	return i, nil
 }
 
@@ -144,6 +218,47 @@ func (m *CSVOptions) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *MySQLOutfileOptions) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MySQLOutfileOptions) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.RowSeparator))
+	dAtA[i] = 0x10
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.FieldSeparator))
+	dAtA[i] = 0x18
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Enclose))
+	dAtA[i] = 0x20
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Encloser))
+	dAtA[i] = 0x28
+	i++
+	if m.HasEscape {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
+	dAtA[i] = 0x30
+	i++
+	i = encodeVarintIoFormats(dAtA, i, uint64(m.Escape))
+	return i, nil
+}
+
 func encodeVarintIoFormats(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -159,6 +274,8 @@ func (m *IOFileFormat) Size() (n int) {
 	n += 1 + sovIoFormats(uint64(m.Format))
 	l = m.Csv.Size()
 	n += 1 + l + sovIoFormats(uint64(l))
+	l = m.MysqlOut.Size()
+	n += 1 + l + sovIoFormats(uint64(l))
 	return n
 }
 
@@ -172,6 +289,18 @@ func (m *CSVOptions) Size() (n int) {
 		n += 1 + l + sovIoFormats(uint64(l))
 	}
 	n += 1 + sovIoFormats(uint64(m.Skip))
+	return n
+}
+
+func (m *MySQLOutfileOptions) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovIoFormats(uint64(m.RowSeparator))
+	n += 1 + sovIoFormats(uint64(m.FieldSeparator))
+	n += 1 + sovIoFormats(uint64(m.Enclose))
+	n += 1 + sovIoFormats(uint64(m.Encloser))
+	n += 2
+	n += 1 + sovIoFormats(uint64(m.Escape))
 	return n
 }
 
@@ -263,6 +392,36 @@ func (m *IOFileFormat) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.Csv.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MysqlOut", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MysqlOut.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -424,6 +583,171 @@ func (m *CSVOptions) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *MySQLOutfileOptions) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowIoFormats
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MySQLOutfileOptions: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MySQLOutfileOptions: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RowSeparator", wireType)
+			}
+			m.RowSeparator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RowSeparator |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FieldSeparator", wireType)
+			}
+			m.FieldSeparator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FieldSeparator |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Enclose", wireType)
+			}
+			m.Enclose = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Enclose |= (MySQLOutfileOptions_Enclose(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Encloser", wireType)
+			}
+			m.Encloser = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Encloser |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HasEscape", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.HasEscape = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Escape", wireType)
+			}
+			m.Escape = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowIoFormats
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Escape |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipIoFormats(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthIoFormats
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipIoFormats(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -532,24 +856,36 @@ var (
 func init() { proto.RegisterFile("roachpb/io-formats.proto", fileDescriptorIoFormats) }
 
 var fileDescriptorIoFormats = []byte{
-	// 298 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x8f, 0x4f, 0x4a, 0xc3, 0x40,
-	0x14, 0xc6, 0xf3, 0x6c, 0x6b, 0xf0, 0xb5, 0x95, 0x3a, 0xb8, 0x18, 0x0a, 0x8e, 0x31, 0xab, 0x28,
-	0x98, 0x42, 0xc1, 0x0b, 0xb4, 0x58, 0x74, 0x55, 0x68, 0xb1, 0x0b, 0x37, 0x52, 0xc7, 0x5a, 0x43,
-	0x9b, 0x79, 0x21, 0x89, 0x7a, 0x0a, 0xc1, 0xbb, 0x78, 0x89, 0x2c, 0x5d, 0xba, 0x12, 0x8d, 0x17,
-	0x91, 0x4c, 0xa6, 0xb4, 0xa0, 0xbb, 0xc7, 0xf7, 0xe7, 0xc7, 0xf7, 0x90, 0xc7, 0x34, 0x95, 0x0f,
-	0xd1, 0x6d, 0x27, 0xa0, 0xd3, 0x7b, 0x8a, 0xc3, 0x69, 0x9a, 0xf8, 0x51, 0x4c, 0x29, 0xb1, 0x3d,
-	0x49, 0x72, 0xa1, 0x5d, 0xdf, 0x64, 0xda, 0xfb, 0x73, 0x9a, 0x93, 0x76, 0x3b, 0xc5, 0x55, 0x06,
-	0xdd, 0x37, 0xc0, 0xc6, 0xe5, 0x70, 0x10, 0x2c, 0x67, 0x03, 0x0d, 0x60, 0x17, 0xb8, 0x5d, 0xa2,
-	0x38, 0x38, 0xe0, 0xed, 0x76, 0x4f, 0xfc, 0x3f, 0x28, 0x7f, 0xb3, 0xe0, 0xaf, 0xcf, 0x5e, 0x35,
-	0xfb, 0x3c, 0xb4, 0x46, 0xa6, 0xcf, 0xce, 0xb0, 0x22, 0x93, 0x27, 0xbe, 0xe5, 0x80, 0x57, 0xef,
-	0x1e, 0xfc, 0x83, 0xe9, 0x8f, 0x27, 0xc3, 0x28, 0x0d, 0x48, 0x25, 0xa6, 0x59, 0xe4, 0x5d, 0x17,
-	0x71, 0x63, 0x4e, 0x1d, 0xed, 0x2b, 0xb5, 0x50, 0xf4, 0xac, 0x5a, 0x16, 0xb3, 0xb1, 0xd2, 0x1f,
-	0x4f, 0x5a, 0xe0, 0xbe, 0x00, 0xe2, 0xba, 0xcd, 0xda, 0x58, 0x93, 0x14, 0x86, 0x53, 0x3d, 0xb9,
-	0x66, 0x60, 0xa5, 0xc4, 0x04, 0xda, 0xc5, 0x31, 0x53, 0xa9, 0x5e, 0xb2, 0x72, 0x57, 0x22, 0x3b,
-	0xc6, 0xa6, 0x7a, 0x5c, 0x2e, 0x6f, 0x66, 0x4a, 0xd2, 0x5d, 0xa0, 0xe6, 0xbc, 0xe2, 0x80, 0xb7,
-	0xa3, 0x53, 0x30, 0x6a, 0x14, 0xd6, 0xb9, 0x71, 0x18, 0xc7, 0x6a, 0xb2, 0x08, 0x22, 0x5e, 0x75,
-	0xc0, 0x6b, 0x1a, 0x8e, 0x56, 0x7a, 0x47, 0xd9, 0xb7, 0xb0, 0xb2, 0x5c, 0xc0, 0x7b, 0x2e, 0xe0,
-	0x23, 0x17, 0xf0, 0x95, 0x0b, 0x78, 0xfd, 0x11, 0xd6, 0xb5, 0x6d, 0x9e, 0xfd, 0x0d, 0x00, 0x00,
-	0xff, 0xff, 0x10, 0x9e, 0xdd, 0x0c, 0xac, 0x01, 0x00, 0x00,
+	// 485 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x51, 0xcf, 0x6e, 0xd3, 0x30,
+	0x18, 0x8f, 0xd3, 0x3f, 0x69, 0xbf, 0x65, 0x25, 0x18, 0x0e, 0xd1, 0x04, 0x21, 0x04, 0x09, 0x15,
+	0xa4, 0x65, 0x52, 0x05, 0x0f, 0xc0, 0xa6, 0x4e, 0x4c, 0x62, 0xab, 0x58, 0xc5, 0x0e, 0x5c, 0x2a,
+	0x93, 0xb9, 0x6d, 0xd4, 0xd4, 0x0e, 0x76, 0xba, 0xaa, 0x0f, 0x81, 0xb4, 0xc7, 0xea, 0x91, 0x03,
+	0x07, 0x4e, 0x08, 0xca, 0x8b, 0xa0, 0x38, 0x0e, 0xcd, 0x44, 0x0f, 0xdc, 0x3e, 0xfd, 0xfe, 0x7d,
+	0xdf, 0xcf, 0x06, 0x57, 0x70, 0x12, 0x4d, 0xd3, 0x4f, 0x47, 0x31, 0x3f, 0x1c, 0x73, 0x31, 0x27,
+	0x99, 0x0c, 0x53, 0xc1, 0x33, 0x8e, 0xef, 0x47, 0x3c, 0x9a, 0x29, 0x36, 0xd4, 0x9a, 0x83, 0x87,
+	0x13, 0x3e, 0xe1, 0x8a, 0x3d, 0xca, 0xa7, 0x42, 0x18, 0xdc, 0x9a, 0x60, 0x9f, 0x0d, 0x4e, 0xe3,
+	0x84, 0x9e, 0xaa, 0x00, 0xfc, 0x16, 0x9a, 0x45, 0x94, 0x8b, 0x7c, 0xd4, 0xed, 0xf4, 0x5e, 0x86,
+	0xff, 0x44, 0x85, 0x55, 0x43, 0xb8, 0x1d, 0x8f, 0xeb, 0xeb, 0x1f, 0x4f, 0x8c, 0x4b, 0xed, 0xc7,
+	0xaf, 0xa1, 0x16, 0xc9, 0x1b, 0xd7, 0xf4, 0x51, 0x77, 0xaf, 0xf7, 0x78, 0x47, 0xcc, 0xc9, 0xf0,
+	0x6a, 0x90, 0x66, 0x31, 0x67, 0x52, 0x3b, 0x73, 0x3d, 0x3e, 0x83, 0xf6, 0x7c, 0x25, 0x3f, 0x27,
+	0x23, 0xbe, 0xc8, 0xdc, 0x9a, 0x32, 0x3f, 0xdf, 0x61, 0x3e, 0x5f, 0x0d, 0xdf, 0xbf, 0x1b, 0x2c,
+	0xb2, 0x71, 0x9c, 0xd0, 0xbb, 0x29, 0x2d, 0x65, 0x1f, 0x2c, 0xb2, 0xe0, 0x15, 0x40, 0xa5, 0xd9,
+	0x1e, 0x58, 0x1f, 0xd8, 0x8c, 0xf1, 0x25, 0x73, 0x0c, 0x6c, 0x41, 0xed, 0x64, 0x78, 0xe5, 0x20,
+	0xec, 0x80, 0x7d, 0xae, 0xf5, 0x79, 0x94, 0x63, 0x06, 0x5f, 0x10, 0xc0, 0xf6, 0x34, 0x7c, 0x00,
+	0x8d, 0x88, 0xcf, 0xe7, 0x44, 0xbd, 0x47, 0x43, 0xef, 0x28, 0x20, 0xec, 0x81, 0x95, 0x0f, 0x94,
+	0x65, 0xaa, 0x66, 0xc9, 0x96, 0x20, 0x7e, 0x01, 0xfb, 0x6c, 0x91, 0x24, 0x23, 0xca, 0x22, 0x7e,
+	0x1d, 0xb3, 0x89, 0xea, 0xd3, 0x56, 0x2a, 0x74, 0x69, 0xe7, 0x54, 0x5f, 0x33, 0xd8, 0x85, 0xba,
+	0x9c, 0xc5, 0xa9, 0x5b, 0xf7, 0x51, 0x77, 0x5f, 0xe7, 0x28, 0x24, 0xf8, 0x66, 0xc2, 0x83, 0x1d,
+	0x6d, 0xf3, 0x70, 0xc1, 0x97, 0x23, 0x49, 0x53, 0x22, 0x48, 0xc6, 0xc5, 0x9d, 0x03, 0x6d, 0xc1,
+	0x97, 0xc3, 0x92, 0xc1, 0x87, 0x70, 0x6f, 0x1c, 0xd3, 0xe4, 0xba, 0x22, 0xae, 0xde, 0xdb, 0x51,
+	0xe4, 0x56, 0x7e, 0x01, 0x16, 0x65, 0x51, 0xc2, 0x25, 0x55, 0x07, 0x77, 0x7a, 0xe1, 0xff, 0x7d,
+	0x40, 0xd8, 0x2f, 0x5c, 0xe5, 0x33, 0xe8, 0x10, 0xec, 0x43, 0x4b, 0x8f, 0x42, 0xf5, 0x2b, 0xf7,
+	0xfe, 0x45, 0xf1, 0x33, 0x80, 0x29, 0x91, 0x23, 0x2a, 0x23, 0x92, 0x52, 0xb7, 0xe1, 0xa3, 0x6e,
+	0x4b, 0x6b, 0xda, 0x53, 0x22, 0xfb, 0x0a, 0xc6, 0x8f, 0xa0, 0xa9, 0x05, 0xcd, 0x4a, 0x88, 0xc6,
+	0x82, 0x10, 0x2c, 0xbd, 0x1e, 0xb7, 0xa1, 0x71, 0x41, 0x6f, 0xa8, 0x70, 0x0c, 0x0c, 0xd0, 0x7c,
+	0x93, 0x2c, 0xc9, 0x4a, 0x3a, 0x08, 0xdb, 0xd0, 0x2a, 0x0e, 0x25, 0x89, 0x63, 0x1e, 0x3f, 0x5d,
+	0xff, 0xf2, 0x8c, 0xf5, 0xc6, 0x43, 0x5f, 0x37, 0x1e, 0xfa, 0xbe, 0xf1, 0xd0, 0xcf, 0x8d, 0x87,
+	0x6e, 0x7f, 0x7b, 0xc6, 0x47, 0x4b, 0x57, 0xfc, 0x13, 0x00, 0x00, 0xff, 0xff, 0xab, 0x0c, 0x13,
+	0x4c, 0x60, 0x03, 0x00, 0x00,
 }
