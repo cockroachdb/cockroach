@@ -1,4 +1,5 @@
 import { ThunkAction } from "redux-thunk";
+import { createSelector } from "reselect";
 
 import { Action } from "redux";
 import { userLogin } from "src/util/api";
@@ -18,16 +19,73 @@ declare global {
   }
 }
 
-// State
+// State for application use.
 
 export interface LoginState {
+    loginEnabled(): boolean;
+    hasAccess(): boolean;
+    loggedInUser(): string;
+}
+
+class LoginEnabledState {
+    apiState: LoginAPIState;
+
+    constructor(state: LoginAPIState) {
+        this.apiState = state;
+    }
+
+    loginEnabled(): boolean {
+        return true;
+    }
+
+    hasAccess(): boolean {
+        return this.apiState.loggedInUser != null;
+    }
+
+    loggedInUser(): string {
+        return this.apiState.loggedInUser;
+    }
+}
+
+class LoginDisabledState {
+    loginEnabled(): boolean {
+        return false;
+    }
+
+    hasAccess(): boolean {
+        return true;
+    }
+
+    loggedInUser(): string {
+        return null;
+    }
+}
+
+// Selector
+
+export const selectLoginState = createSelector(
+    (state: AdminUIState) => state.login,
+    (login: LoginAPIState) => {
+        if (!window.dataFromServer || !window.dataFromServer.LoginEnabled) {
+            return new LoginDisabledState();
+        }
+
+        return new LoginEnabledState(login);
+    },
+);
+
+// Redux implementation.
+
+// State
+
+export interface LoginAPIState {
   loggedInUser: string;
   error: string;
   inProgress: boolean;
 }
 
-const emptyLoginState: LoginState = {
-  loggedInUser: window.loggedInUser,
+const emptyLoginState: LoginAPIState = {
+  loggedInUser: window.dataFromServer && window.dataFromServer.LoggedInUser,
   error: null,
   inProgress: false,
 };
@@ -84,7 +142,7 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
 
 // Reducer
 
-export function loginReducer(state = emptyLoginState, action: Action): LoginState {
+export function loginReducer(state = emptyLoginState, action: Action): LoginAPIState {
   switch (action.type) {
     case LOGIN_BEGIN:
       return {

@@ -12,7 +12,7 @@ import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
-import { loginReducer, LoginState } from "./login";
+import { loginReducer, LoginAPIState } from "./login";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
@@ -23,7 +23,7 @@ export interface AdminUIState {
     routing: RouterState;
     timewindow: TimeWindowState;
     uiData: UIDataState;
-    login: LoginState;
+    login: LoginAPIState;
 }
 
 // createAdminUIStore is a function that returns a new store for the admin UI.
