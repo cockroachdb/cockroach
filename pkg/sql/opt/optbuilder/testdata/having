@@ -131,9 +131,9 @@ build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+w) > 5
 ----
 project
- ├── columns: count:6(int) "k + w":5(int)
+ ├── columns: count:6(int) "k + w":5(int!null)
  └── select
-      ├── columns: column5:5(int) count:6(int)
+      ├── columns: column5:5(int!null) count:6(int)
       ├── group-by
       │    ├── columns: column5:5(int) count:6(int)
       │    ├── grouping columns: column5:5(int)
@@ -149,9 +149,7 @@ project
       │         └── count-rows [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
-                ├── plus [type=int]
-                │    ├── variable: kv.k [type=int]
-                │    └── variable: kv.w [type=int]
+                ├── variable: column5 [type=int]
                 └── const: 5 [type=int]
 
 build
@@ -204,8 +202,7 @@ project
       │              └── variable: kv.w [type=int]
       └── filters [type=bool]
            └── like [type=bool]
-                ├── function: lower [type=string]
-                │    └── variable: kv.s [type=string]
+                ├── variable: column5 [type=string]
                 └── const: 'test%' [type=string]
 
 build
@@ -242,7 +239,7 @@ SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
 project
  ├── columns: v:2(int)
  └── select
-      ├── columns: t.public.kv.v:2(int) column5:5(int)
+      ├── columns: t.public.kv.v:2(int) column5:5(int!null)
       ├── group-by
       │    ├── columns: t.public.kv.v:2(int) column5:5(int)
       │    ├── grouping columns: t.public.kv.v:2(int) column5:5(int)
@@ -256,9 +253,7 @@ project
       │                   └── variable: t.public.kv.w [type=int]
       └── filters [type=bool]
            └── gt [type=bool]
-                ├── mult [type=int]
-                │    ├── variable: t.public.kv.k [type=int]
-                │    └── variable: t.public.kv.w [type=int]
+                ├── variable: column5 [type=int]
                 └── const: 5 [type=int]
 
 build fully-qualify-names

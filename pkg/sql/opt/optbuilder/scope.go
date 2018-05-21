@@ -49,10 +49,12 @@ type scope struct {
 	columns int
 }
 
-// groupByStrSet is a set of stringified GROUP BY expressions.
-type groupByStrSet map[string]struct{}
+// groupByStrSet is a set of stringified GROUP BY expressions that map to the
+// grouping column in an aggOutScope scope that projects that expression.
+type groupByStrSet map[string]*scopeColumn
 
-// exists is the 0-byte value of each element in groupByStrSet.
+// exists is a 0-byte dummy value used in a map that's being used to track
+// whether keys exist (i.e. where only the key matters).
 var exists = struct{}{}
 
 // inGroupingContext returns true when the aggInScope is not nil. This is the
@@ -260,21 +262,6 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 				// existing column that computes it.
 				return &s.getAggregateCols()[i]
 			}
-		}
-	}
-
-	return nil
-}
-
-// findGrouping finds the given grouping expression among the bound variables
-// in the groupingsScope. Returns nil if the grouping is not found.
-func (s *scope) findGrouping(grouping memo.GroupID) *scopeColumn {
-	for i, g := range s.groupby.groupings {
-		if g == grouping {
-			// Grouping already exists, so return information about the
-			// existing column that computes it. The first columns in aggInScope
-			// are always listed in the same order as s.groupby.groupings.
-			return &s.groupby.aggInScope.cols[i]
 		}
 	}
 
