@@ -74,6 +74,8 @@ const (
 	jsonEmptyArray    = jsonInvertedIndex + 1
 	jsonEmptyObject   = jsonEmptyArray + 1
 
+	tupleMarker = jsonEmptyObject + 1
+
 	// IntMin is chosen such that the range of int tags does not overlap the
 	// ascii character set that is frequently used in testing.
 	IntMin      = 0x80 // 128
@@ -1057,7 +1059,8 @@ const (
 	// Do not change SentinelType from 15. This value is specifically used for bit
 	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
-	JSON
+	JSON         Type = iota
+	Tuple
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -1140,6 +1143,8 @@ func PeekLength(b []byte) (int, error) {
 		return getBytesLength(b, ascendingEscapes)
 	case jsonInvertedIndex:
 		return getJSONInvertedIndexKeyLength(b)
+	case tupleMarker:
+		return getTupleKeyLength(b)
 	case bytesDescMarker:
 		return getBytesLength(b, descendingEscapes)
 	case timeMarker:
@@ -1606,6 +1611,13 @@ func EncodeArrayValue(appendTo []byte, colID uint32, data []byte) []byte {
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+// EncodeTupleValue encodes a tuple with its value tag, appends it to the
+// supplied buffer, and returns the final buffer.
+func EncodeTupleValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, Tuple)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // EncodeTimeValue encodes a time.Time value with its value tag, appends it to
 // the supplied buffer, and returns the final buffer.
 func EncodeTimeValue(appendTo []byte, colID uint32, t time.Time) []byte {
@@ -1969,7 +1981,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON:
+	case Bytes, Array, JSON, Tuple:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Decimal:
@@ -2171,4 +2183,8 @@ func getJSONInvertedIndexKeyLength(buf []byte) (int, error) {
 
 		return len + valLen, nil
 	}
+}
+
+func getTupleKeyLength(buf []byte) (int, error) {
+	return 0, errors.Errorf("TODO(donotmerge)")
 }
