@@ -5,6 +5,7 @@ import { RouterState } from "react-router";
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
+import RequireLogin from "src/views/login/requireLogin";
 
 /**
  * Defines the main layout of all admin ui pages. This includes static
@@ -15,7 +16,7 @@ import AlertBanner from "src/views/app/containers/alertBanner";
 export default class extends React.Component<RouterState, {}> {
   render() {
     return (
-      <div>
+      <RequireLogin>
         <Helmet titleTemplate="%s | Cockroach Console" defaultTitle="Cockroach Console" />
         <TimeWindowManager/>
         <AlertBanner/>
@@ -23,7 +24,7 @@ export default class extends React.Component<RouterState, {}> {
         <div className="page">
           { this.props.children }
         </div>
-      </div>
+      </RequireLogin>
     );
   }
 }

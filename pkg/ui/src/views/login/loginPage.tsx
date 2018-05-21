@@ -1,13 +1,14 @@
 import React from "react";
 import Helmet from "react-helmet";
 import { connect } from "react-redux";
+import { withRouter, WithRouterProps } from "react-router";
 
 import { doLogin, LoginAPIState } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 
 interface LoginPageProps {
   loginState: LoginAPIState;
-  handleLogin: (username: string, password: string) => void;
+  handleLogin: (username: string, password: string) => Promise<void>;
 }
 
 interface LoginPageState {
@@ -15,8 +16,8 @@ interface LoginPageState {
   password: string;
 }
 
-class LoginPage extends React.Component<LoginPageProps, LoginPageState> {
-  constructor(props: LoginPageProps) {
+class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginPageState> {
+  constructor(props: LoginPageProps & WithRouterProps) {
     super(props);
     this.state = {
       username: "",
@@ -40,7 +41,15 @@ class LoginPage extends React.Component<LoginPageProps, LoginPageState> {
   handleSubmit = (evt: React.FormEvent<any>) => {
     evt.preventDefault();
 
-    this.props.handleLogin(this.state.username, this.state.password);
+    this.props.handleLogin(this.state.username, this.state.password)
+        .then(() => {
+            const { location, router } = this.props;
+            if (location.query && location.query.redirectTo) {
+                router.push(location.query.redirectTo);
+            } else {
+                router.push("/");
+            }
+        });
   }
 
   render() {
@@ -82,9 +91,9 @@ const LoginPageConnected = connect(
   },
   (dispatch) => ({
     handleLogin: (username: string, password: string) => {
-      dispatch(doLogin(username, password));
+      return dispatch(doLogin(username, password));
     },
   }),
-)(LoginPage);
+)(withRouter(LoginPage));
 
 export default LoginPageConnected;
