@@ -146,7 +146,19 @@ func (o *Optimizer) Memo() *memo.Memo {
 func (o *Optimizer) Optimize(root memo.GroupID, requiredProps *props.Physical) memo.ExprView {
 	required := o.mem.InternPhysicalProps(requiredProps)
 	state := o.optimizeGroup(root, required)
+
+	// Validate the resulting operator.
 	ev := memo.MakeExprView(o.mem, state.best)
+	if ev.Operator() == opt.UnknownOp {
+		panic("optimization failed: result cannot be Unknown")
+	}
+
+	// Validate that outer columns did not change.
+	if ev.IsRelational() && !ev.Logical().Relational.OuterCols.Empty() {
+		format := "top-level relational expression cannot have outer columns: %s"
+		panic(fmt.Sprintf(format, ev.Logical().Relational.OuterCols))
+	}
+
 	o.mem.SetRoot(ev)
 	return ev
 }

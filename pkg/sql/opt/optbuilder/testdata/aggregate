@@ -1937,12 +1937,8 @@ project
  │                   └── variable: kv.w [type=int]
  └── projections
       └── div [type=decimal]
-           ├── plus [type=int]
-           │    ├── variable: kv.k [type=int]
-           │    └── variable: kv.v [type=int]
-           └── plus [type=int]
-                ├── variable: kv.v [type=int]
-                └── variable: kv.w [type=int]
+           ├── variable: column5 [type=int]
+           └── variable: column6 [type=int]
 
 # Check that everything still works with differently qualified names
 build fully-qualify-names
@@ -1989,9 +1985,7 @@ project
  └── projections
       └── plus [type=int]
            ├── variable: t.public.kv.v [type=int]
-           └── mult [type=int]
-                ├── variable: t.public.kv.k [type=int]
-                └── variable: t.public.kv.w [type=int]
+           └── variable: column6 [type=int]
 
 # Check all the different types of scalar expressions as group by columns
 build
@@ -2022,9 +2016,7 @@ project
  │                   └── variable: abc.c [type=bool]
  └── projections
       └── and [type=bool]
-           ├── and [type=bool]
-           │    ├── variable: bools.b [type=bool]
-           │    └── variable: abc.c [type=bool]
+           ├── variable: column9 [type=bool]
            └── variable: bools.b [type=bool]
 
 build
@@ -2060,9 +2052,7 @@ project
  │                   └── variable: abc.c [type=bool]
  └── projections
       └── or [type=bool]
-           ├── or [type=bool]
-           │    ├── variable: bools.b [type=bool]
-           │    └── variable: abc.c [type=bool]
+           ├── variable: column9 [type=bool]
            └── variable: bools.b [type=bool]
 
 build
@@ -2088,9 +2078,7 @@ project
  │                   └── variable: kv.w [type=int]
  └── projections
       └── mod [type=int]
-           ├── mod [type=int]
-           │    ├── variable: kv.k [type=int]
-           │    └── variable: kv.w [type=int]
+           ├── variable: column5 [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -2116,9 +2104,7 @@ project
  │                   └── variable: abc.a [type=string]
  └── projections
       └── function: concat [type=string]
-           ├── function: concat [type=string]
-           │    ├── variable: kv.s [type=string]
-           │    └── variable: abc.a [type=string]
+           ├── variable: column9 [type=string]
            └── variable: abc.a [type=string]
 
 build
@@ -2144,9 +2130,7 @@ project
  │                   └── variable: kv.w [type=int]
  └── projections
       └── and [type=bool]
-           ├── lt [type=bool]
-           │    ├── variable: kv.k [type=int]
-           │    └── variable: kv.w [type=int]
+           ├── variable: column5 [type=bool]
            └── ne [type=bool]
                 ├── variable: kv.v [type=int]
                 └── const: 5 [type=int]
@@ -2189,9 +2173,7 @@ project
  │                   └── variable: foo.baz [type=jsonb]
  └── projections
       └── and [type=bool]
-           ├── contains [type=bool]
-           │    ├── variable: foo.bar [type=jsonb]
-           │    └── variable: foo.baz [type=jsonb]
+           ├── variable: column7 [type=bool]
            └── contains [type=bool]
                 ├── variable: foo.baz [type=jsonb]
                 └── variable: foo.baz [type=jsonb]
@@ -2199,7 +2181,7 @@ project
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
 ----
-error: column "foo.bar" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "a.bar" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT b.baz <@ a.bar AND b.baz <@ b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
@@ -2224,9 +2206,7 @@ project
  │                   └── variable: foo.baz [type=jsonb]
  └── projections
       └── and [type=bool]
-           ├── contains [type=bool]
-           │    ├── variable: foo.bar [type=jsonb]
-           │    └── variable: foo.baz [type=jsonb]
+           ├── variable: column7 [type=bool]
            └── contains [type=bool]
                 ├── variable: foo.baz [type=jsonb]
                 └── variable: foo.baz [type=jsonb]
@@ -2266,18 +2246,14 @@ project
  │                   └── variable: times.t [type=time]
  └── projections
       └── minus [type=interval]
-           ├── function: date_trunc [type=interval]
-           │    ├── const: 'second' [type=string]
-           │    └── variable: times.t [type=time]
-           └── function: date_trunc [type=interval]
-                ├── const: 'minute' [type=string]
-                └── variable: times.t [type=time]
+           ├── variable: column3 [type=interval]
+           └── variable: column4 [type=interval]
 
 build
 SELECT date_trunc('second', a.t) - date_trunc('second', b.t) FROM times a, times b
   GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
 ----
-error: column "times.t" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "b.t" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT NOT b FROM bools GROUP BY NOT b
@@ -2332,9 +2308,8 @@ project
  │                   └── variable: kv.w [type=int]
  └── projections
       └── mult [type=int]
-           ├── variable: kv.k [type=int]
-           └── unary-minus [type=int]
-                └── variable: kv.w [type=int]
+           ├── variable: column5 [type=int]
+           └── variable: column6 [type=int]
 
 build
 SELECT k * (-w) FROM kv GROUP BY +k, -w
