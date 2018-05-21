@@ -46,6 +46,7 @@ type VarName interface {
 var _ VarName = &UnresolvedName{}
 var _ VarName = UnqualifiedStar{}
 var _ VarName = &AllColumnsSelector{}
+var _ VarName = &TupleStar{}
 var _ VarName = &ColumnItem{}
 
 // UnqualifiedStar corresponds to a standalone '*' in a scalar

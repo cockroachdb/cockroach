@@ -1099,10 +1099,6 @@ type FuncExpr struct {
 	// Filter is used for filters on aggregates: SUM(k) FILTER (WHERE k > 0)
 	Filter    Expr
 	WindowDef *WindowDef
-	// EscapeSRF is to be set to true if the FuncExpr
-	// is enclosed in a ColumnAccessExpr. This is a temporary
-	// mechanism until #24866 is solved.
-	EscapeSRF bool
 
 	typeAnnotation
 	fnProps *FunctionProperties
@@ -1501,14 +1497,43 @@ func (node *CollateExpr) Format(ctx *FmtCtx) {
 	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, node.Locale, lex.EncNoFlags)
 }
 
-// ColumnAccessExpr represents (SRF).x or (SRF).* expression. Specifically, it
+// TupleStar represents (E).* expressions.
+// It is meant to evaporate during star expansion.
+type TupleStar struct {
+	Expr Expr
+}
+
+// NormalizeVarName implements the VarName interface.
+func (node *TupleStar) NormalizeVarName() (VarName, error) { return node, nil }
+
+// Format implements the NodeFormatter interface.
+func (node *TupleStar) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Expr)
+	ctx.WriteString(").*")
+}
+
+// ColumnAccessExpr represents (E).x expressions. Specifically, it
 // allows accessing the column(s) from a Set Retruning Function.
 type ColumnAccessExpr struct {
 	Expr    Expr
 	ColName string
-	Star    bool
+
+	// ColIndex indicates the index of the column in the tuple. This is
+	// set during type checking based on the label in ColName.
+	ColIndex int
 
 	typeAnnotation
+}
+
+// NewTypedColumnAccessExpr creates a pre-typed ColumnAccessExpr.
+func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *ColumnAccessExpr {
+	return &ColumnAccessExpr{
+		Expr:           expr,
+		ColName:        colName,
+		ColIndex:       colIdx,
+		typeAnnotation: typeAnnotation{typ: expr.ResolvedType()},
+	}
 }
 
 // Format implements the NodeFormatter interface.
@@ -1516,11 +1541,7 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteString(").")
-	if node.Star {
-		ctx.WriteByte('*')
-	} else {
-		ctx.WriteString(node.ColName)
-	}
+	ctx.WriteString(node.ColName)
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
@@ -1575,6 +1596,7 @@ func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
+func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
