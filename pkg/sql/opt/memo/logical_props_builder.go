@@ -87,6 +87,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.ExplainOp:
 		return b.buildExplainProps(ev)
 
+	case opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+		return b.buildShowTraceProps(ev)
+
 	case opt.RowNumberOp:
 		return b.buildRowNumberProps(ev)
 	}
@@ -435,6 +438,18 @@ func (b *logicalPropsBuilder) buildExplainProps(ev ExprView) props.Logical {
 	logical.Relational.Cardinality = props.AnyCardinality
 
 	// Zero value for Stats is ok for Explain.
+
+	return logical
+}
+
+func (b *logicalPropsBuilder) buildShowTraceProps(ev ExprView) props.Logical {
+	logical := props.Logical{Relational: &props.Relational{}}
+
+	def := ev.Private().(*ShowTraceOpDef)
+	logical.Relational.OutputCols = opt.ColListToSet(def.ColList)
+	logical.Relational.Cardinality = props.AnyCardinality
+
+	// Zero value for Stats is ok for ShowTrace.
 
 	return logical
 }

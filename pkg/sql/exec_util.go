@@ -402,12 +402,7 @@ func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool 
 		// Only handle a subset of the statement types (currently read-only queries).
 		switch stmt.AST.(type) {
 		case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-			*tree.UnionClause, *tree.ValuesClause:
-			return true
-		case *tree.Explain:
-			// The optimizer doesn't yet support EXPLAIN but if we return false, it gets
-			// executed with the old planner which can be very confusing; it's
-			// preferable to error out.
+			*tree.UnionClause, *tree.ValuesClause, *tree.Explain, *tree.ShowTrace:
 			return true
 		}
 	}

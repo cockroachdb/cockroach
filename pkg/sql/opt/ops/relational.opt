@@ -319,10 +319,26 @@ define Max1Row {
     Input Expr
 }
 
+# ShowTrace is an operator which returns information about the execution plan of
+# the "input" expression.
 [Relational]
 define Explain {
     Input Expr
     Def   ExplainOpDef
+}
+
+# ShowTrace is an operator which runs the "input" expressions in a special
+# tracing mode and outputs trace results.
+[Relational]
+define ShowTrace {
+    Input Expr
+    Def   ShowTraceOpDef
+}
+
+# ShowTraceForSession is an operator which returns the current session traces.
+[Relational]
+define ShowTraceForSession {
+    Def   ShowTraceOpDef
 }
 
 # RowNumber adds a column to each row in its input containing a unique,
