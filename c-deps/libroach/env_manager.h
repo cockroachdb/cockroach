@@ -20,6 +20,14 @@
 
 namespace cockroach {
 
+// EnvStatsHandler provides an interface to generate Env-specific stats.
+class EnvStatsHandler {
+ public:
+  virtual ~EnvStatsHandler() {}
+
+  virtual rocksdb::Status GetEncryptionStats(std::string* stats) = 0;
+};
+
 // EnvManager manages all created Envs, as well as the file registry.
 // Rocksdb owns Env::Default (global static). All other envs are owned by EnvManager.
 //
@@ -30,10 +38,14 @@ struct EnvManager {
   EnvManager(rocksdb::Env* env) : base_env(env), db_env(env) {}
   ~EnvManager() {}
 
+  // Set the stats handler implementing GetEncryptionStats to fill in env-related stats.
+  // It does not have called, leaving env_stats_handler nil.
+  void SetStatsHandler(EnvStatsHandler* stats_handler) { env_stats_handler.reset(stats_handler); }
   void TakeEnvOwnership(rocksdb::Env* env) { envs.push_back(std::unique_ptr<rocksdb::Env>(env)); }
 
   rocksdb::Env* base_env;
   rocksdb::Env* db_env;
+  std::unique_ptr<EnvStatsHandler> env_stats_handler;
   std::unique_ptr<FileRegistry> file_registry;
   std::vector<std::unique_ptr<rocksdb::Env>> envs;
 };

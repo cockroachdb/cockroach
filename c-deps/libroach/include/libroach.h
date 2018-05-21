@@ -304,8 +304,16 @@ typedef struct {
   int64_t pending_compaction_bytes_estimate;
 } DBStatsResult;
 
+// DBEnvStatsResult contains Env stats (filesystem layer).
+typedef struct {
+  // encryption status (CCL only).
+  // This is a serialized enginepbccl/stats.proto:EncryptionStatus
+  DBString encryption_status;
+} DBEnvStatsResult;
+
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
 DBString DBGetCompactionStats(DBEngine* db);
+DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats);
 
 typedef struct {
   int level;

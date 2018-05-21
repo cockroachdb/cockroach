@@ -14,6 +14,7 @@
 
 #include "db.h"
 #include "include/libroach.h"
+#include "status.h"
 #include "testutils.h"
 
 using namespace cockroach;
@@ -29,4 +30,16 @@ TEST(Libroach, DBOpenHook) {
   db_opts.extra_options = ToDBSlice("blah");
   EXPECT_ERR(DBOpenHook("", db_opts, nullptr),
              "DBOptions has extra_options, but OSS code cannot handle them");
+}
+
+TEST(Libroach, DBOpen) {
+  DBOptions db_opts = defaultDBOptions();
+  DBEngine* db;
+
+  EXPECT_STREQ(DBOpen(&db, DBSlice(), db_opts).data, NULL);
+  DBEnvStatsResult stats;
+  EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
+  EXPECT_STREQ(stats.encryption_status.data, NULL);
+
+  DBClose(db);
 }

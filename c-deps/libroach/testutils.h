@@ -18,6 +18,21 @@
 #include <rocksdb/env.h>
 #include <rocksdb/status.h>
 #include <string>
+#include "include/libroach.h"
+
+// Returns initialized DBOptions with reasonable values for unittests.
+inline DBOptions defaultDBOptions() {
+  return DBOptions{
+      nullptr,    // cache
+      2,          // num_cpu
+      1024,       // max_open_files
+      false,      // use_file_registry
+      false,      // must_exist
+      false,      // read_only
+      DBSlice(),  // rocksdb_options
+      DBSlice(),  // extra_options
+  };
+}
 
 namespace testutils {
 

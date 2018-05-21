@@ -19,6 +19,12 @@
 #include <string>
 #include "fmt.h"
 
+extern "C" {
+// Tests are run in plain C++, we need a symbol for rocksDBLog, normally
+// implemented on the Go side.
+void __attribute__((weak)) rocksDBLog(char*, int) {}
+}  // extern "C"
+
 namespace testutils {
 
 rocksdb::Status compareErrorMessage(rocksdb::Status status, const char* err_msg) {

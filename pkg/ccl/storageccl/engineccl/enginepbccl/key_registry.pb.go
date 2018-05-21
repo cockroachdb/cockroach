@@ -6,12 +6,14 @@
 
 	It is generated from these files:
 		ccl/storageccl/engineccl/enginepbccl/key_registry.proto
+		ccl/storageccl/engineccl/enginepbccl/stats.proto
 
 	It has these top-level messages:
 		DataKeysRegistry
 		KeyInfo
 		SecretKey
 		EncryptionSettings
+		EncryptionStatus
 */
 package enginepbccl
 
