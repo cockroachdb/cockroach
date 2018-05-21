@@ -21,18 +21,21 @@
 # improvements!
 
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
-$(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
+  $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
 else
-$(if $(BENCHES),$(error BENCHES can only be specified with `make bench`))
+  $(if $(BENCHES),$(error BENCHES can only be specified with `make bench`))
 endif
 
-# Prevent invoking make with a specific test name without a constraining
-# package.
 ifneq "$(filter bench% test% stress%,$(MAKECMDGOALS))" ""
-ifeq "$(PKG)" ""
-$(if $(subst -,,$(TESTS)),$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql)))
-$(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql)))
-endif
+  # The maketest build tag is used for assertion code that we want to keep out of
+  # non-test builds.
+  override TAGS += maketest
+  ifeq "$(PKG)" ""
+    # Prevent invoking make with a specific test name without a constraining
+    # package.
+    $(if $(subst -,,$(TESTS)),$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql)))
+    $(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql)))
+  endif
 endif
 
 ## Which package to run tests against, e.g. "./pkg/storage".
@@ -126,58 +129,58 @@ LINKFLAGS ?=
 BUILD_TYPE := development
 ifeq ($(TYPE),)
 else ifeq ($(TYPE),msan)
-NATIVE_SUFFIX := _msan
-override GOFLAGS += -msan
-# NB: using jemalloc with msan causes segfaults. See
-# https://github.com/jemalloc/jemalloc/issues/821.
-override TAGS += stdmalloc
-MSAN_CPPFLAGS := -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1
-MSAN_LDFLAGS  := -fsanitize=memory -stdlib=libc++ -L/libcxx_msan/lib -lc++abi -Wl,-rpath,/libcxx_msan/lib
-override CGO_CPPFLAGS += $(MSAN_CPPFLAGS)
-override CGO_LDFLAGS += $(MSAN_LDFLAGS)
-export CGO_CPPFLAGS
-export CGO_LDFLAGS
-# NB: CMake doesn't respect CPPFLAGS (!)
-#
-# See https://bugs.launchpad.net/pantheon-terminal/+bug/1325329.
-override CFLAGS += $(MSAN_CPPFLAGS)
-override CXXFLAGS += $(MSAN_CPPFLAGS)
-override LDFLAGS += $(MSAN_LDFLAGS)
+  NATIVE_SUFFIX := _msan
+  override GOFLAGS += -msan
+  # NB: using jemalloc with msan causes segfaults. See
+  # https://github.com/jemalloc/jemalloc/issues/821.
+  override TAGS += stdmalloc
+  MSAN_CPPFLAGS := -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -I/libcxx_msan/include -I/libcxx_msan/include/c++/v1
+  MSAN_LDFLAGS  := -fsanitize=memory -stdlib=libc++ -L/libcxx_msan/lib -lc++abi -Wl,-rpath,/libcxx_msan/lib
+  override CGO_CPPFLAGS += $(MSAN_CPPFLAGS)
+  override CGO_LDFLAGS += $(MSAN_LDFLAGS)
+  export CGO_CPPFLAGS
+  export CGO_LDFLAGS
+  # NB: CMake doesn't respect CPPFLAGS (!)
+  #
+  # See https://bugs.launchpad.net/pantheon-terminal/+bug/1325329.
+  override CFLAGS += $(MSAN_CPPFLAGS)
+  override CXXFLAGS += $(MSAN_CPPFLAGS)
+  override LDFLAGS += $(MSAN_LDFLAGS)
 else ifeq ($(TYPE),release-linux-gnu)
-# We use a custom toolchain to target old Linux and glibc versions. However,
-# this toolchain's libstdc++ version is quite recent and must be statically
-# linked to avoid depending on the target's available libstdc++.
-XHOST_TRIPLE := x86_64-unknown-linux-gnu
-override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
-override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
-BUILD_TYPE := release
+  # We use a custom toolchain to target old Linux and glibc versions. However,
+  # this toolchain's libstdc++ version is quite recent and must be statically
+  # linked to avoid depending on the target's available libstdc++.
+  XHOST_TRIPLE := x86_64-unknown-linux-gnu
+  override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+  override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
+  BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
-XHOST_TRIPLE := x86_64-unknown-linux-musl
-override LINKFLAGS += -extldflags "-static"
-override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
-BUILD_TYPE := release
+  XHOST_TRIPLE := x86_64-unknown-linux-musl
+  override LINKFLAGS += -extldflags "-static"
+  override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
+  BUILD_TYPE := release
 else ifeq ($(TYPE),release-aarch64-linux)
-XGOARCH := arm64
-export CGO_ENABLED := 1
-XHOST_TRIPLE := aarch64-unknown-linux-gnueabi
-override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
-override SUFFIX := $(SUFFIX)-linux-3.7.10-gnu-aarch64
-BUILD_TYPE := release
+  XGOARCH := arm64
+  export CGO_ENABLED := 1
+  XHOST_TRIPLE := aarch64-unknown-linux-gnueabi
+  override LINKFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+  override SUFFIX := $(SUFFIX)-linux-3.7.10-gnu-aarch64
+  BUILD_TYPE := release
 else ifeq ($(TYPE),release-darwin)
-XGOOS := darwin
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-apple-darwin13
-override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
-BUILD_TYPE := release
+  XGOOS := darwin
+  export CGO_ENABLED := 1
+  XHOST_TRIPLE := x86_64-apple-darwin13
+  override SUFFIX := $(SUFFIX)-darwin-10.9-amd64
+  BUILD_TYPE := release
 else ifeq ($(TYPE),release-windows)
-XGOOS := windows
-export CGO_ENABLED := 1
-XHOST_TRIPLE := x86_64-w64-mingw32
-override SUFFIX := $(SUFFIX)-windows-6.2-amd64
-override LINKFLAGS += -extldflags "-static"
-BUILD_TYPE := release
+  XGOOS := windows
+  export CGO_ENABLED := 1
+  XHOST_TRIPLE := x86_64-w64-mingw32
+  override SUFFIX := $(SUFFIX)-windows-6.2-amd64
+  override LINKFLAGS += -extldflags "-static"
+  BUILD_TYPE := release
 else
-$(error unknown build type $(TYPE))
+  $(error unknown build type $(TYPE))
 endif
 
 # Build C/C++ with basic debugging information.
@@ -203,25 +206,25 @@ SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 # Ensure we have an unambiguous GOPATH.
 GOPATH := $(realpath $(shell $(GO) env GOPATH))
 ifeq ($(strip $(GOPATH)),)
-$(error GOPATH is not set and could not be automatically determined, build cannot continue)
+  $(error GOPATH is not set and could not be automatically determined, build cannot continue)
 endif
 
 ifneq "$(or $(findstring :,$(GOPATH)),$(findstring ;,$(GOPATH)))" ""
-$(error GOPATHs with multiple entries are not supported)
+  $(error GOPATHs with multiple entries are not supported)
 endif
 
 ifeq "$(filter $(GOPATH)%,$(CURDIR))" ""
-$(error Current directory "$(CURDIR)" is not within GOPATH "$(GOPATH)")
+  $(error Current directory "$(CURDIR)" is not within GOPATH "$(GOPATH)")
 endif
 
 ifeq "$(GOPATH)" "/"
-$(error GOPATH=/ is not supported)
+  $(error GOPATH=/ is not supported)
 endif
 
 # Avoid printing twice if Make restarts (because a Makefile was changed) or is
 # called recursively from another Makefile.
 ifeq ($(MAKE_RESTARTS)$(MAKELEVEL),0)
-$(info GOPATH set to $(GOPATH))
+  $(info GOPATH set to $(GOPATH))
 endif
 
 # We install our vendored tools to a directory within this repository to avoid
@@ -247,7 +250,7 @@ export PATH := $(abspath bin):$(PATH)
 # deprecated, so revisit whether this workaround is necessary then.
 export SHELL := env PWD=$(CURDIR) bash
 ifeq ($(SHELL),)
-$(error bash is required)
+  $(error bash is required)
 endif
 
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
@@ -293,7 +296,7 @@ $(call make-lazy,term-reset)
 IGNORE_GOVERS :=
 go-version-check := $(if $(IGNORE_GOVERS),,$(shell build/go-version-check.sh $(GO)))
 ifneq "$(go-version-check)" ""
-$(error $(go-version-check). Disable this check with IGNORE_GOVERS=1)
+  $(error $(go-version-check). Disable this check with IGNORE_GOVERS=1)
 endif
 
 # Print an error if the user specified any variables on the command line that
@@ -449,41 +452,41 @@ XCMAKE_FLAGS := $(CMAKE_FLAGS)
 
 ifdef XHOST_TRIPLE
 
-# Darwin wants clang, so special treatment is in order.
-ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
-
-XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
-
-export PATH := $(XHOST_BIN_DIR):$(PATH)
-
-CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
-ifdef ISDARWIN
-CC_PATH  := $(CC_PATH)-clang
-CXX_PATH := $(CXX_PATH)-clang++
+  # Darwin wants clang, so special treatment is in order.
+  ISDARWIN := $(findstring darwin,$(XHOST_TRIPLE))
+  
+  XHOST_BIN_DIR := /x-tools/$(XHOST_TRIPLE)/bin
+  
+  export PATH := $(XHOST_BIN_DIR):$(PATH)
+  
+  CC_PATH  := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
+  CXX_PATH := $(XHOST_BIN_DIR)/$(XHOST_TRIPLE)
+  ifdef ISDARWIN
+    CC_PATH  := $(CC_PATH)-clang
+    CXX_PATH := $(CXX_PATH)-clang++
+  else
+    CC_PATH  := $(CC_PATH)-gcc
+    CXX_PATH := $(CXX_PATH)-g++
+  endif
+  
+  ifdef ISDARWIN
+    CMAKE_SYSTEM_NAME := Darwin
+  else ifneq ($(findstring linux,$(XHOST_TRIPLE)),)
+    CMAKE_SYSTEM_NAME := Linux
+  else ifneq ($(findstring mingw,$(XHOST_TRIPLE)),)
+    CMAKE_SYSTEM_NAME := Windows
+  endif
+  
+  CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE) CC=$(CC_PATH) CXX=$(CXX_PATH)
+  
+  # Use XCMAKE_FLAGS when invoking CMake on libraries/binaries for the target
+  # platform (i.e., the cross-compiled platform, if specified); use plain
+  # CMAKE_FLAGS when invoking CMake on libraries/binaries for the host platform.
+  XCMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME) -DCMAKE_INSTALL_NAME_TOOL=$(XHOST_TRIPLE)-install_name_tool
+  
+  TARGET_TRIPLE := $(XHOST_TRIPLE)
 else
-CC_PATH  := $(CC_PATH)-gcc
-CXX_PATH := $(CXX_PATH)-g++
-endif
-
-ifdef ISDARWIN
-CMAKE_SYSTEM_NAME := Darwin
-else ifneq ($(findstring linux,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Linux
-else ifneq ($(findstring mingw,$(XHOST_TRIPLE)),)
-CMAKE_SYSTEM_NAME := Windows
-endif
-
-CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE) CC=$(CC_PATH) CXX=$(CXX_PATH)
-
-# Use XCMAKE_FLAGS when invoking CMake on libraries/binaries for the target
-# platform (i.e., the cross-compiled platform, if specified); use plain
-# CMAKE_FLAGS when invoking CMake on libraries/binaries for the host platform.
-XCMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME) -DCMAKE_INSTALL_NAME_TOOL=$(XHOST_TRIPLE)-install_name_tool
-
-TARGET_TRIPLE := $(XHOST_TRIPLE)
-else
-TARGET_TRIPLE := $(HOST_TRIPLE)
+  TARGET_TRIPLE := $(HOST_TRIPLE)
 endif
 
 NATIVE_SPECIFIER := $(TARGET_TRIPLE)$(NATIVE_SUFFIX)
@@ -495,7 +498,7 @@ BUILD_DIR := $(GOPATH)/native/$(NATIVE_SPECIFIER)
 # TODO(benesch): Figure out why. MinGW transparently converts Unix-style paths
 # everywhere else.
 ifdef MINGW
-BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
+  BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
 CRYPTOPP_DIR := $(BUILD_DIR)/cryptopp
