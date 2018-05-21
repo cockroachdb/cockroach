@@ -203,3 +203,24 @@ type HistogramTick struct {
 	// [Now-Elapsed,Now).
 	Now time.Time
 }
+
+// Snapshot creates a SnapshotTick from the receiver.
+func (t HistogramTick) Snapshot() SnapshotTick {
+	return SnapshotTick{
+		Name:    t.Name,
+		Elapsed: t.Elapsed,
+		Now:     t.Now,
+		Hist:    t.Hist.Export(),
+	}
+}
+
+// SnapshotTick parallels HistogramTick but replace the histogram with a
+// snapshot that is suitable for serialization. Additionally, it only contains
+// the per-tick histogram, not the cumulative histogram. (The cumulative
+// histogram can be computed by aggregating all of the per-tick histograms).
+type SnapshotTick struct {
+	Name    string
+	Hist    *hdrhistogram.Snapshot
+	Elapsed time.Duration
+	Now     time.Time
+}
