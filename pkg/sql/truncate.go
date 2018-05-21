@@ -256,36 +256,10 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 func (p *planner) findAllReferences(
 	ctx context.Context, table sqlbase.TableDescriptor,
 ) ([]*sqlbase.TableDescriptor, error) {
-	refs := map[sqlbase.ID]struct{}{}
-	if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
-		for _, a := range index.Interleave.Ancestors {
-			refs[a.TableID] = struct{}{}
-		}
-		for _, c := range index.InterleavedBy {
-			refs[c.Table] = struct{}{}
-		}
-
-		if index.ForeignKey.IsSet() {
-			to := index.ForeignKey.Table
-			refs[to] = struct{}{}
-		}
-
-		for _, c := range index.ReferencedBy {
-			refs[c.Table] = struct{}{}
-		}
-		return nil
-	}); err != nil {
+	refs, err := table.FindAllReferences()
+	if err != nil {
 		return nil, err
 	}
-
-	for _, dest := range table.DependsOn {
-		refs[dest] = struct{}{}
-	}
-
-	for _, c := range table.DependedOnBy {
-		refs[c.ID] = struct{}{}
-	}
-
 	tables := make([]*sqlbase.TableDescriptor, 0, len(refs))
 	for id := range refs {
 		if id == table.ID {
