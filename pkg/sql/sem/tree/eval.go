@@ -3396,7 +3396,8 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 // Eval implements the TypedExpr interface.
 func (expr *ColumnAccessExpr) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-		"programmer error: column access expressions must be replaced before evaluation")
+		"programmer error: column access expressions must be replaced before evaluation",
+	)
 }
 
 // Eval implements the TypedExpr interface.
