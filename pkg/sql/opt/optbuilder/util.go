@@ -26,16 +26,62 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// expandStar expands expr into a list of columns if expr
-// corresponds to a "*" or "<table>.*".
-func (b *Builder) expandStar(expr tree.Expr, inScope *scope) (exprs []tree.TypedExpr) {
+func checkFrom(expr tree.Expr, inScope *scope) {
 	if len(inScope.cols) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(expr))})
 	}
+}
 
+// expandStar expands expr into a list of columns if expr
+// corresponds to a "*", "<table>.*" or "(Expr).*".
+func (b *Builder) expandStar(
+	expr tree.Expr, inScope *scope,
+) (labels []string, exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
+	case *tree.TupleStar:
+		texpr := inScope.resolveType(t.Expr, types.Any)
+		typ := texpr.ResolvedType()
+		tType, ok := typ.(types.TTuple)
+		if !ok || tType.Labels == nil {
+			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
+		}
+
+		// If the sub-expression is a tuple constructor, we'll de-tuplify below.
+		// Otherwise we'll re-evaluate the expression multiple times.
+		//
+		// The following query generates a tuple constructor:
+		//     SELECT (kv.*).* FROM kv
+		//     -- the inner star expansion (scope.VisitPre) first expands to
+		//     SELECT (((kv.k, kv.v) as k,v)).* FROM kv
+		//     -- then the inner tuple constructor detuplifies here to:
+		//     SELECT kv.k, kv.v FROM kv
+		//
+		// The following query generates a scalar var with tuple type that
+		// is not a tuple constructor:
+		//
+		//     SELECT (SELECT pg_get_keywords() AS x LIMIT 1).*
+		//     -- does not detuplify, one gets instead:
+		//     SELECT (SELECT pg_get_keywords() AS x LIMIT 1).word,
+		//            (SELECT pg_get_keywords() AS x LIMIT 1).catcode,
+		//            (SELECT pg_get_keywords() AS x LIMIT 1).catdesc
+		//     -- (and we hope a later opt will merge the subqueries)
+		tTuple, isTuple := texpr.(*tree.Tuple)
+
+		labels = tType.Labels
+		exprs = make([]tree.TypedExpr, len(tType.Types))
+		for i := range tType.Types {
+			if isTuple {
+				// De-tuplify: ((a,b,c)).* -> a, b, c
+				exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
+			} else {
+				// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, tType.Labels[i], i)
+			}
+		}
+
 	case *tree.AllColumnsSelector:
+		checkFrom(expr, inScope)
 		src, _, err := t.Resolve(b.ctx, inScope)
 		if err != nil {
 			panic(builderError{err})
@@ -44,30 +90,37 @@ func (b *Builder) expandStar(expr tree.Expr, inScope *scope) (exprs []tree.Typed
 			col := inScope.cols[i]
 			if col.table == *src && !col.hidden {
 				exprs = append(exprs, &col)
+				labels = append(labels, string(col.name))
 			}
 		}
 
 	case tree.UnqualifiedStar:
+		checkFrom(expr, inScope)
 		for i := range inScope.cols {
 			col := inScope.cols[i]
 			if !col.hidden {
 				exprs = append(exprs, &col)
+				labels = append(labels, string(col.name))
 			}
 		}
+
+	default:
+		panic(fmt.Sprintf("unhandled type: %T", expr))
 	}
 
-	return exprs
+	return labels, exprs
 }
 
-// expandStarAndResolveType expands expr into a list of columns if expr
-// corresponds to a "*" or "<table>.*". Otherwise, expandStarAndResolveType
-// resolves the type of expr and returns it as a []TypedExpr.
+// expandStarAndResolveType expands expr into a list of columns if
+// expr corresponds to a "*", "<table>.*" or "(Expr).*". Otherwise,
+// expandStarAndResolveType resolves the type of expr and returns it
+// as a []TypedExpr.
 func (b *Builder) expandStarAndResolveType(
 	expr tree.Expr, inScope *scope,
 ) (exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
-	case *tree.AllColumnsSelector, tree.UnqualifiedStar:
-		exprs = b.expandStar(expr, inScope)
+	case *tree.AllColumnsSelector, tree.UnqualifiedStar, *tree.TupleStar:
+		_, exprs = b.expandStar(expr, inScope)
 
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()

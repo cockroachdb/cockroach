@@ -6792,7 +6792,7 @@ d_expr:
 // TODO(knz/jordan): extend this for compound types. See explanation above.
 | '(' a_expr ')' '.' '*'
   {
-    $$.val = &tree.ColumnAccessExpr{Expr: $2.expr(), Star: true }
+    $$.val = &tree.TupleStar{Expr: $2.expr()}
   }
 | '(' a_expr ')' '.' unrestricted_name
   {

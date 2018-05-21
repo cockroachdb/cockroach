@@ -225,7 +225,7 @@ build
 SELECT (kv.*) AS r FROM kv
 ----
 project
- ├── columns: r:3(tuple{string, string})
+ ├── columns: r:3(tuple{string AS k, string AS v})
  ├── scan kv
  │    └── columns: k:1(string!null) v:2(string)
  └── projections
@@ -257,7 +257,7 @@ error (42P01): no data source matches pattern: bar.kv.*
 build
 SELECT kv.*[1] FROM kv
 ----
-error (42804): cannot subscript type tuple{string, string} because it is not an array
+error (42804): cannot subscript type tuple{string AS k, string AS v} because it is not an array
 
 build
 SELECT ARRAY[]

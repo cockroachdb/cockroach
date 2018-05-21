@@ -3410,9 +3410,11 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnAccessExpr) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-		"programmer error: column access expressions must be replaced before evaluation",
-	)
+	d, err := expr.Expr.(TypedExpr).Eval(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.(*DTuple).D[expr.ColIndex], nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -3716,6 +3718,11 @@ func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr *TupleStar) Eval(ctx *EvalContext) (Datum, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
 }
 

@@ -475,6 +475,38 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 }
 
+// NewTypeIsNotCompositeError generates an error suitable to report
+// when a ColumnAccessExpr or TupleStar is applied to a non-composite
+// type.
+func NewTypeIsNotCompositeError(resolvedType types.T) error {
+	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+		"type %s is not composite", resolvedType,
+	)
+}
+
+// TypeCheck implements the Expr interface.
+func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	subExpr, err := expr.Expr.TypeCheck(ctx, desired)
+	if err != nil {
+		return nil, err
+	}
+	expr.Expr = subExpr
+	resolvedType := subExpr.ResolvedType()
+
+	// Alghough we're going to elide the tuple star, we need to ensure
+	// the expression is indeed a labeled tuple first.
+	if tType, ok := resolvedType.(types.TTuple); !ok || len(tType.Labels) == 0 {
+		return nil, NewTypeIsNotCompositeError(resolvedType)
+	}
+
+	return subExpr, err
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (expr *TupleStar) ResolvedType() types.T {
+	return expr.Expr.(TypedExpr).ResolvedType()
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	subExpr, err := expr.Expr.TypeCheck(ctx, desired)
@@ -483,50 +515,38 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 	}
 
 	expr.Expr = subExpr
-	resolvedType := subExpr.ResolvedType()
+	resolvedType := types.UnwrapType(subExpr.ResolvedType())
 
-	if !resolvedType.FamilyEqual(types.FamTuple) {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"type %s is not composite", resolvedType,
-		)
-	}
-
-	// For now, only support column access into tuple expressions.
-	if _, ok := expr.Expr.(*Tuple); !ok {
-		return nil, pgerror.UnimplementedWithIssueErrorf(
-			24866, "cannot access column \"%s\" in non-tuple expression", expr.ColName)
-	}
-
-	labels := resolvedType.(types.TTuple).Labels
-	// Ensure that the tuple is indeed labeled.
-	if len(labels) == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"type %s is not composite", resolvedType,
-		)
-	}
-
-	if expr.Star {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"star expansion of tuples is not supported",
-		)
+	tType, ok := resolvedType.(types.TTuple)
+	if !ok || len(tType.Labels) == 0 {
+		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
 	// Go through all of the labels to find a match.
-	colIndex := -1
-	for i, label := range labels {
+	expr.ColIndex = -1
+	for i, label := range tType.Labels {
 		if label == expr.ColName {
-			colIndex = i
+			expr.ColIndex = i
 			break
 		}
 	}
-
-	if colIndex < 0 {
+	if expr.ColIndex < 0 {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-			"could not identify column \"%s\" in %s", expr.ColName, resolvedType,
+			"could not identify column %q in %s",
+			ErrNameString(&expr.ColName), resolvedType,
 		)
 	}
 
-	return expr.Expr.(*Tuple).Exprs[colIndex].(TypedExpr), nil
+	// Optimization: if the expression is actually a tuple, then
+	// simplify the tuple straight away.
+	if tExpr, ok := expr.Expr.(*Tuple); ok {
+		return tExpr.Exprs[expr.ColIndex].(TypedExpr), nil
+	}
+
+	// Otherwise, let the expression be, it's probably more complex.
+	// Just annotate the type of the result properly.
+	expr.typ = tType.Types[expr.ColIndex]
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
