@@ -87,8 +87,8 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
-func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
-	// Set other attributes of col.Type and perform type-specific verification.
+// PopulateTypeAttrs set other attributes of col.Type and performs type-specific verification.
+func PopulateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	switch t := typ.(type) {
 	case *coltypes.TBool:
 	case *coltypes.TInt:
@@ -135,7 +135,7 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
 		var err error
-		base, err = populateTypeAttrs(base, t.ParamType)
+		base, err = PopulateTypeAttrs(base, t.ParamType)
 		if err != nil {
 			return ColumnType{}, err
 		}
@@ -175,7 +175,7 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, err
 	}
 
-	col.Type, err = populateTypeAttrs(colTyp, d.Type)
+	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
 	if err != nil {
 		return nil, nil, nil, err
 	}
