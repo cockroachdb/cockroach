@@ -131,12 +131,12 @@ memo (optimized)
  │    └── ""
  │         ├── best: (project G2 G3)
  │         └── cost: 2026.65
- ├── G2: (limit G4 G5 +2)
+ ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
- │    │    ├── best: (limit G4="[ordering: +2]" G5 +2)
+ │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
  │    │    └── cost: 2026.65
  │    └── "[ordering: +2]"
- │         ├── best: (limit G4="[ordering: +2]" G5 +2)
+ │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
  │         └── cost: 2026.65
  ├── G3: (projections G6 a.y b.x)
  ├── G4: (inner-join G7 G8 G9)
@@ -266,3 +266,30 @@ memo (optimized)
       └── ""
            ├── best: (scan a,constrained)
            └── cost: 1.00
+
+memo 
+SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
+----
+memo (optimized)
+ ├── G1: (union G2 G3)
+ │    └── "[presentation: x:7,y:8]"
+ │         ├── best: (union G2 G3)
+ │         └── cost: 2000.00
+ ├── G2: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G3: (project G4 G5)
+ │    └── ""
+ │         ├── best: (project G4 G5)
+ │         └── cost: 1000.00
+ ├── G4: (scan a)
+ │    └── ""
+ │         ├── best: (scan a)
+ │         └── cost: 1000.00
+ ├── G5: (projections G6 G7)
+ ├── G6: (plus G8 G10)
+ ├── G7: (plus G9 G10)
+ ├── G8: (variable a.x)
+ ├── G9: (variable a.y)
+ └── G10: (const 1)
