@@ -230,6 +230,7 @@ type TestServer struct {
 	// Admin UI.
 	authClient struct {
 		httpClient http.Client
+		cookie     *serverpb.SessionCookie
 		once       sync.Once
 		err        error
 	}
@@ -481,8 +482,13 @@ func (ts *TestServer) GetHTTPClient() (http.Client, error) {
 
 const authenticatedUserName = "authentic_user"
 
-// GetAuthenticatedHTTPClient implements TestServerInterface.
+// GetAuthenticatedHTTPClient implements the TestServerInterface.
 func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
+	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie()
+	return httpClient, err
+}
+
+func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (http.Client, *serverpb.SessionCookie, error) {
 	ts.authClient.once.Do(func() {
 		// Create an authentication session for an arbitrary user. We do not
 		// currently have an authorization mechanism, so a specific user is not
@@ -492,11 +498,12 @@ func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 			if err != nil {
 				return err
 			}
-			// Encode a session cookie and store it in a cookie jar.
-			cookie, err := encodeSessionCookie(&serverpb.SessionCookie{
+			rawCookie := &serverpb.SessionCookie{
 				ID:     id,
 				Secret: secret,
-			})
+			}
+			// Encode a session cookie and store it in a cookie jar.
+			cookie, err := encodeSessionCookie(rawCookie)
 			if err != nil {
 				return err
 			}
@@ -515,11 +522,12 @@ func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 				return err
 			}
 			ts.authClient.httpClient.Jar = cookieJar
+			ts.authClient.cookie = rawCookie
 			return nil
 		}()
 	})
 
-	return ts.authClient.httpClient, ts.authClient.err
+	return ts.authClient.httpClient, ts.authClient.cookie, ts.authClient.err
 }
 
 // MustGetSQLCounter implements TestServerInterface.

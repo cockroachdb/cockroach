@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"testing"
 	"time"
@@ -436,7 +437,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 		var resp serverpb.UserLoginResponse
 		return httputil.PostJSONWithRequest(
-			httpClient, ts.AdminURL()+authPrefix+"login", &req, &resp,
+			httpClient, ts.AdminURL()+loginPath, &req, &resp,
 		)
 	}
 
@@ -490,6 +491,81 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 			e,
 			sessionCookie.Secret,
 		)
+	}
+}
+
+func TestLogout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	// Log in.
+	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie()
+	if err != nil {
+		t.Fatal("error opening HTTP client", err)
+	}
+
+	// Log out.
+	var resp serverpb.UserLogoutResponse
+	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL()+logoutPath, &resp); err != nil {
+		t.Fatal("logout request failed:", err)
+	}
+
+	// Verify that revokedAt has been set in the DB.
+	query := `SELECT "revokedAt" FROM system.web_sessions WHERE id = $1`
+	result := db.QueryRow(query, cookie.ID)
+	var revokedAt string
+	if err := result.Scan(&revokedAt); err != nil {
+		t.Fatalf("error querying auth session: %s", err)
+	}
+
+	if revokedAt == "" {
+		t.Fatal("expected revoked at to not be empty; was empty")
+	}
+
+	databasesURL := ts.AdminURL() + "/_admin/v1/databases"
+
+	// Verify that we're unauthorized after logout.
+	response, err := authHTTPClient.Get(databasesURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatal("expected unauthorized response after logout; got", response.StatusCode)
+	}
+
+	// Try to use the revoked cookie; verify that it doesn't work.
+	parsedURL, err := url.Parse(s.AdminURL())
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedCookie, err := encodeSessionCookie(cookie)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invalidAuthClient, err := s.GetHTTPClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidAuthClient.Jar = jar
+	invalidAuthClient.Jar.SetCookies(parsedURL, []*http.Cookie{encodedCookie})
+
+	invalidAuthResp, err := invalidAuthClient.Get(databasesURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalidAuthResp.Body.Close()
+
+	if invalidAuthResp.StatusCode != 401 {
+		t.Fatal("expected unauthorized error; got", invalidAuthResp.StatusCode)
 	}
 }
 
