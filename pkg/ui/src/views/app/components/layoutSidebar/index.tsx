@@ -59,6 +59,10 @@ class IconLink extends React.Component<IconLinkProps, {}> {
 }
 
 function LoginIndicator({ loginState }: { loginState: LoginState }) {
+  if (!loginState.useLogin()) {
+    return null;
+  }
+
   if (!loginState.loginEnabled()) {
     return (<div className="login-indicator">Insecure mode</div>);
   }
