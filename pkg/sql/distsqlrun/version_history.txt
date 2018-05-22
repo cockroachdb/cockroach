@@ -58,3 +58,7 @@
     - Add NumRows to ValuesSpec (used for zero-column case). The implementation
       tolerates this field being unset in existing planning cases (at lest one
       column).
+- Version: 14 (MinAcceptedVersion: 6)
+    - Enhancements to lookup joins. They now support joining against secondary
+      indexes as well as left outer joins. Left join support required two
+      additional fields on JoinReaderSpec: index_filter_expr and type.

@@ -228,6 +228,9 @@ func TestJoinReader(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// Set a lower batch size to force multiple batches.
+			jr.batchSize = 2
+
 			jr.Run(context.Background(), nil /* wg */)
 
 			if !in.Done {
@@ -342,6 +345,10 @@ INSERT INTO test.t VALUES
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			// Set a lower batch size to force multiple batches.
+			jr.batchSize = 2
+
 			jr.Run(context.Background(), nil /* wg */)
 
 			// Check results.
