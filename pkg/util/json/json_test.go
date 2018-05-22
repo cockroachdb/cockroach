@@ -1020,7 +1020,7 @@ func TestJSONDeepSet(t *testing.T) {
 	}
 }
 
-func TestJSONRemoveKey(t *testing.T) {
+func TestJSONRemoveString(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
 		key      string
@@ -1061,7 +1061,7 @@ func TestJSONRemoveKey(t *testing.T) {
 
 		for _, tc := range tests {
 			runDecodedAndEncoded(t, k+`-`+tc.key, left, func(t *testing.T, j JSON) {
-				result, ok, err := j.RemoveKey(tc.key)
+				result, ok, err := j.RemoveString(tc.key)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
