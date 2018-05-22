@@ -815,6 +815,28 @@ refers  CREATE TABLE refers (
 statement ok
 DROP INDEX refers@another_idx
 
+# refers is not visible because it is in the ADD state.
+query T
+SHOW TABLES FROM test
+----
+bar
+child
+customers
+delivery
+domain_modules
+domains
+foo
+grandchild
+modules
+pairs
+referee
+refpairs
+refpairs_c_between
+refpairs_wrong_order
+tx
+tx_leg
+unindexed
+
 statement ok
 COMMIT
 
