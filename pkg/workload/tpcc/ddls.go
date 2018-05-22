@@ -16,10 +16,10 @@ package tpcc
 
 import (
 	gosql "database/sql"
-	"encoding/binary"
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -185,10 +185,10 @@ func splitTables(db *gosql.DB, warehouses int) {
 
 	// Split the history table into 1000 ranges.
 	const maxVal = math.MaxUint64
-	const valsPerRange uint64 = maxVal / 1000
+	const historyRanges = 1000
+	const valsPerRange uint64 = maxVal / historyRanges
 	for i := 1; i < 100; i++ {
-		var u uuid.UUID
-		binary.BigEndian.PutUint64(u.GetBytes()[:], uint64(i)*valsPerRange)
+		u := uuid.FromUint128(uint128.FromInts(uint64(i)*valsPerRange, 0))
 		sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
 		if _, err := db.Exec(sql); err != nil {
 			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
