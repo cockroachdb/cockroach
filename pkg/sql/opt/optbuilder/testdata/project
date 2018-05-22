@@ -208,7 +208,7 @@ project
  ├── scan b
  │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
  └── projections
-      └── cast: string [type=string]
+      └── cast: STRING [type=string]
            └── variable: b.rowid [type=int]
 
 build

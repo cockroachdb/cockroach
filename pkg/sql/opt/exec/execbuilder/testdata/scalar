@@ -414,6 +414,15 @@ render     ·         ·                      ("CAST((a + b) + c AS STRING)")  �
 ·          table     t@primary              ·                                ·
 ·          spans     ALL                    ·                                ·
 
+exec hide-colnames nodist
+EXPLAIN (VERBOSE) SELECT s::VARCHAR(2) FROM t
+----
+render     ·         ·              ("s::VARCHAR(2)")  ·
+ │         render 0  s::VARCHAR(2)  ·                  ·
+ └── scan  ·         ·              (s)                ·
+·          table     t@primary      ·                  ·
+·          spans     ALL            ·                  ·
+
 exec rowsort
 SELECT LENGTH(s)::float, s FROM str
 ----

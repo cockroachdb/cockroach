@@ -72,6 +72,8 @@ func mapPrivateType(typ string) string {
 		return "tree.Datum"
 	case "Type":
 		return "types.T"
+	case "ColType":
+		return "coltypes.T"
 	case "TypedExpr":
 		return "tree.TypedExpr"
 	default:

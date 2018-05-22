@@ -136,64 +136,84 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		"value type %s cannot be used for table columns", t)
 }
 
-// CastTargetToDatumType produces a types.T equivalent to the given
-// SQL cast target type.
+// CastTargetToDatumType produces the types.T that is closest to the given SQL
+// cast target type. The resulting type might not be "tight", meaning that it
+// may allow values that the original type would not allow. See the comment for
+// TryCastTargetToDatumType for more details.
 func CastTargetToDatumType(t CastTargetType) types.T {
-	switch ct := t.(type) {
+	res, _ := TryCastTargetToDatumType(t)
+	return res
+}
+
+// TryCastTargetToDatumType produces the types.T that is closest to the given
+// SQL cast target type. It returns the resulting type, as well as a boolean
+// indicating whether the conversion is "tight". A tight conversion means that
+// the destination type allows exactly the same set of values that the source
+// type allows. For example, the following conversion is not tight, because the
+// destination type allows strings that are longer than two characters:
+//
+//   VARCHAR(2) => STRING
+//
+func TryCastTargetToDatumType(src CastTargetType) (dst types.T, tight bool) {
+	switch ct := src.(type) {
 	case *TBool:
-		return types.Bool
+		return types.Bool, true
 	case *TInt:
-		return types.Int
+		return types.Int, ct.Width == 0
 	case *TFloat:
-		return types.Float
+		return types.Float, ct.Width == 64 && ct.Prec == 0 && !ct.PrecSpecified
 	case *TDecimal:
-		return types.Decimal
+		return types.Decimal, ct.Prec == 0 && ct.Scale == 0
 	case *TString:
-		return types.String
+		return types.String, ct.N == 0
 	case *TName:
-		return types.Name
+		return types.Name, true
 	case *TBytes:
-		return types.Bytes
+		return types.Bytes, true
 	case *TDate:
-		return types.Date
+		return types.Date, true
 	case *TTime:
-		return types.Time
+		return types.Time, true
 	case *TTimeTZ:
-		return types.TimeTZ
+		return types.TimeTZ, true
 	case *TTimestamp:
-		return types.Timestamp
+		return types.Timestamp, true
 	case *TTimestampTZ:
-		return types.TimestampTZ
+		return types.TimestampTZ, true
 	case *TInterval:
-		return types.Interval
+		return types.Interval, true
 	case *TJSON:
-		return types.JSON
+		return types.JSON, true
 	case *TUUID:
-		return types.UUID
+		return types.UUID, true
 	case *TIPAddr:
-		return types.INet
+		return types.INet, true
 	case *TCollatedString:
-		return types.TCollatedString{Locale: ct.Locale}
+		return types.TCollatedString{Locale: ct.Locale}, ct.N == 0
 	case *TArray:
-		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
+		typ, equiv := TryCastTargetToDatumType(ct.ParamType)
+		return types.TArray{Typ: typ}, equiv
 	case *TVector:
 		switch ct.ParamType.(type) {
 		case *TInt:
-			return types.IntVector
+			return types.IntVector, true
 		case *TOid:
-			return types.OidVector
+			return types.OidVector, true
 		default:
-			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", t, ct.ParamType))
+			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", src, ct.ParamType))
 		}
 	case TTuple:
+		tight = true
 		ret := types.TTuple{Types: make([]types.T, len(ct))}
 		for i := range ct {
-			ret.Types[i] = CastTargetToDatumType(ct[i])
+			var tightVal bool
+			ret.Types[i], tightVal = TryCastTargetToDatumType(ct[i])
+			tight = tight && tightVal
 		}
-		return ret
+		return ret, tight
 	case *TOid:
-		return TOidToType(ct)
+		return TOidToType(ct), true
 	default:
-		panic(fmt.Sprintf("unexpected CastTarget %T", t))
+		panic(fmt.Sprintf("unexpected CastTarget %T", src))
 	}
 }

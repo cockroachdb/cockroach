@@ -72,7 +72,7 @@ project
       │         ├── eq [type=bool]
       │         │    ├── variable: kv.v [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── cast: bytes [type=bytes]
+      │         └── cast: BYTES [type=bytes]
       │              └── variable: kv.s [type=string]
       └── aggregations
            ├── min [type=int]
@@ -136,9 +136,9 @@ project
  │         └── xor-agg [type=bytes]
  │              └── variable: column15 [type=bytes]
  └── projections
-      ├── cast: float [type=float]
+      ├── cast: FLOAT [type=float]
       │    └── variable: column6 [type=decimal]
-      ├── cast: float [type=float]
+      ├── cast: FLOAT [type=float]
       │    └── variable: column10 [type=decimal]
       └── function: to_hex [type=string]
            └── variable: column16 [type=bytes]
@@ -235,7 +235,7 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         └── cast: string [type=string]
+ │         └── cast: TEXT [type=string]
  │              └── null [type=unknown]
  └── aggregations
       └── array-agg [type=string[]]
@@ -885,7 +885,7 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── null [type=unknown]
  │         └── tuple [type=tuple{unknown, unknown}]
  │              ├── null [type=unknown]
@@ -1003,9 +1003,9 @@ group-by
  │    ├── scan kv
  │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── projections
- │         ├── cast: decimal [type=decimal]
+ │         ├── cast: DECIMAL [type=decimal]
  │         │    └── variable: kv.k [type=int]
- │         └── cast: decimal [type=decimal]
+ │         └── cast: DECIMAL [type=decimal]
  │              └── variable: kv.v [type=int]
  └── aggregations
       ├── avg [type=decimal]
@@ -1038,7 +1038,7 @@ project
            ├── mult [type=decimal]
            │    ├── variable: column5 [type=decimal]
            │    └── const: 2.0 [type=decimal]
-           └── cast: decimal [type=decimal]
+           └── cast: DECIMAL [type=decimal]
                 └── variable: column6 [type=int]
 
 build
@@ -1070,7 +1070,7 @@ project
            ├── mult [type=decimal]
            │    ├── variable: column5 [type=decimal]
            │    └── const: 2.0 [type=decimal]
-           └── cast: decimal [type=decimal]
+           └── cast: DECIMAL [type=decimal]
                 └── variable: column6 [type=int]
 
 exec-ddl
@@ -1367,7 +1367,7 @@ project
  │    │    ├── scan xyz
  │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    │    └── projections
- │    │         └── cast: decimal [type=decimal]
+ │    │         └── cast: DECIMAL [type=decimal]
  │    │              └── variable: xyz.y [type=int]
  │    └── aggregations
  │         ├── variance [type=decimal]
@@ -1412,7 +1412,7 @@ project
  │    │    ├── scan xyz
  │    │    │    └── columns: x:1(int!null) y:2(int) z:3(float)
  │    │    └── projections
- │    │         └── cast: decimal [type=decimal]
+ │    │         └── cast: DECIMAL [type=decimal]
  │    │              └── variable: xyz.y [type=int]
  │    └── aggregations
  │         ├── std-dev [type=decimal]
@@ -1457,11 +1457,11 @@ project
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
- │    │         ├── cast: int [type=int]
+ │    │         ├── cast: INT [type=int]
  │    │         │    └── const: 1 [type=int]
- │    │         ├── cast: float [type=float]
+ │    │         ├── cast: FLOAT [type=float]
  │    │         │    └── const: 2.0 [type=float]
- │    │         └── cast: decimal [type=decimal]
+ │    │         └── cast: DECIMAL [type=decimal]
  │    │              └── const: 3 [type=decimal]
  │    └── aggregations
  │         ├── avg [type=decimal]
@@ -1471,11 +1471,11 @@ project
  │         └── avg [type=decimal]
  │              └── variable: column7 [type=decimal]
  └── projections
-      ├── cast: float [type=float]
+      ├── cast: FLOAT [type=float]
       │    └── variable: column2 [type=decimal]
-      ├── cast: float [type=float]
+      ├── cast: FLOAT [type=float]
       │    └── variable: column5 [type=float]
-      └── cast: float [type=float]
+      └── cast: FLOAT [type=float]
            └── variable: column8 [type=decimal]
 
 build
@@ -1488,11 +1488,11 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── const: 2 [type=int]
- │         ├── cast: float [type=float]
+ │         ├── cast: FLOAT [type=float]
  │         │    └── const: 3.0 [type=float]
- │         └── cast: decimal [type=decimal]
+ │         └── cast: DECIMAL [type=decimal]
  │              └── const: 4 [type=decimal]
  └── aggregations
       ├── count [type=int]
@@ -1512,11 +1512,11 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: float [type=float]
+ │         ├── cast: FLOAT [type=float]
  │         │    └── const: 2.0 [type=float]
- │         └── cast: decimal [type=decimal]
+ │         └── cast: DECIMAL [type=decimal]
  │              └── const: 3 [type=decimal]
  └── aggregations
       ├── sum [type=decimal]
@@ -1536,11 +1536,11 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: float [type=float]
+ │         ├── cast: FLOAT [type=float]
  │         │    └── const: 1.0 [type=float]
- │         └── cast: decimal [type=decimal]
+ │         └── cast: DECIMAL [type=decimal]
  │              └── const: 1 [type=decimal]
  └── aggregations
       ├── variance [type=decimal]
@@ -1560,11 +1560,11 @@ group-by
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── const: 1 [type=int]
- │         ├── cast: float [type=float]
+ │         ├── cast: FLOAT [type=float]
  │         │    └── const: 1.0 [type=float]
- │         └── cast: decimal [type=decimal]
+ │         └── cast: DECIMAL [type=decimal]
  │              └── const: 1 [type=decimal]
  └── aggregations
       ├── std-dev [type=decimal]

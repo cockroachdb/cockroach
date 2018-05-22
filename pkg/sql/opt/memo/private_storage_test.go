@@ -17,6 +17,7 @@ package memo
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -311,6 +312,94 @@ func TestInternType(t *testing.T) {
 	test(types.TTable{Cols: ttuple, Labels: []string{"a"}}, types.TTable{Cols: ttuple}, true)
 }
 
+func TestInternColType(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right coltypes.T, expected bool) {
+		t.Helper()
+		leftID := ps.internColType(left)
+		rightID := ps.internColType(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	// Arithmetic types.
+	test(coltypes.Boolean, &coltypes.TBool{Name: "BOOLEAN"}, true)
+
+	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
+	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)
+
+	test(coltypes.Float4, &coltypes.TFloat{Name: "FLOAT4", Width: 32}, true)
+	test(coltypes.Float8, &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}, false)
+	test(coltypes.Float, coltypes.NewFloat(64, true), false)
+	test(coltypes.NewFloat(0, true), coltypes.NewFloat(0, true), true)
+
+	tdec := &coltypes.TDecimal{Name: "DECIMAL", Prec: 19}
+	test(coltypes.Numeric, &coltypes.TDecimal{Name: "NUMERIC"}, true)
+	test(coltypes.Decimal, tdec, false)
+	test(tdec, &coltypes.TDecimal{Name: "DECIMAL", Prec: 19, Scale: 2}, false)
+
+	// Miscellaneous types.
+	test(coltypes.UUID, &coltypes.TUUID{}, true)
+	test(coltypes.INet, &coltypes.TIPAddr{Name: "INET"}, true)
+	test(coltypes.JSON, &coltypes.TJSON{Name: "JSON"}, true)
+	test(coltypes.JSONB, &coltypes.TJSON{Name: "JSONB"}, true)
+	test(coltypes.JSON, coltypes.JSONB, false)
+	test(coltypes.Oid, &coltypes.TOid{Name: "OID"}, true)
+
+	// String types.
+	test(coltypes.String, &coltypes.TString{Name: "STRING"}, true)
+	test(coltypes.VarChar, &coltypes.TString{Name: "VARCHAR"}, true)
+	test(coltypes.VarChar, coltypes.String, false)
+	test(&coltypes.TString{Name: "VARCHAR", N: 9}, &coltypes.TString{Name: "VARCHAR", N: 10}, false)
+
+	tstr1 := &coltypes.TCollatedString{Name: "STRING"}
+	tstr2 := &coltypes.TCollatedString{Name: "STRING", N: 256}
+	tstr3 := &coltypes.TCollatedString{Name: "STRING", N: 256, Locale: "en_US"}
+	tstr4 := &coltypes.TCollatedString{Name: "STRING", Locale: "en_US"}
+	test(tstr1, tstr2, false)
+	test(tstr2, tstr2, true)
+	test(tstr2, tstr3, false)
+	test(tstr2, tstr4, false)
+	test(tstr3, tstr4, false)
+
+	test(coltypes.Name, &coltypes.TName{}, true)
+	test(coltypes.Bytes, &coltypes.TBytes{Name: "BYTES"}, true)
+	test(coltypes.Bytes, coltypes.Blob, false)
+
+	// Time/date types.
+	test(coltypes.Date, &coltypes.TDate{}, true)
+	test(coltypes.Time, &coltypes.TTime{}, true)
+	test(coltypes.TimeTZ, &coltypes.TTimeTZ{}, true)
+	test(coltypes.Timestamp, &coltypes.TTimestamp{}, true)
+	test(coltypes.TimestampWithTZ, &coltypes.TTimestampTZ{}, true)
+	test(coltypes.Interval, &coltypes.TInterval{}, true)
+
+	// Arrays types.
+	tarr1, _ := coltypes.ArrayOf(coltypes.Int, []int32{-1})
+	tarr2, _ := coltypes.ArrayOf(coltypes.Int, []int32{3, 3})
+	tarr3, _ := coltypes.ArrayOf(coltypes.String, []int32{3, 3})
+	tarr4, _ := coltypes.ArrayOf(tarr1, []int32{-1})
+	test(tarr1, tarr2, true)
+	test(tarr2, tarr3, false)
+	test(tarr1, tarr4, false)
+	test(tarr4, tarr4, true)
+	test(coltypes.Int2vector, &coltypes.TVector{Name: "INT2VECTOR", ParamType: coltypes.Int}, true)
+	test(coltypes.OidVector, &coltypes.TVector{Name: "OIDVECTOR", ParamType: coltypes.Oid}, true)
+	test(coltypes.Int2vector, coltypes.OidVector, false)
+
+	// Tuple types.
+	ttup1 := coltypes.TTuple{coltypes.Int}
+	ttup2 := coltypes.TTuple{coltypes.String, coltypes.Int}
+	ttup3 := coltypes.TTuple{coltypes.Int, coltypes.String}
+	test(ttup1, coltypes.TTuple{coltypes.Int}, true)
+	test(ttup2, coltypes.TTuple{coltypes.String, coltypes.Int}, true)
+	test(ttup2, ttup3, false)
+	test(coltypes.TTuple{tarr1, tarr2}, coltypes.TTuple{tarr2, tarr1}, true)
+}
+
 func TestInternTypedExpr(t *testing.T) {
 	var ps privateStorage
 	ps.init()
@@ -353,6 +442,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
+	colTyp := coltypes.Int
 
 	testutils.TestNoMallocs(t, func() {
 		ps.internColumnID(colID)
@@ -366,6 +456,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
+		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
 	})
 }
@@ -393,6 +484,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
+	colTyp := coltypes.Int
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -408,6 +500,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
+		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
 	}
 }

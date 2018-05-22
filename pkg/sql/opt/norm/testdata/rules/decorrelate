@@ -752,7 +752,7 @@ project
       │    │    │    │              ├── variable: xy.x [type=int, outer=(6)]
       │    │    │    │              └── variable: a.k [type=int, outer=(1)]
       │    │    │    └── projections [outer=(7)]
-      │    │    │         └── cast: string [type=string, outer=(7)]
+      │    │    │         └── cast: STRING [type=string, outer=(7)]
       │    │    │              └── variable: xy.y [type=int, outer=(7)]
       │    │    └── aggregations [outer=(8)]
       │    │         └── concat-agg [type=string, outer=(8)]
@@ -1207,7 +1207,7 @@ project
                 │    ├── tuple [type=tuple{int, int}, outer=(8)]
                 │    │    ├── const: 0 [type=int]
                 │    │    └── function: length [type=int, outer=(8)]
-                │    │         └── cast: string [type=string, outer=(8)]
+                │    │         └── cast: STRING [type=string, outer=(8)]
                 │    │              └── variable: count [type=int, outer=(8)]
                 │    └── tuple [type=tuple{int, int}]
                 │         ├── const: 0 [type=int]
@@ -2058,7 +2058,7 @@ semi-join
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
- │         └── cast: string [type=string, outer=(9)]
+ │         └── cast: STRING [type=string, outer=(9)]
  │              └── variable: xy.y [type=int, outer=(9)]
  └── filters [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
       └── eq [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
@@ -2202,7 +2202,7 @@ anti-join
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
- │         └── cast: string [type=string, outer=(9)]
+ │         └── cast: STRING [type=string, outer=(9)]
  │              └── variable: xy.y [type=int, outer=(9)]
  └── filters [type=bool, outer=(4,10)]
       └── is-not [type=bool, outer=(4,10)]
@@ -2312,7 +2312,7 @@ anti-join
  │    ├── scan xy
  │    │    └── columns: xy.y:9(int)
  │    └── projections [outer=(9)]
- │         └── cast: string [type=string, outer=(9)]
+ │         └── cast: STRING [type=string, outer=(9)]
  │              └── variable: xy.y [type=int, outer=(9)]
  └── filters [type=bool, outer=(4,10)]
       └── is-not [type=bool, outer=(4,10)]

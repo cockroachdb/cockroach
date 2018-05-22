@@ -129,7 +129,7 @@ select
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
            ├── variable: xy.x [type=int, outer=(1)]
-           └── cast: int [type=int]
+           └── cast: INT [type=int]
                 └── function: now [type=timestamptz]
 
 # Test that we get a not-NULL constraint on x and y.

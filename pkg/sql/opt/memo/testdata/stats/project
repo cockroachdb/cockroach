@@ -104,7 +104,7 @@ select
  │    └── projections [outer=(2,3)]
  │         └── function: concat [type=string, outer=(2,3)]
  │              ├── variable: a.s [type=string, outer=(3)]
- │              └── cast: string [type=string, outer=(2)]
+ │              └── cast: STRING [type=string, outer=(2)]
  │                   └── variable: a.y [type=int, outer=(2)]
  └── filters [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
       └── eq [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight)]
@@ -131,7 +131,7 @@ group-by
       └── projections [outer=(1-3)]
            └── function: concat [type=string, outer=(2,3)]
                 ├── variable: a.s [type=string, outer=(3)]
-                └── cast: string [type=string, outer=(2)]
+                └── cast: STRING [type=string, outer=(2)]
                      └── variable: a.y [type=int, outer=(2)]
 
 # No available stats for column y.

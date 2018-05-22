@@ -231,49 +231,57 @@ project
 # EliminateCast
 # --------------------------------------------------
 opt
-SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
+SELECT
+    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::text::char::varchar
+FROM a
 ----
 project
- ├── columns: "i::INT":7(int) "arr::INT[]":8(int[]) "'[1, 2]'::JSON::JSON":9(jsonb!null) "NULL::STRING::INT":10(int)
- ├── scan a
- │    └── columns: i:2(int) arr:6(int[])
- └── projections [outer=(2,6)]
-      ├── variable: a.i [type=int, outer=(2)]
-      ├── variable: a.arr [type=int[], outer=(6)]
-      ├── const: '[1, 2]' [type=jsonb]
-      └── null [type=int]
-
-# Shouldn't eliminate these cases.
-opt
-SELECT i::float, arr::decimal[], s::json::json FROM a
-----
-project
- ├── columns: "i::FLOAT":7(float) "arr::DECIMAL[]":8(decimal[]) "s::JSON::JSON":9(jsonb)
+ ├── columns: "i::INT":7(int) "arr::INT[]":8(int[]) "'[1, 2]'::JSONB::JSON":9(jsonb!null) "NULL::CHAR(2)::BIT":10(int) "s::TEXT::CHAR::VARCHAR":11(string)
  ├── scan a
  │    └── columns: i:2(int) s:4(string) arr:6(int[])
  └── projections [outer=(2,4,6)]
-      ├── cast: float [type=float, outer=(2)]
+      ├── variable: a.i [type=int, outer=(2)]
+      ├── variable: a.arr [type=int[], outer=(6)]
+      ├── const: '[1, 2]' [type=jsonb]
+      ├── null [type=int]
+      └── variable: a.s [type=string, outer=(4)]
+
+# Shouldn't eliminate these cases.
+opt
+SELECT i::float, arr::decimal[], s::json::json, s::varchar(2), i::smallint::int8 FROM a
+----
+project
+ ├── columns: "i::FLOAT":7(float) "arr::DECIMAL[]":8(decimal[]) "s::JSON::JSON":9(jsonb) "s::VARCHAR(2)":10(string) "i::SMALLINT::INT8":11(int)
+ ├── scan a
+ │    └── columns: i:2(int) s:4(string) arr:6(int[])
+ └── projections [outer=(2,4,6)]
+      ├── cast: FLOAT [type=float, outer=(2)]
       │    └── variable: a.i [type=int, outer=(2)]
-      ├── cast: decimal[] [type=decimal[], outer=(6)]
+      ├── cast: DECIMAL[] [type=decimal[], outer=(6)]
       │    └── variable: a.arr [type=int[], outer=(6)]
-      └── cast: jsonb [type=jsonb, outer=(4)]
-           └── variable: a.s [type=string, outer=(4)]
+      ├── cast: JSON [type=jsonb, outer=(4)]
+      │    └── variable: a.s [type=string, outer=(4)]
+      ├── cast: VARCHAR(2) [type=string, outer=(4)]
+      │    └── variable: a.s [type=string, outer=(4)]
+      └── cast: SMALLINT [type=int, outer=(2)]
+           └── variable: a.i [type=int, outer=(2)]
 
 # --------------------------------------------------
 # FoldNullCast
 # --------------------------------------------------
 opt
-SELECT null::int, null::timestamptz
+SELECT null::int, null::timestamptz, null::decimal(19,2)::bit::char(2)
 ----
 project
- ├── columns: "NULL::INT":1(int) "NULL::TIMESTAMP WITH TIME ZONE":2(timestamptz)
+ ├── columns: "NULL::INT":1(int) "NULL::TIMESTAMP WITH TIME ZONE":2(timestamptz) "NULL::DECIMAL(19,2)::BIT::CHAR(2)":3(string)
  ├── cardinality: [1 - 1]
  ├── values
  │    ├── cardinality: [1 - 1]
  │    └── tuple [type=tuple{}]
  └── projections
       ├── null [type=int]
-      └── null [type=timestamptz]
+      ├── null [type=timestamptz]
+      └── null [type=string]
 
 # --------------------------------------------------
 # FoldNullUnary
@@ -321,20 +329,20 @@ project
       ├── null [type=int]
       ├── null [type=int]
       ├── concat [type=decimal[], outer=(6)]
-      │    ├── cast: decimal[] [type=decimal[], outer=(6)]
+      │    ├── cast: DECIMAL[] [type=decimal[], outer=(6)]
       │    │    └── variable: a.arr [type=int[], outer=(6)]
       │    └── null [type=unknown]
       ├── concat [type=string[], outer=(6)]
       │    ├── null [type=unknown]
-      │    └── cast: string[] [type=string[], outer=(6)]
+      │    └── cast: STRING[] [type=string[], outer=(6)]
       │         └── variable: a.arr [type=int[], outer=(6)]
       ├── concat [type=decimal[], outer=(2)]
-      │    ├── cast: decimal [type=decimal, outer=(2)]
+      │    ├── cast: DECIMAL [type=decimal, outer=(2)]
       │    │    └── variable: a.i [type=int, outer=(2)]
       │    └── null [type=unknown]
       └── concat [type=float[], outer=(2)]
            ├── null [type=unknown]
-           └── cast: float [type=float, outer=(2)]
+           └── cast: FLOAT [type=float, outer=(2)]
                 └── variable: a.i [type=int, outer=(2)]
 
 opt
@@ -423,7 +431,7 @@ project
                 ├── concat [type=string, outer=(4)]
                 │    ├── variable: a.s [type=string, outer=(4)]
                 │    └── const: 'foo' [type=string]
-                └── cast: string [type=string, outer=(4)]
+                └── cast: STRING [type=string, outer=(4)]
                      └── function: length [type=int, outer=(4)]
                           └── variable: a.s [type=string, outer=(4)]
 

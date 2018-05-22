@@ -450,7 +450,7 @@ select
                 │         └── tuple [type=tuple{}]
                 └── filters [type=bool, outer=(1,3)]
                      └── eq [type=bool, outer=(1,3)]
-                          ├── cast: string [type=string, outer=(1)]
+                          ├── cast: STRING [type=string, outer=(1)]
                           │    └── variable: xysd.x [type=int, outer=(1)]
                           └── variable: xysd.s [type=string, outer=(3)]
 
