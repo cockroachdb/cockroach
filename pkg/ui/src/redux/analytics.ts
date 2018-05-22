@@ -188,9 +188,33 @@ export class AnalyticsSync {
 
         // Loop through redactions, if any matches return the appropriate
         // redacted string.
-        let path = location.pathname;
+        const path = this.redact(location.pathname);
+        let search = "";
+
+        if (location.search && location.search.length > 1) {
+            const query = location.search.slice(1);
+            const params = new URLSearchParams(query);
+
+            for (const param of params) {
+                params.set(param[0], this.redact(param[1]));
+            }
+
+            search = "?" + params.toString();
+        }
+
+        this.analytics.page({
+            userId: userID,
+            name: path,
+            properties: {
+                path,
+                search,
+            },
+        });
+    }
+
+    private redact(path: string): string {
         _.each(this.redactions, (r) => {
-            if (r.match.test(location.pathname)) {
+            if (r.match.test(path)) {
 
                 // Apparently TypeScript doesn't know how to dispatch functions.
                 // If there are two function overloads defined (as with
@@ -207,14 +231,7 @@ export class AnalyticsSync {
                 return false;
             }
         });
-
-        this.analytics.page({
-            userId: userID,
-            name: path,
-            properties: {
-                path,
-            },
-        });
+        return path;
     }
 }
 
