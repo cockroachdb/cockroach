@@ -1203,6 +1203,7 @@ func (s *Server) Start(ctx context.Context) error {
 		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
 		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
+		gwruntime.WithMetadata(forwardAuthenticationMetadata),
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
@@ -1478,7 +1479,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle("/_admin/v1/health", gwMux)
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
-	s.mux.Handle(authPrefix, gwMux)
+	s.mux.Handle(loginPath, gwMux)
+	s.mux.Handle(logoutPath, authHandler)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
@@ -1928,7 +1930,7 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 			LoginEnabled:         cfg.RequireWebSession(),
 			Version:              build.VersionPrefix(),
 		}
-		loggedInUser, ok := request.Context().Value(loggedInUserKey{}).(string)
+		loggedInUser, ok := request.Context().Value(webSessionUserKey{}).(string)
 		if ok && loggedInUser != "" {
 			tmplArgs.LoggedInUser = &loggedInUser
 		}
