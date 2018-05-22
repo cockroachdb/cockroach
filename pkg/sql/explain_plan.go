@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -46,34 +45,6 @@ type explainPlanNode struct {
 	optimizeSubqueries bool
 
 	run explainPlanRun
-}
-
-var explainPlanColumns = sqlbase.ResultColumns{
-	// Tree shows the node type with the tree structure.
-	{Name: "Tree", Typ: types.String},
-	// Field is the part of the node that a row of output pertains to.
-	{Name: "Field", Typ: types.String},
-	// Description contains details about the field.
-	{Name: "Description", Typ: types.String},
-}
-
-var explainPlanVerboseColumns = sqlbase.ResultColumns{
-	// Tree shows the node type with the tree structure.
-	{Name: "Tree", Typ: types.String},
-	// Level is the depth of the node in the tree. Hidden by default; can be
-	// retrieved using:
-	//   SELECT "Level" FROM [ EXPLAIN (VERBOSE) ... ].
-	{Name: "Level", Typ: types.Int, Hidden: true},
-	// Type is the node type. Hidden by default.
-	{Name: "Type", Typ: types.String, Hidden: true},
-	// Field is the part of the node that a row of output pertains to.
-	{Name: "Field", Typ: types.String},
-	// Description contains details about the field.
-	{Name: "Description", Typ: types.String},
-	// Columns is the type signature of the data source.
-	{Name: "Columns", Typ: types.String},
-	// Ordering indicates the known ordering of the data from this source.
-	{Name: "Ordering", Typ: types.String},
 }
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
@@ -116,9 +87,9 @@ func (p *planner) makeExplainPlanNodeWithPlan(
 		flags.showTypes = true
 	}
 
-	columns := explainPlanColumns
+	columns := sqlbase.ExplainPlanColumns
 	if flags.showMetadata {
-		columns = explainPlanVerboseColumns
+		columns = sqlbase.ExplainPlanVerboseColumns
 	}
 
 	e := explainer{explainFlags: flags}

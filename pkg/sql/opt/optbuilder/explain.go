@@ -15,10 +15,9 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
@@ -39,37 +38,16 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		panic(errorf("only PLAN is supported for EXPLAIN"))
 	}
 
-	verboseColumns := opts.Flags.Contains(tree.ExplainFlagVerbose) ||
-		opts.Flags.Contains(tree.ExplainFlagTypes)
-
-	// Tree shows the node type with the tree structure.
-	b.synthesizeColumn(outScope, "Tree", types.String, nil /* expr */, 0 /* group */)
-	if verboseColumns {
-		// Level is the depth of the node in the tree (hidden).
-		c := b.synthesizeColumn(outScope, "Level", types.Int, nil /* expr */, 0 /* group */)
-		c.hidden = true
-		// Type is the node type (hidden).
-		c = b.synthesizeColumn(outScope, "Type", types.String, nil /* expr */, 0 /* group */)
-		c.hidden = true
+	cols := sqlbase.ExplainPlanColumns
+	if opts.Flags.Contains(tree.ExplainFlagVerbose) || opts.Flags.Contains(tree.ExplainFlagTypes) {
+		cols = sqlbase.ExplainPlanVerboseColumns
 	}
-	// Field is the part of the node that a row of output pertains to.
-	b.synthesizeColumn(outScope, "Field", types.String, nil /* expr */, 0 /* group */)
-	// Description contains details about the field.
-	b.synthesizeColumn(outScope, "Description", types.String, nil /* expr */, 0 /* group */)
-	if verboseColumns {
-		// Columns is the type signature of the data source.
-		b.synthesizeColumn(outScope, "Columns", types.String, nil /* expr */, 0 /* group */)
-		// Ordering indicates the known ordering of the data from this source.
-		b.synthesizeColumn(outScope, "Ordering", types.String, nil /* expr */, 0 /* group */)
-	}
+	b.synthesizeResultColumns(outScope, cols)
 
 	def := memo.ExplainOpDef{
 		Options: opts,
-		ColList: make(opt.ColList, len(outScope.cols)),
+		ColList: colsToColList(outScope.cols),
 		Props:   stmtScope.physicalProps,
-	}
-	for i := range outScope.cols {
-		def.ColList[i] = outScope.cols[i].id
 	}
 	outScope.group = b.factory.ConstructExplain(stmtScope.group, b.factory.InternExplainOpDef(&def))
 	return outScope
