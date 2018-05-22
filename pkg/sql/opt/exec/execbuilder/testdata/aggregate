@@ -10,699 +10,165 @@ CREATE TABLE kv (
 ----
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
+EXPLAIN (TYPES) SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
 ----
-group           ·             ·                   (min, max, count, sum_int, avg, sum, stddev, variance, bool_and, bool_or, xor_agg)  ·
- │              aggregate 0   min(column5)        ·                                                                                   ·
- │              aggregate 1   max(column5)        ·                                                                                   ·
- │              aggregate 2   count(column5)      ·                                                                                   ·
- │              aggregate 3   sum_int(column5)    ·                                                                                   ·
- │              aggregate 4   avg(column5)        ·                                                                                   ·
- │              aggregate 5   sum(column5)        ·                                                                                   ·
- │              aggregate 6   stddev(column5)     ·                                                                                   ·
- │              aggregate 7   variance(column5)   ·                                                                                   ·
- │              aggregate 8   bool_and(column14)  ·                                                                                   ·
- │              aggregate 9   bool_or(column16)   ·                                                                                   ·
- │              aggregate 10  xor_agg(column18)   ·                                                                                   ·
- └── render     ·             ·                   (column5, column14, column16, column18)                                             ·
-      │         render 0      1                   ·                                                                                   ·
-      │         render 1      true                ·                                                                                   ·
-      │         render 2      false               ·                                                                                   ·
-      │         render 3      '\x01'              ·                                                                                   ·
-      └── scan  ·             ·                   ()                                                                                  ·
-·               table         kv@primary          ·                                                                                   ·
-·               spans         ALL                 ·                                                                                   ·
-
-exec
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(false), XOR_AGG(b'\x01') FROM kv
-----
-min:int  max:int  count:int  sum_int:int  avg:decimal  sum:decimal  stddev:decimal  variance:decimal  bool_and:bool  bool_or:bool  xor_agg:bytes
-NULL     NULL     0          NULL         NULL         NULL         NULL            NULL              NULL           NULL          NULL
-
-# Aggregate functions return NULL if there are no rows.
-exec
-SELECT ARRAY_AGG(1) FROM kv
-----
-array_agg:int[]
-NULL
-
-exec
-SELECT JSON_AGG(1) FROM kv
-----
-json_agg:jsonb
-NULL
-
-exec
-SELECT JSONB_AGG(1) FROM kv
-----
-jsonb_agg:jsonb
-NULL
+group           ·             ·                   (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
+ │              aggregate 0   min(column5)        ·                                                                                                                                                   ·
+ │              aggregate 1   max(column5)        ·                                                                                                                                                   ·
+ │              aggregate 2   count(column5)      ·                                                                                                                                                   ·
+ │              aggregate 3   sum_int(column5)    ·                                                                                                                                                   ·
+ │              aggregate 4   avg(column5)        ·                                                                                                                                                   ·
+ │              aggregate 5   sum(column5)        ·                                                                                                                                                   ·
+ │              aggregate 6   stddev(column5)     ·                                                                                                                                                   ·
+ │              aggregate 7   variance(column5)   ·                                                                                                                                                   ·
+ │              aggregate 8   bool_and(column14)  ·                                                                                                                                                   ·
+ │              aggregate 9   bool_or(column16)   ·                                                                                                                                                   ·
+ │              aggregate 10  xor_agg(column18)   ·                                                                                                                                                   ·
+ └── render     ·             ·                   (column5 int, column14 bool, column16 bool, column18 bytes)                                                                                         ·
+      │         render 0      (1)[int]            ·                                                                                                                                                   ·
+      │         render 1      (true)[bool]        ·                                                                                                                                                   ·
+      │         render 2      (false)[bool]       ·                                                                                                                                                   ·
+      │         render 3      ('\x01')[bytes]     ·                                                                                                                                                   ·
+      └── scan  ·             ·                   ()                                                                                                                                                  ·
+·               table         kv@primary          ·                                                                                                                                                   ·
+·               spans         ALL                 ·                                                                                                                                                   ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+EXPLAIN (TYPES) SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
-render               ·            ·                   (min, max, count, sum_int, avg, sum, stddev, variance, bool_and, bool_and, xor_agg)  ·
- │                   render 0     agg0                ·                                                                                    ·
- │                   render 1     agg1                ·                                                                                    ·
- │                   render 2     agg2                ·                                                                                    ·
- │                   render 3     agg3                ·                                                                                    ·
- │                   render 4     agg4                ·                                                                                    ·
- │                   render 5     agg5                ·                                                                                    ·
- │                   render 6     agg6                ·                                                                                    ·
- │                   render 7     agg7                ·                                                                                    ·
- │                   render 8     agg8                ·                                                                                    ·
- │                   render 9     agg8                ·                                                                                    ·
- │                   render 10    agg9                ·                                                                                    ·
- └── group           ·            ·                   (agg0, agg1, agg2, agg3, agg4, agg5, agg6, agg7, agg8, agg9)                         ·
-      │              aggregate 0  min(kv.v)           ·                                                                                    ·
-      │              aggregate 1  max(kv.v)           ·                                                                                    ·
-      │              aggregate 2  count(kv.v)         ·                                                                                    ·
-      │              aggregate 3  sum_int(column8)    ·                                                                                    ·
-      │              aggregate 4  avg(kv.v)           ·                                                                                    ·
-      │              aggregate 5  sum(kv.v)           ·                                                                                    ·
-      │              aggregate 6  stddev(kv.v)        ·                                                                                    ·
-      │              aggregate 7  variance(kv.v)      ·                                                                                    ·
-      │              aggregate 8  bool_and(column14)  ·                                                                                    ·
-      │              aggregate 9  xor_agg(column16)   ·                                                                                    ·
-      └── render     ·            ·                   (column8, column14, column16, "kv.v")                                                ·
-           │         render 0     1                   ·                                                                                    ·
-           │         render 1     v = 1               ·                                                                                    ·
-           │         render 2     s::BYTES            ·                                                                                    ·
-           │         render 3     v                   ·                                                                                    ·
-           └── scan  ·            ·                   (v, s)                                                                               ·
-·                    table        kv@primary          ·                                                                                    ·
-·                    spans        ALL                 ·                                                                                    ·
-
-exec
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
-----
-min:int  max:int  count:int  sum_int:int  avg:decimal  sum:decimal  stddev:decimal  variance:decimal  bool_and:bool  bool_and:bool  xor_agg:bytes
-NULL     NULL     0          NULL         NULL         NULL         NULL            NULL              NULL           NULL           NULL
-
-exec
-SELECT ARRAY_AGG(v) FROM kv
-----
-array_agg:int[]
-NULL
-
-exec
-SELECT JSON_AGG(v) FROM kv
-----
-json_agg:jsonb
-NULL
-
-exec
-SELECT JSONB_AGG(v) FROM kv
-----
-jsonb_agg:jsonb
-NULL
+render               ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
+ │                   render 0     (agg0)[int]                  ·                                                                                                                                                    ·
+ │                   render 1     (agg1)[int]                  ·                                                                                                                                                    ·
+ │                   render 2     (agg2)[int]                  ·                                                                                                                                                    ·
+ │                   render 3     (agg3)[int]                  ·                                                                                                                                                    ·
+ │                   render 4     (agg4)[decimal]              ·                                                                                                                                                    ·
+ │                   render 5     (agg5)[decimal]              ·                                                                                                                                                    ·
+ │                   render 6     (agg6)[decimal]              ·                                                                                                                                                    ·
+ │                   render 7     (agg7)[decimal]              ·                                                                                                                                                    ·
+ │                   render 8     (agg8)[bool]                 ·                                                                                                                                                    ·
+ │                   render 9     (agg8)[bool]                 ·                                                                                                                                                    ·
+ │                   render 10    (agg9)[bytes]                ·                                                                                                                                                    ·
+ └── group           ·            ·                            (agg0 int, agg1 int, agg2 int, agg3 int, agg4 decimal, agg5 decimal, agg6 decimal, agg7 decimal, agg8 bool, agg9 bytes)                              ·
+      │              aggregate 0  min(kv.v)                    ·                                                                                                                                                    ·
+      │              aggregate 1  max(kv.v)                    ·                                                                                                                                                    ·
+      │              aggregate 2  count(kv.v)                  ·                                                                                                                                                    ·
+      │              aggregate 3  sum_int(column8)             ·                                                                                                                                                    ·
+      │              aggregate 4  avg(kv.v)                    ·                                                                                                                                                    ·
+      │              aggregate 5  sum(kv.v)                    ·                                                                                                                                                    ·
+      │              aggregate 6  stddev(kv.v)                 ·                                                                                                                                                    ·
+      │              aggregate 7  variance(kv.v)               ·                                                                                                                                                    ·
+      │              aggregate 8  bool_and(column14)           ·                                                                                                                                                    ·
+      │              aggregate 9  xor_agg(column16)            ·                                                                                                                                                    ·
+      └── render     ·            ·                            (column8 int, column14 bool, column16 bytes, "kv.v" int)                                                                                             ·
+           │         render 0     (1)[int]                     ·                                                                                                                                                    ·
+           │         render 1     ((v)[int] = (1)[int])[bool]  ·                                                                                                                                                    ·
+           │         render 2     ((s)[string]::BYTES)[bytes]  ·                                                                                                                                                    ·
+           │         render 3     (v)[int]                     ·                                                                                                                                                    ·
+           └── scan  ·            ·                            (v int, s string)                                                                                                                                    ·
+·                    table        kv@primary                   ·                                                                                                                                                    ·
+·                    spans        ALL                          ·                                                                                                                                                    ·
 
 # Aggregate functions trigger aggregation and computation when there is no source.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+EXPLAIN (TYPES) SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-render                 ·             ·                   (min, count, max, sum_int, "avg(1)::FLOAT", sum, stddev, variance, bool_and, bool_or, to_hex)  ·
- │                     render 0      agg0                ·                                                                                              ·
- │                     render 1      agg1                ·                                                                                              ·
- │                     render 2      agg2                ·                                                                                              ·
- │                     render 3      agg3                ·                                                                                              ·
- │                     render 4      agg4::FLOAT         ·                                                                                              ·
- │                     render 5      agg5                ·                                                                                              ·
- │                     render 6      agg6                ·                                                                                              ·
- │                     render 7      agg7                ·                                                                                              ·
- │                     render 8      agg8                ·                                                                                              ·
- │                     render 9      agg9                ·                                                                                              ·
- │                     render 10     to_hex(agg10)       ·                                                                                              ·
- └── group             ·             ·                   (agg0, agg1, agg2, agg3, agg4, agg5, agg6, agg7, agg8, agg9, agg10)                            ·
-      │                aggregate 0   min(column1)        ·                                                                                              ·
-      │                aggregate 1   count(column1)      ·                                                                                              ·
-      │                aggregate 2   max(column1)        ·                                                                                              ·
-      │                aggregate 3   sum_int(column1)    ·                                                                                              ·
-      │                aggregate 4   avg(column1)        ·                                                                                              ·
-      │                aggregate 5   sum(column1)        ·                                                                                              ·
-      │                aggregate 6   stddev(column1)     ·                                                                                              ·
-      │                aggregate 7   variance(column1)   ·                                                                                              ·
-      │                aggregate 8   bool_and(column11)  ·                                                                                              ·
-      │                aggregate 9   bool_or(column11)   ·                                                                                              ·
-      │                aggregate 10  xor_agg(column14)   ·                                                                                              ·
-      └── render       ·             ·                   (column1, column11, column14)                                                                  ·
-           │           render 0      1                   ·                                                                                              ·
-           │           render 1      true                ·                                                                                              ·
-           │           render 2      '\x01'              ·                                                                                              ·
-           └── values  ·             ·                   ()                                                                                             ·
-·                      size          0 columns, 1 row    ·                                                                                              ·
-
-exec
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
-----
-min:int  count:int  max:int  sum_int:int  avg(1)::FLOAT:float  sum:decimal  stddev:decimal  variance:decimal  bool_and:bool  bool_or:bool  to_hex:string
-1        1          1        1            1.0                  1            NULL            NULL              true           true          01
-
-# Aggregate functions triggers aggregation and computation when there is no source.
-exec
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
-----
-min:int  count:int  max:int  sum_int:int  avg(1)::FLOAT:float  sum:decimal  stddev:decimal  variance:decimal  bool_and:bool  bool_or:bool  to_hex:string
-1        1          1        1            1.0                  1            NULL            NULL              true           true          01
-
-# Aggregate functions triggers aggregation and computation when there is no source.
-exec
-SELECT ARRAY_AGG(1)
-----
-array_agg:int[]
-ARRAY[1]
-
-exec
-SELECT JSON_AGG(1)
-----
-json_agg:jsonb
-'[1]'
-
-exec
-SELECT JSONB_AGG(1)
-----
-jsonb_agg:jsonb
-'[1]'
-
-# Some aggregate functions are not normalized to NULL when given a NULL
-# argument.
-exec
-SELECT COUNT(NULL)
-----
-count:int
-0
-
-exec
-SELECT JSON_AGG(NULL)
-----
-json_agg:jsonb
-'[null]'
-
-exec
-SELECT JSONB_AGG(NULL)
-----
-jsonb_agg:jsonb
-'[null]'
-
-exec
-SELECT ARRAY_AGG(NULL::TEXT)
-----
-array_agg:string[]
-ARRAY[NULL]
-
-# TODO(radu): Selecting from series not supported yet.
-## Check that COALESCE using aggregate results over an empty table
-## work properly.
-#exec
-#SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0)
-#----
-#0
-#
-#exec
-#SELECT COUNT_ROWS() FROM generate_series(1,100)
-#----
-#100
-#
-## Same, using arithmetic on COUNT.
-#exec
-#SELECT 1 + COUNT(*) FROM generate_series(1,0)
-#----
-#1
-
-# Same, using an empty table.
-# The following test *must* occur before the first INSERT to the tables,
-# so that it can observe an empty table.
-exec
-SELECT COUNT(*), COALESCE(MAX(k), 1) FROM kv
-----
-count:int  COALESCE(max(k), 1):int
-0          1
-
-# TODO(radu): Subqueries not implemented yet.
-## Same, using a subquery. (#12705)
-#exec
-#SELECT (SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0))
-#----
-#0
-
-exec-raw
-INSERT INTO kv VALUES
-(1, 2, 3, 'a'),
-(3, 4, 5, 'a'),
-(5, NULL, 5, NULL),
-(6, 2, 3, 'b'),
-(7, 2, 2, 'b'),
-(8, 4, 2, 'A')
-----
-
-# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
-# NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-exec
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
-----
-min:int  count:int  max:int  sum_int:int  avg(1)::FLOAT:float  sum:decimal  stddev:decimal  variance(1)::FLOAT:float  bool_and:bool  bool_or:bool  to_hex:string
-1        6          1        6            1.0                  6            0               0.0                       true           true          00
-
-# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
-exec
-SELECT ARRAY_AGG(1) FROM kv
-----
-array_agg:int[]
-ARRAY[1,1,1,1,1,1]
-
-exec
-SELECT JSON_AGG(1) FROM kv
-----
-json_agg:jsonb
-'[1, 1, 1, 1, 1, 1]'
-
-exec
-SELECT JSONB_AGG(1) FROM kv
-----
-jsonb_agg:jsonb
-'[1, 1, 1, 1, 1, 1]'
-
-# Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
-exec rowsort
-SELECT 1 FROM kv GROUP BY v
-----
-1:int
-1
-1
-1
-
-# Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
-exec
-SELECT 3 FROM kv HAVING TRUE
-----
-3:int
-3
-
-exec rowsort
-SELECT COUNT(*), k FROM kv GROUP BY k
-----
-count:int  k:int
-1          1
-1          3
-1          5
-1          6
-1          7
-1          8
+render                 ·             ·                                 (min int, count int, max int, sum_int int, "avg(1)::FLOAT" float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)  ·
+ │                     render 0      (agg0)[int]                       ·                                                                                                                                                             ·
+ │                     render 1      (agg1)[int]                       ·                                                                                                                                                             ·
+ │                     render 2      (agg2)[int]                       ·                                                                                                                                                             ·
+ │                     render 3      (agg3)[int]                       ·                                                                                                                                                             ·
+ │                     render 4      ((agg4)[decimal]::FLOAT)[float]   ·                                                                                                                                                             ·
+ │                     render 5      (agg5)[decimal]                   ·                                                                                                                                                             ·
+ │                     render 6      (agg6)[decimal]                   ·                                                                                                                                                             ·
+ │                     render 7      (agg7)[decimal]                   ·                                                                                                                                                             ·
+ │                     render 8      (agg8)[bool]                      ·                                                                                                                                                             ·
+ │                     render 9      (agg9)[bool]                      ·                                                                                                                                                             ·
+ │                     render 10     (to_hex((agg10)[bytes]))[string]  ·                                                                                                                                                             ·
+ └── group             ·             ·                                 (agg0 int, agg1 int, agg2 int, agg3 int, agg4 decimal, agg5 decimal, agg6 decimal, agg7 decimal, agg8 bool, agg9 bool, agg10 bytes)                           ·
+      │                aggregate 0   min(column1)                      ·                                                                                                                                                             ·
+      │                aggregate 1   count(column1)                    ·                                                                                                                                                             ·
+      │                aggregate 2   max(column1)                      ·                                                                                                                                                             ·
+      │                aggregate 3   sum_int(column1)                  ·                                                                                                                                                             ·
+      │                aggregate 4   avg(column1)                      ·                                                                                                                                                             ·
+      │                aggregate 5   sum(column1)                      ·                                                                                                                                                             ·
+      │                aggregate 6   stddev(column1)                   ·                                                                                                                                                             ·
+      │                aggregate 7   variance(column1)                 ·                                                                                                                                                             ·
+      │                aggregate 8   bool_and(column11)                ·                                                                                                                                                             ·
+      │                aggregate 9   bool_or(column11)                 ·                                                                                                                                                             ·
+      │                aggregate 10  xor_agg(column14)                 ·                                                                                                                                                             ·
+      └── render       ·             ·                                 (column1 int, column11 bool, column14 bytes)                                                                                                                  ·
+           │           render 0      (1)[int]                          ·                                                                                                                                                             ·
+           │           render 1      (true)[bool]                      ·                                                                                                                                                             ·
+           │           render 2      ('\x01')[bytes]                   ·                                                                                                                                                             ·
+           └── values  ·             ·                                 ()                                                                                                                                                            ·
+·                      size          0 columns, 1 row                  ·                                                                                                                                                             ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT COUNT(*), k FROM kv GROUP BY 2
+EXPLAIN (TYPES) SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
-render          ·            ·             (count, k)  ·
- │              render 0     agg0          ·           ·
- │              render 1     k             ·           ·
- └── group      ·            ·             (k, agg0)   ·
-      │         aggregate 0  k             ·           ·
-      │         aggregate 1  count_rows()  ·           ·
-      │         group by     @1            ·           ·
-      └── scan  ·            ·             (k)         ·
-·               table        kv@primary    ·           ·
-·               spans        ALL           ·           ·
-
-# GROUP BY specified using column index works.
-exec rowsort
-SELECT COUNT(*), k FROM kv GROUP BY 2
-----
-count:int  k:int
-1          1
-1          3
-1          5
-1          6
-1          7
-1          8
-
-# Grouping by more than one column works.
-exec rowsort
-SELECT v, COUNT(*), w FROM kv GROUP BY v, w
-----
-v:int  count:int  w:int
-NULL   1          5
-2      1          2
-2      2          3
-4      1          2
-4      1          5
-
-# Grouping by more than one column using column numbers works.
-exec rowsort
-SELECT v, COUNT(*), w FROM kv GROUP BY 1, 3
-----
-v:int  count:int  w:int
-NULL   1          5
-2      1          2
-2      2          3
-4      1          2
-4      1          5
-
-# Selecting and grouping on a function expression works.
-exec rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
-----
-count:int  upper:string
-1          NULL
-2          B
-3          A
-
-# Selecting and grouping on a constant works.
-exec
-SELECT COUNT(*) FROM kv GROUP BY 1+2
-----
-count:int
-6
-
-exec
-SELECT COUNT(*) FROM kv GROUP BY length('abc')
-----
-count:int
-6
-
-# Selecting a function of something which is grouped works.
-exec rowsort
-SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
-----
-count:int  upper:string
-1          NULL
-1          A
-2          A
-2          B
+render          ·            ·             (count int, k int)  ·
+ │              render 0     (agg0)[int]   ·                   ·
+ │              render 1     (k)[int]      ·                   ·
+ └── group      ·            ·             (k int, agg0 int)   ·
+      │         aggregate 0  k             ·                   ·
+      │         aggregate 1  count_rows()  ·                   ·
+      │         group by     @1            ·                   ·
+      └── scan  ·            ·             (k int)             ·
+·               table        kv@primary    ·                   ·
+·               spans        ALL           ·                   ·
 
 # Selecting and grouping on a more complex expression works.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
+EXPLAIN (TYPES) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
-render               ·            ·             (count, "k + v")  ·
- │                   render 0     agg0          ·                 ·
- │                   render 1     column5       ·                 ·
- └── group           ·            ·             (column5, agg0)   ·
-      │              aggregate 0  column5       ·                 ·
-      │              aggregate 1  count_rows()  ·                 ·
-      │              group by     @1            ·                 ·
-      └── render     ·            ·             (column5)         ·
-           │         render 0     k + v         ·                 ·
-           └── scan  ·            ·             (k, v)            ·
-·                    table        kv@primary    ·                 ·
-·                    spans        ALL           ·                 ·
-
-exec rowsort
-SELECT COUNT(*), k+v FROM kv GROUP BY k+v
-----
-count:int  k + v:int
-1          NULL
-1          3
-1          7
-1          8
-1          9
-1          12
+render               ·            ·                           (count int, "k + v" int)  ·
+ │                   render 0     (agg0)[int]                 ·                         ·
+ │                   render 1     (column5)[int]              ·                         ·
+ └── group           ·            ·                           (column5 int, agg0 int)   ·
+      │              aggregate 0  column5                     ·                         ·
+      │              aggregate 1  count_rows()                ·                         ·
+      │              group by     @1                          ·                         ·
+      └── render     ·            ·                           (column5 int)             ·
+           │         render 0     ((k)[int] + (v)[int])[int]  ·                         ·
+           └── scan  ·            ·                           (k int, v int)            ·
+·                    table        kv@primary                  ·                         ·
+·                    spans        ALL                         ·                         ·
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
+EXPLAIN (TYPES) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
-render          ·            ·             (count, "k + v")  ·
- │              render 0     agg0          ·                 ·
- │              render 1     k + v         ·                 ·
- └── group      ·            ·             (k, v, agg0)      ·
-      │         aggregate 0  k             ·                 ·
-      │         aggregate 1  v             ·                 ·
-      │         aggregate 2  count_rows()  ·                 ·
-      │         group by     @1-@2         ·                 ·
-      └── scan  ·            ·             (k, v)            ·
-·               table        kv@primary    ·                 ·
-·               spans        ALL           ·                 ·
-
-exec rowsort
-SELECT COUNT(*), k+v FROM kv GROUP BY k, v
-----
-count:int  k + v:int
-1          NULL
-1          3
-1          7
-1          8
-1          9
-1          12
-
-# Test case from #2761.
-exec rowsort
-SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
-----
-count_1:int  lx:int
-1            NULL
-1            4
-1            6
-1            9
-2            5
-
-exec rowsort
-SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
-----
-s:string  count:int
-a         2
-b         2
-
-#TODO(radu): DISTINCT not supported yet.
-#exec rowsort
-#SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
-#----
-#column5:string  column6:int  column8:int
-#A               3            3
-#B               2            2
-
-exec rowsort
-SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
-----
-max:int  min:int
-
-exec rowsort
-SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
-----
-max:int  min:int
-8        2
-
-exec
-SELECT COUNT(*)
-----
-count:int
-1
-
-exec
-SELECT COUNT(k) FROM kv
-----
-count:int
-6
-
-exec
-SELECT COUNT(1)
-----
-count:int
-1
-
-exec
-SELECT COUNT(1) FROM kv
-----
-count:int
-6
-
-# TODO(radu): ORDER BY not implemented yet.
-#exec
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
-#----
-#NULL 1
-#2 3
-#4 2
-#
-#exec
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
-#----
-#4 2
-#2 3
-#NULL 1
-#
-#exec
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
-#----
-#2 3
-#4 2
-#NULL 1
-#
-#exec
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
-#----
-#NULL 1
-#2 3
-#4 2
-#
-#exec
-#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
-#----
-#4 2
-#2 3
-#NULL 1
-
-# TODO(radu): column names should be "count".
-exec
-SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
-----
-count:int  count:int  count:int
-6          6          5
-
-# TODO(radu): this requires tuples but they are not yet supported in
-# distsql (#15938).
-exec nodist
-SELECT COUNT(kv.*) FROM kv
-----
-count:int
-6
-
-# TODO(radu): DISTINCT not supported yet.
-#exec
-#SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
-#----
-#6 2 2
-#
-#exec rowsort
-#SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv GROUP BY UPPER(s)
-#----
-#A    3 2 2
-#B    2 1 1
-#NULL 1 0 0
-#
-#
-
-# TODO(radu): these queries require tuples but they are not yet supported in
-# distsql (#15938).
-exec nodist
-SELECT COUNT((k, v)) FROM kv
-----
-count:int
-6
-
-# TODO(radu): DISTINCT not supported yet.
-#exec nodist
-#SELECT COUNT(DISTINCT (k, v)) FROM kv
-#----
-#column6:int
-#6
-
-#exec nodist
-#SELECT COUNT(DISTINCT (k, (v))) FROM kv
-#----
-#column6:int
-#6
-
-exec nodist
-SELECT COUNT((k, v)) FROM kv LIMIT 1
-----
-count:int
-6
-
-exec nodist
-SELECT COUNT((k, v)) FROM kv OFFSET 1
-----
-count:int
-
-exec
-SELECT COUNT(k)+COUNT(kv.v) FROM kv
-----
-count(k) + count(kv.v):int
-11
-
-exec nodist
-SELECT COUNT(NULL::int), COUNT((NULL, NULL))
-----
-count:int  count:int
-0          1
-
-exec
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
-----
-min:int  max:int  min:int  max:int
-1        8        2        4
-
-# Even if no input rows match, we expect a row (of nulls).
-exec
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
-----
-min:int  max:int  min:int  max:int
-NULL     NULL     NULL     NULL
-
-# TODO(justin): we don't yet respect the inner ORDER BY
-#exec
-#SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
-#----
-#column5:int[]       column6:string[]
-#ARRAY[1,3,5,6,7,8]  ARRAY['a','a',NULL,'b','b','A']
-
-exec
-SELECT array_agg(s) FROM kv WHERE s IS NULL
-----
-array_agg:string[]
-ARRAY[NULL]
-
-exec
-SELECT JSON_AGG(s) FROM kv WHERE s IS NULL
-----
-json_agg:jsonb
-'[null]'
-
-exec
-SELECT JSONB_AGG(s) FROM kv WHERE s IS NULL
-----
-jsonb_agg:jsonb
-'[null]'
-
-exec
-SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
-----
-avg:decimal  avg:decimal  sum:decimal  sum:decimal
-5            2.8          30           14
-
-exec
-SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
-----
-avg:decimal  avg:decimal  sum:decimal  sum:decimal
-5            2.8          30           14
-
-#exec
-#SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
-#----
-#5 3 30 6
-
-exec
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
-----
-(avg(k) * 2.0) + max(v)::DECIMAL:decimal
-14.0
-
-# Verify things work with distsql when some of the nodes emit no results in the
-# local stage.
-exec
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
-----
-(avg(k) * 2.0) + max(v)::DECIMAL:decimal
-14.0
+render          ·            ·                           (count int, "k + v" int)  ·
+ │              render 0     (agg0)[int]                 ·                         ·
+ │              render 1     ((k)[int] + (v)[int])[int]  ·                         ·
+ └── group      ·            ·                           (k int, v int, agg0 int)  ·
+      │         aggregate 0  k                           ·                         ·
+      │         aggregate 1  v                           ·                         ·
+      │         aggregate 2  count_rows()                ·                         ·
+      │         group by     @1-@2                       ·                         ·
+      └── scan  ·            ·                           (k int, v int)            ·
+·               table        kv@primary                  ·                         ·
+·               spans        ALL                         ·                         ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
+EXPLAIN (TYPES) SELECT COUNT(k) FROM kv
 ----
-group      ·            ·           (count)  ·
- │         aggregate 0  count(k)    ·        ·
- └── scan  ·            ·           (k)      ·
-·          table        kv@primary  ·        ·
-·          spans        ALL         ·        ·
+group      ·            ·           (count int)  ·
+ │         aggregate 0  count(k)    ·            ·
+ └── scan  ·            ·           (k int)      ·
+·          table        kv@primary  ·            ·
+·          spans        ALL         ·            ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+EXPLAIN (TYPES) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
-group      ·            ·           (count, sum, max)  ·
- │         aggregate 0  count(k)    ·                  ·
- │         aggregate 1  sum(k)      ·                  ·
- │         aggregate 2  max(k)      ·                  ·
- └── scan  ·            ·           (k)                ·
-·          table        kv@primary  ·                  ·
-·          spans        ALL         ·                  ·
+group      ·            ·           (count int, sum decimal, max int)  ·
+ │         aggregate 0  count(k)    ·                                  ·
+ │         aggregate 1  sum(k)      ·                                  ·
+ │         aggregate 2  max(k)      ·                                  ·
+ └── scan  ·            ·           (k int)                            ·
+·          table        kv@primary  ·                                  ·
+·          spans        ALL         ·                                  ·
 
 exec-raw
 CREATE TABLE abc (
@@ -713,53 +179,14 @@ CREATE TABLE abc (
 )
 ----
 
-exec-raw
-INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
-----
-
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+EXPLAIN (TYPES) SELECT MIN(a) FROM abc
 ----
-group      ·            ·            (min)  ·
- │         aggregate 0  min(a)       ·      ·
- └── scan  ·            ·            (a)    ·
-·          table        abc@primary  ·      ·
-·          spans        ALL          ·      ·
-
-exec
-SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
-----
-min:string  min:float  min:bool  min:decimal
-one         1.5        false     1.1
-
-exec
-SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM abc
-----
-max:string  max:float  max:bool  max:decimal
-two         2.0        true      5
-
-exec
-SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
-----
-avg:float  sum:float  avg:decimal  sum:decimal
-1.75       3.5        3.05         6.1
-
-# Verify summing of intervals
-exec-raw
-CREATE TABLE intervals (
-  a INTERVAL PRIMARY KEY
-)
-----
-
-exec-raw
-INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
-----
-
-exec
-SELECT SUM(a) FROM intervals
-----
-sum:interval
-'3y5mon7d19s'
+group      ·            ·            (min string)  ·
+ │         aggregate 0  min(a)       ·             ·
+ └── scan  ·            ·            (a string)    ·
+·          table        abc@primary  ·             ·
+·          spans        ALL          ·             ·
 
 exec-raw
 CREATE TABLE xyz (
@@ -778,279 +205,122 @@ exec-raw
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 ----
 
-exec
-SELECT MIN(x) FROM xyz
-----
-min:int
-1
-
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
+EXPLAIN (TYPES) SELECT MIN(x) FROM xyz
 ----
-group      ·            ·            (min)  ·
- │         aggregate 0  min(x)       ·      ·
- └── scan  ·            ·            (x)    ·
-·          table        xyz@primary  ·      ·
-·          spans        ALL          ·      ·
-
-exec
-SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
-----
-min:int
-4
+group      ·            ·            (min int)  ·
+ │         aggregate 0  min(x)       ·          ·
+ └── scan  ·            ·            (x int)    ·
+·          table        xyz@primary  ·          ·
+·          spans        ALL          ·          ·
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
-group      ·            ·                        (min)  ·
- │         aggregate 0  min(x)                   ·      ·
- └── scan  ·            ·                        (x)    ·
-·          table        xyz@primary              ·      ·
-·          spans        /0-/0/# /4-/4/# /7-/7/#  ·      ·
-
-exec
-SELECT MAX(x) FROM xyz
-----
-max:int
-7
+group      ·            ·                        (min int)  ·
+ │         aggregate 0  min(x)                   ·          ·
+ └── scan  ·            ·                        (x int)    ·
+·          table        xyz@primary              ·          ·
+·          spans        /0-/0/# /4-/4/# /7-/7/#  ·          ·
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
+EXPLAIN (TYPES) SELECT MAX(x) FROM xyz
 ----
-group      ·            ·            (max)  ·
- │         aggregate 0  max(x)       ·      ·
- └── scan  ·            ·            (x)    ·
-·          table        xyz@primary  ·      ·
-·          spans        ALL          ·      ·
-
-exec
-SELECT MIN(y) FROM xyz WHERE x = 1
-----
-min:int
-2
+group      ·            ·            (max int)  ·
+ │         aggregate 0  max(x)       ·          ·
+ └── scan  ·            ·            (x int)    ·
+·          table        xyz@primary  ·          ·
+·          spans        ALL          ·          ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·            (min)   ·
- │         aggregate 0  min(y)       ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        /1-/1/#      ·       ·
-
-exec
-SELECT MAX(y) FROM xyz WHERE x = 1
-----
-max:int
-2
+group      ·            ·            (min int)       ·
+ │         aggregate 0  min(y)       ·               ·
+ └── scan  ·            ·            (x int, y int)  ·
+·          table        xyz@primary  ·               ·
+·          spans        /1-/1/#      ·               ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
-group      ·            ·            (max)   ·
- │         aggregate 0  max(y)       ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        /1-/1/#      ·       ·
-
-exec
-SELECT MIN(y) FROM xyz WHERE x = 7
-----
-min:int
-NULL
+group      ·            ·            (max int)       ·
+ │         aggregate 0  max(y)       ·               ·
+ └── scan  ·            ·            (x int, y int)  ·
+·          table        xyz@primary  ·               ·
+·          spans        /1-/1/#      ·               ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT MIN(y) FROM xyz WHERE x = 7
 ----
-group      ·            ·            (min)   ·
- │         aggregate 0  min(y)       ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        /7-/7/#      ·       ·
-
-exec
-SELECT MAX(y) FROM xyz WHERE x = 7
-----
-max:int
-NULL
+group      ·            ·            (min int)       ·
+ │         aggregate 0  min(y)       ·               ·
+ └── scan  ·            ·            (x int, y int)  ·
+·          table        xyz@primary  ·               ·
+·          spans        /7-/7/#      ·               ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
+EXPLAIN (TYPES) SELECT MAX(y) FROM xyz WHERE x = 7
 ----
-group      ·            ·            (max)   ·
- │         aggregate 0  max(y)       ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        /7-/7/#      ·       ·
-
-exec
-SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
-----
-min:int
-1
+group      ·            ·            (max int)       ·
+ │         aggregate 0  max(y)       ·               ·
+ └── scan  ·            ·            (x int, y int)  ·
+·          table        xyz@primary  ·               ·
+·          spans        /7-/7/#      ·               ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+EXPLAIN (TYPES) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
-group      ·            ·          (min)      ·
- │         aggregate 0  min(x)     ·          ·
- └── scan  ·            ·          (x, y, z)  ·
-·          table        xyz@zyx    ·          ·
-·          spans        /3/2-/3/3  ·          ·
+group      ·            ·          (min int)                ·
+ │         aggregate 0  min(x)     ·                        ·
+ └── scan  ·            ·          (x int, y int, z float)  ·
+·          table        xyz@zyx    ·                        ·
+·          spans        /3/2-/3/3  ·                        ·
 
-exec
-SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
-----
-max:int
-1
+# TODO(radu): enable once we have SHOW TRACE support
+#query T
+#SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+#----
+#fetched: /xyz/zyx/3.0/2/1 -> NULL
+#output row: [1]
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+EXPLAIN (TYPES) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
-group      ·            ·          (max)      ·
- │         aggregate 0  max(x)     ·          ·
- └── scan  ·            ·          (x, y, z)  ·
-·          table        xyz@zyx    ·          ·
-·          spans        /3/2-/3/3  ·          ·
+group      ·            ·          (max int)                ·
+ │         aggregate 0  max(x)     ·                        ·
+ └── scan  ·            ·          (x int, y int, z float)  ·
+·          table        xyz@zyx    ·                        ·
+·          spans        /3/2-/3/3  ·                        ·
 
 # VARIANCE/STDDEV
 
-exec
-SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
-----
-variance:decimal  variance:decimal  round:float
-9                 4.5               6.33333333333333
-
-exec
-SELECT VARIANCE(x) FROM xyz WHERE x = 10
-----
-variance:decimal
-NULL
-
-exec
-SELECT VARIANCE(x) FROM xyz WHERE x = 1
-----
-variance:decimal
-NULL
+# TODO(radu): enable once we have SHOW TRACE support
+#query T
+#SELECT message FROM [SHOW KV TRACE FOR SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz]
+# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+#----
+#fetched: /xyz/primary/1 -> NULL
+#fetched: /xyz/primary/1/y -> 2
+#fetched: /xyz/primary/1/z -> 3.0
+#fetched: /xyz/primary/4 -> NULL
+#fetched: /xyz/primary/4/y -> 5
+#fetched: /xyz/primary/4/z -> 6.0
+#fetched: /xyz/primary/7 -> NULL
+#fetched: /xyz/primary/7/z -> 8.0
+#output row: [9 4.5 6.33333333333333]
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+EXPLAIN (TYPES) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
-group      ·            ·            (variance)  ·
- │         aggregate 0  variance(x)  ·           ·
- └── scan  ·            ·            (x)         ·
-·          table        xyz@primary  ·           ·
-·          spans        /1-/1/#      ·           ·
-
-exec
-SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
-----
-stddev:decimal  stddev:decimal         round:float
-3               2.1213203435596425732  2.51661147842358
-
-exec
-SELECT STDDEV(x) FROM xyz WHERE x = 1
-----
-stddev:decimal
-NULL
-
-exec
-SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
-----
-avg(1::INT)::FLOAT:float  avg(2::FLOAT)::FLOAT:float  avg(3::DECIMAL)::FLOAT:float
-1.0                       2.0                         3.0
-
-exec
-SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
-----
-count:int  count:int  count:int
-1          1          1
-
-exec
-SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
-----
-sum:decimal  sum:float  sum:decimal
-1            2.0        3
-
-exec
-SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
-----
-variance:decimal  variance:float  variance:decimal
-NULL              NULL            NULL
-
-exec
-SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
-----
-stddev:decimal  stddev:float  stddev:decimal
-NULL            NULL          NULL
-
-# TODO(radu): subqueries not supported yet.
-## Ensure subqueries don't trigger aggregation.
-#exec
-#SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
-#----
-#true
-
-exec-raw
-CREATE TABLE bools (b BOOL)
-----
-
-exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
-----
-bool_and:bool  bool_or:bool
-NULL           NULL
-
-exec-raw
-INSERT INTO bools VALUES (true), (true), (true)
-----
-
-exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
-----
-bool_and:bool  bool_or:bool
-true           true
-
-exec-raw
-INSERT INTO bools VALUES (false), (false)
-----
-
-exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
-----
-bool_and:bool  bool_or:bool
-false          true
-
-exec-raw
-DELETE FROM bools WHERE b
-----
-
-exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
-----
-bool_and:bool  bool_or:bool
-false          false
-
-# TODO(justin): we don't yet respect the inner ORDER BY
-#exec
-#SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
-#----
-#column5:string
-#aabbA
-#
-#exec
-#SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
-#----
-#column5:jsonb
-#'["a", "a", null, "b", "b", "A"]'
-#
-#exec
-#SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
-#----
-#column5:jsonb
-#'["a", "a", null, "b", "b", "A"]'
+group      ·            ·            (variance decimal)  ·
+ │         aggregate 0  variance(x)  ·                   ·
+ └── scan  ·            ·            (x int)             ·
+·          table        xyz@primary  ·                   ·
+·          spans        /1-/1/#      ·                   ·
 
 ## Tests for the single-row optimization.
 exec-raw
@@ -1114,53 +384,47 @@ INSERT INTO ab VALUES
 #fetched: /ab/primary/5 -> NULL
 #output row: [5]
 
-# TODO(radu): ORDER BY not supported yet.
-#exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
-#----
-#sort                 ·            ·
-# │                   order        +count
-# └── group           ·            ·
-#      │              aggregate 0  v
-#      │              aggregate 1  count(k)
-#      │              group by     @1
-#      └── render     ·            ·
-#           │         render 0     v
-#           │         render 1     k
-#           └── scan  ·            ·
-#·                    table        kv@primary
-#·                    spans        ALL
-#
-#exec hide-colnames nodist
-#EXPLAIN (VERBOSE) #SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
-#----
-#sort                 ·            ·
-# │                   order        +count
-# └── group           ·            ·
-#      │              aggregate 0  v
-#      │              aggregate 1  count_rows()
-#      │              group by     @1
-#      └── render     ·            ·
-#           │         render 0     v
-#           └── scan  ·            ·
-#·                    table        kv@primary
-#·                    spans        ALL
-#
-#exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
-#----
-#sort                 ·            ·
-# │                   order        +count
-# └── group           ·            ·
-#      │              aggregate 0  v
-#      │              aggregate 1  count(1)
-#      │              group by     @1
-#      └── render     ·            ·
-#           │         render 0     v
-#           │         render 1     1
-#           └── scan  ·            ·
-#·                    table        kv@primary
-#·                    spans        ALL
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+----
+sort            ·            ·           (v int, count int)  +count
+ │              order        +count      ·                   ·
+ └── group      ·            ·           (v int, count int)  ·
+      │         aggregate 0  v           ·                   ·
+      │         aggregate 1  count(k)    ·                   ·
+      │         group by     @2          ·                   ·
+      └── scan  ·            ·           (k int, v int)      ·
+·               table        kv@primary  ·                   ·
+·               spans        ALL         ·                   ·
+
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+----
+sort            ·            ·             (v int, count int)  +count
+ │              order        +count        ·                   ·
+ └── group      ·            ·             (v int, count int)  ·
+      │         aggregate 0  v             ·                   ·
+      │         aggregate 1  count_rows()  ·                   ·
+      │         group by     @1            ·                   ·
+      └── scan  ·            ·             (v int)             ·
+·               table        kv@primary    ·                   ·
+·               spans        ALL           ·                   ·
+
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+----
+sort                 ·            ·               (v int, count int)         +count
+ │                   order        +count          ·                          ·
+ └── group           ·            ·               (v int, count int)         ·
+      │              aggregate 0  kv.v            ·                          ·
+      │              aggregate 1  count(column5)  ·                          ·
+      │              group by     @2              ·                          ·
+      └── render     ·            ·               (column5 int, "kv.v" int)  ·
+           │         render 0     (1)[int]        ·                          ·
+           │         render 1     (v)[int]        ·                          ·
+           └── scan  ·            ·               (v int)                    ·
+·                    table        kv@primary      ·                          ·
+·                    spans        ALL             ·                          ·
 
 # TODO(radu): we don't propagate filters yet.
 ## Check that filters propagate through no-op aggregation.
@@ -1189,34 +453,6 @@ INSERT INTO ab VALUES
 #  mark BOOL
 #)
 #----
-#
-#exec-raw
-#INSERT INTO filter_test VALUES
-#(1, 2, false),
-#(3, 4, true),
-#(5, NULL, true),
-#(6, 2, true),
-#(7, 2, true),
-#(8, 4, true),
-#(NULL, 4, true)
-#----
-#
-## FILTER should eliminate some results.
-#exec rowsort
-#SELECT v, COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
-#----
-#2 2
-#4 1
-#NULL 0
-#
-## Test multiple filters
-#exec rowsort
-#SELECT v, mark, COUNT(*) FILTER (WHERE k > 5), COUNT(*), MAX(k) FILTER (WHERE k < 8) FROM filter_test GROUP BY v, mark
-#----
-#2 false 0 1 1
-#2 true 2 2 7
-#4 true 1 3 3
-#NULL true 0 1 5
 #
 ## Check that filter expressions are only rendered once.
 #exec nodist
@@ -1248,56 +484,35 @@ INSERT INTO ab VALUES
 
 # Tests with * inside GROUP BY.
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*;
+EXPLAIN (TYPES) SELECT 1 FROM kv GROUP BY kv.*;
 ----
-render     ·         ·           ("1")  ·
- │         render 0  1           ·      ·
- └── scan  ·         ·           ()     ·
-·          table     kv@primary  ·      ·
-·          spans     ALL         ·      ·
-
-exec
-SELECT 1 FROM kv GROUP BY kv.*;
-----
-1:int
-1
-1
-1
-1
-1
-1
+render     ·         ·           ("1" int)  ·
+ │         render 0  (1)[int]    ·          ·
+ └── scan  ·         ·           ()         ·
+·          table     kv@primary  ·          ·
+·          spans     ALL         ·          ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
+EXPLAIN (TYPES) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-render               ·            ·            (sum)               ·
- │                   render 0     agg0         ·                   ·
- └── group           ·            ·            (k, v, w, s, agg0)  ·
-      │              aggregate 0  k            ·                   ·
-      │              aggregate 1  v            ·                   ·
-      │              aggregate 2  w            ·                   ·
-      │              aggregate 3  s            ·                   ·
-      │              aggregate 4  sum(d)       ·                   ·
-      │              group by     @1-@4        ·                   ·
-      └── join       ·            ·            (k, v, w, s, d)     ·
-           │         type         inner        ·                   ·
-           │         pred         k >= d       ·                   ·
-           ├── scan  ·            ·            (k, v, w, s)        ·
-           │         table        kv@primary   ·                   ·
-           │         spans        ALL          ·                   ·
-           └── scan  ·            ·            (d)                 ·
-·                    table        abc@primary  ·                   ·
-·                    spans        ALL          ·                   ·
-
-exec rowsort
-SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
-----
-sum:decimal
-1.1
-6.1
-6.1
-6.1
-6.1
+render               ·            ·                                 (sum decimal)                                  ·
+ │                   render 0     (agg0)[decimal]                   ·                                              ·
+ └── group           ·            ·                                 (k int, v int, w int, s string, agg0 decimal)  ·
+      │              aggregate 0  k                                 ·                                              ·
+      │              aggregate 1  v                                 ·                                              ·
+      │              aggregate 2  w                                 ·                                              ·
+      │              aggregate 3  s                                 ·                                              ·
+      │              aggregate 4  sum(d)                            ·                                              ·
+      │              group by     @1-@4                             ·                                              ·
+      └── join       ·            ·                                 (k int, v int, w int, s string, d decimal)     ·
+           │         type         inner                             ·                                              ·
+           │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                                              ·
+           ├── scan  ·            ·                                 (k int, v int, w int, s string)                ·
+           │         table        kv@primary                        ·                                              ·
+           │         spans        ALL                               ·                                              ·
+           └── scan  ·            ·                                 (d decimal)                                    ·
+·                    table        abc@primary                       ·                                              ·
+·                    spans        ALL                               ·                                              ·
 
 # TODO(radu): single-row optimization not yet supported.
 ## opt_test is used for tests around the single-row optimization for MIN/MAX.
@@ -1305,13 +520,9 @@ sum:decimal
 #CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 #----
 #
-#exec-raw
-#INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
-#----
-#
 ## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 #exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
+#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test
 #----
 #group           0  group   ·            ·                       (min)            ·
 # │              0  ·       aggregate 0  min(v)                  ·                ·
@@ -1322,21 +533,9 @@ sum:decimal
 #·               2  ·       spans        /!NULL-                 ·                ·
 #·               2  ·       limit        1                       ·                ·
 #
-## Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
-#exec
-#SELECT MIN(v) FROM opt_test
-#----
-#5
-#
-## Cross-check against a query without this optimization.
-#exec
-#SELECT MIN(v) FROM opt_test@primary
-#----
-#5
-#
 ## Repeat test when there is an existing filter.
 #exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
+#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                       (min)   ·
 # │              0  ·       aggregate 0  min(v)                  ·       ·
@@ -1347,16 +546,11 @@ sum:decimal
 #·               2  ·       spans        /!NULL-                 ·       ·
 #·               2  ·       filter       k != 4                  ·       ·
 #
-#exec
-#SELECT MIN(v) FROM opt_test WHERE k <> 4
-#----
-#10
-#
 ## Check the optimization when the argument is non-trivial. The renderNode can't
 ## present an ordering on v+1 so the optimization is not applied, but the IS NOT
 ## NULL filter should be added.
 #exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
+#EXPLAIN (TYPES) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 #----
 #group           0  group   ·            ·                           (min)            ·
 # │              0  ·       aggregate 0  min(v + 1)                  ·                ·
@@ -1369,7 +563,7 @@ sum:decimal
 #
 ## Verify that we don't use the optimization if there is a GROUP BY.
 #exec hide-colnames nodist
-#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
+#EXPLAIN (TYPES) SELECT MIN(v) FROM opt_test GROUP BY k
 #----
 #group      0  group  ·            ·                 (min)   ·
 # │         0  ·      aggregate 0  min(v)            ·       ·
@@ -1377,109 +571,172 @@ sum:decimal
 # └── scan  1  scan   ·            ·                 (k, v)  k!=NULL; key(k)
 #·          1  ·      table        opt_test@primary  ·       ·
 #·          1  ·      spans        ALL               ·       ·
-#
-#exec rowsort
-#SELECT MIN(v) FROM opt_test GROUP BY k
-#----
-#NULL
-#NULL
-#5
-#10
-#
-#exec rowsort
-#SELECT MAX(v) FROM opt_test GROUP BY k
-#----
-#NULL
-#NULL
-#5
-#10
 
 exec-raw
-CREATE TABLE xor_bytes (a bytes, b int, c int)
-----
-
-exec-raw
-INSERT INTO xor_bytes VALUES
-  (b'\x01\x01', 1, 3),
-  (b'\x02\x01', 1, 1),
-  (b'\x04\x01', 2, -5),
-  (b'\x08\x01', 2, -1),
-  (b'\x10\x01', 2, 0)
-----
-
-exec
-SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM xor_bytes
-----
-to_hex:string  xor_agg:int
-1f01           6
-
-# TODO(radu): ORDER BY not supported.
-#exec
-#SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
-#----
-#0300  1   2
-#1c01  2   4
-
-exec
-SELECT MAX(true), MIN(true)
-----
-max:bool  min:bool
-true      true
-
-exec-raw
-DELETE FROM ab;
-INSERT INTO ab(a,b) VALUES (1,2), (3,4);
 CREATE TABLE xy(x STRING, y STRING);
-INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
 ----
-
-# Grouping and rendering tuples.
-exec rowsort nodist
-SELECT (b, a) FROM ab GROUP BY (b, a)
-----
-(b, a):tuple{int, int}
-(2, 1)
-(4, 3)
 
 # TODO(radu): this requires tuples but they are not yet supported in
 # distsql (#15938).
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
+EXPLAIN (TYPES) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
-render     ·         ·           ("(b, a)")  ·
- │         render 0  (b, a)      ·           ·
- └── scan  ·         ·           (a, b)      ·
-·          table     ab@primary  ·           ·
-·          spans     ALL         ·           ·
-
-# TODO(radu): this requires tuples but they are not yet supported in
-# distsql (#15938).
-exec rowsort nodist
-SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
-----
-min:string  (b, a):tuple{int, int}
-b           (2, 1)
-b           (4, 3)
-d           (2, 1)
-d           (4, 3)
+render     ·         ·                                        ("(b, a)" tuple{int, int})  ·
+ │         render 0  (((b)[int], (a)[int]))[tuple{int, int}]  ·                           ·
+ └── scan  ·         ·                                        (a int, b int)              ·
+·          table     ab@primary                               ·                           ·
+·          spans     ALL                                      ·                           ·
 
 exec hide-colnames nodist
-EXPLAIN (VERBOSE) SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
+EXPLAIN (TYPES) SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
-render               ·            ·           (min, "(b, a)")  ·
- │                   render 0     agg0        ·                ·
- │                   render 1     (b, a)      ·                ·
- └── group           ·            ·           (a, b, x, agg0)  ·
-      │              aggregate 0  a           ·                ·
-      │              aggregate 1  b           ·                ·
-      │              aggregate 2  x           ·                ·
-      │              aggregate 3  min(y)      ·                ·
-      │              group by     @1-@3       ·                ·
-      └── join       ·            ·           (a, b, x, y)     ·
-           │         type         cross       ·                ·
-           ├── scan  ·            ·           (a, b)           ·
-           │         table        ab@primary  ·                ·
-           │         spans        ALL         ·                ·
-           └── scan  ·            ·           (x, y)           ·
-·                    table        xy@primary  ·                ·
-·                    spans        ALL         ·                ·
+render               ·            ·                                        (min string, "(b, a)" tuple{int, int})  ·
+ │                   render 0     (agg0)[string]                           ·                                       ·
+ │                   render 1     (((b)[int], (a)[int]))[tuple{int, int}]  ·                                       ·
+ └── group           ·            ·                                        (a int, b int, x string, agg0 string)   ·
+      │              aggregate 0  a                                        ·                                       ·
+      │              aggregate 1  b                                        ·                                       ·
+      │              aggregate 2  x                                        ·                                       ·
+      │              aggregate 3  min(y)                                   ·                                       ·
+      │              group by     @1-@3                                    ·                                       ·
+      └── join       ·            ·                                        (a int, b int, x string, y string)      ·
+           │         type         cross                                    ·                                       ·
+           ├── scan  ·            ·                                        (a int, b int)                          ·
+           │         table        ab@primary                               ·                                       ·
+           │         spans        ALL                                      ·                                       ·
+           └── scan  ·            ·                                        (x string, y string)                    ·
+·                    table        xy@primary                               ·                                       ·
+·                    spans        ALL                                      ·                                       ·
+
+# Test that ordering on GROUP BY columns is maintained.
+# TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
+#exec-raw
+#CREATE TABLE group_ord (
+#  x INT PRIMARY KEY,
+#  y INT,
+#  z INT,
+#  INDEX foo(z)
+#)
+#----
+#
+## The ordering is on all the GROUP BY columns, and isn't preserved after the
+## aggregation.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT x, max(y) FROM group_ord GROUP BY x
+#----
+#group      ·            ·                  (x, max)  ·
+# │         aggregate 0  x                  ·         ·
+# │         aggregate 1  max(y)             ·         ·
+# │         group by     @1                 ·         ·
+# └── scan  ·            ·                  (x, y)    ·
+#·          table        group_ord@primary  ·         ·
+#·          spans        ALL                ·         ·
+#
+## The ordering is on all the GROUP BY columns, and is preserved after the
+## aggregation.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
+#----
+#sort            ·            ·                  (x, max)  +x
+# │              order        +x                 ·         ·
+# └── group      ·            ·                  (x, max)  ·
+#      │         aggregate 0  x                  ·         ·
+#      │         aggregate 1  max(y)             ·         ·
+#      │         group by     @1                 ·         ·
+#      └── scan  ·            ·                  (x, y)    ·
+#·               table        group_ord@primary  ·         ·
+#·               spans        ALL                ·         ·
+#
+## The ordering is on some of the GROUP BY columns, and isn't preserved after
+## the aggregation.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT z, x, max(y) FROM group_ord GROUP BY x, z
+#----
+#render          ·            ·                  (z, x, max)   ·
+# │              render 0     z                  ·             ·
+# │              render 1     x                  ·             ·
+# │              render 2     agg0               ·             ·
+# └── group      ·            ·                  (x, z, agg0)  ·
+#      │         aggregate 0  x                  ·             ·
+#      │         aggregate 1  z                  ·             ·
+#      │         aggregate 2  max(y)             ·             ·
+#      │         group by     @1,@3              ·             ·
+#      └── scan  ·            ·                  (x, y, z)     ·
+#·               table        group_ord@primary  ·             ·
+#·               spans        ALL                ·             ·
+#
+## The ordering is on some of the GROUP BY columns, and is preserved after
+## the aggregation.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT z, x, max(y) FROM group_ord GROUP BY x, z ORDER BY x
+#----
+#render               ·            ·                  (z, x, max)   ·
+# │                   render 0     z                  ·             ·
+# │                   render 1     x                  ·             ·
+# │                   render 2     agg0               ·             ·
+# └── sort            ·            ·                  (x, z, agg0)  +x
+#      │              order        +x                 ·             ·
+#      └── group      ·            ·                  (x, z, agg0)  ·
+#           │         aggregate 0  x                  ·             ·
+#           │         aggregate 1  z                  ·             ·
+#           │         aggregate 2  max(y)             ·             ·
+#           │         group by     @1,@3              ·             ·
+#           └── scan  ·            ·                  (x, y, z)     ·
+#·                    table        group_ord@primary  ·             ·
+#·                    spans        ALL                ·             ·
+#
+## If the underlying ordering isn't from the primary index, it needs to be hinted
+## for now.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT z, max(y) FROM group_ord@foo GROUP BY z
+#----
+#group      ·            ·                  (z, max)  ·
+# │         aggregate 0  z                  ·         ·
+# │         aggregate 1  max(y)             ·         ·
+# │         group by     @2                 ·         ·
+# └── scan  ·            ·                  (y, z)    ·
+#·          table        group_ord@primary  ·         ·
+#·          spans        ALL                ·         ·
+#
+## Test that a merge join is used on two aggregate subqueries with orderings on
+## the GROUP BY columns. Note that an ORDER BY is not necessary on the
+## subqueries.
+#exec hide-colnames nodist
+#EXPLAIN (TYPES) SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y) FROM group_ord@foo GROUP BY z) ON x = z
+#----
+#join            ·            ·                  (x, max, z, min)  ·
+# │              type         inner              ·                 ·
+# │              equality     (x) = (z)          ·                 ·
+# ├── group      ·            ·                  (x, agg0)         ·
+# │    │         aggregate 0  x                  ·                 ·
+# │    │         aggregate 1  max(y)             ·                 ·
+# │    │         group by     @1                 ·                 ·
+# │    └── scan  ·            ·                  (x, y)            ·
+# │              table        group_ord@primary  ·                 ·
+# │              spans        ALL                ·                 ·
+# └── group      ·            ·                  (z, agg0)         ·
+#      │         aggregate 0  z                  ·                 ·
+#      │         aggregate 1  min(y)             ·                 ·
+#      │         group by     @2                 ·                 ·
+#      └── scan  ·            ·                  (y, z)            ·
+#·               table        group_ord@primary  ·                 ·
+#·               spans        ALL                ·                 ·
+
+# Regression test for #25533 (crash when propagating filter through GROUP BY).
+exec hide-colnames nodist
+EXPLAIN (TYPES) SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
+----
+render                    ·            ·                                          ("1" int)                      ·
+ │                        render 0     (1)[int]                                   ·                              ·
+ └── group                ·            ·                                          ("kv.v" int, column5 decimal)  ·
+      │                   aggregate 0  kv.v                                       ·                              ·
+      │                   aggregate 1  column5                                    ·                              ·
+      │                   group by     @2,@1                                      ·                              ·
+      └── filter          ·            ·                                          (column5 decimal, "kv.v" int)  ·
+           │              filter       ((column5)[decimal] > (1)[decimal])[bool]  ·                              ·
+           └── render     ·            ·                                          (column5 decimal, "kv.v" int)  ·
+                │         render 0     ((w)[int]::DECIMAL)[decimal]               ·                              ·
+                │         render 1     (v)[int]                                   ·                              ·
+                └── scan  ·            ·                                          (v int, w int)                 ·
+·                         table        kv@primary                                 ·                              ·
+·                         spans        ALL                                        ·                              ·
