@@ -209,10 +209,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 	// Disable write barrier on mounted SSDs.
 	if !c.isLocal() {
-		c.Run(ctx, c.All(),
-			"sudo", "umount", "/mnt/data1", ";",
-			"sudo", "mount", "-o", "discard,defaults,nobarrier",
-			"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+		c.RemountNoBarrier(ctx)
 	}
 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
