@@ -119,8 +119,44 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   }
 }
 
+const systemDatabases = [
+  "defaultdb",
+  "postgres",
+  "system",
+];
+
+function cmp(a: string, b: string) {
+  if (a === b) {
+      return 0;
+  }
+  if (a < b) {
+      return -1;
+  }
+  return 1;
+}
+
+function systemLast(a: string, b: string) {
+  const aIsSys = systemDatabases.indexOf(a) !== -1;
+  const bIsSys = systemDatabases.indexOf(b) !== -1;
+  if (aIsSys && bIsSys) {
+    return cmp(a, b);
+  }
+  if (aIsSys) {
+      return 1;
+  }
+  if (bIsSys) {
+      return -1;
+  }
+  return cmp(a, b);
+}
+
 // Base selectors to extract data from redux state.
-const databaseNames = (state: AdminUIState): string[] => state.cachedData.databases.data && state.cachedData.databases.data.databases;
+function databaseNames(state: AdminUIState): string[] {
+  if (state.cachedData.databases.data && state.cachedData.databases.data.databases) {
+    return state.cachedData.databases.data.databases.sort(systemLast);
+  }
+  return [];
+}
 
 // Connect the DatabaseTablesList class with our redux store.
 const databaseTablesListConnected = connect(
