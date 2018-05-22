@@ -1143,7 +1143,17 @@ var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterVal
 var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
 
 func (j jsonArray) RemoveKey(key string) (JSON, bool, error) {
-	return j, false, nil
+	b := NewArrayBuilder(j.Len())
+	removed := false
+	for _, el := range j {
+		s, _ := el.AsText()
+		if strings.Compare(*s, key) != 0 {
+			b.Add(el)
+		} else {
+			removed = true
+		}
+	}
+	return b.Build(), removed, nil
 }
 
 func (j jsonObject) RemoveKey(key string) (JSON, bool, error) {
