@@ -1089,7 +1089,7 @@ ui-generate: $(UI_ROOT)/distccl/bindata.go
 .PHONY: ui-lint
 ui-lint: $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
-	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
+	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
 	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json *.js
 	@if $(NODE_RUN) -C $(UI_ROOT) yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
