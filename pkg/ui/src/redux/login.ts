@@ -5,20 +5,11 @@ import { Action } from "redux";
 import { userLogin } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
+import { getDataFromServer } from "src/util/dataFromServer";
+
 import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
 
-// Tell TypeScript about `window.loggedInUser`, which is set in a script
-// tag in index.html, the contents of which are generated in a Go template
-// server-side.
-declare global {
-  interface Window {
-    dataFromServer: {
-      ExperimentalUseLogin: boolean;
-      LoginEnabled: boolean;
-      LoggedInUser: string;
-    };
-  }
-}
+const dataFromServer = getDataFromServer();
 
 // State for application use.
 
@@ -94,11 +85,11 @@ class NoLoginState {
 export const selectLoginState = createSelector(
     (state: AdminUIState) => state.login,
     (login: LoginAPIState) => {
-        if (!window.dataFromServer || !window.dataFromServer.ExperimentalUseLogin) {
+        if (!dataFromServer.ExperimentalUseLogin) {
             return new NoLoginState();
         }
 
-        if (!window.dataFromServer.LoginEnabled) {
+        if (!dataFromServer.LoginEnabled) {
             return new LoginDisabledState();
         }
 
@@ -117,7 +108,7 @@ export interface LoginAPIState {
 }
 
 const emptyLoginState: LoginAPIState = {
-  loggedInUser: window.dataFromServer && window.dataFromServer.LoggedInUser,
+  loggedInUser: dataFromServer.LoggedInUser,
   error: null,
   inProgress: false,
 };
