@@ -551,15 +551,17 @@ func (c *cluster) Destroy(ctx context.Context) {
 func (c *cluster) destroy(ctx context.Context) {
 	defer close(c.destroyed)
 
-	if c.name != clusterName {
-		c.status("destroying cluster")
-		if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
-			c.l.errorf("%s", err)
-		}
-	} else if clusterWipe {
-		c.status("wiping cluster")
-		if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
-			c.l.errorf("%s", err)
+	if clusterWipe {
+		if c.name != clusterName {
+			c.status("destroying cluster")
+			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
+				c.l.errorf("%s", err)
+			}
+		} else {
+			c.status("wiping cluster")
+			if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
+				c.l.errorf("%s", err)
+			}
 		}
 	} else {
 		c.l.printf("skipping cluster wipe\n")
