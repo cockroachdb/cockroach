@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// TestQuery validates that query results match the expectation of the test
-// model.
-func TestQuery(t *testing.T) {
+// TestQueryBasic validates that query results match the expectation of the test
+// model in basic situations.
+func TestQueryBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tm := newTestModelRunner(t)
 	tm.Start()
@@ -196,6 +196,7 @@ func TestQuery(t *testing.T) {
 		StartNanos:          5,
 		EndNanos:            24,
 		SampleDurationNanos: 1,
+		NowNanos:            math.MaxInt64,
 	}
 	query.assertSuccess(4, 2)
 }
@@ -446,8 +447,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 
 			// Expected maximum usage may slightly exceed the budget due to the size of
 			// dataSpan structures which are not accounted for in getMaxTimespan.
-			expectedMaxUsage := limit + 3*(int64(len("source1"))+sizeOfDataSpan)
-			if a, e := adjustedMon.MaximumBytes(), expectedMaxUsage; a > e {
+			if a, e := adjustedMon.MaximumBytes(), limit; a > e {
 				t.Fatalf("memory usage for query was %d, exceeded set maximum limit %d", a, e)
 			}
 
@@ -572,5 +572,88 @@ func TestQueryBadRequests(t *testing.T) {
 		query.SampleDurationNanos = 10
 		query.setDerivative((tspb.TimeSeriesQueryDerivative)(999))
 		query.assertSuccess(0, 0)
+	}
+}
+
+func TestQueryNearCurrentTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	tm.storeTimeSeriesData(resolution1ns, []tspb.TimeSeriesData{
+		{
+			Name:   "metric.test",
+			Source: "source1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(1, 100),
+				datapoint(5, 500),
+				datapoint(15, 500),
+				datapoint(16, 600),
+				datapoint(17, 700),
+				datapoint(22, 200),
+				datapoint(45, 500),
+				datapoint(46, 600),
+				datapoint(52, 200),
+			},
+		},
+		{
+			Name:   "metric.test",
+			Source: "source2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				datapoint(7, 0),
+				datapoint(7, 700),
+				datapoint(9, 900),
+				datapoint(14, 400),
+				datapoint(18, 800),
+				datapoint(33, 300),
+				datapoint(34, 400),
+				datapoint(56, 600),
+				datapoint(59, 900),
+			},
+		},
+	})
+	tm.assertKeyCount(9)
+	tm.assertModelCorrect()
+
+	// All points returned for query with nowNanos in the future.
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 500)
+		query.NowNanos = 60
+		query.assertSuccess(17, 2)
+	}
+
+	// Test query is disallowed in the future.
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 20, 500)
+		query.NowNanos = 10
+		query.assertError("cannot query time series in the future")
+	}
+
+	// Test query is truncated so that future datapoints are not queried.
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 500)
+		query.NowNanos = 30
+		query.assertSuccess(10, 2)
+	}
+
+	// Data points from incomplete periods are not included.
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 500)
+		query.NowNanos = 59
+		query.assertSuccess(16, 2)
+	}
+
+	// Data points for incomplete periods are not included (with downsampling).
+	{
+		query := tm.makeQuery("metric.test", resolution1ns, 0, 500)
+		query.NowNanos = 60
+		query.SampleDurationNanos = 10
+		query.assertSuccess(6, 2)
+
+		query = tm.makeQuery("metric.test", resolution1ns, 0, 500)
+		query.NowNanos = 59
+		query.SampleDurationNanos = 10
+		query.assertSuccess(5, 2)
 	}
 }
