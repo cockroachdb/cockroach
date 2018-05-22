@@ -436,7 +436,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		}
 		var resp serverpb.UserLoginResponse
 		return httputil.PostJSONWithRequest(
-			httpClient, ts.AdminURL()+authPrefix+"login", &req, &resp,
+			httpClient, ts.AdminURL()+loginPrefix+"login", &req, &resp,
 		)
 	}
 
@@ -490,6 +490,35 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 			e,
 			sessionCookie.Secret,
 		)
+	}
+}
+
+func TestLogout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	ts := s.(*TestServer)
+
+	authHTTPClient, cookie, err := ts.getAuthenticatedHTTPClientAndCookie()
+	if err != nil {
+		t.Fatal("error opening HTTP client", err)
+	}
+
+	var resp serverpb.UserLogoutResponse
+	if err := httputil.GetJSON(authHTTPClient, ts.AdminURL()+logoutPrefix+"logout", &resp); err != nil {
+		t.Fatal("logout request failed:", err)
+	}
+
+	query := `SELECT "revokedAt" FROM system.web_sessions WHERE id = $1`
+	result := db.QueryRow(query, cookie.ID)
+	fmt.Println("result:", result, "for session", cookie.ID)
+	var revokedAt string
+	if err := result.Scan(&revokedAt); err != nil {
+		t.Fatalf("error querying auth session: %s", err)
+	}
+
+	if revokedAt == "" {
+		t.Fatal("expected revoked at to not be empty; was empty")
 	}
 }
 
