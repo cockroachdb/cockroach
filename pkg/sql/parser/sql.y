@@ -1372,6 +1372,11 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableDropNotNull{ColumnKeyword: $2.bool(), Column: tree.Name($3)}
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP STORED
+| ALTER opt_column column_name DROP STORED
+  {
+    $$.val = &tree.AlterTableDropStored{ColumnKeyword: $2.bool(), Column: tree.Name($3)}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column column_name SET NOT NULL { return unimplemented(sqllex, "alter set non null") }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
