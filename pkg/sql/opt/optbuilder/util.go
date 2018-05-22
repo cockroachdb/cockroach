@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // expandStar expands expr into a list of columns if expr
@@ -118,6 +119,15 @@ func (b *Builder) synthesizeColumn(
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
 	return &scope.cols[len(scope.cols)-1]
+}
+
+func (b *Builder) synthesizeResultColumns(scope *scope, cols sqlbase.ResultColumns) {
+	for i := range cols {
+		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, 0 /* group */)
+		if cols[i].Hidden {
+			c.hidden = true
+		}
+	}
 }
 
 // colIndex takes an expression that refers to a column using an integer,
