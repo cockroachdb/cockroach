@@ -33,7 +33,7 @@ func registerKV(r *registry) {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"./workload run kv --init --read-percent=%d --splits=1000"+
+				"./workload run kv --init --read-percent=%d --splits=1000 --histograms=logs/stats.json"+
 					concurrency+duration+
 					" {pgurl:1-%d}",
 				percent, nodes)
