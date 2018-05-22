@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -263,67 +264,71 @@ func (f *memoFormatter) computeIndegrees(id GroupID, reachable []bool, indegrees
 }
 
 func (f exprFormatter) formatPrivate(private interface{}, mode formatMode) {
-	if private != nil {
-		switch t := private.(type) {
-		case nil:
+	if private == nil {
+		return
+	}
+	switch t := private.(type) {
+	case *ScanOpDef:
+		// Don't output name of index if it's the primary index.
+		def := private.(*ScanOpDef)
+		tab := f.mem.metadata.Table(def.Table)
+		if def.Index == opt.PrimaryIndex {
+			fmt.Fprintf(f.buf, " %s", tab.TabName())
+		} else {
+			fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
+		}
 
-		case *ScanOpDef:
-			f.formatScanPrivate(t, false /* short */)
-
-		case *RowNumberDef:
-			if t.Ordering.Defined() {
-				fmt.Fprintf(f.buf, " ordering=%s", t.Ordering)
+		if mode == formatMemo {
+			if tab.ColumnCount() != def.Cols.Len() {
+				fmt.Fprintf(f.buf, ",cols=%s", def.Cols)
 			}
+			if def.Constraint != nil {
+				fmt.Fprintf(f.buf, ",constrained")
+			}
+			if def.HardLimit > 0 {
+				fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
+			}
+		}
 
-		case opt.ColumnID:
-			fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
+	case *RowNumberDef:
+		if t.Ordering.Defined() {
+			fmt.Fprintf(f.buf, " ordering=%s", t.Ordering)
+		}
 
-		case *LookupJoinDef:
-			fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
+	case opt.ColumnID:
+		fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(t))
 
-		case *ExplainOpDef:
+	case *LookupJoinDef:
+		fmt.Fprintf(f.buf, " %s,cols=%s", f.mem.metadata.Table(t.Table).TabName(), t.Cols)
+
+	case *ExplainOpDef:
+		if mode == formatMemo {
 			propsStr := t.Props.String()
 			if propsStr != "" {
 				fmt.Fprintf(f.buf, " %s", propsStr)
 			}
-
-		case opt.ColSet, opt.ColList:
-			// Don't show anything, because it's mostly redundant.
-
-		case *ProjectionsOpDef:
-			// In normal mode, the information is mostly redundant. It is helpful to
-			// display these columns in memo mode though.
-			if mode == formatMemo {
-				t.PassthroughCols.ForEach(func(i int) {
-					fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(opt.ColumnID(i)))
-				})
-			}
-
-		default:
-			fmt.Fprintf(f.buf, " %s", private)
 		}
-	}
-}
 
-func (f exprFormatter) formatScanPrivate(def *ScanOpDef, short bool) {
-	// Don't output name of index if it's the primary index.
-	tab := f.mem.metadata.Table(def.Table)
-	if def.Index == opt.PrimaryIndex {
-		fmt.Fprintf(f.buf, " %s", tab.TabName())
-	} else {
-		fmt.Fprintf(f.buf, " %s@%s", tab.TabName(), tab.Index(def.Index).IdxName())
-	}
+	case opt.ColSet, opt.ColList:
+		// Don't show anything, because it's mostly redundant.
 
-	// Add additional fields when short=false.
-	if !short {
-		if tab.ColumnCount() != def.Cols.Len() {
-			fmt.Fprintf(f.buf, ",cols=%s", def.Cols)
+	case *ProjectionsOpDef:
+		// In normal mode, the information is mostly redundant. It is helpful to
+		// display these columns in memo mode though.
+		if mode == formatMemo {
+			t.PassthroughCols.ForEach(func(i int) {
+				fmt.Fprintf(f.buf, " %s", f.mem.metadata.ColumnLabel(opt.ColumnID(i)))
+			})
 		}
-		if def.Constraint != nil {
-			fmt.Fprintf(f.buf, ",constrained")
+
+	case props.Ordering:
+		if t.Defined() {
+			fmt.Fprintf(f.buf, " ordering=%s", t)
 		}
-		if def.HardLimit > 0 {
-			fmt.Fprintf(f.buf, ",lim=%d", def.HardLimit)
-		}
+
+	case *SetOpColMap:
+
+	default:
+		fmt.Fprintf(f.buf, " %v", private)
 	}
 }

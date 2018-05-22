@@ -111,9 +111,9 @@ memo
 SELECT s FROM a WHERE s='foo' LIMIT 1
 ----
 memo (optimized)
- ├── G1: (limit G2 G3 ) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
+ ├── G1: (limit G2 G3) (scan a@s_idx,cols=(4),constrained,lim=1) (scan a@si_idx,cols=(4),constrained,lim=1)
  │    └── "[presentation: s:4]"
- │         ├── best: (limit G2 G3 )
+ │         ├── best: (limit G2 G3)
  │         └── cost: 1.00
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(4),constrained) (scan a@si_idx,cols=(4),constrained)
  │    └── ""
