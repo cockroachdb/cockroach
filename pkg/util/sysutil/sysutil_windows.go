@@ -17,6 +17,7 @@
 package sysutil
 
 import (
+	"errors"
 	"fmt"
 	"os/user"
 )
@@ -29,4 +30,10 @@ func ProcessIdentity() string {
 		return "<unknown>"
 	}
 	return fmt.Sprintf("uid %s, gid %s", u.Uid, u.Gid)
+}
+
+// StatFS returns an FSInfo describing the named filesystem. It is only
+// supported on Unix-like platforms.
+func StatFS(path string) (*FSInfo, error) {
+	return nil, errors.New("unsupported on Windows")
 }

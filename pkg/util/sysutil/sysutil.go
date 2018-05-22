@@ -31,12 +31,12 @@ type Signal = syscall.Signal
 // Errno is syscall.Errno.
 type Errno = syscall.Errno
 
-// StatfsT is syscall.Statfs_t.
-type StatfsT = syscall.Statfs_t
-
-// Statfs is syscall.Statfs.
-func Statfs(path string, buf *StatfsT) (err error) {
-	return syscall.Statfs(path, buf)
+// FSInfo describes a filesystem. It is returned by StatFS.
+type FSInfo struct {
+	FreeBlocks  int64
+	AvailBlocks int64
+	TotalBlocks int64
+	BlockSize   int64
 }
 
 // ExitStatus returns the exit status contained within an exec.ExitError.

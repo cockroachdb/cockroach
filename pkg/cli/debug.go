@@ -168,17 +168,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 func runDebugBallast(cmd *cobra.Command, args []string) error {
 	ballastFile := args[0] // we use cobra.ExactArgs(1)
 	dataDirectory := filepath.Dir(ballastFile)
-	fs := sysutil.StatfsT{}
 
-	err := sysutil.Statfs(dataDirectory, &fs)
+	fs, err := sysutil.StatFS(dataDirectory)
 	if err != nil {
-		return errors.Wrapf(err, "failed to stat the directory %s", dataDirectory)
+		return errors.Wrapf(err, "failed to stat filesystem %s", dataDirectory)
 	}
-	// This int casting may look awkward, but serves to avoid TestLint/TestMegaCheck/misccheck/uncovert
-	// which likes to fire since the struct fields of `fs` have different types on
-	// different systems.
-	total := int64(int(fs.Blocks) * int(fs.Bsize))
-	free := int64(int(fs.Bavail) * int(fs.Bsize))
+	total := fs.TotalBlocks * fs.BlockSize
+	free := fs.AvailBlocks * fs.BlockSize
 
 	used := total - free
 	var targetUsage int64
