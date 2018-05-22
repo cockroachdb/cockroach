@@ -18,9 +18,11 @@ package main
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,7 +34,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/tylertreat/hdrhistogram-writer"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -61,11 +62,9 @@ var initCmd = setCmdDefaults(&cobra.Command{
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
 
-// Output in HdrHistogram Plotter format. See
-// https://hdrhistogram.github.io/HdrHistogram/plotFiles.html
-var histFile = runFlags.String(
-	"hist-file", "",
-	"Write histogram data to file for HdrHistogram Plotter, or stdout if - is specified.")
+var histograms = runFlags.String(
+	"histograms", "",
+	"File to write per-op incremental and cumulative histogram data.")
 
 func init() {
 	for _, meta := range workload.Registered() {
@@ -291,6 +290,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		}()
 	}
 
+	var jsonEnc *json.Encoder
+	if *histograms != "" {
+		_ = os.MkdirAll(filepath.Dir(*histograms), 0755)
+		jsonF, err := os.Create(*histograms)
+		if err != nil {
+			return err
+		}
+		jsonEnc = json.NewEncoder(jsonF)
+	}
+
 	for i := 0; ; {
 		select {
 		case err := <-errCh:
@@ -319,6 +328,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					time.Duration(t.Hist.ValueAtQuantile(100)).Seconds()*1000,
 					t.Name,
 				)
+				if jsonEnc != nil {
+					_ = jsonEnc.Encode(t.Snapshot())
+				}
 			})
 
 		case <-done:
@@ -345,8 +357,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			resultTick := workload.HistogramTick{Name: ops.ResultHist}
 			reg.Tick(func(t workload.HistogramTick) {
 				printTotalHist(t)
+				if jsonEnc != nil {
+					// Note that we're outputting the delta from the last tick. The
+					// cumulative histogram can be computed by merging all of the
+					// per-tick histograms.
+					_ = jsonEnc.Encode(t.Snapshot())
+				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
 					if resultTick.Cumulative == nil {
+						resultTick.Now = t.Now
 						resultTick.Cumulative = t.Cumulative
 					} else {
 						resultTick.Cumulative.Merge(t.Cumulative)
@@ -365,19 +384,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			}
 
-			if *histFile == "-" {
-				if err := histwriter.WriteDistribution(
-					resultTick.Cumulative, nil, 1, os.Stdout,
-				); err != nil {
-					fmt.Printf("failed to write histogram to stdout: %v\n", err)
-				}
-			} else if *histFile != "" {
-				if err := histwriter.WriteDistributionFile(
-					resultTick.Cumulative, nil, 1, *histFile,
-				); err != nil {
-					fmt.Printf("failed to write histogram file: %v\n", err)
-				}
-			}
 			return nil
 		}
 	}
