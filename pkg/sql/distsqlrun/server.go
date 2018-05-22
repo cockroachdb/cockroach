@@ -74,7 +74,7 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 13
+const Version DistSQLVersion = 14
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
