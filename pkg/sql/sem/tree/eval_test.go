@@ -81,6 +81,8 @@ func TestEval(t *testing.T) {
 		{`2:::int ^ 2.1:::decimal`, `4.2870938501451726569`},
 		// Division is always done on floats or decimals.
 		{`4 / 5`, `0.8`},
+		{`1 / 3`, `0.33333333333333333333`},
+		{`-1 / 3`, `-0.33333333333333333333`},
 		{`1.1:::decimal / 2.2:::decimal`, `0.5`},
 		{`1:::int / 2.2:::decimal`, `0.45454545454545454545`},
 		{`1.1:::decimal / 2:::int`, `0.55`},
@@ -912,8 +914,8 @@ func TestEval(t *testing.T) {
 		{`'1mon2d3h4s5us6ns'::interval::decimal::interval`, `'1mon2d3h4s5µs6ns'`},
 		{`(-2775604.000005006)::decimal::interval`, `'-1mon-2d-3h-4s-5µs-6ns'`},
 		{`'-1mon-2d-3h-4s-5us-6ns'::interval::decimal::interval`, `'-1mon-2d-3h-4s-5µs-6ns'`},
-		{`9223372036854775807.000000001::interval::decimal`, `9223372036854775807.000000001`},                       // MaxInt64
-		{`-9223372036854775808.000000001::interval::decimal`, `-9223372036854775808.000000001`},                     // MinInt64
+		{`(decimal '9223372036854775807.000000001')::interval::decimal`, `9223372036854775807.000000001`},           // MaxInt64
+		{`(decimal '-9223372036854775808.000000001')::interval::decimal`, `-9223372036854775808.000000001`},         // MinInt64
 		{`'296533308798y20d15h30m7s1ns'::interval::decimal::interval`, `'296533308798y20d15h30m7s1ns'`},             // MaxInt64
 		{`'-296533308798y-20d-15h-30m-8s-1ns'::interval::decimal::interval`, `'-296533308798y-20d-15h-30m-8s-1ns'`}, // MinInt64
 		{`'1970-01-01 00:01:00.123456-00:00'::timestamp::float`, `60.123456`},

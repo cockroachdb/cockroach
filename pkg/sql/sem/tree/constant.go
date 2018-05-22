@@ -272,27 +272,13 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
 					"from string %q", expr, den)
 			}
-			cond, err := LosslessCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal)
-			if err != nil {
-				switch {
-				case cond.Inexact():
-					return nil, errDecOutOfRange
-				case cond.DivisionByZero():
+			if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
+				if cond.DivisionByZero() {
 					return nil, ErrDivByZero
-				default:
-					return nil, err
 				}
+				return nil, err
 			}
 		} else {
-			if strings.HasPrefix(s, "0x.") || strings.HasPrefix(s, "-0x.") {
-				// The constant.Value was converted to a constant.floatVal,
-				// which is formatted using the 'p' big.Float format (binary
-				// exponent, hexadecimal mantissa). This happens when a
-				// constant.ratVal constains a component that exceeds the
-				// constant.maxExp limit. We detect this and throw an error
-				// because it indicates information loss.
-				return nil, errDecOutOfRange
-			}
 			if err := dd.SetString(s); err != nil {
 				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
