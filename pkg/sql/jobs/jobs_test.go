@@ -96,48 +96,21 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 		return errors.Errorf("expected fraction completed %f, got %f", e, a)
 	}
 
-	// Check internally-managed timestamps for sanity.
-	started := timeutil.FromUnixMicros(payload.StartedMicros)
-	modified := timeutil.FromUnixMicros(payload.ModifiedMicros)
-	finished := timeutil.FromUnixMicros(payload.FinishedMicros)
-
-	verifyModifiedAgainst := func(name string, ts time.Time) error {
-		if modified.Before(ts) {
-			return errors.Errorf("modified time %v before %s time %v", modified, name, ts)
-		}
-		if now := timeutil.Now().Round(time.Microsecond); modified.After(now) {
-			return errors.Errorf("modified time %v after current time %v", modified, now)
-		}
+	if status == jobs.StatusPending {
 		return nil
 	}
-
-	if expected.Before.After(created) {
-		return errors.Errorf(
-			"created time %v is before expected created time %v",
-			created, expected.Before,
-		)
-	}
-	if status == jobs.StatusPending {
-		return verifyModifiedAgainst("created", created)
-	}
-
+	started := timeutil.FromUnixMicros(payload.StartedMicros)
 	if started.Equal(timeutil.UnixEpoch) && status == jobs.StatusSucceeded {
 		return errors.Errorf("started time is empty but job claims to be successful")
 	}
-	if !started.Equal(timeutil.UnixEpoch) && created.After(started) {
-		return errors.Errorf("created time %v is after started time %v", created, started)
-	}
 	if status == jobs.StatusRunning || status == jobs.StatusPaused {
-		return verifyModifiedAgainst("started", started)
+		return nil
 	}
 
-	if started.After(finished) {
-		return errors.Errorf("started time %v is after finished time %v (status: %s)", started, finished, status)
-	}
 	if e, a := expected.Error, payload.Error; e != a {
-		return errors.Errorf("expected error %v, got %v", e, a)
+		return errors.Errorf("expected error %q, got %q", e, a)
 	}
-	return verifyModifiedAgainst("finished", finished)
+	return nil
 }
 
 func TestRegistryLifecycle(t *testing.T) {
