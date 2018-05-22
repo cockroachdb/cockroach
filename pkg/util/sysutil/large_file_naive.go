@@ -22,9 +22,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CreateLargeFile creates a large file at the given path with bytes size.
-// It just writes given amount of data to the file, which can take a long time.
-func CreateLargeFile(path string, bytes int64) (err error) {
+// CreateLargeFile creates a large file at the given path with bytes size. On
+// Linux, it uses the fallocate syscall to efficiently create the file. On other
+// platforms, it naively writes the specified number of bytes, which can take a
+// long time when the number of bytes is large.
+func CreateLargeFile(path string, bytes int64) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create file %s", path)
