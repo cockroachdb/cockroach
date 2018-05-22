@@ -38,15 +38,20 @@ var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
 
 func newIndexBackfiller(
-	flowCtx *FlowCtx, spec BackfillerSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec BackfillerSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*indexBackfiller, error) {
 	ib := &indexBackfiller{
 		backfiller: backfiller{
-			name:    "Index",
-			filter:  backfill.IndexMutationFilter,
-			flowCtx: flowCtx,
-			output:  output,
-			spec:    spec,
+			name:        "Index",
+			filter:      backfill.IndexMutationFilter,
+			flowCtx:     flowCtx,
+			processorID: processorID,
+			output:      output,
+			spec:        spec,
 		},
 	}
 	ib.backfiller.chunkBackfiller = ib

@@ -121,6 +121,7 @@ const hashJoinerProcName = "hash joiner"
 
 func newHashJoiner(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *HashJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
@@ -139,6 +140,7 @@ func newHashJoiner(
 	}
 	if err := h.joinerBase.init(
 		flowCtx,
+		processorID,
 		leftSource.OutputTypes(),
 		rightSource.OutputTypes(),
 		spec.Type,

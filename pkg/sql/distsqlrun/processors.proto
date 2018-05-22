@@ -70,6 +70,13 @@ message ProcessorSpec {
   // useful for plan diagrams.
   optional int32 stage_id = 5 [(gogoproto.nullable) = false,
                                (gogoproto.customname) = "StageID"];
+
+  // processor_id uniquely identifies a processor within a physical plan. This
+  // has no consequence on the running of flows, but is useful for plan
+  // diagrams and linking information like tracing spans and log messages to
+  // processors.
+  optional int32 processor_id = 6 [(gogoproto.nullable) = false,
+                                  (gogoproto.customname) = "ProcessorID"];
 }
 
 // PostProcessSpec describes the processing required to obtain the output

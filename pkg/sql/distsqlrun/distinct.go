@@ -57,7 +57,12 @@ var _ RowSource = &sortedDistinct{}
 const sortedDistinctProcName = "sorted distinct"
 
 func newDistinct(
-	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *DistinctSpec,
+	input RowSource,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (Processor, error) {
 	if len(spec.DistinctColumns) == 0 {
 		return nil, errors.New("programming error: 0 distinct columns specified for distinct processor")
@@ -85,7 +90,7 @@ func newDistinct(
 	}
 
 	if err := d.init(
-		post, d.types, flowCtx, output,
+		post, d.types, flowCtx, processorID, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{d.input},
 			trailingMetaCallback: func() []ProducerMetadata {

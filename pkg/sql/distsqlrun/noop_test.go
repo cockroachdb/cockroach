@@ -49,7 +49,7 @@ func BenchmarkNoop(b *testing.B) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newNoopProcessor(flowCtx, input, post, disposer)
+				d, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, post, disposer)
 				if err != nil {
 					b.Fatal(err)
 				}

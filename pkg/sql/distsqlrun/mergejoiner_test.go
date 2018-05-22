@@ -707,7 +707,7 @@ func TestMergeJoiner(t *testing.T) {
 			}
 
 			post := PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			m, err := newMergeJoiner(&flowCtx, &ms, leftInput, rightInput, &post, out)
+			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &ms, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -813,7 +813,7 @@ func TestConsumerClosed(t *testing.T) {
 				EvalCtx:  evalCtx,
 			}
 			post := PostProcessSpec{Projection: true, OutputColumns: outCols}
-			m, err := newMergeJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
+			m, err := newMergeJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -861,7 +861,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				m, err := newMergeJoiner(flowCtx, spec, leftInput, rightInput, post, disposer)
+				m, err := newMergeJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
 				if err != nil {
 					b.Fatal(err)
 				}

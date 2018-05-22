@@ -2623,6 +2623,11 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan
 	finalOut.Streams = append(finalOut.Streams, distsqlrun.StreamEndpointSpec{
 		Type: distsqlrun.StreamEndpointSpec_SYNC_RESPONSE,
 	})
+
+	// Assign processor IDs.
+	for i := range plan.Processors {
+		plan.Processors[i].Spec.ProcessorID = int32(i)
+	}
 }
 
 func makeTableReaderSpans(spans roachpb.Spans) []distsqlrun.TableReaderSpan {

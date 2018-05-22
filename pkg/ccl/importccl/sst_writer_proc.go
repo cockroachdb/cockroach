@@ -41,12 +41,14 @@ var sstOutputTypes = []sqlbase.ColumnType{
 
 func newSSTWriterProcessor(
 	flowCtx *distsqlrun.FlowCtx,
+	processorID int32,
 	spec distsqlrun.SSTWriterSpec,
 	input distsqlrun.RowSource,
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
 		flowCtx:     flowCtx,
+		processorID: processorID,
 		spec:        spec,
 		input:       input,
 		output:      output,
@@ -64,6 +66,7 @@ func newSSTWriterProcessor(
 
 type sstWriter struct {
 	flowCtx     *distsqlrun.FlowCtx
+	processorID int32
 	spec        distsqlrun.SSTWriterSpec
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper

@@ -140,7 +140,7 @@ func TestTableReader(t *testing.T) {
 					buf = &RowBuffer{}
 					out = buf
 				}
-				tr, err := newTableReader(&flowCtx, &ts, &c.post, out)
+				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &ts, &c.post, out)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -233,7 +233,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 			buf = &RowBuffer{}
 			out = buf
 		}
-		tr, err := newTableReader(&flowCtx, &spec, &post, out)
+		tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, out)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -329,7 +329,7 @@ func TestLimitScans(t *testing.T) {
 	const limit = 3
 	post := PostProcessSpec{Limit: limit}
 
-	tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
+	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +434,7 @@ func BenchmarkTableReader(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				tr, err := newTableReader(&flowCtx, &spec, &post, nil /* output */)
+				tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
 				if err != nil {
 					b.Fatal(err)
 				}

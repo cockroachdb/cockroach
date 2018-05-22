@@ -316,13 +316,13 @@ func TestSorter(t *testing.T) {
 					var s Processor
 					if !testingForceSortAll {
 						var err error
-						s, err = newSorter(context.Background(), &flowCtx, &c.spec, in, &c.post, out)
+						s, err = newSorter(context.Background(), &flowCtx, 0 /* processorID */, &c.spec, in, &c.post, out)
 						if err != nil {
 							t.Fatal(err)
 						}
 					} else {
 						var err error
-						s, err = newSortAllProcessor(context.Background(), &flowCtx, &c.spec, in, &c.post, out)
+						s, err = newSortAllProcessor(context.Background(), &flowCtx, 0 /* procedssorID */, &c.spec, in, &c.post, out)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -385,7 +385,9 @@ func BenchmarkSortAll(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
+				s, err := newSorter(
+					context.Background(), &flowCtx, 0 /* processorID */, &spec, input, &post, &RowDisposer{},
+				)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -422,7 +424,9 @@ func BenchmarkSortLimit(b *testing.B) {
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
+					s, err := newSorter(
+						context.Background(), &flowCtx, 0 /* processorID */, &spec, input, &post, &RowDisposer{},
+					)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -467,7 +471,7 @@ func BenchmarkSortChunks(b *testing.B) {
 				b.SetBytes(int64(numRows * numCols * 8))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					s, err := newSorter(context.Background(), &flowCtx, &spec, input, &post, &RowDisposer{})
+					s, err := newSorter(context.Background(), &flowCtx, 0 /* processorID */, &spec, input, &post, &RowDisposer{})
 					if err != nil {
 						b.Fatal(err)
 					}

@@ -423,7 +423,7 @@ func TestAggregator(t *testing.T) {
 				EvalCtx:  evalCtx,
 			}
 
-			ag, err := newAggregator(&flowCtx, &ags, in, &PostProcessSpec{}, out)
+			ag, err := newAggregator(&flowCtx, 0 /* processorID */, &ags, in, &PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -500,7 +500,7 @@ func BenchmarkAggregation(b *testing.B) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newAggregator(flowCtx, spec, input, post, disposer)
+				d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -535,7 +535,7 @@ func BenchmarkGrouping(b *testing.B) {
 	b.SetBytes(int64(8 * numRows * numCols))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		d, err := newAggregator(flowCtx, spec, input, post, disposer)
+		d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -593,7 +593,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 			b.SetBytes(int64(8 * intPow(groupSize, len(groupedCols)+1) * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newAggregator(flowCtx, spec, input, post, disposer)
+				d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
 				if err != nil {
 					b.Fatal(err)
 				}

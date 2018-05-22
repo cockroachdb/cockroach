@@ -53,7 +53,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 	}
 
 	spec := &SamplerSpec{SampleSize: uint32(numSamples)}
-	p, err := newSamplerProcessor(&flowCtx, spec, in, &PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestSamplerSketch(t *testing.T) {
 			},
 		},
 	}
-	p, err := newSamplerProcessor(&flowCtx, spec, in, &PostProcessSpec{}, out)
+	p, err := newSamplerProcessor(&flowCtx, 0 /* processorID */, spec, in, &PostProcessSpec{}, out)
 	if err != nil {
 		t.Fatal(err)
 	}
