@@ -1478,7 +1478,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle("/_admin/v1/health", gwMux)
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
-	s.mux.Handle(authPrefix, gwMux)
+	s.mux.Handle(loginPrefix, gwMux)
+	s.mux.Handle(
+		logoutPrefix,
+		newAuthenticationMux(s.authentication, http.HandlerFunc(s.authentication.doLogout)),
+	)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 

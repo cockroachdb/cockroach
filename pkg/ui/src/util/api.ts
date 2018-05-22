@@ -89,10 +89,13 @@ export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsR
 export type UserLoginRequestMessage = protos.cockroach.server.serverpb.UserLoginRequest;
 export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLoginResponse;
 
+export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
-export const AUTH_PREFIX = "_auth/v1";
+export const LOGIN_PREFIX = "_login/v1";
+export const LOGOUT_PREFIX = "_logout/v1";
 export const STATUS_PREFIX = "_status";
 
 // HELPER FUNCTIONS
@@ -315,7 +318,9 @@ export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Durat
 }
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {
-  return timeoutFetch(serverpb.UserLoginResponse, `${AUTH_PREFIX}/login`, req as any, timeout);
+  return timeoutFetch(serverpb.UserLoginResponse, `${LOGIN_PREFIX}/login`, req as any, timeout);
 }
 
-// TODO(vilterp): logout
+export function userLogout(timeout?: moment.Duration): Promise<UserLogoutResponseMessage> {
+  return timeoutFetch(serverpb.UserLogoutResponse, `${LOGOUT_PREFIX}/logout`, null, timeout);
+}

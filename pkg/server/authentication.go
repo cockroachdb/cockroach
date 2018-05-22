@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -44,7 +45,8 @@ import (
 const (
 	// authPrefix is the prefix for RESTful endpoints used to provide
 	// authentication methods.
-	authPrefix = "/_auth/v1/"
+	loginPrefix  = "/_login/v1/"
+	logoutPrefix = "/_logout/v1/"
 	// secretLength is the number of random bytes generated for session secrets.
 	secretLength      = 16
 	sessionCookieName = "session"
@@ -72,7 +74,7 @@ func newAuthenticationServer(s *Server) *authenticationServer {
 
 // RegisterService registers the GRPC service.
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
-	serverpb.RegisterAuthenticationServer(g, s)
+	serverpb.RegisterLogInServer(g, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -80,7 +82,7 @@ func (s *authenticationServer) RegisterService(g *grpc.Server) {
 func (s *authenticationServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
-	return serverpb.RegisterAuthenticationHandler(ctx, mux, conn)
+	return serverpb.RegisterLogInHandler(ctx, mux, conn)
 }
 
 // UserLogin verifies an incoming request by a user to create an web
@@ -147,10 +149,67 @@ func (s *authenticationServer) UserLogin(
 }
 
 // UserLogout allows a user to terminate their currently active session.
+//
+// NOTE: this is an unused stub; we're using the `doLogout` method below instead of
+// this because of https://github.com/grpc-ecosystem/grpc-gateway/issues/470
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "Logout method has not yet been implemented.")
+}
+
+// doLogout allows a user to terminate their currently active session.
+func (s *authenticationServer) doLogout(writer http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+
+	sessionID := ctx.Value(webSessionIDKey{})
+	if sessionID == nil {
+		http.Error(writer, "tried to log out without being logged in", http.StatusBadRequest)
+		return
+	}
+
+	// Revoke the session.
+	if n, err := s.server.internalExecutor.Exec(
+		ctx,
+		"revoke-auth-session",
+		nil, /* txn */
+		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
+		sessionID,
+	); err != nil {
+		http.Error(writer, err.Error(), http.StatusInternalServerError)
+		return
+	} else if n == 0 {
+		http.Error(writer, fmt.Sprintf("session with id %d nonexistent or already revoked", sessionID), http.StatusBadRequest)
+		return
+	}
+
+	// Send back a header which will cause the browser to destroy the cookie.
+	// See https://tools.ietf.org/search/rfc6265, page 7.
+	cookie := makeCookieWithValue("")
+	cookie.MaxAge = -1
+
+	writer.Header().Add("set-cookie", cookie.String())
+
+	acceptContentType := req.Header.Get(httputil.AcceptHeader)
+	var payload []byte
+	switch acceptContentType {
+	case httputil.PlaintextContentType, httputil.JSONContentType:
+		payload = []byte("{}")
+	case httputil.ProtoContentType:
+		resp := &serverpb.UserLogoutResponse{}
+		_, err := resp.MarshalTo(payload)
+		if err != nil {
+			http.Error(writer, fmt.Sprintf("error marshalling response: %s", err.Error()), http.StatusInternalServerError)
+		}
+	default:
+		http.Error(writer, fmt.Sprintf("unknown content type: %s", acceptContentType), http.StatusBadRequest)
+	}
+	writer.Header().Add("Content-Type", acceptContentType)
+
+	if _, err := writer.Write(payload); err != nil {
+		log.Errorf(ctx, "error writing logout response", err)
+		return
+	}
 }
 
 // verifySession verifies the existence and validity of the session claimed by
@@ -304,9 +363,10 @@ func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenti
 }
 
 type loggedInUserKey struct{}
+type webSessionIDKey struct{}
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, err := am.getSession(w, req)
+	username, cookie, err := am.getSession(w, req)
 	if err != nil && !am.allowAnonymous {
 		log.Infof(req.Context(), "Web session error: %s", err)
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
@@ -314,6 +374,9 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	}
 
 	newCtx := context.WithValue(req.Context(), loggedInUserKey{}, username)
+	if cookie != nil {
+		newCtx = context.WithValue(newCtx, webSessionIDKey{}, cookie.ID)
+	}
 	newReq := req.WithContext(newCtx)
 
 	am.inner.ServeHTTP(w, newReq)
@@ -324,43 +387,49 @@ func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, e
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
 	}
+	value := base64.StdEncoding.EncodeToString(cookieValueBytes)
+	return makeCookieWithValue(value), nil
+}
 
+func makeCookieWithValue(value string) *http.Cookie {
 	return &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    base64.StdEncoding.EncodeToString(cookieValueBytes),
+		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
-	}, nil
+	}
 }
 
 // getSession decodes the cookie from the request, looks up the corresponding session, and
 // returns the logged in user name. If there's an error, it returns an error value and the
 // HTTP error code.
-func (am *authenticationMux) getSession(w http.ResponseWriter, req *http.Request) (string, error) {
+func (am *authenticationMux) getSession(
+	w http.ResponseWriter, req *http.Request,
+) (string, *serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
 	rawCookie, err := req.Cookie(sessionCookieName)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	cookie, err := decodeSessionCookie(rawCookie)
 	if err != nil {
 		err = errors.Wrap(err, "a valid authentication cookie is required")
-		return "", err
+		return "", nil, err
 	}
 
 	valid, username, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
 		err := apiInternalError(req.Context(), err)
-		return "", err
+		return "", nil, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		return "", err
+		return "", nil, err
 	}
 
-	return username, nil
+	return username, cookie, nil
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
