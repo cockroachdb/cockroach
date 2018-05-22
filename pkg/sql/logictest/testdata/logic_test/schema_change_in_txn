@@ -63,7 +63,7 @@ subtest create_index_references_create_table_outside_txn
 statement ok
 BEGIN
 
-# create index on a table that was created outside of the trasanction
+# create index on a table that was created outside of the transaction
 statement ok
 CREATE INDEX bar ON test.kv (quantity)
 
@@ -86,6 +86,26 @@ BEGIN
 
 statement ok
 CREATE TABLE b (parent_id INT REFERENCES parent(id));
+
+# schema changes are permitted on the table even though it's in the ADD state.
+statement ok
+CREATE INDEX foo ON b (parent_id)
+
+statement ok
+ALTER TABLE b ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (parent_id)
+
+query TT
+SHOW CREATE TABLE b
+----
+b  CREATE TABLE b (
+    parent_id INT NULL,
+    d INT NULL DEFAULT 23:::INT,
+    CONSTRAINT fk_parent_id_ref_parent FOREIGN KEY (parent_id) REFERENCES parent (id),
+    INDEX b_auto_index_fk_parent_id_ref_parent (parent_id ASC),
+    INDEX foo (parent_id ASC),
+    UNIQUE INDEX bar (parent_id ASC),
+    FAMILY "primary" (parent_id, rowid, d)
+)
 
 # table b is not visible to the transaction #17949
 statement error pgcode 42P01 relation "b" does not exist
@@ -326,3 +346,92 @@ SELECT * FROM want
 ----
 a b
 e f
+
+subtest fk_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE parents (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO parents (k) VALUES ('b')
+
+statement ok
+CREATE TABLE children (k CHAR PRIMARY KEY, v CHAR REFERENCES parents)
+
+statement ok
+INSERT INTO children (k,v) VALUES ('a', 'b')
+
+# Add a column to test a column backfill in the midst of FK checks.
+statement ok
+ALTER TABLE children ADD COLUMN d INT DEFAULT 23
+
+query TTI
+SELECT * FROM children
+----
+a b 23
+
+statement ok
+COMMIT
+
+subtest add_drop_add_constraint
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE class (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO class (k) VALUES ('b')
+
+statement ok
+CREATE TABLE student (k CHAR PRIMARY KEY, v CHAR REFERENCES class)
+
+statement ok
+INSERT INTO student (k,v) VALUES ('a', 'b')
+
+statement ok
+ALTER TABLE student DROP CONSTRAINT fk_v_ref_class
+
+statement ok
+ALTER TABLE student ADD FOREIGN KEY (v) REFERENCES class
+
+query TT
+SELECT * FROM student
+----
+a b
+
+statement ok
+COMMIT
+
+subtest interleaved_in_same_txn
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE customers (k CHAR PRIMARY KEY)
+
+statement ok
+INSERT INTO customers (k) VALUES ('b')
+
+statement ok
+CREATE TABLE orders (k CHAR PRIMARY KEY, v CHAR) INTERLEAVE IN PARENT customers (k)
+
+statement ok
+INSERT INTO orders (k,v) VALUES ('a', 'b')
+
+# Add a column to test a column backfill over an interleaved child.
+statement ok
+ALTER TABLE orders ADD COLUMN d INT DEFAULT 23
+
+query TTI
+SELECT * FROM orders
+----
+a b 23
+
+statement ok
+COMMIT

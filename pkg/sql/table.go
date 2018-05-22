@@ -547,6 +547,18 @@ func (tc *TableCollection) getUncommittedTable(
 	return false, nil, nil
 }
 
+func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *sqlbase.TableDescriptor {
+	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
+	// with the same name will result in the CREATE TABLE being seen.
+	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
+		table := tc.uncommittedTables[i]
+		if table.ID == id {
+			return table
+		}
+	}
+	return nil
+}
+
 // getAllDescriptors returns all descriptors visible by the transaction,
 // first checking the TableCollection's cached descriptors for validity
 // before defaulting to a key-value scan, if necessary.
@@ -643,7 +655,7 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	}
 
 	if p.Tables().isCreatedTable(tableDesc.ID) {
-		if err := runSchemaChangesInTxn(ctx, p.txn, p.execCfg, p.EvalContext(), tableDesc); err != nil {
+		if err := runSchemaChangesInTxn(ctx, p.txn, p.Tables(), p.execCfg, p.EvalContext(), tableDesc); err != nil {
 			return err
 		}
 	}

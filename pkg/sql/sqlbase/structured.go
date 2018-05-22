@@ -2701,3 +2701,37 @@ func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
 func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
 	return TableDescriptor_DISABLED
 }
+
+// FindAllReferences returns all the references from a table.
+func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
+	refs := map[ID]struct{}{}
+	if err := desc.ForeachNonDropIndex(func(index *IndexDescriptor) error {
+		for _, a := range index.Interleave.Ancestors {
+			refs[a.TableID] = struct{}{}
+		}
+		for _, c := range index.InterleavedBy {
+			refs[c.Table] = struct{}{}
+		}
+
+		if index.ForeignKey.IsSet() {
+			to := index.ForeignKey.Table
+			refs[to] = struct{}{}
+		}
+
+		for _, c := range index.ReferencedBy {
+			refs[c.Table] = struct{}{}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, dest := range desc.DependsOn {
+		refs[dest] = struct{}{}
+	}
+
+	for _, c := range desc.DependedOnBy {
+		refs[c.ID] = struct{}{}
+	}
+	return refs, nil
+}
