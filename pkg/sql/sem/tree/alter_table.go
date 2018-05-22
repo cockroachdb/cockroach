@@ -62,6 +62,7 @@ func (*AlterTableAlterColumnType) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
+func (*AlterTableDropStored) alterTableCmd()         {}
 func (*AlterTableSetAudit) alterTableCmd()           {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
@@ -74,6 +75,7 @@ var _ AlterTableCmd = &AlterTableAlterColumnType{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
+var _ AlterTableCmd = &AlterTableDropStored{}
 var _ AlterTableCmd = &AlterTableSetAudit{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
@@ -273,6 +275,24 @@ func (node *AlterTableDropNotNull) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" DROP NOT NULL")
+}
+
+// AlterTableDropStored represents an ALTER COLUMN DROP STORED command
+// to remove the computed-ness from a column.
+type AlterTableDropStored struct {
+	Column Name
+}
+
+// GetColumn implemnets the ColumnMutationCmd interface.
+func (node *AlterTableDropStored) GetColumn() Name {
+	return node.Column
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropStored) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" DROP STORED")
 }
 
 // AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
