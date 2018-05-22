@@ -132,7 +132,7 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	id sqlbase.ID,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, sequenceName,
+	desc := InitTableDescriptor(id, parentID, sequenceName,
 		params.p.txn.CommitTimestamp(), privileges)
 
 	// Mimic a table with one column, "value".

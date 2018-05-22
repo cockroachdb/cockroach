@@ -883,7 +883,8 @@ var CreatePartitioningCCL = func(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
-func initTableDescriptor(
+// InitTableDescriptor returns a blank TableDescriptor.
+func InitTableDescriptor(
 	id, parentID sqlbase.ID,
 	name string,
 	creationTime hlc.Timestamp,
@@ -915,7 +916,7 @@ func makeTableDescIfAs(
 	if err != nil {
 		return desc, err
 	}
-	desc = initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
+	desc = InitTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
@@ -1003,7 +1004,7 @@ func MakeTableDesc(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
-	desc := initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
+	desc := InitTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
