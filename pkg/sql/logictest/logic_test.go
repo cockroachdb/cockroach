@@ -25,12 +25,27 @@ import (
 
 // TestLogic runs logic tests that were written by hand to test various
 // CockroachDB features. The tests use a similar methodology to the SQLLite
-// Sqllogictests.
+// Sqllogictests. All of these tests should only verify correctness of output,
+// and not how that output was derived. Therefore, these tests can be run
+// using the heuristic planner, the cost-based optimizer, or even run against
+// Postgres to verify it returns the same logical results.
 //
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	RunLogicTest(t, "testdata/logic_test/[^.]*")
+}
+
+// TestPlannerLogic tests the heuristic planner by running EXPLAIN and SHOW
+// TRACE queries that show the plan that was produced. These tests are split
+// off from the TestLogic tests because the expected output is specific to how
+// the planner works. The cost-based optimizer will often return different
+// results for the same EXPLAIN statement, as it often chooses different ways
+// to execute the same logical query. Note that the cost-based optimizer tests
+// are housed in the various sql/opt packages.
+func TestPlannerLogic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	RunLogicTest(t, "testdata/planner_test/[^.]*")
 }
 
 // TestSqlLiteLogic runs all logic tests from CockroachDB's fork of

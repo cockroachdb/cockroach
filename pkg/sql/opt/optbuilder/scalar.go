@@ -126,7 +126,7 @@ func (b *Builder) buildScalarHelper(
 			// groupStrs checking code above.
 			panic(errorf(
 				"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-				t.String(),
+				tree.ErrString(&t.name),
 			))
 		}
 		return b.finishBuildScalarRef(t, label, inScope, outScope)

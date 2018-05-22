@@ -1,4 +1,4 @@
-# LogicTest: default parallel-stmts distsql distsql-metadata
+# LogicTest: default opt parallel-stmts distsql distsql-metadata
 
 statement ok
 CREATE TABLE kv (
@@ -325,19 +325,6 @@ query error column "s" must appear in the GROUP BY clause or be used in an aggre
 SELECT COUNT(*), s FROM kv GROUP BY UPPER(s)
 
 # Selecting and grouping on a more complex expression works.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
-----
-group           ·            ·                                    (count, "k + v")                weak-key("k + v")
- │              aggregate 0  count_rows()                         ·                               ·
- │              aggregate 1  k + v                                ·                               ·
- │              group by     @1                                   ·                               ·
- └── render     ·            ·                                    ("k + v")                       ·
-      │         render 0     test.public.kv.k + test.public.kv.v  ·                               ·
-      └── scan  ·            ·                                    (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
-·               table        kv@primary                           ·                               ·
-·               spans        ALL                                  ·                               ·
-
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
@@ -350,24 +337,6 @@ SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
-----
-render               ·            ·                 (count, "k + v")                ·
- │                   render 0     agg0              ·                               ·
- │                   render 1     agg1 + agg2       ·                               ·
- └── group           ·            ·                 (agg0, agg1, agg2)              agg1!=NULL; key(agg1)
-      │              aggregate 0  count_rows()      ·                               ·
-      │              aggregate 1  k                 ·                               ·
-      │              aggregate 2  v                 ·                               ·
-      │              group by     @1-@2             ·                               ·
-      └── render     ·            ·                 (k, v)                          k!=NULL; key(k); +k
-           │         render 0     test.public.kv.k  ·                               ·
-           │         render 1     test.public.kv.v  ·                               ·
-           └── scan  ·            ·                 (k, v, w[omitted], s[omitted])  k!=NULL; key(k); +k
-·                    table        kv@primary        ·                               ·
-·                    spans        ALL               ·                               ·
-
 query II rowsort
 SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
@@ -618,34 +587,6 @@ SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 14.0
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
-]
-----
-group           ·            ·
- │              aggregate 0  count(k)
- └── render     ·            ·
-      │         render 0     test.public.kv.k
-      └── scan  ·            ·
-·               table        kv@primary
-·               spans        ALL
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
-]
-----
-group           ·            ·
- │              aggregate 0  count(k)
- │              aggregate 1  sum(k)
- │              aggregate 2  max(k)
- └── render     ·            ·
-      │         render 0     test.public.kv.k
-      └── scan  ·            ·
-·               table        kv@primary
-·               spans        ALL
-
 statement ok
 CREATE TABLE abc (
   a CHAR PRIMARY KEY,
@@ -656,20 +597,6 @@ CREATE TABLE abc (
 
 statement ok
 INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
-]
-----
-group           ·            ·
- │              aggregate 0  min(a)
- └── render     ·            ·
-      │         render 0     test.public.abc.a
-      └── scan  ·            ·
-·               table        abc@primary
-·               spans        ALL
-·               limit        1
 
 query TRBR
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
@@ -739,178 +666,45 @@ SELECT MIN(x) FROM xyz
 ----
 1
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
-]
-----
-group           ·            ·
- │              aggregate 0  min(x)
- └── render     ·            ·
-      │         render 0     test.public.xyz.x
-      └── scan  ·            ·
-·               table        xyz@xy
-·               spans        ALL
-·               limit        1
-
 query I
 SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 4
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
-]
-----
-group           ·            ·
- │              aggregate 0  min(x)
- └── render     ·            ·
-      │         render 0     test.public.xyz.x
-      └── scan  ·            ·
-·               table        xyz@xy
-·               spans        /0-/1 /4-/5 /7-/8
-·               limit        1
 
 query I
 SELECT MAX(x) FROM xyz
 ----
 7
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
-]
-----
-group              ·            ·
- │                 aggregate 0  max(x)
- └── render        ·            ·
-      │            render 0     test.public.xyz.x
-      └── revscan  ·            ·
-·                  table        xyz@xy
-·                  spans        ALL
-·                  limit        1
-
 query I
 SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 2
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
-]
-----
-group           ·            ·
- │              aggregate 0  min(y)
- └── render     ·            ·
-      │         render 0     test.public.xyz.y
-      └── scan  ·            ·
-·               table        xyz@xy
-·               spans        /1/!NULL-/2
-·               limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 2
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
-]
-----
-group              ·            ·
- │                 aggregate 0  max(y)
- └── render        ·            ·
-      │            render 0     test.public.xyz.y
-      └── revscan  ·            ·
-·                  table        xyz@xy
-·                  spans        /1/!NULL-/2
-·                  limit        1
-
 query I
 SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 NULL
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
-]
-----
-group           ·            ·
- │              aggregate 0  min(y)
- └── render     ·            ·
-      │         render 0     test.public.xyz.y
-      └── scan  ·            ·
-·               table        xyz@xy
-·               spans        /7/!NULL-/8
-·               limit        1
 
 query I
 SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 NULL
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
-]
-----
-group              ·            ·
- │                 aggregate 0  max(y)
- └── render        ·            ·
-      │            render 0     test.public.xyz.y
-      └── revscan  ·            ·
-·                  table        xyz@xy
-·                  spans        /7/!NULL-/8
-·                  limit        1
-
 query I
 SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 1
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
-]
-----
-group           ·            ·
- │              aggregate 0  min(x)
- └── render     ·            ·
-      │         render 0     test.public.xyz.x
-      └── scan  ·            ·
-·               table        xyz@zyx
-·               spans        /3/2-/3/3
-·               limit        1
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /xyz/zyx/3.0/2/1 -> NULL
-output row: [1]
-
 query I
 SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 1
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
-]
-----
-group              ·            ·
- │                 aggregate 0  max(x)
- └── render        ·            ·
-      │            render 0     test.public.xyz.x
-      └── revscan  ·            ·
-·                  table        xyz@zyx
-·                  spans        /3/2-/3/3
-·                  limit        1
 
 # VARIANCE/STDDEV
 
@@ -918,20 +712,6 @@ query RRR
 SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
 9 4.5 6.33333333333333
-
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /xyz/primary/1 -> NULL
-fetched: /xyz/primary/1/y -> 2
-fetched: /xyz/primary/1/z -> 3.0
-fetched: /xyz/primary/4 -> NULL
-fetched: /xyz/primary/4/y -> 5
-fetched: /xyz/primary/4/z -> 6.0
-fetched: /xyz/primary/7 -> NULL
-fetched: /xyz/primary/7/z -> 8.0
-output row: [9 4.5 6.33333333333333]
 
 query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 10
@@ -942,19 +722,6 @@ query R
 SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 NULL
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
-]
-----
-group           ·            ·
- │              aggregate 0  variance(x)
- └── render     ·            ·
-      │         render 0     test.public.xyz.x
-      └── scan  ·            ·
-·               table        xyz@xy
-·               spans        /1-/2
 
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
@@ -996,14 +763,6 @@ query RRR
 SELECT round(STDDEV(n), 2), round(STDDEV(n), 2), round(STDDEV(p)) FROM mnop
 ----
 0.29 0.29 3
-
-# Verify we only look at one row for MIN when we have an index on that column.
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(z) FROM xyz]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /xyz/zyx/3.0/2/1 -> NULL
-output row: [3.0]
 
 query RRR
 SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
@@ -1083,140 +842,6 @@ SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 ["a", "a", null, "b", "b", "A"]
 
-# Tests for the single-row optimization.
-statement OK
-CREATE TABLE ab (
-  a INT PRIMARY KEY,
-  b INT,
-  FAMILY (a),
-  FAMILY (b)
-)
-
-statement OK
-INSERT INTO ab VALUES
-  (1, 10),
-  (2, 20),
-  (3, 30),
-  (4, 40),
-  (5, 50)
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
-]
-----
-group           ·            ·
- │              aggregate 0  min(a)
- └── render     ·            ·
-      │         render 0     test.public.abc.a
-      └── scan  ·            ·
-·               table        abc@primary
-·               spans        ALL
-·               limit        1
-
-# Verify we only buffer one row.
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(a) FROM ab]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/1 -> NULL
-fetched: /ab/primary/1/b -> 10
-output row: [1]
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(a) FROM abc
-]
-----
-group              ·            ·
- │                 aggregate 0  max(a)
- └── render        ·            ·
-      │            render 0     test.public.abc.a
-      └── revscan  ·            ·
-·                  table        abc@primary
-·                  spans        ALL
-·                  limit        1
-
-# Verify we only buffer one row.
-query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MAX(a) FROM ab]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /ab/primary/5/b -> 50
-fetched: /ab/primary/5 -> NULL
-output row: [5]
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
-]
-----
-sort                 ·            ·
- │                   order        +count
- └── group           ·            ·
-      │              aggregate 0  v
-      │              aggregate 1  count(k)
-      │              group by     @1
-      └── render     ·            ·
-           │         render 0     test.public.kv.v
-           │         render 1     test.public.kv.k
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        ALL
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
-]
-----
-sort                 ·            ·
- │                   order        +count
- └── group           ·            ·
-      │              aggregate 0  v
-      │              aggregate 1  count_rows()
-      │              group by     @1
-      └── render     ·            ·
-           │         render 0     test.public.kv.v
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        ALL
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
-]
-----
-sort                 ·            ·
- │                   order        +count
- └── group           ·            ·
-      │              aggregate 0  v
-      │              aggregate 1  count(1)
-      │              group by     @1
-      └── render     ·            ·
-           │         render 0     test.public.kv.v
-           │         render 1     1
-           └── scan  ·            ·
-·                    table        kv@primary
-·                    spans        ALL
-
-# Check that filters propagate through no-op aggregation.
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
-]
-----
-group           ·            ·
- │              aggregate 0  v
- │              aggregate 1  count(1)
- │              group by     @1
- └── render     ·            ·
-      │         render 0     test.public.kv.v
-      │         render 1     1
-      └── scan  ·            ·
-·               table        kv@primary
-·               spans        ALL
-·               filter       v > 10
-
 # Verify that FILTER works.
 
 statement ok
@@ -1262,50 +887,7 @@ SELECT k FILTER (WHERE k=1) FROM kv GROUP BY k
 query error aggregate functions are not allowed in FILTER
 SELECT v, COUNT(*) FILTER (WHERE COUNT(*) > 5) FROM filter_test GROUP BY v
 
-# Check that filter expressions are only rendered once.
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
-]
-----
-group           ·            ·
- │              aggregate 0  count_rows() FILTER (WHERE k > 5)
- │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
- │              group by     @1
- └── render     ·            ·
-      │         render 0     test.public.filter_test.v
-      │         render 1     test.public.filter_test.k > 5
-      └── scan  ·            ·
-·               table        filter_test@primary
-·               spans        ALL
-
-query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
-----
-group           ·            ·                                  (count int)                                                    ·
- │              aggregate 0  count_rows() FILTER (WHERE k > 5)  ·                                                              ·
- │              group by     @1                                 ·                                                              ·
- └── render     ·            ·                                  (v int, "k > 5" bool)                                          ·
-      │         render 0     (v)[int]                           ·                                                              ·
-      │         render 1     ((k)[int] > (5)[int])[bool]        ·                                                              ·
-      └── scan  ·            ·                                  (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
-·               table        filter_test@primary                ·                                                              ·
-·               spans        ALL                                ·                                                              ·
-
 # Tests with * inside GROUP BY.
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*
-]
-----
-render          ·         ·
- │              render 0  1
- └── group      ·         ·
-      │         group by  @1-@4
-      └── scan  ·         ·
-·               table     kv@primary
-·               spans     ALL
-
 query I
 SELECT 1 FROM kv GROUP BY kv.*
 ----
@@ -1315,30 +897,6 @@ SELECT 1 FROM kv GROUP BY kv.*
 1
 1
 1
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
-]
-----
-group                ·            ·
- │                   aggregate 0  sum(d)
- │                   group by     @1-@4
- └── render          ·            ·
-      │              render 0     test.public.kv.k
-      │              render 1     test.public.kv.v
-      │              render 2     test.public.kv.w
-      │              render 3     test.public.kv.s
-      │              render 4     test.public.abc.d
-      └── join       ·            ·
-           │         type         inner
-           │         pred         test.public.kv.k >= test.public.abc.d
-           ├── scan  ·            ·
-           │         table        kv@primary
-           │         spans        ALL
-           └── scan  ·            ·
-·                    table        abc@primary
-·                    spans        ALL
 
 query R rowsort
 SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
@@ -1357,18 +915,6 @@ statement ok
 INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
 
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
-query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
-----
-group           ·            ·                       (min)            ·
- │              aggregate 0  min(v)                  ·                ·
- └── render     ·            ·                       (v)              v!=NULL; +v
-      │         render 0     test.public.opt_test.v  ·                ·
-      └── scan  ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
-·               table        opt_test@v              ·                ·
-·               spans        /!NULL-                 ·                ·
-·               limit        1                       ·                ·
-
 # Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
 query I
 SELECT MIN(v) FROM opt_test
@@ -1382,49 +928,12 @@ SELECT MIN(v) FROM opt_test@primary
 5
 
 # Repeat test when there is an existing filter.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
-----
-group           ·            ·                       (min)   ·
- │              aggregate 0  min(v)                  ·       ·
- └── render     ·            ·                       (v)     v!=NULL; +v
-      │         render 0     test.public.opt_test.v  ·       ·
-      └── scan  ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
-·               table        opt_test@v              ·       ·
-·               spans        /!NULL-                 ·       ·
-·               filter       k != 4                  ·       ·
-
 query I
 SELECT MIN(v) FROM opt_test WHERE k <> 4
 ----
 10
 
-# Check the optimization when the argument is non-trivial. The renderNode can't
-# present an ordering on v+1 so the optimization is not applied, but the IS NOT
-# NULL filter should be added.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
-----
-group           ·            ·                           (min)            ·
- │              aggregate 0  min(v + 1)                  ·                ·
- └── render     ·            ·                           ("v + 1")        ·
-      │         render 0     test.public.opt_test.v + 1  ·                ·
-      └── scan  ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
-·               table        opt_test@primary            ·                ·
-·               spans        -/3/# /5-                   ·                ·
-·               filter       (v + 1) IS NOT NULL         ·                ·
-
 # Verify that we don't use the optimization if there is a GROUP BY.
-query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
-----
-group      ·            ·                 (min)   ·
- │         aggregate 0  min(v)            ·       ·
- │         group by     @1                ·       ·
- └── scan  ·            ·                 (k, v)  k!=NULL; key(k)
-·          table        opt_test@primary  ·       ·
-·          spans        ALL               ·       ·
-
 query I rowsort
 SELECT MIN(v) FROM opt_test GROUP BY k
 ----
@@ -1472,8 +981,17 @@ SELECT MAX(true), MIN(true)
 true
 true
 
+# Grouping and rendering tuples.
+statement OK
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
 statement ok
-DELETE FROM ab; INSERT INTO ab(a,b) VALUES (1,2), (3,4);
+INSERT INTO ab(a,b) VALUES (1,2), (3,4);
   CREATE TABLE xy(x STRING, y STRING);
   INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
 
@@ -1484,24 +1002,6 @@ SELECT (b, a) FROM ab GROUP BY (b, a)
 (2,1)
 (4,3)
 
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
-]
-----
-render               ·            ·
- │                   render 0     (agg0, agg1)
- └── group           ·            ·
-      │              aggregate 0  b
-      │              aggregate 1  a
-      │              group by     @1-@2
-      └── render     ·            ·
-           │         render 0     test.public.ab.b
-           │         render 1     test.public.ab.a
-           └── scan  ·            ·
-·                    table        ab@primary
-·                    spans        ALL
-
 query TT rowsort
 SELECT MIN(y), (b, a)
  FROM ab, xy GROUP BY (x, (a, b))
@@ -1510,35 +1010,6 @@ b  (2,1)
 d  (2,1)
 b  (4,3)
 d  (4,3)
-
-query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE)
-   SELECT MIN(y), (b, a)
-     FROM ab, xy GROUP BY (x, (a, b))
-]
-----
-render                    ·            ·
- │                        render 0     agg0
- │                        render 1     (agg1, agg2)
- └── group                ·            ·
-      │                   aggregate 0  min(y)
-      │                   aggregate 1  b
-      │                   aggregate 2  a
-      │                   group by     @1-@3
-      └── render          ·            ·
-           │              render 0     test.public.xy.x
-           │              render 1     test.public.ab.a
-           │              render 2     test.public.ab.b
-           │              render 3     test.public.xy.y
-           └── join       ·            ·
-                │         type         cross
-                ├── scan  ·            ·
-                │         table        ab@primary
-                │         spans        ALL
-                └── scan  ·            ·
-·                         table        xy@primary
-·                         spans        ALL
 
 # Test that ordering on GROUP BY columns is maintained.
 statement ok
@@ -1570,20 +1041,6 @@ SELECT x, max(y) FROM group_ord GROUP BY x
 7  2
 8  4
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x
-----
-group           ·            ·                        (x, max)            x!=NULL; key(x)
- │              aggregate 0  x                        ·                   ·
- │              aggregate 1  max(y)                   ·                   ·
- │              group by     @1                       ·                   ·
- └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
-      │         render 0     test.public.group_ord.x  ·                   ·
-      │         render 1     test.public.group_ord.y  ·                   ·
-      └── scan  ·            ·                        (x, y, z[omitted])  x!=NULL; key(x); +x
-·               table        group_ord@primary        ·                   ·
-·               spans        ALL                      ·                   ·
-
 # The ordering is on all the GROUP BY columns, and is preserved after the
 # aggregation.
 query II
@@ -1595,20 +1052,6 @@ SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
 6  2
 7  2
 8  4
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT x, max(y) FROM group_ord GROUP BY x ORDER BY x
-----
-group           ·            ·                        (x, max)            x!=NULL; key(x); +x
- │              aggregate 0  x                        ·                   ·
- │              aggregate 1  max(y)                   ·                   ·
- │              group by     @1                       ·                   ·
- └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
-      │         render 0     test.public.group_ord.x  ·                   ·
-      │         render 1     test.public.group_ord.y  ·                   ·
-      └── scan  ·            ·                        (x, y, z[omitted])  x!=NULL; key(x); +x
-·               table        group_ord@primary        ·                   ·
-·               spans        ALL                      ·                   ·
 
 # The ordering is on some of the GROUP BY columns, and isn't preserved after
 # the aggregation.
@@ -1622,22 +1065,6 @@ SELECT z, x, max(y) FROM group_ord GROUP BY x, z
 2  7  2
 2  8  4
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT z, x, max(y) FROM group_ord GROUP BY x, z
-----
-group           ·            ·                        (z, x, max)  x!=NULL; key(x)
- │              aggregate 0  z                        ·            ·
- │              aggregate 1  x                        ·            ·
- │              aggregate 2  max(y)                   ·            ·
- │              group by     @1-@2                    ·            ·
- └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
-      │         render 0     test.public.group_ord.x  ·            ·
-      │         render 1     test.public.group_ord.z  ·            ·
-      │         render 2     test.public.group_ord.y  ·            ·
-      └── scan  ·            ·                        (x, y, z)    x!=NULL; key(x); +x
-·               table        group_ord@primary        ·            ·
-·               spans        ALL                      ·            ·
-
 # The ordering is on some of the GROUP BY columns, and is preserved after
 # the aggregation.
 query III
@@ -1650,22 +1077,6 @@ SELECT z, x, max(y) FROM group_ord GROUP BY x, z ORDER BY x
 2  7  2
 2  8  4
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT z, x, max(y) FROM group_ord GROUP BY x, z ORDER BY x
-----
-group           ·            ·                        (z, x, max)  x!=NULL; key(x); +x
- │              aggregate 0  z                        ·            ·
- │              aggregate 1  x                        ·            ·
- │              aggregate 2  max(y)                   ·            ·
- │              group by     @1-@2                    ·            ·
- └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
-      │         render 0     test.public.group_ord.x  ·            ·
-      │         render 1     test.public.group_ord.z  ·            ·
-      │         render 2     test.public.group_ord.y  ·            ·
-      └── scan  ·            ·                        (x, y, z)    x!=NULL; key(x); +x
-·               table        group_ord@primary        ·            ·
-·               spans        ALL                      ·            ·
-
 # If the underlying ordering isn't from the primary index, it needs to be hinted
 # for now.
 query II rowsort
@@ -1674,23 +1085,6 @@ SELECT z, max(y) FROM group_ord@foo GROUP BY z
 5  4
 2  4
 3  2
-
-query TTTTT
-EXPLAIN (VERBOSE) SELECT z, max(y) FROM group_ord@foo GROUP BY z
-----
-group                 ·            ·                        (z, max)                     weak-key(z)
- │                    aggregate 0  z                        ·                            ·
- │                    aggregate 1  max(y)                   ·                            ·
- │                    group by     @1                       ·                            ·
- └── render           ·            ·                        (z, y)                       +z
-      │               render 0     test.public.group_ord.z  ·                            ·
-      │               render 1     test.public.group_ord.y  ·                            ·
-      └── index-join  ·            ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
-           ├── scan   ·            ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
-           │          table        group_ord@foo            ·                            ·
-           │          spans        ALL                      ·                            ·
-           └── scan   ·            ·                        (x[omitted], y, z)           ·
-·                     table        group_ord@primary        ·                            ·
 
 # Test that a merge join is used on two aggregate subqueries with orderings on
 # the GROUP BY columns. Note that an ORDER BY is not necessary on the
@@ -1701,59 +1095,11 @@ SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y
 5  NULL  5  4
 3  4     3  2
 
-query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y) FROM group_ord@foo GROUP BY z) ON x = z
-----
-join                       ·               ·                        (x, max, z, min)             x=z; x!=NULL
- │                         type            inner                    ·                            ·
- │                         equality        (x) = (z)                ·                            ·
- │                         mergeJoinOrder  +"(x=z)"                 ·                            ·
- ├── group                 ·               ·                        (x, max)                     x!=NULL; key(x); +x
- │    │                    aggregate 0     x                        ·                            ·
- │    │                    aggregate 1     max(y)                   ·                            ·
- │    │                    group by        @1                       ·                            ·
- │    └── render           ·               ·                        (x, y)                       x!=NULL; key(x); +x
- │         │               render 0        test.public.group_ord.x  ·                            ·
- │         │               render 1        test.public.group_ord.y  ·                            ·
- │         └── scan        ·               ·                        (x, y, z[omitted])           x!=NULL; key(x); +x
- │                         table           group_ord@primary        ·                            ·
- │                         spans           ALL                      ·                            ·
- └── group                 ·               ·                        (z, min)                     weak-key(z); +z
-      │                    aggregate 0     z                        ·                            ·
-      │                    aggregate 1     min(y)                   ·                            ·
-      │                    group by        @1                       ·                            ·
-      └── render           ·               ·                        (z, y)                       +z
-           │               render 0        test.public.group_ord.z  ·                            ·
-           │               render 1        test.public.group_ord.y  ·                            ·
-           └── index-join  ·               ·                        (x[omitted], y, z)           x!=NULL; weak-key(x,z); +z
-                ├── scan   ·               ·                        (x, y[omitted], z[omitted])  x!=NULL; weak-key(x,z); +z
-                │          table           group_ord@foo            ·                            ·
-                │          spans           ALL                      ·                            ·
-                └── scan   ·               ·                        (x[omitted], y, z)           ·
-·                          table           group_ord@primary        ·                            ·
-
 # Regression test for #23798 until #10495 is fixed.
 statement error function reserved for internal use
 SELECT final_variance(1.2, 1.2, 123) FROM kv
 
 # Regression test for #25533 (crash when propagating filter through GROUP BY).
-query TTTTT
-EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1;
-----
-render                    ·            ·                          ("1")                           "1"=CONST           
- │                        render 0     1                          ·                               ·                   
- └── group                ·            ·                          (agg0)                          weak-key(agg0)      
-      │                   aggregate 0  w::DECIMAL                 ·                               ·                   
-      │                   group by     @1-@2                      ·                               ·                   
-      └── filter          ·            ·                          (v, "w::DECIMAL")               "w::DECIMAL"!=NULL  
-           │              filter       "w::DECIMAL" > 1           ·                               ·                   
-           └── render     ·            ·                          (v, "w::DECIMAL")               ·                   
-                │         render 0     test.public.kv.v           ·                               ·                   
-                │         render 1     test.public.kv.w::DECIMAL  ·                               ·                   
-                └── scan  ·            ·                          (k[omitted], v, w, s[omitted])  k!=NULL; key(k)     
-·                         table        kv@primary                 ·                               ·                   
-·                         spans        ALL                        ·                               ·                   
-
 query I
 SELECT 1 FROM kv GROUP BY v, w::DECIMAL HAVING w::DECIMAL > 1
 ----

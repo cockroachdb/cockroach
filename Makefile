@@ -837,7 +837,7 @@ testlogic: pkg/sql/logictest/logictest.test
 testccllogic: ## Run SQL CCL Logic Tests.
 testccllogic: pkg/ccl/logictestccl/logictestccl.test
 
-testlogic testccllogic: TESTS := Test(CCL)?Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
+testlogic testccllogic: TESTS := Test\w*Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
 testlogic testccllogic:
 	cd $(<D) && ./$(<F) -test.run "$(TESTS)" -test.timeout $(TESTTIMEOUT) $(TESTFLAGS)
