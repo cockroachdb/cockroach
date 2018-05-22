@@ -248,8 +248,9 @@ func registerUpgrade(r *registry) {
 	const oldVersion = "v2.0.0"
 	for _, n := range []int{5} {
 		r.Add(testSpec{
-			Name:  fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
-			Nodes: nodes(n),
+			Name:       fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
+			MinVersion: "v2.1.0",
+			Nodes:      nodes(n),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runUpgrade(ctx, t, c, oldVersion)
 			},

@@ -290,6 +290,24 @@ func TestRegistryPrepareSpec(t *testing.T) {
 			"a/b: subtest may not provide cluster specification",
 			nil,
 		},
+		{
+			testSpec{
+				Name:       "a",
+				MinVersion: "v2.1.0",
+				Run:        dummyRun,
+			},
+			"",
+			[]string{"a"},
+		},
+		{
+			testSpec{
+				Name:       "a",
+				MinVersion: "foo",
+				Run:        dummyRun,
+			},
+			"a: unable to parse min-version: foo",
+			nil,
+		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -304,6 +322,48 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				if diff := pretty.Diff(c.expectedTests, tests); len(diff) != 0 {
 					t.Fatalf("unexpected tests:\n%s", strings.Join(diff, "\n"))
 				}
+			}
+		})
+	}
+}
+
+func TestRegistryMinVersion(t *testing.T) {
+	testCases := []struct {
+		buildVersion string
+		expectedA    bool
+		expectedB    bool
+	}{
+		{"1.1.0", false, false},
+		{"2.0.0", true, false},
+		{"2.1.0", true, true},
+	}
+	for _, c := range testCases {
+		t.Run(c.buildVersion, func(t *testing.T) {
+			var buf syncedBuffer
+			var runA, runB bool
+			r := newRegistry()
+			r.out = &buf
+			r.Add(testSpec{
+				Name:       "a",
+				MinVersion: "2.0.0",
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runA = true
+				},
+			})
+			r.Add(testSpec{
+				Name:       "b",
+				MinVersion: "2.1.0",
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runB = true
+				},
+			})
+			if err := r.setBuildVersion(c.buildVersion); err != nil {
+				t.Fatal(err)
+			}
+			r.Run(nil)
+			if c.expectedA != runA || c.expectedB != runB {
+				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
+					c.expectedA, c.expectedB, runA, runB, buf.String())
 			}
 		})
 	}
