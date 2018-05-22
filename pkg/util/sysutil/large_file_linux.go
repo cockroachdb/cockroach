@@ -18,9 +18,9 @@ package sysutil
 
 import (
 	"os"
-	"syscall"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // CreateLargeFile creates a large file at the given path with bytes size. On
@@ -33,7 +33,7 @@ func CreateLargeFile(path string, bytes int64) error {
 		return errors.Wrapf(err, "failed to create file %s", path)
 	}
 	defer f.Close()
-	if err := syscall.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
+	if err := unix.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
 		return err
 	}
 	return f.Sync()
