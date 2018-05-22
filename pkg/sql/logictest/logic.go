@@ -394,7 +394,7 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
-	{name: "opt", numNodes: 1, overrideOptimizerMode: "On"},
+	{name: "opt", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "On"},
 	{name: "parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
 	{name: "distsql", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
 	{name: "distsql-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
