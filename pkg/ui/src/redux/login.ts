@@ -2,7 +2,7 @@ import { ThunkAction } from "redux-thunk";
 import { createSelector } from "reselect";
 
 import { Action } from "redux";
-import { userLogin } from "src/util/api";
+import { userLogin, userLogout } from "src/util/api";
 import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
@@ -119,6 +119,10 @@ const LOGIN_BEGIN = "LOGIN_BEGIN";
 const LOGIN_SUCCESS = "LOGIN_SUCCESS";
 const LOGIN_FAILURE = "LOGIN_FAILURE";
 
+const LOGOUT_BEGIN = "LOGOUT_BEGIN";
+const LOGOUT_SUCCESS = "LOGOUT_SUCCESS";
+const LOGOUT_FAILURE = "LOGOUT_FAILURE";
+
 const loginBeginAction = {
   type: LOGIN_BEGIN,
 };
@@ -147,6 +151,26 @@ function loginFailure(error: string): LoginFailureAction {
   };
 }
 
+const logoutBeginAction = {
+  type: LOGOUT_BEGIN,
+};
+
+const logoutSuccessAction = {
+  type: LOGIN_SUCCESS,
+};
+
+interface LogoutFailureAction extends Action {
+  type: typeof LOGOUT_FAILURE;
+  error: string;
+}
+
+function logoutFailure(error: string): LogoutFailureAction {
+  return {
+    type: LOGOUT_FAILURE,
+    error,
+  };
+}
+
 export function doLogin(username: string, password: string): ThunkAction<Promise<void>, AdminUIState, void> {
   return (dispatch) => {
     dispatch(loginBeginAction);
@@ -160,6 +184,21 @@ export function doLogin(username: string, password: string): ThunkAction<Promise
         () => { dispatch(loginSuccess(username)); },
         (err) => { dispatch(loginFailure(err.toString())); },
       );
+  };
+}
+
+export function doLogout(): ThunkAction<Promise<void>, AdminUIState, void> {
+  return (dispatch) => {
+    dispatch(logoutBeginAction);
+
+    return userLogout()
+      .then(() => {
+        dispatch(logoutSuccessAction);
+        document.location.reload();
+      }, (err) => {
+        console.error("logout failure", err);
+        dispatch(logoutFailure(err.toString()));
+      });
   };
 }
 
@@ -182,6 +221,24 @@ export function loginReducer(state = emptyLoginState, action: Action): LoginAPIS
     case LOGIN_FAILURE:
       return {
         loggedInUser: null,
+        inProgress: false,
+        error: (action as LoginFailureAction).error,
+      };
+    case LOGOUT_BEGIN:
+      return {
+        loggedInUser: state.loggedInUser,
+        inProgress: true,
+        error: null,
+      };
+    case LOGOUT_SUCCESS:
+      return {
+        loggedInUser: null,
+        inProgress: false,
+        error: null,
+      };
+    case LOGOUT_FAILURE:
+      return {
+        loggedInUser: state.loggedInUser,
         inProgress: false,
         error: (action as LoginFailureAction).error,
       };
