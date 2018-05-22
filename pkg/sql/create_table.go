@@ -127,8 +127,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
-	params.p.Tables().addCreatedTable(id)
-
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	privs := n.dbDesc.GetPrivileges()
@@ -158,6 +156,28 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	if desc.Adding() {
+		// if this table and all its references are created in the same
+		// transaction it can be made PUBLIC.
+		refs, err := desc.FindAllReferences()
+		if err != nil {
+			return err
+		}
+		var foundExternalReference bool
+		for id := range refs {
+			if !params.p.Tables().isCreatedTable(id) {
+				foundExternalReference = true
+				break
+			}
+		}
+		if !foundExternalReference {
+			desc.State = sqlbase.TableDescriptor_PUBLIC
+			// No need to increment the version.
+			desc.UpVersion = false
+		}
+	}
+
+	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
@@ -170,6 +190,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	if desc.Adding() {
 		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
+
+	params.p.Tables().addCreatedTable(id)
 
 	for _, index := range desc.AllNonDropIndexes() {
 		if len(index.Interleave.Ancestors) > 0 {
