@@ -13,7 +13,7 @@
 /pkg/kv/                     @cockroachdb/core-prs
 /pkg/roachpb/                @cockroachdb/core-prs
 /pkg/rpc/                    @cockroachdb/core-prs
-/pkg/server/                 @cockroachdb/core-prs @cockroachdb/admin-ui-prs
+/pkg/server/                 @cockroachdb/core-prs @cockroachdb/server-prs
 /pkg/storage/                @cockroachdb/core-prs
 /pkg/migration/              @cockroachdb/core-prs
 /pkg/sqlmigrations           @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
