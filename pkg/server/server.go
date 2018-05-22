@@ -44,6 +44,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1923,8 +1924,9 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 
 		// Construct arguments for template.
 		tmplArgs := ui.IndexHTMLArgs{
-			LoginEnabled:         cfg.RequireWebSession(),
 			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         cfg.RequireWebSession(),
+			Version:              build.VersionPrefix(),
 		}
 		loggedInUser, ok := request.Context().Value(loggedInUserKey{}).(string)
 		if ok && loggedInUser != "" {
