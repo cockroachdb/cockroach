@@ -2981,6 +2981,39 @@ func TestAddComputedColumn(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT * FROM t.test ORDER BY a`, [][]string{{"2", "7"}, {"10", "15"}})
 }
 
+// TestDropComputedColumn verifies the effects of removing the
+// computed-ness from a column.
+func TestDropComputedColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	// Create a new computed column, add data, and verify.
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "CREATE TABLE d.t (a INT PRIMARY KEY, b INT AS (a + 2) STORED)")
+
+	sqlDB.Exec(t, "INSERT INTO d.t (a) VALUES (1)")
+	sqlDB.Exec(t, "INSERT INTO d.t (a) VALUES (2)")
+
+	sqlDB.CheckQueryResults(t, "SELECT a, b FROM d.t", [][]string{{"1", "3"}, {"2", "4"}})
+
+	sqlDB.Exec(t, "ALTER TABLE d.t ALTER COLUMN b DROP STORED")
+
+	// Now check that no computation happens and that we can mutate
+	// values in the no-longer-computed column.
+	sqlDB.Exec(t, "INSERT INTO d.t (a) VALUES (3)")
+	sqlDB.Exec(t, "INSERT INTO d.t (a,b) VALUES (4,99)")
+
+	sqlDB.CheckQueryResults(t, "SELECT a, b FROM d.t", [][]string{
+		{"1", "3"},
+		{"2", "4"},
+		{"3", "NULL"},
+		{"4", "99"},
+	})
+}
+
 func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()

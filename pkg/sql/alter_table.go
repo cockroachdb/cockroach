@@ -710,6 +710,9 @@ func applyColumnMutation(
 
 	case *tree.AlterTableDropNotNull:
 		col.Nullable = true
+
+	case *tree.AlterTableDropStored:
+		col.ComputeExpr = nil
 	}
 	return nil
 }
