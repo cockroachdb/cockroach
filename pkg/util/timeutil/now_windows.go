@@ -33,13 +33,10 @@ func init() {
 // This has a higher precision than time.Now in go1.8, but is much slower
 // (~2000x) and requires Windows 8+.
 //
-// TODO(tamird): consider removing this in go1.9. go1.9 is expected to add
-// monotonic clock support to values retured from time.Now, which this
-// implementation will not support. The monotonic clock support may also
-// obviate the need for this, since we only need the higher precision when
-// subtracting `time.Time`s.
+// Even on Go 1.10 with Windows 10 the time resolution of time.Now() is
+// about 500µs. The method below can do <1µs.
 func Now() time.Time {
 	var ft windows.Filetime
 	windows.GetSystemTimePreciseAsFileTime(&ft)
-	return time.Unix(0, ft.Nanoseconds()).UTC()
+	return time.Unix(0, ft.Nanoseconds())
 }
