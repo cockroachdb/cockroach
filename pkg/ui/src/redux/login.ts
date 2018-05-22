@@ -13,6 +13,7 @@ import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
 declare global {
   interface Window {
     dataFromServer: {
+      ExperimentalUseLogin: boolean;
       LoginEnabled: boolean;
       LoggedInUser: string;
     };
@@ -22,6 +23,7 @@ declare global {
 // State for application use.
 
 export interface LoginState {
+    useLogin(): boolean;
     loginEnabled(): boolean;
     hasAccess(): boolean;
     loggedInUser(): string;
@@ -32,6 +34,10 @@ class LoginEnabledState {
 
     constructor(state: LoginAPIState) {
         this.apiState = state;
+    }
+
+    useLogin(): boolean {
+        return true;
     }
 
     loginEnabled(): boolean {
@@ -48,6 +54,28 @@ class LoginEnabledState {
 }
 
 class LoginDisabledState {
+    useLogin(): boolean {
+        return true;
+    }
+
+    loginEnabled(): boolean {
+        return false;
+    }
+
+    hasAccess(): boolean {
+        return true;
+    }
+
+    loggedInUser(): string {
+        return null;
+    }
+}
+
+class NoLoginState {
+    useLogin(): boolean {
+        return false;
+    }
+
     loginEnabled(): boolean {
         return false;
     }
@@ -66,7 +94,11 @@ class LoginDisabledState {
 export const selectLoginState = createSelector(
     (state: AdminUIState) => state.login,
     (login: LoginAPIState) => {
-        if (!window.dataFromServer || !window.dataFromServer.LoginEnabled) {
+        if (!window.dataFromServer || !window.dataFromServer.ExperimentalUseLogin) {
+            return new NoLoginState();
+        }
+
+        if (!window.dataFromServer.LoginEnabled) {
             return new LoginDisabledState();
         }
 

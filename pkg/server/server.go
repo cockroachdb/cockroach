@@ -1923,7 +1923,8 @@ func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
 
 		// Construct arguments for template.
 		tmplArgs := ui.IndexHTMLArgs{
-			LoginEnabled: cfg.RequireWebSession(),
+			LoginEnabled:         cfg.RequireWebSession(),
+			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
 		}
 		loggedInUser, ok := request.Context().Value(loggedInUserKey{}).(string)
 		if ok && loggedInUser != "" {

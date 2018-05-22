@@ -963,6 +963,10 @@ func TestServeIndexHTML(t *testing.T) {
 	t.Run("Insecure mode", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure: true,
+			// This test server argument has the same effect as setting the environment variable
+			// `COCKROACH_EXPERIMENTAL_REQUIRE_WEB_SESSION` to false, or not setting it.
+			// In test servers, web sessions are required by default.
+			DisableWebSessionAuthentication: true,
 		})
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)
@@ -984,7 +988,7 @@ func TestServeIndexHTML(t *testing.T) {
 			t.Fatal(err)
 		}
 		respString := string(respBytes)
-		expected := fmt.Sprintf(htmlTemplate, `{"LoginEnabled":false,"LoggedInUser":null}`)
+		expected := fmt.Sprintf(htmlTemplate, `{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null}`)
 		if respString != expected {
 			t.Fatalf("expected %s; got %s", expected, respString)
 		}
@@ -1008,8 +1012,8 @@ func TestServeIndexHTML(t *testing.T) {
 			client http.Client
 			json   string
 		}{
-			{loggedInClient, `{"LoginEnabled":true,"LoggedInUser":"authentic_user"}`},
-			{loggedOutClient, `{"LoginEnabled":true,"LoggedInUser":null}`},
+			{loggedInClient, `{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":"authentic_user"}`},
+			{loggedOutClient, `{"ExperimentalUseLogin":true,"LoginEnabled":true,"LoggedInUser":null}`},
 		}
 
 		for _, testCase := range cases {
