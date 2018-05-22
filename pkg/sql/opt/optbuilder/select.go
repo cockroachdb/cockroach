@@ -15,8 +15,11 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -74,7 +77,10 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		return outScope
 
 	default:
-		panic(errorf("not yet implemented: table expr: %T", texpr))
+		panic(builderError{pgerror.Unimplemented(
+			"table expr",
+			fmt.Sprintf("not yet implemented: table expr: %T", texpr),
+		)})
 	}
 }
 

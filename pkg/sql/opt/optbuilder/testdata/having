@@ -113,19 +113,19 @@ error (42804): argument of HAVING must be type bool, not type int
 build
 SELECT 3 FROM kv GROUP BY v HAVING k > 5
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # pg has a special case for grouping on primary key, which would allow this, but we do not.
 # See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
 build
 SELECT 3 FROM kv GROUP BY k HAVING v > 2
 ----
-error: column "kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k FROM kv HAVING k > 7
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+w) > 5
@@ -155,7 +155,7 @@ project
 build
 SELECT count(*), k+w FROM kv GROUP BY k+w HAVING (k+v) > 5
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Check that everything still works with differently qualified names
 build
@@ -259,7 +259,7 @@ project
 build fully-qualify-names
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
 ----
-error: column "t.public.kv.w" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "w" must appear in the GROUP BY clause or be used in an aggregate function
 
 build fully-qualify-names
 SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
