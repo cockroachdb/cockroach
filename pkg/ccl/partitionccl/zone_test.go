@@ -48,6 +48,8 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	zoneOverride := config.DefaultZoneConfig()
 	zoneOverride.GC.TTLSeconds = 42
 
+	dbDescID := uint32(keys.MinNonPredefinedUserDescID)
+
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
 		CLISpecifier: ".default",
@@ -59,27 +61,27 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 		Config:       zoneOverride,
 	}
 	dbRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 1,
+		ID:           dbDescID,
 		CLISpecifier: "d",
 		Config:       zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
 	primaryRow := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "d.t@primary",
 		Config:       zoneOverride,
 	}
 	p0Row := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "d.t.p0",
 		Config:       zoneOverride,
 	}
 	p1Row := sqlutils.ZoneRow{
-		ID:           keys.MaxReservedDescID + 2,
+		ID:           dbDescID + 1,
 		CLISpecifier: "d.t.p1",
 		Config:       zoneOverride,
 	}
@@ -220,11 +222,11 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 	}{
 		{
 			"ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
-			`no schema has been selected to search index: "foo"`,
+			`index "foo" does not exist`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
-			`no schema has been selected to search index: "foo"`,
+			`index "foo" does not exist`,
 		},
 		{
 			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",

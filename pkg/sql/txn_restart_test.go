@@ -1471,7 +1471,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// One of the rows in the table.
-	targetKey := roachpb.Key("\273\211\212")
+	targetKey := roachpb.Key("\275\211\212")
 
 	restarted := true
 

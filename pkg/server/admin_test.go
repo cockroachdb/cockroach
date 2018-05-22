@@ -248,7 +248,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedDBs := []string{"system", testdb}
+	expectedDBs := []string{"defaultdb", "postgres", "system", testdb}
 	if a, e := len(resp.Databases), len(expectedDBs); a != e {
 		t.Fatalf("length of result %d != expected %d", a, e)
 	}
@@ -689,7 +689,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		{sql.EventLogNodeJoin, false, 0, 1},
 		{sql.EventLogNodeRestart, false, 0, 0},
 		{sql.EventLogDropDatabase, false, 0, 0},
-		{sql.EventLogCreateDatabase, false, 0, 1},
+		{sql.EventLogCreateDatabase, false, 0, 3},
 		{sql.EventLogDropTable, false, 0, 2},
 		{sql.EventLogCreateTable, false, 0, 3},
 		{sql.EventLogSetClusterSetting, false, 0, 5},

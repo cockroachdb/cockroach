@@ -70,7 +70,7 @@ const (
 	// We need to choose arbitrary database and table IDs. These aren't important,
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
-	defaultCSVParentID sqlbase.ID = keys.MaxReservedDescID + 1
+	defaultCSVParentID sqlbase.ID = keys.MinNonPredefinedUserDescID
 	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
 )
 

@@ -124,7 +124,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + 1))
+		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MinUserDescID))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestStoreRangeSplitInsideRow(t *testing.T) {
 	// Manually create some the column keys corresponding to the table:
 	//
 	//   CREATE TABLE t (id STRING PRIMARY KEY, col1 INT, col2 INT)
-	tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	tableKey := keys.MakeTablePrefix(keys.MinUserDescID)
 	rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
 	rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), "a")
 	col1Key, err := keys.EnsureSafeSplitKey(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
@@ -537,7 +537,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	ctx := context.Background()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	keyPrefix := keys.MakeTablePrefix(keys.MinUserDescID)
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
@@ -669,7 +669,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 
 	// Split the range after the last table data key to get a range that contains
 	// no user data.
-	splitKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	splitKey := keys.MakeTablePrefix(keys.MinUserDescID)
 	splitArgs := adminSplitArgs(splitKey)
 	if _, err := client.SendWrapped(ctx, mtc.distSenders[0], splitArgs); err != nil {
 		t.Fatal(err)
@@ -736,7 +736,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	ctx := context.Background()
 
 	// Split the range after the last table data key.
-	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+	keyPrefix := keys.MakeTablePrefix(keys.MinUserDescID)
 	args := adminSplitArgs(keyPrefix)
 	if _, pErr := client.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatal(pErr)
@@ -846,7 +846,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 
 	const maxBytes = 1 << 16
 	// Set max bytes.
-	descID := uint32(keys.MaxReservedDescID + 1)
+	descID := uint32(keys.MinUserDescID)
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
@@ -904,7 +904,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 
 	// Set max bytes.
 	const maxBytes = 1 << 16
-	descID := uint32(keys.MaxReservedDescID + 1)
+	descID := uint32(keys.MinUserDescID)
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
@@ -1083,7 +1083,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
-	userTableMax := keys.MaxReservedDescID + 5
+	userTableMax := keys.MinUserDescID + 4
 	schema := sqlbase.MakeMetadataSchema()
 	// Write table descriptors for the tables in the metadata schema as well as
 	// five dummy user tables. This does two things:
@@ -1103,7 +1103,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				return err
 			}
 		}
-		for i := keys.MaxReservedDescID + 1; i <= userTableMax; i++ {
+		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
 			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
 			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
@@ -1134,7 +1134,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(i)),
 			)
 		}
-		for i := keys.MaxReservedDescID + 1; i <= userTableMax; i++ {
+		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			expKeys = append(expKeys,
 				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(uint32(i))),
 			)
@@ -2708,7 +2708,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	// will first search for meta(/Table/49) which is on the left meta2 range. However,
 	// the user range [/Table/48-/Max) is stored on the right meta2 range, so the lookup
 	// will require a scan that continues into the next meta2 range.
-	const tableID = keys.MaxReservedDescID + 2 // 51
+	const tableID = keys.MinUserDescID + 1 // 51
 	splitReq := adminSplitArgs(keys.MakeTablePrefix(tableID - 3 /* 48 */))
 	if _, pErr := client.SendWrapped(ctx, s.DB().GetSender(), splitReq); pErr != nil {
 		t.Fatal(pErr)

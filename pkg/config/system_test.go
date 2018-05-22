@@ -274,7 +274,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const (
-		start         = keys.MaxReservedDescID + 1
+		start         = keys.MinUserDescID
 		reservedStart = keys.MaxSystemConfigDescID + 1
 	)
 
@@ -401,8 +401,8 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LeaseTableID), keys.SystemDatabaseID},
 		{tkey(keys.JobsTableID), keys.SystemDatabaseID},
 		{tkey(keys.LocationsTableID), keys.SystemDatabaseID},
-		{tkey(keys.MaxReservedDescID + 1), keys.MaxReservedDescID + 1},
-		{tkey(keys.MaxReservedDescID + 23), keys.MaxReservedDescID + 23},
+		{tkey(keys.MinUserDescID), keys.MinUserDescID},
+		{tkey(keys.MinUserDescID + 22), keys.MinUserDescID + 22},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
 	}
 

@@ -192,7 +192,7 @@ func TestAnyPrivilege(t *testing.T) {
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := ID(keys.MaxReservedDescID + 1)
+	id := ID(keys.MinUserDescID)
 	descriptor := NewDefaultPrivilegeDescriptor()
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
@@ -323,7 +323,7 @@ func TestFixPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Use a non-system ID.
-	userID := ID(keys.MaxReservedDescID + 1)
+	userID := ID(keys.MinUserDescID)
 	userPrivs := privilege.List{privilege.ALL}
 
 	// And create an entry for a fake system table.

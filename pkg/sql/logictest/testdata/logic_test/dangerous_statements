@@ -14,3 +14,6 @@ DELETE FROM foo
 
 statement error rejected: ALTER TABLE DROP COLUMN
 ALTER TABLE foo DROP COLUMN x
+
+statement error rejected: SET database to empty string
+SET database = ''
