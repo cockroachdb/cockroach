@@ -194,8 +194,7 @@ func (b *Builder) buildScalarHelper(
 	case *tree.CastExpr:
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		arg := b.buildScalarHelper(texpr, "", inScope, nil)
-		typ := coltypes.CastTargetToDatumType(t.Type)
-		out = b.factory.ConstructCast(arg, b.factory.InternType(typ))
+		out = b.factory.ConstructCast(arg, b.factory.InternColType(t.Type.(coltypes.T)))
 
 	case *tree.CoalesceExpr:
 		args := make([]memo.GroupID, len(t.Exprs))

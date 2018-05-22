@@ -17,6 +17,7 @@ package memo
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -121,7 +122,7 @@ func init() {
 		opt.CoalesceOp:        typeCoalesce,
 		opt.CaseOp:            typeCase,
 		opt.WhenOp:            typeWhen,
-		opt.CastOp:            typeAsPrivate,
+		opt.CastOp:            typeCast,
 		opt.SubqueryOp:        typeSubquery,
 		opt.ArrayOp:           typeAsPrivate,
 
@@ -286,6 +287,11 @@ func typeCase(ev ExprView) types.T {
 func typeWhen(ev ExprView) types.T {
 	val := ev.Child(1)
 	return val.Logical().Scalar.Type
+}
+
+// typeCast returns the type of a CAST operator.
+func typeCast(ev ExprView) types.T {
+	return coltypes.CastTargetToDatumType(ev.Private().(coltypes.T))
 }
 
 // typeAsPrivate returns a type extracted from the expression's private field,

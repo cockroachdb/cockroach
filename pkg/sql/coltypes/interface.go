@@ -24,6 +24,12 @@ import (
 // ColTypeFormatter knows how to format a ColType to a bytes.Buffer.
 type ColTypeFormatter interface {
 	fmt.Stringer
+
+	// Format returns a non-lossy string representation of the coltype.
+	// NOTE: It is important that two coltypes that should be different print out
+	//       different string representations. The optimizer relies on unique
+	//       string representations in order to intern the coltypes during
+	//       memoization.
 	Format(buf *bytes.Buffer, flags lex.EncodeFlags)
 }
 

@@ -17,6 +17,7 @@ package execbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -266,7 +267,7 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedEx
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewTypedCastExpr(input, ev.Logical().Scalar.Type)
+	return tree.NewTypedCastExpr(input, ev.Private().(coltypes.T))
 }
 
 func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {

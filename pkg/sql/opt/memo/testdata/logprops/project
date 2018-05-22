@@ -141,5 +141,5 @@ project
       ├── const: 1 [type=int]
       ├── const: 'foo' [type=string]
       ├── null [type=unknown]
-      └── cast: string [type=string]
+      └── cast: STRING [type=string]
            └── null [type=unknown]

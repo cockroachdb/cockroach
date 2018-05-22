@@ -248,7 +248,7 @@ project
       └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
            └── eq [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
                 ├── variable: f [type=float, outer=(5)]
-                └── cast: float [type=float, outer=(2)]
+                └── cast: FLOAT [type=float, outer=(2)]
                      └── variable: a.i [type=int, outer=(2)]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
@@ -980,7 +980,7 @@ group-by
  │    └── projections [outer=(2,4)]
  │         └── plus [type=int, outer=(2,4)]
  │              ├── variable: a.i [type=int, outer=(2)]
- │              └── cast: int [type=int, outer=(4)]
+ │              └── cast: INT [type=int, outer=(4)]
  │                   └── variable: a.s [type=string, outer=(4)]
  └── aggregations [outer=(5)]
       └── avg [type=decimal, outer=(5)]
