@@ -63,6 +63,7 @@ Use 'roachtest run -n' to see a list of all tests.
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
 			r := newRegistry()
+			r.loadBuildVersion()
 			registerTests(r)
 			os.Exit(r.Run(args))
 			return nil
