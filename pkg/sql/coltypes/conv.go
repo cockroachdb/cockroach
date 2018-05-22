@@ -137,9 +137,8 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 }
 
 // CastTargetToDatumType produces the types.T that is closest to the given SQL
-// cast target type. The resulting type might not be "tight", meaning that it
-// may allow values that the original type would not allow. See the comment for
-// TryCastTargetToDatumType for more details.
+// cast target type. The resulting type might not be equivalent. See the comment
+// for TryCastTargetToDatumType for more details.
 func CastTargetToDatumType(t CastTargetType) types.T {
 	res, _ := TryCastTargetToDatumType(t)
 	return res
@@ -147,14 +146,25 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 
 // TryCastTargetToDatumType produces the types.T that is closest to the given
 // SQL cast target type. It returns the resulting type, as well as a boolean
-// indicating whether the conversion is "tight". A tight conversion means that
-// the destination type allows exactly the same set of values that the source
-// type allows. For example, the following conversion is not tight, because the
-// destination type allows strings that are longer than two characters:
+// indicating whether the source and destination types are "equivalent". If
+// equivalent is true, then:
+//
+//   1. The source type can be cast to the destination type, and the destination
+//      type can be cast to the source type. This is true for all casts except
+//      those involving INT2VECTOR and OIDVECTOR, which are not supported by
+//      Cockroach's Cast operator.
+//   2. The destination type allows exactly the same set of values that the
+//      source type allows. Another way to state this is that conversions in
+//      both directions is non-lossy.
+//
+// For example, the following source and destination types are not equivalent,
+// because the destination type allows strings that are longer than two
+// characters. If a string having three characters were converted to VARCHAR(2),
+// the extra character would be truncated (i.e. it's a lossy conversion).
 //
 //   VARCHAR(2) => STRING
 //
-func TryCastTargetToDatumType(src CastTargetType) (dst types.T, tight bool) {
+func TryCastTargetToDatumType(src CastTargetType) (dst types.T, equivalent bool) {
 	switch ct := src.(type) {
 	case *TBool:
 		return types.Bool, true
@@ -196,21 +206,21 @@ func TryCastTargetToDatumType(src CastTargetType) (dst types.T, tight bool) {
 	case *TVector:
 		switch ct.ParamType.(type) {
 		case *TInt:
-			return types.IntVector, true
+			return types.IntVector, false
 		case *TOid:
-			return types.OidVector, true
+			return types.OidVector, false
 		default:
 			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", src, ct.ParamType))
 		}
 	case TTuple:
-		tight = true
+		equivalent = true
 		ret := types.TTuple{Types: make([]types.T, len(ct))}
 		for i := range ct {
-			var tightVal bool
-			ret.Types[i], tightVal = TryCastTargetToDatumType(ct[i])
-			tight = tight && tightVal
+			var equivVal bool
+			ret.Types[i], equivVal = TryCastTargetToDatumType(ct[i])
+			equivalent = equivalent && equivVal
 		}
-		return ret, tight
+		return ret, equivalent
 	case *TOid:
 		return TOidToType(ct), true
 	default:
