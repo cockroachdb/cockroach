@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -323,17 +325,45 @@ func (ps *privateStorage) internDatum(datum tree.Datum) PrivateID {
 // be used to retrieve the value by calling the lookup method. If the value has
 // been previously added to storage, then internType always returns the same
 // private id that was returned from the previous call.
-func (ps *privateStorage) internType(sqlType types.T) PrivateID {
+//
+// NOTE: internType is used to intern datum types from the "types" package.
+//       These are a normalized subset of the column types from the "coltypes"
+//       package. The column types allow aliases (e.g. STRING vs. TEXT vs.
+//       VARCHAR), and allows limited versions of more general types (e.g.
+//       VARCHAR(2) and INT8).
+func (ps *privateStorage) internType(datumType types.T) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	// While most types.T values are valid Go map keys, several are not, such as
 	// types.TTuple. So use the string name of the type, and distinguish that
 	// from other private types by using the reflect.Type of the types.T value.
-	typ := reflect.TypeOf(sqlType)
-	if id, ok := ps.privatesMap[privateKey{iface: typ, str: sqlType.String()}]; ok {
+	typ := reflect.TypeOf(datumType)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: datumType.String()}]; ok {
 		return id
 	}
-	return ps.addValue(privateKey{iface: typ, str: sqlType.String()}, sqlType)
+	return ps.addValue(privateKey{iface: typ, str: datumType.String()}, datumType)
+}
+
+// internColType adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internColType always returns
+// the same private id that was returned from the previous call.
+//
+// NOTE: See the comment for internType for more information on the difference
+//       between types.T and coltypes.T.
+func (ps *privateStorage) internColType(colType coltypes.T) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	// While most types.T values are valid Go map keys, several are not, such as
+	// types.TTuple. So use the string name of the type, and distinguish that
+	// from other private types by using the reflect.Type of the types.T value.
+	typ := reflect.TypeOf(colType)
+	ps.keyBuf.Reset()
+	colType.Format(&ps.keyBuf.Buffer, lex.EncNoFlags)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, colType)
 }
 
 // internTypedExpr adds the given value to storage and returns an id that can
