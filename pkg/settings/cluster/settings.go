@@ -85,6 +85,32 @@ var version = settings.RegisterStateMachineSetting(KeyVersionSetting,
 	settings.TransformerFn(versionTransformer),
 )
 
+var preserveDowngradeVersion = settings.RegisterValidatedStringSetting(
+	"cluster.preserve_downgrade_option",
+	"disable (automatic or manual) cluster version upgrade from the specified version until reset",
+	"",
+	func(sv *settings.Values, s string) error {
+		if sv == nil || s == "" {
+			return nil
+		}
+		opaque := sv.Opaque()
+		st := opaque.(*Settings)
+		clusterVersion := st.Version.Version().MinimumVersion
+		downgradeVersion, err := roachpb.ParseVersion(s)
+		if err != nil {
+			return err
+		}
+
+		// cluster.preserve_downgrade_option can only be set to the current cluster version.
+		if downgradeVersion != clusterVersion {
+			return errors.Errorf(
+				"cannot set cluster.preserve_downgrade_option to %s (cluster version is %s)",
+				s, clusterVersion)
+		}
+		return nil
+	},
+)
+
 // InitializeVersion initializes the Version field of this setting. Before this
 // method has been called, usage of the Version field is illegal and leads to a
 // fatal error.
@@ -332,6 +358,11 @@ func versionTransformer(
 	newV := oldV
 	newV.UseVersion = minVersion
 	newV.MinimumVersion = minVersion
+
+	// Prevent cluster version upgrade until cluster.preserve_downgrade_option is reset.
+	if downgrade := preserveDowngradeVersion.Get(sv); downgrade != "" {
+		return nil, nil, errors.Errorf("cannot upgrade to %s: cluster.preserve_downgrade_option is set to %s", minVersion, downgrade)
+	}
 
 	if minVersion.Less(oldV.MinimumVersion) {
 		return nil, nil, errors.Errorf("cannot downgrade from %s to %s", oldV.MinimumVersion, minVersion)
