@@ -400,6 +400,7 @@ type testStatus struct {
 
 type test struct {
 	spec     *testSpec
+	registry *registry
 	runner   string
 	runnerID int64
 	start    time.Time
@@ -556,8 +557,27 @@ func (t *test) Failed() bool {
 	return failed
 }
 
+// IsBuildVersion returns true if the build version is greater than or equal to
+// minVersion. This allows a test to optionally perform additional checks
+// depending on the cockroach version it is running against. Note that the
+// versions are Cockroach build tag version numbers, not the internal cluster
+// version number.
+func (t *test) IsBuildVersion(minVersion string) bool {
+	// We append "-0" to the min-version spec so that we capture all
+	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
+	// greater than "v2.1.0-alpha.x".
+	vers, err := version.NewVersion(minVersion + "-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return !t.registry.buildVersion.LessThan(vers)
+}
+
 func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done func()) {
-	t := &test{spec: spec}
+	t := &test{
+		spec:     spec,
+		registry: r,
+	}
 
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
