@@ -12,31 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package sysutil is a cross-platform compatibility layer on top of package
-// syscall. It exposes APIs for common operations that require package syscall
-// and re-exports several symbols from package syscall that are known to be
-// safe. Using package syscall directly from other packages is forbidden.
-
 // +build linux
 
 package sysutil
 
 import (
 	"os"
-	"syscall"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
-// CreateLargeFile creates a large file at the given path with bytes size.
-// It uses fallocate syscall to create file of given size.
-func CreateLargeFile(path string, bytes int64) (err error) {
+// CreateLargeFile creates a large file at the given path with bytes size. On
+// Linux, it uses the fallocate syscall to efficiently create a file of the
+// given size. On other platforms, it naively writes the specified number of
+// bytes, which can take a long time.
+func CreateLargeFile(path string, bytes int64) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create file %s", path)
 	}
 	defer f.Close()
-	if err := syscall.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
+	if err := unix.Fallocate(int(f.Fd()), 0, 0, bytes); err != nil {
 		return err
 	}
 	return f.Sync()
