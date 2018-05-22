@@ -92,10 +92,11 @@ export type UserLoginResponseMessage = protos.cockroach.server.serverpb.UserLogi
 export type StoresRequestMessage = protos.cockroach.server.serverpb.StoresRequest;
 export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresResponse;
 
+export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
-export const AUTH_PREFIX = "_auth/v1";
 export const STATUS_PREFIX = "_status";
 
 // HELPER FUNCTIONS
@@ -318,12 +319,14 @@ export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Durat
 }
 
 export function userLogin(req: UserLoginRequestMessage, timeout?: moment.Duration): Promise<UserLoginResponseMessage> {
-  return timeoutFetch(serverpb.UserLoginResponse, `${AUTH_PREFIX}/login`, req as any, timeout);
+  return timeoutFetch(serverpb.UserLoginResponse, `login`, req as any, timeout);
+}
+
+export function userLogout(timeout?: moment.Duration): Promise<UserLogoutResponseMessage> {
+  return timeoutFetch(serverpb.UserLogoutResponse, `logout`, null, timeout);
 }
 
 // getStores returns information about a node's stores.
 export function getStores(req: StoresRequestMessage, timeout?: moment.Duration): Promise<StoresResponseMessage> {
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
 }
-
-// TODO(vilterp): logout
