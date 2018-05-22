@@ -254,7 +254,7 @@ func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		formatter := ev.mem.makeExprFormatter(&buf)
-		formatter.formatScanPrivate(ev.Private().(*ScanOpDef), true /* short */)
+		formatter.formatPrivate(ev.Private(), formatNormal)
 	}
 
 	var physProps *props.Physical
