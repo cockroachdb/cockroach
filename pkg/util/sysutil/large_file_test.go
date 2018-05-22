@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package sysutil is a cross-platform compatibility layer on top of package
-// syscall. It exposes APIs for common operations that require package syscall
-// and re-exports several symbols from package syscall that are known to be
-// safe. Using package syscall directly from other packages is forbidden.
-
 package sysutil
 
 import (
