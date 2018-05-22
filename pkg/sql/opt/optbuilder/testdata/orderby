@@ -402,37 +402,37 @@ error (42P01): no data source matches prefix: a
 build
 SELECT GENERATE_SERIES FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY 1
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT ARRAY[GENERATE_SERIES] AS a FROM GENERATE_SERIES(1, 100) ORDER BY a
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY 1
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY GENERATE_SERIES
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 build
 SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY -GENERATE_SERIES
 ----
-error: not yet implemented: table expr: *tree.FuncExpr
+error (0A000): not yet implemented: table expr: *tree.FuncExpr
 
 
 # Sort should be skipped if the ORDER BY clause is constant.
