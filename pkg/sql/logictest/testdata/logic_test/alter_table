@@ -707,6 +707,41 @@ bar
 baz
 foo
 
+# Create a table with a computed column that we'll de-compute
+statement ok
+CREATE TABLE decomputed_column (a INT PRIMARY KEY, b INT AS ( a + 1 ) STORED)
+
+statement ok
+INSERT INTO decomputed_column VALUES (1), (2)
+
+statement error cannot write directly to computed column
+INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
+
+statement ok
+ALTER TABLE decomputed_column ALTER COLUMN b DROP STORED
+
+# Verify that the computation is dropped and that we can mutate the column
+statement ok
+INSERT INTO decomputed_column VALUES (3, NULL), (4, 99)
+
+query II
+select a, b from decomputed_column order by a
+----
+1 2
+2 3
+3 NULL
+4 99
+
+query TT
+show create table decomputed_column
+----
+decomputed_column  CREATE TABLE decomputed_column (
+                   a INT NOT NULL,
+                   b INT NULL,
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                   FAMILY "primary" (a, b)
+)
+
 # Verify that auditing can be enabled by root, and cannot be disabled by non-root.
 
 statement ok
