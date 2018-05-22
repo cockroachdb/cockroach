@@ -12,6 +12,8 @@ import { AdminUIState, createAdminUIStore } from "./state";
 
 import * as protos from "src/js/protos";
 
+import { createLocation } from "src/hacks/createLocation";
+
 describe("analytics listener", function() {
   const clusterID = "a49f0ced-7ada-4135-af37-8acf6b548df0";
   describe("page method", function () {
@@ -74,6 +76,7 @@ describe("analytics listener", function() {
         name: "/test/path",
         properties: {
           path: "/test/path",
+          search: "",
         },
       });
     });
@@ -98,6 +101,7 @@ describe("analytics listener", function() {
         name: "/test/path",
         properties: {
           path: "/test/path",
+          search: "",
         },
       });
       assert.deepEqual(pageSpy.args[1][0], {
@@ -105,6 +109,7 @@ describe("analytics listener", function() {
         name: "/test/path/2",
         properties: {
           path: "/test/path/2",
+          search: "",
         },
       });
     });
@@ -128,6 +133,7 @@ describe("analytics listener", function() {
         name: "/test/[redacted]/path",
         properties: {
           path: "/test/[redacted]/path",
+          search: "",
         },
       });
     });
@@ -162,19 +168,26 @@ describe("analytics listener", function() {
         "/overview/map/datacenter=us-west-1/rack=1234",
         "/overview/map/[locality]/[locality]",
       ),
+      testRedaction(
+        "login redirect URL parameters",
+        "/login?redirectTo=%2Fdatabase%2Ffoobar%2Ftable%2Fbaz",
+        "/login?redirectTo=%2Fdatabase%2F%5Bdb%5D%2Ftable%2F%5Btbl%5D",
+      ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
         setClusterData();
         const sync = new AnalyticsSync(analytics, store, defaultRedactions);
+        const expectedLocation = createLocation(expected);
 
-        sync.page({ pathname: input } as Location);
+        sync.page(createLocation(input));
 
         assert.isTrue(pageSpy.calledOnce);
         assert.deepEqual(pageSpy.args[0][0], {
           userId: clusterID,
-          name: expected,
+          name: expectedLocation.pathname,
           properties: {
-            path: expected,
+            path: expectedLocation.pathname,
+            search: expectedLocation.search,
           },
         });
       });

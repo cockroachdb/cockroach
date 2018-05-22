@@ -200,10 +200,7 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		// since we do not expect any projections or rendering
 		// on a scan before a join.
 		args[i].ValNeededForCol.AddRange(0, len(desc.Columns)-1)
-		args[i].ColIdxMap = make(map[sqlbase.ColumnID]int, len(desc.Columns))
-		for j, c := range desc.Columns {
-			args[i].ColIdxMap[c.ID] = j
-		}
+		args[i].ColIdxMap = desc.ColumnIdxMap()
 		args[i].Desc = &desc
 		args[i].Cols = desc.Columns
 		args[i].Spans = make(roachpb.Spans, len(table.Spans))
