@@ -141,7 +141,7 @@ type csvRecord struct {
 // convertRecord converts CSV records into KV pairs and sends them on the
 // kvCh chan.
 func (c *csvInputReader) convertRecord(ctx context.Context) error {
-	conv, err := newRowConverter(ctx, c.tableDesc, c.kvCh)
+	conv, err := newRowConverter(c.tableDesc, c.kvCh)
 	if err != nil {
 		return err
 	}
@@ -164,10 +164,10 @@ func (c *csvInputReader) convertRecord(ctx context.Context) error {
 					}
 				}
 			}
-			if err := conv.row(batch.fileIndex, rowNum); err != nil {
+			if err := conv.row(ctx, batch.fileIndex, rowNum); err != nil {
 				return errors.Wrapf(err, "converting row: %s: row %d", batch.file, rowNum)
 			}
 		}
 	}
-	return conv.sendBatch()
+	return conv.sendBatch(ctx)
 }

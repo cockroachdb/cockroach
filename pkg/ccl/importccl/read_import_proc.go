@@ -157,10 +157,6 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 type kvBatch []roachpb.KeyValue
 
 type rowConverter struct {
-	// stored ctx allows caching a matching Done channel between calls.
-	ctx  context.Context
-	done <-chan struct{}
-
 	// current row buf
 	datums []tree.Datum
 
@@ -184,11 +180,9 @@ type rowConverter struct {
 const kvBatchSize = 1000
 
 func newRowConverter(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, kvCh chan<- kvBatch,
+	tableDesc *sqlbase.TableDescriptor, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
 	c := &rowConverter{
-		ctx:       ctx,
-		done:      ctx.Done(),
 		tableDesc: tableDesc,
 		kvCh:      kvCh,
 		evalCtx:   tree.EvalContext{SessionData: &sessiondata.SessionData{Location: time.UTC}},
@@ -241,7 +235,7 @@ func newRowConverter(
 	return c, nil
 }
 
-func (c *rowConverter) row(fileIndex int32, rowIndex int64) error {
+func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64) error {
 	if c.hidden >= 0 {
 		// We don't want to call unique_rowid() for the hidden PK column because
 		// it is not idempotent. The sampling from the first stage will be useless
@@ -269,7 +263,7 @@ func (c *rowConverter) row(fileIndex int32, rowIndex int64) error {
 		return errors.Wrapf(err, "generate insert row")
 	}
 	if err := c.ri.InsertRow(
-		c.ctx,
+		ctx,
 		inserter(func(kv roachpb.KeyValue) {
 			kv.Value.InitChecksum(kv.Key)
 			c.kvBatch = append(c.kvBatch, kv)
@@ -283,18 +277,18 @@ func (c *rowConverter) row(fileIndex int32, rowIndex int64) error {
 	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.kvBatch) >= kvBatchSize {
-		if err := c.sendBatch(); err != nil {
+		if err := c.sendBatch(ctx); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *rowConverter) sendBatch() error {
+func (c *rowConverter) sendBatch(ctx context.Context) error {
 	select {
 	case c.kvCh <- c.kvBatch:
-	case <-c.done:
-		return c.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	c.kvBatch = make(kvBatch, 0, c.batchCap)
 	return nil
