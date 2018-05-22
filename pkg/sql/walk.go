@@ -493,7 +493,9 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.source)
 
 	case *showTraceNode:
-		v.visit(n.plan)
+		if n.plan != nil {
+			v.visit(n.plan)
+		}
 
 	case *showTraceReplicaNode:
 		v.visit(n.plan)
