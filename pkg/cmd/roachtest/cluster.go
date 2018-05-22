@@ -750,6 +750,14 @@ func (c *cluster) RunWithBuffer(
 		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
 }
 
+// RemountNoBarrier remounts the cluster's local SSDs with the nobarrier option.
+func (c *cluster) RemountNoBarrier(ctx context.Context) {
+	c.Run(ctx, c.All(),
+		"sudo", "umount", "/mnt/data1", ";",
+		"sudo", "mount", "-o", "discard,defaults,nobarrier",
+		"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+}
+
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
 // specifying whether the URL should include the node's internal or external IP
 // address. In general, inter-cluster communication and should use internal IPs
