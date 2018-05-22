@@ -22,6 +22,7 @@ import "fmt"
 type QueryTimespan struct {
 	StartNanos          int64
 	EndNanos            int64
+	NowNanos            int64
 	SampleDurationNanos int64
 }
 
@@ -29,15 +30,6 @@ type QueryTimespan struct {
 // and end bounds.
 func (qt *QueryTimespan) width() int64 {
 	return qt.EndNanos - qt.StartNanos
-}
-
-// slideForward modifies the timespan so that it has the same width, but
-// startNanos is moved to endNanos - in effect, sliding the timespan forward to
-// the next "window" with the same width.
-func (qt *QueryTimespan) slideForward() {
-	w := qt.width()
-	qt.StartNanos += w
-	qt.EndNanos += w
 }
 
 // moveForward modifies the timespan so that it has the same width, but
@@ -92,5 +84,30 @@ func (qt *QueryTimespan) verifyDiskResolution(diskResolution Resolution) error {
 			resolutionSampleDuration,
 		)
 	}
+	return nil
+}
+
+// adjustForCurrentTime adjusts the passed query timespan in order to prevent
+// certain artifacts which can occur when querying in the very recent past.
+func (qt *QueryTimespan) adjustForCurrentTime(diskResolution Resolution) error {
+	// Disallow queries for the sample period containing the current system time
+	// and any later periods. This prevents returning "incomplete" data for sample
+	// periods where new data may yet be recorded, which in turn prevents an odd
+	// user experience where graphs of recent metric data have a precipitous "dip"
+	// at latest timestamp.
+	cutoff := qt.NowNanos - qt.SampleDurationNanos
+
+	// Do not allow queries in the future.
+	if qt.StartNanos > cutoff {
+		return fmt.Errorf(
+			"cannot query time series in the future (start time %d was greater than current clock %d",
+			qt.StartNanos,
+			qt.NowNanos,
+		)
+	}
+	if qt.EndNanos > cutoff {
+		qt.EndNanos = cutoff
+	}
+
 	return nil
 }

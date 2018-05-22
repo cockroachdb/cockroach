@@ -116,8 +116,20 @@ func (mdb *ModelDB) Query(
 	sources []string,
 	downsample, agg tspb.TimeSeriesQueryAggregator,
 	derivative tspb.TimeSeriesQueryDerivative,
-	slabDuration, sampleDuration, start, end, interpolationLimit int64,
+	slabDuration, sampleDuration, start, end, interpolationLimit, now int64,
 ) DataSeries {
+	// Check query bounds against the provided current time. Queries in the future
+	// are disallowed; "future" is considered to be at or later than the sample
+	// period containing the current system time (represented by the "now"
+	// timestamp)
+	cutoff := now - sampleDuration
+	if start > cutoff {
+		return nil
+	}
+	if end > cutoff {
+		end = cutoff
+	}
+
 	// Add one nanosecond to end because the real CockroachDB system is currently
 	// inclusive of end boundary.
 	end++

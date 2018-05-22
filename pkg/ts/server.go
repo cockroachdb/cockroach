@@ -19,6 +19,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -216,6 +217,7 @@ func (s *Server) Query(
 		StartNanos:          request.StartNanos,
 		EndNanos:            request.EndNanos,
 		SampleDurationNanos: sampleNanos,
+		NowNanos:            timeutil.Now().UnixNano(),
 	}
 
 	// Start a task which is itself responsible for starting per-query worker
@@ -255,7 +257,7 @@ func (s *Server) Query(
 						},
 					)
 
-					datapoints, sources, err := s.db.QueryMemoryConstrained(
+					datapoints, sources, err := s.db.Query(
 						ctx,
 						query,
 						Resolution10s,
