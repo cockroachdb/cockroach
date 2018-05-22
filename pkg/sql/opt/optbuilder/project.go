@@ -143,7 +143,8 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 }
 
 // buildScalarProjection builds a set of memo groups that represent a scalar
-// expression.
+// expression, and then projects a new output column (either passthrough or
+// synthesized) in outScope having that expression as its value.
 //
 // texpr   The given scalar expression.
 // label   If a new column is synthesized, it will be labeled with this string.
@@ -157,49 +158,15 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 func (b *Builder) buildScalarProjection(
 	texpr tree.TypedExpr, label string, inScope, outScope *scope,
 ) *scopeColumn {
-	// NB: The case statements are sorted lexicographically.
-	switch t := texpr.(type) {
-	case *scopeColumn:
-		b.passthroughColumn(t, label, inScope, outScope)
-
-	case *tree.FuncExpr:
-		out, col := b.buildFunction(t, label, inScope)
-		if col != nil {
-			// Function was mapped to a column reference, such as in the case
-			// of an aggregate.
-			outScope.cols = append(outScope.cols, *col)
-		} else {
-			b.buildDefaultScalarProjection(texpr, out, label, inScope, outScope)
-		}
-
-	case *tree.ParenExpr:
-		b.buildScalarProjection(t.TypedInnerExpr(), label, inScope, outScope)
-
-	default:
-		out := b.buildScalar(texpr, inScope)
-		b.buildDefaultScalarProjection(texpr, out, label, inScope, outScope)
-	}
-
+	b.buildScalarHelper(texpr, label, inScope, outScope)
 	return &outScope.cols[len(outScope.cols)-1]
 }
 
-// passthroughColumn adds (to the output scope) a column that is available in
-// the input scope. The group is 0 for passthrough columns.
-//
-// See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) passthroughColumn(col *scopeColumn, label string, inScope, outScope *scope) {
-	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.id) {
-		panic(groupingError(col.String()))
-	}
-	col = outScope.appendColumn(col, label)
-
-	// Mark the column as a visible member of an anonymous table.
-	col.table.TableName = ""
-	col.hidden = false
-}
-
-// buildDefaultScalarProjection builds a set of memo groups that represent
-// a scalar expression.
+// finishBuildScalar completes construction of a new scalar expression. If
+// outScope is nil, then finishBuildScalar returns the result memo group, which
+// can be nested within the larger expression being built. If outScope is not
+// nil, then finishBuildScalar synthesizes a new output column in outScope with
+// the expression as its value.
 //
 // texpr     The given scalar expression. The expression is any scalar
 //           expression except for a bare variable or aggregate (those are
@@ -210,28 +177,13 @@ func (b *Builder) passthroughColumn(col *scopeColumn, label string, inScope, out
 // label     If a new column is synthesized, it will be labeled with this
 //           string.
 //
-// See Builder.buildStmt for a description of the remaining input values.
-func (b *Builder) buildDefaultScalarProjection(
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) finishBuildScalar(
 	texpr tree.TypedExpr, group memo.GroupID, label string, inScope, outScope *scope,
-) {
-	if inScope.inGroupingContext() && !inScope.groupby.inAgg {
-		if len(inScope.groupby.varsUsed) > 0 {
-			if _, ok := inScope.groupby.groupStrs[symbolicExprStr(texpr)]; !ok {
-				// This expression was not found among the GROUP BY expressions.
-				i := inScope.groupby.varsUsed[0]
-				col := b.colMap[i]
-				panic(groupingError(col.String()))
-			}
-
-			// Reset varsUsed for the next projection.
-			inScope.groupby.varsUsed = inScope.groupby.varsUsed[:0]
-		}
-
-		if col := inScope.findGrouping(group); col != nil {
-			// The column already exists, so use that instead.
-			outScope.appendColumn(col, label)
-			return
-		}
+) (out memo.GroupID) {
+	if outScope == nil {
+		return group
 	}
 
 	// Avoid synthesizing a new column if possible.
@@ -242,4 +194,35 @@ func (b *Builder) buildDefaultScalarProjection(
 	}
 
 	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr, group)
+	return group
+}
+
+// finishBuildScalarRef constructs a reference to the given column. If outScope
+// is nil, then finishBuildScalarRef returns a Variable expression that refers
+// to the column. This expression can be nested within the larger expression
+// being constructed. If outScope is not nil, then finishBuildScalarRef adds the
+// column as a passthrough column to outScope.
+//
+// col     Column containing the scalar expression that's been referenced.
+// label   If passthrough column is added, it will optionally be labeled with
+//         this string (if not empty).
+//
+// See Builder.buildStmt for a description of the remaining input and return
+// values.
+func (b *Builder) finishBuildScalarRef(
+	col *scopeColumn, label string, inScope, outScope *scope,
+) (out memo.GroupID) {
+	// If this is not a projection context, then wrap the column reference with
+	// a Variable expression that can be embedded in outer expression(s).
+	if outScope == nil {
+		return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+	}
+
+	// Project the column.
+	col = outScope.appendColumn(col, label)
+
+	// Mark the column as a visible member of an anonymous table.
+	col.table.TableName = ""
+	col.hidden = false
+	return col.group
 }
