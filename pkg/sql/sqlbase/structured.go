@@ -596,7 +596,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	// before AllocateIDs.
 	savedID := desc.ID
 	if desc.ID == 0 {
-		desc.ID = keys.MaxReservedDescID + 1
+		desc.ID = keys.MinUserDescID
 	}
 	err := desc.ValidateTable(nil)
 	desc.ID = savedID

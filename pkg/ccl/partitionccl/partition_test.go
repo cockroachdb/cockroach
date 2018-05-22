@@ -123,7 +123,7 @@ func (t *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		st := cluster.MakeTestingClusterSettings()
-		const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
+		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
 		t.parsed.tableDesc, err = importccl.MakeSimpleTableDescriptor(
 			ctx, st, createTable, parentID, tableID, hlc.UnixNano())
 		if err != nil {

@@ -3,6 +3,8 @@
 query T
 SHOW DATABASES
 ----
+defaultdb
+postgres
 system
 test
 
@@ -28,10 +30,14 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM system.namespace]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
+fetched: /namespace/primary/0/'defaultdb'/id -> 50
+output row: [0 'defaultdb' 50]
+fetched: /namespace/primary/0/'postgres'/id -> 51
+output row: [0 'postgres' 51]
 fetched: /namespace/primary/0/'system'/id -> 1
 output row: [0 'system' 1]
-fetched: /namespace/primary/0/'test'/id -> 50
-output row: [0 'test' 50]
+fetched: /namespace/primary/0/'test'/id -> 52
+output row: [0 'test' 52]
 fetched: /namespace/primary/1/'descriptor'/id -> 3
 output row: [1 'descriptor' 3]
 fetched: /namespace/primary/1/'eventlog'/id -> 12
@@ -64,8 +70,10 @@ output row: [1 'zones' 5]
 query ITI rowsort
 SELECT * FROM system.namespace
 ----
+0  defaultdb         50
+0  postgres          51
 0  system            1
-0  test              50
+0  test              52
 1  descriptor        3
 1  eventlog          12
 1  jobs              15
@@ -100,6 +108,8 @@ SELECT id FROM system.descriptor
 21
 23
 50
+51
+52
 
 # Verify we can read "protobuf" columns.
 query I

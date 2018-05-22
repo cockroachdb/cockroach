@@ -36,9 +36,8 @@ func TestRenameTable(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	counter := int64(keys.MaxReservedDescID)
+	counter := int64(keys.MinNonPredefinedUserDescID)
 
-	counter++
 	oldDBID := sqlbase.ID(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)

@@ -6,12 +6,6 @@ start_server $argv
 
 spawn $argv sql
 
-start_test "Check that a client without a current database suggests to use SET."
-eexpect "warning: no current database set"
-eexpect "SET database"
-eexpect root@
-end_test
-
 start_test "Check that a syntax error can make suggestions."
 send "select * from;\r"
 eexpect "syntax error"

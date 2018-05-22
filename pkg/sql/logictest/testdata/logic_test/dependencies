@@ -18,89 +18,89 @@ query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, column_id
 ----
 descriptor_id  descriptor_name  column_id  column_name  column_type                                                   nullable  default_expr    hidden
-51             test_kv          1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-51             test_kv          2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-51             test_kv          3          w            semantic_type:DECIMAL width:0 precision:0 visible_type:NONE   true      NULL            false
-52             test_kvr1        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-53             test_kvr2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-53             test_kvr2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-53             test_kvr2        3          rowid        semantic_type:INT width:0 precision:0 visible_type:NONE       false     unique_rowid()  true
-54             test_kvr3        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-54             test_kvr3        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-54             test_kvr3        3          rowid        semantic_type:INT width:0 precision:0 visible_type:NONE       false     unique_rowid()  true
-55             test_kvi1        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-56             test_kvi2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-56             test_kvi2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
-57             test_v1          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-59             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+53             test_kv          1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+53             test_kv          2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+53             test_kv          3          w            semantic_type:DECIMAL width:0 precision:0 visible_type:NONE   true      NULL            false
+54             test_kvr1        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+55             test_kvr2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+55             test_kvr2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+55             test_kvr2        3          rowid        semantic_type:INT width:0 precision:0 visible_type:NONE       false     unique_rowid()  true
+56             test_kvr3        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+56             test_kvr3        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+56             test_kvr3        3          rowid        semantic_type:INT width:0 precision:0 visible_type:NONE       false     unique_rowid()  true
+57             test_kvi1        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+58             test_kvi2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+58             test_kvi2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
+59             test_v1          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+61             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
 
 query ITITTB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
 ----
 descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
-51             test_kv          1         primary          primary     true
-51             test_kv          2         test_v_idx       secondary   true
-51             test_kv          3         test_v_idx2      secondary   false
-51             test_kv          4         test_v_idx3      secondary   false
-52             test_kvr1        1         primary          primary     true
-53             test_kvr2        1         primary          primary     true
-53             test_kvr2        2         test_kvr2_v_key  secondary   true
-54             test_kvr3        1         primary          primary     true
-54             test_kvr3        2         test_kvr3_v_key  secondary   true
-55             test_kvi1        1         primary          primary     true
-56             test_kvi2        1         primary          primary     true
-56             test_kvi2        2         test_kvi2_idx    secondary   true
-57             test_v1          0         ·                primary     false
-59             test_v2          0         ·                primary     false
+53             test_kv          1         primary          primary     true
+53             test_kv          2         test_v_idx       secondary   true
+53             test_kv          3         test_v_idx2      secondary   false
+53             test_kv          4         test_v_idx3      secondary   false
+54             test_kvr1        1         primary          primary     true
+55             test_kvr2        1         primary          primary     true
+55             test_kvr2        2         test_kvr2_v_key  secondary   true
+56             test_kvr3        1         primary          primary     true
+56             test_kvr3        2         test_kvr3_v_key  secondary   true
+57             test_kvi1        1         primary          primary     true
+58             test_kvi2        1         primary          primary     true
+58             test_kvi2        2         test_kvi2_idx    secondary   true
+59             test_v1          0         ·                primary     false
+61             test_v2          0         ·                primary     false
 
 query ITITTITT colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
 ----
 descriptor_id  descriptor_name  index_id  index_name       column_type  column_id  column_name  column_direction
-51             test_kv          1         primary          key          1          k            ASC
-51             test_kv          2         test_v_idx       extra        1          NULL         NULL
-51             test_kv          2         test_v_idx       key          2          v            ASC
-51             test_kv          3         test_v_idx2      extra        1          NULL         NULL
-51             test_kv          3         test_v_idx2      key          2          v            DESC
-51             test_kv          4         test_v_idx3      composite    3          NULL         NULL
-51             test_kv          4         test_v_idx3      extra        1          NULL         NULL
-51             test_kv          4         test_v_idx3      key          3          w            ASC
-51             test_kv          4         test_v_idx3      storing      2          NULL         NULL
-52             test_kvr1        1         primary          key          1          k            ASC
-53             test_kvr2        1         primary          key          3          rowid        ASC
-53             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL
-53             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC
-54             test_kvr3        1         primary          key          3          rowid        ASC
-54             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL
-54             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC
-55             test_kvi1        1         primary          key          1          k            ASC
-56             test_kvi2        1         primary          key          1          k            ASC
-56             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL
-56             test_kvi2        2         test_kvi2_idx    key          2          v            ASC
+53             test_kv          1         primary          key          1          k            ASC
+53             test_kv          2         test_v_idx       extra        1          NULL         NULL
+53             test_kv          2         test_v_idx       key          2          v            ASC
+53             test_kv          3         test_v_idx2      extra        1          NULL         NULL
+53             test_kv          3         test_v_idx2      key          2          v            DESC
+53             test_kv          4         test_v_idx3      composite    3          NULL         NULL
+53             test_kv          4         test_v_idx3      extra        1          NULL         NULL
+53             test_kv          4         test_v_idx3      key          3          w            ASC
+53             test_kv          4         test_v_idx3      storing      2          NULL         NULL
+54             test_kvr1        1         primary          key          1          k            ASC
+55             test_kvr2        1         primary          key          3          rowid        ASC
+55             test_kvr2        2         test_kvr2_v_key  extra        3          NULL         NULL
+55             test_kvr2        2         test_kvr2_v_key  key          2          v            ASC
+56             test_kvr3        1         primary          key          3          rowid        ASC
+56             test_kvr3        2         test_kvr3_v_key  extra        3          NULL         NULL
+56             test_kvr3        2         test_kvr3_v_key  key          2          v            ASC
+57             test_kvi1        1         primary          key          1          k            ASC
+58             test_kvi2        1         primary          key          1          k            ASC
+58             test_kvi2        2         test_kvi2_idx    extra        1          NULL         NULL
+58             test_kvi2        2         test_kvi2_idx    key          2          v            ASC
 
 query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name    dependson_details
-52             test_kvr1        1         NULL       51            fk              1                   fk_k_ref_test_kv  SharedPrefixLen: 1
-53             test_kvr2        2         NULL       51            fk              1                   fk_v_ref_test_kv  SharedPrefixLen: 1
-54             test_kvr3        2         NULL       51            fk              2                   fk_v_ref_test_kv  SharedPrefixLen: 1
-55             test_kvi1        1         NULL       51            interleave      1                   NULL              SharedPrefixLen: 1
-56             test_kvi2        2         NULL       51            interleave      1                   NULL              SharedPrefixLen: 1
-57             test_v1          NULL      NULL       51            view            NULL                NULL              NULL
-59             test_v2          NULL      NULL       57            view            NULL                NULL              NULL
+54             test_kvr1        1         NULL       53            fk              1                   fk_k_ref_test_kv  SharedPrefixLen: 1
+55             test_kvr2        2         NULL       53            fk              1                   fk_v_ref_test_kv  SharedPrefixLen: 1
+56             test_kvr3        2         NULL       53            fk              2                   fk_v_ref_test_kv  SharedPrefixLen: 1
+57             test_kvi1        1         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
+58             test_kvi2        2         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
+59             test_v1          NULL      NULL       53            view            NULL                NULL              NULL
+61             test_v2          NULL      NULL       59            view            NULL                NULL              NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-51             test_kv          NULL      57               view               0                      NULL               Columns: [1 2 3]
-51             test_kv          1         52               fk                 1                      ·                  SharedPrefixLen: 0
-51             test_kv          1         53               fk                 2                      ·                  SharedPrefixLen: 0
-51             test_kv          1         55               interleave         1                      NULL               SharedPrefixLen: 0
-51             test_kv          1         56               interleave         2                      NULL               SharedPrefixLen: 0
-51             test_kv          2         54               fk                 2                      ·                  SharedPrefixLen: 0
-57             test_v1          NULL      59               view               0                      NULL               Columns: [1]
+53             test_kv          NULL      59               view               0                      NULL               Columns: [1 2 3]
+53             test_kv          1         54               fk                 1                      ·                  SharedPrefixLen: 0
+53             test_kv          1         55               fk                 2                      ·                  SharedPrefixLen: 0
+53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
+53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
+53             test_kv          2         56               fk                 2                      ·                  SharedPrefixLen: 0
+59             test_v1          NULL      61               view               0                      NULL               Columns: [1]
 
 # Checks view dependencies (#17306)
 statement ok
@@ -111,13 +111,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-62             moretest_v       NULL      NULL       60            view            NULL                NULL            NULL
+64             moretest_v       NULL      NULL       62            view            NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-60             moretest_t       NULL      62               view               0                      NULL               Columns: [1 2 3]
+62             moretest_t       NULL      64               view               0                      NULL               Columns: [1 2 3]
 
 # Check sequence dependencies.
 
@@ -131,13 +131,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'blog_posts'
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-64             blog_posts       NULL      1          63            sequence        NULL                NULL            NULL
+66             blog_posts       NULL      1          65            sequence        NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
+65             blog_posts_id_seq  NULL      66               sequence           0                      NULL               Columns: [0]
 
 # Verify that we report a dependency on a column that is being mutated.
   #CREATE VIEW v AS WITH a AS (UPDATE kv SET v = 444 RETURNING k) SELECT k FROM a;
@@ -172,4 +172,4 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-65             kv               NULL      66               view               0                      NULL               Columns: [1 2 3]
+67             kv               NULL      68               view               0                      NULL               Columns: [1 2 3]

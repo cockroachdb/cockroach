@@ -1351,7 +1351,7 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
-	baseID := uint32(keys.MaxReservedDescID + 1)
+	baseID := uint32(keys.MinUserDescID)
 	testData := []struct {
 		repl        *Replica
 		expMaxBytes int64

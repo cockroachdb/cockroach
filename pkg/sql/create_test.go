@@ -43,7 +43,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	expectedCounter := int64(keys.MaxReservedDescID + 1)
+	expectedCounter := int64(keys.MinNonPredefinedUserDescID)
 
 	// Test values before creating the database.
 	// descriptor ID counter.

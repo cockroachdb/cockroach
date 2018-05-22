@@ -36,13 +36,13 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
 query IITTI
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
-51  1  NULL  p12      1
-51  1  p12   p12p3    1
-51  1  p12p3 p12p3p8  1
-51  1  NULL  p6       1
-51  1  p6    p6p7     1
-51  1  p6    p6p8     1
-51  1  p6    p6px     1
-51  1  p12   pd       1
-51  2  NULL  p00      2
-52  1  NULL  pfoo     1
+53  1  NULL   p12      1
+53  1  p12    p12p3    1
+53  1  p12p3  p12p3p8  1
+53  1  NULL   p6       1
+53  1  p6     p6p7     1
+53  1  p6     p6p8     1
+53  1  p6     p6px     1
+53  1  p12    pd       1
+53  2  NULL   p00      2
+54  1  NULL   pfoo     1

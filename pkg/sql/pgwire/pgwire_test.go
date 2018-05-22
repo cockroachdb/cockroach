@@ -704,7 +704,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("hello world"),
 		},
 		"SHOW DATABASE": {
-			baseTest.Results(""),
+			baseTest.Results("defaultdb"),
 		},
 		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
 			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
@@ -716,7 +716,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("isRole", "BOOL", false, false, "{}"),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("d").Results("system"),
+			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
 			baseTest.Results("system", "public", "users", sqlbase.AdminRole, "DELETE").

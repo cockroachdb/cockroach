@@ -749,6 +749,8 @@ func Example_sql() {
 	// 42	69
 	// sql --execute=show databases
 	// Database
+	// defaultdb
+	// postgres
 	// system
 	// t
 	// sql -e select 1; select 2
@@ -2001,7 +2003,7 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 		testcases = append(testcases,
 			testCase{"leader_ranges", baseIdx, 3},
 			testCase{"leaseholder_ranges", baseIdx + 1, 3},
-			testCase{"ranges", baseIdx + 2, 20},
+			testCase{"ranges", baseIdx + 2, 22},
 			testCase{"unavailable_ranges", baseIdx + 3, 1},
 			testCase{"underreplicated_ranges", baseIdx + 4, 1},
 		)
@@ -2239,6 +2241,10 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
+  debug/nodes/1/ranges/21
+  debug/nodes/1/ranges/22
+  debug/schema/defaultdb@details
+  debug/schema/postgres@details
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog

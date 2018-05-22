@@ -100,7 +100,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	})
 
 	// Verify the actual splits.
-	objectID := uint32(keys.MaxReservedDescID + 1)
+	objectID := uint32(keys.MinUserDescID)
 	splits := []roachpb.RKey{keys.MakeTablePrefix(objectID), roachpb.RKeyMax}
 	ranges, err := getRangeKeys(kvDB)
 	if err != nil {
