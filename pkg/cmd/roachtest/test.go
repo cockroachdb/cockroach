@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	version "github.com/hashicorp/go-version"
 	"github.com/petermattis/goid"
 )
 
@@ -56,8 +57,14 @@ func makeFilterRE(filter []string) *regexp.Regexp {
 }
 
 type testSpec struct {
-	SkippedBecause string // if non-empty, test will be skipped
-	Name           string
+	Skip string // if non-empty, test will be skipped
+	Name string
+	// MinVersion indicates the minimum cockroach version that is required for
+	// the test to be run. If MinVersion is less than the version specified
+	// --cockroach-version, Skip will be populated causing the test to be
+	// skipped.
+	MinVersion string
+	minVersion *version.Version
 	// Stable indicates whether failure of the test will result in failure of the
 	// test run. Tests should be added initially as unstable, and only converted
 	// to stable once they have passed successfully on multiple nightly (not
@@ -93,6 +100,7 @@ type registry struct {
 	clusters       map[string]string
 	out            io.Writer
 	statusInterval time.Duration
+	buildVersion   *version.Version
 
 	status struct {
 		syncutil.Mutex
@@ -107,6 +115,33 @@ func newRegistry() *registry {
 		m:        make(map[string]*testSpec),
 		clusters: make(map[string]string),
 		out:      os.Stdout,
+	}
+}
+
+func (r *registry) setBuildVersion(buildTag string) error {
+	var err error
+	r.buildVersion, err = version.NewVersion(buildTag)
+	return err
+}
+
+func (r *registry) loadBuildVersion() {
+	getLatestTag := func() (string, error) {
+		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	buildTag, err := getLatestTag()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+	if err := r.setBuildVersion(buildTag); err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
 	}
 }
 
@@ -149,6 +184,18 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 			return err
 		}
 	}
+
+	if spec.MinVersion != "" {
+		// We append "-0" to the min-version spec so that we capture all
+		// prereleases of the specified version. Otherwise, "v2.1.0" would compare
+		// greater than "v2.1.0-alpha.x".
+		var err error
+		spec.minVersion, err = version.NewVersion(spec.MinVersion + "-0")
+		if err != nil {
+			return fmt.Errorf("%s: unable to parse min-version: %s: %+v",
+				spec.Name, spec.MinVersion, err)
+		}
+	}
 	return nil
 }
 
@@ -181,6 +228,17 @@ func (r *registry) List(re *regexp.Regexp) []*testSpec {
 func (r *registry) Run(filter []string) int {
 	filterRE := makeFilterRE(filter)
 	tests := r.List(filterRE)
+
+	// Skip any tests for which the min-version is less than the build-version.
+	for _, t := range tests {
+		if t.Skip == "" && t.minVersion != nil {
+			if r.buildVersion.LessThan(t.minVersion) {
+				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
+					r.buildVersion, t.minVersion)
+			}
+		}
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(count * len(tests))
 
@@ -504,11 +562,18 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
 	} else {
-		stability := ""
+		var details []string
 		if !t.spec.Stable {
-			stability = " [unstable]"
+			details = append(details, "unstable")
 		}
-		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), stability)
+		if t.spec.Skip != "" {
+			details = append(details, "skip")
+		}
+		var detail string
+		if len(details) > 0 {
+			detail = fmt.Sprintf(" [%s]", strings.Join(details, ","))
+		}
+		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), detail)
 	}
 	r.status.Lock()
 	r.status.running[t] = struct{}{}
@@ -570,16 +635,16 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
 						}
 					}
-				} else if t.spec.SkippedBecause == "" {
+				} else if t.spec.Skip == "" {
 					fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 				} else {
 					if teamCity {
 						fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
-							t.Name(), t.spec.SkippedBecause)
+							t.Name(), t.spec.Skip)
 					}
-					fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.SkippedBecause)
+					fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
 				}
 
 				if teamCity {
@@ -606,7 +671,7 @@ func (r *registry) run(spec *testSpec, filter *regexp.Regexp, c *cluster, done f
 
 		t.start = timeutil.Now()
 
-		if t.spec.SkippedBecause != "" {
+		if t.spec.Skip != "" {
 			return
 		}
 

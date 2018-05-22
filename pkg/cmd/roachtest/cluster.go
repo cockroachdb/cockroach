@@ -53,6 +53,7 @@ var (
 	cockroach   string
 	workload    string
 	roachprod   string
+	buildTag    string
 	clusterName string
 	clusterID   string
 	clusterWipe bool

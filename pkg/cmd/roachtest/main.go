@@ -63,6 +63,13 @@ Use 'roachtest run -n' to see a list of all tests.
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
 			r := newRegistry()
+			if buildTag != "" {
+				if err := r.setBuildVersion(buildTag); err != nil {
+					return err
+				}
+			} else {
+				r.loadBuildVersion()
+			}
 			registerTests(r)
 			os.Exit(r.Run(args))
 			return nil
@@ -81,6 +88,8 @@ Use 'roachtest run -n' to see a list of all tests.
 		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 	runCmd.Flags().StringVar(
 		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+	runCmd.Flags().StringVar(
+		&buildTag, "build-tag", "", "build tag (auto-detect if empty)")
 	runCmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
 	runCmd.Flags().BoolVar(
