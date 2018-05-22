@@ -102,7 +102,7 @@
     "stylus-loader": "^3.0.1",
     "thread-loader": "^1.1.1",
     "ts-loader": "^2.3.4",
-    "tslint": "^5.1.0",
+    "tslint": "^5.10.0",
     "typescript": "^2.2.1",
     "url-loader": "^0.5.8",
     "webpack": "^3.5.6",

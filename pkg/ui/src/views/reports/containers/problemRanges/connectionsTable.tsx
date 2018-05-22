@@ -21,7 +21,7 @@ interface ConnectionsTableProps {
 const connectionTableColumns: ConnectionTableColumn[] = [
   {
     title: "Node",
-    extract: (_, id) => (
+    extract: (_problem, id) => (
       <Link className="debug-link" to={`/reports/problemranges/${id}`}>
         n{id}
       </Link>
