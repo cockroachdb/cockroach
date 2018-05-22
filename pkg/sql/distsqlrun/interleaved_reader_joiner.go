@@ -69,7 +69,11 @@ var _ Processor = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
-	flowCtx *FlowCtx, spec *InterleavedReaderJoinerSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec *InterleavedReaderJoinerSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
@@ -161,6 +165,7 @@ func newInterleavedReaderJoiner(
 	// TODO(richardwu): Generalize this to 2+ tables.
 	if err := irj.joinerBase.init(
 		flowCtx,
+		processorID,
 		irj.tables[0].post.outputTypes,
 		irj.tables[1].post.outputTypes,
 		spec.Type,

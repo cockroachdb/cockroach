@@ -98,7 +98,7 @@ distinct        ·            ·                  (x, y, z)               weak-k
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLFugzAQhvc-RfXPN8RA0pSJoUuWpoq6VQwUnyKkBCPbSEkj3r0ChpQosSuBxGg73333O-YuKJXk9-zIBvEXBAgBCCEIEQhLpIRKq5yNUbr9SQ9s5AnxglCUVW3b7ZSQK82IL7CFPTBifGbfB95xJlmDINlmxaGTVLo4ZvqcnM4_IGxrGz8nASUhJRHShqBqe61qbLZnxKKh_5vfCmOLMrdDbSKo0zx0BA8d19J1qbRkzXJQO22m6yIcdCFmu2OPeZI7DmZL5zFPki6cLZ3HPEm6aLZ0HvPkX_8dx45NpUrDN1PgfuVFOx1Y7rkfJUbVOucPrfJO0y-3HddtSDa2PxX9YlP2R22Df2HhhIMBLG7hwG32qEMnHbnhaEzfSye8cptXY8wvTnjtNq_HmF_d_9XC80zcj-zWnTZPvwEAAP__B_KjkQ==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyslE2LqzAUhvf3V1zedaAm2i9XLu6mm9uhzG5w4ZhDEVojSYR2iv99UMGOpY0Oukzie57zxHBuyJWk_8mZDMIPcDAIMPhgCMCwRMxQaJWSMUrXn7SBnbwg9BiyvChtvR0zpEoTwhtsZk-EEO_J54kOlEjSCw8MkmySnRpMobNzoq_R5foFhn1pw7-RYJHPogBxxaBKe69rbHIkhLxi49n_MmOzPLWLZR8ccdaAXlLES8q9eJkrLUmT7NWOK1cf3PtlI36vET7-qvncVz3A7hRXk65ajDcUcxsOsDvD9SRDf7yhP7fhALsz3EwyDMYbBnMbDrA7w-1sA-EJ5UCmULmhh8HwvLJXDwySR2qni1GlTulNq7TBtMt9k2s2JBnbnvJ2scvbo7rBn2HuDItemD-GhZs8gPad6cAdDqb0vXSGV27yagp57Qxv3OTNFPLW_a-8gWfifmSP7Lj68x0AAP__pp2oBA==
 
 query III rowsort
 SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
@@ -130,7 +130,7 @@ distinct             ·            ·                  (x, y, z)               w
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUFvukAQxe__T2Hm-t-DC2iVE4devNTG9tZwoOzEkChLdpdEa_zuDXCwEplpsyEcAd_7zbx9WS9QaoUv2REtxB8gQUAAAkIQEIGABaQCKqNztFab5iedYKNOEM8FFGVVu-Z1KiDXBiG-gCvcASGG9-zzgDvMFBoQoNBlxaGFVKY4ZuacnM5fIGBbu3iWBCIJRRJBehWga3dztS7bI8TyKn5PftPG9aGJ_D9oHvzF_Lmwrihz17cX7Q7NQkahQRXPEjlIDAeJN5DufB6tMdZY0d1YcrLzZch-58uYj3C-wWRBMmS_IBnzEYIMJwuSIfsFyZiPEGQ0WZAM2S9Ixnzkq_sBcYe20qXFO-KQ87y511HtsfsfsLo2Ob4anbeY7nHb6toXCq3rvsruYVN2n5oBf4olKQ5ocUCKwzux7ItDeuwljY5I9YIWL0gxQ176LP1Eilc0eUWK17R47TO2ZDrGlYxumWRqJr16JpmiRQycbppkqibprvVnT6__vgMAAP__NNy6Yw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lb9u2zAQh_c-RXBrCdhH0o6tSUOXLE2Rdis8qOIhEOCIBkkBSQO_e6E_gCo3OsqyOkry777jdwf6HUpr6Gv2Qh6Sn4AgQIIABQI0CNjAQcDJ2Zy8t67-SRt4MK-QrAUU5akK9euDgNw6guQdQhGOBAn8yH4d6YkyQ261BgGGQlYcG8zJFS-Ze0tf336DgMcqJHepFKkSqYbDWYCtQl_Xh-yZIMGzmM7-bl0gt9oMsSl-Hi0vryn_pfChKPOwwvUlQTQHqU_lDDkyyV2Ko1A1Cu1Ztq3z0UnYzv45-1Wd6UFnOH3SuPSkI-xu0tu5k46U733igpOW033KpX1G2J3P-7k-I-V7n3JBn2q6T7W0zwi787mb6zNSvvepFvSpp_vUS_uMsDuf-7k-I-V7n_o_3ewfQJ_In2zpaUAcq7yur30yz9T-TXhbuZy-OZs3mPbxsck1Lwz50H7F9uGhbD_VDf4dRjYs-bBkw2oQxsuw4tve8mjNpjd8eMOGI-TtLYe-Z8M7nrxjw3s-vL-lbYzsWGzJ-C3DyJrhTXuGkUXTETi_aRhZNeR37bL3w_nTnwAAAP__eVbBtQ==
 
 query III
 SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
@@ -162,7 +162,7 @@ distinct             ·            ·                  (x, y)                   
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElD9vszAQxvf3U7y6NR5iIGnCxNAlS1Ol3SoGik8RUoKRbaSkUb57BQxpULlrZSpG_vz8Oz9-5AuUWuFTdkQL8RtIEBCAgBAERCBgAamAyugcrdWm-aUDNuoE8VxAUVa1a16nAnJtEOILuMIdEGJ4zd4PuMNMoQEBCl1WHFpJZYpjZs7J6fwBAra1i_8ngUhCSK8CdO1uS1qX7RFieRU_175o4_rGJJiJRM4GBcFvBI-FdUWZu76i2YtRaFA1-xl0hYOum0J36wxtYvyhoruh5DQHy2j9D5YRjHqwwTQZMlr_DBnBqBmG02TIaP0zZASjZhhNkyGj9c-QEfzZJf2Na4e20qXFO9fQyvPm9ka1x-7Gt7o2OT4bnbea7nHbcu0LhdZ1X2X3sCm7T82AX2FJwgENByQc3sGyD4f02EtaHZH0goYXJMyYlz6bfiDhFW1ekfCahtc-Y0umY1zJ6JZJpmbSq2eSKVrEyOmmSaZqku5af_b0-u8zAAD__6QwtJc=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyslb9u2zAQh_c-RXFrCNhHyo6tSUOXLE2Rdis0qOIhEOCIAkkBSQO_e6E_gCq3OioQR0n-8bv77kC_Q200fS1eyEH6ExAESBCgQEACAg6QC2isKck5Y7ufDIEH_QrpXkBVN63vXucCSmMJ0nfwlb8QpPCj-HWhJyo02d0eBGjyRXXpMY2tXgr7lr2-_QYBj61PP2dSZAryqwDT-ulQ54tnghSvYj34u7Ge7O4wZ2byTmR4t4iQH0F8qZyv6tLvcH9L6RqymizprqlFnFrETRQznLPUB1vXP92vrCuZ1YXrR4xRRxwAjyM-bhlxADGpxCgjlutVyqgqA-BR5f0WlQHEpFJGUanWq1RRVQbAo8rTFpUBxKRSRVGZrFeZRFUZAI8qz1tUBhCTyiT6Hf4f3BO5xtSOZqylk_fd5U76mYY_BGdaW9I3a8oeMzw-9rn-hSbnh684PDzUw6euwL_DyIYlH5ZsWM3CeBtWfNlHHp2w6QMfPrDhAPm4pel7NnziySc2fObD5y1lY2DHQkvGbxkG1gw37RkGFi0JwPlNw8CqIb9rt7Xn109_AgAA__8Zbbvp
 
 query II
 SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
@@ -182,7 +182,7 @@ scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkj9r80AMxvf3YzyzXvC_dPDUNUtaQrfi4eITweBYRneGluDvXnw3pA5uaTG440n66aeD54pOLB_MhR3KV6QgZCDkIBQg7FARepWanROdRiKwt28oE0LT9YOfyhWhFmWUV_jGt4wSL-bU8pGNZQXBsjdNGyS9Nhej74_mVKMaCTL42xbnzZlRpiN9YboJhk7UsrKdra_GhVsO8l_6u7FlcTYTp5t9MdvMlG9mKv4kIAumI7teOsc_SkAyBYjtmWPanAxa87NKHTTx-RS4ULDsfOym8bHvQisc-BlOv4UfZnByD2drzPkauFgD734FV-O_jwAAAP__iw2FSg==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskj1rwzAQhvf-jHdWiT87eOqaJS2hW_GgWEcwOD5zkqEl-L8Xy0Pq4BYVdZTunnvu4L2iZ0MHfSGL6h0pFDIo5FAooFCiVhiEG7KWZW5ZgL35QJUotP0wuvm7VmhYCNUVrnUdocKbPnV0JG1IdvNcQ063ndcM0l60fD7rU4N6UuDR3eZYp8-EKp3UD66bYuxZDAmZ1fh62tjmwI887Mq7xm11tlKn4WdmsWdm4a481pWHu4pYVxHuSv4zKhuuI9mBe0tBSUjmKJE505I7y6M09CrceM3yfPGc_zBk3VJNl8e-9yW_4Hc4_RV-WsHJPZzFmPMYuIiByz_B9fTwFQAA__97QoeT
 
 query TTT rowsort
 SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
@@ -208,7 +208,7 @@ distinct        ·            ·            (a, b)     a!=NULL; b!=NULL; key(a,b
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzE1DFr6zAQB_D9fYrHf80Nsezk5Xny0CVLU0K34kGxjmBILCPJ0BL83YutQurQyIVgPFryX787JO6CSit-lme2SN8QgSBAiEFIQFghJ9RGF2ytNt0vPrBV70iXhLKqG9ct54RCG0Z6gSvdiZHiVR5OvGep2ICg2Mny1CO1Kc_SfGTyUICwa1z6N4soE5TFyFuCbtz1VOvkkZFGLf1efiqtK6vCDdne6ECj2LD6Qu-K4q54hbQ_6tZZUCYWlMUL5O1U5cWD8qLZrmJEnuAqxGy9jsgT9BrP1uuIPEGvyWy9jsgTj5MfxD3bWleWB-K9k5fdjGF1ZD-brG5MwS9GFz3jP3d9rl9QbJ3fjfzHtvJbXYHfw1EwLAbh6DYswvIIHQfTSTicPFL3Khheh-X1I_K_YHgTljePyP_Dd7UceSbhR3Zr5-2fzwAAAP__kaS7sw==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy0lM-LqzAQx-_vr3jMtQM10f7y5OFdenldyt4WD9YMRWiNJBF2Kf7vi2axa9lGwezRxO985sOEuUEpBf3PrqQhfgMGCBwQQkCIAGEFKUKlZE5aS9X-YgN78Q5xgFCUVW3a4xQhl4ogvoEpzIUghtfsdKEjZYLUsq0ryGTFpcNUqrhm6iPJTjkgHGoT_00YJhyTENIGQdbmXleb7EwQswans_8V2hRlbpbrIbijtEglSJH4wj5l8qfMO0raUo-cBSZ8gUm4gLRxNciCWR2Ggw7Z9Ilw3xMZYffCG48T4dN9Q9--I-zed-vRN5zuG_n2HWH3vjuPvtF038C37wi791390ob5gXkkXclS04D4rHLQrh0SZ7LrSsta5fSiZN5h7Oehy3UHgrSxt8x-7Et71Tb4PcycYT4Is8cwd5NH0KEzHbnD0Zy-V87w2k1ezyFvnOGtm7ydQ965ZxWMPBP3I3tkp82fzwAAAP__G57AJg==
 
 query TT
 SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c

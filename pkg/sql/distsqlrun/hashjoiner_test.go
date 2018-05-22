@@ -91,7 +91,7 @@ func TestHashJoiner(t *testing.T) {
 					Type:           c.joinType,
 					OnExpr:         c.onExpr,
 				}
-				h, err := newHashJoiner(&flowCtx, spec, leftInput, rightInput, &post, out)
+				h, err := newHashJoiner(&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out)
 				if err != nil {
 					return err
 				}
@@ -205,7 +205,7 @@ func TestHashJoinerError(t *testing.T) {
 				Type:           c.joinType,
 				OnExpr:         c.onExpr,
 			}
-			h, err := newHashJoiner(&flowCtx, spec, leftInput, rightInput, &post, out)
+			h, err := newHashJoiner(&flowCtx, 0 /* processorID */, spec, leftInput, rightInput, &post, out)
 			if err != nil {
 				return err
 			}
@@ -337,7 +337,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
-	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
+	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +460,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	}
 
 	post := PostProcessSpec{Projection: true, OutputColumns: outCols}
-	h, err := newHashJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
+	h, err := newHashJoiner(&flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						// TODO(asubiotto): Get rid of uncleared state between
 						// hashJoiner Run()s to omit instantiation time from benchmarks.
-						h, err := newHashJoiner(flowCtx, spec, leftInput, rightInput, post, &RowDisposer{})
+						h, err := newHashJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, &RowDisposer{})
 						if err != nil {
 							b.Fatal(err)
 						}

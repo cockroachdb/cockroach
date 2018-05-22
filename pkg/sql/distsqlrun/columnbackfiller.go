@@ -35,15 +35,20 @@ var _ Processor = &columnBackfiller{}
 var _ chunkBackfiller = &columnBackfiller{}
 
 func newColumnBackfiller(
-	flowCtx *FlowCtx, spec BackfillerSpec, post *PostProcessSpec, output RowReceiver,
+	flowCtx *FlowCtx,
+	processorID int32,
+	spec BackfillerSpec,
+	post *PostProcessSpec,
+	output RowReceiver,
 ) (*columnBackfiller, error) {
 	cb := &columnBackfiller{
 		backfiller: backfiller{
-			name:    "Column",
-			filter:  backfill.ColumnMutationFilter,
-			flowCtx: flowCtx,
-			output:  output,
-			spec:    spec,
+			name:        "Column",
+			filter:      backfill.ColumnMutationFilter,
+			flowCtx:     flowCtx,
+			processorID: processorID,
+			output:      output,
+			spec:        spec,
 		},
 	}
 	cb.backfiller.chunkBackfiller = cb

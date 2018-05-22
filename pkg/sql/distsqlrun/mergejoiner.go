@@ -49,6 +49,7 @@ const mergeJoinerProcName = "merge joiner"
 
 func newMergeJoiner(
 	flowCtx *FlowCtx,
+	processorID int32,
 	spec *MergeJoinerSpec,
 	leftSource RowSource,
 	rightSource RowSource,
@@ -71,7 +72,7 @@ func newMergeJoiner(
 	}
 
 	if err := m.joinerBase.init(
-		flowCtx, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		procStateOpts{
 			inputsToDrain: []RowSource{leftSource, rightSource},
