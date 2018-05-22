@@ -159,7 +159,7 @@ function timeoutFetch<TResponse$Properties, TResponse, TResponseBuilder extends 
   });
 }
 
-export type APIRequestFn<TRequest, TResponse> = (req: TRequest, timeout?: moment.Duration) => Promise<TResponse>;
+export type APIRequestFn<TReq, TResponse> = (req: TReq, timeout?: moment.Duration) => Promise<TResponse>;
 
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
@@ -258,7 +258,7 @@ export function getLogs(req: LogsRequestMessage, timeout?: moment.Duration): Pro
 }
 
 // getLiveness gets cluster liveness information from the current node.
-export function getLiveness(_: LivenessRequestMessage, timeout?: moment.Duration): Promise<LivenessResponseMessage> {
+export function getLiveness(_req: LivenessRequestMessage, timeout?: moment.Duration): Promise<LivenessResponseMessage> {
   return timeoutFetch(serverpb.LivenessResponse, `${API_PREFIX}/liveness`, null, timeout);
 }
 

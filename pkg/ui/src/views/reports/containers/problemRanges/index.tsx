@@ -118,8 +118,8 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
 
     const { data } = problemRanges;
 
-    const validIDs = _.keys(_.pickBy(data.problems_by_node_id, problems => {
-      return _.isEmpty(problems.error_message);
+    const validIDs = _.keys(_.pickBy(data.problems_by_node_id, d => {
+      return _.isEmpty(d.error_message);
     }));
     if (validIDs.length === 0) {
       if (_.isEmpty(this.props.params[nodeIDAttr])) {

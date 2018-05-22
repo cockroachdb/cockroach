@@ -143,7 +143,7 @@ class TableMain extends React.Component<TableMainProps, {}> {
  *         SELECTORS
  */
 
-function tableInfo(state: AdminUIState, props: RouterState): TableInfo {
+function selectTableInfo(state: AdminUIState, props: RouterState): TableInfo {
   const db = props.params[databaseNameAttr];
   const table = props.params[tableNameAttr];
   const details = state.cachedData.tableDetails[generateTableID(db, table)];
@@ -155,7 +155,7 @@ function tableInfo(state: AdminUIState, props: RouterState): TableInfo {
 const tableMainConnected = connect(
   (state: AdminUIState, ownProps: RouterState) => {
     return {
-      tableInfo: tableInfo(state, ownProps),
+      tableInfo: selectTableInfo(state, ownProps),
       grantsSortSetting: databaseTableGrantsSortSetting.selector(state),
     };
   },

@@ -18,7 +18,7 @@ import { Bytes } from "src/util/format";
 import { TableInfo } from "src/views/databases/data/tableInfo";
 
 import {
-    DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos, grants,
+    DatabaseSummaryBase, DatabaseSummaryExplicitData, databaseDetails, tableInfos as selectTableInfos, grants,
 } from "src/views/databases/containers/databaseSummary";
 
 const databaseTablesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -124,7 +124,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
 export default connect(
   (state: AdminUIState, ownProps: DatabaseSummaryExplicitData) => {
     return {
-      tableInfos: tableInfos(state, ownProps.name),
+      tableInfos: selectTableInfos(state, ownProps.name),
       sortSetting: databaseTablesSortSetting.selector(state),
       dbResponse: databaseDetails(state)[ownProps.name] && databaseDetails(state)[ownProps.name].data,
       grants: grants(state, ownProps.name),

@@ -143,7 +143,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
+    const { params, nodesSummary, hoverState } = this.props;
     const selectedDashboard = params[dashboardNameAttr];
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
@@ -179,6 +179,12 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       tooltipSelection,
     };
 
+    const forwardParams = {
+      hoverOn: this.props.hoverOn,
+      hoverOff: this.props.hoverOff,
+      hoverState: this.props.hoverState,
+    };
+
     // Generate graphs for the current dashboard, wrapping each one in a
     // MetricsDataProvider with a unique key.
     const graphs = dashboards[dashboard].component(dashboardProps);
@@ -187,7 +193,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       return (
         <div key={key}>
           <MetricsDataProvider id={key}>
-            { React.cloneElement(graph, { hoverOn, hoverOff, hoverState }) }
+            { React.cloneElement(graph, forwardParams) }
           </MetricsDataProvider>
         </div>
       );

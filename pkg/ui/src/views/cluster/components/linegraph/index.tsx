@@ -181,10 +181,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, hoverOn} = this.props;
+    const { title, subtitle, tooltip, data } = this.props;
 
     let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
-    if (hoverOn) {
+    if (this.props.hoverOn) {
       hoverProps = {
         onMouseMove: this.mouseMove,
         onMouseLeave: this.mouseLeave,
