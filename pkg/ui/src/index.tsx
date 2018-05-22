@@ -25,6 +25,7 @@ import { alertDataSync } from "src/redux/alerts";
 import "src/redux/analytics";
 import { store, history } from "src/redux/state";
 
+import loginRoutes from "src/routes/login";
 import visualizationRoutes from "src/routes/visualization";
 
 import NotFound from "src/views/app/components/NotFound";
@@ -63,6 +64,9 @@ import Settings from "src/views/reports/containers/settings";
 ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
+      { /* login */}
+      { loginRoutes() }
+
       <Route path="/" component={Layout}>
         <IndexRedirect to="overview" />
 

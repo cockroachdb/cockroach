@@ -407,6 +407,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		&(info.fetcher),
 		info.table,
 		int(info.index.ID)-1,
+		info.table.ColumnIdxMap(),
 		false, /* reverse */
 		neededCols,
 		false, /* check */
