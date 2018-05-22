@@ -18,24 +18,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// showTraceNode is a planNode that wraps another node and uses session
-// tracing to report all the database events that occur during its
-// execution.
+// showTraceNode is a planNode that processes session trace data; it can
+// retrieve data from the current session trace, or it can trace the execution
+// of an inner plan.
+//
 // It is used as the top-level node for SHOW TRACE FOR statements.
 type showTraceNode struct {
-	// plan is the wrapped execution plan that will be traced.
+	// plan is the wrapped execution plan that will be traced; nil if we are
+	// just showing the session trace.
 	plan planNode
-	// stmtType represents the statement type of the wrapped execution plan.
+
+	// stmtType represents the statement type of the wrapped execution plan. Only
+	// set if plan is not nil.
 	stmtType tree.StatementType
-	columns  sqlbase.ResultColumns
+
+	columns sqlbase.ResultColumns
+	compact bool
 
 	// If set, the trace will also include "KV trace" messages - verbose messages
 	// around the interaction of SQL with KV. Some of the messages are per-row.
@@ -44,132 +54,31 @@ type showTraceNode struct {
 	run traceRun
 }
 
-// ShowTrace shows the current stored session trace.
+// ShowTrace shows the current stored session trace, or the trace of a given
+// query.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
-	if n.TraceType == tree.ShowTraceReplica {
-		return p.ShowTraceReplica(ctx, n)
-	}
-
-	const fullSelection = `
-       timestamp,
-       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
-       message, tag, loc, operation, span`
-	const compactSelection = `
-       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
-       IF(length(loc)=0,message,loc || ' ' || message) AS message,
-       tag, operation`
-
-	const traceClause = `
-SELECT %s
-  FROM (SELECT timestamp,
-               message,
-               tag,
-               loc,
-               first_value(operation) OVER (PARTITION BY span_idx ORDER BY message_idx) as operation,
-               span_idx AS span
-          FROM crdb_internal.session_trace)
- %s
- ORDER BY timestamp
-`
-
-	renderClause := fullSelection
-	if n.Compact {
-		renderClause = compactSelection
-	}
-
-	whereClause := ""
-	if n.TraceType == tree.ShowTraceKV {
-		whereClause = `
-WHERE message LIKE 'fetched: %'
-   OR message LIKE 'CPut %'
-   OR message LIKE 'Put %'
-   OR message LIKE 'DelRange %'
-   OR message LIKE 'ClearRange %'
-   OR message LIKE 'Del %'
-   OR message LIKE 'Get %'
-   OR message LIKE 'Scan %'
-   OR message = 'consuming rows'
-   OR message = 'starting plan'
-   OR message LIKE 'fast path - %'
-   OR message LIKE 'querying next range at %'
-   OR message LIKE 'output row: %'
-   OR message LIKE 'execution failed: %'
-   OR message LIKE 'r%: sending batch %'
-   OR message LIKE 'cascading %'
-`
-	}
-
-	plan, err := p.delegateQuery(ctx, "SHOW TRACE",
-		fmt.Sprintf(traceClause, renderClause, whereClause), nil, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if n.Statement == nil {
-		// SHOW TRACE FOR SESSION ...
-		return plan, nil
-	}
-
-	// SHOW TRACE FOR SELECT ...
-	stmtPlan, err := p.newPlan(ctx, n.Statement, nil)
-	if err != nil {
-		plan.Close(ctx)
-		return nil, err
-	}
-	tracePlan, err := p.makeShowTraceNode(
-		stmtPlan, n.Statement.StatementType(), n.TraceType == tree.ShowTraceKV /* kvTracingEnabled */)
-	if err != nil {
-		plan.Close(ctx)
-		stmtPlan.Close(ctx)
-		return nil, err
-	}
-
-	// inject the tracePlan inside the SHOW query plan.
-
-	// Suggestion from Radu:
-	// This is not very elegant and would be cleaner if the showTraceNode
-	// could process the statement source node first, let it emit its
-	// trace messages, and only then query the session_trace vtable.
-	// Alternatively, the outer SHOW could use a UNION between the
-	// showTraceNode and the query on session_trace.
-
-	// Unfortunately, neither is currently possible because the plan for
-	// the query on session_trace cannot be constructed until the trace
-	// is complete. If we want to enable EXPLAIN [SHOW TRACE FOR ...],
-	// this limitation of the vtable session_trace must be lifted first.
-	// TODO(andrei): make this code more elegant.
-	if s, ok := plan.(*sortNode); ok {
-		if w, ok := s.plan.(*windowNode); ok {
-			if r, ok := w.plan.(*renderNode); ok {
-				subPlan := r.source.plan
-				if f, ok := subPlan.(*filterNode); ok {
-					// The filter layer is only present when the KV modifier is
-					// specified.
-					subPlan = f.source.plan
-				}
-				if w, ok := subPlan.(*windowNode); ok {
-					if r, ok := w.plan.(*renderNode); ok {
-						if _, ok := r.source.plan.(*delayedNode); ok {
-							r.source.plan.Close(ctx)
-							r.source.plan = tracePlan
-							return plan, nil
-						}
-					}
-				}
-			}
+	// For the SHOW TRACE FOR <query> version, build a plan for the inner
+	// statement.
+	// For the SHOW TRACE FOR SESSION version, stmtPlan stays nil.
+	var stmtPlan planNode
+	var stmtType tree.StatementType
+	if n.Statement != nil {
+		stmtType = n.Statement.StatementType()
+		var err error
+		stmtPlan, err = p.newPlan(ctx, n.Statement, nil)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	// We failed to substitute; this is an internal error.
-	err = pgerror.NewErrorf(pgerror.CodeInternalError,
-		"invalid logical plan structure:\n%s", planToString(ctx, plan, nil),
-	).SetDetailf(
-		"while inserting:\n%s", planToString(ctx, tracePlan, nil))
-	plan.Close(ctx)
-	stmtPlan.Close(ctx)
-	tracePlan.Close(ctx)
-	return nil, err
+	node := p.makeShowTraceNode(stmtPlan, stmtType, n.Compact, n.TraceType == tree.ShowTraceKV)
+
+	if n.TraceType == tree.ShowTraceReplica {
+		// Wrap the showTraceNode in a showTraceReplicaNode.
+		return p.makeShowTraceReplicaNode(node), nil
+	}
+	return node, nil
 }
 
 // makeShowTraceNode creates a new showTraceNode.
@@ -181,26 +90,29 @@ WHERE message LIKE 'fetched: %'
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
 func (p *planner) makeShowTraceNode(
-	plan planNode, stmtType tree.StatementType, kvTracingEnabled bool,
-) (planNode, error) {
-	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
-	if err != nil {
-		return nil, err
-	}
-	return &showTraceNode{
+	plan planNode, stmtType tree.StatementType, compact bool, kvTracingEnabled bool,
+) *showTraceNode {
+	n := &showTraceNode{
 		plan:             plan,
-		columns:          sqlbase.ResultColumnsFromColDescs(desc.Columns),
 		stmtType:         stmtType,
 		kvTracingEnabled: kvTracingEnabled,
-	}, nil
+		compact:          compact,
+	}
+	if compact {
+		// We make a copy here because n.columns can be mutated to rename columns.
+		n.columns = append(n.columns, showCompactTraceColumns...)
+	} else {
+		n.columns = append(n.columns, showTraceColumns...)
+	}
+	return n
 }
 
 // traceRun contains the run-time state of showTraceNode during local execution.
 type traceRun struct {
 	execDone bool
 
-	traceRows []traceRow
-	curRow    int
+	resultRows []tree.Datums
+	curRow     int
 
 	// stopTracing is set if this node started tracing on the
 	// session. If it is set, then Close() must call it.
@@ -208,6 +120,9 @@ type traceRun struct {
 }
 
 func (n *showTraceNode) startExec(params runParams) error {
+	if n.plan == nil {
+		return nil
+	}
 	if params.extendedEvalCtx.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
@@ -226,75 +141,166 @@ func (n *showTraceNode) startExec(params runParams) error {
 
 func (n *showTraceNode) Next(params runParams) (bool, error) {
 	if !n.run.execDone {
-		// We need to run the entire statement upfront. Subsequent
-		// invocations of Next() will merely return the trace.
+		// Get all the data upfront and process the traces. Subsequent
+		// invocations of Next() will merely return the results.
+		if n.plan != nil {
+			n.runChildPlan(params)
 
-		func() {
-			consumeCtx, sp := tracing.ChildSpan(params.ctx, "consuming rows")
-			defer sp.Finish()
-
-			slowPath := true
-			if a, ok := n.plan.(planNodeFastPath); ok {
-				if count, res := a.FastPathResults(); res {
-					log.VEventf(consumeCtx, 2, "fast path - rows affected: %d", count)
-					slowPath = false
-				}
+			if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
+				return false, err
 			}
-			if slowPath {
-				for {
-					hasNext, err := n.plan.Next(params)
-					if err != nil {
-						log.VEventf(consumeCtx, 2, "execution failed: %v", err)
-						break
-					}
-					if !hasNext {
-						break
-					}
-
-					values := n.plan.Values()
-					if n.kvTracingEnabled {
-						log.VEventf(consumeCtx, 2, "output row: %s", values)
-					}
-				}
-			}
-			log.VEventf(consumeCtx, 2, "plan completed execution")
-
-			// Release the plan's resources early.
-			n.plan.Close(consumeCtx)
-			n.plan = nil
-
-			log.VEventf(consumeCtx, 2, "resources released, stopping trace")
-		}()
-
-		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
-			return false, err
+			n.run.stopTracing = nil
 		}
-		n.run.stopTracing = nil
 
-		var err error
-		n.run.traceRows, err = params.extendedEvalCtx.Tracing.getRecording()
+		traceRows, err := params.extendedEvalCtx.Tracing.getRecording()
 		if err != nil {
 			return false, err
 		}
+		n.processTraceRows(params.EvalContext(), traceRows)
 		n.run.execDone = true
 	}
 
-	if n.run.curRow >= len(n.run.traceRows) {
+	if n.run.curRow >= len(n.run.resultRows) {
 		return false, nil
 	}
 	n.run.curRow++
 	return true, nil
 }
 
+// runChildPlan runs the enclosed plan inside a child span.
+func (n *showTraceNode) runChildPlan(params runParams) {
+	consumeCtx, sp := tracing.ChildSpan(params.ctx, "consuming rows")
+	defer sp.Finish()
+
+	slowPath := true
+	if a, ok := n.plan.(planNodeFastPath); ok {
+		if count, res := a.FastPathResults(); res {
+			log.VEventf(consumeCtx, 2, "fast path - rows affected: %d", count)
+			slowPath = false
+		}
+	}
+	if slowPath {
+		for {
+			hasNext, err := n.plan.Next(params)
+			if err != nil {
+				log.VEventf(consumeCtx, 2, "execution failed: %v", err)
+				break
+			}
+			if !hasNext {
+				break
+			}
+
+			values := n.plan.Values()
+			if n.kvTracingEnabled {
+				log.VEventf(consumeCtx, 2, "output row: %s", values)
+			}
+		}
+	}
+	log.VEventf(consumeCtx, 2, "plan completed execution")
+
+	// Release the plan's resources early.
+	n.plan.Close(consumeCtx)
+	n.plan = nil
+
+	log.VEventf(consumeCtx, 2, "resources released, stopping trace")
+}
+
+// processTraceRows populates n.resultRows.
+func (n *showTraceNode) processTraceRows(evalCtx *tree.EvalContext, traceRows []traceRow) {
+	// The schema of the trace rows mirrors that of the
+	// crdb_internal.session_trace table:
+	const (
+		// span_idx    INT NOT NULL,        -- The span's index.
+		spanIdxCol = iota
+		// message_idx INT NOT NULL,        -- The message's index within its span.
+		_
+		// timestamp   TIMESTAMPTZ NOT NULL,-- The message's timestamp.
+		timestampCol
+		// duration    INTERVAL,            -- The span's duration. Set only on the first
+		//                                  -- (dummy) message on a span.
+		//                                  -- NULL if the span was not finished at the time
+		//                                  -- the trace has been collected.
+		_
+		// operation   STRING NULL,         -- The span's operation. Set only on
+		//                                  -- the first (dummy) message in a span.
+		opCol
+		// loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
+		locCol
+		// tag         STRING NOT NULL,     -- The logging tag, if any.
+		tagCol
+		// message     STRING NOT NULL      -- The logged message.
+		msgCol
+	)
+
+	// Get the operation ID for each spanIdx (it is present only in the first
+	// message of a span).
+	opMap := make(map[tree.DInt]*tree.DString)
+	for _, r := range traceRows {
+		if r[opCol] != tree.DNull {
+			spanIdx := *r[spanIdxCol].(*tree.DInt)
+			opMap[spanIdx] = r[opCol].(*tree.DString)
+		}
+	}
+
+	// Filter trace rows based on the message (in the SHOW KV TRACE case)
+	if n.kvTracingEnabled {
+		res := traceRows[:0]
+		for _, r := range traceRows {
+			msg := r[msgCol].(*tree.DString)
+			if kvMsgRegexp.MatchString(string(*msg)) {
+				res = append(res, r)
+			}
+		}
+		traceRows = res
+	}
+	if len(traceRows) == 0 {
+		return
+	}
+
+	// Sort the trace rows based on timestamp.
+	sort.Slice(traceRows, func(i, j int) bool {
+		return traceRows[i][timestampCol].Compare(
+			evalCtx,
+			traceRows[j][timestampCol],
+		) < 0
+	})
+
+	// Render the final rows.
+	n.run.resultRows = make([]tree.Datums, len(traceRows))
+	minTs := traceRows[0][timestampCol].(*tree.DTimestampTZ)
+	for i, r := range traceRows {
+		ts := r[timestampCol].(*tree.DTimestampTZ)
+		age := &tree.DInterval{Duration: duration.Duration{Nanos: ts.Sub(minTs.Time).Nanoseconds()}}
+		loc := r[locCol]
+		tag := r[tagCol]
+		msg := r[msgCol]
+		spanIdx := r[spanIdxCol]
+		op := tree.DNull
+		if opStr, ok := opMap[*(spanIdx.(*tree.DInt))]; ok {
+			op = opStr
+		}
+
+		if !n.compact {
+			n.run.resultRows[i] = tree.Datums{ts, age, msg, tag, loc, op, spanIdx}
+		} else {
+			msgStr := msg.(*tree.DString)
+			if locStr := string(*loc.(*tree.DString)); locStr != "" {
+				msgStr = tree.NewDString(fmt.Sprintf("%s %s", locStr, string(*msgStr)))
+			}
+			n.run.resultRows[i] = tree.Datums{age, msgStr, tag, op}
+		}
+	}
+}
+
 func (n *showTraceNode) Values() tree.Datums {
-	return n.run.traceRows[n.run.curRow-1][:]
+	return n.run.resultRows[n.run.curRow-1]
 }
 
 func (n *showTraceNode) Close(ctx context.Context) {
 	if n.plan != nil {
 		n.plan.Close(ctx)
 	}
-	n.run.traceRows = nil
+	n.run.resultRows = nil
 	if n.run.stopTracing != nil {
 		if err := n.run.stopTracing(); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
@@ -302,8 +308,45 @@ func (n *showTraceNode) Close(ctx context.Context) {
 	}
 }
 
-var sessionTraceTableName = tree.MakeTableNameWithSchema("", "crdb_internal", "session_trace")
-
 var errTracingAlreadyEnabled = errors.New(
 	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +
 		" - did you mean SHOW TRACE FOR SESSION?")
+
+// kvMsgRegexp is the message filter used for SHOW KV TRACE.
+var kvMsgRegexp = regexp.MustCompile(
+	strings.Join([]string{
+		"^fetched: ",
+		"^CPut ",
+		"^Put ",
+		"^DelRange ",
+		"^ClearRange ",
+		"^Del ",
+		"^Get ",
+		"^Scan ",
+		"^fast path - ",
+		"^querying next range at ",
+		"^output row: ",
+		"^execution failed: ",
+		"^r.*: sending batch ",
+		"^cascading ",
+		"^consuming rows$",
+		"^starting plan$",
+	}, "|"),
+)
+
+var showTraceColumns = sqlbase.ResultColumns{
+	{Name: "timestamp", Typ: types.TimestampTZ},
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "loc", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+	{Name: "span", Typ: types.Int},
+}
+
+var showCompactTraceColumns = sqlbase.ResultColumns{
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+}

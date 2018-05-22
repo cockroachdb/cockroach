@@ -318,8 +318,10 @@ func (p *planner) propagateFilters(
 		}
 
 	case *showTraceNode:
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
+		if n.plan != nil {
+			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+				return plan, extraFilter, err
+			}
 		}
 
 	case *showTraceReplicaNode:

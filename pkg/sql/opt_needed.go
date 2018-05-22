@@ -38,7 +38,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *showTraceNode:
-		setNeededColumns(n.plan, allColumns(n.plan))
+		if n.plan != nil {
+			setNeededColumns(n.plan, allColumns(n.plan))
+		}
 
 	case *showTraceReplicaNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
