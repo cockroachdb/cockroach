@@ -17,7 +17,6 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -757,8 +757,7 @@ func splitAndScatter(
 	ctx, span := tracing.ChildSpan(restoreCtx, "presplit-scatter")
 	defer tracing.FinishSpan(span)
 
-	var g *errgroup.Group
-	g, ctx = errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 
 	// TODO(dan): This not super principled. I just wanted something that wasn't
 	// a constant and grew slower than linear with the length of importSpans. It
@@ -776,7 +775,7 @@ func splitAndScatter(
 	}
 
 	importSpanChunksCh := make(chan []importEntry)
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
 		for idx, importSpanChunk := range importSpanChunks {
 			// TODO(dan): The structure between this and the below are very
@@ -808,8 +807,8 @@ func splitAndScatter(
 			}
 
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-g.Done:
+				return g.Err()
 			case importSpanChunksCh <- importSpanChunk:
 			}
 		}
@@ -821,7 +820,7 @@ func splitAndScatter(
 	splitScatterWorkers := numClusterNodes * 2
 	var splitScatterStarted uint64 // Only access using atomic.
 	for worker := 0; worker < splitScatterWorkers; worker++ {
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			for importSpanChunk := range importSpanChunksCh {
 				for _, importSpan := range importSpanChunk {
 					idx := atomic.AddUint64(&splitScatterStarted, 1)
@@ -850,8 +849,8 @@ func splitAndScatter(
 					}
 
 					select {
-					case <-ctx.Done():
-						return ctx.Err()
+					case <-g.Done:
+						return g.Err()
 					case readyForImportCh <- importSpan:
 					}
 				}
@@ -1062,7 +1061,7 @@ func restore(
 	maxConcurrentImports := numClusterNodes * runtime.NumCPU()
 	importsSem := make(chan struct{}, maxConcurrentImports)
 
-	g, gCtx := errgroup.WithContext(restoreCtx)
+	g := ctxgroup.WithContext(restoreCtx)
 
 	// The Import (and resulting AddSSTable) requests made below run on
 	// leaseholders, so presplit and scatter the ranges to balance the work
@@ -1077,16 +1076,16 @@ func restore(
 	// canceled).
 	const presplitLeadLimit = 10
 	readyForImportCh := make(chan importEntry, presplitLeadLimit)
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		defer close(readyForImportCh)
-		return splitAndScatter(gCtx, db, kr, numClusterNodes, importSpans, readyForImportCh)
+		return splitAndScatter(ctx, db, kr, numClusterNodes, importSpans, readyForImportCh)
 	})
 
 	requestFinishedCh := make(chan struct{}, len(importSpans)) // enough buffer to never block
-	g.Go(func() error {
-		progressCtx, progressSpan := tracing.ChildSpan(gCtx, "progress-log")
+	g.GoCtx(func(ctx context.Context) error {
+		ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
 		defer tracing.FinishSpan(progressSpan)
-		return progressLogger.Loop(progressCtx, requestFinishedCh)
+		return progressLogger.Loop(ctx, requestFinishedCh)
 	})
 
 	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
@@ -1108,21 +1107,21 @@ func restore(
 			Rekeys:   rekeys,
 		}
 
-		importCtx, importSpan := tracing.ChildSpan(gCtx, "import")
 		log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))
 
 		select {
 		case importsSem <- struct{}{}:
-		case <-gCtx.Done():
+		case <-g.Done:
 			return mu.res, nil, nil, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
 		}
-		log.Event(importCtx, "acquired semaphore")
 
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
+			ctx, importSpan := tracing.ChildSpan(ctx, "import")
+			log.Event(ctx, "acquired semaphore")
 			defer tracing.FinishSpan(importSpan)
 			defer func() { <-importsSem }()
 
-			importRes, pErr := client.SendWrapped(importCtx, db.GetSender(), importRequest)
+			importRes, pErr := client.SendWrapped(ctx, db.GetSender(), importRequest)
 			if pErr != nil {
 				return pErr.GoError()
 			}

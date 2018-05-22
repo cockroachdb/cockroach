@@ -15,7 +15,6 @@ import (
 	"io/ioutil"
 
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -212,7 +212,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer batcher.Close()
 
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	startKeyMVCC, endKeyMVCC := engine.MVCCKey{Key: args.DataSpan.Key}, engine.MVCCKey{Key: args.DataSpan.EndKey}
 	iter := engineccl.MakeMultiIterator(iters)
 	defer iter.Close()
@@ -284,11 +284,11 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		if size := batcher.Size(); size > maxSize {
 			finishBatcher := batcher
 			batcher = nil
-			log.Eventf(gCtx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
-			g.Go(func() error {
+			log.Eventf(ctx, "triggering finish of batch of size %s", humanizeutil.IBytes(size))
+			g.GoCtx(func(ctx context.Context) error {
 				defer log.Event(ctx, "finished batch")
 				defer finishBatcher.Close()
-				return errors.Wrapf(finishBatcher.Finish(gCtx, db), "import [%s, %s)", startKeyMVCC.Key, endKeyMVCC.Key)
+				return errors.Wrapf(finishBatcher.Finish(ctx, db), "import [%s, %s)", startKeyMVCC.Key, endKeyMVCC.Key)
 			})
 			if err := makeBatcher(); err != nil {
 				return nil, err
@@ -297,10 +297,10 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	// Flush out the last batch.
 	if batcher.Size() > 0 {
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			defer log.Event(ctx, "finished batch")
 			defer batcher.Close()
-			return batcher.Finish(gCtx, db)
+			return batcher.Finish(ctx, db)
 		})
 	}
 	log.Event(ctx, "waiting for batchers to finish")
