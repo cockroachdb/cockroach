@@ -481,11 +481,11 @@ limit
  │    ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
  │    ├── scan xyzw
  │    │    └── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
- │    └── cast: int [type=int]
+ │    └── cast: INT [type=int]
  │         └── mult [type=float]
  │              ├── function: random [type=float]
  │              └── const: 0.0 [type=float]
- └── cast: int [type=int]
+ └── cast: INT [type=int]
       └── mult [type=float]
            ├── function: random [type=float]
            └── const: 0.0 [type=float]
@@ -634,7 +634,7 @@ project
            │    ├── columns: column1:1(int)
            │    └── tuple [type=tuple{int}]
            │         └── const: 1 [type=int]
-           └── cast: int [type=int]
+           └── cast: INT [type=int]
                 └── null [type=unknown]
 
 build
@@ -659,7 +659,7 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -676,7 +676,7 @@ project
                 │    ├── columns: column1:1(int)
                 │    └── tuple [type=tuple{int}]
                 │         └── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -702,7 +702,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: int [type=int]
+                     └── cast: INT [type=int]
                           └── null [type=unknown]
 
 # Tests with an empty IN tuple.
@@ -725,7 +725,7 @@ project
            │         └── gt [type=bool]
            │              ├── variable: column1 [type=int]
            │              └── const: 1 [type=int]
-           └── cast: int [type=int]
+           └── cast: INT [type=int]
                 └── null [type=unknown]
 
 build
@@ -756,7 +756,7 @@ project
            │              └── variable: column2 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -779,7 +779,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -811,7 +811,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: int [type=int]
+                     └── cast: INT [type=int]
                           └── null [type=unknown]
 
 build
@@ -834,7 +834,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -866,7 +866,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: int [type=int]
+                     └── cast: INT [type=int]
                           └── null [type=unknown]
 
 build
@@ -889,7 +889,7 @@ project
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
-                └── cast: int [type=int]
+                └── cast: INT [type=int]
                      └── null [type=unknown]
 
 build
@@ -921,7 +921,7 @@ project
                 │              └── variable: column2 [type=int]
                 └── tuple [type=tuple{int, int}]
                      ├── const: 1 [type=int]
-                     └── cast: int [type=int]
+                     └── cast: INT [type=int]
                           └── null [type=unknown]
 
 exec-ddl
@@ -1011,7 +1011,7 @@ select
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
  └── filters [type=bool]
-      └── cast: bool [type=bool]
+      └── cast: BOOL [type=bool]
            └── gt [type=bool]
                 ├── variable: a.x [type=int]
                 └── const: 10 [type=int]

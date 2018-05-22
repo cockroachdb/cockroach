@@ -1325,13 +1325,9 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 }
 
 // NewTypedCastExpr returns a new CastExpr that is verified to be well-typed.
-func NewTypedCastExpr(expr TypedExpr, typ types.T) (*CastExpr, error) {
-	colType, err := coltypes.DatumTypeToColumnType(typ)
-	if err != nil {
-		return nil, err
-	}
+func NewTypedCastExpr(expr TypedExpr, colType coltypes.T) (*CastExpr, error) {
 	node := &CastExpr{Expr: expr, Type: colType, SyntaxMode: CastShort}
-	node.typ = typ
+	node.typ = coltypes.CastTargetToDatumType(colType)
 	return node, nil
 }
 

@@ -19,6 +19,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -353,12 +354,24 @@ func (s listSorter) compare(i, j int) int {
 //
 // ----------------------------------------------------------------------
 
-// hasType returns true if the given expression has a static type that's
-// equivalent to the requested type.
-func (f *Factory) hasType(group memo.GroupID, typ memo.PrivateID) bool {
+// hasColType returns true if the given expression has a static type that's
+// equivalent to the requested coltype.
+func (f *Factory) hasColType(group memo.GroupID, colTyp memo.PrivateID) bool {
 	groupType := f.lookupScalar(group).Type
-	requestedType := f.mem.LookupPrivate(typ).(types.T)
-	return groupType.Equivalent(requestedType)
+	reqType, equiv := coltypes.TryCastTargetToDatumType(f.mem.LookupPrivate(colTyp).(coltypes.T))
+	if !equiv {
+		// Column type could not be converted to datum type without losing
+		// information, so it's not an equivalent type. For example:
+		//   VARCHAR(2) <> STRING
+		return false
+	}
+	return groupType.Equivalent(reqType)
+}
+
+// colTypeToDatumType maps the given column type to a datum type.
+func (f *Factory) colTypeToDatumType(colTyp memo.PrivateID) memo.PrivateID {
+	datumTyp := coltypes.CastTargetToDatumType(f.mem.LookupPrivate(colTyp).(coltypes.T))
+	return f.mem.InternType(datumTyp)
 }
 
 // boolType returns the private ID of the boolean SQL type.

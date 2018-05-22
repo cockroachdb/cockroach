@@ -462,11 +462,11 @@ group-by
  │         ├── eq [type=bool]
  │         │    ├── variable: b.z [type=decimal]
  │         │    └── const: 0 [type=decimal]
- │         ├── cast: int [type=int]
+ │         ├── cast: INT [type=int]
  │         │    └── variable: b.x [type=string]
- │         ├── cast: jsonb [type=jsonb]
+ │         ├── cast: JSON [type=jsonb]
  │         │    └── variable: b.x [type=string]
- │         └── cast: jsonb [type=jsonb]
+ │         └── cast: JSONB [type=jsonb]
  │              └── variable: b.x [type=string]
  └── aggregations
       ├── array-agg [type=decimal[]]
@@ -521,14 +521,14 @@ project
       │    │    │    ├── scan a
       │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
       │    │    │    └── projections
-      │    │    │         └── cast: string [type=string]
+      │    │    │         └── cast: STRING [type=string]
       │    │    │              └── variable: a.x [type=int]
       │    │    ├── scan b
       │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
       │    │    └── filters [type=bool]
       │    │         └── eq [type=bool]
       │    │              ├── variable: a.y [type=int]
-      │    │              └── cast: int [type=int]
+      │    │              └── cast: INT [type=int]
       │    │                   └── variable: b.z [type=decimal]
       │    └── aggregations
       │         ├── max [type=string]
@@ -541,3 +541,15 @@ project
            └── gt [type=bool]
                 ├── variable: max [type=string]
                 └── const: 'foo' [type=string]
+
+# Cast
+build
+SELECT x::VARCHAR(2) FROM b
+----
+project
+ ├── columns: "x::VARCHAR(2)":3(string)
+ ├── scan b
+ │    └── columns: x:1(string!null) z:2(decimal!null)
+ └── projections
+      └── cast: VARCHAR(2) [type=string]
+           └── variable: b.x [type=string]
