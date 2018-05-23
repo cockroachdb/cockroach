@@ -25,6 +25,13 @@ try {
   DashboardPlugin = class { apply() { /* no-op */ } };
 }
 
+const proxyPrefixes = ["/_admin", "/_status", "/ts", "/_auth"];
+function shouldProxy(path) {
+  return proxyPrefixes.some((prefix) => (
+    path.startsWith(prefix)
+  ));
+}
+
 // tslint:disable:object-literal-sort-keys
 module.exports = (distDir, ...additionalRoots) => ({
   entry: ["./src/index.tsx"],
@@ -116,10 +123,24 @@ module.exports = (distDir, ...additionalRoots) => ({
 
   devServer: {
     contentBase: path.join(__dirname, distDir),
-    proxy: [{
-      context: ["/_admin", "/_status", "/ts", "/_auth"],
-      secure: false,
-      target: process.env.TARGET,
-    }],
+    index: "",
+    proxy: {
+      // Note: this shouldn't require a custom bypass function to work;
+      // docs say that setting `index: ''` is sufficient to proxy `/`.
+      // However, that did not work, and may require upgrading ty webpack 4.x.
+      "/": {
+        secure: false,
+        target: process.env.TARGET,
+        bypass: (req) => {
+          if (req.path === "/") {
+            return false;
+          }
+          if (shouldProxy(req.path)) {
+            return false;
+          }
+          return req.path;
+        },
+      },
+    },
   },
 });
