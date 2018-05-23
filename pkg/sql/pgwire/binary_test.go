@@ -56,35 +56,45 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 	}
 	f.Close()
 
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
 	for _, test := range tests {
-		buf.wrapped.Reset()
+		t.Run(test.In, func(t *testing.T) {
+			buf.wrapped.Reset()
 
-		d := datumConstructor(test.In)
-		oid := d.ResolvedType().Oid()
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					fmt.Printf("%q: %s", test.In, r)
-					panic(r)
+			d := datumConstructor(test.In)
+			oid := d.ResolvedType().Oid()
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Printf("%q: %s", test.In, r)
+						panic(r)
+					}
+				}()
+				buf.writeBinaryDatum(context.Background(), d, time.UTC)
+				if buf.err != nil {
+					t.Fatal(buf.err)
+				}
+
+				got := buf.wrapped.Bytes()
+				if !bytes.Equal(got, test.Expect) {
+					t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
+				}
+
+				datum, err := pgwirebase.DecodeOidDatum(
+					oid, pgwirebase.FormatBinary, got[4:],
+				)
+				if err != nil {
+					t.Fatalf("unable to decode %v: %s", got[4:], err)
+				}
+
+				if d.Compare(evalCtx, datum) != 0 {
+					t.Errorf("expected %s, got %s", d, datum)
 				}
 			}()
-			buf.writeBinaryDatum(context.Background(), d, time.UTC)
-			if buf.err != nil {
-				t.Fatal(buf.err)
-			}
-			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
-				t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
-			} else if datum, err := pgwirebase.DecodeOidDatum(
-				oid, pgwirebase.FormatBinary, got[4:],
-			); err != nil {
-				t.Fatalf("unable to decode %v: %s", got[4:], err)
-			} else if d.Compare(evalCtx, datum) != 0 {
-				t.Errorf("expected %s, got %s", d, datum)
-			}
-		}()
+		})
 	}
 }
 
