@@ -128,6 +128,6 @@ EXPLAIN (DISTSQL) SELECT 246::REGTYPE FROM abc
 # Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
 # statistics.
 query T
-SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv]
+SELECT "URL" FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM kv JOIN kw ON kv.k=kw.w];
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj71qxDAQhPs8xTH1QuxWVdprknCkCyoUazhMfF6zK-eHQ-8ebBUhReDKmZG-j71i1szHdKEjvKJHFCymA93Vtqo9OOYvhE4wzstatjoKBjUiXFHGMhEBL-lt4okp0-47CDJLGqcdu9h4Sfb98P4BgemnH4wph0OHWAW6ll-ql3QmQl_ldvOJvujs_CP9j9zVKGA-s13nutrAZ9Nh17T4tP_bi0wvbe1bOM5tqrHe_QQAAP__udhpqQ==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyckkFr4zAQhe_7K8ScEhDEdvYkWBB7anpoSuit-KBa00TEtsyM3CQE__diuZA6JG3To968N994xkeovcUHUyGDeoYUcgkN-QKZPfXSYFjYPahEgqubNvRyLqHwhKCOEFwoERQ8mZcSV2gs0iwBCRaDcWVs25CrDB309g0kkN-xIDRWiQTyToJvw6krB7NGUGknf0dOr5B3PyVnV8knYFt7skhoR7C8T35nuTD-neHNvXc10iwbT1_ia5jodPqP3HoTJjqbgoyiGH2KhFg_Fzl4QivYWVQiOkBCZfaiwsrTQbSMvVP8_5Ct4-1IXLZBCZ1KnUk9l_rv1Z3Nb7nWCrnxNeP57i52TvqFoV3jcAD2LRX4SL6ImOG5jLkoWOQwVLPhsahjKf5On8PpDeHsPJx9GZ6PwkmXd3_eAwAA___kgB3h

@@ -22,9 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -77,6 +79,13 @@ func (p hashJoinPhase) String() string {
 // There is no guarantee on the output ordering.
 type hashJoiner struct {
 	joinerBase
+
+	// memMonitor and diskMonitor refer to the memory and disk monitors to be used
+	// for a hashJoiner run. They usually point to the flow monitor and the shared
+	// disk monitor, but are separate child monitors during stats collection to be
+	// able to separate memory/disk allocations that the hashJoiner makes from the
+	// rest of the flow.
+	memMonitor, diskMonitor *mon.BytesMonitor
 
 	leftSource, rightSource RowSource
 
@@ -164,6 +173,9 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	pushTrailingMeta := func(ctx context.Context) {
+		// TODO(asubiotto): Once hashJoiner implements RowSource, set
+		// processorBase.finishTrace = h.outputStatsToTrace.
+		h.outputStatsToTrace()
 		sendTraceData(ctx, h.out.output)
 	}
 
@@ -180,11 +192,34 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer log.Infof(ctx, "exiting hash joiner run")
 	}
 
+	h.memMonitor = h.evalCtx.Mon
+	h.diskMonitor = h.flowCtx.diskMonitor
+	// If the trace is recording, instrument the hashJoiner to collect stats.
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		h.leftSource = NewInputStatCollector(h.leftSource)
+		h.rightSource = NewInputStatCollector(h.rightSource)
+
+		// Start private memory monitors to track the memory and disk
+		// usage of the hashJoiner.
+		hashJoinerMemMonitor := mon.MakeMonitorInheritWithLimit(
+			"hashjoiner-stat-mem", 0 /* limit */, h.memMonitor,
+		)
+		hashJoinerMemMonitor.Start(ctx, h.memMonitor, mon.BoundAccount{})
+		defer hashJoinerMemMonitor.Stop(ctx)
+		hashJoinerDiskMonitor := mon.MakeMonitorInheritWithLimit(
+			"hashjoiner-stat-disk", 0 /* limit */, h.diskMonitor,
+		)
+		hashJoinerDiskMonitor.Start(ctx, h.diskMonitor, mon.BoundAccount{})
+		defer hashJoinerDiskMonitor.Stop(ctx)
+
+		h.memMonitor = &hashJoinerMemMonitor
+		h.diskMonitor = &hashJoinerDiskMonitor
+	}
+
 	st := h.flowCtx.Settings
 	useTempStorage := settingUseTempStorageJoins.Get(&st.SV) ||
 		h.flowCtx.testingKnobs.MemoryLimitBytes > 0 ||
 		h.testingKnobMemFailPoint != unset
-	rowContainerMon := h.evalCtx.Mon
 	if useTempStorage {
 		// Limit the memory use by creating a child monitor with a hard limit.
 		// The hashJoiner will overflow to disk if this limit is not enough.
@@ -192,8 +227,8 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&st.SV)
 		}
-		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, rowContainerMon)
-		limitedMon.Start(ctx, rowContainerMon, mon.BoundAccount{})
+		limitedMon := mon.MakeMonitorInheritWithLimit("hashjoiner-limited", limit, h.memMonitor)
+		limitedMon.Start(ctx, h.memMonitor, mon.BoundAccount{})
 		defer limitedMon.Stop(ctx)
 
 		// Override initialBufferSize to be half of this processor's memory
@@ -201,13 +236,13 @@ func (h *hashJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
 		// stream.
 		h.initialBufferSize = limit / 2
 
-		rowContainerMon = &limitedMon
+		h.memMonitor = &limitedMon
 	}
 
 	h.rows[leftSide].initWithMon(
-		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, rowContainerMon)
+		nil /* ordering */, h.leftSource.OutputTypes(), h.evalCtx, h.memMonitor)
 	h.rows[rightSide].initWithMon(
-		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, rowContainerMon)
+		nil /* ordering */, h.rightSource.OutputTypes(), h.evalCtx, h.memMonitor)
 	defer h.rows[leftSide].Close(ctx)
 	defer h.rows[rightSide].Close(ctx)
 
@@ -428,7 +463,7 @@ func (h *hashJoiner) buildPhase(
 
 	log.VEventf(ctx, 2, "build phase falling back to disk")
 
-	storedDiskRows := makeHashDiskRowContainer(h.flowCtx.diskMonitor, h.flowCtx.TempStorage)
+	storedDiskRows := makeHashDiskRowContainer(h.diskMonitor, h.flowCtx.TempStorage)
 	if err := storedDiskRows.Init(
 		ctx,
 		shouldMark(h.storedSide, h.joinType),
@@ -662,6 +697,7 @@ func (h *hashJoiner) probePhase(
 		}
 	}
 
+	h.outputStatsToTrace()
 	sendTraceData(ctx, h.out.output)
 	h.out.Close()
 	return false, nil
@@ -710,6 +746,57 @@ func (h *hashJoiner) receiveRow(
 			return nil, true, err
 		}
 	}
+}
+
+var _ DistSQLSpanStats = &HashJoinerStats{}
+
+// Stats implements the SpanStats interface.
+func (hjs *HashJoinerStats) Stats() map[string]string {
+	return map[string]string{
+		"hashjoiner.left.input.rows":  fmt.Sprintf("%d", hjs.LeftInputStats.NumRows),
+		"hashjoiner.right.input.rows": fmt.Sprintf("%d", hjs.RightInputStats.NumRows),
+		"hashjoiner.stored_side":      hjs.StoredSide,
+		"hashjoiner.mem.max":          humanizeutil.IBytes(hjs.MaxAllocatedMem),
+		"hashjoiner.disk.max":         humanizeutil.IBytes(hjs.MaxAllocatedDisk),
+	}
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (hjs *HashJoinerStats) StatsForQueryPlan() []string {
+	return []string{
+		fmt.Sprintf("left rows read: %d", hjs.LeftInputStats.NumRows),
+		fmt.Sprintf("right rows read: %d", hjs.RightInputStats.NumRows),
+		fmt.Sprintf("stored side: %s", hjs.StoredSide),
+		fmt.Sprintf("max memory used: %s", humanizeutil.IBytes(hjs.MaxAllocatedMem)),
+		fmt.Sprintf("max disk used: %s", humanizeutil.IBytes(hjs.MaxAllocatedDisk)),
+	}
+}
+
+// outputStatsToTrace outputs the collected hashJoiner stats to the trace. Will
+// fail silently if the hashJoiner is not collecting stats.
+func (h *hashJoiner) outputStatsToTrace() {
+	lisc, ok := h.leftSource.(*InputStatCollector)
+	if !ok {
+		return
+	}
+	risc, ok := h.rightSource.(*InputStatCollector)
+	if !ok {
+		return
+	}
+	sp := opentracing.SpanFromContext(h.ctx)
+	if sp == nil {
+		return
+	}
+	tracing.SetSpanStats(
+		sp,
+		&HashJoinerStats{
+			LeftInputStats:   lisc.InputStats,
+			RightInputStats:  risc.InputStats,
+			StoredSide:       h.storedSide.String(),
+			MaxAllocatedMem:  h.memMonitor.MaximumBytes(),
+			MaxAllocatedDisk: h.diskMonitor.MaximumBytes(),
+		},
+	)
 }
 
 // Some types of joins need to mark rows that matched.

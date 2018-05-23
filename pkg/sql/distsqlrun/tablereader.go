@@ -265,7 +265,7 @@ func (tr *tableReader) ConsumerClosed() {
 	tr.internalClose()
 }
 
-var _ tracing.SpanStats = &TableReaderStats{}
+var _ DistSQLSpanStats = &TableReaderStats{}
 
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {

@@ -28,3 +28,12 @@ message InputStats {
 message TableReaderStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
 }
+
+// HashJoinerStats are the stats collected during a hashJoiner run.
+message HashJoinerStats {
+  InputStats left_input_stats = 1 [(gogoproto.nullable) = false];
+  InputStats right_input_stats = 2 [(gogoproto.nullable) = false];
+  string stored_side = 3;
+  int64 max_allocated_mem = 4;
+  int64 max_allocated_disk = 5;
+}
