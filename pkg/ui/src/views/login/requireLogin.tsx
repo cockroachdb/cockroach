@@ -3,8 +3,7 @@ import { withRouter, WithRouterProps } from "react-router";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "src/redux/state";
-import { selectLoginState, LoginState } from "src/redux/login";
-import { LOGIN_PAGE } from "src/routes/login";
+import { selectLoginState, LoginState, getLoginPage } from "src/redux/login";
 
 interface RequireLoginProps {
   loginState: LoginState;
@@ -23,10 +22,7 @@ class RequireLogin extends React.Component<WithRouterProps & RequireLoginProps> 
     const { location, router } = this.props;
 
     if (!this.hasAccess()) {
-        router.push({
-            pathname: LOGIN_PAGE,
-            query: { redirectTo: router.createPath(location.pathname, location.query) },
-        });
+      router.push(getLoginPage(location));
     }
   }
 
