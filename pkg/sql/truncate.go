@@ -37,8 +37,8 @@ const TableTruncateChunkSize = indexTruncateChunkSize
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
 	// Since truncation may cascade to a given table any number of times, start by
-	// building the unique set (by ID) of tables to truncate.
-	toTruncate := make(map[sqlbase.ID]struct{}, len(n.Tables))
+	// building the unique set (ID->name) of tables to truncate.
+	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
@@ -61,7 +61,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 			return nil, err
 		}
 
-		toTruncate[tableDesc.ID] = struct{}{}
+		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
 	}
 
@@ -89,7 +89,11 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 				return err
 			}
-			toTruncate[other.ID] = struct{}{}
+			otherName, err := p.getQualifiedTableName(ctx, other)
+			if err != nil {
+				return err
+			}
+			toTruncate[other.ID] = otherName
 			toTraverse = append(toTraverse, *other)
 			return nil
 		}
@@ -122,8 +126,24 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		return nil, errors.Errorf("programming error: cannot prepare a TRUNCATE statement")
 	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
-	for id := range toTruncate {
+	for id, name := range toTruncate {
 		if err := p.truncateTable(ctx, id, traceKV); err != nil {
+			return nil, err
+		}
+
+		// Log a Truncate Table event for this table.
+		if err := MakeEventLogger(p.extendedEvalCtx.ExecCfg).InsertEventRecord(
+			ctx,
+			p.txn,
+			EventLogTruncateTable,
+			int32(id),
+			int32(p.extendedEvalCtx.NodeID),
+			struct {
+				TableName string
+				Statement string
+				User      string
+			}{name, n.String(), p.SessionData().User},
+		); err != nil {
 			return nil, err
 		}
 	}

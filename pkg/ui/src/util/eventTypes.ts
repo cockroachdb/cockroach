@@ -14,6 +14,8 @@ export const DROP_DATABASE = "drop_database";
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
 export const DROP_TABLE = "drop_table";
+// Recorded when a table is truncated.
+export const TRUNCATE_TABLE = "truncate_table";
 // Recorded when a table is altered.
 export const ALTER_TABLE = "alter_table";
 // Recorded when an index is created.
@@ -58,9 +60,9 @@ export const REMOVE_ZONE_CONFIG = "remove_zone_config";
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [
-  CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX, ALTER_INDEX,
-  DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE,
-  FINISH_SCHEMA_CHANGE_ROLLBACK,
+  CREATE_TABLE, DROP_TABLE, TRUNCATE_TABLE, ALTER_TABLE, CREATE_INDEX,
+  ALTER_INDEX, DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE,
+  FINISH_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE_ROLLBACK,
 ];
 export const settingsEvents = [SET_CLUSTER_SETTING, SET_ZONE_CONFIG, REMOVE_ZONE_CONFIG];
 export const allEvents = [...nodeEvents, ...databaseEvents, ...tableEvents, ...settingsEvents];

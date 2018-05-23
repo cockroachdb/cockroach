@@ -174,6 +174,19 @@ WHERE "eventType" = 'finish_schema_change'
 53  1
 53  1
 
+# Truncate a table
+##################
+
+statement ok
+TRUNCATE TABLE a
+
+query IIT rowsort
+SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+FROM system.eventlog
+WHERE "eventType" = 'truncate_table'
+----
+53  1  test.public.a
+
 # Drop both tables + superfluous "IF EXISTS"
 ##################
 
@@ -196,7 +209,7 @@ SELECT "targetID", "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
 ----
-53  1  test.public.a
+55  1  test.public.a
 54  1  test.public.b
 
 # Verify the contents of the 'info' field of each event.
@@ -208,7 +221,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE a%'
 ----
-53  1  test.public.a
+55  1  test.public.a
 
 query IIT
 SELECT "targetID", "reportingID", info::JSONB->>'TableName'
@@ -245,7 +258,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE eventlogtest%'
 ----
-55  1
+56  1
 
 query II
 SELECT "targetID", "reportingID"
@@ -253,7 +266,7 @@ FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
-56  1
+57  1
 
 # Add some tables to eventlogtest.
 ##################
@@ -290,7 +303,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
 ----
-55  1  ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
+56  1  ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
 
 query IIT
 SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
@@ -298,7 +311,7 @@ FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
 ----
-56  1  []
+57  1  []
 
 statement ok
 SET DATABASE = test
@@ -356,7 +369,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp"
 ----
-59  1  {"Target":"test.a","Config":"range_max_bytes: 67108865","User":"root"}
+60  1  {"Target":"test.a","Config":"range_max_bytes: 67108865","User":"root"}
 22  1  {"Target":".liveness","Config":"range_min_bytes: 1048577","User":"root"}
 
 query IIT
@@ -365,7 +378,7 @@ FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp"
 ----
-59  1  {"Target":"test.a","User":"root"}
+60  1  {"Target":"test.a","User":"root"}
 22  1  {"Target":".liveness","User":"root"}
 
 statement ok
@@ -387,9 +400,9 @@ SELECT "eventType", "targetID", "reportingID", info::JSONB->>'SequenceName'
   FROM system.eventlog
  WHERE "eventType" in ('create_sequence', 'alter_sequence', 'drop_sequence')
 ----
-create_sequence  60  1  test.public.s
-alter_sequence   60  1  test.public.s
-drop_sequence    60  1  test.public.s
+create_sequence  61  1  test.public.s
+alter_sequence   61  1  test.public.s
+drop_sequence    61  1  test.public.s
 
 # Views
 
@@ -404,5 +417,5 @@ SELECT "eventType", "targetID", "reportingID", info::JSONB->>'ViewName'
   FROM system.eventlog
  WHERE "eventType" in ('create_view', 'drop_view')
 ----
-create_view  61  1  test.public.v
-drop_view    61  1  test.public.v
+create_view  62  1  test.public.v
+drop_view    62  1  test.public.v
