@@ -147,6 +147,21 @@ type ExplainOpDef struct {
 	Props props.Physical
 }
 
+// ShowTraceOpDef defines the value of the Def private field of the Explain operator.
+type ShowTraceOpDef struct {
+	Type tree.ShowTraceType
+
+	// Compact indicates that we output a smaller set of columns; set
+	// when SHOW COMPACT [KV] TRACE is used.
+	Compact bool
+
+	// ColList stores the column IDs for the SHOW TRACE columns.
+	ColList opt.ColList
+
+	// Props stores the required physical properties for the enclosed expression.
+	Props props.Physical
+}
+
 // RowNumberDef defines the value of the Def private field of the RowNumber
 // operator.
 type RowNumberDef struct {

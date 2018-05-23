@@ -71,3 +71,65 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 	}
 	return true
 }
+
+// ExplainPlanColumns are the result columns of an EXPLAIN (PLAN) ...
+// statement.
+var ExplainPlanColumns = ResultColumns{
+	// Tree shows the node type with the tree structure.
+	{Name: "Tree", Typ: types.String},
+	// Field is the part of the node that a row of output pertains to.
+	{Name: "Field", Typ: types.String},
+	// Description contains details about the field.
+	{Name: "Description", Typ: types.String},
+}
+
+// ExplainPlanVerboseColumns are the result columns of an
+// EXPLAIN (PLAN, ...) ...
+// statement when a flag like VERBOSE or TYPES is passed.
+var ExplainPlanVerboseColumns = ResultColumns{
+	// Tree shows the node type with the tree structure.
+	{Name: "Tree", Typ: types.String},
+	// Level is the depth of the node in the tree. Hidden by default; can be
+	// retrieved using:
+	//   SELECT "Level" FROM [ EXPLAIN (VERBOSE) ... ].
+	{Name: "Level", Typ: types.Int, Hidden: true},
+	// Type is the node type. Hidden by default.
+	{Name: "Type", Typ: types.String, Hidden: true},
+	// Field is the part of the node that a row of output pertains to.
+	{Name: "Field", Typ: types.String},
+	// Description contains details about the field.
+	{Name: "Description", Typ: types.String},
+	// Columns is the type signature of the data source.
+	{Name: "Columns", Typ: types.String},
+	// Ordering indicates the known ordering of the data from this source.
+	{Name: "Ordering", Typ: types.String},
+}
+
+// ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
+var ShowTraceColumns = ResultColumns{
+	{Name: "timestamp", Typ: types.TimestampTZ},
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "loc", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+	{Name: "span", Typ: types.Int},
+}
+
+// ShowCompactTraceColumns are the result columns of a
+// SHOW COMPACT [KV] TRACE statement.
+var ShowCompactTraceColumns = ResultColumns{
+	{Name: "age", Typ: types.Interval},
+	{Name: "message", Typ: types.String},
+	{Name: "tag", Typ: types.String},
+	{Name: "operation", Typ: types.String},
+}
+
+// ShowReplicaTraceColumns are the result columns of a
+// SHOW EXPERIMENTAL_REPLICA TRACE statement.
+var ShowReplicaTraceColumns = ResultColumns{
+	{Name: "timestamp", Typ: types.TimestampTZ},
+	{Name: "node_id", Typ: types.Int},
+	{Name: "store_id", Typ: types.Int},
+	{Name: "replica_id", Typ: types.Int},
+}

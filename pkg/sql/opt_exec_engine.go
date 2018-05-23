@@ -524,6 +524,26 @@ func (ee *execEngine) ConstructExplain(
 	)
 }
 
+// ConstructShowTrace is part of the exec.Factory interface.
+func (ee *execEngine) ConstructShowTrace(
+	typ tree.ShowTraceType, compact bool, input exec.Node,
+) (exec.Node, error) {
+	var inputPlan planNode
+	if input != nil {
+		inputPlan = input.(planNode)
+	}
+
+	// TODO(radu): we hardcode tree.Rows because the optimizer doesn't yet support
+	// statements with other types.
+	node := ee.planner.makeShowTraceNode(inputPlan, tree.Rows, compact, typ == tree.ShowTraceKV)
+
+	if typ == tree.ShowTraceReplica {
+		// Wrap the showTraceNode in a showTraceReplicaNode.
+		return ee.planner.makeShowTraceReplicaNode(node), nil
+	}
+	return node, nil
+}
+
 // execEngineRowWriter is used when executing via DistSQL as a container for the
 // results.
 type execEngineRowWriter struct {

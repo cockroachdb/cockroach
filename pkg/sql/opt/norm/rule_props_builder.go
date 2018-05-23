@@ -84,11 +84,13 @@ func (b *rulePropsBuilder) buildProps(ev memo.ExprView) {
 	case opt.Max1RowOp:
 		b.buildMax1RowProps(ev)
 
-	case opt.ExplainOp:
-		b.buildExplainProps(ev)
-
 	case opt.RowNumberOp:
 		b.buildRowNumberProps(ev)
+
+	case opt.ExplainOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
+		// Don't allow any columns to be pruned, since that would trigger the
+		// creation of a wrapper Project around the Explain (it's not capable
+		// of pruning columns or of passing through Project operators).
 
 	default:
 		panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.Operator()))
@@ -175,12 +177,6 @@ func (b *rulePropsBuilder) buildValuesProps(ev memo.ExprView) {
 
 	// All columns can potentially be pruned from the Values operator.
 	relational.Rule.PruneCols = ev.Logical().Relational.OutputCols
-}
-
-func (b *rulePropsBuilder) buildExplainProps(ev memo.ExprView) {
-	// Don't allow any columns to be pruned, since that would trigger the
-	// creation of a wrapper Project around the Explain, since it's not capable
-	// of pruning columns or of passing through Project operators.
 }
 
 func (b *rulePropsBuilder) buildLimitProps(ev memo.ExprView) {

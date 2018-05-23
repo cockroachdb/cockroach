@@ -68,6 +68,8 @@ func mapPrivateType(typ string) string {
 		return "*memo.SetOpColMap"
 	case "ExplainOpDef":
 		return "*memo.ExplainOpDef"
+	case "ShowTraceOpDef":
+		return "*memo.ShowTraceOpDef"
 	case "Datum":
 		return "tree.Datum"
 	case "Type":
