@@ -20,6 +20,13 @@ const databasePages = [
   { value: "grants", label: "Grants" },
 ];
 
+// The system databases should sort after user databases.
+const systemDatabases = [
+  "defaultdb",
+  "postgres",
+  "system",
+];
+
 // DatabaseListNav displays the database page navigation bar.
 class DatabaseListNav extends React.Component<{selected: string}, {}> {
   // Magic to add react router to the context.
@@ -65,6 +72,8 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
+    const dbs = _.partition(this.props.databaseNames, (db) => systemDatabases.indexOf(db) === -1);
+
     return <div>
       <Helmet>
         <title>Tables | Databases</title>
@@ -72,9 +81,13 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="tables"/>
       <div className="section databases">
-        { _.map(this.props.databaseNames, (n) => {
-          return <DatabaseSummaryTables name={n} key={n} />;
-        }) }
+        {
+          dbs[0].map(n => <DatabaseSummaryTables name={n} key={n} />)
+        }
+        <hr />
+        {
+          dbs[1].map(n => <DatabaseSummaryTables name={n} key={n} />)
+        }
         <NonTableSummary />
       </div>
     </div>;
@@ -88,6 +101,8 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
   }
 
   render() {
+    const dbs = _.partition(this.props.databaseNames, (db) => systemDatabases.indexOf(db) === -1);
+
     return <div>
       <Helmet>
         <title>Grants | Databases</title>
@@ -95,49 +110,22 @@ class DatabaseGrantsList extends React.Component<DatabaseListProps, {}> {
       <section className="section"><h1>Databases</h1></section>
       <DatabaseListNav selected="grants"/>
       <div className="section databases">
-        { _.map(this.props.databaseNames, (n) => {
-          return <DatabaseSummaryGrants name={n} key={n} />;
-        }) }
+        {
+          dbs[0].map(n => <DatabaseSummaryGrants name={n} key={n} />)
+        }
+        <hr />
+        {
+          dbs[1].map(n => <DatabaseSummaryGrants name={n} key={n} />)
+        }
       </div>
     </div>;
   }
 }
 
-const systemDatabases = [
-  "defaultdb",
-  "postgres",
-  "system",
-];
-
-function cmp(a: string, b: string) {
-  if (a === b) {
-      return 0;
-  }
-  if (a < b) {
-      return -1;
-  }
-  return 1;
-}
-
-function systemLast(a: string, b: string) {
-  const aIsSys = systemDatabases.indexOf(a) !== -1;
-  const bIsSys = systemDatabases.indexOf(b) !== -1;
-  if (aIsSys && bIsSys) {
-    return cmp(a, b);
-  }
-  if (aIsSys) {
-      return 1;
-  }
-  if (bIsSys) {
-      return -1;
-  }
-  return cmp(a, b);
-}
-
 // Base selectors to extract data from redux state.
 function databaseNames(state: AdminUIState): string[] {
   if (state.cachedData.databases.data && state.cachedData.databases.data.databases) {
-    return state.cachedData.databases.data.databases.sort(systemLast);
+    return state.cachedData.databases.data.databases;
   }
   return [];
 }
