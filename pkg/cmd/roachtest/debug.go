@@ -53,8 +53,10 @@ func registerDebug(r *registry) {
 				return err
 			}
 
-			if err := c.RunE(ctx, c.Node(node), "grep -F 'liveness.heartbeatlatency-p99' ./debug/metrics"); err != nil {
-				return err
+			if t.IsBuildVersion("v2.1.0") {
+				if err := c.RunE(ctx, c.Node(node), "grep -F 'liveness.heartbeatlatency-p99' ./debug/metrics"); err != nil {
+					return err
+				}
 			}
 			if err := c.RunE(ctx, c.Node(node), "rm -rf debug"); err != nil {
 				return err
