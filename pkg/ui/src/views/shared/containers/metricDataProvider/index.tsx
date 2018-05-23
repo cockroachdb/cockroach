@@ -7,7 +7,7 @@ import moment from "moment";
 
 import * as protos from  "src/js/protos";
 import { AdminUIState } from "src/redux/state";
-import { requestMetrics, MetricsQuery } from "src/redux/metrics";
+import { requestMetrics as requestMetricsAction, MetricsQuery } from "src/redux/metrics";
 import {
   Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
@@ -69,7 +69,7 @@ function queryFromProps(
 interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
-  requestMetrics: typeof requestMetrics;
+  requestMetrics: typeof requestMetricsAction;
 }
 
 /**
@@ -223,7 +223,7 @@ const metricsDataProviderConnected = connect(
     };
   },
   {
-    requestMetrics,
+    requestMetricsAction,
   },
 )(MetricsDataProvider);
 
