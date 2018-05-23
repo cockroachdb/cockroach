@@ -1422,7 +1422,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 	}
 	ds := NewDistSender(cfg, g)
 	rScan := &roachpb.ReverseScanRequest{
-		Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
 	if _, err := client.SendWrapped(context.Background(), ds, rScan); err != nil {
 		t.Fatal(err)
@@ -1916,7 +1916,7 @@ func TestMultiRangeSplitEndTransaction(t *testing.T) {
 		ba.Add(roachpb.NewPut(test.put1, val))
 		val = roachpb.MakeValueFromString("val")
 		ba.Add(roachpb.NewPut(test.put2, val))
-		ba.Add(&roachpb.EndTransactionRequest{Span: roachpb.Span{Key: test.et}})
+		ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: test.et}})
 
 		if _, pErr := ds.Send(context.Background(), ba); pErr != nil {
 			t.Fatal(pErr)

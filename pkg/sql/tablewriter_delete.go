@@ -187,7 +187,7 @@ func (td *tableDeleter) deleteAllRowsFast(
 	b := &client.Batch{}
 	// TODO(tschottdorf): this might need a cluster migration.
 	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    resume.Key,
 			EndKey: resume.EndKey,
 		},

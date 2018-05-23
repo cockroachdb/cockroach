@@ -212,7 +212,7 @@ func evalExport(
 	}
 
 	exported := roachpb.ExportResponse_File{
-		Span:     args.Span,
+		Span:     args.Span(),
 		Exported: rows.BulkOpSummary,
 		Sha512:   checksum,
 	}

@@ -919,7 +919,7 @@ func (txn *Txn) Send(
 			}
 			// Set the key in the begin transaction request to the txn's anchor key.
 			bt := &roachpb.BeginTransactionRequest{
-				Span: roachpb.Span{
+				RequestHeader: roachpb.RequestHeader{
 					Key: txn.mu.Proto.Key,
 				},
 			}

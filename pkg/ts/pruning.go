@@ -176,7 +176,7 @@ func (tsdb *DB) pruneTimeSeries(
 		}
 
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key:    start,
 				EndKey: end,
 			},

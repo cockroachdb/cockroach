@@ -816,8 +816,8 @@ func (r *Replica) adminSplitWithDescriptor(
 			// If the key that routed this request to this range is now out of this
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
-			if !containsKey(*desc, args.Span.Key) {
-				return reply, roachpb.NewRangeKeyMismatchError(args.Span.Key, args.Span.Key, desc)
+			if !containsKey(*desc, args.Key) {
+				return reply, roachpb.NewRangeKeyMismatchError(args.Key, args.Key, desc)
 			}
 			foundSplitKey = args.SplitKey
 		}

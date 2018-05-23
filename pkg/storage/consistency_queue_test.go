@@ -90,7 +90,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 
 	// Run consistency check.
 	checkArgs := roachpb.CheckConsistencyRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			// span of keys that include "a".
 			Key:    []byte("a"),
 			EndKey: []byte("aa"),
@@ -166,7 +166,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Run consistency check.
 	checkArgs := roachpb.CheckConsistencyRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			// span of keys that include "a" & "c".
 			Key:    []byte("a"),
 			EndKey: []byte("z"),
@@ -230,8 +230,8 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 	computeDelta := func(db *client.DB) enginepb.MVCCStats {
 		var b client.Batch
 		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
-			Span:   roachpb.Span{Key: key},
-			DryRun: true,
+			RequestHeader: roachpb.RequestHeader{Key: key},
+			DryRun:        true,
 		})
 		if err := db.Run(ctx, &b); err != nil {
 			t.Fatal(err)

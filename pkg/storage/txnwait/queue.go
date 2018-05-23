@@ -744,7 +744,7 @@ func (q *Queue) queryTxnStatus(
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
 	b := &client.Batch{}
 	b.AddRawRequest(&roachpb.QueryTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txnMeta.Key,
 		},
 		Txn:              txnMeta,

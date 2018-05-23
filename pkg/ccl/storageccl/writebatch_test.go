@@ -134,9 +134,9 @@ func TestWriteBatchMVCCStats(t *testing.T) {
 
 	cArgs := batcheval.CommandArgs{
 		Args: &roachpb.WriteBatchRequest{
-			Span:     span,
-			DataSpan: span,
-			Data:     data,
+			RequestHeader: roachpb.RequestHeaderFromSpan(span),
+			DataSpan:      span,
+			Data:          data,
 		},
 		// Start with some stats to represent data throughout the replica's
 		// keyrange.

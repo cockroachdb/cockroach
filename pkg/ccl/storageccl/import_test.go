@@ -272,9 +272,9 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			atomic.StoreInt64(&remainingAmbiguousSubReqs, initialAmbiguousSubReqs)
 
 			req := &roachpb.ImportRequest{
-				Span:     roachpb.Span{Key: reqStartKey},
-				DataSpan: roachpb.Span{Key: dataStartKey, EndKey: dataEndKey},
-				Rekeys:   rekeys,
+				RequestHeader: roachpb.RequestHeader{Key: reqStartKey},
+				DataSpan:      roachpb.Span{Key: dataStartKey, EndKey: dataEndKey},
+				Rekeys:        rekeys,
 			}
 
 			for _, f := range files[:i] {

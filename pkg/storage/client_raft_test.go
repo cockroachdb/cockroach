@@ -2931,7 +2931,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	// 3. Wait for the lease holder to obtain raft leadership too.
 	testutils.SucceedsSoon(t, func() error {
 		req := &roachpb.LeaseInfoRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.KeyMin,
 			},
 		}

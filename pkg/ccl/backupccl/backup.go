@@ -675,10 +675,10 @@ func backup(
 			defer func() { <-exportsSem }()
 			header := roachpb.Header{Timestamp: span.end}
 			req := &roachpb.ExportRequest{
-				Span:       span.span,
-				Storage:    exportStore.Conf(),
-				StartTime:  span.start,
-				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
+				RequestHeader: roachpb.RequestHeaderFromSpan(span.span),
+				Storage:       exportStore.Conf(),
+				StartTime:     span.start,
+				MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
 			rawRes, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
 			if pErr != nil {
@@ -1285,10 +1285,10 @@ func getAllRevisions(
 	// TODO(dt): version check.
 	header := roachpb.Header{Timestamp: endTime}
 	req := &roachpb.ExportRequest{
-		Span:       roachpb.Span{Key: startKey, EndKey: endKey},
-		StartTime:  startTime,
-		MVCCFilter: roachpb.MVCCFilter_All,
-		ReturnSST:  true,
+		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
+		StartTime:     startTime,
+		MVCCFilter:    roachpb.MVCCFilter_All,
+		ReturnSST:     true,
 	}
 	resp, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
 	if pErr != nil {

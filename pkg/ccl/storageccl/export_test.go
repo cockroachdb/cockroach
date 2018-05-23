@@ -42,8 +42,8 @@ func TestExportCmd(t *testing.T) {
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
 	) ([]string, []engine.MVCCKeyValue) {
 		req := &roachpb.ExportRequest{
-			Span:      roachpb.Span{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
-			StartTime: start,
+			RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+			StartTime:     start,
 			Storage: roachpb.ExportStorage{
 				Provider:  roachpb.ExportStorageProvider_LocalFile,
 				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: "/foo"},
@@ -182,8 +182,8 @@ func TestExportGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.ExportRequest{
-		Span:      roachpb.Span{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
-		StartTime: hlc.Timestamp{WallTime: -1},
+		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
+		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {

@@ -2912,8 +2912,8 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 			return nil
 		}
 		gcr := roachpb.GCRequest{
-			Span:      sp,
-			Threshold: tc.Server(0).Clock().Now(),
+			RequestHeader: roachpb.RequestHeaderFromSpan(sp),
+			Threshold:     tc.Server(0).Clock().Now(),
 		}
 		_, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr)
 		if err != nil {
