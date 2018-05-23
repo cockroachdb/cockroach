@@ -11,8 +11,12 @@ maybe_ccache() {
     echo "On release branch ($TC_BUILD_BRANCH), so not enabling ccache."
   else
     echo "Building PR (#$TC_BUILD_BRANCH), so enabling ccache."
-    run export COCKROACH_BUILDER_CCACHE=1
+    definitely_ccache
   fi
+}
+
+definitely_ccache() {
+  run export COCKROACH_BUILDER_CCACHE=1
 }
 
 run() {
