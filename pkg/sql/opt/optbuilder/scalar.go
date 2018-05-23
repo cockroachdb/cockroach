@@ -151,9 +151,21 @@ func (b *Builder) buildScalarHelper(
 	case *tree.BinaryExpr:
 		fn := binaryOpMap[t.Operator]
 		if fn != nil {
+			// It's possible for an overload to be selected that expects different
+			// types than the TypedExpr arguments return:
+			//
+			//   ARRAY[1, 2] || NULL
+			//
+			// This is a tricky case, because the type checker selects []int as the
+			// type of the right argument, but then types it as unknown. This causes
+			// issues for the execbuilder, which doesn't have enough information to
+			// select the right overload. The solution is to wrap any mismatched
+			// arguments with a CastExpr that preserves the static type.
+			left, _ := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
+			right, _ := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
 			out = fn(b.factory,
-				b.buildScalarHelper(t.TypedLeft(), "", inScope, nil),
-				b.buildScalarHelper(t.TypedRight(), "", inScope, nil),
+				b.buildScalarHelper(left, "", inScope, nil),
+				b.buildScalarHelper(right, "", inScope, nil),
 			)
 		} else if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
