@@ -1139,7 +1139,7 @@ sort
 opt format=show-all
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
-(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 ----
 except-all
  ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
@@ -1177,7 +1177,7 @@ except-all
                      └── null [type=unknown]
 
 opt format=show-all
-(SELECT o_w_id, o_d_id, o_id FROM "order"@primary WHERE o_carrier_id IS NULL)
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 ----
