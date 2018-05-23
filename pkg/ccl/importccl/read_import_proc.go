@@ -501,6 +501,10 @@ func sampleAll(kv roachpb.KeyValue) bool {
 	return true
 }
 
+func makeRowErr(file string, row int64, format string, args ...interface{}) error {
+	return errors.Errorf("%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
+}
+
 func init() {
 	distsqlrun.NewReadImportDataProcessor = newReadImportDataProcessor
 }
