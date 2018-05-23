@@ -177,16 +177,19 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
       // Note that after dispatching requestData, state.inFlight is true
       dispatch(this.requestData(req));
       // Fetch data from the servers. Return the promise for use in tests.
-      return this.apiEndpoint(req, this.requestTimeout).then((data) => {
-        // Dispatch the results to the store.
-        dispatch(this.receiveData(data, req));
-      }).catch((error: Error) => {
-        // If an error occurred during the fetch, add it to the store.
-        // Wait 1s to record the error to avoid spamming errors.
-        // TODO(maxlang): Fix error handling more comprehensively.
-        // Tracked in #8699
-        setTimeout(() => dispatch(this.errorData(error, req)), 1000);
-      }).then(() => {
+      return this.apiEndpoint(req, this.requestTimeout).then(
+        (data) => {
+          // Dispatch the results to the store.
+          dispatch(this.receiveData(data, req));
+        },
+        (error: Error) => {
+          // If an error occurred during the fetch, add it to the store.
+          // Wait 1s to record the error to avoid spamming errors.
+          // TODO(maxlang): Fix error handling more comprehensively.
+          // Tracked in #8699
+          setTimeout(() => dispatch(this.errorData(error, req)), 1000);
+        },
+      ).then(() => {
         // Invalidate data after the invalidation period if one exists.
         if (this.invalidationPeriod) {
           setTimeout(() => dispatch(this.invalidateData(req)), this.invalidationPeriod.asMilliseconds());
