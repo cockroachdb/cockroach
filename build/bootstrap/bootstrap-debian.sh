@@ -28,6 +28,7 @@ sudo adduser "${USER}" docker
 
 # Configure environment variables
 echo 'export PATH="/usr/lib/ccache:${PATH}"' >> ~/.bashrc_bootstrap
+echo 'export COCKROACH_BUILDER_CCACHE=1"' >> ~/.bashrc_bootstrap
 # NB: GOPATH defaults to ${HOME}/go (but maybe having it set for the remainder
 # of the script is enough reason to keep it here).
 echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_bootstrap
