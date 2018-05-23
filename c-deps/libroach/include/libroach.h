@@ -363,6 +363,9 @@ DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
 // DBEnvOpenFile opens a DBWritableFile as a new "file" in the given engine.
 DBStatus DBEnvOpenFile(DBEngine* db, DBSlice path, DBWritableFile* file);
 
+// DBEnvReadFile reads the file with the given path in the given engine.
+DBStatus DBEnvReadFile(DBEngine* db, DBSlice path, DBSlice* contents);
+
 // DBEnvAppendFile appends the given data to the given DBWritableFile in the
 // given engine.
 DBStatus DBEnvAppendFile(DBEngine* db, DBWritableFile file, DBSlice contents);
@@ -372,6 +375,9 @@ DBStatus DBEnvSyncFile(DBEngine* db, DBWritableFile file);
 
 // DBEnvCloseFile closes the given DBWritableFile in the given engine.
 DBStatus DBEnvCloseFile(DBEngine* db, DBWritableFile file);
+
+// DBEnvDeleteFile deletes the file with the given filename in the given engine.
+DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path);
 
 // DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
 typedef void* DBFileLock;

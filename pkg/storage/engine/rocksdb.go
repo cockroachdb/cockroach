@@ -26,6 +26,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -2621,9 +2622,29 @@ func (r *RocksDB) WriteFile(filename string, data []byte) error {
 func (r *RocksDB) OpenFile(filename string) (DBFile, error) {
 	var file C.DBWritableFile
 	if err := statusToError(C.DBEnvOpenFile(r.rdb, goToCSlice([]byte(filename)), &file)); err != nil {
-		return nil, err
+		return nil, notFoundErrOrDefault(err)
 	}
 	return &rocksdbFile{file: file, rdb: r.rdb}, nil
+}
+
+// ReadFile reads the content from a file with the given filename. The file
+// must have been opened through Engine.OpenFile. Otherwise an error will be
+// returned.
+func (r *RocksDB) ReadFile(filename string) ([]byte, error) {
+	var data C.DBSlice
+	if err := statusToError(C.DBEnvReadFile(r.rdb, goToCSlice([]byte(filename)), &data)); err != nil {
+		return nil, notFoundErrOrDefault(err)
+	}
+	defer C.free(unsafe.Pointer(data.data))
+	return cSliceToGoBytes(data), nil
+}
+
+// DeleteFile deletes the file with the given filename from this RocksDB's env.
+func (r *RocksDB) DeleteFile(filename string) error {
+	if err := statusToError(C.DBEnvDeleteFile(r.rdb, goToCSlice([]byte(filename)))); err != nil {
+		return notFoundErrOrDefault(err)
+	}
+	return nil
 }
 
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
@@ -2670,6 +2691,13 @@ func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byt
 	repr = repr[keySize+valSize:]
 	key, err = DecodeKey(rawKey)
 	return key, value, repr, err
+}
+
+func notFoundErrOrDefault(err error) error {
+	if strings.Contains(err.Error(), "No such file or directory") {
+		return os.ErrNotExist
+	}
+	return err
 }
 
 // DBFile is an interface for interacting with DBWritableFile in RocksDB.
