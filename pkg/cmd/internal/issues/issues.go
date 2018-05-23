@@ -111,6 +111,9 @@ func getAssignee(
 	listCommits func(ctx context.Context, owner string, repo string,
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error),
 ) (string, error) {
+	if authorEmail == "" {
+		return "", nil
+	}
 	commits, _, err := listCommits(ctx, githubUser, githubRepo, &github.CommitsListOptions{
 		Author: authorEmail,
 		ListOptions: github.ListOptions{
@@ -124,6 +127,9 @@ func getAssignee(
 		return "", errors.Errorf("couldn't find GitHub commits for user email %s", authorEmail)
 	}
 
+	if commits[0].Author == nil {
+		return "", nil
+	}
 	assignee := *commits[0].Author.Login
 
 	if newAssignee, ok := oldFriendsMap[assignee]; ok {
