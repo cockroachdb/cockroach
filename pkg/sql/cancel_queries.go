@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -64,12 +65,15 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	}
 
 	statusServer := params.extendedEvalCtx.StatusServer
-	queryIDDatum := datum.(*tree.DString)
+	queryIDString, ok := tree.AsDString(datum)
+	if !ok {
+		return false, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: %q: expected *DString, found %T", datum, datum)
+	}
 
-	queryIDString := string(*queryIDDatum)
-	queryID, err := StringToClusterWideID(queryIDString)
+	queryID, err := StringToClusterWideID(string(queryIDString))
 	if err != nil {
-		return false, errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
+		return false, errors.Wrapf(err, "invalid query ID %s", datum)
 	}
 
 	// Get the lowest 32 bits of the query ID.
@@ -77,7 +81,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
-		QueryID:  queryIDString,
+		QueryID:  string(queryIDString),
 		Username: params.SessionData().User,
 	}
 

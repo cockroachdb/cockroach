@@ -12,6 +12,9 @@ CANCEL JOBS SELECT 'foo'
 query error CANCEL JOBS expects a single column source, got 2 columns
 CANCEL JOBS VALUES (1,2)
 
+query error CANCEL JOBS requires int values, not type oid
+CANCEL JOB 1::OID
+
 statement ok count 0
 PAUSE JOB (SELECT id FROM system.jobs LIMIT 0)
 
@@ -83,3 +86,10 @@ CANCEL SESSION (SELECT 'a' LIMIT 0)
 
 statement ok count 0
 CANCEL SESSIONS SELECT 'a' LIMIT 0
+
+# Regression test for #25842
+query error odd length hex string
+CANCEL SESSION 'aaa'::NAME
+
+query error odd length hex string
+CANCEL QUERY 'aaa'::NAME
