@@ -81,6 +81,7 @@ const (
 	ExplainFlagNoExpand
 	ExplainFlagNoNormalize
 	ExplainFlagNoOptimize
+	ExplainFlagAnalyze
 )
 
 var explainFlagStrings = map[string]int{
@@ -90,6 +91,7 @@ var explainFlagStrings = map[string]int{
 	"noexpand":    ExplainFlagNoExpand,
 	"nonormalize": ExplainFlagNoNormalize,
 	"nooptimize":  ExplainFlagNoOptimize,
+	"analyze":     ExplainFlagAnalyze,
 }
 
 // ParseOptions parses the options for an EXPLAIN statement.

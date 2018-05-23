@@ -31,6 +31,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// processorIDTagKey is the key used for processor id tags in tracing spans.
+const processorIDTagKey = tracing.TagPrefix + "processorid"
+
 // Processor is a common interface implemented by all processors, used by the
 // higher-level flow orchestration code.
 type Processor interface {

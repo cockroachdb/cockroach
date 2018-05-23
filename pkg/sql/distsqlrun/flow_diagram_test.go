@@ -139,7 +139,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		},
 	}
 
-	json, url, err := GeneratePlanDiagramWithURL(flows)
+	json, url, err := GeneratePlanDiagramURL(flows)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := GeneratePlanDiagram(flows, &buf); err != nil {
+	if err := GeneratePlanDiagram(flows, nil /* spans */, &buf); err != nil {
 		t.Fatal(err)
 	}
 

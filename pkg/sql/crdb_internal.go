@@ -595,7 +595,7 @@ CREATE TABLE crdb_internal.session_trace (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		rows, err := p.ExtendedEvalContext().Tracing.getRecording()
+		rows, err := p.ExtendedEvalContext().Tracing.getSessionTrace()
 		if err != nil {
 			return err
 		}
