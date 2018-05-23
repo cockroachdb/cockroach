@@ -234,6 +234,44 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	})
 }
 
+func TestChangefeedSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	const testPollingInterval = 10 * time.Millisecond
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = testPollingInterval
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	k := newTestKafkaProducer()
+	testProducersHook[t.Name()] = k
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = $1`, testPollingInterval.String())
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE EXPERIMENTAL_CHANGEFEED EMIT foo TO $1`, `kafka://`+t.Name())
+
+	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (1)`)
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b INT`)
+	sqlDB.Exec(t, `INSERT INTO foo (a) VALUES (2)`)
+	sqlDB.Exec(t, `INSERT INTO foo (a, b) VALUES (3, 4)`)
+	time.Sleep(100 * testPollingInterval)
+	assertPayloads(t, k.WaitUntilNewMessages(), []string{
+		`[1]->{"a": 1}`,
+		`[2]->{"a": 2, "b": null}`,
+		`[3]->{"a": 3, "b": 4}`,
+	})
+
+	// TODO(dan): Test a schema change that uses a backfill once we figure out
+	// the user facing semantics of that.
+}
+
 // testKafkaProducer is an implementation of sarama.SyncProducer used for
 // testing.
 type testKafkaProducer struct {
