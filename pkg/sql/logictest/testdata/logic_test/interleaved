@@ -380,3 +380,59 @@ END
 
 statement error duplicate key value \(p_id,c_id\)=\(1,1\) violates unique constraint "primary"
 INSERT INTO c20067 VALUES (1, 1, 'John Doe')
+
+
+subtest create_interleaved_external_reference
+
+statement ok
+CREATE TABLE referee (a INT PRIMARY KEY);
+
+statement ok
+BEGIN TRANSACTION
+
+statement ok
+CREATE TABLE refers (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX b_idx (b)
+) INTERLEAVE IN PARENT referee (a)
+
+# Add some schema changes within the same transaction.
+statement ok
+CREATE INDEX foo ON refers (a)
+
+statement ok
+ALTER INDEX refers@b_idx RENAME TO another_idx
+
+query TT
+SHOW CREATE TABLE refers
+----
+refers CREATE TABLE refers (
+  a INT NOT NULL,
+  b INT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a ASC),
+  INDEX another_idx (b ASC),
+  INDEX foo (a ASC),
+  FAMILY "primary" (a, b)
+) INTERLEAVE IN PARENT referee (a)
+
+statement ok
+DROP INDEX refers@another_idx
+
+# refers is PUBLIC.
+query T
+SHOW TABLES FROM test
+----
+all_interleaves
+c20067
+customers
+interdb
+orders
+p1_0
+p1_1
+p20067
+referee
+refers
+
+statement ok
+COMMIT

@@ -820,8 +820,6 @@ func addInterleave(
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
 	}
 	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
-
-	desc.State = sqlbase.TableDescriptor_ADD
 	return nil
 }
 
@@ -853,19 +851,7 @@ func (p *planner) finalizeInterleave(
 	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
 		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
-	if err := p.saveNonmutationAndNotify(ctx, ancestorTable); err != nil {
-		return err
-	}
-
-	if desc.State == sqlbase.TableDescriptor_ADD {
-		desc.State = sqlbase.TableDescriptor_PUBLIC
-
-		if err := p.saveNonmutationAndNotify(ctx, desc); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return p.saveNonmutationAndNotify(ctx, ancestorTable)
 }
 
 // CreatePartitioning constructs the partitioning descriptor for an index that
