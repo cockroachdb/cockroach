@@ -15,11 +15,8 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -62,6 +59,11 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 			panic(builderError{err})
 		}
 
+		// TODO(andyk): Re-enable virtual tables when we can fully support them.
+		if tab.IsVirtualTable() {
+			panic(unimplementedf("virtual tables are not supported"))
+		}
+
 		return b.buildScan(tab, tn, inScope)
 
 	case *tree.ParenTableExpr:
@@ -77,10 +79,7 @@ func (b *Builder) buildTable(texpr tree.TableExpr, inScope *scope) (outScope *sc
 		return outScope
 
 	default:
-		panic(builderError{pgerror.Unimplemented(
-			"table expr",
-			fmt.Sprintf("not yet implemented: table expr: %T", texpr),
-		)})
+		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
 	}
 }
 

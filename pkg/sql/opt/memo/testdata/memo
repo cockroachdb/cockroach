@@ -172,36 +172,38 @@ memo (optimized)
 
 # Test interning of expressions.
 memo
-SELECT 1, 1+z, now()::timestamp, now()::timestamptz
+SELECT 1, 1+z, left(x, 10)::timestamp, left(x, 10)::timestamptz
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
 memo (optimized)
  ├── G1: (project G2 G3)
- │    └── "[presentation: 1:3,1 + z:4,now()::TIMESTAMP:5,now()::TIMESTAMP WITH TIME ZONE:6]"
+ │    └── "[presentation: 1:3,1 + z:4,left(x, 10)::TIMESTAMP:5,left(x, 10)::TIMESTAMP WITH TIME ZONE:6]"
  │         ├── best: (project G2 G3)
  │         └── cost: 1010.00
  ├── G2: (select G4 G5)
  │    └── ""
  │         ├── best: (select G4 G5)
  │         └── cost: 1010.00
- ├── G3: (projections G6 G7 G8 G11)
+ ├── G3: (projections G6 G7 G8 G9)
  ├── G4: (scan b)
  │    └── ""
  │         ├── best: (scan b)
  │         └── cost: 1000.00
- ├── G5: (filters G9 G10)
+ ├── G5: (filters G10 G11)
  ├── G6: (const 1)
- ├── G7: (plus G12 G13)
- ├── G8: (cast G11 TIMESTAMP)
- ├── G9: (eq G12 G13)
- ├── G10: (eq G14 G14)
- ├── G11: (function now)
- ├── G12: (variable b.z)
- ├── G13: (const 1)
- ├── G14: (function G16 G15 G16 concat)
- ├── G15: (const 'foo')
- └── G16: (variable b.x)
+ ├── G7: (plus G13 G14)
+ ├── G8: (cast G12 TIMESTAMP)
+ ├── G9: (cast G12 TIMESTAMP WITH TIME ZONE)
+ ├── G10: (eq G13 G14)
+ ├── G11: (eq G15 G15)
+ ├── G12: (function G18 G16 left)
+ ├── G13: (variable b.z)
+ ├── G14: (const 1)
+ ├── G15: (function G18 G17 G18 concat)
+ ├── G16: (const 10)
+ ├── G17: (const 'foo')
+ └── G18: (variable b.x)
 
 # Test topological sorting
 memo

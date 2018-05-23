@@ -57,7 +57,7 @@ project
 build
 SELECT ARRAY(((((VALUES (1), (2))))))[2]
 ----
-error: not yet implemented: scalar expr: *tree.IndirectionExpr
+error (0A000): not yet implemented: scalar expression: *tree.IndirectionExpr
 
 build
 SELECT 1 + (SELECT 1)

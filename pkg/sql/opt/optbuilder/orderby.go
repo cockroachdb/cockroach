@@ -17,7 +17,6 @@ package optbuilder
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -167,7 +166,6 @@ func (b *Builder) buildOrderByProject(projectionsScope, orderByScope *scope) {
 
 func ensureColumnOrderable(e tree.TypedExpr) {
 	if _, ok := e.ResolvedType().(types.TArray); ok || e.ResolvedType() == types.JSON {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-			"can't order by column type %s", e.ResolvedType())})
+		panic(unimplementedf("can't order by column type %s", e.ResolvedType()))
 	}
 }
