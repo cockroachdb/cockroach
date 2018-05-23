@@ -274,6 +274,11 @@ func (trs *TableReaderStats) Stats() map[string]string {
 	}
 }
 
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (trs *TableReaderStats) StatsForQueryPlan() []string {
+	return []string{fmt.Sprintf("rows read: %d", trs.InputStats.NumRows)}
+}
+
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {

@@ -152,7 +152,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 			n.run.stopTracing = nil
 		}
 
-		traceRows, err := params.extendedEvalCtx.Tracing.getRecording()
+		traceRows, err := params.extendedEvalCtx.Tracing.getSessionTrace()
 		if err != nil {
 			return false, err
 		}

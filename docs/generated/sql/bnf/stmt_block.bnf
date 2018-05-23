@@ -939,6 +939,7 @@ expr_list ::=
 
 explain_option_name ::=
 	non_reserved_word
+	| 'ANALYZE'
 
 privilege ::=
 	name
