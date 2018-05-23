@@ -796,7 +796,9 @@ func splitAndScatter(
 			}
 
 			log.VEventf(restoreCtx, 1, "scattering chunk %d of %d", idx, len(importSpanChunks))
-			scatterReq := &roachpb.AdminScatterRequest{Span: chunkSpan}
+			scatterReq := &roachpb.AdminScatterRequest{
+				RequestHeader: roachpb.RequestHeaderFromSpan(chunkSpan),
+			}
 			if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
 				// fail the RESTORE when Scatter fails. I'm uncomfortable that
@@ -838,7 +840,9 @@ func splitAndScatter(
 					}
 
 					log.VEventf(restoreCtx, 1, "scattering %d of %d", idx, len(importSpans))
-					scatterReq := &roachpb.AdminScatterRequest{Span: newSpan}
+					scatterReq := &roachpb.AdminScatterRequest{
+						RequestHeader: roachpb.RequestHeaderFromSpan(newSpan),
+					}
 					if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
 						// TODO(dan): Unfortunately, Scatter is still too unreliable to
 						// fail the RESTORE when Scatter fails. I'm uncomfortable that
@@ -1100,11 +1104,11 @@ func restore(
 			// Import is a point request because we don't want DistSender to split
 			// it. Assume (but don't require) the entire post-rewrite span is on the
 			// same range.
-			Span:     roachpb.Span{Key: newSpan.Key},
-			DataSpan: readyForImportSpan.Span,
-			Files:    readyForImportSpan.files,
-			EndTime:  endTime,
-			Rekeys:   rekeys,
+			RequestHeader: roachpb.RequestHeader{Key: newSpan.Key},
+			DataSpan:      readyForImportSpan.Span,
+			Files:         readyForImportSpan.files,
+			EndTime:       endTime,
+			Rekeys:        rekeys,
 		}
 
 		log.VEventf(restoreCtx, 1, "importing %d of %d", idx, len(importSpans))

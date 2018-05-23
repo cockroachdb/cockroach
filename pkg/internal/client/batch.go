@@ -584,7 +584,7 @@ func (b *Batch) adminMerge(key interface{}) {
 		return
 	}
 	req := &roachpb.AdminMergeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
 	}
@@ -606,7 +606,7 @@ func (b *Batch) adminSplit(spanKeyIn, splitKeyIn interface{}) {
 		return
 	}
 	req := &roachpb.AdminSplitRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: spanKey,
 		},
 	}
@@ -624,7 +624,7 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 		return
 	}
 	req := &roachpb.AdminTransferLeaseRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
 		Target: target,
@@ -644,7 +644,7 @@ func (b *Batch) adminChangeReplicas(
 		return
 	}
 	req := &roachpb.AdminChangeReplicasRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
 		ChangeType: changeType,
@@ -668,9 +668,9 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 	}
 	span := roachpb.Span{Key: begin, EndKey: end}
 	req := &roachpb.WriteBatchRequest{
-		Span:     span,
-		DataSpan: span,
-		Data:     data,
+		RequestHeader: roachpb.RequestHeaderFromSpan(span),
+		DataSpan:      span,
+		Data:          data,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
@@ -688,9 +688,11 @@ func (b *Batch) addSSTable(s, e interface{}, data []byte) {
 		b.initResult(0, 0, notRaw, err)
 		return
 	}
-	span := roachpb.Span{Key: begin, EndKey: end}
 	req := &roachpb.AddSSTableRequest{
-		Span: span,
+		RequestHeader: roachpb.RequestHeader{
+			Key:    begin,
+			EndKey: end,
+		},
 		Data: data,
 	}
 	b.appendReqs(req)

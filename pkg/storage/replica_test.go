@@ -903,23 +903,23 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	header := roachpb.Span{
+	header := roachpb.RequestHeader{
 		Key: roachpb.Key("a"),
 	}
 	testCases := []roachpb.Request{
 		// Admin split covers admin commands.
 		&roachpb.AdminSplitRequest{
-			Span:     header,
-			SplitKey: roachpb.Key("a"),
+			RequestHeader: header,
+			SplitKey:      roachpb.Key("a"),
 		},
 		// Get covers read-only commands.
 		&roachpb.GetRequest{
-			Span: header,
+			RequestHeader: header,
 		},
 		// Put covers read-write commands.
 		&roachpb.PutRequest{
-			Span:  header,
-			Value: roachpb.MakeValueFromString("value"),
+			RequestHeader: header,
+			Value:         roachpb.MakeValueFromString("value"),
 		},
 	}
 
@@ -1436,7 +1436,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 
 func getArgs(key []byte) roachpb.GetRequest {
 	return roachpb.GetRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}
@@ -1444,7 +1444,7 @@ func getArgs(key []byte) roachpb.GetRequest {
 
 func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 	return roachpb.PutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value: roachpb.MakeValueFromBytes(value),
@@ -1454,7 +1454,7 @@ func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
 func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutRequest {
 	expV := roachpb.MakeValueFromBytes(expValue)
 	return roachpb.ConditionalPutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value:    roachpb.MakeValueFromBytes(value),
@@ -1464,7 +1464,7 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) roachpb.ConditionalPutReq
 
 func iPutArgs(key roachpb.Key, value []byte) roachpb.InitPutRequest {
 	return roachpb.InitPutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value: roachpb.MakeValueFromBytes(value),
@@ -1473,7 +1473,7 @@ func iPutArgs(key roachpb.Key, value []byte) roachpb.InitPutRequest {
 
 func deleteArgs(key roachpb.Key) roachpb.DeleteRequest {
 	return roachpb.DeleteRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}
@@ -1492,7 +1492,7 @@ func readOrWriteArgs(key roachpb.Key, read bool) roachpb.Request {
 
 func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 	return roachpb.IncrementRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Increment: inc,
@@ -1501,7 +1501,7 @@ func incrementArgs(key []byte, inc int64) roachpb.IncrementRequest {
 
 func scanArgs(start, end []byte) roachpb.ScanRequest {
 	return roachpb.ScanRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
 		},
@@ -1510,7 +1510,7 @@ func scanArgs(start, end []byte) roachpb.ScanRequest {
 
 func reverseScanArgs(start, end []byte) roachpb.ReverseScanRequest {
 	return roachpb.ReverseScanRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    start,
 			EndKey: end,
 		},
@@ -1521,7 +1521,7 @@ func beginTxnArgs(
 	key []byte, txn *roachpb.Transaction,
 ) (roachpb.BeginTransactionRequest, roachpb.Header) {
 	return roachpb.BeginTransactionRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 	}, roachpb.Header{Txn: txn}
@@ -1531,7 +1531,7 @@ func endTxnArgs(
 	txn *roachpb.Transaction, commit bool,
 ) (roachpb.EndTransactionRequest, roachpb.Header) {
 	return roachpb.EndTransactionRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key, // not allowed when going through TxnCoordSender, but we're not
 		},
 		Commit: commit,
@@ -1542,7 +1542,7 @@ func pushTxnArgs(
 	pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType,
 ) roachpb.PushTxnRequest {
 	return roachpb.PushTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: pushee.Key,
 		},
 		Now:       pusher.Timestamp,
@@ -1557,7 +1557,7 @@ func heartbeatArgs(
 	txn *roachpb.Transaction, now hlc.Timestamp,
 ) (roachpb.HeartbeatTxnRequest, roachpb.Header) {
 	return roachpb.HeartbeatTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: now,
@@ -1566,7 +1566,7 @@ func heartbeatArgs(
 
 func internalMergeArgs(key []byte, value roachpb.Value) roachpb.MergeRequest {
 	return roachpb.MergeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value: value,
@@ -1589,7 +1589,7 @@ func gcKey(key roachpb.Key, timestamp hlc.Timestamp) roachpb.GCRequest_GCKey {
 
 func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roachpb.GCRequest {
 	return roachpb.GCRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    startKey,
 			EndKey: endKey,
 		},
@@ -2536,7 +2536,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 	// scenario. See the comment on RunWithoutInitialSpan.
 	heartbeatBa := newBa(true /* withTxn */)
 	heartbeatBa.Add(&roachpb.HeartbeatTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: now,
@@ -2544,7 +2544,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	endTxnBa := newBa(true /* withTxn */)
 	endTxnBa.Add(&roachpb.EndTransactionRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Commit: true,
@@ -2555,7 +2555,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	splitBa := newBa(true /* withTxn */)
 	splitBa.Add(&roachpb.EndTransactionRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Commit: true,
@@ -2580,7 +2580,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	pushBa := newBa(false /* withTxn */)
 	pushBa.Add(&roachpb.PushTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		PusheeTxn: txn.TxnMeta,
@@ -2591,7 +2591,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	resolveIntentBa := newBa(false /* withTxn */)
 	resolveIntentBa.Add(&roachpb.ResolveIntentRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: intentKey,
 		},
 		IntentTxn: txn.TxnMeta,
@@ -2607,14 +2607,14 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	getKeyBa := newBa(true /* withTxn */)
 	getKeyBa.Add(&roachpb.GetRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: intentKey,
 		},
 	})
 
 	putKeyBa := newBa(true /* withTxn */)
 	putKeyBa.Add(&roachpb.PutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: intentKey,
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
@@ -2725,7 +2725,7 @@ func (ci cancelInstr) req() *roachpb.BatchRequest {
 	// Default to a DeleteRangeRequest because it performs a single write over its Span.
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = hlc.Timestamp{WallTime: cmdQCancelTestTimestamp}
-	ba.Add(&roachpb.DeleteRangeRequest{Span: ci.span})
+	ba.Add(&roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeaderFromSpan(ci.span)})
 	return &ba
 }
 
@@ -3329,9 +3329,9 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	// Abort the intent and try to write again to ensure the timestamp
 	// cache wasn't updated by the second failed conditional put.
 	rArgs := &roachpb.ResolveIntentRequest{
-		Span:      pArgs.Header(),
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.ABORTED,
+		RequestHeader: pArgs.Header(),
+		IntentTxn:     txn.TxnMeta,
+		Status:        roachpb.ABORTED,
 	}
 	txn.Sequence++
 	h = roachpb.Header{Timestamp: txn.Timestamp}
@@ -3470,9 +3470,9 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 
 	// Resolve the intent.
 	rArgs := &roachpb.ResolveIntentRequest{
-		Span:      pArgs.Header(),
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
+		RequestHeader: pArgs.Header(),
+		IntentTxn:     txn.TxnMeta,
+		Status:        roachpb.COMMITTED,
 	}
 	txn.Sequence++
 	if _, pErr = tc.SendWrappedWith(roachpb.Header{Timestamp: txn.Timestamp}, rArgs); pErr != nil {
@@ -3818,7 +3818,7 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 			lastActive, pushReq.Now, abortedPushee)
 	}
 
-	gcSpan := roachpb.Span{
+	gcHeader := roachpb.RequestHeader{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
 	}
@@ -3828,7 +3828,7 @@ func TestEndTransactionTxnSpanGCThreshold(t *testing.T) {
 	// may have written intents elsewhere.
 	{
 		gcReq := roachpb.GCRequest{
-			Span: gcSpan,
+			RequestHeader: gcHeader,
 			Keys: []roachpb.GCRequest_GCKey{
 				{Key: keys.TransactionKey(pushee.Key, pushee.ID)},
 			},
@@ -4786,7 +4786,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 				var gr roachpb.GetResponse
 				if _, err := batcheval.Get(
 					ctx, tc.engine, batcheval.CommandArgs{
-						Args: &roachpb.GetRequest{Span: roachpb.Span{
+						Args: &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
 					},
@@ -5075,7 +5075,7 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 			reply, pErr := maybeWrapWithBeginTransaction(context.Background(), tc.store, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
-			}, &roachpb.IncrementRequest{Span: roachpb.Span{Key: k}, Increment: 123})
+			}, &roachpb.IncrementRequest{RequestHeader: roachpb.RequestHeader{Key: k}, Increment: 123})
 			if pErr != nil {
 				return nil, pErr
 			}
@@ -5089,7 +5089,7 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 			_, pErr := client.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
 				Txn:     actor,
 				RangeID: 1,
-			}, &roachpb.GetRequest{Span: roachpb.Span{Key: k}})
+			}, &roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: k}})
 			return pErr
 		}
 
@@ -5753,7 +5753,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 
 	// Resolve the intents.
 	rArgs := &roachpb.ResolveIntentRangeRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key:    roachpb.Key("a"),
 			EndKey: roachpb.Key("c"),
 		},
@@ -5865,7 +5865,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	// Resolve the 2nd value.
 	rArgs := &roachpb.ResolveIntentRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: pArgs.Key,
 		},
 		IntentTxn: txn.TxnMeta,
@@ -6096,7 +6096,7 @@ func TestConditionFailedError(t *testing.T) {
 	}
 	val := roachpb.MakeValueFromString("moo")
 	args := roachpb.ConditionalPutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value:    roachpb.MakeValueFromBytes(value),
@@ -6431,7 +6431,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 
 				// Resolve the intents.
 				rArgs := &roachpb.ResolveIntentRangeRequest{
-					Span: roachpb.Span{
+					RequestHeader: roachpb.RequestHeader{
 						Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
 						EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
 					},
@@ -6644,19 +6644,19 @@ func TestBatchErrorWithIndex(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	// This one succeeds.
 	ba.Add(&roachpb.PutRequest{
-		Span:  roachpb.Span{Key: roachpb.Key("k")},
-		Value: roachpb.MakeValueFromString("not nil"),
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Value:         roachpb.MakeValueFromString("not nil"),
 	})
 	// This one fails with a ConditionalPutError, which will populate the
 	// returned error's index.
 	ba.Add(&roachpb.ConditionalPutRequest{
-		Span:     roachpb.Span{Key: roachpb.Key("k")},
-		Value:    roachpb.MakeValueFromString("irrelevant"),
-		ExpValue: nil, // not true after above Put
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Value:         roachpb.MakeValueFromString("irrelevant"),
+		ExpValue:      nil, // not true after above Put
 	})
 	// This one is never executed.
 	ba.Add(&roachpb.GetRequest{
-		Span: roachpb.Span{Key: roachpb.Key("k")},
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
 	})
 
 	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr == nil {
@@ -6689,8 +6689,8 @@ func TestProposalOverhead(t *testing.T) {
 
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
-		Span:  roachpb.Span{Key: roachpb.Key("k")},
-		Value: roachpb.MakeValueFromString("v"),
+		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		Value:         roachpb.MakeValueFromString("v"),
 	})
 	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
 		t.Fatal(pErr)
@@ -7211,7 +7211,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			var ba roachpb.BatchRequest
 			ba.RangeID = 1
 			ba.Add(&roachpb.GetRequest{
-				Span: roachpb.Span{Key: key},
+				RequestHeader: roachpb.RequestHeader{Key: key},
 			})
 			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 				t.Fatal(err)
@@ -7268,7 +7268,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	var ba roachpb.BatchRequest
 	ba.RangeID = 1
 	ba.Add(&roachpb.PutRequest{
-		Span: roachpb.Span{Key: []byte("acdfg")},
+		RequestHeader: roachpb.RequestHeader{Key: []byte("acdfg")},
 	})
 	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
 		t.Fatal(err)
@@ -7534,7 +7534,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = magicTS
 	ba.Add(&roachpb.PutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: roachpb.Key("a"),
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
@@ -7717,7 +7717,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		for i := 0; i < num; i++ {
 			var ba roachpb.BatchRequest
 			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
+			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			lease, _ := repl.GetLease()
 			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
@@ -7795,7 +7795,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ctx := context.WithValue(context.Background(), magicKey{}, "foo")
 			var ba roachpb.BatchRequest
 			ba.Timestamp = tc.Clock().Now()
-			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
+			ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, &allSpans)
 			if pErr != nil {
@@ -7914,7 +7914,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		id := fmt.Sprintf("%08d", i)
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
-		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
+		ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
 		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans)
 		if pErr != nil {
@@ -8688,31 +8688,31 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cfg := TestStoreConfig(nil)
-	sp := roachpb.Span{Key: roachpb.Key("a")}
+	rh := roachpb.RequestHeader{Key: roachpb.Key("a")}
 	txn := newTransaction(
 		"name",
-		sp.Key,
+		rh.Key,
 		roachpb.NormalUserPriority,
 		enginepb.SERIALIZABLE,
 		cfg.Clock,
 	)
 
 	getReq := &roachpb.GetRequest{
-		Span: sp,
+		RequestHeader: rh,
 	}
 	putReq := &roachpb.PutRequest{
-		Span:  sp,
-		Value: roachpb.MakeValueFromBytes([]byte("val")),
+		RequestHeader: rh,
+		Value:         roachpb.MakeValueFromBytes([]byte("val")),
 	}
 	deleteReq := &roachpb.DeleteRequest{
-		Span: sp,
+		RequestHeader: rh,
 	}
 	commitTxnReq := &roachpb.EndTransactionRequest{
-		Span:   sp,
-		Commit: true,
+		RequestHeader: rh,
+		Commit:        true,
 	}
 	pushTxnReq := &roachpb.PushTxnRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: txn.TxnMeta.Key,
 		},
 		PusheeTxn: txn.TxnMeta,
@@ -8720,16 +8720,16 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		PushType:  roachpb.PUSH_ABORT,
 	}
 	resolveCommittedIntentReq := &roachpb.ResolveIntentRequest{
-		Span:      sp,
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.COMMITTED,
-		Poison:    false,
+		RequestHeader: rh,
+		IntentTxn:     txn.TxnMeta,
+		Status:        roachpb.COMMITTED,
+		Poison:        false,
 	}
 	resolveAbortedIntentReq := &roachpb.ResolveIntentRequest{
-		Span:      sp,
-		IntentTxn: txn.TxnMeta,
-		Status:    roachpb.ABORTED,
-		Poison:    true,
+		RequestHeader: rh,
+		IntentTxn:     txn.TxnMeta,
+		Status:        roachpb.ABORTED,
+		Poison:        true,
 	}
 
 	testCases := []struct {
@@ -9234,7 +9234,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	runTest := func(test testCase) {
 		t.Run(test.name, func(t *testing.T) {
 			args := &roachpb.RecomputeStatsRequest{
-				Span: roachpb.Span{
+				RequestHeader: roachpb.RequestHeader{
 					Key: test.key,
 				},
 			}
@@ -9799,8 +9799,8 @@ func TestReplicaBootstrapRangeAppliedStateKey(t *testing.T) {
 			computeStatsDelta := func(db *client.DB) (enginepb.MVCCStats, error) {
 				var b client.Batch
 				b.AddRawRequest(&roachpb.RecomputeStatsRequest{
-					Span:   roachpb.Span{Key: roachpb.KeyMin},
-					DryRun: true,
+					RequestHeader: roachpb.RequestHeader{Key: roachpb.KeyMin},
+					DryRun:        true,
 				})
 				if err := db.Run(ctx, &b); err != nil {
 					return enginepb.MVCCStats{}, err

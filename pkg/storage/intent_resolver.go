@@ -225,7 +225,7 @@ func (ir *intentResolver) maybePushTransactions(
 	var pushReqs []roachpb.Request
 	for _, pushTxn := range pushTxns {
 		pushReqs = append(pushReqs, &roachpb.PushTxnRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key: pushTxn.Key,
 			},
 			PusherTxn: *partialPusherTxn,
@@ -454,7 +454,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				}
 				b := &client.Batch{}
 				b.AddRawRequest(&roachpb.PushTxnRequest{
-					Span: roachpb.Span{Key: txn.Key},
+					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 					PusherTxn: roachpb.Transaction{
 						TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
 					},
@@ -527,7 +527,7 @@ func (ir *intentResolver) cleanupFinishedTxnIntents(
 		}
 		endKey := key.Next()
 
-		gcArgs.Span = roachpb.Span{
+		gcArgs.RequestHeader = roachpb.RequestHeader{
 			Key:    key.AsRawKey(),
 			EndKey: endKey.AsRawKey(),
 		}
@@ -583,18 +583,18 @@ func (ir *intentResolver) resolveIntents(
 		intent := intents[i] // avoids a race in `i, intent := range ...`
 		if len(intent.EndKey) == 0 {
 			resolveReqs = append(resolveReqs, &roachpb.ResolveIntentRequest{
-				Span:      intent.Span,
-				IntentTxn: intent.Txn,
-				Status:    intent.Status,
-				Poison:    opts.Poison,
+				RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:     intent.Txn,
+				Status:        intent.Status,
+				Poison:        opts.Poison,
 			})
 		} else {
 			resolveRangeReqs = append(resolveRangeReqs, &roachpb.ResolveIntentRangeRequest{
-				Span:         intent.Span,
-				IntentTxn:    intent.Txn,
-				Status:       intent.Status,
-				Poison:       opts.Poison,
-				MinTimestamp: opts.MinTimestamp,
+				RequestHeader: roachpb.RequestHeaderFromSpan(intent.Span),
+				IntentTxn:     intent.Txn,
+				Status:        intent.Status,
+				Poison:        opts.Poison,
+				MinTimestamp:  opts.MinTimestamp,
 			})
 		}
 	}
@@ -655,7 +655,7 @@ func (ir *intentResolver) resolveIntents(
 				break
 			}
 			reqCopy := *(req.(*roachpb.ResolveIntentRangeRequest))
-			reqCopy.SetHeader(*resp.ResumeSpan)
+			reqCopy.SetSpan(*resp.ResumeSpan)
 			req = &reqCopy
 		}
 	}

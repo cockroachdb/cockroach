@@ -1279,7 +1279,7 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 // the default replica for the specified key.
 func getArgs(key roachpb.Key) *roachpb.GetRequest {
 	return &roachpb.GetRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 	}
@@ -1289,7 +1289,7 @@ func getArgs(key roachpb.Key) *roachpb.GetRequest {
 // the default replica for the specified key / value.
 func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
 	return &roachpb.PutRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Value: roachpb.MakeValueFromBytes(value),
@@ -1300,7 +1300,7 @@ func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
 // for the specified key.
 func incrementArgs(key roachpb.Key, inc int64) *roachpb.IncrementRequest {
 	return &roachpb.IncrementRequest{
-		Span: roachpb.Span{
+		RequestHeader: roachpb.RequestHeader{
 			Key: key,
 		},
 		Increment: inc,

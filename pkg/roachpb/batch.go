@@ -273,7 +273,7 @@ func actualSpan(req Request, resp Response) (Span, bool) {
 			return Span{Key: h.Key, EndKey: resumeSpan.Key}, true
 		}
 	}
-	return h, true
+	return h.Span(), true
 }
 
 // Combine implements the Combinable interface. It combines each slot of the

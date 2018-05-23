@@ -1552,7 +1552,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	)
 	for _, key := range []string{"c"} {
 		req := &roachpb.AdminSplitRequest{
-			Span: roachpb.Span{
+			RequestHeader: roachpb.RequestHeader{
 				Key: roachpb.Key(key),
 			},
 			SplitKey: roachpb.Key(key),
@@ -1895,7 +1895,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 	newUncertaintyFilter := func(key roachpb.Key) func(storagebase.FilterArgs) *roachpb.Error {
 		var count int32
 		return func(fArgs storagebase.FilterArgs) *roachpb.Error {
-			if (fArgs.Req.Header().Key.Equal(key) || fArgs.Req.Header().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
+			if (fArgs.Req.Header().Key.Equal(key) ||
+				fArgs.Req.Header().Span().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
 				if atomic.AddInt32(&count, 1) > 1 {
 					return nil
 				}

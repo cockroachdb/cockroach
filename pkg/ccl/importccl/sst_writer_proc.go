@@ -178,7 +178,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 						log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
 						scatterReq := &roachpb.AdminScatterRequest{
-							Span: sst.span,
+							RequestHeader: roachpb.RequestHeaderFromSpan(sst.span),
 						}
 						if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
 							// TODO(dan): Unfortunately, Scatter is still too unreliable to

@@ -192,9 +192,9 @@ func TestBatchPrevNextWithNoop(t *testing.T) {
 	middleKey := roachpb.RKey("b")
 	rightKey := roachpb.Key("c")
 	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: leftKey}})
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: leftKey}})
 	ba.Add(&roachpb.NoopRequest{})
-	ba.Add(&roachpb.GetRequest{Span: roachpb.Span{Key: rightKey}})
+	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: rightKey}})
 
 	t.Run("prev", func(t *testing.T) {
 		rk, err := prev(ba, middleKey)

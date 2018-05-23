@@ -261,9 +261,9 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{
-			Span:    roachpb.Span{Key: r.Desc().StartKey.AsRawKey()},
-			Index:   oldestIndex,
-			RangeID: r.RangeID,
+			RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+			Index:         oldestIndex,
+			RangeID:       r.RangeID,
 		})
 		if err := rlq.db.Run(ctx, b); err != nil {
 			return err

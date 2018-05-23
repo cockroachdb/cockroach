@@ -1213,7 +1213,7 @@ func fillSkippedResponses(
 		}
 		hdr := resp.GetInner().Header()
 		hdr.ResumeReason = resumeReason
-		origSpan := req.Header()
+		origSpan := req.Header().Span()
 		if isReverse {
 			if hdr.ResumeSpan != nil {
 				// The ResumeSpan.Key might be set to the StartKey of a range;

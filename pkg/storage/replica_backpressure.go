@@ -87,7 +87,7 @@ func canBackpressureBatch(ba roachpb.BatchRequest) bool {
 
 		inSpan := false
 		for _, s := range backpressurableSpans {
-			if s.Contains(req.Header()) {
+			if s.Contains(req.Header().Span()) {
 				inSpan = true
 				break
 			}
