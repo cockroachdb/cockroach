@@ -25,10 +25,14 @@ import (
 	"sort"
 	"strings"
 
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	humanize "github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 )
 
@@ -429,7 +433,9 @@ type diagramData struct {
 	Edges      []diagramEdge      `json:"edges"`
 }
 
-func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, error) {
+func generateDiagramData(
+	flows []FlowSpec, nodeNames []string, pidToStatDetails map[int][]string,
+) (diagramData, error) {
 	d := diagramData{NodeNames: nodeNames}
 
 	// inPorts maps streams to their "destination" attachment point. Only DestProc
@@ -443,6 +449,9 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
 			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
+			if statDetails, ok := pidToStatDetails[int(p.ProcessorID)]; ok {
+				proc.Core.Details = append(proc.Core.Details, statDetails...)
+			}
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
@@ -539,9 +548,13 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 	return d, nil
 }
 
-// GeneratePlanDiagram generates the json data for a flow diagram.  There should // be one FlowSpec per node. The function assumes that StreamIDs are unique
-// across all flows.
-func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
+// GeneratePlanDiagram generates the json data for a flow diagram. There should
+// be one FlowSpec per node. The function assumes that StreamIDs are unique
+// across all flows. If spans are provided, stats are extracted from the spans
+// and added to the plan.
+func GeneratePlanDiagram(
+	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan, w io.Writer,
+) error {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
 	nodeIDs := make([]int, 0, len(flows))
@@ -558,21 +571,35 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
 		nodeNames[i] = n.String()
 	}
 
-	d, err := generateDiagramData(flowSlice, nodeNames)
+	d, err := generateDiagramData(flowSlice, nodeNames, extractStatsFromSpans(spans))
 	if err != nil {
 		return err
 	}
 	return json.NewEncoder(w).Encode(d)
 }
 
-// GeneratePlanDiagramWithURL generates the json data for a flow diagram and a
+// GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
-	var json, compressed bytes.Buffer
-	if err := GeneratePlanDiagram(flows, &json); err != nil {
+func GeneratePlanDiagramURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
+	return GeneratePlanDiagramURLWithSpans(flows, nil /* spans */)
+}
+
+// GeneratePlanDiagramURLWithSpans is equivalent to GeneratePlanDiagramURL when
+// called with no spans. If spans are provided, stats are extracted and added to
+// the plan.
+func GeneratePlanDiagramURLWithSpans(
+	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan,
+) (string, url.URL, error) {
+	var json bytes.Buffer
+	if err := GeneratePlanDiagram(flows, spans, &json); err != nil {
 		return "", url.URL{}, err
 	}
+	return encodeJSONToURL(json)
+}
+
+func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
+	var compressed bytes.Buffer
 	jsonStr := json.String()
 
 	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
@@ -592,6 +619,33 @@ func GeneratePlanDiagramWithURL(flows map[roachpb.NodeID]FlowSpec) (string, url.
 		Path:     "distsqlplan/decode.html",
 		RawQuery: compressed.String(),
 	}
-
 	return jsonStr, url, nil
+}
+
+// extractStatsFromSpans extracts stats from spans tagged with a processor id
+// and returns a map from that processor id to a slice of stat descriptions
+// that can be added to a plan.
+func extractStatsFromSpans(spans []tracing.RecordedSpan) map[int][]string {
+	res := make(map[int][]string)
+	for _, span := range spans {
+		// Get the processor id for this span. If there isn't one, this span doesn't
+		// belong to a processor.
+		pid, ok := span.Tags[processorIDTagKey]
+		if !ok {
+			continue
+		}
+
+		var da types.DynamicAny
+		if err := types.UnmarshalAny(span.Stats, &da); err != nil {
+			continue
+		}
+		if dss, ok := da.Message.(DistSQLSpanStats); ok {
+			i, err := strconv.Atoi(pid)
+			if err != nil {
+				continue
+			}
+			res[i] = dss.StatsForQueryPlan()
+		}
+	}
+	return res
 }

@@ -2111,7 +2111,7 @@ table_name_list:
 // %Text:
 // EXPLAIN <statement>
 // EXPLAIN ([PLAN ,] <planoptions...> ) <statement>
-// EXPLAIN (DISTSQL) <statement>
+// EXPLAIN [ANALYZE] (DISTSQL) <statement>
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
@@ -2130,6 +2130,10 @@ explain_stmt:
 | EXPLAIN '(' explain_option_list ')' explainable_stmt
   {
     $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
+  }
+| EXPLAIN ANALYZE '(' explain_option_list ')' explainable_stmt
+  {
+    $$.val = &tree.Explain{Options: append($4.strs(), $2), Statement: $6.stmt()}
   }
 // This second error rule is necessary, because otherwise
 // explainable_stmt also provides "selectclause := '(' error ..." and
