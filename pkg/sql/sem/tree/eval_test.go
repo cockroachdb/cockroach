@@ -107,7 +107,11 @@ func TestEval(t *testing.T) {
 		// Hexadecimal bytes literals.
 		{`x'636174'`, `'\x636174'`},
 		{`X'636174'`, `'\x636174'`},
+		{`pg_typeof(x'636174')`, `'bytes'`},
+		{`'\x636174'::bytes`, `'\x636174'`},
 		{`x'636174'::string`, `'cat'`},
+		// Cast from bytes to string uses the current value of bytea_output.
+		{`x'636174'::bytes::string`, `e'\\x636174'`},
 		{`e'\\x636174'::BYTES`, `'\x636174'`},
 		{`e'\\X636174'::BYTES`, `'\x636174'`},
 		{`e'\\x636174'::STRING::BYTES`, `'\x636174'`},
@@ -829,6 +833,9 @@ func TestEval(t *testing.T) {
 		{`'hello'::char(2)`, `'he'`},
 		{`'hello'::bytes`, `'\x68656c6c6f'`},
 		{`b'hello'::string`, `'hello'`},
+		// Casting a byte array to string uses the current value of
+		// bytea_output, which is hex by default in this test.
+		{`b'hello'::bytes::string`, `e'\\x68656c6c6f'`},
 		{`b'\xff'`, `'\xff'`},
 		{`123::text`, `'123'`},
 		{`date '2010-09-28'`, `'2010-09-28'`},

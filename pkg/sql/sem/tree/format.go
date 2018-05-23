@@ -127,8 +127,9 @@ const (
 	//    DDecimal 1 and the DInt 1).
 	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
 
-	// FmtParseDatums, if set, formats datums such that they can be round-tripped
-	// with their associated Parse func.
+	// FmtParseDatums, if set, formats datums in a raw form
+	// (e.g. suitable for output into a CSV file) such that they can be
+	// round-tripped with their associated Parse func.
 	FmtParseDatums FmtFlags = FmtBareStrings | fmtUnicodeStrings
 )
 

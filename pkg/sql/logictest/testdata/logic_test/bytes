@@ -1,6 +1,11 @@
 # LogicTest: default opt
 
 query T
+SHOW bytea_output
+----
+hex
+
+query T
 SELECT 'non-escaped-string':::BYTES::STRING
 ----
 \x6e6f6e2d657363617065642d737472696e67
@@ -36,6 +41,80 @@ SELECT '\X':::BYTES::STRING
 \x
 
 query T
+SELECT e'a\\134b\nc\'e'::STRING::BYTES::STRING
+----
+\x615c620a632765
+
+
+query T
 SELECT '日本語':::STRING::BYTES::STRING
 ----
 \xe697a5e69cace8aa9e
+
+statement ok
+SET bytea_output = escape
+
+query T
+SELECT 'non-escaped-string':::BYTES::STRING
+----
+non-escaped-string
+
+query T
+SELECT '\Xabcd':::BYTES::STRING
+----
+\253\315
+
+query T
+SELECT b'\x5c\x78':::BYTES
+----
+\x
+
+query T
+SELECT b'\x5c\x78':::BYTES::STRING
+----
+\\x
+
+query T
+SELECT b'\x5c\x58':::BYTES::STRING
+----
+\\X
+
+query T
+SELECT e'\x5c\x78'::STRING
+----
+\x
+
+query T
+SELECT '\X':::BYTES::STRING
+----
+·
+
+query T
+SELECT e'a\\134b\nc\'e'::STRING::BYTES::STRING
+----
+a\\b\012c'e
+
+query T
+SELECT '日本語':::STRING::BYTES::STRING
+----
+\346\227\245\346\234\254\350\252\236
+
+statement ok
+set bytea_output = hex
+
+# Regression test for #25841.
+query T
+SELECT e'a\\\\b'::STRING::BYTEA
+----
+a\b
+
+query I
+SELECT length(e'a\\\\b'::STRING::BYTEA)
+----
+3
+
+query error invalid bytea escape sequence
+SELECT e'a\\bcde'::STRING::BYTEA
+
+query error bytea encoded value ends with incomplete escape sequence
+SELECT e'a\\01'::STRING::BYTEA

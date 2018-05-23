@@ -25,9 +25,14 @@ package lex
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
@@ -76,14 +81,6 @@ func EscapeSQLString(in string) string {
 	var buf bytes.Buffer
 	EncodeSQLString(&buf, in)
 	return buf.String()
-}
-
-// HexEncodeString writes a hexadecimal representation of the string
-// to buf.
-func HexEncodeString(buf *bytes.Buffer, in string) {
-	for i := 0; i < len(in); i++ {
-		buf.Write(stringencoding.RawHexMap[in[i]])
-	}
 }
 
 // EncodeSQLStringWithFlags writes a string literal to buf. All
@@ -198,7 +195,11 @@ func encodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
-// EncodeSQLBytes encodes the SQL byte array in 'in' to buf.
+// EncodeSQLBytes encodes the SQL byte array in 'in' to buf, to a
+// format suitable for re-scanning. We don't use a straightforward hex
+// encoding here with x'...'  because the result would be less
+// compact. We are trading a little more time during the encoding to
+// have a little less bytes on the wire.
 func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 	start := 0
 	buf.WriteString("b'")
@@ -212,7 +213,9 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 			buf.WriteByte(encodedChar)
 			start = i + 1
 		} else if ch == '\'' {
-			// We can't just fold this into stringencoding.EncodeMap because stringencoding.EncodeMap is also used for strings which aren't quoted with single-quotes
+			// We can't just fold this into stringencoding.EncodeMap because
+			// stringencoding.EncodeMap is also used for strings which
+			// aren't quoted with single-quotes
 			buf.WriteString(in[start:i])
 			buf.WriteByte('\\')
 			buf.WriteByte(ch)
@@ -226,4 +229,124 @@ func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 	}
 	buf.WriteString(in[start:])
 	buf.WriteByte('\'')
+}
+
+// EncodeByteArrayToRawBytes converts a SQL-level byte array into raw
+// bytes according to the encoding specification in "be".
+// If the skipHexPrefix argument is set, the hexadecimal encoding does not
+// prefix the output with "\x". This is suitable e.g. for the encode()
+// built-in.
+func EncodeByteArrayToRawBytes(
+	data string, be sessiondata.BytesEncodeFormat, skipHexPrefix bool,
+) string {
+	switch be {
+	case sessiondata.BytesEncodeHex:
+		head := 2
+		if skipHexPrefix {
+			head = 0
+		}
+		res := make([]byte, head+hex.EncodedLen(len(data)))
+		if !skipHexPrefix {
+			res[0] = '\\'
+			res[1] = 'x'
+		}
+		hex.Encode(res[head:], []byte(data))
+		return string(res)
+
+	case sessiondata.BytesEncodeEscape:
+		// PostgreSQL does not allow all the escapes formats recognized by
+		// CockroachDB's scanner. It only recognizes octal and \\ for the
+		// backslash itself.
+		// See https://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
+		res := make([]byte, 0, len(data))
+		for _, c := range []byte(data) {
+			if c == '\\' {
+				res = append(res, '\\', '\\')
+			} else if c < 32 || c >= 127 {
+				// Escape the character in octal.
+				//
+				// Note: CockroachDB only supports UTF-8 for which all values
+				// below 128 are ASCII. There is no locale-dependent escaping
+				// in that case.
+				res = append(res, '\\', '0'+(c>>6), '0'+((c>>3)&7), '0'+(c&7))
+			} else {
+				res = append(res, c)
+			}
+		}
+		return string(res)
+
+	case sessiondata.BytesEncodeBase64:
+		return base64.StdEncoding.EncodeToString([]byte(data))
+
+	default:
+		panic(fmt.Sprintf("unhandled format: %s", be))
+	}
+}
+
+// DecodeRawBytesToByteArray converts raw bytes to a SQL-level byte array
+// according to the encoding specification in "be".
+// When using the Hex format, the caller is responsible for skipping the
+// "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
+// an alternative.
+func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([]byte, error) {
+	switch be {
+	case sessiondata.BytesEncodeHex:
+		return hex.DecodeString(data)
+
+	case sessiondata.BytesEncodeEscape:
+		// PostgreSQL does not allow all the escapes formats recognized by
+		// CockroachDB's scanner. It only recognizes octal and \\ for the
+		// backslash itself.
+		// See https://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
+		res := make([]byte, 0, len(data))
+		for i := 0; i < len(data); i++ {
+			ch := data[i]
+			if ch != '\\' {
+				res = append(res, ch)
+				continue
+			}
+			if i >= len(data)-1 {
+				return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+					"bytea encoded value ends with escape character")
+			}
+			if data[i+1] == '\\' {
+				res = append(res, '\\')
+				i++
+				continue
+			}
+			if i+3 >= len(data) {
+				return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+					"bytea encoded value ends with incomplete escape sequence")
+			}
+			b := byte(0)
+			for j := 1; j <= 3; j++ {
+				octDigit := data[i+j]
+				if octDigit < '0' || octDigit > '7' {
+					return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+						"invalid bytea escape sequence")
+				}
+				b = (b << 3) | (octDigit - '0')
+			}
+			res = append(res, b)
+			i += 3
+		}
+		return res, nil
+
+	case sessiondata.BytesEncodeBase64:
+		return base64.StdEncoding.DecodeString(data)
+
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: unhandled format: %s", be)
+	}
+}
+
+// DecodeRawBytesToByteArrayAuto detects which format to use with
+// DecodeRawBytesToByteArray(). It only supports hex ("\x" prefix)
+// and escape.
+func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
+	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
+		return DecodeRawBytesToByteArray(string(data[2:]), sessiondata.BytesEncodeHex)
+	}
+	return DecodeRawBytesToByteArray(string(data), sessiondata.BytesEncodeEscape)
 }
