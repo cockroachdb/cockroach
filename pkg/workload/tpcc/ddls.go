@@ -16,11 +16,13 @@ package tpcc
 
 import (
 	gosql "database/sql"
-	"encoding/binary"
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -161,38 +163,65 @@ const (
 // NB: Since we always split at the same points (specific warehouse IDs and
 // item IDs), splitting is idempotent.
 func splitTables(db *gosql.DB, warehouses int) {
+	var g errgroup.Group
+	const concurrency = 64
+	sem := make(chan struct{}, concurrency)
+	acquireSem := func() func() {
+		sem <- struct{}{}
+		return func() { <-sem }
+	}
+
 	// Split district and warehouse tables every 10 warehouses.
 	const warehousesPerRange = 10
 	for i := warehousesPerRange; i < warehouses; i += warehousesPerRange {
-		sql := fmt.Sprintf("ALTER TABLE warehouse SPLIT AT VALUES (%d)", i)
-		if _, err := db.Exec(sql); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
-		}
-		sql = fmt.Sprintf("ALTER TABLE district SPLIT AT VALUES (%d, 0)", i)
-		if _, err := db.Exec(sql); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
-		}
+		i := i
+		g.Go(func() error {
+			defer acquireSem()()
+			sql := fmt.Sprintf("ALTER TABLE warehouse SPLIT AT VALUES (%d)", i)
+			if _, err := db.Exec(sql); err != nil {
+				return errors.Wrapf(err, "Couldn't exec %s", sql)
+			}
+			sql = fmt.Sprintf("ALTER TABLE district SPLIT AT VALUES (%d, 0)", i)
+			if _, err := db.Exec(sql); err != nil {
+				return errors.Wrapf(err, "Couldn't exec %s", sql)
+			}
+			return nil
+		})
 	}
 
 	// Split the item table every 100 items.
 	const itemsPerRange = 100
 	for i := itemsPerRange; i < numItems; i += itemsPerRange {
-		sql := fmt.Sprintf("ALTER TABLE item SPLIT AT VALUES (%d)", i)
-		if _, err := db.Exec(sql); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
-		}
+		i := i
+		g.Go(func() error {
+			defer acquireSem()()
+			sql := fmt.Sprintf("ALTER TABLE item SPLIT AT VALUES (%d)", i)
+			if _, err := db.Exec(sql); err != nil {
+				return errors.Wrapf(err, "Couldn't exec %s", sql)
+			}
+			return nil
+		})
 	}
 
 	// Split the history table into 1000 ranges.
 	const maxVal = math.MaxUint64
-	const valsPerRange uint64 = maxVal / 1000
-	for i := 1; i < 100; i++ {
-		var u uuid.UUID
-		binary.BigEndian.PutUint64(u.GetBytes()[:], uint64(i)*valsPerRange)
-		sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
-		if _, err := db.Exec(sql); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
-		}
+	const historyRanges = 1000
+	const valsPerRange uint64 = maxVal / historyRanges
+	for i := 1; i < historyRanges; i++ {
+		i := i
+		g.Go(func() error {
+			defer acquireSem()()
+			u := uuid.FromUint128(uint128.FromInts(uint64(i)*valsPerRange, 0))
+			sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
+			if _, err := db.Exec(sql); err != nil {
+				return errors.Wrapf(err, "Couldn't exec %s", sql)
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		panic(err)
 	}
 }
 
@@ -209,10 +238,17 @@ func scatterRanges(db *gosql.DB) {
 		`warehouse`,
 	}
 
+	var g errgroup.Group
 	for _, table := range tables {
-		sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
-		if _, err := db.Exec(sql); err != nil {
-			panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
-		}
+		g.Go(func() error {
+			sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
+			if _, err := db.Exec(sql); err != nil {
+				return errors.Wrapf(err, "Couldn't exec %s", sql)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		panic(err)
 	}
 }
